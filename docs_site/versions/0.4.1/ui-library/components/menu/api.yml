@@ -1,0 +1,399 @@
+schema_version: 1
+family: menu
+
+components:
+  - CMenu
+  - CMenuItem
+  - CMenuCheckboxItem
+  - CMenuRadioGroup
+  - CMenuRadioItem
+  - CMenuGroup
+  - CMenuSeparator
+  - CMenuSubmenu
+
+inputs:
+  - id: cmenu-server-inputs
+    component: CMenu
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the Menu surface and activator relationship identity.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial visibility and the uncontrolled fallback.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables the activator and force-closes the tree. Native disabled fieldset ancestry also applies.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Wraps arrow navigation and typeahead matching.}
+      - {id: placement, name: placement, type: {display: '"top-start" | "top" | "top-end" | "bottom-start" | "bottom" | "bottom-end"', interfaces: [CMenuPlacement]}, default: {kind: literal, value: bottom-start}, effect: Sets the preferred logical root placement.}
+      - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: false}, effect: Matches the activator width up to the viewport-safe maximum.}
+      - {id: close-on-select, name: close_on_select, type: bool, default: {kind: literal, value: true}, effect: Sets the default command and choice close policy.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, default: {kind: literal, value: md}, effect: Sets item geometry for the whole tree.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds surface classes and merges with `attrs`.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds surface styles; private anchor ownership merges last.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, ARIA, Alpine, and data attributes to the Menu surface.'}
+
+  - id: cmenu-client-inputs
+    component: CMenu
+    channel: client
+    column_widths: [fit, 13rem, 12rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control from committed state. `null` has the same effect., effect: Controls root visibility while supplied as a Boolean.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls local disabledness; native fieldset disabledness remains authoritative.}
+      - {id: loop, name: loop, type: boolean, omitted: Uses the server input., effect: Controls keyboard wrapping.}
+      - {id: placement, name: placement, type: {display: 'six logical placement strings', interfaces: [CMenuPlacement]}, omitted: Uses the server input., effect: Controls requested placement.}
+      - {id: match-width, name: matchWidth, type: boolean, omitted: Uses the server input., effect: Controls clamped activator-width matching.}
+      - {id: close-on-select, name: closeOnSelect, type: boolean, omitted: Uses the server input., effect: Controls the tree default close policy.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, omitted: Uses the server input., effect: Controls tree geometry.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a visibility callback., effect: Receives visibility requests and forced close notices.}
+      - {id: on-action, name: onAction, type: function, omitted: Does not notify a root action callback., effect: Receives valued command and choice activations.}
+
+  - id: cmenu-item-server-inputs
+    component: CMenuItem
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: Supplies optional canonical command identity for root `onAction`; rejected with `href`.}
+      - {id: href, name: href, type: 'str | None', default: {kind: literal, value: null}, effect: Renders a real anchor and preserves native navigation.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Makes the item focusable but inactive.}
+      - {id: close-on-select, name: close_on_select, type: 'bool | None', default: {kind: literal, value: null}, effect: Overrides the root close policy when supplied.}
+      - {id: intent, name: intent, type: {display: '"default" | "danger"', interfaces: [CMenuIntent]}, default: {kind: literal, value: default}, effect: Sets visual emphasis.}
+      - {id: text-value, name: text_value, type: 'str | None', default: {kind: literal, value: null}, effect: Overrides label-derived typeahead text.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds semantic-root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds semantic-root styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed semantic-root attributes.}
+
+  - id: cmenu-item-client-inputs
+    component: CMenuItem
+    channel: client
+    entries:
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls inactive behavior and `aria-disabled`.}
+      - {id: close-on-select, name: closeOnSelect, type: 'boolean | null', omitted: Inherits the root policy. `null` has the same effect., effect: Controls per-item close behavior.}
+      - {id: intent, name: intent, type: {display: '"default" | "danger"', interfaces: [CMenuIntent]}, omitted: Uses the server input., effect: Controls emphasis and `data-intent`.}
+      - {id: text-value, name: textValue, type: 'string | null', omitted: Uses the server fallback., effect: Controls typeahead text; a null fallback may read current label text.}
+
+  - id: cmenu-checkbox-item-server-inputs
+    component: CMenuCheckboxItem
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Sets unique canonical choice identity.}
+      - {id: checked, name: checked, type: {display: 'bool | "mixed"', interfaces: [CMenuChecked]}, default: {kind: literal, value: false}, effect: Sets initial checked state.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Makes the item focusable but inactive.}
+      - {id: close-on-select, name: close_on_select, type: 'bool | None', default: {kind: literal, value: null}, effect: Overrides the root close policy.}
+      - {id: text-value, name: text_value, type: 'str | None', default: {kind: literal, value: null}, effect: Overrides label-derived typeahead text.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds item classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds item styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed item attributes.}
+
+  - id: cmenu-checkbox-item-client-inputs
+    component: CMenuCheckboxItem
+    channel: client
+    entries:
+      - {id: checked, name: checked, type: {display: 'boolean | "mixed" | null', interfaces: [CMenuChecked]}, omitted: Releases control from committed state. `null` has the same effect., effect: Controls checked state.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls inactive behavior.}
+      - {id: close-on-select, name: closeOnSelect, type: 'boolean | null', omitted: Inherits the root policy., effect: Controls per-item close behavior.}
+      - {id: text-value, name: textValue, type: 'string | null', omitted: Uses the server fallback., effect: Controls typeahead text.}
+      - {id: on-checked-change, name: onCheckedChange, type: function, omitted: Does not notify a checked callback., effect: Receives requested checked values.}
+
+  - id: cmenu-radio-group-server-inputs
+    component: CMenuRadioGroup
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Sets the required initial direct-radio selection.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds group classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds group styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed group attributes.}
+
+  - id: cmenu-radio-group-client-inputs
+    component: CMenuRadioGroup
+    channel: client
+    entries:
+      - {id: value, name: value, type: 'string | null', omitted: Releases control from committed state. `null` has the same effect., effect: Controls the selected radio value.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: Does not notify a value callback., effect: Receives activation and structural-removal value requests.}
+
+  - id: cmenu-radio-item-server-inputs
+    component: CMenuRadioItem
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Sets canonical identity unique in the radio group.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Makes the item focusable but inactive.}
+      - {id: close-on-select, name: close_on_select, type: 'bool | None', default: {kind: literal, value: null}, effect: Overrides the root close policy.}
+      - {id: text-value, name: text_value, type: 'str | None', default: {kind: literal, value: null}, effect: Overrides label-derived typeahead text.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds item classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds item styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed item attributes.}
+
+  - id: cmenu-radio-item-client-inputs
+    component: CMenuRadioItem
+    channel: client
+    entries:
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls inactive behavior.}
+      - {id: close-on-select, name: closeOnSelect, type: 'boolean | null', omitted: Inherits the root policy., effect: Controls per-item close behavior.}
+      - {id: text-value, name: textValue, type: 'string | null', omitted: Uses the server fallback., effect: Controls typeahead text.}
+
+  - id: cmenu-group-server-inputs
+    component: CMenuGroup
+    channel: server
+    entries:
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds group classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds group styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed group attributes.}
+
+  - id: cmenu-separator-server-inputs
+    component: CMenuSeparator
+    channel: server
+    entries:
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds separator classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds separator styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed separator attributes.}
+
+  - id: cmenu-submenu-server-inputs
+    component: CMenuSubmenu
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Sets a canonical path segment unique at its menu level.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Makes the trigger inactive and force-closes its child.}
+      - {id: intent, name: intent, type: {display: '"default" | "danger"', interfaces: [CMenuIntent]}, default: {kind: literal, value: default}, effect: Sets trigger emphasis.}
+      - {id: text-value, name: text_value, type: 'str | None', default: {kind: literal, value: null}, effect: Overrides label-derived typeahead text.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds neutral-wrapper classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds neutral-wrapper styles inherited by the child surface.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed neutral-wrapper attributes.}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed submenu-trigger attributes.}
+      - {id: menu-attrs, name: menu_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed child Menu-surface attributes.}
+
+  - id: cmenu-submenu-client-inputs
+    component: CMenuSubmenu
+    channel: client
+    entries:
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls inactive behavior and child closure.}
+      - {id: intent, name: intent, type: {display: '"default" | "danger"', interfaces: [CMenuIntent]}, omitted: Uses the server input., effect: Controls trigger emphasis.}
+      - {id: text-value, name: textValue, type: 'string | null', omitted: Uses the server fallback., effect: Controls typeahead text.}
+
+slots:
+  - id: cmenu-slots
+    component: CMenu
+    entries:
+      - {id: activator, name: activator, required: true, data: {display: '{activator_attrs: dict[str, object], activator_disabled: bool}', interfaces: [CMenuActivatorSlotData]}, fallback: none}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CMenuDefaultSlotData]}, fallback: none}
+  - id: cmenu-item-slots
+    component: CMenuItem
+    entries: &item_slots
+      - {id: start, name: start, required: false, data: {display: '{}', interfaces: [CMenuItemStartSlotData]}, fallback: omitted}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CMenuItemDefaultSlotData]}, fallback: none}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CMenuItemDescriptionSlotData]}, fallback: omitted}
+      - {id: end, name: end, required: false, data: {display: '{}', interfaces: [CMenuItemEndSlotData]}, fallback: omitted}
+  - id: cmenu-checkbox-item-slots
+    component: CMenuCheckboxItem
+    entries: *item_slots
+  - id: cmenu-radio-item-slots
+    component: CMenuRadioItem
+    entries: *item_slots
+  - id: cmenu-radio-group-slots
+    component: CMenuRadioGroup
+    entries:
+      - {id: label, name: label, required: false, data: {display: '{}', interfaces: [CMenuRadioGroupLabelSlotData]}, fallback: omitted}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CMenuRadioGroupDefaultSlotData]}, fallback: none}
+  - id: cmenu-group-slots
+    component: CMenuGroup
+    entries:
+      - {id: label, name: label, required: true, data: {display: '{}', interfaces: [CMenuGroupLabelSlotData]}, fallback: none}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CMenuGroupDefaultSlotData]}, fallback: none}
+  - id: cmenu-submenu-slots
+    component: CMenuSubmenu
+    entries:
+      - {id: start, name: start, required: false, data: {display: '{}', interfaces: [CMenuSubmenuStartSlotData]}, fallback: omitted}
+      - {id: label, name: label, required: true, data: {display: '{}', interfaces: [CMenuSubmenuLabelSlotData]}, fallback: none}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CMenuSubmenuDescriptionSlotData]}, fallback: omitted}
+      - {id: end, name: end, required: false, data: {display: '{}', interfaces: [CMenuSubmenuEndSlotData]}, fallback: Built-in direction-aware chevron.}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CMenuSubmenuDefaultSlotData]}, fallback: none}
+
+events:
+  - id: cmenu-events
+    component: CMenu
+    entries:
+      - {id: on-open-change, name: onOpenChange, signature: {display: '(requestedOpen: boolean, detail: CMenuOpenChangeDetail) => void', interfaces: [CMenuOpenChangeDetail]}, trigger: A visibility request occurs or a forced safety close changes effective open state., detail: {display: '{reason, controlled, forced, source}', interfaces: [CMenuOpenChangeDetail]}, behavior: Uncontrolled requests commit before notification; controlled requests wait except forced closes.}
+      - {id: on-action, name: onAction, signature: {display: '(value: string, detail: CMenuActionDetail) => void', interfaces: [CMenuActionDetail]}, trigger: An enabled valued command or choice activates., detail: {display: '{kind, item, event, path}', interfaces: [CMenuActionDetail]}, behavior: Fires once after a choice-specific request and before the close request. Links and anonymous commands do not fire it.}
+  - id: cmenu-checkbox-item-events
+    component: CMenuCheckboxItem
+    entries:
+      - {id: on-checked-change, name: onCheckedChange, signature: {display: '(requestedChecked: boolean, detail: CMenuCheckedChangeDetail) => void', interfaces: [CMenuCheckedChangeDetail]}, trigger: An enabled checkbox item activates., detail: {display: '{checked, previousChecked, controlled, item, event, path}', interfaces: [CMenuCheckedChangeDetail]}, behavior: Controlled items wait for owner acceptance.}
+  - id: cmenu-radio-group-events
+    component: CMenuRadioGroup
+    entries:
+      - {id: on-value-change, name: onValueChange, signature: {display: '(requestedValue: string, detail: CMenuRadioChangeDetail) => void', interfaces: [CMenuRadioChangeDetail]}, trigger: A different enabled radio activates or the selected radio is structurally removed in either ownership mode., detail: {display: '{value, previousValue, reason, controlled, item, event, path}', interfaces: [CMenuRadioChangeDetail]}, behavior: Controlled groups wait for owner acceptance.}
+
+methods: []
+
+css:
+  - id: cmenu-css-variables
+    component: CMenu
+    entries:
+      - {id: cui-menu-background, name: --cui-menu-background, type: color, purpose: Menu surfaces., default: Canvas}
+      - {id: cui-menu-foreground, name: --cui-menu-foreground, type: color, purpose: Item text., default: CanvasText}
+      - {id: cui-menu-muted-color, name: --cui-menu-muted-color, type: color, purpose: 'Descriptions, labels, and shortcuts.', default: 'color-mix(in srgb, current foreground 72%, transparent)'}
+      - {id: cui-menu-border-color, name: --cui-menu-border-color, type: color, purpose: Surface and separator boundaries., default: 'color-mix(in srgb, CanvasText 18%, transparent)'}
+      - {id: cui-menu-border-width, name: --cui-menu-border-width, type: length, purpose: Surface boundary width., default: 1px}
+      - {id: cui-menu-radius, name: --cui-menu-radius, type: length, purpose: Surface corners., default: 0.75rem}
+      - {id: cui-menu-shadow, name: --cui-menu-shadow, type: shadow, purpose: Root elevation., default: '0 0.75rem 2rem rgb(15 23 42 / 18%)'}
+      - {id: cui-menu-submenu-shadow, name: --cui-menu-submenu-shadow, type: shadow, purpose: Nested elevation., default: '0 1rem 2.5rem rgb(15 23 42 / 22%)'}
+      - {id: cui-menu-inline-size, name: --cui-menu-inline-size, type: length, purpose: Preferred width., default: 14rem}
+      - {id: cui-menu-min-inline-size, name: --cui-menu-min-inline-size, type: length, purpose: Minimum useful inline submenu corridor., default: 10rem}
+      - {id: cui-menu-max-inline-size, name: --cui-menu-max-inline-size, type: length, purpose: Viewport-safe width., default: 'calc(100dvi - 1rem)'}
+      - {id: cui-menu-max-block-size, name: --cui-menu-max-block-size, type: length, purpose: Scroll limit., default: 'min(24rem, calc(100dvb - 1rem))'}
+      - {id: cui-menu-padding, name: --cui-menu-padding, type: length, purpose: Surface edge spacing., default: 0.375rem}
+      - {id: cui-menu-item-block-size, name: --cui-menu-item-block-size, type: length, purpose: Item minimum height., default: Size-derived.}
+      - {id: cui-menu-item-padding-inline, name: --cui-menu-item-padding-inline, type: length, purpose: Item inline spacing., default: Size-derived.}
+      - {id: cui-menu-item-gap, name: --cui-menu-item-gap, type: length, purpose: Item-region gap., default: 0.625rem}
+      - {id: cui-menu-item-radius, name: --cui-menu-item-radius, type: length, purpose: Item corners., default: 0.5rem}
+      - {id: cui-menu-hover-background, name: --cui-menu-hover-background, type: color, purpose: Pointer hover fill., default: 'color-mix(in srgb, CanvasText 8%, transparent)'}
+      - {id: cui-menu-focus-background, name: --cui-menu-focus-background, type: color, purpose: Focused item fill., default: 'light-dark(#175cd3, #84adff)'}
+      - {id: cui-menu-focus-foreground, name: --cui-menu-focus-foreground, type: color, purpose: Focused item content., default: 'light-dark(#ffffff, #101828)'}
+      - {id: cui-menu-focus-outline-color, name: --cui-menu-focus-outline-color, type: color, purpose: Focus-visible outline., default: 'light-dark(#175cd3, #84adff)'}
+      - {id: cui-menu-danger-color, name: --cui-menu-danger-color, type: color, purpose: Destructive item content., default: 'light-dark(#b42318, #fda29b)'}
+      - {id: cui-menu-disabled-opacity, name: --cui-menu-disabled-opacity, type: number, purpose: Disabled content opacity., default: '0.5'}
+      - {id: cui-menu-offset, name: --cui-menu-offset, type: length, purpose: Root anchor gap., default: 0.375rem}
+      - {id: cui-menu-submenu-offset, name: --cui-menu-submenu-offset, type: length, purpose: Nested anchor gap., default: 0.25rem}
+      - {id: cui-menu-duration, name: --cui-menu-duration, type: time, purpose: Entry and exit duration., default: 120ms}
+      - {id: cui-menu-easing, name: --cui-menu-easing, type: easing, purpose: Entry and exit easing., default: 'cubic-bezier(0.2, 0.8, 0.2, 1)'}
+
+attributes:
+  - id: cmenu-attributes
+    component: CMenu
+    entries:
+      - {id: popover, name: popover, element: Menu surface, type: '"manual"', meaning: Native top-layer presence with Citry dismissal.}
+      - {id: role, name: role, element: Menu surface, type: '"menu"', meaning: Application Menu composite.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Menu surface, type: activator IDREF, meaning: Names the Menu from its Button.}
+      - {id: data-open, name: data-open, element: Menu surface, type: present | absent, meaning: Mirrors logical open ownership.}
+      - {id: data-placement, name: data-placement, element: Menu surface, type: {display: six requested placement strings, interfaces: [CMenuPlacement]}, meaning: 'Requested logical placement, not collision result.'}
+      - {id: data-match-width, name: data-match-width, element: Menu surface, type: present | absent, meaning: Indicates clamped activator-width matching.}
+      - {id: data-size, name: data-size, element: Menu surface, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, meaning: Effective item geometry.}
+      - {id: aria-haspopup, name: aria-haspopup, element: Activator Button, type: '"menu"', meaning: Announces the controlled popup kind.}
+      - {id: aria-controls, name: aria-controls, element: Activator Button, type: IDREF, meaning: References the Menu surface.}
+      - {id: aria-expanded, name: aria-expanded, element: Activator Button, type: '"true" | "false"', meaning: Mirrors logical open state.}
+  - id: cmenu-item-attributes
+    component: CMenuItem
+    entries:
+      - {id: role, name: role, element: Item root, type: '"menuitem"', meaning: Command or native-link semantics.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Item root, type: owned label IDREF, meaning: Exact visible accessible name.}
+      - {id: aria-describedby, name: aria-describedby, element: Item root, type: description IDREF | absent, meaning: Optional separate description.}
+      - {id: aria-disabled, name: aria-disabled, element: Item root, type: '"true" | absent', meaning: Focusable inactive item.}
+      - {id: data-disabled, name: data-disabled, element: Item root, type: present | absent, meaning: Disabled styling mirror.}
+      - {id: data-intent, name: data-intent, element: Item root, type: {display: '"default" | "danger"', interfaces: [CMenuIntent]}, meaning: Visual emphasis.}
+  - id: cmenu-checkbox-item-attributes
+    component: CMenuCheckboxItem
+    entries:
+      - {id: role, name: role, element: Item Button, type: '"menuitemcheckbox"', meaning: Checkable command semantics.}
+      - {id: aria-checked, name: aria-checked, element: Item Button, type: '"false" | "true" | "mixed"', meaning: Effective checked value.}
+      - {id: data-checked, name: data-checked, element: Item Button, type: '"false" | "true" | "mixed"', meaning: Styling mirror.}
+  - id: cmenu-radio-item-attributes
+    component: CMenuRadioItem
+    entries:
+      - {id: role, name: role, element: Item Button, type: '"menuitemradio"', meaning: Exclusive choice semantics.}
+      - {id: aria-checked, name: aria-checked, element: Item Button, type: '"false" | "true"', meaning: Effective group selection.}
+      - {id: data-checked, name: data-checked, element: Item Button, type: '"false" | "true"', meaning: Styling mirror.}
+  - id: cmenu-group-attributes
+    component: CMenuGroup
+    entries:
+      - {id: role, name: role, element: Group root, type: '"group"', meaning: Owns grouped direct Menu items.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Group root, type: group-label IDREF, meaning: Names the group from its visible label.}
+  - id: cmenu-radio-group-attributes
+    component: CMenuRadioGroup
+    entries:
+      - {id: role, name: role, element: Radio-group root, type: '"group"', meaning: Owns exclusive radio items.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Radio-group root, type: label IDREF | absent, meaning: Names the group when a label is supplied.}
+  - id: cmenu-separator-attributes
+    component: CMenuSeparator
+    entries:
+      - {id: role, name: role, element: Horizontal rule, type: '"separator"', meaning: Divides vertically stacked item families.}
+  - id: cmenu-submenu-attributes
+    component: CMenuSubmenu
+    entries:
+      - {id: role, name: role, element: Wrapper / trigger / surface, type: '"none" / "menuitem" / "menu"', meaning: Keeps the trigger and immediate sibling child Menu relationship.}
+      - {id: aria-haspopup, name: aria-haspopup, element: Submenu trigger, type: '"menu"', meaning: Announces the child Menu.}
+      - {id: aria-controls, name: aria-controls, element: Submenu trigger, type: child Menu IDREF, meaning: References the child surface.}
+      - {id: aria-expanded, name: aria-expanded, element: Submenu trigger, type: '"true" | "false"', meaning: Mirrors child open state.}
+      - {id: data-open, name: data-open, element: Wrapper / child surface, type: present | absent, meaning: Mirrors logical child open ownership.}
+
+selectors:
+  - id: cmenu-selectors
+    component: CMenu
+    entries:
+      - {id: menu, selector: '[data-citry-ui-part="menu"]', element: Root or submenu surface, purpose: Popover presence and collection focus.}
+      - {id: menu-item, selector: '[data-citry-ui-part="menu-item"]', element: Command/link/check/radio semantic root, purpose: Item styling.}
+      - {id: menu-item-start, selector: '[data-citry-ui-part="menu-item-start"]', element: Decorative start wrapper, purpose: Start-region layout.}
+      - {id: menu-item-label, selector: '[data-citry-ui-part="menu-item-label"]', element: Visible item label, purpose: Layout and exact accessible-name target.}
+      - {id: menu-item-description, selector: '[data-citry-ui-part="menu-item-description"]', element: Optional description, purpose: Supporting text and accessible description.}
+      - {id: menu-item-end, selector: '[data-citry-ui-part="menu-item-end"]', element: Decorative end wrapper, purpose: Shortcut/end-region layout.}
+      - {id: menu-choice-indicator, selector: '[data-citry-ui-part="menu-choice-indicator"]', element: Decorative choice indicator, purpose: Checked/radio marker.}
+      - {id: menu-group, selector: '[data-citry-ui-part="menu-group"]', element: Labelled group root, purpose: Group layout.}
+      - {id: menu-group-label, selector: '[data-citry-ui-part="menu-group-label"]', element: Visible group label, purpose: Exact group name and layout.}
+      - {id: menu-radio-group, selector: '[data-citry-ui-part="menu-radio-group"]', element: Radio-group root, purpose: Exclusive choice grouping.}
+      - {id: menu-separator, selector: '[data-citry-ui-part="menu-separator"]', element: Horizontal separator, purpose: Collection division.}
+      - {id: menu-submenu, selector: '[data-citry-ui-part="menu-submenu"]', element: Neutral submenu wrapper, purpose: Trigger/surface ownership and inherited customization.}
+      - {id: menu-submenu-trigger, selector: '[data-citry-ui-part="menu-submenu-trigger"]', element: Submenu Button, purpose: Child Menu activation and placement anchor.}
+
+interfaces:
+  - id: cmenu-type-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: placement, name: CMenuPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
+      - {id: size, name: CMenuSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: intent, name: CMenuIntent, definition: 'Literal["default", "danger"]'}
+      - {id: checked, name: CMenuChecked, definition: 'bool | Literal["mixed"]'}
+  - id: cmenu-activator-slot-data
+    kind: record
+    name: CMenuActivatorSlotData
+    entries:
+      - {id: activator-attrs, name: activator_attrs, type: 'dict[str, object]', meaning: 'Owned trigger marker, anchor identity, and synchronized ARIA relationships.'}
+      - {id: activator-disabled, name: activator_disabled, type: bool, meaning: Server-owned disabled value to forward through the activator component input.}
+  - {id: cmenu-default-slot-data, kind: record, name: CMenuDefaultSlotData, entries: []}
+  - {id: cmenu-item-start-slot-data, kind: record, name: CMenuItemStartSlotData, entries: []}
+  - {id: cmenu-item-default-slot-data, kind: record, name: CMenuItemDefaultSlotData, entries: []}
+  - {id: cmenu-item-description-slot-data, kind: record, name: CMenuItemDescriptionSlotData, entries: []}
+  - {id: cmenu-item-end-slot-data, kind: record, name: CMenuItemEndSlotData, entries: []}
+  - {id: cmenu-group-label-slot-data, kind: record, name: CMenuGroupLabelSlotData, entries: []}
+  - {id: cmenu-group-default-slot-data, kind: record, name: CMenuGroupDefaultSlotData, entries: []}
+  - {id: cmenu-radio-group-label-slot-data, kind: record, name: CMenuRadioGroupLabelSlotData, entries: []}
+  - {id: cmenu-radio-group-default-slot-data, kind: record, name: CMenuRadioGroupDefaultSlotData, entries: []}
+  - {id: cmenu-submenu-start-slot-data, kind: record, name: CMenuSubmenuStartSlotData, entries: []}
+  - {id: cmenu-submenu-label-slot-data, kind: record, name: CMenuSubmenuLabelSlotData, entries: []}
+  - {id: cmenu-submenu-description-slot-data, kind: record, name: CMenuSubmenuDescriptionSlotData, entries: []}
+  - {id: cmenu-submenu-end-slot-data, kind: record, name: CMenuSubmenuEndSlotData, entries: []}
+  - {id: cmenu-submenu-default-slot-data, kind: record, name: CMenuSubmenuDefaultSlotData, entries: []}
+  - id: cmenu-open-change-detail
+    kind: record
+    name: CMenuOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: '"trigger" | "escape" | "outside" | "focus-outside" | "tab" | "action" | "native" | "disabled" | "ancestor"', meaning: Cause of the requested or forced visibility change.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client Boolean owns desired state.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether native/structural safety overrides owner rejection.}
+      - {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the change.}
+  - id: cmenu-action-detail
+    kind: record
+    name: CMenuActionDetail
+    entries:
+      - {id: kind, name: kind, type: '"command" | "checkbox" | "radio"', meaning: Activated semantic item kind.}
+      - {id: item, name: item, type: Element, meaning: Activated item root.}
+      - {id: event, name: event, type: Event, meaning: Native activation event.}
+      - {id: path, name: path, type: 'list[str]', meaning: Canonical ancestor-submenu path from the root.}
+  - id: cmenu-checked-change-detail
+    kind: record
+    name: CMenuCheckedChangeDetail
+    entries:
+      - {id: checked, name: checked, type: boolean, meaning: Requested checked value; activation moves mixed to true and otherwise negates the prior state.}
+      - {id: previous-checked, name: previousChecked, type: {display: 'boolean | "mixed"', interfaces: [CMenuChecked]}, meaning: Prior effective value.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client value owns state.}
+      - {id: item, name: item, type: Element, meaning: Activated checkbox item.}
+      - {id: event, name: event, type: Event, meaning: Native activation event.}
+      - {id: path, name: path, type: 'list[str]', meaning: Canonical ancestor-submenu path.}
+  - id: cmenu-radio-change-detail
+    kind: record
+    name: CMenuRadioChangeDetail
+    entries:
+      - {id: value, name: value, type: string, meaning: Requested radio value.}
+      - {id: previous-value, name: previousValue, type: string, meaning: Prior selected value.}
+      - {id: reason, name: reason, type: '"activation" | "removal"', meaning: Request source.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client value owns state.}
+      - {id: item, name: item, type: 'Element | null', meaning: Activated item or null for structural removal.}
+      - {id: event, name: event, type: 'Event | null', meaning: Native activation event or null for removal.}
+      - {id: path, name: path, type: 'list[str]', meaning: Canonical ancestor-submenu path.}
+
+translations: []

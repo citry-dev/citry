@@ -1,0 +1,765 @@
+<!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:1:s--><!doctype html><html data-cid-cn6tn8uno lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Editable submit modes</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CEditable_620b5b>@layer citry-ui.theme {
+  :where(.cui-editable) {
+    --_cui-editable-background: var(--cui-editable-background, Canvas);
+    --_cui-editable-foreground: var(--cui-editable-foreground, CanvasText);
+    --_cui-editable-border-color: var(--cui-editable-border-color, light-dark(#d0d5dd, #535862));
+    --_cui-editable-hover-border-color: var(--cui-editable-hover-border-color, light-dark(#667085, #a4a7ae));
+    --_cui-editable-focus-color: var(--cui-editable-focus-color, Highlight);
+    --_cui-editable-invalid-border-color: var(--cui-editable-invalid-border-color, light-dark(#d92d20, #f97066));
+    --_cui-editable-muted-color: var(--cui-editable-muted-color, light-dark(#667085, #a4a7ae));
+    --_cui-editable-action-background: var(
+      --cui-editable-action-background,
+      color-mix(in srgb, CanvasText 7%, Canvas)
+    );
+    --_cui-editable-action-foreground: var(--cui-editable-action-foreground, CanvasText);
+    --_cui-editable-radius: var(--cui-editable-radius, .5rem);
+    --_cui-editable-height: var(--cui-editable-height, 2.5rem);
+    --_cui-editable-padding: var(--cui-editable-padding, .5rem .75rem);
+    --_cui-editable-action-size: var(--cui-editable-action-size, 1.75rem);
+    --_cui-editable-gap: var(--cui-editable-gap, .375rem);
+    box-sizing: border-box;
+    display: grid;
+    min-inline-size: 0;
+    color: var(--_cui-editable-foreground);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  :where(.cui-editable[data-size="sm"]) {
+    --_cui-editable-height: 2.25rem;
+    --_cui-editable-padding: .375rem .625rem;
+    --_cui-editable-action-size: 1.5rem;
+    font-size: .875rem;
+  }
+  :where(.cui-editable[data-size="lg"]) {
+    --_cui-editable-height: 2.75rem;
+    --_cui-editable-padding: .625rem .875rem;
+    --_cui-editable-action-size: 2rem;
+    font-size: 1.0625rem;
+  }
+  :where(.cui-editable__preview), :where(.cui-editable__edit-surface) {
+    box-sizing: border-box;
+    min-inline-size: 0;
+    min-block-size: var(--_cui-editable-height);
+  }
+  :where(.cui-editable__preview) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--_cui-editable-gap);
+    padding: var(--_cui-editable-padding);
+    border: 1px solid var(--_cui-editable-border-color);
+    border-radius: var(--_cui-editable-radius);
+    background: var(--_cui-editable-background);
+  }
+  :where(.cui-editable [data-citry-ui-part="preview-value"]) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+  :where(.cui-editable[data-empty] [data-citry-ui-part="preview-value"]) {
+    color: var(--_cui-editable-muted-color);
+  }
+  :where(.cui-editable__edit-surface) {
+    position: relative;
+    display: grid;
+    min-inline-size: 0;
+  }
+  :where(.cui-editable__input) {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-inline-size: 0;
+    min-block-size: var(--_cui-editable-height);
+    padding: var(--_cui-editable-padding);
+    border: 1px solid var(--_cui-editable-border-color);
+    border-radius: var(--_cui-editable-radius);
+    background: var(--_cui-editable-background);
+    color: var(--_cui-editable-foreground);
+    font: inherit;
+  }
+  :where(.cui-editable[data-action-position="inside"] .cui-editable__input) {
+    padding-inline-end: calc(var(--_cui-editable-action-size) * 2 + var(--_cui-editable-gap) * 3);
+  }
+  :where(.cui-editable__actions) {
+    display: inline-flex;
+    gap: var(--_cui-editable-gap);
+  }
+  :where(.cui-editable[data-action-position="inside"] .cui-editable__actions) {
+    position: absolute;
+    inset-inline-end: var(--_cui-editable-gap);
+    inset-block-start: 50%;
+    transform: translateY(-50%);
+  }
+  :where(.cui-editable[data-action-position="outside"] .cui-editable__edit-surface) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--_cui-editable-gap);
+  }
+  :where(.cui-editable__action) {
+    box-sizing: border-box;
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--_cui-editable-action-size);
+    block-size: var(--_cui-editable-action-size);
+    min-inline-size: var(--_cui-editable-action-size);
+    margin: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: calc(var(--_cui-editable-radius) - .125rem);
+    background: var(--_cui-editable-action-background);
+    color: var(--_cui-editable-action-foreground);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+  }
+  :where(.cui-editable__action:focus-visible), :where(.cui-editable__input:focus-visible) {
+    outline: 2px solid var(--_cui-editable-focus-color);
+    outline-offset: 2px;
+  }
+  :where(.cui-editable__action:disabled) { cursor: not-allowed; opacity: .55; }
+  :where(.cui-editable[data-variant="filled"] .cui-editable__preview),
+  :where(.cui-editable[data-variant="filled"] .cui-editable__input) {
+    background: color-mix(in srgb, CanvasText 6%, Canvas);
+    border-color: transparent;
+  }
+  :where(.cui-editable[data-variant="plain"] .cui-editable__preview),
+  :where(.cui-editable[data-variant="plain"] .cui-editable__input) {
+    border-color: transparent;
+    border-radius: 0;
+    background: transparent;
+  }
+  :where(.cui-editable[data-invalid] .cui-editable__preview),
+  :where(.cui-editable[data-invalid] .cui-editable__input) {
+    border-color: var(--_cui-editable-invalid-border-color);
+  }
+  :where(.cui-editable[data-disabled]), :where(.cui-editable[data-readonly]) { opacity: .72; }
+  :where(.cui-editable:not([data-citry-editable-initialized]) .cui-editable__preview),
+  :where(.cui-editable:not([data-citry-editable-initialized]) .cui-editable__actions) { display: none; }
+  :where(.cui-editable[data-citry-editable-initialized]:not([data-editing]) .cui-editable__edit-surface) {
+    display: none;
+  }
+  :where(.cui-editable[data-citry-editable-initialized][data-editing] .cui-editable__preview) {
+    display: none;
+  }
+  @media (hover: hover) {
+    :where(.cui-editable:not([data-disabled]):not([data-readonly]) .cui-editable__preview:hover),
+    :where(.cui-editable__input:not(:disabled):not([readonly]):hover) {
+      border-color: var(--_cui-editable-hover-border-color);
+    }
+  }
+  @media (forced-colors: active) {
+    :where(.cui-editable__preview), :where(.cui-editable__input), :where(.cui-editable__action) {
+      border-color: ButtonText;
+    }
+    :where(.cui-editable[data-invalid] .cui-editable__preview),
+    :where(.cui-editable[data-invalid] .cui-editable__input) { border-color: Mark; }
+  }
+  @media print {
+    :where(.cui-editable__edit-surface), :where(.cui-editable__action) { display: none !important; }
+    :where(.cui-editable__preview) {
+      display: block !important;
+      min-block-size: auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: CanvasText;
+    }
+  }
+  @media (max-width: 24rem) {
+    :where(.cui-editable[data-action-position="outside"] .cui-editable__edit-surface) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}</style><style data-citry-css-class=CStack_3c2a26>@layer citry-ui.theme {
+  :where([data-citry-ui-part="stack"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.75rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: var(--_cui-stack-gap);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="0"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xs"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="sm"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="lg"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xl"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="center"]) {
+    align-items: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="stack"][data-reverse]) {
+    flex-direction: column-reverse;
+  }
+
+  :where([data-citry-ui-part="stack"] > *) {
+    min-inline-size: 0;
+  }
+}</style></head><body><main><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:2:s--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:3:s--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:4:s--><div class=cui-stack data-align=stretch data-cid-cn6tn8unp data-cid-cn6tn8unq data-citry-ui-part=stack data-gap=md data-justify=start><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:r:1:s--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:r:2:s--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:5:s--><div class=cui-editable data-action-position=inside data-cid=cn6tn8uns data-cid-cn6tn8uns data-citry-root data-citry-ui-part=root data-size=md data-submit-mode=both data-variant=outline><div class=cui-editable__preview data-citry-ui-part=preview><span data-citry-ui-part=preview-value>Enter or blur</span><button class="cui-editable__action cui-editable__edit" aria-label=Edit data-citry-ui-part=edit-action type=button><span aria-hidden=true>✎</span></button></div><div class=cui-editable__edit-surface data-citry-ui-part=edit-surface><input placeholder="Click to edit" value="Enter or blur" aria-label=Both class=cui-editable__input data-citry-ui-part=input id=cui-editable-cn6tn8uns><span class=cui-editable__actions data-citry-ui-part=actions> <button class="cui-editable__action cui-editable__submit" aria-label=Save data-citry-ui-part=submit-action type=button><span aria-hidden=true>✓</span></button> <button class="cui-editable__action cui-editable__cancel" aria-label=Cancel data-citry-ui-part=cancel-action type=button><span aria-hidden=true>✕</span></button> </span></div></div><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:5:e--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:6:s--><div class=cui-editable data-action-position=inside data-cid=cn6tn8unt data-cid-cn6tn8unt data-citry-root data-citry-ui-part=root data-size=md data-submit-mode=enter data-variant=outline><div class=cui-editable__preview data-citry-ui-part=preview><span data-citry-ui-part=preview-value>Enter only</span><button class="cui-editable__action cui-editable__edit" aria-label=Edit data-citry-ui-part=edit-action type=button><span aria-hidden=true>✎</span></button></div><div class=cui-editable__edit-surface data-citry-ui-part=edit-surface><input aria-label="Enter only" placeholder="Click to edit" value="Enter only" class=cui-editable__input data-citry-ui-part=input id=cui-editable-cn6tn8unt><span class=cui-editable__actions data-citry-ui-part=actions> <button class="cui-editable__action cui-editable__submit" aria-label=Save data-citry-ui-part=submit-action type=button><span aria-hidden=true>✓</span></button> <button class="cui-editable__action cui-editable__cancel" aria-label=Cancel data-citry-ui-part=cancel-action type=button><span aria-hidden=true>✕</span></button> </span></div></div><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:6:e--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:7:s--><div class=cui-editable data-action-position=inside data-cid=cn6tn8unu data-cid-cn6tn8unu data-citry-root data-citry-ui-part=root data-size=md data-submit-mode=blur data-variant=outline><div class=cui-editable__preview data-citry-ui-part=preview><span data-citry-ui-part=preview-value>Blur only</span><button class="cui-editable__action cui-editable__edit" aria-label=Edit data-citry-ui-part=edit-action type=button><span aria-hidden=true>✎</span></button></div><div class=cui-editable__edit-surface data-citry-ui-part=edit-surface><input aria-label="Blur only" placeholder="Click to edit" value="Blur only" class=cui-editable__input data-citry-ui-part=input id=cui-editable-cn6tn8unu><span class=cui-editable__actions data-citry-ui-part=actions> <button class="cui-editable__action cui-editable__submit" aria-label=Save data-citry-ui-part=submit-action type=button><span aria-hidden=true>✓</span></button> <button class="cui-editable__action cui-editable__cancel" aria-label=Cancel data-citry-ui-part=cancel-action type=button><span aria-hidden=true>✕</span></button> </span></div></div><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:7:e--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:8:s--><div class=cui-editable data-action-position=inside data-cid=cn6tn8unv data-cid-cn6tn8unv data-citry-root data-citry-ui-part=root data-size=md data-submit-mode=explicit data-variant=outline><div class=cui-editable__preview data-citry-ui-part=preview><span data-citry-ui-part=preview-value>Buttons only</span><button class="cui-editable__action cui-editable__edit" aria-label=Edit data-citry-ui-part=edit-action type=button><span aria-hidden=true>✎</span></button></div><div class=cui-editable__edit-surface data-citry-ui-part=edit-surface><input placeholder="Click to edit" value="Buttons only" aria-label=Explicit class=cui-editable__input data-citry-ui-part=input id=cui-editable-cn6tn8unv><span class=cui-editable__actions data-citry-ui-part=actions> <button class="cui-editable__action cui-editable__submit" aria-label=Save data-citry-ui-part=submit-action type=button><span aria-hidden=true>✓</span></button> <button class="cui-editable__action cui-editable__cancel" aria-label=Cancel data-citry-ui-part=cancel-action type=button><span aria-hidden=true>✕</span></button> </span></div></div><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:8:e--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:r:2:e--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:r:1:e--></div><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:4:e--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:3:e--><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"EditableSubmitModes_f41d13","className":"EditableSubmitModes"},{"classId":"CStack_3c2a26","className":"CStack"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CEditable_620b5b","className":"CEditable"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8unq","invocationId":2,"parentRenderId":"cn6tn8unp"},{"childRenderId":"cn6tn8uns","invocationId":4,"parentRenderId":"cn6tn8unp"},{"childRenderId":"cn6tn8unt","invocationId":5,"parentRenderId":"cn6tn8unp"},{"childRenderId":"cn6tn8unu","invocationId":6,"parentRenderId":"cn6tn8unp"},{"childRenderId":"cn6tn8unv","invocationId":7,"parentRenderId":"cn6tn8unp"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8uno","transparent":false},{"classId":"EditableSubmitModes_f41d13","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8unp","transparent":false},{"classId":"CStack_3c2a26","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8unp","renderId":"cn6tn8unq","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":3,"parentRenderId":"cn6tn8unq","renderId":"cn6tn8unr","transparent":true},{"classId":"CEditable_620b5b","instanceId":5,"invocationId":4,"parentRenderId":"cn6tn8unp","renderId":"cn6tn8uns","transparent":false},{"classId":"CEditable_620b5b","instanceId":6,"invocationId":5,"parentRenderId":"cn6tn8unp","renderId":"cn6tn8unt","transparent":false},{"classId":"CEditable_620b5b","instanceId":7,"invocationId":6,"parentRenderId":"cn6tn8unp","renderId":"cn6tn8unu","transparent":false},{"classId":"CEditable_620b5b","instanceId":8,"invocationId":7,"parentRenderId":"cn6tn8unp","renderId":"cn6tn8unv","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"EditableSubmitModes_f41d13","ownerRenderId":"cn6tn8unp","policy":"template","receiverClassId":"CStack_3c2a26","receiverRenderId":"cn6tn8unq","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CStack_3c2a26","ownerRenderId":"cn6tn8unq","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8unr","slotName":"default","sourceInvocationId":3}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"EditableSubmitModes_f41d13","sourceRenderId":"cn6tn8unp","tagName":"cstack","targetClassId":"CStack_3c2a26","targetRenderId":"cn6tn8unq"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CStack_3c2a26","sourceRenderId":"cn6tn8unq","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8unr"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"EditableSubmitModes_f41d13","sourceRenderId":"cn6tn8unp","tagName":"ceditable","targetClassId":"CEditable_620b5b","targetRenderId":"cn6tn8uns"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"EditableSubmitModes_f41d13","sourceRenderId":"cn6tn8unp","tagName":"ceditable","targetClassId":"CEditable_620b5b","targetRenderId":"cn6tn8unt"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"EditableSubmitModes_f41d13","sourceRenderId":"cn6tn8unp","tagName":"ceditable","targetClassId":"CEditable_620b5b","targetRenderId":"cn6tn8unu"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"EditableSubmitModes_f41d13","sourceRenderId":"cn6tn8unp","tagName":"ceditable","targetClassId":"CEditable_620b5b","targetRenderId":"cn6tn8unv"}],"slotRegions":[{"fillId":2,"ownerRenderId":"cn6tn8unq","parentRegionId":null,"receiverRenderId":"cn6tn8unr","regionId":1,"resultOwnerRenderId":"cn6tn8unq","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8unr"},{"fillId":1,"ownerRenderId":"cn6tn8unp","parentRegionId":1,"receiverRenderId":"cn6tn8unq","regionId":2,"resultOwnerRenderId":"cn6tn8unp","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8unq"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuNjU3NDBlOTUzY2RmLmpz", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuYWRmZThhM2YyMWRjOThlODJhZGU1NTBmYTdmZTdkYjcuanM=", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuNjI4MmFkZGM1ZmMyNTFlNjhiYmYwZGQzZDg0Y2U3NWYuanM=", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuYmM3OTYwZWVhYWRkYmNhYmJjN2Y5Y2Y0MzY5MzFmZmYuanM=", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuZGJjNThhZjUwZDNjY2YyYmU4MDg4NTZhMzg3OWVlZjkuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuOTJlYjlmOGEyYmJjLmNzcw==", "L2NpdHJ5L2NhY2hlL0NTdGFja18zYzJhMjYuYjk5MjE5MGEwMzg5LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0VkaXRhYmxlXzYyMGI1Yg==", "Y242dG44dW5z", "YWRmZThhM2YyMWRjOThlODJhZGU1NTBmYTdmZTdkYjc=", "init"], ["Q0VkaXRhYmxlXzYyMGI1Yg==", "Y242dG44dW50", "NjI4MmFkZGM1ZmMyNTFlNjhiYmYwZGQzZDg0Y2U3NWY=", "init"], ["Q0VkaXRhYmxlXzYyMGI1Yg==", "Y242dG44dW51", "YmM3OTYwZWVhYWRkYmNhYmJjN2Y5Y2Y0MzY5MzFmZmY=", "init"], ["Q0VkaXRhYmxlXzYyMGI1Yg==", "Y242dG44dW52", "ZGJjNThhZjUwZDNjY2YyYmU4MDg4NTZhMzg3OWVlZjk=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dW5v"], ["Q1N0YWNrXzNjMmEyNg==", "Y242dG44dW5x"]], "graph": "2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const editableHandoffKey = Symbol.for("citry-ui:editable-handoff");
+Citry.manager.registerComponent("CEditable_620b5b", {
+  props: {
+    value: {}, editing: {}, required: {}, disabled: {}, readonly: {}, invalid: {},
+    submitMode: {}, selectOnFocus: {}, actionPosition: {}, variant: {}, size: {},
+    onValueChange: {}, onEditChange: {},
+  },
+  init: ({ els, data, props, effect, inject, i18n }) => {
+    const root = els[0];
+    const preview = root.querySelector(':scope > [data-citry-ui-part="preview"]');
+    const previewValue = preview?.querySelector('[data-citry-ui-part="preview-value"]');
+    const editAction = preview?.querySelector('[data-citry-ui-part="edit-action"]');
+    const editSurface = root.querySelector(':scope > [data-citry-ui-part="edit-surface"]');
+    const input = editSurface?.querySelector(':scope > [data-citry-ui-part="input"]');
+    const actions = editSurface?.querySelector(':scope > [data-citry-ui-part="actions"]');
+    const submitAction = actions?.querySelector('[data-citry-ui-part="submit-action"]');
+    const cancelAction = actions?.querySelector('[data-citry-ui-part="cancel-action"]');
+    if (!(preview instanceof HTMLElement) || !(previewValue instanceof HTMLElement)
+      || !(editAction instanceof HTMLButtonElement) || !(editSurface instanceof HTMLElement)
+      || !(input instanceof HTMLInputElement) || !(actions instanceof HTMLElement)
+      || !(submitAction instanceof HTMLButtonElement) || !(cancelAction instanceof HTMLButtonElement)) {
+      throw new Error("[citry-ui] CEditable settled anatomy is invalid.");
+    }
+
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const invalidEpisodes = new Set();
+    const prior = root[editableHandoffKey];
+    delete root[editableHandoffKey];
+    const serverFingerprint = data.value;
+    let committed = prior?.serverFingerprint === serverFingerprint ? prior.committed : data.value;
+    let draft = prior?.serverFingerprint === serverFingerprint ? prior.draft : committed;
+    let dirty = prior?.serverFingerprint === serverFingerprint ? Boolean(prior.dirty) : false;
+    let internalEditing = prior?.serverFingerprint === serverFingerprint
+      ? Boolean(prior.internalEditing)
+      : data.editing;
+    let editing = false;
+    let controlledValue = false;
+    let controlledEditing = false;
+    let clientValue;
+    let clientEditing;
+    let onValueChange = null;
+    let onEditChange = null;
+    let nativeInvalid = false;
+    let composing = false;
+    let actionPressPending = false;
+    let active = true;
+    let generation = 0;
+    let pendingFocus = false;
+    let configuration = {
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      submitMode: data.submitMode,
+      selectOnFocus: data.selectOnFocus,
+      actionPosition: data.actionPosition,
+      variant: data.variant,
+      size: data.size,
+    };
+
+    const report = (name, value, suffix = "") => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CEditable ${name} received invalid client value${suffix}`, value);
+    };
+    const boolean = (name, fallback) => {
+      const value = props[name];
+      if (value === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof value === "boolean") { invalidEpisodes.delete(name); return value; }
+      report(name, value, "; using the server fallback");
+      return fallback;
+    };
+    const choice = (name, fallback, allowed) => {
+      const value = props[name];
+      if (value === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof value === "string" && allowed.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value, "; using the server fallback");
+      return fallback;
+    };
+    const idrefs = (...values) => {
+      const result = [];
+      values.forEach((value) => {
+        if (typeof value !== "string") return;
+        value.split(/\s+/).filter(Boolean).forEach((token) => {
+          if (!result.includes(token)) result.push(token);
+        });
+      });
+      return result.join(" ") || null;
+    };
+    const effectiveDisabled = () => configuration.disabled || input.matches(":disabled");
+    const syncRelationships = (invalid) => {
+      const described = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const error = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (described) input.setAttribute("aria-describedby", described);
+      else input.removeAttribute("aria-describedby");
+      if (error) input.setAttribute("aria-errormessage", error);
+      else input.removeAttribute("aria-errormessage");
+    };
+    const focusInput = () => {
+      const scheduled = ++generation;
+      queueMicrotask(() => {
+        if (!active || scheduled !== generation || !editing || !input.isConnected) return;
+        input.focus({ preventScroll: true });
+        if (configuration.selectOnFocus) input.select();
+      });
+    };
+    const sync = () => {
+      const disabled = effectiveDisabled();
+      const invalid = configuration.invalid || nativeInvalid;
+      root.toggleAttribute("data-editing", editing);
+      root.toggleAttribute("data-empty", !committed);
+      root.toggleAttribute("data-required", configuration.required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", configuration.readonly);
+      root.toggleAttribute("data-invalid", invalid);
+      root.dataset.submitMode = configuration.submitMode;
+      root.dataset.actionPosition = configuration.actionPosition;
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      previewValue.textContent = committed || data.placeholder;
+      editAction.disabled = disabled || configuration.readonly;
+      submitAction.disabled = disabled || configuration.readonly;
+      cancelAction.disabled = disabled || configuration.readonly;
+      input.required = configuration.required;
+      input.disabled = configuration.disabled;
+      input.readOnly = configuration.readonly;
+      if (invalid) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+      syncRelationships(invalid);
+      field?.setNativeInvalid(nativeInvalid);
+    };
+    const notifyEdit = (next, reason, source, forced = false) => {
+      onEditChange?.(next, { editing: next, reason, controlled: controlledEditing, forced, source });
+    };
+    const applyEditing = (next, { focus = false } = {}) => {
+      if (next && (effectiveDisabled() || configuration.readonly)) next = false;
+      if (next === editing) {
+        if (next && focus) focusInput();
+        return;
+      }
+      editing = next;
+      if (next) {
+        if (!dirty) {
+          draft = committed;
+          input.value = draft;
+        }
+        sync();
+        if (focus) focusInput();
+      } else {
+        pendingFocus = false;
+        sync();
+      }
+    };
+    const requestEditing = (next, reason, source, { focus = false, forced = false } = {}) => {
+      if (forced) {
+        internalEditing = next;
+        applyEditing(next, { focus });
+        notifyEdit(next, reason, source, true);
+        return;
+      }
+      if (controlledEditing) {
+        notifyEdit(next, reason, source);
+        return;
+      }
+      internalEditing = next;
+      applyEditing(next, { focus });
+      notifyEdit(next, reason, source);
+    };
+    const startEdit = (source) => {
+      if (effectiveDisabled() || configuration.readonly || editing) return;
+      dirty = false;
+      draft = committed;
+      input.value = draft;
+      requestEditing(true, "edit", source, { focus: true });
+    };
+    const clearNativeInvalid = () => {
+      if (!nativeInvalid || !input.validity.valid) return;
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+    };
+    const requestValue = (next, source, sourceEvent) => {
+      if (next === committed) return false;
+      const previous = committed;
+      const detail = {
+        value: next,
+        previousValue: previous,
+        controlled: controlledValue,
+        source,
+        sourceEvent,
+      };
+      if (!controlledValue) committed = next;
+      onValueChange?.(next, detail);
+      return true;
+    };
+    const submit = (reason, sourceEvent) => {
+      if (!editing || effectiveDisabled() || configuration.readonly) return;
+      if (!input.checkValidity()) {
+        nativeInvalid = true;
+        sync();
+        input.focus({ preventScroll: true });
+        return;
+      }
+      draft = input.value.replace(/\r\n?/g, "\n");
+      dirty = false;
+      requestValue(draft, reason === "blur" ? "blur" : "submit", sourceEvent);
+      clearNativeInvalid();
+      requestEditing(false, reason, sourceEvent);
+      sync();
+      if (!controlledEditing && !effectiveDisabled() && !configuration.readonly) {
+        queueMicrotask(() => editAction.focus({ preventScroll: true }));
+      }
+    };
+    const cancel = (sourceEvent, reason = "cancel") => {
+      if (!editing) return;
+      draft = committed;
+      dirty = false;
+      input.value = committed;
+      nativeInvalid = false;
+      requestEditing(false, reason, sourceEvent);
+      sync();
+      if (!controlledEditing && !effectiveDisabled() && !configuration.readonly) {
+        queueMicrotask(() => editAction.focus({ preventScroll: true }));
+      }
+    };
+    const forceClosed = (reason, source) => {
+      if (!editing) return;
+      draft = committed;
+      dirty = false;
+      input.value = committed;
+      internalEditing = false;
+      applyEditing(false);
+      notifyEdit(false, reason, source, true);
+    };
+
+    const onClick = (event) => {
+      const path = event.composedPath();
+      if (path.includes(editAction)) startEdit(editAction);
+      else if (path.includes(submitAction)) submit("submit", event);
+      else if (path.includes(cancelAction)) cancel(event);
+    };
+    const onPointerDown = (event) => {
+      const path = event.composedPath();
+      if (!path.includes(submitAction) && !path.includes(cancelAction)) return;
+      actionPressPending = true;
+      setTimeout(() => { actionPressPending = false; }, 0);
+    };
+    const onInput = () => {
+      draft = input.value;
+      dirty = draft !== committed;
+      clearNativeInvalid();
+      sync();
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancel(event);
+      } else if (
+        event.key === "Enter"
+        && !event.isComposing
+        && !composing
+        && ["enter", "both"].includes(configuration.submitMode)
+      ) {
+        event.preventDefault();
+        submit("submit", event);
+      }
+    };
+    const onFocusOut = (event) => {
+      if (!editing || !["blur", "both"].includes(configuration.submitMode)) return;
+      const scheduled = generation;
+      queueMicrotask(() => {
+        if (!active || scheduled !== generation || !editing || actionPressPending) return;
+        const activeElement = root.ownerDocument.activeElement;
+        if (root.contains(activeElement) || event.relatedTarget && root.contains(event.relatedTarget)) return;
+        submit("blur", event);
+      });
+    };
+    const onInvalid = (event) => {
+      nativeInvalid = true;
+      if (!editing) requestEditing(true, "invalid", input, { focus: true, forced: true });
+      sync();
+      void event;
+    };
+    const onReset = (event) => {
+      const scheduled = generation;
+      setTimeout(() => {
+        if (!active || event.defaultPrevented || scheduled !== generation) return;
+        const previous = committed;
+        const next = data.value;
+        nativeInvalid = false;
+        dirty = false;
+        draft = next;
+        if (controlledValue) {
+          input.value = committed;
+          if (next !== committed) {
+            onValueChange?.(next, {
+              value: next,
+              previousValue: previous,
+              controlled: true,
+              source: "reset",
+              sourceEvent: event,
+            });
+          }
+        } else {
+          committed = next;
+          input.value = next;
+          if (next !== previous) {
+            onValueChange?.(next, {
+              value: next,
+              previousValue: previous,
+              controlled: false,
+              source: "reset",
+              sourceEvent: event,
+            });
+          }
+        }
+        if (editing) requestEditing(false, "reset", event);
+        sync();
+      }, 0);
+    };
+    const onCompositionStart = () => { composing = true; };
+    const onCompositionEnd = () => { composing = false; };
+
+    root.addEventListener("click", onClick, true);
+    root.addEventListener("pointerdown", onPointerDown, true);
+    root.addEventListener("focusout", onFocusOut);
+    input.addEventListener("input", onInput);
+    input.addEventListener("keydown", onKeyDown);
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("compositionstart", onCompositionStart);
+    input.addEventListener("compositionend", onCompositionEnd);
+    input.form?.addEventListener("reset", onReset);
+    const fieldsetObservers = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (!(ancestor instanceof HTMLFieldSetElement)) continue;
+      const observer = new MutationObserver(() => {
+        if (effectiveDisabled()) forceClosed("disabled", ancestor);
+        sync();
+      });
+      observer.observe(ancestor, { attributes: true, childList: true, attributeFilter: ["disabled"] });
+      fieldsetObservers.push(observer);
+    }
+
+    const stop = effect(() => {
+      clientValue = props.value;
+      clientEditing = props.editing;
+      onValueChange = typeof props.onValueChange === "function" ? props.onValueChange : null;
+      onEditChange = typeof props.onEditChange === "function" ? props.onEditChange : null;
+      if (props.onValueChange != null && onValueChange === null) report("onValueChange", props.onValueChange);
+      else invalidEpisodes.delete("onValueChange");
+      if (props.onEditChange != null && onEditChange === null) report("onEditChange", props.onEditChange);
+      else invalidEpisodes.delete("onEditChange");
+
+      configuration = {
+        required: field ? field.required : boolean("required", data.required),
+        disabled: field ? field.disabled : Boolean(form?.disabled) || boolean("disabled", data.disabled),
+        readonly: field ? field.readonly : Boolean(form?.readonly) || boolean("readonly", data.readonly),
+        invalid: field ? field.invalid : boolean("invalid", data.invalid),
+        submitMode: choice("submitMode", data.submitMode, ["enter", "blur", "both", "explicit"]),
+        selectOnFocus: boolean("selectOnFocus", data.selectOnFocus),
+        actionPosition: choice("actionPosition", data.actionPosition, ["inside", "outside"]),
+        variant: choice("variant", data.variant, ["outline", "filled", "plain"]),
+        size: choice("size", data.size, ["sm", "md", "lg"]),
+      };
+
+      if (clientValue === undefined || clientValue === null) {
+        invalidEpisodes.delete("value");
+        controlledValue = false;
+      } else if (typeof clientValue === "string" && !clientValue.includes("\0")) {
+        invalidEpisodes.delete("value");
+        controlledValue = true;
+        committed = clientValue.replace(/\r\n?/g, "\n");
+        if (!editing || !dirty) {
+          draft = committed;
+          input.value = committed;
+        }
+      } else {
+        report("value", clientValue, "; releasing control to the committed value");
+        controlledValue = false;
+      }
+
+      if (clientEditing === undefined || clientEditing === null) {
+        invalidEpisodes.delete("editing");
+        controlledEditing = false;
+        applyEditing(internalEditing, { focus: internalEditing && pendingFocus });
+      } else if (typeof clientEditing === "boolean") {
+        invalidEpisodes.delete("editing");
+        controlledEditing = true;
+        internalEditing = clientEditing;
+        applyEditing(clientEditing, { focus: clientEditing && !editing });
+      } else {
+        report("editing", clientEditing, "; releasing control to committed mode");
+        controlledEditing = false;
+        applyEditing(internalEditing);
+      }
+      pendingFocus = false;
+      if (effectiveDisabled()) forceClosed("disabled", input);
+      else if (configuration.readonly) forceClosed("readonly", input);
+      sync();
+    });
+
+    const placeholderBinding = i18n && data.catalogPlaceholder
+      ? i18n.bind({
+          message: "citry-ui-editable-click-to-edit",
+          onChange: (text) => {
+            data.placeholder = text;
+            input.placeholder = text;
+            sync();
+          },
+        })
+      : null;
+
+    root.setAttribute("data-citry-editable-initialized", "");
+    input.value = draft;
+    applyEditing(internalEditing, { focus: internalEditing });
+    sync();
+
+    return () => {
+      active = false;
+      generation += 1;
+      root[editableHandoffKey] = {
+        serverFingerprint,
+        committed,
+        draft,
+        dirty,
+        internalEditing,
+      };
+      stop?.();
+      placeholderBinding?.dispose();
+      fieldsetObservers.forEach((observer) => observer.disconnect());
+      root.removeEventListener("click", onClick, true);
+      root.removeEventListener("pointerdown", onPointerDown, true);
+      root.removeEventListener("focusout", onFocusOut);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("keydown", onKeyDown);
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("compositionstart", onCompositionStart);
+      input.removeEventListener("compositionend", onCompositionEnd);
+      input.form?.removeEventListener("reset", onReset);
+      if (nativeInvalid) field?.setNativeInvalid(false);
+      root.removeAttribute("data-citry-editable-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CEditable_620b5b", "adfe8a3f21dc98e82ade550fa7fe7db7", atob("eyJ2YWx1ZSI6IkVudGVyIG9yIGJsdXIiLCJlZGl0aW5nIjpmYWxzZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsInJlYWRvbmx5IjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsInN1Ym1pdE1vZGUiOiJib3RoIiwic2VsZWN0T25Gb2N1cyI6dHJ1ZSwiYWN0aW9uUG9zaXRpb24iOiJpbnNpZGUiLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCIsInBsYWNlaG9sZGVyIjoiQ2xpY2sgdG8gZWRpdCIsImNhdGFsb2dQbGFjZWhvbGRlciI6dHJ1ZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CEditable_620b5b", "6282addc5fc251e68bbf0dd3d84ce75f", atob("eyJ2YWx1ZSI6IkVudGVyIG9ubHkiLCJlZGl0aW5nIjpmYWxzZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsInJlYWRvbmx5IjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsInN1Ym1pdE1vZGUiOiJlbnRlciIsInNlbGVjdE9uRm9jdXMiOnRydWUsImFjdGlvblBvc2l0aW9uIjoiaW5zaWRlIiwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJwbGFjZWhvbGRlciI6IkNsaWNrIHRvIGVkaXQiLCJjYXRhbG9nUGxhY2Vob2xkZXIiOnRydWUsImV4dGVybmFsRGVzY3JpYmVkQnkiOm51bGwsImV4dGVybmFsRXJyb3JNZXNzYWdlIjpudWxsfQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CEditable_620b5b", "bc7960eeaaddbcabbc7f9cf436931fff", atob("eyJ2YWx1ZSI6IkJsdXIgb25seSIsImVkaXRpbmciOmZhbHNlLCJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwic3VibWl0TW9kZSI6ImJsdXIiLCJzZWxlY3RPbkZvY3VzIjp0cnVlLCJhY3Rpb25Qb3NpdGlvbiI6Imluc2lkZSIsInZhcmlhbnQiOiJvdXRsaW5lIiwic2l6ZSI6Im1kIiwicGxhY2Vob2xkZXIiOiJDbGljayB0byBlZGl0IiwiY2F0YWxvZ1BsYWNlaG9sZGVyIjp0cnVlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CEditable_620b5b", "dbc58af50d3ccf2be808856a3879eef9", atob("eyJ2YWx1ZSI6IkJ1dHRvbnMgb25seSIsImVkaXRpbmciOmZhbHNlLCJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwic3VibWl0TW9kZSI6ImV4cGxpY2l0Iiwic2VsZWN0T25Gb2N1cyI6dHJ1ZSwiYWN0aW9uUG9zaXRpb24iOiJpbnNpZGUiLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCIsInBsYWNlaG9sZGVyIjoiQ2xpY2sgdG8gZWRpdCIsImNhdGFsb2dQbGFjZWhvbGRlciI6dHJ1ZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script></body></html><!--citry:g1:2d008fae7aaec899cf8c692c46f25fb00450b17e3e93dee40ce40950d235b20c:0:i:1:e-->

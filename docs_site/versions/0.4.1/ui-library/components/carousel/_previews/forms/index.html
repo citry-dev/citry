@@ -1,0 +1,2350 @@
+<!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:1:s--><!doctype html><html data-cid-cn6tn8vhu lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Carousel form content</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CInput_dc895e>@layer citry-ui.theme {
+  :where(.cui-input) {
+    --_cui-input-background: var(--cui-input-background, Canvas);
+    --_cui-input-foreground: var(--cui-input-foreground, CanvasText);
+    --_cui-input-border-color: var(
+      --cui-input-border-color,
+      color-mix(in srgb, CanvasText 38%, transparent)
+    );
+    --_cui-input-hover-border-color: var(
+      --cui-input-hover-border-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-input-focus-color: var(--cui-input-focus-color, Highlight);
+    --_cui-input-invalid-border-color: var(
+      --cui-input-invalid-border-color,
+      light-dark(#d92d20, #f97066)
+    );
+    --_cui-input-disabled-background: var(
+      --cui-input-disabled-background,
+      color-mix(in srgb, CanvasText 7%, Canvas)
+    );
+    --_cui-input-placeholder-color: var(
+      --cui-input-placeholder-color,
+      color-mix(in srgb, CanvasText 55%, transparent)
+    );
+    --_cui-input-radius: var(--cui-input-radius, 0.5rem);
+    --_cui-input-height: var(--cui-input-height, 2.5rem);
+    --_cui-input-inline-padding: var(--cui-input-inline-padding, 0.75rem);
+    --_cui-input-block-padding: var(--cui-input-block-padding, 0.5rem);
+    --_cui-input-font-size: var(--cui-input-font-size, 1rem);
+
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-block-size: var(--_cui-input-height);
+    padding-block: var(--_cui-input-block-padding);
+    padding-inline: var(--_cui-input-inline-padding);
+    border: 1px solid var(--_cui-input-border-color);
+    border-radius: var(--_cui-input-radius);
+    background: var(--_cui-input-background);
+    color: var(--_cui-input-foreground);
+    font: inherit;
+    font-size: var(--_cui-input-font-size);
+    line-height: 1.25;
+  }
+
+  :where(.cui-input[data-variant="filled"]) {
+    --_cui-input-background: var(
+      --cui-input-background,
+      color-mix(in srgb, CanvasText 7%, Canvas)
+    );
+    --_cui-input-border-color: var(--cui-input-border-color, transparent);
+  }
+
+  :where(.cui-input[data-variant="plain"]) {
+    --_cui-input-background: var(--cui-input-background, transparent);
+    --_cui-input-border-color: var(--cui-input-border-color, transparent);
+    --_cui-input-radius: var(--cui-input-radius, 0);
+  }
+
+  :where(.cui-input[data-size="sm"]) {
+    --_cui-input-height: var(--cui-input-height, 2.25rem);
+    --_cui-input-inline-padding: var(--cui-input-inline-padding, 0.625rem);
+    --_cui-input-block-padding: var(--cui-input-block-padding, 0.375rem);
+    --_cui-input-font-size: var(--cui-input-font-size, 0.875rem);
+  }
+
+  :where(.cui-input[data-size="lg"]) {
+    --_cui-input-height: var(--cui-input-height, 2.75rem);
+    --_cui-input-inline-padding: var(--cui-input-inline-padding, 0.875rem);
+    --_cui-input-block-padding: var(--cui-input-block-padding, 0.625rem);
+    --_cui-input-font-size: var(--cui-input-font-size, 1.0625rem);
+  }
+
+  @media (hover: hover) {
+    :where(.cui-input:not(:disabled):not([data-readonly]):hover) {
+      border-color: var(--_cui-input-hover-border-color);
+    }
+  }
+
+  :where(.cui-input:focus-visible) {
+    border-color: var(--_cui-input-focus-color);
+    outline: 0.1875rem solid color-mix(
+      in srgb,
+      var(--_cui-input-focus-color) 38%,
+      transparent
+    );
+    outline-offset: 0.125rem;
+  }
+
+  :where(.cui-input[data-invalid]) {
+    border-color: var(--_cui-input-invalid-border-color);
+  }
+
+  :where(.cui-input:disabled) {
+    background: var(--_cui-input-disabled-background);
+    cursor: not-allowed;
+  }
+
+  :where(.cui-input[readonly]) {
+    cursor: text;
+  }
+
+  :where(.cui-input)::placeholder {
+    color: var(--_cui-input-placeholder-color);
+    opacity: 1;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-input) {
+      border-color: ButtonText;
+    }
+
+    :where(.cui-input[data-invalid]) {
+      border-color: Mark;
+    }
+  }
+}</style><style data-citry-css-class=CField_81c723>@layer citry-ui.theme {
+  :where(.cui-field) {
+    --_cui-field-gap: var(--cui-field-gap, 0.5rem);
+    --_cui-field-label-color: var(--cui-field-label-color, CanvasText);
+    --_cui-field-label-weight: var(--cui-field-label-weight, 600);
+    --_cui-field-description-color: var(
+      --cui-field-description-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-field-error-color: var(
+      --cui-field-error-color,
+      light-dark(#b42318, #fda29b)
+    );
+    --_cui-field-required-color: var(
+      --cui-field-required-color,
+      var(--_cui-field-error-color)
+    );
+
+    display: grid;
+    gap: var(--_cui-field-gap);
+    min-inline-size: 0;
+    color: CanvasText;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  :where(.cui-field[data-orientation="horizontal"]) {
+    grid-template-columns: minmax(8rem, 0.35fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  :where(.cui-field[data-density="comfortable"]) {
+    --_cui-field-gap: var(--cui-field-gap, 0.375rem);
+  }
+
+  :where(.cui-field[data-density="compact"]) {
+    --_cui-field-gap: var(--cui-field-gap, 0.25rem);
+  }
+
+  :where(.cui-field > [data-citry-ui-part="label"]) {
+    color: var(--_cui-field-label-color);
+    font-weight: var(--_cui-field-label-weight);
+  }
+
+  :where(.cui-field__required) {
+    color: var(--_cui-field-required-color);
+  }
+
+  :where(.cui-field > [data-citry-ui-part="description"]) {
+    color: var(--_cui-field-description-color);
+    font-size: 0.875em;
+  }
+
+  :where(.cui-field > [data-citry-ui-part="error"]) {
+    color: var(--_cui-field-error-color);
+    font-size: 0.875em;
+  }
+
+  @media (max-width: 32rem) {
+    :where(.cui-field[data-orientation="horizontal"]) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-field[data-invalid] > [data-citry-ui-part="error"]) {
+      color: Mark;
+    }
+  }
+}</style><style data-citry-css-class=CCheckbox_05d638>@layer citry-ui.theme {
+  :where(.cui-checkbox) {
+    --_cui-checkbox-background: var(--cui-checkbox-background, Canvas);
+    --_cui-checkbox-foreground: var(--cui-checkbox-foreground, CanvasText);
+    --_cui-checkbox-border-color: var(
+      --cui-checkbox-border-color,
+      color-mix(in srgb, CanvasText 42%, transparent)
+    );
+    --_cui-checkbox-hover-border-color: var(
+      --cui-checkbox-hover-border-color,
+      color-mix(in srgb, CanvasText 72%, transparent)
+    );
+    --_cui-checkbox-active-color: var(
+      --cui-checkbox-active-color,
+      light-dark(#2563eb, #60a5fa)
+    );
+    --_cui-checkbox-indicator-color: var(
+      --cui-checkbox-indicator-color,
+      light-dark(white, #0b1220)
+    );
+    --_cui-checkbox-focus-color: var(--cui-checkbox-focus-color, Highlight);
+    --_cui-checkbox-invalid-color: var(
+      --cui-checkbox-invalid-color,
+      light-dark(#b42318, #f97066)
+    );
+    --_cui-checkbox-disabled-opacity: var(--cui-checkbox-disabled-opacity, 0.55);
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1.125rem);
+    --_cui-checkbox-radius: var(--cui-checkbox-radius, 0.3rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.625rem);
+    --_cui-checkbox-description-color: var(
+      --cui-checkbox-description-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-checkbox-description-gap: var(--cui-checkbox-description-gap, 0.2rem);
+
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--_cui-checkbox-gap);
+    min-inline-size: 0;
+    color: var(--_cui-checkbox-foreground);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.4;
+    vertical-align: middle;
+  }
+
+  :where(.cui-checkbox[data-label-pos="start"]) {
+    flex-direction: row-reverse;
+  }
+
+  :where(.cui-checkbox[data-size="sm"]) {
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.5rem);
+
+    font-size: 0.875rem;
+  }
+
+  :where(.cui-checkbox[data-size="lg"]) {
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1.25rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.75rem);
+
+    font-size: 1.0625rem;
+  }
+
+  :where(.cui-checkbox__input) {
+    appearance: none;
+    display: grid;
+    flex: 0 0 auto;
+    place-content: center;
+    box-sizing: border-box;
+    inline-size: var(--_cui-checkbox-control-size);
+    block-size: var(--_cui-checkbox-control-size);
+    margin: 0.15em 0 0;
+    border: 1px solid var(--_cui-checkbox-border-color);
+    border-radius: var(--_cui-checkbox-radius);
+    background: var(--_cui-checkbox-background);
+    color: var(--_cui-checkbox-indicator-color);
+    cursor: pointer;
+    font: inherit;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  :where(.cui-checkbox__input)::after {
+    content: "";
+    display: block;
+    box-sizing: border-box;
+    opacity: 0;
+  }
+
+  :where(.cui-checkbox__input:checked) {
+    border-color: var(--_cui-checkbox-active-color);
+    background: var(--_cui-checkbox-active-color);
+  }
+
+  :where(.cui-checkbox__input:checked)::after {
+    inline-size: 0.32em;
+    block-size: 0.62em;
+    border: solid currentcolor;
+    border-width: 0 0.13em 0.13em 0;
+    opacity: 1;
+    transform: translateY(-0.04em) rotate(45deg);
+  }
+
+  :where(.cui-checkbox__input:indeterminate) {
+    border-color: var(--_cui-checkbox-active-color);
+    background: var(--_cui-checkbox-active-color);
+  }
+
+  :where(.cui-checkbox__input:indeterminate)::after {
+    inline-size: 0.58em;
+    block-size: 0.13em;
+    border-radius: 999px;
+    background: currentcolor;
+    opacity: 1;
+  }
+
+  :where(.cui-checkbox[data-variant="outline"] .cui-checkbox__input:checked),
+  :where(.cui-checkbox[data-variant="outline"] .cui-checkbox__input:indeterminate) {
+    --_cui-checkbox-indicator-color: var(
+      --cui-checkbox-indicator-color,
+      var(--_cui-checkbox-active-color)
+    );
+
+    background: var(--_cui-checkbox-background);
+    color: var(--_cui-checkbox-indicator-color);
+  }
+
+  :where(.cui-checkbox__input:focus-visible) {
+    border-color: var(--_cui-checkbox-focus-color);
+    outline: 0.1875rem solid color-mix(
+      in srgb,
+      var(--_cui-checkbox-focus-color) 38%,
+      transparent
+    );
+    outline-offset: 0.125rem;
+  }
+
+  @media (hover: hover) {
+    :where(.cui-checkbox:not([data-disabled]) .cui-checkbox__input:hover) {
+      border-color: var(--_cui-checkbox-hover-border-color);
+    }
+  }
+
+  :where(.cui-checkbox[data-invalid] .cui-checkbox__input) {
+    border-color: var(--_cui-checkbox-invalid-color);
+  }
+
+  :where(.cui-checkbox__body) {
+    display: grid;
+    min-inline-size: 0;
+    gap: var(--_cui-checkbox-description-gap);
+  }
+
+  :where(.cui-checkbox [data-citry-ui-part="label"]) {
+    min-inline-size: 0;
+    color: inherit;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-checkbox[data-disabled]),
+  :where(.cui-checkbox:has(> .cui-checkbox__input:disabled)) {
+    opacity: var(--_cui-checkbox-disabled-opacity);
+  }
+
+  :where(.cui-checkbox[data-disabled] .cui-checkbox__input),
+  :where(.cui-checkbox[data-disabled] [data-citry-ui-part="label"]),
+  :where(.cui-checkbox > .cui-checkbox__input:disabled),
+  :where(.cui-checkbox:has(> .cui-checkbox__input:disabled) [data-citry-ui-part="label"]) {
+    cursor: not-allowed;
+  }
+
+  :where(.cui-checkbox [data-citry-ui-part="description"]) {
+    min-inline-size: 0;
+    color: var(--_cui-checkbox-description-color);
+    font-size: 0.875em;
+    overflow-wrap: anywhere;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-checkbox__input) {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-checkbox__input) {
+      border-color: ButtonText;
+      forced-color-adjust: auto;
+    }
+
+    :where(.cui-checkbox[data-invalid] .cui-checkbox__input) {
+      border-color: Mark;
+    }
+  }
+
+  @media print {
+    :where(.cui-checkbox__input) {
+      print-color-adjust: exact;
+    }
+  }
+}</style><style data-citry-css-class=CCarousel_f351c4>@layer citry-ui.theme {
+  :where([data-citry-ui-part="carousel"]) {
+    --_cui-carousel-background: var(--cui-carousel-background, transparent);
+    --_cui-carousel-foreground: var(--cui-carousel-foreground, CanvasText);
+    --_cui-carousel-border-color: var(--cui-carousel-border-color, light-dark(#e7e5e4, #44403c));
+    --_cui-carousel-radius: var(--cui-carousel-radius, 0.9rem);
+    --_cui-carousel-gap: var(--cui-carousel-gap, 1rem);
+    --_cui-carousel-padding: var(--cui-carousel-padding, 0.75rem);
+    --_cui-carousel-block-size: var(--cui-carousel-block-size, 20rem);
+    --_cui-carousel-control-background: var(--cui-carousel-control-background, light-dark(#f5f5f4, #292524));
+    --_cui-carousel-control-foreground: var(--cui-carousel-control-foreground, CanvasText);
+    --_cui-carousel-control-size: var(--cui-carousel-control-size, 2.5rem);
+    --_cui-carousel-focus-color: var(--cui-carousel-focus-color, Highlight);
+    --_cui-carousel-indicator-size: var(--cui-carousel-indicator-size, 0.65rem);
+    --_cui-carousel-indicator-color: var(--cui-carousel-indicator-color, light-dark(#a8a29e, #78716c));
+    --_cui-carousel-indicator-active-color: var(--cui-carousel-indicator-active-color, Highlight);
+    --_cui-carousel-duration: var(--cui-carousel-duration, 260ms);
+    --_cui-carousel-easing: var(--cui-carousel-easing, ease-out);
+    display: grid;
+    gap: var(--_cui-carousel-gap);
+    min-inline-size: 0;
+    padding: var(--_cui-carousel-padding);
+    color: var(--_cui-carousel-foreground);
+    background: var(--_cui-carousel-background);
+  }
+  :where([data-citry-ui-part="carousel"][data-variant="surface"]) {
+    border: 1px solid var(--_cui-carousel-border-color);
+    border-radius: var(--_cui-carousel-radius);
+    background: light-dark(#fafaf9, #1c1917);
+  }
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="controls"]) {
+    display: flex;
+    justify-content: end;
+    gap: 0.45rem;
+  }
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="controls"][hidden]),
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="indicators"][hidden]) {
+    display: none !important;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="previous"]),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="next"]) {
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--_cui-carousel-control-size);
+    block-size: var(--_cui-carousel-control-size);
+    padding: 0;
+    border: 1px solid var(--_cui-carousel-border-color);
+    border-radius: 999px;
+    color: var(--_cui-carousel-control-foreground);
+    background: var(--_cui-carousel-control-background);
+    font: inherit;
+    font-size: 1.25rem;
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="previous"]:disabled),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="next"]:disabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]) {
+    min-inline-size: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+    scroll-snap-type: inline mandatory;
+    border-radius: var(--_cui-carousel-radius);
+    cursor: grab;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]::-webkit-scrollbar) {
+    display: none;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"][data-dragging]) {
+    cursor: grabbing;
+    user-select: none;
+    scroll-snap-type: none;
+  }
+  :where([data-citry-ui-part="carousel"][data-orientation="vertical"] [data-citry-ui-part="viewport"]) {
+    block-size: var(--_cui-carousel-block-size);
+    scroll-snap-type: block mandatory;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="track"]) {
+    display: flex;
+    gap: var(--_cui-carousel-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :where([data-citry-ui-part="carousel"][data-orientation="vertical"] [data-citry-ui-part="track"]) {
+    flex-direction: column;
+    min-block-size: 100%;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="slide"]) {
+    box-sizing: border-box;
+    flex: 0 0 100%;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    scroll-snap-align: start;
+  }
+  :where([data-citry-ui-part="carousel"][data-orientation="vertical"] [data-citry-ui-part="slide"]) {
+    min-block-size: var(--_cui-carousel-block-size);
+  }
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="indicators"]) {
+    display: flex;
+    justify-content: center;
+    gap: 0.55rem;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="indicator"]) {
+    inline-size: var(--_cui-carousel-indicator-size);
+    block-size: var(--_cui-carousel-indicator-size);
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--_cui-carousel-indicator-color);
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="indicator"][aria-current]) {
+    background: var(--_cui-carousel-indicator-active-color);
+    outline: 1px solid Canvas;
+    outline-offset: -2px;
+  }
+  :where([data-citry-ui-part="carousel"] button:focus-visible),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]:focus-visible),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="slide"] :focus-visible) {
+    outline: 3px solid var(--_cui-carousel-focus-color);
+    outline-offset: 2px;
+  }
+  :where([data-citry-ui-part="carousel"][data-size="sm"]) {
+    --_cui-carousel-gap: 0.7rem;
+    --_cui-carousel-padding: 0.55rem;
+    --_cui-carousel-control-size: 2.15rem;
+    font-size: 0.875rem;
+  }
+  :where([data-citry-ui-part="carousel"][data-size="lg"]) {
+    --_cui-carousel-gap: 1.25rem;
+    --_cui-carousel-padding: 1rem;
+    --_cui-carousel-control-size: 2.85rem;
+    font-size: 1.0625rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]) {
+      scroll-behavior: auto;
+    }
+    :where([data-citry-ui-part="carousel"]) {
+      --_cui-carousel-duration: 0ms;
+    }
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="carousel"][data-variant="surface"]),
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="previous"]),
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="next"]) {
+      border-color: CanvasText;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="indicator"][aria-current]) {
+      background: Highlight;
+    }
+  }
+  @media print {
+    :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="controls"]),
+    :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="indicators"]) {
+      display: none !important;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]) {
+      block-size: auto;
+      overflow: visible;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="track"]) {
+      display: grid;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="slide"]) {
+      min-block-size: 0;
+      break-inside: avoid;
+    }
+  }
+}</style></head><body><main><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:2:s--><form data-cid-cn6tn8vhv><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:3:s--><section aria-label="Profile setup" aria-roledescription=carousel class=cui-carousel data-cid=cn6tn8vhw data-cid-cn6tn8vhw data-citry-carousel-root data-citry-root data-citry-ui-part=carousel data-draggable data-index=0 data-orientation=horizontal data-size=md data-variant=plain id=cui-carousel-cn6tn8vhw role=region><div data-citry-ui-part=controls><button aria-label="Previous slide" data-citry-carousel-previous data-citry-ui-part=previous disabled type=button><span aria-hidden=true>←</span></button><button aria-label="Next slide" data-citry-carousel-next data-citry-ui-part=next type=button><span aria-hidden=true>→</span></button></div><div data-citry-carousel-viewport data-citry-ui-part=viewport tabindex=0><div data-citry-ui-part=track><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:1:s--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:4:s--><div aria-label="Identity form" aria-roledescription=slide class=cui-carousel__slide data-active data-cid-cn6tn8vhx data-citry-carousel-slide data-citry-ui-part=slide data-index=0 data-value=identity role=group><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:2:s--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:5:s--><div class=cui-field data-cid=cn6tn8vhy data-cid-cn6tn8vhy data-citry-field-root data-citry-root data-citry-ui-part=field data-density=default data-orientation=vertical id=cui-field-cn6tn8vhy-control-field><label data-citry-ui-part=label for=cui-field-cn6tn8vhy-control id=cui-field-cn6tn8vhy-control-label><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:3:s-->Project name<!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:3:e--> <span aria-hidden=true class=cui-field__required data-citry-ui-part=required-indicator hidden> * </span></label><div data-citry-ui-part=control><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:4:s--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:6:s--><input class=cui-input data-cid=cn6tn8vhz data-cid-cn6tn8vhz data-citry-field-control data-citry-root data-citry-ui-part=input data-size=md data-variant=outline id=cui-field-cn6tn8vhy-control name=project><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:6:e--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:4:e--></div><div aria-live=polite data-citry-ui-part=error hidden id=cui-field-cn6tn8vhy-control-error></div></div><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:5:e--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:2:e--></div><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:4:e--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:7:s--><div aria-label="Preferences form" aria-roledescription=slide class=cui-carousel__slide data-cid-cn6tn8vi0 data-citry-carousel-slide data-citry-ui-part=slide data-index=1 data-value=preferences role=group><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:5:s--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:8:s--><span class=cui-checkbox data-cid=cn6tn8vi1 data-cid-cn6tn8vi1 data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=solid> <input class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-cn6tn8vi1 name=updates type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-cn6tn8vi1><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:6:s-->Receive updates<!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:6:e--></label> </span> </span><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:8:e--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:5:e--></div><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:7:e--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:1:e--></div></div><div aria-label="Choose slide" data-citry-carousel-indicators data-citry-ui-part=indicators hidden role=group></div></section><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:3:e--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:9:s--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:10:s--><button class=cui-button data-cid=cn6tn8vi2 data-cid-cn6tn8vi2 data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:7:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:8:s--> <span class=cui-button__spinner></span> <!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:8:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:9:s-->Save profile<!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:9:e--> </span><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:r:7:e--></button><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:10:e--><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:9:e--></form><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"CarouselForms_2ff37d","className":"CarouselForms"},{"classId":"CCarousel_f351c4","className":"CCarousel"},{"classId":"CCarouselSlide_3aa95b","className":"CCarouselSlide"},{"classId":"CField_81c723","className":"CField"},{"classId":"CInput_dc895e","className":"CInput"},{"classId":"CCheckbox_05d638","className":"CCheckbox"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8vhw","invocationId":2,"parentRenderId":"cn6tn8vhv"},{"childRenderId":"cn6tn8vhx","invocationId":4,"parentRenderId":"cn6tn8vhv"},{"childRenderId":"cn6tn8vhy","invocationId":6,"parentRenderId":"cn6tn8vhv"},{"childRenderId":"cn6tn8vhz","invocationId":7,"parentRenderId":"cn6tn8vhv"},{"childRenderId":"cn6tn8vi0","invocationId":5,"parentRenderId":"cn6tn8vhv"},{"childRenderId":"cn6tn8vi1","invocationId":8,"parentRenderId":"cn6tn8vhv"},{"childRenderId":"cn6tn8vi2","invocationId":3,"parentRenderId":"cn6tn8vhv"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8vhu","transparent":false},{"classId":"CarouselForms_2ff37d","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8vhv","transparent":false},{"classId":"CCarousel_f351c4","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8vhv","renderId":"cn6tn8vhw","transparent":false},{"classId":"CCarouselSlide_3aa95b","instanceId":4,"invocationId":4,"parentRenderId":"cn6tn8vhv","renderId":"cn6tn8vhx","transparent":false},{"classId":"CField_81c723","instanceId":5,"invocationId":6,"parentRenderId":"cn6tn8vhv","renderId":"cn6tn8vhy","transparent":false},{"classId":"CInput_dc895e","instanceId":6,"invocationId":7,"parentRenderId":"cn6tn8vhv","renderId":"cn6tn8vhz","transparent":false},{"classId":"CCarouselSlide_3aa95b","instanceId":7,"invocationId":5,"parentRenderId":"cn6tn8vhv","renderId":"cn6tn8vi0","transparent":false},{"classId":"CCheckbox_05d638","instanceId":8,"invocationId":8,"parentRenderId":"cn6tn8vhv","renderId":"cn6tn8vi1","transparent":false},{"classId":"CButton_353146","instanceId":9,"invocationId":3,"parentRenderId":"cn6tn8vhv","renderId":"cn6tn8vi2","transparent":false},{"classId":"DynamicElement_29900a","instanceId":10,"invocationId":9,"parentRenderId":"cn6tn8vi2","renderId":"cn6tn8vi3","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"CarouselForms_2ff37d","ownerRenderId":"cn6tn8vhv","policy":"template","receiverClassId":"CCarousel_f351c4","receiverRenderId":"cn6tn8vhw","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CarouselForms_2ff37d","ownerRenderId":"cn6tn8vhv","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8vi2","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"CarouselForms_2ff37d","ownerRenderId":"cn6tn8vhv","policy":"template","receiverClassId":"CCarouselSlide_3aa95b","receiverRenderId":"cn6tn8vhx","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"CarouselForms_2ff37d","ownerRenderId":"cn6tn8vhv","policy":"template","receiverClassId":"CCarouselSlide_3aa95b","receiverRenderId":"cn6tn8vi0","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":7,"kind":"named","locationId":null,"ownerClassId":"CarouselForms_2ff37d","ownerRenderId":"cn6tn8vhv","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"cn6tn8vhy","slotName":"label","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":8,"kind":"named","locationId":null,"ownerClassId":"CarouselForms_2ff37d","ownerRenderId":"cn6tn8vhv","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"cn6tn8vhy","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":12,"kind":"implicit","locationId":null,"ownerClassId":"CarouselForms_2ff37d","ownerRenderId":"cn6tn8vhv","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"cn6tn8vi1","slotName":"default","sourceInvocationId":8},{"fallbackLocationId":null,"fillId":14,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8vi2","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8vi3","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":16,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8vi2","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8vi2","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CarouselForms_2ff37d","sourceRenderId":"cn6tn8vhv","tagName":"ccarousel","targetClassId":"CCarousel_f351c4","targetRenderId":"cn6tn8vhw"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CarouselForms_2ff37d","sourceRenderId":"cn6tn8vhv","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cn6tn8vi2"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CarouselForms_2ff37d","sourceRenderId":"cn6tn8vhv","tagName":"ccarouselslide","targetClassId":"CCarouselSlide_3aa95b","targetRenderId":"cn6tn8vhx"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CarouselForms_2ff37d","sourceRenderId":"cn6tn8vhv","tagName":"ccarouselslide","targetClassId":"CCarouselSlide_3aa95b","targetRenderId":"cn6tn8vi0"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"CarouselForms_2ff37d","sourceRenderId":"cn6tn8vhv","tagName":"cfield","targetClassId":"CField_81c723","targetRenderId":"cn6tn8vhy"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":4,"sourceClassId":"CarouselForms_2ff37d","sourceRenderId":"cn6tn8vhv","tagName":"cinput","targetClassId":"CInput_dc895e","targetRenderId":"cn6tn8vhz"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":5,"sourceClassId":"CarouselForms_2ff37d","sourceRenderId":"cn6tn8vhv","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"cn6tn8vi1"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cn6tn8vi2","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8vi3"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cn6tn8vhv","parentRegionId":null,"receiverRenderId":"cn6tn8vhw","regionId":1,"resultOwnerRenderId":"cn6tn8vhv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vhw"},{"fillId":4,"ownerRenderId":"cn6tn8vhv","parentRegionId":1,"receiverRenderId":"cn6tn8vhx","regionId":2,"resultOwnerRenderId":"cn6tn8vhv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vhv"},{"fillId":7,"ownerRenderId":"cn6tn8vhv","parentRegionId":2,"receiverRenderId":"cn6tn8vhy","regionId":3,"resultOwnerRenderId":"cn6tn8vhv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vhv"},{"fillId":8,"ownerRenderId":"cn6tn8vhv","parentRegionId":2,"receiverRenderId":"cn6tn8vhy","regionId":4,"resultOwnerRenderId":"cn6tn8vhv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vhv"},{"fillId":5,"ownerRenderId":"cn6tn8vhv","parentRegionId":1,"receiverRenderId":"cn6tn8vi0","regionId":5,"resultOwnerRenderId":"cn6tn8vhv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vhv"},{"fillId":12,"ownerRenderId":"cn6tn8vhv","parentRegionId":5,"receiverRenderId":"cn6tn8vi1","regionId":6,"resultOwnerRenderId":"cn6tn8vhv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vhv"},{"fillId":14,"ownerRenderId":"cn6tn8vi2","parentRegionId":null,"receiverRenderId":"cn6tn8vi3","regionId":7,"resultOwnerRenderId":"cn6tn8vi2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vi3"},{"fillId":16,"ownerRenderId":"cn6tn8vi2","parentRegionId":7,"receiverRenderId":"cn6tn8vi2","regionId":8,"resultOwnerRenderId":"cn6tn8vi2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vi2"},{"fillId":2,"ownerRenderId":"cn6tn8vhv","parentRegionId":7,"receiverRenderId":"cn6tn8vi2","regionId":9,"resultOwnerRenderId":"cn6tn8vhv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vi2"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NJbnB1dF9kYzg5NWUuZWE1ZDRhOGEwNDE4Lmpz", "L2NpdHJ5L2NhY2hlL0NJbnB1dF9kYzg5NWUuMDQxOTFjZTA1OWQ2Y2ZkZDM3YmQ0MjQyYjNhZTUyZTIuanM=", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuZDNhODE3Yjg5YjI5Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuNDk2ZTlmNGMwZjcxYzZmZmQ0Yjg0YTY4YzQ1MWU0YmMuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguODg0MTQ5NmJhZTdkLmpz", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguMDE4ZTAzMjY2NGY4YmYzZjYxOTUyZTZlZjNjMmMzYWYuanM=", "L2NpdHJ5L2NhY2hlL0NDYXJvdXNlbF9mMzUxYzQuYjQ4MDc4ZDNiYTUwLmpz", "L2NpdHJ5L2NhY2hlL0NDYXJvdXNlbF9mMzUxYzQuMmQ0OGJlMWFlZDUyNjhhYjJjY2YyYjMwMDdkOWIyODMuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NJbnB1dF9kYzg5NWUuOTBhZjc0MWUzZDhhLmNzcw==", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuOTk2YTE3ZGJmZGUwLmNzcw==", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguMDQzNWRiNmEzMjQwLmNzcw==", "L2NpdHJ5L2NhY2hlL0NDYXJvdXNlbF9mMzUxYzQuNzJmNTU5NDE0ZDVlLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0lucHV0X2RjODk1ZQ==", "Y242dG44dmh6", "MDQxOTFjZTA1OWQ2Y2ZkZDM3YmQ0MjQyYjNhZTUyZTI=", "init"], ["Q0ZpZWxkXzgxYzcyMw==", "Y242dG44dmh5", "NDk2ZTlmNGMwZjcxYzZmZmQ0Yjg0YTY4YzQ1MWU0YmM=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y242dG44dmkx", "MDE4ZTAzMjY2NGY4YmYzZjYxOTUyZTZlZjNjMmMzYWY=", "init"], ["Q0Nhcm91c2VsX2YzNTFjNA==", "Y242dG44dmh3", "MmQ0OGJlMWFlZDUyNjhhYjJjY2YyYjMwMDdkOWIyODM=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y242dG44dmky", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dmh1"]], "graph": "d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      (()=>{const r=Symbol.for("citry-ui:scroll-geometry"),i=globalThis[r];
+      if(i!==void 0){if(i.generation!==1)throw new Error(
+      "[citry-ui] incompatible scroll geometry runtime; reload the page.");
+      return}const l=(o,n)=>Math.max(0,o-n),t=(o,n)=>Math.min(Math.max(Number.isFinite(o)?o:0,0),n),
+      c=(o,n,e)=>t(e?-o:o,n),m=(o,n,e)=>{const a=t(o,n);return e?-a:a};
+      globalThis[r]={generation:1,maximum:l,clamp:t,horizontalFromRaw:c,horizontalToRaw:m}})();
+    
+})();</script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CInput_dc895e", {
+  props: {
+    value: {},
+    required: {},
+    disabled: {},
+    readonly: {},
+    invalid: {},
+    variant: {},
+    size: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const input = els[0];
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const allowedValues = {
+      variant: ["outline", "filled", "plain"],
+      size: ["sm", "md", "lg"],
+    };
+    const invalidEpisodes = new Map();
+    let nativeInvalid = false;
+    let controlled = false;
+    let controlledValue = null;
+    let composing = false;
+    const resetTimers = new Set();
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CInput ${name} received invalid client value ${describedValue}; `
+          + "using the previous valid or server-rendered fallback.",
+        input,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const reportFieldOwned = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `field:${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CInput ${name} is controlled by its enclosing CField; `
+          + `ignoring client value ${describedValue}.`,
+        input,
+      );
+    };
+    const idrefs = (...values) => {
+      const result = [];
+      values.forEach((value) => {
+        if (typeof value !== "string") {
+          return;
+        }
+        value.split(/\s+/).filter(Boolean).forEach((token) => {
+          if (!result.includes(token)) {
+            result.push(token);
+          }
+        });
+      });
+      return result.join(" ") || null;
+    };
+    const syncRelationships = (invalid) => {
+      const describedBy = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const errorMessage = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (describedBy) {
+        input.setAttribute("aria-describedby", describedBy);
+      } else {
+        input.removeAttribute("aria-describedby");
+      }
+      if (errorMessage) {
+        input.setAttribute("aria-errormessage", errorMessage);
+      } else {
+        input.removeAttribute("aria-errormessage");
+      }
+    };
+    const applyState = () => {
+      let required;
+      let disabled;
+      let readonly;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "readonly", "invalid"].forEach((name) => {
+          if (props[name] !== undefined) {
+            reportFieldOwned(name, props[name]);
+          } else {
+            invalidEpisodes.delete(name);
+          }
+        });
+        required = field.required;
+        disabled = field.disabled;
+        readonly = field.readonly;
+        externalInvalid = field.invalid;
+      } else {
+        required = resolveBoolean("required", data.required);
+        // A native disabled CForm fieldset always wins.
+        disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+        const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+        readonly = resolveBoolean("readonly", readonlyFallback);
+        externalInvalid = resolveBoolean("invalid", data.invalid);
+      }
+      const invalid = externalInvalid || nativeInvalid;
+      const variant = resolveChoice("variant");
+      const size = resolveChoice("size");
+
+      input.required = required;
+      input.disabled = disabled;
+      input.readOnly = readonly;
+      input.toggleAttribute("data-required", required);
+      input.toggleAttribute("data-disabled", disabled);
+      input.toggleAttribute("data-readonly", readonly);
+      input.toggleAttribute("data-invalid", invalid);
+      input.dataset.variant = variant;
+      input.dataset.size = size;
+      if (invalid) {
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
+      syncRelationships(invalid);
+    };
+    const clearNativeInvalidWhenValid = () => {
+      if (!nativeInvalid || !input.validity.valid) {
+        return;
+      }
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+      applyState();
+    };
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const onInput = () => {
+      clearNativeInvalidWhenValid();
+      if (controlled && !composing) {
+        queueMicrotask(() => {
+          if (controlled && !composing) {
+            input.value = controlledValue;
+          }
+        });
+      }
+    };
+    const onChange = () => {
+      clearNativeInvalidWhenValid();
+    };
+    const onCompositionStart = () => {
+      composing = true;
+    };
+    const onCompositionEnd = () => {
+      composing = false;
+      if (controlled) {
+        queueMicrotask(() => {
+          if (controlled && !composing) {
+            input.value = controlledValue;
+          }
+        });
+      }
+    };
+    const onReset = (event) => {
+      const resetTimer = setTimeout(() => {
+        resetTimers.delete(resetTimer);
+        if (event.defaultPrevented) {
+          return;
+        }
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        if (controlled) {
+          input.value = controlledValue;
+        }
+        applyState();
+      }, 0);
+      resetTimers.add(resetTimer);
+    };
+    const nativeForm = input.form;
+
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onChange);
+    input.addEventListener("compositionstart", onCompositionStart);
+    input.addEventListener("compositionend", onCompositionEnd);
+    nativeForm?.addEventListener("reset", onReset);
+    effect(() => {
+      applyState();
+      clearNativeInvalidWhenValid();
+    });
+    effect(() => {
+      const value = props.value;
+      if (value === undefined) {
+        controlled = false;
+        invalidEpisodes.delete("value");
+        return;
+      }
+      if (typeof value !== "string") {
+        reportInvalid("value", value);
+        return;
+      }
+      invalidEpisodes.delete("value");
+      controlled = true;
+      controlledValue = value;
+      if (!composing) {
+        input.value = value;
+      }
+    });
+    input.setAttribute("data-citry-input-initialized", "");
+
+    return () => {
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("compositionstart", onCompositionStart);
+      input.removeEventListener("compositionend", onCompositionEnd);
+      nativeForm?.removeEventListener("reset", onReset);
+      resetTimers.forEach((resetTimer) => clearTimeout(resetTimer));
+      resetTimers.clear();
+      if (nativeInvalid) {
+        field?.setNativeInvalid(false);
+      }
+      input.removeAttribute("data-citry-input-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CInput_dc895e", "04191ce059d6cfdd37bd4242b3ae52e2", atob("eyJ2YWx1ZSI6bnVsbCwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsInJlYWRvbmx5IjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOmZhbHNlLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCIsImV4dGVybmFsRGVzY3JpYmVkQnkiOm51bGwsImV4dGVybmFsRXJyb3JNZXNzYWdlIjpudWxsfQ=="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CField_81c723", {
+  props: {
+    required: {},
+    disabled: {},
+    readonly: {},
+    invalid: {},
+    orientation: {},
+    density: {},
+  },
+  init: ({ els, data, props, effect, reactive, provide, inject }) => {
+    const root = els[0];
+    const requiredIndicator = root.querySelector(
+      ':scope > [data-citry-ui-part="label"] > [data-citry-ui-part="required-indicator"]',
+    );
+    // Controls may expose parts with the same public names. Restrict the
+    // lookup to this Field's direct status node so nested component
+    // internals are never mistaken for Field-owned UI.
+    const error = root.querySelector(':scope > [data-citry-ui-part="error"]');
+    const controls = root.querySelectorAll('[data-citry-field-control]');
+    if (controls.length !== 1) {
+      throw new Error(
+        `[citry-ui] CField requires exactly one marked control, but found ${controls.length}.`,
+      );
+    }
+    const control = controls[0];
+    const initialSupportsRequired = control.getAttribute(
+      "data-citry-field-supports-required",
+    ) !== "false";
+    const initialSupportsReadonly = control.getAttribute(
+      "data-citry-field-supports-readonly",
+    ) !== "false";
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const allowedValues = {
+      orientation: ["vertical", "horizontal"],
+      density: ["default", "comfortable", "compact"],
+    };
+    const invalidEpisodes = new Map();
+    let externalInvalid = data.invalid;
+    let capabilityGeneration = 0;
+    let activeCapabilityGeneration = null;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name} received invalid client value ${describedValue}; `
+          + "using the server-rendered fallback.",
+        root,
+      );
+    };
+    const reportUnsupported = (name) => {
+      const episode = `capability:${name}`;
+      const fingerprint = "unsupported:true";
+      if (invalidEpisodes.get(episode) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(episode, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name}=true is not supported by its registered control; using false.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const context = reactive({
+      controlId: data.controlId,
+      descriptionId: data.descriptionId,
+      errorId: data.errorId,
+      hasDescription: data.hasDescription,
+      hasError: data.hasError,
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      nativeInvalid: false,
+      supportsRequired: initialSupportsRequired,
+      supportsReadonly: initialSupportsReadonly,
+      registerCapabilities(capabilities) {
+        const generation = ++capabilityGeneration;
+        activeCapabilityGeneration = generation;
+        context.supportsRequired = capabilities.required !== false;
+        context.supportsReadonly = capabilities.readonly !== false;
+        return () => {
+          if (activeCapabilityGeneration !== generation) {
+            return;
+          }
+          activeCapabilityGeneration = null;
+          context.supportsRequired = true;
+          context.supportsReadonly = true;
+        };
+      },
+      setNativeInvalid(value) {
+        context.nativeInvalid = Boolean(value);
+        applyInvalid();
+      },
+    });
+    provide(Symbol.for("citry-ui:field"), context);
+
+    const applyInvalid = () => {
+      const invalid = externalInvalid || context.nativeInvalid;
+      context.invalid = invalid;
+      root.toggleAttribute("data-invalid", invalid);
+      error.hidden = !(invalid && context.hasError);
+    };
+    effect(() => {
+      const requestedRequired = resolveBoolean("required", data.required);
+      const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+      // CForm uses a native disabled fieldset, so its disabled state
+      // must win over a descendant's local configuration.
+      const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+      const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
+      const required = requestedRequired && context.supportsRequired;
+      const readonly = requestedReadonly && context.supportsReadonly;
+      if (requestedRequired && !context.supportsRequired) {
+        reportUnsupported("required");
+      } else {
+        invalidEpisodes.delete("capability:required");
+      }
+      if (requestedReadonly && !context.supportsReadonly) {
+        reportUnsupported("readonly");
+      } else {
+        invalidEpisodes.delete("capability:readonly");
+      }
+      externalInvalid = resolveBoolean("invalid", data.invalid);
+      const orientation = resolveChoice("orientation");
+      const density = resolveChoice("density");
+
+      context.required = required;
+      context.disabled = disabled;
+      context.readonly = readonly;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", readonly);
+      root.dataset.orientation = orientation;
+      root.dataset.density = density;
+      requiredIndicator.hidden = !required;
+      applyInvalid();
+    });
+    root.setAttribute("data-citry-field-initialized", "");
+
+    return () => {
+      root.removeAttribute("data-citry-field-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CField_81c723", "496e9f4c0f71c6ffd4b84a68c451e4bc", atob("eyJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5Ijp0cnVlLCJpbnZhbGlkIjpmYWxzZSwib3JpZW50YXRpb24iOiJ2ZXJ0aWNhbCIsImRlbnNpdHkiOiJkZWZhdWx0IiwiY29udHJvbElkIjoiY3VpLWZpZWxkLWNuNnRuOHZoeS1jb250cm9sIiwiZGVzY3JpcHRpb25JZCI6ImN1aS1maWVsZC1jbjZ0bjh2aHktY29udHJvbC1kZXNjcmlwdGlvbiIsImVycm9ySWQiOiJjdWktZmllbGQtY242dG44dmh5LWNvbnRyb2wtZXJyb3IiLCJoYXNEZXNjcmlwdGlvbiI6ZmFsc2UsImhhc0Vycm9yIjpmYWxzZX0="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CCheckbox_05d638", {
+  props: {
+    checked: {},
+    indeterminate: {},
+    value: {},
+    required: {},
+    disabled: {},
+    invalid: {},
+    variant: {},
+    size: {},
+    label_pos: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const root = els[0];
+    const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
+    if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
+      throw new Error("[citry-ui] CCheckbox requires one direct native checkbox input.");
+    }
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const handoffKey = Symbol.for("citry-ui:checkbox-handoff");
+    const allowedValues = {
+      variant: ["solid", "outline"],
+      size: ["sm", "md", "lg"],
+      label_pos: ["start", "end"],
+    };
+    const invalidEpisodes = new Map();
+    const resetTimers = new Set();
+    let nativeInvalid = false;
+    let controlledChecked = false;
+    let controlledCheckedValue = false;
+    let controlledIndeterminate = false;
+    let controlledIndeterminateValue = false;
+    let activationPending = false;
+    let reconcileTimer = null;
+
+    const handoff = root[handoffKey];
+    delete root[handoffKey];
+    // Correlated rerenders replace the initializer but may retain this root.
+    // Restore browser-owned current state after HTML updates reset defaults.
+    if (handoff) {
+      input.checked = Boolean(handoff.checked);
+      input.indeterminate = Boolean(handoff.indeterminate);
+    } else {
+      input.indeterminate = data.indeterminate;
+    }
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CCheckbox ${name} received invalid client value ${describedValue}; `
+          + "using the documented fallback.",
+        root,
+      );
+    };
+    const reportFieldOwned = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `field:${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CCheckbox ${name} is controlled by its enclosing CField; `
+          + `ignoring client value ${describedValue}.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const canonicalizeValue = (value) => {
+      if (typeof value !== "string" || value.includes("\0")) {
+        return null;
+      }
+      return value.replace(/\r\n?/g, "\n");
+    };
+    const resolveValue = () => {
+      if (props.value === undefined) {
+        invalidEpisodes.delete("value");
+        return data.value;
+      }
+      const canonical = canonicalizeValue(props.value);
+      if (canonical === null) {
+        reportInvalid("value", props.value);
+        return data.value;
+      }
+      invalidEpisodes.delete("value");
+      return canonical;
+    };
+    const idrefs = (...values) => {
+      const result = [];
+      values.forEach((value) => {
+        if (typeof value !== "string") {
+          return;
+        }
+        value.split(/\s+/).filter(Boolean).forEach((token) => {
+          if (!result.includes(token)) {
+            result.push(token);
+          }
+        });
+      });
+      return result.join(" ") || null;
+    };
+    const syncRelationships = (invalid) => {
+      const describedBy = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        data.hasDescription ? data.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const errorMessage = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (describedBy) {
+        input.setAttribute("aria-describedby", describedBy);
+      } else {
+        input.removeAttribute("aria-describedby");
+      }
+      if (errorMessage) {
+        input.setAttribute("aria-errormessage", errorMessage);
+      } else {
+        input.removeAttribute("aria-errormessage");
+      }
+    };
+    const syncNativeMirrors = () => {
+      root.toggleAttribute("data-checked", input.checked);
+      root.toggleAttribute("data-indeterminate", input.indeterminate);
+    };
+    const applyState = () => {
+      let required;
+      let disabled;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "invalid"].forEach((name) => {
+          if (props[name] !== undefined) {
+            reportFieldOwned(name, props[name]);
+          } else {
+            invalidEpisodes.delete(name);
+          }
+        });
+        required = field.required;
+        disabled = field.disabled;
+        externalInvalid = field.invalid;
+      } else {
+        required = resolveBoolean("required", data.required);
+        disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+        externalInvalid = resolveBoolean("invalid", data.invalid);
+      }
+      const invalid = externalInvalid || nativeInvalid;
+      const variant = resolveChoice("variant", data.variant);
+      const size = resolveChoice("size", data.size);
+      const labelPos = resolveChoice("label_pos", data.labelPos);
+      const value = resolveValue();
+
+      input.required = required;
+      input.disabled = disabled;
+      if (input.value !== value) {
+        input.value = value;
+      }
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", input.matches(":disabled"));
+      root.toggleAttribute("data-invalid", invalid);
+      root.dataset.variant = variant;
+      root.dataset.size = size;
+      root.dataset.labelPos = labelPos;
+      if (invalid) {
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
+      syncRelationships(invalid);
+      syncNativeMirrors();
+    };
+    const clearNativeInvalidWhenValid = () => {
+      if (!nativeInvalid || !input.validity.valid) {
+        return;
+      }
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+      applyState();
+    };
+    const applyControlledBoolean = (name, property) => {
+      const value = props[name];
+      const controlledName = name === "checked" ? "controlledChecked" : "controlledIndeterminate";
+      if (value === undefined) {
+        invalidEpisodes.delete(name);
+        if (controlledName === "controlledChecked") {
+          controlledChecked = false;
+        } else {
+          controlledIndeterminate = false;
+        }
+        return;
+      }
+      if (typeof value !== "boolean") {
+        reportInvalid(name, value);
+        const isControlled = controlledName === "controlledChecked"
+          ? controlledChecked
+          : controlledIndeterminate;
+        const retained = controlledName === "controlledChecked"
+          ? controlledCheckedValue
+          : controlledIndeterminateValue;
+        if (isControlled && !activationPending && input[property] !== retained) {
+          input[property] = retained;
+        }
+        return;
+      }
+      invalidEpisodes.delete(name);
+      if (controlledName === "controlledChecked") {
+        controlledChecked = true;
+        controlledCheckedValue = value;
+      } else {
+        controlledIndeterminate = true;
+        controlledIndeterminateValue = value;
+      }
+      if (!activationPending && input[property] !== value) {
+        input[property] = value;
+      }
+    };
+    const applyLatestControlled = () => {
+      applyControlledBoolean("checked", "checked");
+      applyControlledBoolean("indeterminate", "indeterminate");
+      syncNativeMirrors();
+    };
+    const scheduleReconcile = () => {
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      reconcileTimer = setTimeout(() => {
+        reconcileTimer = null;
+        activationPending = false;
+        applyLatestControlled();
+        clearNativeInvalidWhenValid();
+        applyState();
+      }, 0);
+    };
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const onInput = () => {
+      // A microtask can run between native input and change. Keep the
+      // browser-produced state visible to both consumer handlers.
+      activationPending = true;
+      syncNativeMirrors();
+      scheduleReconcile();
+      if (!controlledChecked) {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onChange = () => {
+      if (!activationPending) {
+        activationPending = true;
+        scheduleReconcile();
+      }
+      syncNativeMirrors();
+      if (!controlledChecked) {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onReset = (event) => {
+      const resetTimer = setTimeout(() => {
+        resetTimers.delete(resetTimer);
+        if (event.defaultPrevented) {
+          return;
+        }
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        activationPending = false;
+        applyLatestControlled();
+        applyState();
+      }, 0);
+      resetTimers.add(resetTimer);
+    };
+    const unregisterCapabilities = field?.registerCapabilities({
+      required: true,
+      readonly: false,
+    });
+    const nativeForm = input.form;
+    const ancestorFieldsets = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLFieldSetElement) {
+        ancestorFieldsets.push(ancestor);
+      }
+    }
+    // Native fieldset disabledness does not change input.disabled. Watch
+    // only the resolved ancestor fieldsets so the public mirror follows
+    // the browser's effective :disabled state.
+    const fieldsetObserver = ancestorFieldsets.length > 0
+      ? new MutationObserver(() => applyState())
+      : null;
+    ancestorFieldsets.forEach(fieldset => fieldsetObserver.observe(fieldset, {
+      attributes: true,
+      attributeFilter: ["disabled"],
+    }));
+
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onChange);
+    nativeForm?.addEventListener("reset", onReset);
+    effect(() => {
+      applyState();
+      applyLatestControlled();
+      if (!activationPending) {
+        clearNativeInvalidWhenValid();
+      }
+    });
+    root.setAttribute("data-citry-checkbox-initialized", "");
+
+    return () => {
+      root[handoffKey] = {
+        checked: input.checked,
+        indeterminate: input.indeterminate,
+      };
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onChange);
+      nativeForm?.removeEventListener("reset", onReset);
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      resetTimers.forEach((resetTimer) => clearTimeout(resetTimer));
+      resetTimers.clear();
+      fieldsetObserver?.disconnect();
+      unregisterCapabilities?.();
+      if (nativeInvalid) {
+        field?.setNativeInvalid(false);
+      }
+      root.removeAttribute("data-citry-checkbox-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "018e032664f8bf3f61952e6ef3c2c3af", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsImluZGV0ZXJtaW5hdGUiOmZhbHNlLCJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsInZhcmlhbnQiOiJzb2xpZCIsInNpemUiOiJtZCIsImxhYmVsUG9zIjoiZW5kIiwiZGVzY3JpcHRpb25JZCI6ImN1aS1jaGVja2JveC1jbjZ0bjh2aTEtZGVzY3JpcHRpb24iLCJoYXNEZXNjcmlwdGlvbiI6ZmFsc2UsImV4dGVybmFsRGVzY3JpYmVkQnkiOm51bGwsImV4dGVybmFsRXJyb3JNZXNzYWdlIjpudWxsfQ=="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CCarousel_f351c4", {
+  props: {
+    index: {},
+    orientation: {},
+    loop: {},
+    disabled: {},
+    controls: {},
+    indicators: {},
+    draggable: {},
+    variant: {},
+    size: {},
+    onIndexChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const root = els[0];
+    const geometry = globalThis[Symbol.for("citry-ui:scroll-geometry")];
+    if (geometry?.generation !== 1) {
+      throw new Error("[citry-ui] CCarousel scroll geometry dependency did not load.");
+    }
+    const viewport = root.querySelector("[data-citry-carousel-viewport]");
+    const track = viewport?.querySelector(':scope > [data-citry-ui-part="track"]');
+    const previousButton = root.querySelector("[data-citry-carousel-previous]");
+    const nextButton = root.querySelector("[data-citry-carousel-next]");
+    const controls = root.querySelector(':scope > [data-citry-ui-part="controls"]');
+    const indicators = root.querySelector("[data-citry-carousel-indicators]");
+    if (!viewport || !track || !previousButton || !nextButton || !controls || !indicators) {
+      throw new Error("[citry-ui] CCarousel requires its owned controls, viewport, track, and indicators.");
+    }
+    const handoffKey = Symbol.for("citry-ui:carousel-handoff");
+    const previous = root[handoffKey];
+    delete root[handoffKey];
+    let active = true;
+    let controlled = false;
+    let internalIndex = previous?.serverIndex === data.index ? previous.index : data.index;
+    let effectiveIndex = -1;
+    let onIndexChange = null;
+    let slides = [];
+    let invalidStructure = false;
+    let scrollFrame = null;
+    let scrollTimer = null;
+    let suppressionTimer = null;
+    let reconcileFrame = null;
+    let suppressScroll = false;
+    let drag = null;
+    let configuration = {
+      orientation: data.orientation,
+      loop: data.loop,
+      disabled: data.disabled,
+      controls: data.controls,
+      indicators: data.indicators,
+      draggable: data.draggable,
+      variant: data.variant,
+      size: data.size,
+    };
+    const invalidEpisodes = new Set();
+
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CCarousel ${name} received invalid client value.`, value, root);
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveChoice = (name, allowed) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowed.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveCallback = () => {
+      const value = props.onIndexChange;
+      if (value === undefined || value === null || typeof value === "function") {
+        invalidEpisodes.delete("onIndexChange");
+        return value ?? null;
+      }
+      reportInvalid("onIndexChange", value);
+      return null;
+    };
+    const collect = () => {
+      const children = [...track.children];
+      const next = children.filter((element) => element.matches("[data-citry-carousel-slide]"));
+      const values = new Set();
+      let valid = next.length > 0 && next.length === children.length;
+      next.forEach((slide, index) => {
+        const value = slide.dataset.value;
+        if (!value || values.has(value)) valid = false;
+        values.add(value);
+        slide.dataset.index = String(index);
+      });
+      slides = next;
+      invalidStructure = !valid;
+      if (!valid) reportInvalid("structure", children.length);
+      else invalidEpisodes.delete("structure");
+    };
+    const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const horizontalMaximum = () => geometry.maximum(viewport.scrollWidth, viewport.clientWidth);
+    const horizontalRtl = () => getComputedStyle(viewport).direction === "rtl";
+    const horizontalPosition = () => geometry.horizontalFromRaw(
+      viewport.scrollLeft,
+      horizontalMaximum(),
+      horizontalRtl(),
+    );
+    const horizontalRaw = (position) => geometry.horizontalToRaw(
+      position,
+      horizontalMaximum(),
+      horizontalRtl(),
+    );
+    const horizontalSlidePosition = (slide) => Math.abs(slide.offsetLeft - track.offsetLeft);
+    const scrollPosition = (index) => {
+      const slide = slides[index];
+      if (!slide) return 0;
+      return configuration.orientation === "horizontal"
+        ? horizontalSlidePosition(slide)
+        : slide.offsetTop - track.offsetTop;
+    };
+    const scrollToIndex = (index, instant = false) => {
+      const position = scrollPosition(index);
+      const currentPosition = configuration.orientation === "horizontal"
+        ? horizontalPosition()
+        : viewport.scrollTop;
+      if (Math.abs(currentPosition - position) <= 1) {
+        suppressScroll = false;
+        return;
+      }
+      suppressScroll = true;
+      viewport.scrollTo({
+        left: configuration.orientation === "horizontal" ? horizontalRaw(position) : 0,
+        top: configuration.orientation === "vertical" ? position : 0,
+        behavior: instant || reducedMotion() ? "instant" : "smooth",
+      });
+      clearTimeout(suppressionTimer);
+      suppressionTimer = setTimeout(() => { suppressScroll = false; }, instant ? 0 : 350);
+    };
+    const syncIndicators = () => {
+      indicators.replaceChildren();
+      slides.forEach((slide, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.citryUiPart = "indicator";
+        button.dataset.index = String(index);
+        button.setAttribute(
+          "aria-label",
+          slide.getAttribute("aria-label") ?? slide.dataset.value ?? String(index + 1),
+        );
+        indicators.append(button);
+      });
+    };
+    const apply = (index, { scroll = false, instant = false } = {}) => {
+      const next = invalidStructure || slides.length === 0
+        ? -1
+        : Math.min(Math.max(index, 0), slides.length - 1);
+      effectiveIndex = next;
+      root.dataset.orientation = configuration.orientation;
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.toggleAttribute("data-loop", configuration.loop);
+      root.toggleAttribute("data-disabled", configuration.disabled);
+      root.toggleAttribute("data-draggable", configuration.draggable);
+      if (next < 0) delete root.dataset.index;
+      else root.dataset.index = String(next);
+      controls.hidden = !configuration.controls;
+      indicators.hidden = !configuration.indicators;
+      previousButton.disabled = configuration.disabled || (!configuration.loop && next <= 0);
+      nextButton.disabled = configuration.disabled || (!configuration.loop && next >= slides.length - 1);
+      slides.forEach((slide, slideIndex) => slide.toggleAttribute("data-active", slideIndex === next));
+      [...indicators.children].forEach((button, buttonIndex) => {
+        button.toggleAttribute("aria-current", buttonIndex === next);
+        button.disabled = configuration.disabled;
+      });
+      if (scroll && next >= 0) scrollToIndex(next, instant);
+    };
+    const notify = (index, previousIndex, reason, source, forced = false) => {
+      onIndexChange?.(index, {
+        index,
+        previousIndex,
+        value: slides[index]?.dataset.value ?? "",
+        reason,
+        controlled,
+        forced,
+        source,
+      });
+    };
+    const request = (requested, reason, source, forced = false) => {
+      if (!slides.length || configuration.disabled) return;
+      let next = requested;
+      if (configuration.loop) next = (next + slides.length) % slides.length;
+      else next = Math.min(Math.max(next, 0), slides.length - 1);
+      const previousIndex = effectiveIndex;
+      if (next === previousIndex) return;
+      if (!controlled || forced) {
+        internalIndex = next;
+        apply(next, { scroll: true });
+      }
+      notify(next, previousIndex, reason, source, forced);
+    };
+    const nearestIndex = () => {
+      const position = configuration.orientation === "horizontal" ? horizontalPosition() : viewport.scrollTop;
+      let best = 0;
+      let distance = Number.POSITIVE_INFINITY;
+      slides.forEach((slide, index) => {
+        const candidate = configuration.orientation === "horizontal"
+          ? horizontalSlidePosition(slide)
+          : slide.offsetTop - track.offsetTop;
+        const currentDistance = Math.abs(position - candidate);
+        if (currentDistance < distance) {
+          best = index;
+          distance = currentDistance;
+        }
+      });
+      return best;
+    };
+    const settleScroll = () => {
+      scrollFrame = null;
+      if (!active || suppressScroll || drag) return;
+      const next = nearestIndex();
+      if (next === effectiveIndex) return;
+      const previousIndex = effectiveIndex;
+      if (controlled) scrollToIndex(effectiveIndex);
+      else {
+        internalIndex = next;
+        apply(next);
+      }
+      notify(next, previousIndex, "scroll", viewport);
+    };
+    const onScroll = () => {
+      if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        scrollFrame = requestAnimationFrame(settleScroll);
+      }, 90);
+    };
+    const onClick = (event) => {
+      if (configuration.disabled) return;
+      const path = event.composedPath();
+      if (path.includes(previousButton)) request(effectiveIndex - 1, "previous", previousButton);
+      else if (path.includes(nextButton)) request(effectiveIndex + 1, "next", nextButton);
+      else {
+        const picker = path.find((element) => element?.matches?.('[data-citry-ui-part="indicator"]'));
+        if (picker && indicators.contains(picker)) request(Number(picker.dataset.index), "picker", picker);
+      }
+    };
+    const axisPosition = (event) => configuration.orientation === "horizontal" ? event.clientX : event.clientY;
+    const axisScroll = () => configuration.orientation === "horizontal"
+      ? horizontalPosition()
+      : viewport.scrollTop;
+    const onPointerDown = (event) => {
+      if (
+        !configuration.draggable
+        || configuration.disabled
+        || event.button !== 0
+        || event.pointerType === "touch"
+      ) return;
+      drag = { id: event.pointerId, start: axisPosition(event), scroll: axisScroll() };
+      viewport.setPointerCapture(event.pointerId);
+      viewport.toggleAttribute("data-dragging", true);
+    };
+    const onPointerMove = (event) => {
+      if (!drag || drag.id !== event.pointerId) return;
+      const position = drag.scroll + drag.start - axisPosition(event);
+      if (configuration.orientation === "horizontal") viewport.scrollLeft = horizontalRaw(position);
+      else viewport.scrollTop = position;
+      event.preventDefault();
+    };
+    const onPointerEnd = (event) => {
+      if (!drag || drag.id !== event.pointerId) return;
+      drag = null;
+      viewport.toggleAttribute("data-dragging", false);
+      if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      requestAnimationFrame(settleScroll);
+    };
+    const reconcile = () => {
+      reconcileFrame = null;
+      const previousSlides = slides;
+      const previousValue = previousSlides[effectiveIndex]?.dataset.value ?? null;
+      const previousIndex = effectiveIndex;
+      collect();
+      syncIndicators();
+      if (invalidStructure) {
+        apply(-1);
+        return;
+      }
+      let next = previousValue === null
+        ? internalIndex
+        : slides.findIndex((slide) => slide.dataset.value === previousValue);
+      let forced = false;
+      if (next < 0) {
+        next = Math.min(previousIndex, slides.length - 1);
+        forced = previousIndex >= 0;
+      }
+      if (!controlled) internalIndex = next;
+      apply(controlled ? effectiveIndex : next, { scroll: true, instant: true });
+      if (forced) notify(next, previousIndex, "structure", root, true);
+    };
+    const scheduleReconcile = () => {
+      if (reconcileFrame !== null) return;
+      reconcileFrame = requestAnimationFrame(reconcile);
+    };
+    const observer = new MutationObserver(scheduleReconcile);
+    observer.observe(track, { childList: true });
+    const resizeObserver = new ResizeObserver(() => {
+      if (effectiveIndex >= 0) scrollToIndex(effectiveIndex, true);
+    });
+    resizeObserver.observe(viewport);
+    root.addEventListener("click", onClick, true);
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    viewport.addEventListener("pointerdown", onPointerDown);
+    viewport.addEventListener("pointermove", onPointerMove);
+    viewport.addEventListener("pointerup", onPointerEnd);
+    viewport.addEventListener("pointercancel", onPointerEnd);
+    collect();
+    syncIndicators();
+
+    effect(() => {
+      configuration = {
+        orientation: resolveChoice("orientation", ["horizontal", "vertical"]),
+        loop: resolveBoolean("loop"),
+        disabled: resolveBoolean("disabled"),
+        controls: resolveBoolean("controls"),
+        indicators: resolveBoolean("indicators"),
+        draggable: resolveBoolean("draggable"),
+        variant: resolveChoice("variant", ["plain", "surface"]),
+        size: resolveChoice("size", ["sm", "md", "lg"]),
+      };
+      onIndexChange = resolveCallback();
+      const supplied = props.index !== undefined;
+      let next = internalIndex;
+      if (supplied) {
+        if (Number.isInteger(props.index) && props.index >= 0 && props.index < slides.length) {
+          controlled = true;
+          invalidEpisodes.delete("index");
+          next = props.index;
+          internalIndex = props.index;
+        } else {
+          controlled = false;
+          reportInvalid("index", props.index);
+        }
+      } else {
+        controlled = false;
+        invalidEpisodes.delete("index");
+      }
+      apply(next, { scroll: true, instant: effectiveIndex < 0 });
+      root.setAttribute("data-citry-carousel-initialized", "");
+    });
+
+    return () => {
+      active = false;
+      clearTimeout(scrollTimer);
+      clearTimeout(suppressionTimer);
+      cancelAnimationFrame(scrollFrame);
+      cancelAnimationFrame(reconcileFrame);
+      observer.disconnect();
+      resizeObserver.disconnect();
+      root.removeEventListener("click", onClick, true);
+      viewport.removeEventListener("scroll", onScroll);
+      viewport.removeEventListener("pointerdown", onPointerDown);
+      viewport.removeEventListener("pointermove", onPointerMove);
+      viewport.removeEventListener("pointerup", onPointerEnd);
+      viewport.removeEventListener("pointercancel", onPointerEnd);
+      root[handoffKey] = { index: internalIndex, serverIndex: data.index };
+      root.removeAttribute("data-citry-carousel-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCarousel_f351c4", "2d48be1aed5268ab2ccf2b3007d9b283", atob("eyJpbmRleCI6MCwib3JpZW50YXRpb24iOiJob3Jpem9udGFsIiwibG9vcCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwiY29udHJvbHMiOnRydWUsImluZGljYXRvcnMiOmZhbHNlLCJkcmFnZ2FibGUiOnRydWUsInZhcmlhbnQiOiJwbGFpbiIsInNpemUiOiJtZCJ9"));
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script></body></html><!--citry:g1:d5a83973c30353c631b90c65d4b77d29d6ce983b5013376efd03d677cb8850f8:0:i:1:e-->

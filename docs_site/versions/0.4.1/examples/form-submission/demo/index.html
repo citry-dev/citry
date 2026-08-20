@@ -1,0 +1,57 @@
+<!--citry:g1:6ced0dd5a66e9c41da65f9e119cb7cba68d39067135bc2f9f3dd8733fa1eb418:0:i:1:s--><!doctype html><html data-cid-cn6tn8xqs lang=en><head><meta charset=utf-8><title>Form submission example</title><style data-citry-css-class=ContactForm_dbfa6e>.contact-form {
+  max-width: 22rem;
+  display: grid;
+  gap: 0.75rem;
+  font-family: system-ui, sans-serif;
+}
+.contact-form__label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: #24292f;
+}
+.contact-form__input {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font: inherit;
+}
+.contact-form__button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background: #4f46e5;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+.contact-form__button:hover {
+  background: #4338ca;
+}
+.contact-form__thanks {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #2da44e;
+  border-radius: 6px;
+  background: #effef1;
+  color: #1a7f37;
+}</style></head><body style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"><!--citry:g1:6ced0dd5a66e9c41da65f9e119cb7cba68d39067135bc2f9f3dd8733fa1eb418:0:i:2:s--><form class=contact-form data-cid=cn6tn8xqu data-cid-cn6tn8xqu data-citry-root><label class=contact-form__label>Name <input placeholder="Ada Lovelace" class=contact-form__input name=name></label><button class=contact-form__button>Submit</button><div aria-live=polite class=contact-form__result role=status></div></form><!--citry:g1:6ced0dd5a66e9c41da65f9e119cb7cba68d39067135bc2f9f3dd8733fa1eb418:0:i:2:e--><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"FormSubmissionPage_ddc99e","className":"FormSubmissionPage"},{"classId":"ContactForm_dbfa6e","className":"ContactForm"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8xqu","invocationId":2,"parentRenderId":"cn6tn8xqs"}],"componentInstances":[{"classId":"FormSubmissionPage_ddc99e","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8xqs","transparent":false},{"classId":"ContactForm_dbfa6e","instanceId":2,"invocationId":2,"parentRenderId":"cn6tn8xqs","renderId":"cn6tn8xqu","transparent":false}],"fills":[],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"FormSubmissionPage_ddc99e","sourceRenderId":"cn6tn8xqs","tagName":"contactform","targetClassId":"ContactForm_dbfa6e","targetRenderId":"cn6tn8xqu"}],"slotRegions":[],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"6ced0dd5a66e9c41da65f9e119cb7cba68d39067135bc2f9f3dd8733fa1eb418"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL0NvbnRhY3RGb3JtX2RiZmE2ZS45MTQ5NzFhZWIzZjMuanM="], "css": ["L2NpdHJ5L2NhY2hlL0NvbnRhY3RGb3JtX2RiZmE2ZS5lMTU1ODNjOTNjYmUuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q29udGFjdEZvcm1fZGJmYTZl", "Y242dG44eHF1", null, "init"]], "cssInstances": [], "graph": "6ced0dd5a66e9c41da65f9e119cb7cba68d39067135bc2f9f3dd8733fa1eb418", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+Citry.manager.registerComponent("ContactForm_dbfa6e", ({ els }) => {
+  const root = els[0];
+  const form = root.matches("form") ? root : root.querySelector("form");
+  const result = root.querySelector(".contact-form__result");
+  form.addEventListener("submit", (event) => {
+    // No server on a static site: intercept the submit and show the
+    // response in the browser, built from the entered name.
+    event.preventDefault();
+    const entered = (new FormData(form).get("name") || "").toString().trim();
+    const name = entered || "stranger";
+    result.textContent = "";
+    const box = document.createElement("div");
+    box.className = "contact-form__thanks";
+    box.textContent = `Thank you for your submission, ${name}!`;
+    result.appendChild(box);
+  });
+});
+
+})();</script></body></html><!--citry:g1:6ced0dd5a66e9c41da65f9e119cb7cba68d39067135bc2f9f3dd8733fa1eb418:0:i:1:e-->

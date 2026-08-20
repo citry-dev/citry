@@ -1,0 +1,369 @@
+<!doctype html><html data-cid-cn6tn8voj lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Summarize telescope time</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=SurveyTotals_92a123>:where(.survey-totals) {
+  max-width: 44rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.survey-totals [data-citry-ui-part="footer-cell"]) {
+  color: light-dark(#1e3a8a, #bfdbfe);
+}</style><style data-citry-css-class=CTable_6b499b>@layer citry-ui.theme {
+  :where(.cui-table-root) {
+    --_cui-table-background: var(--cui-table-background, Canvas);
+    --_cui-table-foreground: var(--cui-table-foreground, CanvasText);
+    --_cui-table-muted-foreground: var(
+      --cui-table-muted-foreground,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-table-border-color: var(
+      --cui-table-border-color,
+      color-mix(in srgb, CanvasText 22%, transparent)
+    );
+    --_cui-table-header-background: var(
+      --cui-table-header-background,
+      color-mix(in srgb, CanvasText 5%, Canvas)
+    );
+    --_cui-table-footer-background: var(
+      --cui-table-footer-background,
+      color-mix(in srgb, CanvasText 5%, Canvas)
+    );
+    --_cui-table-striped-background: var(
+      --cui-table-striped-background,
+      color-mix(in srgb, CanvasText 3%, Canvas)
+    );
+    --_cui-table-hover-background: var(
+      --cui-table-hover-background,
+      color-mix(in srgb, Highlight 9%, Canvas)
+    );
+    --_cui-table-error-foreground: var(
+      --cui-table-error-foreground,
+      light-dark(#b42318, #fda29b)
+    );
+    --_cui-table-focus-color: var(--cui-table-focus-color, Highlight);
+    --_cui-table-radius: var(--cui-table-radius, 0.625rem);
+    --_cui-table-cell-block-padding: var(--cui-table-cell-block-padding, 0.75rem);
+    --_cui-table-cell-inline-padding: var(--cui-table-cell-inline-padding, 1rem);
+    --_cui-table-caption-padding: var(--cui-table-caption-padding, 0.75rem 1rem);
+    --_cui-table-min-width: var(--cui-table-min-width, 32rem);
+    --_cui-table-sticky-offset: var(--cui-table-sticky-offset, 0px);
+
+    max-width: 100%;
+    color: var(--_cui-table-foreground);
+    background: var(--_cui-table-background);
+    border-radius: var(--_cui-table-radius);
+  }
+
+  :where(.cui-table-announcer) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  :where(.cui-table-root[data-overflow="auto"]) {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  :where(.cui-table-root[data-variant="outline"]) {
+    border: 1px solid var(--_cui-table-border-color);
+  }
+
+  :where(.cui-table) {
+    width: 100%;
+    min-width: var(--_cui-table-min-width);
+    border-spacing: 0;
+    border-collapse: separate;
+    table-layout: auto;
+    color: inherit;
+    background: inherit;
+  }
+
+  :where(.cui-table-root[data-overflow="visible"] > .cui-table) {
+    min-width: 0;
+  }
+
+  :where(.cui-table-root[data-layout="fixed"] > .cui-table) {
+    table-layout: fixed;
+  }
+
+  :where(.cui-table > [data-citry-ui-part="caption"]) {
+    padding: var(--_cui-table-caption-padding);
+    color: var(--_cui-table-muted-foreground);
+    font-weight: 600;
+    text-align: start;
+    caption-side: top;
+  }
+
+  :where(
+    .cui-table-root[data-caption-side="bottom"]
+    > .cui-table
+    > [data-citry-ui-part="caption"]
+  ) {
+    caption-side: bottom;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="header"]
+    > [data-citry-ui-part="header-row"]
+    > [data-citry-ui-part="header-cell"]
+  ) {
+    padding-block: var(--_cui-table-cell-block-padding);
+    padding-inline: var(--_cui-table-cell-inline-padding);
+    border-block-end: 1px solid var(--_cui-table-border-color);
+    color: var(--_cui-table-muted-foreground);
+    background: var(--_cui-table-header-background);
+    font-size: 0.875em;
+    font-weight: 650;
+    text-align: start;
+    vertical-align: bottom;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > :is([data-citry-ui-part="row"], [data-citry-ui-part="state-row"])
+    > :is([data-citry-ui-part="cell"], [data-citry-ui-part="state-cell"]),
+    .cui-table
+    > [data-citry-ui-part="footer"]
+    > [data-citry-ui-part="footer-row"]
+    > [data-citry-ui-part="footer-cell"]
+  ) {
+    padding-block: var(--_cui-table-cell-block-padding);
+    padding-inline: var(--_cui-table-cell-inline-padding);
+    border-block-end: 1px solid var(--_cui-table-border-color);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  :where(
+    .cui-table
+    > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+    > :is([data-citry-ui-part="header-row"], [data-citry-ui-part="row"], [data-citry-ui-part="footer-row"])
+    > [data-align="center"]
+  ) {
+    text-align: center;
+  }
+
+  :where(
+    .cui-table
+    > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+    > :is([data-citry-ui-part="header-row"], [data-citry-ui-part="row"], [data-citry-ui-part="footer-row"])
+    > [data-align="end"]
+  ) {
+    text-align: end;
+  }
+
+  :where(.cui-table-root[data-density="default"]) {
+    --_cui-table-cell-block-padding: var(--cui-table-cell-block-padding, 1rem);
+  }
+
+  :where(.cui-table-root[data-density="compact"]) {
+    --_cui-table-cell-block-padding: var(--cui-table-cell-block-padding, 0.5rem);
+    --_cui-table-cell-inline-padding: var(--cui-table-cell-inline-padding, 0.75rem);
+  }
+
+  :where(
+    .cui-table-root[data-column-borders]
+    > .cui-table
+    > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+    > :is(
+      [data-citry-ui-part="header-row"],
+      [data-citry-ui-part="row"],
+      [data-citry-ui-part="footer-row"]
+    )
+    > :is(
+      [data-citry-ui-part="header-cell"],
+      [data-citry-ui-part="cell"],
+      [data-citry-ui-part="footer-cell"]
+    ):not(:last-child)
+  ) {
+    border-inline-end: 1px solid var(--_cui-table-border-color);
+  }
+
+  :where(
+    .cui-table-root[data-striped]
+    > .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="row"]:nth-child(even)
+    > [data-citry-ui-part="cell"]
+  ) {
+    background: var(--_cui-table-striped-background);
+  }
+
+  :where(
+    .cui-table-root[data-hover]
+    > .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="row"]:hover
+    > [data-citry-ui-part="cell"]
+  ) {
+    background: var(--_cui-table-hover-background);
+  }
+
+  :where(
+    .cui-table-root[data-sticky-header]
+    > .cui-table
+    > [data-citry-ui-part="header"]
+    > [data-citry-ui-part="header-row"]
+    > [data-citry-ui-part="header-cell"]
+  ) {
+    position: sticky;
+    z-index: 1;
+    inset-block-start: var(--_cui-table-sticky-offset);
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="state-row"]
+    > [data-citry-ui-part="state-cell"]
+  ) {
+    color: var(--_cui-table-muted-foreground);
+    text-align: center;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="state-row"]
+    > [data-citry-ui-part="state-cell"]
+    > [data-citry-ui-part="error"]
+  ) {
+    color: var(--_cui-table-error-foreground);
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="row"]:last-child
+    > [data-citry-ui-part="cell"]
+  ) {
+    border-block-end-color: transparent;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="footer"]
+    > [data-citry-ui-part="footer-row"]
+    > [data-citry-ui-part="footer-cell"]
+  ) {
+    border-block-start: 1px solid var(--_cui-table-border-color);
+    border-block-end: 0;
+    background: var(--_cui-table-footer-background);
+    font-weight: 650;
+  }
+
+  :where(.cui-table-root[data-overflow="auto"]:focus-visible) {
+    outline: 2px solid var(--_cui-table-focus-color);
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-table-root[data-variant="outline"]) {
+      border-color: CanvasText;
+    }
+
+    :where(
+      .cui-table
+      > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+      > :is(
+        [data-citry-ui-part="header-row"],
+        [data-citry-ui-part="row"],
+        [data-citry-ui-part="state-row"],
+        [data-citry-ui-part="footer-row"]
+      )
+      > :is(
+        [data-citry-ui-part="header-cell"],
+        [data-citry-ui-part="cell"],
+        [data-citry-ui-part="state-cell"],
+        [data-citry-ui-part="footer-cell"]
+      )
+    ) {
+      border-color: CanvasText;
+    }
+  }
+
+  @media print {
+    :where(.cui-table-root) {
+      overflow: visible;
+      border-color: CanvasText;
+    }
+
+    :where(.cui-table) {
+      min-width: 0;
+    }
+
+    :where(
+      .cui-table-root[data-sticky-header]
+      > .cui-table
+      > [data-citry-ui-part="header"]
+      > [data-citry-ui-part="header-row"]
+      > [data-citry-ui-part="header-cell"]
+    ) {
+      position: static;
+    }
+  }
+}</style></head><body><main><section class=survey-totals data-cid-cn6tn8vok><div aria-labelledby=cui-table-cn6tn8vol-caption class=cui-table-root data-caption-side=top data-cid-cn6tn8vol data-citry-ui-part=root data-density=comfortable data-layout=auto data-overflow=auto data-state=ready data-variant=outline id=cui-table-cn6tn8vol role=region tabindex=0><span aria-atomic=true aria-live=polite class=cui-table-announcer role=status></span><table class=cui-table data-citry-ui-part=table><caption data-citry-ui-part=caption id=cui-table-cn6tn8vol-caption>Telescope survey time</caption><thead data-citry-ui-part=header><tr data-citry-ui-part=header-row><th data-align=start data-citry-ui-part=header-cell data-column-key=program scope=col>Program</th><th data-align=start data-citry-ui-part=header-cell data-column-key=instrument scope=col>Instrument</th><th data-align=end data-citry-ui-part=header-cell data-column-key=hours scope=col>Hours</th></tr></thead><tbody data-citry-ui-part=body><tr data-citry-key=:aurora data-citry-ui-part=row data-row-key=aurora><th data-align=start data-citry-ui-part=cell data-column-key=program scope=row>Aurora survey</th><td data-align=start data-citry-ui-part=cell data-column-key=instrument>Spectrograph</td><td style="font-variant-numeric: tabular-nums;" data-align=end data-citry-ui-part=cell data-column-key=hours>36.0</td></tr><tr data-citry-key=:rings data-citry-ui-part=row data-row-key=rings><th data-align=start data-citry-ui-part=cell data-column-key=program scope=row>Ring survey</th><td data-align=start data-citry-ui-part=cell data-column-key=instrument>Wide-field camera</td><td style="font-variant-numeric: tabular-nums;" data-align=end data-citry-ui-part=cell data-column-key=hours>28.5</td></tr><tr data-citry-key=:comets data-citry-ui-part=row data-row-key=comets><th data-align=start data-citry-ui-part=cell data-column-key=program scope=row>Comet survey</th><td data-align=start data-citry-ui-part=cell data-column-key=instrument>Infrared camera</td><td style="font-variant-numeric: tabular-nums;" data-align=end data-citry-ui-part=cell data-column-key=hours>20.0</td></tr></tbody><tfoot data-citry-ui-part=footer><tr data-citry-ui-part=footer-row><th data-align=start data-citry-ui-part=footer-cell data-column-key=program scope=row>Total</th><td data-align=start data-citry-ui-part=footer-cell data-column-key=instrument>3 programs</td><td data-align=end data-citry-ui-part=footer-cell data-column-key=hours><strong>84.5</strong></td></tr></tfoot></table></div></section></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL1N1cnZleVRvdGFsc185MmExMjMuZWI1NTYyMDA3NTc2LmNzcw==", "L2NpdHJ5L2NhY2hlL0NUYWJsZV82YjQ5OWIuYjQ2NTc1MjgwNzMyLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dm9q"], ["U3VydmV5VG90YWxzXzkyYTEyMw==", "Y242dG44dm9r"], ["Q1RhYmxlXzZiNDk5Yg==", "Y242dG44dm9s"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

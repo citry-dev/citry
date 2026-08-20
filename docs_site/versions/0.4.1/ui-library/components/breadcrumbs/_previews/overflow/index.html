@@ -1,0 +1,268 @@
+<!doctype html><html data-cid-cn6tn8vuc lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Handle long Breadcrumb trails</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=BreadcrumbOverflow_a1e803>:where(.breadcrumb-overflow) {
+  inline-size: min(100%, 22rem);
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+}</style><style data-citry-css-class=CBreadcrumbs_f70ab1>@layer citry-ui.theme {
+  :where(.cui-breadcrumbs) {
+    --_cui-breadcrumbs-foreground: var(--cui-breadcrumbs-foreground, CanvasText);
+    --_cui-breadcrumbs-link-color: var(--cui-breadcrumbs-link-color, LinkText);
+    --_cui-breadcrumbs-current-color: var(--cui-breadcrumbs-current-color, CanvasText);
+    --_cui-breadcrumbs-separator-color: var(
+      --cui-breadcrumbs-separator-color,
+      color-mix(in srgb, CanvasText 54%, transparent)
+    );
+    --_cui-breadcrumbs-gap: var(--cui-breadcrumbs-gap, 0.5rem);
+    --_cui-breadcrumbs-focus-color: var(--cui-breadcrumbs-focus-color, Highlight);
+    color: var(--_cui-breadcrumbs-foreground);
+    font: inherit;
+    font-size: 0.875rem;
+  }
+
+  :where(.cui-breadcrumbs[data-size="sm"]) {
+    font-size: 0.75rem;
+  }
+
+  :where(.cui-breadcrumbs[data-size="lg"]) {
+    font-size: 1rem;
+  }
+
+  :where(.cui-breadcrumbs > [data-citry-ui-part="list"]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--_cui-breadcrumbs-gap);
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  :where(.cui-breadcrumbs:not([data-wrap]) > [data-citry-ui-part="list"]) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  :where(
+    .cui-breadcrumbs
+    > [data-citry-ui-part="list"]
+    > [data-citry-ui-part="item"]
+  ) {
+    display: inline-flex;
+    align-items: center;
+    min-inline-size: 0;
+    gap: var(--_cui-breadcrumbs-gap);
+  }
+
+  :where(
+    .cui-breadcrumbs
+    > [data-citry-ui-part="list"]
+    > [data-citry-ui-part="item"]
+    > [data-citry-ui-part="link"]
+  ) {
+    color: var(--_cui-breadcrumbs-link-color);
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.16em;
+    overflow-wrap: anywhere;
+  }
+
+  :where(
+    .cui-breadcrumbs
+    > [data-citry-ui-part="list"]
+    > [data-citry-ui-part="item"]
+    > [data-citry-ui-part="link"]:focus-visible
+  ) {
+    outline: 0.1875rem solid color-mix(in srgb, var(--_cui-breadcrumbs-focus-color) 44%, transparent);
+    outline-offset: 0.125rem;
+    border-radius: 0.15rem;
+  }
+
+  :where(
+    .cui-breadcrumbs
+    > [data-citry-ui-part="list"]
+    > [data-citry-ui-part="item"]
+    > [data-citry-ui-part="current"]
+  ) {
+    color: var(--_cui-breadcrumbs-current-color);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  :where(
+    .cui-breadcrumbs
+    > [data-citry-ui-part="list"]
+    > [data-citry-ui-part="item"]
+    > [data-citry-ui-part="separator"]
+  ) {
+    color: var(--_cui-breadcrumbs-separator-color);
+    user-select: none;
+  }
+
+  :where(
+    .cui-breadcrumbs:not([data-wrap])
+    > [data-citry-ui-part="list"]
+    > [data-citry-ui-part="item"]
+    > [data-citry-ui-part="link"]
+  ),
+  :where(
+    .cui-breadcrumbs:not([data-wrap])
+    > [data-citry-ui-part="list"]
+    > [data-citry-ui-part="item"]
+    > [data-citry-ui-part="current"]
+  ) {
+    white-space: nowrap;
+  }
+
+  @media (forced-colors: active) {
+    :where(
+      .cui-breadcrumbs
+      > [data-citry-ui-part="list"]
+      > [data-citry-ui-part="item"]
+      > [data-citry-ui-part="separator"]
+    ) {
+      color: CanvasText;
+    }
+  }
+
+  @media print {
+    :where(
+      .cui-breadcrumbs
+      > [data-citry-ui-part="list"]
+      > [data-citry-ui-part="item"]
+      > [data-citry-ui-part="link"]
+    ) {
+      color: currentColor;
+    }
+  }
+}</style><style data-citry-css-class=CStack_3c2a26>@layer citry-ui.theme {
+  :where([data-citry-ui-part="stack"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.75rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: var(--_cui-stack-gap);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="0"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xs"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="sm"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="lg"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xl"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="center"]) {
+    align-items: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="stack"][data-reverse]) {
+    flex-direction: column-reverse;
+  }
+
+  :where([data-citry-ui-part="stack"] > *) {
+    min-inline-size: 0;
+  }
+}</style></head><body><main><div class="cui-stack breadcrumb-overflow" data-align=stretch data-cid-cn6tn8vud data-cid-cn6tn8vue data-citry-ui-part=stack data-gap=md data-justify=start><nav aria-label="Wrapping book location" class=cui-breadcrumbs data-cid-cn6tn8vug data-citry-ui-part=breadcrumbs data-size=md data-wrap><ol data-citry-ui-part=list><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/0> Library </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/1> Collections </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/2> Natural history </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/3> Forests </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/4> Temperate woodland </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><span aria-current=page data-citry-ui-part=current> Field notes </span></li></ol></nav><nav aria-label="Scrolling book location" class=cui-breadcrumbs data-cid-cn6tn8vuh data-citry-ui-part=breadcrumbs data-size=md><ol data-citry-ui-part=list><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/0> Library </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/1> Collections </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/2> Natural history </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/3> Forests </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><a data-citry-ui-part=link href=/shelf/4> Temperate woodland </a> <span aria-hidden=true data-citry-ui-part=separator> / </span></li><li data-citry-ui-part=item><span aria-current=page data-citry-ui-part=current> Field notes </span></li></ol></nav></div></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0JyZWFkY3J1bWJPdmVyZmxvd19hMWU4MDMuMTI2NzVkMDlmZmZmLmNzcw==", "L2NpdHJ5L2NhY2hlL0NCcmVhZGNydW1ic19mNzBhYjEuMjRkYWMwMWI0Mzg0LmNzcw==", "L2NpdHJ5L2NhY2hlL0NTdGFja18zYzJhMjYuYjk5MjE5MGEwMzg5LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dnVj"], ["QnJlYWRjcnVtYk92ZXJmbG93X2ExZTgwMw==", "Y242dG44dnVk"], ["Q0JyZWFkY3J1bWJzX2Y3MGFiMQ==", "Y242dG44dnVn"], ["Q0JyZWFkY3J1bWJzX2Y3MGFiMQ==", "Y242dG44dnVo"], ["Q1N0YWNrXzNjMmEyNg==", "Y242dG44dnVl"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

@@ -1,0 +1,443 @@
+<!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:1:s--><!doctype html><html data-cid-cn6tn8uc8 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Switch at a glance</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=SwitchAtAGlance_de13da>:where(.switch-room) {
+  display: grid;
+  gap: 0.9rem;
+  max-inline-size: 28rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#c8bda8, #665d50);
+  border-radius: 0.9rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.switch-room h2) {
+  margin: 0;
+}</style><style data-citry-css-class=CSwitch_fa49a4>@layer citry-ui.theme {
+  :where(.cui-switch) {
+    --_cui-switch-off-color: var(--cui-switch-off-color, light-dark(#667085, #98a2b3));
+    --_cui-switch-on-color: var(--cui-switch-on-color, light-dark(#175cd3, #84adff));
+    --_cui-switch-thumb-color: var(--cui-switch-thumb-color, Canvas);
+    --_cui-switch-foreground: var(--cui-switch-foreground, CanvasText);
+    --_cui-switch-focus-color: var(--cui-switch-focus-color, Highlight);
+    --_cui-switch-invalid-color: var(--cui-switch-invalid-color, light-dark(#b42318, #f97066));
+    --_cui-switch-disabled-opacity: var(--cui-switch-disabled-opacity, 0.52);
+    --_cui-switch-width: var(--cui-switch-width, 2.5rem);
+    --_cui-switch-height: var(--cui-switch-height, 1.5rem);
+    --_cui-switch-padding: var(--cui-switch-padding, 0.1875rem);
+    --_cui-switch-gap: var(--cui-switch-gap, 0.625rem);
+    --_cui-switch-duration: var(--cui-switch-duration, 140ms);
+    position: relative;
+    display: inline-grid;
+    color: var(--_cui-switch-foreground);
+    font: inherit;
+    line-height: 1.35;
+  }
+
+  :where(.cui-switch[data-size="sm"]) {
+    --_cui-switch-width: var(--cui-switch-width, 2rem);
+    --_cui-switch-height: var(--cui-switch-height, 1.25rem);
+    font-size: 0.8125rem;
+  }
+
+  :where(.cui-switch[data-size="lg"]) {
+    --_cui-switch-width: var(--cui-switch-width, 3rem);
+    --_cui-switch-height: var(--cui-switch-height, 1.75rem);
+    font-size: 1rem;
+  }
+
+  :where(.cui-switch__input) {
+    position: absolute;
+    inline-size: var(--_cui-switch-width);
+    block-size: var(--_cui-switch-height);
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="surface"]) {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--_cui-switch-gap);
+    cursor: pointer;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="track"]) {
+    box-sizing: border-box;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    inline-size: var(--_cui-switch-width);
+    block-size: var(--_cui-switch-height);
+    padding: var(--_cui-switch-padding);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: var(--_cui-switch-off-color);
+    transition: background-color var(--_cui-switch-duration) ease;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="thumb"]) {
+    box-sizing: border-box;
+    display: block;
+    inline-size: calc(var(--_cui-switch-height) - 2 * var(--_cui-switch-padding) - 2px);
+    block-size: calc(var(--_cui-switch-height) - 2 * var(--_cui-switch-padding) - 2px);
+    border-radius: 50%;
+    background: var(--_cui-switch-thumb-color);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+    transform: translateX(0);
+    transition: transform var(--_cui-switch-duration) ease;
+  }
+
+  :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+    background: var(--_cui-switch-on-color);
+  }
+
+  :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="thumb"]) {
+    transform: translateX(
+      calc(var(--_cui-switch-width) - var(--_cui-switch-height))
+    );
+  }
+
+  :where(
+    .cui-switch:dir(rtl)
+    .cui-switch__input:checked
+    + [data-citry-ui-part="surface"]
+    [data-citry-ui-part="thumb"]
+  ) {
+    transform: translateX(
+      calc((var(--_cui-switch-width) - var(--_cui-switch-height)) * -1)
+    );
+  }
+
+  :where(.cui-switch__input:focus-visible + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+    outline: 0.1875rem solid color-mix(in srgb, var(--_cui-switch-focus-color) 42%, transparent);
+    outline-offset: 0.125rem;
+  }
+
+  :where(.cui-switch[data-invalid] [data-citry-ui-part="track"]) {
+    box-shadow: 0 0 0 2px var(--_cui-switch-invalid-color);
+  }
+
+  :where(.cui-switch[data-disabled]) {
+    opacity: var(--_cui-switch-disabled-opacity);
+  }
+
+  :where(.cui-switch[data-disabled] .cui-switch__input),
+  :where(.cui-switch[data-disabled] [data-citry-ui-part="surface"]) {
+    cursor: not-allowed;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="body"]) {
+    display: grid;
+    min-inline-size: 0;
+    gap: 0.2rem;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="label"], .cui-switch [data-citry-ui-part="description"]) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="description"]) {
+    color: color-mix(in srgb, currentColor 72%, transparent);
+    font-size: 0.82em;
+  }
+
+  :where(.cui-switch[data-label-pos="start"] [data-citry-ui-part="surface"]) {
+    flex-direction: row-reverse;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-switch [data-citry-ui-part="track"], .cui-switch [data-citry-ui-part="thumb"]) {
+      transition-duration: 0.01ms;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-switch [data-citry-ui-part="track"]) {
+      border-color: ButtonText;
+      background: Canvas;
+    }
+
+    :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+      background: Highlight;
+    }
+
+    :where(.cui-switch [data-citry-ui-part="thumb"]) {
+      background: ButtonText;
+      box-shadow: none;
+    }
+  }
+
+  @media print {
+    :where(.cui-switch [data-citry-ui-part="track"]) {
+      border-color: currentColor;
+      background: transparent;
+    }
+
+    :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+      background: currentColor;
+    }
+  }
+}</style></head><body><main><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:2:s--><section class=switch-room data-cid-cn6tn8uc9><h2>Evening room</h2><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:3:s--><span class=cui-switch data-cid=cn6tn8uca data-cid-cn6tn8uca data-citry-root data-citry-ui-part=switch data-label-pos=end data-size=md> <input checked class=cui-switch__input data-citry-ui-part=input id=cui-switch-cn6tn8uca role=switch type=checkbox value=on> <span data-citry-ui-part=surface> <span aria-hidden=true data-citry-ui-part=track> <span data-citry-ui-part=thumb></span> </span> <span data-citry-ui-part=body> <label data-citry-ui-part=label for=cui-switch-cn6tn8uca><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:1:s-->Reading lamp<!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:1:e--></label> </span> </span> </span><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:3:e--><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:4:s--><span class=cui-switch data-cid=cn6tn8ucb data-cid-cn6tn8ucb data-citry-root data-citry-ui-part=switch data-label-pos=end data-size=md> <input class=cui-switch__input data-citry-ui-part=input id=cui-switch-cn6tn8ucb role=switch type=checkbox value=on> <span data-citry-ui-part=surface> <span aria-hidden=true data-citry-ui-part=track> <span data-citry-ui-part=thumb></span> </span> <span data-citry-ui-part=body> <label data-citry-ui-part=label for=cui-switch-cn6tn8ucb><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:2:s-->Window shades<!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:2:e--></label> </span> </span> </span><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:4:e--><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:5:s--><span class=cui-switch data-cid=cn6tn8ucc data-cid-cn6tn8ucc data-citry-root data-citry-ui-part=switch data-label-pos=end data-size=md> <input aria-describedby=cui-switch-cn6tn8ucc-description checked class=cui-switch__input data-citry-ui-part=input id=cui-switch-cn6tn8ucc role=switch type=checkbox value=on> <span data-citry-ui-part=surface> <span aria-hidden=true data-citry-ui-part=track> <span data-citry-ui-part=thumb></span> </span> <span data-citry-ui-part=body> <label data-citry-ui-part=label for=cui-switch-cn6tn8ucc><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:3:s-->Quiet ventilation<!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:3:e--></label> <span data-citry-ui-part=description id=cui-switch-cn6tn8ucc-description> <!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:4:s-->Keep air moving below the bedroom.<!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:r:4:e--> </span> </span> </span> </span><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:5:e--></section><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"SwitchAtAGlance_de13da","className":"SwitchAtAGlance"},{"classId":"CSwitch_fa49a4","className":"CSwitch"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8uca","invocationId":2,"parentRenderId":"cn6tn8uc9"},{"childRenderId":"cn6tn8ucb","invocationId":3,"parentRenderId":"cn6tn8uc9"},{"childRenderId":"cn6tn8ucc","invocationId":4,"parentRenderId":"cn6tn8uc9"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8uc8","transparent":false},{"classId":"SwitchAtAGlance_de13da","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8uc9","transparent":false},{"classId":"CSwitch_fa49a4","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8uc9","renderId":"cn6tn8uca","transparent":false},{"classId":"CSwitch_fa49a4","instanceId":4,"invocationId":3,"parentRenderId":"cn6tn8uc9","renderId":"cn6tn8ucb","transparent":false},{"classId":"CSwitch_fa49a4","instanceId":5,"invocationId":4,"parentRenderId":"cn6tn8uc9","renderId":"cn6tn8ucc","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"SwitchAtAGlance_de13da","ownerRenderId":"cn6tn8uc9","policy":"template","receiverClassId":"CSwitch_fa49a4","receiverRenderId":"cn6tn8uca","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"SwitchAtAGlance_de13da","ownerRenderId":"cn6tn8uc9","policy":"template","receiverClassId":"CSwitch_fa49a4","receiverRenderId":"cn6tn8ucb","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"SwitchAtAGlance_de13da","ownerRenderId":"cn6tn8uc9","policy":"template","receiverClassId":"CSwitch_fa49a4","receiverRenderId":"cn6tn8ucc","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"SwitchAtAGlance_de13da","ownerRenderId":"cn6tn8uc9","policy":"template","receiverClassId":"CSwitch_fa49a4","receiverRenderId":"cn6tn8ucc","slotName":"description","sourceInvocationId":4}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"SwitchAtAGlance_de13da","sourceRenderId":"cn6tn8uc9","tagName":"cswitch","targetClassId":"CSwitch_fa49a4","targetRenderId":"cn6tn8uca"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"SwitchAtAGlance_de13da","sourceRenderId":"cn6tn8uc9","tagName":"cswitch","targetClassId":"CSwitch_fa49a4","targetRenderId":"cn6tn8ucb"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"SwitchAtAGlance_de13da","sourceRenderId":"cn6tn8uc9","tagName":"cswitch","targetClassId":"CSwitch_fa49a4","targetRenderId":"cn6tn8ucc"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cn6tn8uc9","parentRegionId":null,"receiverRenderId":"cn6tn8uca","regionId":1,"resultOwnerRenderId":"cn6tn8uc9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8uca"},{"fillId":2,"ownerRenderId":"cn6tn8uc9","parentRegionId":null,"receiverRenderId":"cn6tn8ucb","regionId":2,"resultOwnerRenderId":"cn6tn8uc9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8ucb"},{"fillId":3,"ownerRenderId":"cn6tn8uc9","parentRegionId":null,"receiverRenderId":"cn6tn8ucc","regionId":3,"resultOwnerRenderId":"cn6tn8uc9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8ucc"},{"fillId":4,"ownerRenderId":"cn6tn8uc9","parentRegionId":null,"receiverRenderId":"cn6tn8ucc","regionId":4,"resultOwnerRenderId":"cn6tn8uc9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8ucc"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LmJmMWMxYTlmYzFmYS5qcw==", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LjllZDdiZWYwYTJhNDBiYjk2MmVlZjE5MmQzMmRhY2U2Lmpz", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LjY5MjIyYjE4YWY1YzA5YzNjOTNhNDYyNjdlYTRjNGI2Lmpz", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LjNjZmRlZGVmM2RhMWU0M2FlNTNjNGYxNDA0MzIxM2VmLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL1N3aXRjaEF0QUdsYW5jZV9kZTEzZGEuOWZmZGRhNDc0OTkwLmNzcw==", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0Ljg1M2M3NjZlOWVlZC5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1N3aXRjaF9mYTQ5YTQ=", "Y242dG44dWNh", "OWVkN2JlZjBhMmE0MGJiOTYyZWVmMTkyZDMyZGFjZTY=", "init"], ["Q1N3aXRjaF9mYTQ5YTQ=", "Y242dG44dWNi", "NjkyMjJiMThhZjVjMDljM2M5M2E0NjI2N2VhNGM0YjY=", "init"], ["Q1N3aXRjaF9mYTQ5YTQ=", "Y242dG44dWNj", "M2NmZGVkZWYzZGExZTQzYWU1M2M0ZjE0MDQzMjEzZWY=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dWM4"], ["U3dpdGNoQXRBR2xhbmNlX2RlMTNkYQ==", "Y242dG44dWM5"]], "graph": "e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CSwitch_fa49a4", {
+  props: {
+    checked: {},
+    value: {},
+    required: {},
+    disabled: {},
+    invalid: {},
+    size: {},
+    label_pos: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const root = els[0];
+    const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
+    if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
+      throw new Error("[citry-ui] CSwitch requires one direct native checkbox input.");
+    }
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const handoffKey = Symbol.for("citry-ui:switch-handoff");
+    const invalidEpisodes = new Set();
+    const resetTimers = new Set();
+    let nativeInvalid = false;
+    let controlled = false;
+    let controlledValue = false;
+    let activationPending = false;
+    let reconcileTimer = null;
+    const handoff = root[handoffKey];
+    delete root[handoffKey];
+    if (handoff) input.checked = Boolean(handoff.checked);
+
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CSwitch ${name} received invalid client value; using the fallback.`,
+        value,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name, fallback, choices) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (choices.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const canonicalValue = () => {
+      if (props.value === undefined) return data.value;
+      if (typeof props.value !== "string" || props.value.includes("\0")) {
+        reportInvalid("value", props.value);
+        return data.value;
+      }
+      invalidEpisodes.delete("value");
+      return props.value.replace(/\r\n?/g, "\n");
+    };
+    const syncRelationships = (invalid) => {
+      const values = [
+        field?.hasDescription ? field.descriptionId : null,
+        data.hasDescription ? data.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      ];
+      const describedBy = [...new Set(values.filter(Boolean).flatMap((value) => value.split(/\s+/)))].join(" ");
+      const errorMessage = invalid
+        ? [field?.hasError ? field.errorId : null, data.externalErrorMessage].filter(Boolean).join(" ")
+        : "";
+      describedBy
+        ? input.setAttribute("aria-describedby", describedBy)
+        : input.removeAttribute("aria-describedby");
+      errorMessage
+        ? input.setAttribute("aria-errormessage", errorMessage)
+        : input.removeAttribute("aria-errormessage");
+    };
+    const applyState = () => {
+      let required;
+      let disabled;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "invalid"].forEach((name) => {
+          if (props[name] !== undefined) reportInvalid(`${name}:field-owned`, props[name]);
+          else invalidEpisodes.delete(`${name}:field-owned`);
+        });
+        required = field.required;
+        disabled = field.disabled;
+        externalInvalid = field.invalid;
+      } else {
+        required = resolveBoolean("required", data.required);
+        disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+        externalInvalid = resolveBoolean("invalid", data.invalid);
+      }
+      const invalid = externalInvalid || nativeInvalid;
+      input.required = required;
+      input.disabled = disabled;
+      const value = canonicalValue();
+      if (input.value !== value) input.value = value;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", input.matches(":disabled"));
+      root.toggleAttribute("data-invalid", invalid);
+      root.toggleAttribute("data-checked", input.checked);
+      root.dataset.size = resolveChoice("size", data.size, ["sm", "md", "lg"]);
+      root.dataset.labelPos = resolveChoice("label_pos", data.labelPos, ["start", "end"]);
+      invalid ? input.setAttribute("aria-invalid", "true") : input.removeAttribute("aria-invalid");
+      syncRelationships(invalid);
+    };
+    const applyControlled = () => {
+      if (props.checked === undefined) {
+        controlled = false;
+        invalidEpisodes.delete("checked");
+        return;
+      }
+      if (typeof props.checked !== "boolean") {
+        reportInvalid("checked", props.checked);
+        if (controlled && !activationPending) input.checked = controlledValue;
+        return;
+      }
+      invalidEpisodes.delete("checked");
+      controlled = true;
+      controlledValue = props.checked;
+      if (!activationPending && input.checked !== controlledValue) input.checked = controlledValue;
+    };
+    const settle = () => {
+      activationPending = false;
+      applyControlled();
+      if (nativeInvalid && input.validity.valid) {
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+      }
+      applyState();
+    };
+    const scheduleSettle = () => {
+      if (reconcileTimer !== null) clearTimeout(reconcileTimer);
+      reconcileTimer = setTimeout(() => {
+        reconcileTimer = null;
+        settle();
+      }, 0);
+    };
+    const onInput = () => {
+      activationPending = true;
+      root.toggleAttribute("data-checked", input.checked);
+      scheduleSettle();
+    };
+    const onChange = () => scheduleSettle();
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const nativeForm = input.form;
+    const onReset = (event) => {
+      const timer = setTimeout(() => {
+        resetTimers.delete(timer);
+        if (event.defaultPrevented) return;
+        if (controlled) input.checked = controlledValue;
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        applyState();
+      }, 0);
+      resetTimers.add(timer);
+    };
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onChange);
+    input.addEventListener("invalid", onInvalid);
+    nativeForm?.addEventListener("reset", onReset);
+    const unregisterCapability = field?.registerControlCapabilities?.({
+      supportsRequired: true,
+      supportsReadonly: false,
+    });
+    effect(() => {
+      applyControlled();
+      applyState();
+    });
+    root.setAttribute("data-citry-switch-initialized", "");
+    return () => {
+      root[handoffKey] = {checked: input.checked};
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("invalid", onInvalid);
+      nativeForm?.removeEventListener("reset", onReset);
+      if (reconcileTimer !== null) clearTimeout(reconcileTimer);
+      resetTimers.forEach((timer) => clearTimeout(timer));
+      unregisterCapability?.();
+      root.removeAttribute("data-citry-switch-initialized");
+    };
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSwitch_fa49a4", "9ed7bef0a2a40bb962eef192d32dace6", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktc3dpdGNoLWNuNnRuOHVjYS1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSwitch_fa49a4", "69222b18af5c09c3c93a46267ea4c4b6", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLXN3aXRjaC1jbjZ0bjh1Y2ItZGVzY3JpcHRpb24iLCJoYXNEZXNjcmlwdGlvbiI6ZmFsc2UsImV4dGVybmFsRGVzY3JpYmVkQnkiOm51bGwsImV4dGVybmFsRXJyb3JNZXNzYWdlIjpudWxsfQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSwitch_fa49a4", "3cfdedef3da1e43ae53c4f14043213ef", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktc3dpdGNoLWNuNnRuOHVjYy1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjp0cnVlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script></body></html><!--citry:g1:e916cfe2f0b7dfb5534651e11e3830c5e99bd2a5052c2ade13912edec5addaea:0:i:1:e-->

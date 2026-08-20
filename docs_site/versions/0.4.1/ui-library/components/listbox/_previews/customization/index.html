@@ -1,0 +1,792 @@
+<!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:1:s--><!doctype html><html data-cid-cn6tn8uhr lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Customize Listbox</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CustomizedListbox_d5ffcd>.copper-listbox {
+  --cui-listbox-radius: 1.1rem;
+  --cui-listbox-selected-background: light-dark(#7c2d12, #fed7aa);
+  --cui-listbox-selected-foreground: light-dark(#fff7ed, #431407);
+  --cui-listbox-border-color: light-dark(#c2410c, #fdba74);
+  --cui-listbox-option-padding: 0.7rem 0.8rem;
+}</style><style data-citry-css-class=CListbox_1a159f>@layer citry-ui.theme {
+  :where(.cui-listbox) {
+    --_cui-listbox-gap: var(--cui-listbox-gap, 0.375rem);
+    --_cui-listbox-max-block-size: var(--cui-listbox-max-block-size, 18rem);
+    --_cui-listbox-background: var(--cui-listbox-background, Canvas);
+    --_cui-listbox-foreground: var(--cui-listbox-foreground, CanvasText);
+    --_cui-listbox-muted-color: var(--cui-listbox-muted-color, light-dark(#667085, #a4a7ae));
+    --_cui-listbox-border-color: var(--cui-listbox-border-color, light-dark(#d0d5dd, #535862));
+    --_cui-listbox-hover-background: var(
+      --cui-listbox-hover-background,
+      color-mix(in srgb, CanvasText 7%, transparent)
+    );
+    --_cui-listbox-selected-background: var(
+      --cui-listbox-selected-background,
+      light-dark(#dbeafe, #1e3a5f)
+    );
+    --_cui-listbox-selected-foreground: var(
+      --cui-listbox-selected-foreground,
+      light-dark(#1849a9, #d1e9ff)
+    );
+    --_cui-listbox-focus-color: var(--cui-listbox-focus-color, Highlight);
+    --_cui-listbox-radius: var(--cui-listbox-radius, 0.625rem);
+    --_cui-listbox-option-padding: var(--cui-listbox-option-padding, 0.5rem 0.625rem);
+    box-sizing: border-box;
+    display: grid;
+    gap: var(--_cui-listbox-gap);
+    min-inline-size: 0;
+    color: var(--_cui-listbox-foreground);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  :where(.cui-listbox[data-size="sm"]) {
+    --_cui-listbox-option-padding: var(--cui-listbox-option-padding, 0.375rem 0.5rem);
+    font-size: 0.875rem;
+  }
+  :where(.cui-listbox[data-size="lg"]) {
+    --_cui-listbox-option-padding: var(--cui-listbox-option-padding, 0.625rem 0.75rem);
+    font-size: 1.0625rem;
+  }
+  :where(.cui-listbox__label) {
+    font-size: 0.9375em;
+    font-weight: 650;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  :where(.cui-listbox__surface) {
+    box-sizing: border-box;
+    display: grid;
+    align-content: start;
+    gap: 0.125rem;
+    min-inline-size: 0;
+    max-block-size: var(--_cui-listbox-max-block-size);
+    margin: 0;
+    padding: 0.25rem;
+    overflow: auto;
+    border: 1px solid transparent;
+    border-radius: var(--_cui-listbox-radius);
+    background: var(--_cui-listbox-background);
+    color: var(--_cui-listbox-foreground);
+    overscroll-behavior: contain;
+  }
+  :where(.cui-listbox[data-variant="soft"] .cui-listbox__surface) {
+    --_cui-listbox-background: var(
+      --cui-listbox-background,
+      color-mix(in srgb, CanvasText 5%, Canvas)
+    );
+  }
+  :where(.cui-listbox[data-variant="outline"] .cui-listbox__surface) {
+    border-color: var(--_cui-listbox-border-color);
+  }
+  :where(.cui-listbox__option) {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 1rem auto minmax(0, 1fr) auto;
+    grid-template-areas: "indicator start copy end";
+    align-items: center;
+    gap: 0.5rem;
+    min-inline-size: 0;
+    padding: var(--_cui-listbox-option-padding);
+    border-radius: calc(var(--_cui-listbox-radius) - 0.125rem);
+    outline: none;
+    cursor: default;
+  }
+  :where(.cui-listbox__option:not([data-disabled]):hover) {
+    background: var(--_cui-listbox-hover-background);
+  }
+  :where(.cui-listbox__option[data-selected]) {
+    background: var(--_cui-listbox-selected-background);
+    color: var(--_cui-listbox-selected-foreground);
+  }
+  :where(.cui-listbox__option:focus-visible) {
+    outline: 2px solid var(--_cui-listbox-focus-color);
+    outline-offset: -2px;
+  }
+  :where(.cui-listbox__option[data-disabled]) {
+    color: var(--_cui-listbox-muted-color);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  :where(.cui-listbox__indicator) {
+    grid-area: indicator;
+    display: grid;
+    inline-size: 1rem;
+    block-size: 1rem;
+    place-items: center;
+    font-weight: 800;
+    opacity: 0;
+    transform: scale(0.75);
+    transition: opacity 100ms ease-out, transform 100ms ease-out;
+  }
+  :where(.cui-listbox__indicator::before) { content: "✓"; }
+  :where(.cui-listbox__option[data-selected] > .cui-listbox__indicator) {
+    opacity: 1;
+    transform: none;
+  }
+  :where(.cui-listbox__option-start) { grid-area: start; min-inline-size: 0; }
+  :where(.cui-listbox__option-copy) {
+    grid-area: copy;
+    display: grid;
+    gap: 0.125rem;
+    min-inline-size: 0;
+  }
+  :where(.cui-listbox__option-label) {
+    min-inline-size: 0;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  :where(.cui-listbox__option-description) {
+    min-inline-size: 0;
+    color: var(--_cui-listbox-muted-color);
+    font-size: 0.875em;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  :where(.cui-listbox__option[data-selected] .cui-listbox__option-description) {
+    color: currentColor;
+    opacity: 0.82;
+  }
+  :where(.cui-listbox__option-end) {
+    grid-area: end;
+    min-inline-size: 0;
+    color: var(--_cui-listbox-muted-color);
+    font-size: 0.875em;
+  }
+  :where(.cui-listbox__option[data-selected] .cui-listbox__option-end) {
+    color: currentColor;
+    opacity: 0.82;
+  }
+  :where(.cui-listbox__group) {
+    display: grid;
+    gap: 0.125rem;
+    min-inline-size: 0;
+  }
+  :where(.cui-listbox__group-label) {
+    padding: 0.5rem 0.625rem 0.25rem;
+    color: var(--_cui-listbox-muted-color);
+    font-size: 0.8125em;
+    font-weight: 700;
+    letter-spacing: 0.025em;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    text-transform: uppercase;
+  }
+  :where(.cui-listbox[data-disabled] .cui-listbox__label) { color: var(--_cui-listbox-muted-color); }
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-listbox__indicator) { transition: none; }
+  }
+  @media (forced-colors: active) {
+    :where(.cui-listbox__surface) { border-color: CanvasText; }
+    :where(.cui-listbox__option[data-selected]) {
+      background: Highlight;
+      color: HighlightText;
+      forced-color-adjust: none;
+    }
+    :where(.cui-listbox__option:focus-visible) { outline-color: Highlight; }
+  }
+  @media print {
+    :where(.cui-listbox__surface) {
+      max-block-size: none;
+      overflow: visible;
+      border-color: CanvasText;
+      background: transparent;
+    }
+    :where(.cui-listbox__option:focus-visible) { outline: none; }
+  }
+}</style></head><body><main><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:2:s--><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:3:s--><div class="cui-listbox copper-listbox" data-cid=cn6tn8uht data-cid-cn6tn8uhs data-cid-cn6tn8uht data-citry-root data-citry-ui-part=listbox-root data-size=md data-variant=outline id=cui-listbox-cn6tn8uht><span class=cui-listbox__label data-citry-ui-part=listbox-label id=cui-listbox-cn6tn8uht-label>Finish</span><div aria-labelledby=cui-listbox-cn6tn8uht-label class=cui-listbox__surface data-citry-ui-part=listbox id=cui-listbox-cn6tn8uht-surface role=listbox><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:1:s--><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:4:s--><div aria-describedby=cui-listbox-cn6tn8uht-option-d16f06fe255d-description aria-disabled=false aria-labelledby=cui-listbox-cn6tn8uht-option-d16f06fe255d-label aria-selected=true class=cui-listbox__option data-active data-cid=cn6tn8uhu data-cid-cn6tn8uhu data-citry-key=:copper data-citry-root data-citry-ui-part=listbox-option data-selected data-value=copper id=cui-listbox-cn6tn8uht-option-d16f06fe255d role=option tabindex=0><span aria-hidden=true class=cui-listbox__indicator data-citry-ui-part=listbox-indicator></span><span aria-hidden=true class=cui-listbox__option-start data-citry-ui-part=listbox-option-start data-cui-listbox-slot-region> <!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:2:s--><span aria-hidden=true>◆</span><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:2:e--> </span><span class=cui-listbox__option-copy data-citry-ui-part=listbox-option-copy> <span class=cui-listbox__option-label data-citry-ui-part=listbox-option-label data-cui-listbox-slot-region id=cui-listbox-cn6tn8uht-option-d16f06fe255d-label> <!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:3:s-->Burnished copper<!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:3:e--> </span> <span class=cui-listbox__option-description data-citry-ui-part=listbox-option-description data-cui-listbox-slot-region id=cui-listbox-cn6tn8uht-option-d16f06fe255d-description> <!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:4:s-->Warm and tactile<!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:4:e--> </span> </span></div><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:4:e--><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:5:s--><div aria-disabled=false aria-labelledby=cui-listbox-cn6tn8uht-option-b62f3b3b1b40-label aria-selected=false class=cui-listbox__option data-cid=cn6tn8uhv data-cid-cn6tn8uhv data-citry-key=:slate data-citry-root data-citry-ui-part=listbox-option data-value=slate id=cui-listbox-cn6tn8uht-option-b62f3b3b1b40 role=option tabindex=-1><span aria-hidden=true class=cui-listbox__indicator data-citry-ui-part=listbox-indicator></span><span class=cui-listbox__option-copy data-citry-ui-part=listbox-option-copy> <span class=cui-listbox__option-label data-citry-ui-part=listbox-option-label data-cui-listbox-slot-region id=cui-listbox-cn6tn8uht-option-b62f3b3b1b40-label> <!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:5:s-->Deep slate<!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:5:e--> </span> </span></div><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:5:e--><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:6:s--><div aria-disabled=false aria-labelledby=cui-listbox-cn6tn8uht-option-07ad2ef1607d-label aria-selected=false class=cui-listbox__option data-cid=cn6tn8uhw data-cid-cn6tn8uhw data-citry-key=:linen data-citry-root data-citry-ui-part=listbox-option data-value=linen id=cui-listbox-cn6tn8uht-option-07ad2ef1607d role=option tabindex=-1><span aria-hidden=true class=cui-listbox__indicator data-citry-ui-part=listbox-indicator></span><span class=cui-listbox__option-copy data-citry-ui-part=listbox-option-copy> <span class=cui-listbox__option-label data-citry-ui-part=listbox-option-label data-cui-listbox-slot-region id=cui-listbox-cn6tn8uht-option-07ad2ef1607d-label> <!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:6:s-->Soft linen<!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:6:e--> </span> </span></div><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:6:e--><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:r:1:e--></div></div><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:3:e--><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"CustomizedListbox_d5ffcd","className":"CustomizedListbox"},{"classId":"CListbox_1a159f","className":"CListbox"},{"classId":"CListboxOption_dfb80c","className":"CListboxOption"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8uht","invocationId":2,"parentRenderId":"cn6tn8uhs"},{"childRenderId":"cn6tn8uhu","invocationId":3,"parentRenderId":"cn6tn8uhs"},{"childRenderId":"cn6tn8uhv","invocationId":4,"parentRenderId":"cn6tn8uhs"},{"childRenderId":"cn6tn8uhw","invocationId":5,"parentRenderId":"cn6tn8uhs"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8uhr","transparent":false},{"classId":"CustomizedListbox_d5ffcd","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8uhs","transparent":false},{"classId":"CListbox_1a159f","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8uhs","renderId":"cn6tn8uht","transparent":false},{"classId":"CListboxOption_dfb80c","instanceId":4,"invocationId":3,"parentRenderId":"cn6tn8uhs","renderId":"cn6tn8uhu","transparent":false},{"classId":"CListboxOption_dfb80c","instanceId":5,"invocationId":4,"parentRenderId":"cn6tn8uhs","renderId":"cn6tn8uhv","transparent":false},{"classId":"CListboxOption_dfb80c","instanceId":6,"invocationId":5,"parentRenderId":"cn6tn8uhs","renderId":"cn6tn8uhw","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"CustomizedListbox_d5ffcd","ownerRenderId":"cn6tn8uhs","policy":"template","receiverClassId":"CListbox_1a159f","receiverRenderId":"cn6tn8uht","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"CustomizedListbox_d5ffcd","ownerRenderId":"cn6tn8uhs","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cn6tn8uhu","slotName":"start","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"CustomizedListbox_d5ffcd","ownerRenderId":"cn6tn8uhs","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cn6tn8uhu","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"CustomizedListbox_d5ffcd","ownerRenderId":"cn6tn8uhs","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cn6tn8uhu","slotName":"description","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":6,"kind":"implicit","locationId":null,"ownerClassId":"CustomizedListbox_d5ffcd","ownerRenderId":"cn6tn8uhs","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cn6tn8uhv","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"CustomizedListbox_d5ffcd","ownerRenderId":"cn6tn8uhs","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cn6tn8uhw","slotName":"default","sourceInvocationId":5}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CustomizedListbox_d5ffcd","sourceRenderId":"cn6tn8uhs","tagName":"clistbox","targetClassId":"CListbox_1a159f","targetRenderId":"cn6tn8uht"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CustomizedListbox_d5ffcd","sourceRenderId":"cn6tn8uhs","tagName":"clistboxoption","targetClassId":"CListboxOption_dfb80c","targetRenderId":"cn6tn8uhu"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CustomizedListbox_d5ffcd","sourceRenderId":"cn6tn8uhs","tagName":"clistboxoption","targetClassId":"CListboxOption_dfb80c","targetRenderId":"cn6tn8uhv"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CustomizedListbox_d5ffcd","sourceRenderId":"cn6tn8uhs","tagName":"clistboxoption","targetClassId":"CListboxOption_dfb80c","targetRenderId":"cn6tn8uhw"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cn6tn8uhs","parentRegionId":null,"receiverRenderId":"cn6tn8uht","regionId":1,"resultOwnerRenderId":"cn6tn8uhs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8uht"},{"fillId":3,"ownerRenderId":"cn6tn8uhs","parentRegionId":1,"receiverRenderId":"cn6tn8uhu","regionId":2,"resultOwnerRenderId":"cn6tn8uhs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8uhs"},{"fillId":4,"ownerRenderId":"cn6tn8uhs","parentRegionId":1,"receiverRenderId":"cn6tn8uhu","regionId":3,"resultOwnerRenderId":"cn6tn8uhs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8uhs"},{"fillId":5,"ownerRenderId":"cn6tn8uhs","parentRegionId":1,"receiverRenderId":"cn6tn8uhu","regionId":4,"resultOwnerRenderId":"cn6tn8uhs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8uhs"},{"fillId":6,"ownerRenderId":"cn6tn8uhs","parentRegionId":1,"receiverRenderId":"cn6tn8uhv","regionId":5,"resultOwnerRenderId":"cn6tn8uhs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8uhs"},{"fillId":7,"ownerRenderId":"cn6tn8uhs","parentRegionId":1,"receiverRenderId":"cn6tn8uhw","regionId":6,"resultOwnerRenderId":"cn6tn8uhs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8uhs"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94T3B0aW9uX2RmYjgwYy45YjI5YjM2OGMyMmYuanM=", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94T3B0aW9uX2RmYjgwYy5jMTE2MjBlYmU5YmQwZGExZTJlNGFiZTY5MjM5YmUwMC5qcw==", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94XzFhMTU5Zi5iNmJhOWMwNDhkZjcuanM=", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94XzFhMTU5Zi4yYTlkOGE5NWI3YWIyZDQzN2EzNDM1MzI3NGY0YjM1My5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0N1c3RvbWl6ZWRMaXN0Ym94X2Q1ZmZjZC41OTI5YWVmOTcwOWMuY3Nz", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94XzFhMTU5Zi5jYmU0ODM3MzVjMDAuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0xpc3Rib3hPcHRpb25fZGZiODBj", "Y242dG44dWh1", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q0xpc3Rib3hPcHRpb25fZGZiODBj", "Y242dG44dWh2", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q0xpc3Rib3hPcHRpb25fZGZiODBj", "Y242dG44dWh3", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q0xpc3Rib3hfMWExNTlm", "Y242dG44dWh0", "MmE5ZDhhOTViN2FiMmQ0MzdhMzQzNTMyNzRmNGIzNTM=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dWhy"], ["Q3VzdG9taXplZExpc3Rib3hfZDVmZmNk", "Y242dG44dWhz"]], "graph": "f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CListboxOption_dfb80c", {
+  props: {disabled: {}, textValue: {}},
+  init: ({els, data, props, effect}) => {
+    const option = els[0];
+    const invalidEpisodes = new Set();
+    const report = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CListboxOption ${name} received invalid client value`, value);
+    };
+    const stop = effect(() => {
+      const suppliedDisabled = props.disabled;
+      const disabled = suppliedDisabled === undefined
+        ? data.disabled
+        : typeof suppliedDisabled === 'boolean'
+          ? suppliedDisabled
+          : data.disabled;
+      if (suppliedDisabled !== undefined && typeof suppliedDisabled !== 'boolean') {
+        report('disabled', suppliedDisabled);
+      } else invalidEpisodes.delete('disabled');
+      option.toggleAttribute('data-cui-listbox-option-disabled', disabled);
+      const suppliedText = props.textValue;
+      let textValue = data.textValue;
+      if (suppliedText === null || suppliedText === undefined) {
+        invalidEpisodes.delete('textValue');
+      } else if (typeof suppliedText === 'string' && suppliedText.trim() && !suppliedText.includes('\0')) {
+        textValue = suppliedText.replace(/\r\n?/g, '\n');
+        invalidEpisodes.delete('textValue');
+      } else report('textValue', suppliedText);
+      if (textValue === null) option.removeAttribute('data-cui-listbox-text-value');
+      else option.setAttribute('data-cui-listbox-text-value', textValue);
+    });
+    return () => stop?.();
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CListboxOption_dfb80c", "c11620ebe9bd0da1e2e4abe69239be00", atob("eyJkaXNhYmxlZCI6ZmFsc2UsInRleHRWYWx1ZSI6bnVsbH0="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CListbox_1a159f", {
+  props: {
+    value: {}, mandatory: {}, disabled: {}, loop: {}, variant: {}, size: {}, onValueChange: {},
+  },
+  init: ({els, data, props, effect}) => {
+    const root = els[0];
+    const surface = root.querySelector(':scope > [data-citry-ui-part="listbox"]');
+    const invalidEpisodes = new Set();
+    const prior = root.__citryUiListboxRuntime;
+    const serverFingerprint = JSON.stringify(data.value);
+    let committed = prior?.serverFingerprint === serverFingerprint
+      ? [...prior.committed]
+      : [...data.value];
+    let current = [...committed];
+    let controlled = false;
+    let activeValue = prior?.activeValue ?? null;
+    let previousOrder = Array.isArray(prior?.order) ? [...prior.order] : [];
+    let pendingStructural = prior?.pendingStructural ?? null;
+    let configuration = {
+      mandatory: data.mandatory,
+      disabled: data.disabled,
+      loop: data.loop,
+      variant: data.variant,
+      size: data.size,
+    };
+    let onValueChange = null;
+    let clientValue;
+    let structureValid = false;
+    let task = null;
+    let generation = 0;
+    let typeBuffer = '';
+    let typeTimer = null;
+
+    const options = () => [...surface.querySelectorAll('[role="option"]')]
+      .filter((option) => option.closest('[role="listbox"]') === surface);
+    const canonicalString = (value) => (
+      typeof value === 'string' && value.length > 0 && !value.includes('\0')
+        ? value.replace(/\r\n?/g, '\n')
+        : null
+    );
+    const report = (name, value, suffix = '') => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CListbox ${name} received invalid client value${suffix}`, value);
+    };
+    const resolveBoolean = (name, fallback) => {
+      const supplied = props[name];
+      if (supplied === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof supplied === 'boolean') { invalidEpisodes.delete(name); return supplied; }
+      report(name, supplied, '; using the server fallback');
+      return fallback;
+    };
+    const resolveChoice = (name, fallback, allowed) => {
+      const supplied = props[name];
+      if (supplied === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof supplied === 'string' && allowed.includes(supplied)) {
+        invalidEpisodes.delete(name);
+        return supplied;
+      }
+      report(name, supplied, '; using the server fallback');
+      return fallback;
+    };
+    const deepActiveElement = (documentRoot) => {
+      let active = documentRoot.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+      return active;
+    };
+    const composedContains = (ancestor, node) => {
+      for (let currentNode = node; currentNode;) {
+        if (currentNode === ancestor) return true;
+        currentNode = currentNode.parentNode ?? currentNode.getRootNode?.().host ?? null;
+      }
+      return false;
+    };
+    const focusBody = () => {
+      const body = root.ownerDocument.body;
+      if (!(body instanceof HTMLElement)) return;
+      const hadTabIndex = body.hasAttribute('tabindex');
+      if (!hadTabIndex) body.tabIndex = -1;
+      body.focus({preventScroll:true});
+      if (!hadTabIndex) queueMicrotask(() => body.removeAttribute('tabindex'));
+    };
+    const fieldsetDisabled = () => {
+      for (let node = root.parentElement; node; node = node.parentElement) {
+        if (!(node instanceof HTMLFieldSetElement) || !node.disabled) continue;
+        const legend = [...node.children].find((child) => child instanceof HTMLLegendElement);
+        if (!(legend instanceof Element) || !legend.contains(root)) return true;
+      }
+      return false;
+    };
+    const rootDisabled = () => configuration.disabled || fieldsetDisabled();
+    const ownDisabled = (option) => option.hasAttribute('data-cui-listbox-option-disabled');
+    const optionDisabled = (option) => rootDisabled() || ownDisabled(option);
+    const enabledOptions = () => options().filter((option) => !optionDisabled(option));
+    const valueOf = (option) => option.dataset.value;
+    const optionFor = (value) => options().find((option) => valueOf(option) === value) ?? null;
+    const values = () => options().map(valueOf);
+    const isOption = (node) => node instanceof HTMLElement
+      && node.getAttribute('role') === 'option'
+      && node.closest('[role="listbox"]') === surface;
+    const optionFromEvent = (event) => event.composedPath().find(isOption) ?? null;
+    const formatValue = (vector) => data.multiple ? [...vector] : (vector[0] ?? null);
+    const normalizeSupplied = (supplied) => {
+      if (supplied === null) return {valid:true, values:[]};
+      if (data.multiple) {
+        if (!Array.isArray(supplied)) return {valid:false, values:[]};
+        const normalized = supplied.map(canonicalString);
+        if (normalized.some((value) => value === null) || new Set(normalized).size !== normalized.length) {
+          return {valid:false, values:[]};
+        }
+        return {valid:true, values:normalized};
+      }
+      const normalized = canonicalString(supplied);
+      return normalized === null ? {valid:false, values:[]} : {valid:true, values:[normalized]};
+    };
+    const nearestSurvivor = (removedValue) => {
+      const enabled = new Set(enabledOptions().map(valueOf));
+      const oldIndex = previousOrder.indexOf(removedValue);
+      if (oldIndex >= 0) {
+        for (let distance = 1; distance < previousOrder.length; distance += 1) {
+          const following = previousOrder[oldIndex + distance];
+          if (enabled.has(following)) return optionFor(following);
+          const preceding = previousOrder[oldIndex - distance];
+          if (enabled.has(preceding)) return optionFor(preceding);
+        }
+      }
+      return enabledOptions()[0] ?? null;
+    };
+    const structureProblem = () => {
+      const entries = options();
+      if (entries.length === 0) return 'requires one or more Options';
+      if (new Set(values()).size !== entries.length) return 'contains duplicate Option values';
+      for (const child of surface.children) {
+        if (isOption(child)) continue;
+        if (child.getAttribute?.('role') !== 'group') return 'contains an unknown direct child';
+        const groupChildren = [...child.children];
+        if (!groupChildren[0]?.matches?.('[data-citry-ui-part="listbox-group-label"]')) {
+          return 'Group label anatomy is invalid';
+        }
+        const grouped = groupChildren.slice(1);
+        if (grouped.length === 0 || grouped.some((option) => !isOption(option))) {
+          return 'Group must contain direct Options';
+        }
+      }
+      const forbidden = [
+        'a[href]', 'button', 'input', 'select', 'textarea', 'summary', 'label',
+        '[contenteditable]:not([contenteditable="false"])',
+        '[tabindex]:not([tabindex="-1"])', '[role="listbox"]', '[role="option"]',
+      ].join(',');
+      for (const option of entries) {
+        const regions = option.querySelectorAll('[data-cui-listbox-slot-region]');
+        if ([...regions].some((region) => region.querySelector(forbidden))) {
+          return 'Option content must remain noninteractive';
+        }
+      }
+      return null;
+    };
+    const saveRuntime = () => {
+      root.__citryUiListboxRuntime = {
+        serverFingerprint,
+        committed:[...committed],
+        activeValue,
+        order:[...previousOrder],
+        pendingStructural,
+      };
+    };
+    const focusOption = (option, {moveFocus = true} = {}) => {
+      if (!(option instanceof HTMLElement) || optionDisabled(option)) return;
+      activeValue = valueOf(option);
+      options().forEach((entry) => {
+        const active = entry === option;
+        entry.tabIndex = active && !rootDisabled() ? 0 : -1;
+        entry.toggleAttribute('data-active', active);
+      });
+      if (moveFocus) option.focus({preventScroll:false});
+    };
+    const callbackDetail = (next, previous, option, selected, source, sourceEvent) => ({
+      value:formatValue(next),
+      previousValue:formatValue(previous),
+      option,
+      selected,
+      controlled,
+      source,
+      sourceEvent,
+    });
+    const emitChange = (next, previous, option, selected, source, sourceEvent) => {
+      onValueChange?.(
+        formatValue(next),
+        callbackDetail(next, previous, option, selected, source, sourceEvent),
+      );
+    };
+    const applyState = () => {
+      const disabled = rootDisabled();
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.toggleAttribute('data-multiple', data.multiple);
+      root.toggleAttribute('data-mandatory', configuration.mandatory);
+      root.toggleAttribute('data-disabled', disabled);
+      surface.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      if (data.multiple) surface.setAttribute('aria-multiselectable', 'true');
+      else surface.removeAttribute('aria-multiselectable');
+      options().forEach((option) => {
+        const selected = current.includes(valueOf(option));
+        const itemDisabled = optionDisabled(option);
+        option.setAttribute('aria-selected', selected ? 'true' : 'false');
+        option.setAttribute('aria-disabled', itemDisabled ? 'true' : 'false');
+        option.toggleAttribute('data-selected', selected);
+        option.toggleAttribute('data-disabled', itemDisabled);
+      });
+      let active = optionFor(activeValue);
+      if (!(active instanceof HTMLElement) || optionDisabled(active)) {
+        active = options().find((option) => current.includes(valueOf(option)) && !optionDisabled(option))
+          ?? enabledOptions()[0]
+          ?? null;
+      }
+      options().forEach((option) => {
+        const isActive = option === active;
+        option.tabIndex = isActive && !disabled ? 0 : -1;
+        option.toggleAttribute('data-active', isActive);
+      });
+      activeValue = active ? valueOf(active) : null;
+      previousOrder = values();
+      saveRuntime();
+    };
+    const failClosed = (problem) => {
+      const active = deepActiveElement(root.ownerDocument);
+      if (composedContains(surface, active)) focusBody();
+      structureValid = false;
+      report('structure', problem);
+      root.removeAttribute('data-citry-listbox-initialized');
+      surface.inert = true;
+      surface.setAttribute('aria-disabled', 'true');
+      options().forEach((option) => { option.tabIndex = -1; });
+    };
+    const reconcileValue = () => {
+      const allowed = new Set(values());
+      const supplied = clientValue;
+      if (supplied === undefined) {
+        invalidEpisodes.delete('value');
+        if (controlled) committed = [...current];
+        controlled = false;
+        current = committed.filter((value) => allowed.has(value));
+      } else {
+        const normalized = normalizeSupplied(supplied);
+        if (!normalized.valid) {
+          report('value', supplied, '; releasing control from the committed selection');
+          if (controlled) committed = [...current];
+          controlled = false;
+          current = committed.filter((value) => allowed.has(value));
+        } else {
+          controlled = true;
+          const missing = normalized.values.filter((value) => !allowed.has(value));
+          current = normalized.values.filter((value) => allowed.has(value));
+          if (missing.length === 0) {
+            invalidEpisodes.delete('value');
+            pendingStructural = null;
+          } else {
+            report('value', supplied, '; filtering values missing from the settled collection');
+            const fingerprint = JSON.stringify([missing, current]);
+            if (pendingStructural !== fingerprint) {
+              const previous = [...normalized.values];
+              const next = [...current];
+              const scheduled = generation;
+              pendingStructural = fingerprint;
+              queueMicrotask(() => {
+                if (generation === scheduled && pendingStructural === fingerprint) {
+                  emitChange(next, previous, null, false, 'structure', null);
+                }
+              });
+            }
+          }
+        }
+      }
+      const removedCommitted = committed.filter((value) => !allowed.has(value));
+      if (!controlled && removedCommitted.length > 0) {
+        const previous = [...committed];
+        committed = committed.filter((value) => allowed.has(value));
+        current = [...committed];
+        emitChange(current, previous, null, false, 'structure', null);
+      }
+      if (!controlled && configuration.mandatory && current.length === 0) {
+        const first = enabledOptions()[0];
+        if (first) {
+          const previous = [...current];
+          current = [valueOf(first)];
+          if (!controlled) committed = [...current];
+          if (previousOrder.length > 0) {
+            emitChange(current, previous, first, true, 'structure', null);
+          }
+        }
+      }
+    };
+    const sync = () => {
+      const focusBefore = deepActiveElement(root.ownerDocument);
+      const focusRoot = root.getRootNode();
+      const focusWasOwned = composedContains(surface, focusBefore);
+      const focusWasLost = focusBefore === root.ownerDocument.body
+        || (focusRoot instanceof ShadowRoot && focusBefore === focusRoot.host);
+      const priorActive = activeValue;
+      const disabled = rootDisabled();
+      if (!wasDisabled && disabled) {
+        const active = deepActiveElement(root.ownerDocument);
+        if (composedContains(root, active)) focusBody();
+      }
+      wasDisabled = disabled;
+      const problem = structureProblem();
+      if (problem) { failClosed(problem); return; }
+      structureValid = true;
+      invalidEpisodes.delete('structure');
+      surface.inert = false;
+      reconcileValue();
+      const activeOption = optionFor(activeValue);
+      const activeUnavailable = activeValue !== null
+        && (!(activeOption instanceof HTMLElement) || optionDisabled(activeOption));
+      if (activeUnavailable) {
+        const replacement = nearestSurvivor(activeValue);
+        activeValue = replacement ? valueOf(replacement) : null;
+      }
+      applyState();
+      if (activeUnavailable && (focusWasOwned || focusWasLost)) {
+        const replacement = optionFor(activeValue);
+        if (replacement instanceof HTMLElement) replacement.focus({preventScroll:true});
+        else focusBody();
+      } else if (priorActive !== null && activeValue === null && focusWasOwned) {
+        focusBody();
+      }
+      root.setAttribute('data-citry-listbox-initialized', '');
+    };
+    const schedule = () => {
+      if (task !== null) return;
+      const scheduled = generation;
+      task = setTimeout(() => {
+        task = null;
+        if (scheduled === generation) sync();
+      }, 0);
+    };
+    const requestSelection = (option, event, source) => {
+      if (!structureValid || !isOption(option) || optionDisabled(option)) return;
+      const value = valueOf(option);
+      const previous = [...current];
+      const wasSelected = previous.includes(value);
+      let next;
+      if (data.multiple) {
+        if (wasSelected && configuration.mandatory && previous.length === 1) return;
+        next = wasSelected
+          ? previous.filter((entry) => entry !== value)
+          : [...previous, value];
+      } else {
+        if (wasSelected) return;
+        next = [value];
+      }
+      if (!controlled) {
+        committed = [...next];
+        current = [...next];
+        applyState();
+      }
+      emitChange(next, previous, option, !wasSelected, source, event);
+      if (controlled) schedule();
+    };
+    const clearSelection = (event) => {
+      if (configuration.mandatory || current.length === 0 || rootDisabled()) return false;
+      const previous = [...current];
+      const next = [];
+      if (!controlled) {
+        committed = [];
+        current = [];
+        applyState();
+      }
+      emitChange(next, previous, optionFor(activeValue), false, 'keyboard', event);
+      if (controlled) schedule();
+      return true;
+    };
+    const localeLower = (value) => {
+      const lang = root.closest('[lang]')?.getAttribute('lang')
+        ?? root.ownerDocument.documentElement.lang
+        ?? '';
+      try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
+      catch { return value.toLowerCase(); }
+    };
+    const typeaheadText = (option) => {
+      const explicit = option.getAttribute('data-cui-listbox-text-value');
+      const label = option.querySelector('[data-citry-ui-part="listbox-option-label"]');
+      const raw = explicit ?? label?.textContent ?? '';
+      return localeLower(raw.trim().replace(/\s+/g, ' '));
+    };
+    const onClick = (event) => {
+      const option = optionFromEvent(event);
+      if (!isOption(option) || optionDisabled(option)) return;
+      focusOption(option);
+      requestSelection(option, event, 'pointer');
+    };
+    const onKeyDown = (event) => {
+      const option = optionFromEvent(event);
+      if (!isOption(option) || optionDisabled(option) || rootDisabled()) return;
+      const enabled = enabledOptions();
+      const index = enabled.indexOf(option);
+      let destination = null;
+      if (event.key === 'ArrowDown') {
+        destination = enabled[index + 1] ?? (configuration.loop ? enabled[0] : null);
+      } else if (event.key === 'ArrowUp') {
+        destination = enabled[index - 1] ?? (configuration.loop ? enabled.at(-1) : null);
+      } else if (event.key === 'Home') destination = enabled[0] ?? null;
+      else if (event.key === 'End') destination = enabled.at(-1) ?? null;
+      else if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
+        requestSelection(option, event, 'keyboard');
+        return;
+      } else if (event.key === 'Escape') {
+        if (clearSelection(event)) event.preventDefault();
+        return;
+      } else {
+        const altGraph = event.getModifierState?.('AltGraph') ?? false;
+        if (
+          event.isComposing
+          || event.ctrlKey
+          || event.metaKey
+          || (event.altKey && !altGraph)
+          || event.key.length !== 1
+        ) return;
+        const key = localeLower(event.key);
+        typeBuffer = typeBuffer.length === 1 && typeBuffer === key ? key : typeBuffer + key;
+        if (typeTimer !== null) clearTimeout(typeTimer);
+        typeTimer = setTimeout(() => { typeBuffer = ''; typeTimer = null; }, 500);
+        const ordered = [...enabled.slice(index + 1), ...enabled.slice(0, index + 1)];
+        destination = ordered.find((entry) => typeaheadText(entry).startsWith(typeBuffer)) ?? null;
+      }
+      if (destination instanceof HTMLElement) {
+        event.preventDefault();
+        focusOption(destination);
+      }
+    };
+    const onFocusIn = (event) => {
+      const option = optionFromEvent(event);
+      if (isOption(option) && !optionDisabled(option)) focusOption(option, {moveFocus:false});
+    };
+    const observeStructure = (records) => {
+      const relevant = records.some((record) => {
+        if (record.type === 'childList') return true;
+        if (record.attributeName === 'tabindex' && isOption(record.target)) return false;
+        return true;
+      });
+      if (relevant) schedule();
+    };
+    root.addEventListener('click', onClick, true);
+    root.addEventListener('keydown', onKeyDown, true);
+    root.addEventListener('focusin', onFocusIn, true);
+    const observer = new MutationObserver(observeStructure);
+    observer.observe(surface, {
+      childList:true,
+      subtree:true,
+      attributes:true,
+      attributeFilter:[
+        'data-cui-listbox-option-disabled', 'data-cui-listbox-text-value',
+        'href', 'tabindex', 'contenteditable', 'role',
+      ],
+    });
+    const fieldsets = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (!(ancestor instanceof HTMLFieldSetElement)) continue;
+      const fieldsetObserver = new MutationObserver(schedule);
+      fieldsetObserver.observe(ancestor, {
+        attributes:true,
+        childList:true,
+        attributeFilter:['disabled'],
+      });
+      fieldsets.push(fieldsetObserver);
+    }
+    let wasDisabled = rootDisabled();
+    const stop = effect(() => {
+      clientValue = props.value;
+      onValueChange = typeof props.onValueChange === 'function' ? props.onValueChange : null;
+      if (props.onValueChange !== undefined && props.onValueChange !== null && onValueChange === null) {
+        report('onValueChange', props.onValueChange, '; ignoring the callback');
+      } else invalidEpisodes.delete('onValueChange');
+      configuration = {
+        mandatory: resolveBoolean('mandatory', data.mandatory),
+        disabled: resolveBoolean('disabled', data.disabled),
+        loop: resolveBoolean('loop', data.loop),
+        variant: resolveChoice('variant', data.variant, ['plain','soft','outline']),
+        size: resolveChoice('size', data.size, ['sm','md','lg']),
+      };
+      schedule();
+    });
+    schedule();
+    return () => {
+      generation += 1;
+      if (task !== null) clearTimeout(task);
+      if (typeTimer !== null) clearTimeout(typeTimer);
+      saveRuntime();
+      stop?.();
+      observer.disconnect();
+      fieldsets.forEach((item) => item.disconnect());
+      root.removeEventListener('click', onClick, true);
+      root.removeEventListener('keydown', onKeyDown, true);
+      root.removeEventListener('focusin', onFocusIn, true);
+      root.removeAttribute('data-citry-listbox-initialized');
+    };
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CListbox_1a159f", "2a9d8a95b7ab2d437a34353274f4b353", atob("eyJ2YWx1ZSI6WyJjb3BwZXIiXSwibXVsdGlwbGUiOmZhbHNlLCJtYW5kYXRvcnkiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsImxvb3AiOmZhbHNlLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCJ9"));
+})();</script></body></html><!--citry:g1:f83443dc739dcbf8abc88242fd6e2fbafd1021b975a8c3c5510055f3df4922d2:0:i:1:e-->

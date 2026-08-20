@@ -1,0 +1,186 @@
+schema_version: 1
+family: context-menu
+
+components:
+  - CContextMenu
+
+inputs:
+  - id: ccontext-menu-server-inputs
+    component: CContextMenu
+    channel: server
+    column_widths: [fit, 17rem, 10rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Sets the correlated host, target, point, Menu surface, declaration, and submenu ID family.'}
+      - {id: aria-label, name: aria_label, type: non-whitespace str, default: {kind: required}, effect: Supplies the root Menu surface accessible name without relabelling the arbitrary target.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets server and uncontrolled Menu visibility.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Blocks custom invocation and force-closes an open Menu while preserving native context behavior.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Selects existing CMenu arrow and typeahead wrapping.}
+      - {id: close-on-select, name: close_on_select, type: bool, default: {kind: literal, value: true}, effect: Selects the existing root CMenu action-close policy.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, default: {kind: literal, value: md}, effect: Selects existing CMenu item geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds host classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds host styles; inherited Menu variables reach the inline surface.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed host attributes and isolated-scope unrelated native listeners.}
+      - {id: target-attrs, name: target_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes to the exact bound target mapping without replacing owned identity or invocation behavior.}
+
+  - id: ccontext-menu-client-inputs
+    component: CContextMenu
+    channel: client
+    column_widths: [fit, 18rem, 17rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control from the current committed visibility; null has the same effect., effect: Controls Menu visibility while supplied as a Boolean.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls custom invocation disabledness; native target and fieldset disabledness remain authoritative.}
+      - {id: loop, name: loop, type: boolean, omitted: Uses the server input., effect: Controls existing CMenu navigation wrapping.}
+      - {id: close-on-select, name: closeOnSelect, type: boolean, omitted: Uses the server input., effect: Controls the existing root CMenu action-close policy.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, omitted: Uses the server input., effect: Controls existing CMenu item geometry.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Omission or null selects no visibility callback and refuses a controlled native-default claim., effect: Receives visibility requests and forced closes; only a synchronous literal-true return can claim a controlled closed-to-open native request.}
+      - {id: on-action, name: onAction, type: function, omitted: Omission or null selects no root action callback., effect: Receives existing valued CMenu command and choice activations.}
+
+slots:
+  - id: ccontext-menu-slots
+    component: CContextMenu
+    entries:
+      - {id: target, name: target, required: true, data: {display: '{target_attrs}', interfaces: [CContextMenuTargetSlotData]}, fallback: None. Must settle to exactly one direct standard native Element with the complete target_attrs mapping bound.}
+      - {id: menu, name: menu, required: true, data: {display: '{}', interfaces: [CContextMenuMenuSlotData]}, fallback: None. Requires one or more direct existing CMenu declarations under the existing collection rules.}
+
+events:
+  - id: ccontext-menu-events
+    component: CContextMenu
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CContextMenuOpenChangeDetail) => boolean | void', interfaces: [CContextMenuOpenChangeDetail]}
+        trigger: A trusted contextual request, Menu dismissal, or forced native, disabled, or ancestor close occurs.
+        detail: {display: '{reason, controlled, forced, source, clientX, clientY}', interfaces: [CContextMenuOpenChangeDetail]}
+        behavior: Candidate coordinates accompany refused controlled requests. A controlled closed-to-open request is claimed only when the callback synchronously sets owner open state and returns literal true; all other returns refuse without preventing the native default.
+      - id: on-action
+        name: onAction
+        signature: {display: '(value: string, detail: CMenuActionDetail) => void', interfaces: [CMenuActionDetail]}
+        trigger: An enabled valued CMenu command, checkbox, or radio activates.
+        detail: {display: '{kind, item, event, path}', interfaces: [CMenuActionDetail]}
+        behavior: Uses exact CMenu callback order and action detail. ContextMenu adds no target or point fields to action detail.
+
+methods: []
+
+css:
+  - id: ccontext-menu-reused-menu-css-variables
+    component: CContextMenu
+    entries:
+      - {id: cui-menu-background, name: --cui-menu-background, type: color, purpose: Root and submenu Menu surfaces., default: Canvas}
+      - {id: cui-menu-foreground, name: --cui-menu-foreground, type: color, purpose: Menu item text., default: CanvasText}
+      - {id: cui-menu-muted-color, name: --cui-menu-muted-color, type: color, purpose: 'Descriptions, labels, and shortcuts.', default: 'color-mix(in srgb, current foreground 72%, transparent)'}
+      - {id: cui-menu-border-color, name: --cui-menu-border-color, type: color, purpose: Menu surface and separator boundaries., default: 'color-mix(in srgb, CanvasText 18%, transparent)'}
+      - {id: cui-menu-border-width, name: --cui-menu-border-width, type: length, purpose: Menu surface boundary width., default: 1px}
+      - {id: cui-menu-radius, name: --cui-menu-radius, type: length, purpose: Menu surface corners., default: 0.75rem}
+      - {id: cui-menu-shadow, name: --cui-menu-shadow, type: shadow, purpose: Root Menu elevation., default: '0 0.75rem 2rem rgb(15 23 42 / 18%)'}
+      - {id: cui-menu-submenu-shadow, name: --cui-menu-submenu-shadow, type: shadow, purpose: Nested Menu elevation., default: '0 1rem 2.5rem rgb(15 23 42 / 22%)'}
+      - {id: cui-menu-inline-size, name: --cui-menu-inline-size, type: length, purpose: Preferred Menu width., default: 14rem}
+      - {id: cui-menu-min-inline-size, name: --cui-menu-min-inline-size, type: length, purpose: Minimum useful submenu corridor., default: 10rem}
+      - {id: cui-menu-max-inline-size, name: --cui-menu-max-inline-size, type: length, purpose: Viewport-safe Menu width., default: 'calc(100dvi - 1rem)'}
+      - {id: cui-menu-max-block-size, name: --cui-menu-max-block-size, type: length, purpose: Menu scroll limit., default: 'min(24rem, calc(100dvb - 1rem))'}
+      - {id: cui-menu-padding, name: --cui-menu-padding, type: length, purpose: Menu surface edge spacing., default: 0.375rem}
+      - {id: cui-menu-item-block-size, name: --cui-menu-item-block-size, type: length, purpose: Menu item minimum height., default: Size-derived.}
+      - {id: cui-menu-item-padding-inline, name: --cui-menu-item-padding-inline, type: length, purpose: Menu item inline spacing., default: Size-derived.}
+      - {id: cui-menu-item-gap, name: --cui-menu-item-gap, type: length, purpose: Menu item-region gap., default: 0.625rem}
+      - {id: cui-menu-item-radius, name: --cui-menu-item-radius, type: length, purpose: Menu item corners., default: 0.5rem}
+      - {id: cui-menu-hover-background, name: --cui-menu-hover-background, type: color, purpose: Enabled pointer-hover fill., default: 'color-mix(in srgb, CanvasText 8%, transparent)'}
+      - {id: cui-menu-focus-background, name: --cui-menu-focus-background, type: color, purpose: Focused Menu item fill., default: 'light-dark(#175cd3, #84adff)'}
+      - {id: cui-menu-focus-foreground, name: --cui-menu-focus-foreground, type: color, purpose: Focused Menu item content., default: 'light-dark(#ffffff, #101828)'}
+      - {id: cui-menu-focus-outline-color, name: --cui-menu-focus-outline-color, type: color, purpose: Menu item focus-visible outline., default: 'light-dark(#175cd3, #84adff)'}
+      - {id: cui-menu-danger-color, name: --cui-menu-danger-color, type: color, purpose: Destructive Menu item content., default: 'light-dark(#b42318, #fda29b)'}
+      - {id: cui-menu-disabled-opacity, name: --cui-menu-disabled-opacity, type: number, purpose: Disabled Menu content opacity., default: '0.5'}
+      - {id: cui-menu-offset, name: --cui-menu-offset, type: length, purpose: Context point to root Menu gap., default: 0.375rem}
+      - {id: cui-menu-submenu-offset, name: --cui-menu-submenu-offset, type: length, purpose: Nested Menu anchor gap., default: 0.25rem}
+      - {id: cui-menu-duration, name: --cui-menu-duration, type: time, purpose: Menu entry and exit duration., default: 120ms}
+      - {id: cui-menu-easing, name: --cui-menu-easing, type: easing, purpose: Menu entry and exit curve., default: 'cubic-bezier(0.2, 0.8, 0.2, 1)'}
+
+attributes:
+  - id: ccontext-menu-root-attributes
+    component: CContextMenu
+    entries:
+      - {id: root-id, name: id, element: ContextMenu host, type: supplied or generated string, meaning: 'Identifies the host and bases the correlated target, point, surface, and declaration IDs.'}
+      - {id: data-open, name: data-open, element: ContextMenu host, type: present | absent, meaning: Mirrors committed root Menu visibility.}
+      - {id: data-disabled, name: data-disabled, element: ContextMenu host, type: present | absent, meaning: 'Mirrors effective component, native target, and fieldset disabledness.'}
+      - {id: data-size, name: data-size, element: ContextMenu host, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, meaning: Mirrors effective CMenu item geometry.}
+      - {id: data-invocation, name: data-invocation, element: ContextMenu host, type: '"pointer" | "keyboard" | "long-press" | "external" | absent', meaning: Identifies the latest accepted invocation only while the Menu is open.}
+  - id: ccontext-menu-target-attributes
+    component: CContextMenu
+    entries:
+      - {id: target-id, name: id, element: Bound target Element, type: root ID plus -target, meaning: Uses the exact owned target identity from target_attrs.}
+      - {id: native-escape, name: data-citry-context-menu-native, element: Target or descendant, type: present | absent, meaning: Preserves the browser context menu for a consumer-declared native path.}
+  - id: ccontext-menu-surface-attributes
+    component: CContextMenu
+    entries:
+      - {id: surface-id, name: id, element: Root Menu surface, type: root ID plus -menu, meaning: Uses the exact owned root Menu identity.}
+      - {id: popover, name: popover, element: Root and submenu Menu surfaces, type: '"manual"', meaning: Uses native top-layer presence with Citry dismissal.}
+      - {id: role, name: role, element: Root and submenu Menu surfaces, type: '"menu"', meaning: Exposes application Menu semantics.}
+      - {id: aria-label, name: aria-label, element: Root Menu surface, type: non-whitespace string, meaning: Uses required aria_label without naming the arbitrary target as a Menu Button.}
+      - {id: menu-data-open, name: data-open, element: Root and submenu Menu surfaces, type: present | absent, meaning: Mirrors logical Menu visibility.}
+      - {id: data-placement, name: data-placement, element: Root Menu surface, type: '"bottom-start"', meaning: Mirrors the fixed requested logical point placement rather than collision result.}
+      - {id: menu-data-size, name: data-size, element: Root Menu surface, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, meaning: Mirrors effective Menu item geometry.}
+  - id: ccontext-menu-reused-item-attributes
+    component: CContextMenu
+    entries:
+      - {id: item-role, name: role, element: 'Menu item, group, separator, submenu trigger, or submenu surface', type: CMenu-owned role, meaning: 'Uses existing CMenu command, choice, group, separator, and submenu semantics.'}
+      - {id: aria-labelledby, name: aria-labelledby, element: Menu item or labelled group, type: owned label IDREF | absent, meaning: Uses existing CMenu exact visible labels.}
+      - {id: aria-describedby, name: aria-describedby, element: Menu item root, type: description IDREF | absent, meaning: Uses an optional separate CMenu item description.}
+      - {id: aria-disabled, name: aria-disabled, element: Menu item root, type: '"true" | absent', meaning: Represents a focusable inactive CMenu item.}
+      - {id: data-item-disabled, name: data-disabled, element: Menu item root, type: present | absent, meaning: Mirrors effective CMenu item disabledness.}
+      - {id: data-intent, name: data-intent, element: Menu item root, type: '"default" | "danger"', meaning: Mirrors existing CMenu item emphasis.}
+      - {id: aria-checked, name: aria-checked, element: Checkbox or radio item, type: '"false" | "true" | "mixed"', meaning: Uses effective CMenu choice state; radio items never use mixed.}
+      - {id: data-checked, name: data-checked, element: Checkbox or radio item, type: '"false" | "true" | "mixed"', meaning: Mirrors effective CMenu choice state.}
+      - {id: aria-haspopup, name: aria-haspopup, element: Submenu trigger, type: '"menu"', meaning: Announces an existing CMenu child surface.}
+      - {id: aria-controls, name: aria-controls, element: Submenu trigger, type: child Menu IDREF, meaning: References the existing child Menu surface.}
+      - {id: aria-expanded, name: aria-expanded, element: Submenu trigger, type: '"true" | "false"', meaning: Mirrors existing child Menu visibility.}
+
+selectors:
+  - id: ccontext-menu-selectors
+    component: CContextMenu
+    entries:
+      - {id: context-menu, selector: '[data-citry-ui-part="context-menu"]', element: Host div, purpose: 'Lifecycle owner and class_, style, and attrs destination; it has no visual box.'}
+      - {id: menu, selector: '[data-citry-ui-part="menu"]', element: Root or submenu Menu surface, purpose: Existing CMenu Popover presence and collection focus.}
+      - {id: menu-item, selector: '[data-citry-ui-part="menu-item"]', element: 'Command, link, checkbox, or radio root', purpose: Existing CMenu item styling.}
+      - {id: menu-item-start, selector: '[data-citry-ui-part="menu-item-start"]', element: Decorative item wrapper, purpose: Existing logical-start content.}
+      - {id: menu-item-label, selector: '[data-citry-ui-part="menu-item-label"]', element: Visible item label, purpose: Existing layout and exact accessible-name target.}
+      - {id: menu-item-description, selector: '[data-citry-ui-part="menu-item-description"]', element: Optional item description, purpose: Existing supporting text and accessible description.}
+      - {id: menu-item-end, selector: '[data-citry-ui-part="menu-item-end"]', element: Decorative item wrapper, purpose: Existing shortcut or logical-end content.}
+      - {id: menu-choice-indicator, selector: '[data-citry-ui-part="menu-choice-indicator"]', element: Decorative choice marker, purpose: Existing checkbox and radio state.}
+      - {id: menu-group, selector: '[data-citry-ui-part="menu-group"]', element: Labelled group root, purpose: Existing grouped-command layout.}
+      - {id: menu-group-label, selector: '[data-citry-ui-part="menu-group-label"]', element: Visible group label, purpose: Existing exact group name and layout.}
+      - {id: menu-radio-group, selector: '[data-citry-ui-part="menu-radio-group"]', element: Radio-group root, purpose: Existing exclusive choice grouping.}
+      - {id: menu-separator, selector: '[data-citry-ui-part="menu-separator"]', element: Horizontal separator, purpose: Existing collection division.}
+      - {id: menu-submenu, selector: '[data-citry-ui-part="menu-submenu"]', element: Neutral submenu wrapper, purpose: Existing child trigger and surface ownership.}
+      - {id: menu-submenu-trigger, selector: '[data-citry-ui-part="menu-submenu-trigger"]', element: Submenu Button, purpose: Existing child Menu activation and placement anchor.}
+
+interfaces:
+  - id: ccontext-menu-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: menu-size, name: CMenuSize, definition: 'Literal["sm", "md", "lg"]'}
+  - id: ccontext-menu-target-slot-data
+    kind: record
+    name: CContextMenuTargetSlotData
+    entries:
+      - {id: target-attrs, name: target_attrs, type: 'dict[str, object]', meaning: 'Generated target ID, private ownership marker, and the validated copied target_attrs mapping.'}
+  - {id: ccontext-menu-menu-slot-data, kind: record, name: CContextMenuMenuSlotData, entries: []}
+  - id: ccontext-menu-open-change-detail
+    kind: record
+    name: CContextMenuOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: '"contextmenu" | "keyboard" | "long-press" | "escape" | "outside" | "focus-outside" | "tab" | "action" | "native" | "disabled" | "ancestor"', meaning: Cause of the requested or forced visibility change.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client Boolean owns desired Menu visibility.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether native or structural safety overrides owner refusal.}
+      - {id: source, name: source, type: 'Element | EventTarget | null', meaning: 'Responsible composed-path target, focused Element, item, surface, target, or ancestor when still connected.'}
+      - {id: client-x, name: clientX, type: float, meaning: Candidate or latest committed visual-viewport-clamped x coordinate.}
+      - {id: client-y, name: clientY, type: float, meaning: Candidate or latest committed visual-viewport-clamped y coordinate.}
+  - id: ccontext-menu-action-detail
+    kind: record
+    name: CMenuActionDetail
+    entries:
+      - {id: kind, name: kind, type: '"command" | "checkbox" | "radio"', meaning: Activated semantic CMenu item kind.}
+      - {id: item, name: item, type: Element, meaning: Activated CMenu item root.}
+      - {id: event, name: event, type: Event, meaning: Native CMenu activation event.}
+      - {id: path, name: path, type: 'list[str]', meaning: Canonical ancestor-submenu path from the ContextMenu root Menu.}
+
+translations: []

@@ -1,0 +1,322 @@
+<!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:1:s--><!doctype html><html data-cid-cn6tn8whz lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Spinner at a glance</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=SpinnerAtAGlance_a2522a>:where(.spinner-glance) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 34rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b8b8dd, #4b4a78);
+  border-radius: 0.9rem;
+  background: light-dark(#f7f6ff, #17172a);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.spinner-glance__sky) {
+  color: light-dark(#5b4bb7, #c4b5fd);
+  font-size: 1.3rem;
+  letter-spacing: 0.6rem;
+  text-align: center;
+}
+
+:where(.spinner-glance h2, .spinner-glance p) {
+  margin: 0;
+}
+
+:where(.spinner-glance p) {
+  margin-block-start: 0.25rem;
+  color: light-dark(#55546f, #c6c4de);
+  font-size: 0.8rem;
+}</style><style data-citry-css-class=CSpinner_c40717>@layer citry-ui.theme {
+  :where([data-citry-ui-part="spinner"]) {
+    --_cui-spinner-color: var(
+      --cui-spinner-color,
+      light-dark(#1d4ed8, #60a5fa)
+    );
+    --_cui-spinner-track-color: var(
+      --cui-spinner-track-color,
+      color-mix(in srgb, currentColor 20%, transparent)
+    );
+    --_cui-spinner-size: var(--cui-spinner-size, 1.25rem);
+    --_cui-spinner-thickness: var(--cui-spinner-thickness, 0.16rem);
+    --_cui-spinner-duration: var(--cui-spinner-duration, 0.75s);
+    display: inline-block;
+    flex: none;
+    box-sizing: border-box;
+    inline-size: var(--_cui-spinner-size);
+    block-size: var(--_cui-spinner-size);
+    border: var(--_cui-spinner-thickness) solid var(--_cui-spinner-track-color);
+    border-block-start-color: var(--_cui-spinner-color);
+    border-radius: 50%;
+    color: var(--_cui-spinner-color);
+    vertical-align: -0.125em;
+    animation: cui-spinner-rotate var(--_cui-spinner-duration) linear infinite;
+  }
+
+  :where([data-citry-ui-part="spinner"][data-intent="neutral"]) {
+    --_cui-spinner-color: var(--cui-spinner-color, light-dark(#57534e, #d6d3d1));
+  }
+
+  :where([data-citry-ui-part="spinner"][data-intent="success"]) {
+    --_cui-spinner-color: var(--cui-spinner-color, light-dark(#15803d, #4ade80));
+  }
+
+  :where([data-citry-ui-part="spinner"][data-intent="warn"]) {
+    --_cui-spinner-color: var(--cui-spinner-color, light-dark(#b45309, #fbbf24));
+  }
+
+  :where([data-citry-ui-part="spinner"][data-intent="danger"]) {
+    --_cui-spinner-color: var(--cui-spinner-color, light-dark(#b91c1c, #f87171));
+  }
+
+  :where([data-citry-ui-part="spinner"][data-size="sm"]) {
+    --_cui-spinner-size: var(--cui-spinner-size, 1rem);
+    --_cui-spinner-thickness: var(--cui-spinner-thickness, 0.125rem);
+  }
+
+  :where([data-citry-ui-part="spinner"][data-size="lg"]) {
+    --_cui-spinner-size: var(--cui-spinner-size, 1.75rem);
+    --_cui-spinner-thickness: var(--cui-spinner-thickness, 0.2rem);
+  }
+
+  @keyframes cui-spinner-rotate {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="spinner"]) {
+      border-inline-end-color: var(--_cui-spinner-color);
+      animation: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="spinner"]) {
+      --_cui-spinner-color: var(--cui-spinner-color, CanvasText);
+      --_cui-spinner-track-color: var(--cui-spinner-track-color, GrayText);
+      forced-color-adjust: auto;
+    }
+  }
+
+  @media print {
+    :where([data-citry-ui-part="spinner"]) {
+      border-inline-end-color: var(--_cui-spinner-color);
+      animation: none;
+    }
+  }
+}</style><style data-citry-css-class=CGroup_40f988>@layer citry-ui.theme {
+  :where([data-citry-ui-part="group"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.5rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--_cui-group-gap);
+  }
+
+  :where([data-citry-ui-part="group"][data-wrap]) {
+    flex-wrap: wrap;
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="0"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="xs"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="md"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.75rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="lg"]) {
+    --_cui-group-gap: var(--cui-group-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="xl"]) {
+    --_cui-group-gap: var(--cui-group-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="stretch"]) {
+    align-items: stretch;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="group"][data-reverse]) {
+    flex-direction: row-reverse;
+  }
+
+  :where([data-citry-ui-part="group"] > *) {
+    min-inline-size: 0;
+  }
+}</style></head><body><main><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:2:s--><section class=spinner-glance data-cid-cn6tn8wi0><div aria-hidden=true class=spinner-glance__sky>✦ · ✧ · ✦</div><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:3:s--><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:4:s--><div class=cui-group data-align=center data-cid-cn6tn8wi1 data-citry-ui-part=group data-gap=sm data-justify=center data-wrap><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:r:1:s--><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:r:2:s--><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:5:s--><span aria-label="Calibrating deep-sky camera" class=cui-spinner data-cid=cn6tn8wi3 data-cid-cn6tn8wi3 data-citry-root data-citry-ui-part=spinner data-intent=primary data-size=lg role=progressbar></span><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:5:e--><div><h2>Calibrating the camera</h2><p>Reading dark frames from the observatory sensor.</p></div><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:r:2:e--><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:r:1:e--></div><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:4:e--><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:3:e--></section><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"SpinnerAtAGlance_a2522a","className":"SpinnerAtAGlance"},{"classId":"CGroup_40f988","className":"CGroup"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CSpinner_c40717","className":"CSpinner"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8wi1","invocationId":2,"parentRenderId":"cn6tn8wi0"},{"childRenderId":"cn6tn8wi3","invocationId":4,"parentRenderId":"cn6tn8wi0"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8whz","transparent":false},{"classId":"SpinnerAtAGlance_a2522a","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8wi0","transparent":false},{"classId":"CGroup_40f988","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8wi0","renderId":"cn6tn8wi1","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":3,"parentRenderId":"cn6tn8wi1","renderId":"cn6tn8wi2","transparent":true},{"classId":"CSpinner_c40717","instanceId":5,"invocationId":4,"parentRenderId":"cn6tn8wi0","renderId":"cn6tn8wi3","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"SpinnerAtAGlance_a2522a","ownerRenderId":"cn6tn8wi0","policy":"template","receiverClassId":"CGroup_40f988","receiverRenderId":"cn6tn8wi1","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CGroup_40f988","ownerRenderId":"cn6tn8wi1","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8wi2","slotName":"default","sourceInvocationId":3}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"SpinnerAtAGlance_a2522a","sourceRenderId":"cn6tn8wi0","tagName":"cgroup","targetClassId":"CGroup_40f988","targetRenderId":"cn6tn8wi1"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CGroup_40f988","sourceRenderId":"cn6tn8wi1","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8wi2"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"SpinnerAtAGlance_a2522a","sourceRenderId":"cn6tn8wi0","tagName":"cspinner","targetClassId":"CSpinner_c40717","targetRenderId":"cn6tn8wi3"}],"slotRegions":[{"fillId":2,"ownerRenderId":"cn6tn8wi1","parentRegionId":null,"receiverRenderId":"cn6tn8wi2","regionId":1,"resultOwnerRenderId":"cn6tn8wi1","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wi2"},{"fillId":1,"ownerRenderId":"cn6tn8wi0","parentRegionId":1,"receiverRenderId":"cn6tn8wi1","regionId":2,"resultOwnerRenderId":"cn6tn8wi0","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wi1"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy45OTZmZGIyM2M4ZTQuanM=", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy5hZmUyYzgzYmQ1YTIwYmNmZjU5MGZjZTdiMzM3ODU4ZS5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL1NwaW5uZXJBdEFHbGFuY2VfYTI1MjJhLmVhZTBlZTViOGMzZS5jc3M=", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy44ZmM3MzdlNWQwNGUuY3Nz", "L2NpdHJ5L2NhY2hlL0NHcm91cF80MGY5ODguMTUwODUwZDk3NTRmLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1NwaW5uZXJfYzQwNzE3", "Y242dG44d2kz", "YWZlMmM4M2JkNWEyMGJjZmY1OTBmY2U3YjMzNzg1OGU=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44d2h6"], ["U3Bpbm5lckF0QUdsYW5jZV9hMjUyMmE=", "Y242dG44d2kw"], ["Q0dyb3VwXzQwZjk4OA==", "Y242dG44d2kx"]], "graph": "ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CSpinner_c40717", {
+  props: {
+    label: {},
+    intent: {},
+    size: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const spinner = els[0];
+    const allowedValues = {
+      intent: ["neutral", "primary", "success", "warn", "danger"],
+      size: ["sm", "md", "lg"],
+    };
+    const invalidEpisodes = new Set();
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CSpinner ${name} received invalid client value ${describeValue(value)}; `
+          + "using the server-rendered fallback.",
+        spinner,
+      );
+    };
+    const sourceValue = (name) => props[name] === undefined ? data[name] : props[name];
+    const resolveChoice = (name) => {
+      const value = sourceValue(name);
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveLabel = () => {
+      const value = sourceValue("label");
+      if (typeof value === "string" && value.length > 0) {
+        invalidEpisodes.delete("label");
+        return value;
+      }
+      reportInvalid("label", value);
+      return data.label;
+    };
+    const setAttribute = (name, value) => {
+      if (spinner.getAttribute(name) !== value) {
+        spinner.setAttribute(name, value);
+      }
+    };
+    const setData = (name, value) => {
+      if (spinner.dataset[name] !== value) {
+        spinner.dataset[name] = value;
+      }
+    };
+
+    effect(() => {
+      setAttribute("aria-label", resolveLabel());
+      setData("intent", resolveChoice("intent"));
+      setData("size", resolveChoice("size"));
+    });
+
+    spinner.setAttribute("data-citry-spinner-initialized", "");
+    return () => {
+      spinner.removeAttribute("data-citry-spinner-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSpinner_c40717", "afe2c83bd5a20bcff590fce7b337858e", atob("eyJsYWJlbCI6IkNhbGlicmF0aW5nIGRlZXAtc2t5IGNhbWVyYSIsImludGVudCI6InByaW1hcnkiLCJzaXplIjoibGcifQ=="));
+})();</script></body></html><!--citry:g1:ff87236dbc9bc42de9aff2ce1a6a94e3587b37866d8e02ece5f2f5a1e4d75ead:0:i:1:e-->

@@ -1,0 +1,1100 @@
+<!--citry:g1:81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3:0:i:1:s--><!doctype html><html data-cid-cn6tn8uk2 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Control selection</title><style>@layer citry-ui.theme {
+        :where(.cui-form-control__native--enhanced, .cui-form-control__status) {
+          position: absolute !important;
+          inline-size: 1px !important;
+          block-size: 1px !important;
+          padding: 0 !important;
+          margin: -1px !important;
+          overflow: hidden !important;
+          clip-path: inset(50%) !important;
+          white-space: nowrap !important;
+          border: 0 !important;
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CMultiSelect_e37e33>@layer citry-ui.theme {
+  :where(.cui-multi-select) {
+    --_cui-multi-select-background:var(--cui-multi-select-background,Canvas);
+    --_cui-multi-select-foreground:var(--cui-multi-select-foreground,CanvasText);
+    --_cui-multi-select-placeholder-color:var(--cui-multi-select-placeholder-color,light-dark(#667085,#a4a7ae));
+    --_cui-multi-select-muted-color:var(--cui-multi-select-muted-color,light-dark(#667085,#a4a7ae));
+    --_cui-multi-select-border-color:var(--cui-multi-select-border-color,light-dark(#d0d5dd,#535862));
+    --_cui-multi-select-hover-background:var(--cui-multi-select-hover-background,color-mix(in srgb,CanvasText 7%,transparent));
+    --_cui-multi-select-selected-background:var(--cui-multi-select-selected-background,light-dark(#dbeafe,#1e3a5f));
+    --_cui-multi-select-selected-foreground:var(--cui-multi-select-selected-foreground,light-dark(#1849a9,#d1e9ff));
+    --_cui-multi-select-chip-background:var(--cui-multi-select-chip-background,color-mix(in srgb,CanvasText 9%,Canvas));
+    --_cui-multi-select-chip-foreground:var(--cui-multi-select-chip-foreground,CanvasText);
+    --_cui-multi-select-focus-color:var(--cui-multi-select-focus-color,Highlight);
+    --_cui-multi-select-radius:var(--cui-multi-select-radius,.625rem);
+    --_cui-multi-select-control-padding:var(--cui-multi-select-control-padding,.5rem .625rem);
+    --_cui-multi-select-option-padding:var(--cui-multi-select-option-padding,.5rem .625rem);
+    --_cui-multi-select-max-block-size:var(--cui-multi-select-max-block-size,18rem);
+    --_cui-multi-select-offset:var(--cui-multi-select-offset,.25rem);
+    --_cui-multi-select-shadow:var(--cui-multi-select-shadow,0 .75rem 2rem color-mix(in srgb,CanvasText 18%,transparent));
+    --_cui-multi-select-duration:var(--cui-multi-select-duration,120ms);
+    box-sizing:border-box;display:grid;min-inline-size:0;color:var(--_cui-multi-select-foreground);font-family:ui-sans-serif,system-ui,sans-serif;
+  }
+  :where(.cui-multi-select[data-size="sm"]){font-size:.875rem;--_cui-multi-select-control-padding:.375rem .5rem;--_cui-multi-select-option-padding:.375rem .5rem}
+  :where(.cui-multi-select[data-size="lg"]){font-size:1.0625rem;--_cui-multi-select-control-padding:.625rem .75rem;--_cui-multi-select-option-padding:.625rem .75rem}
+  :where(.cui-multi-select:not([data-citry-multi-select-initialized]) .cui-multi-select__control),
+  :where(.cui-multi-select:not([data-citry-multi-select-initialized]) .cui-multi-select__popup){display:none}
+  :where(.cui-multi-select:not([data-citry-multi-select-initialized]) .cui-multi-select__native){box-sizing:border-box;inline-size:100%;min-block-size:5rem;padding:.5rem;border:1px solid var(--_cui-multi-select-border-color);border-radius:var(--_cui-multi-select-radius);background:var(--_cui-multi-select-background);color:var(--_cui-multi-select-foreground);font:inherit}
+  :where(.cui-multi-select__control){box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.5rem;inline-size:100%;min-inline-size:0;margin:0;padding:var(--_cui-multi-select-control-padding);border:1px solid transparent;border-radius:var(--_cui-multi-select-radius);background:var(--_cui-multi-select-background);color:var(--_cui-multi-select-foreground);font:inherit;text-align:start;cursor:pointer}
+  :where(.cui-multi-select[data-variant="outline"] .cui-multi-select__control){border-color:var(--_cui-multi-select-border-color)}
+  :where(.cui-multi-select[data-variant="filled"] .cui-multi-select__control){background:color-mix(in srgb,CanvasText 6%,Canvas)}
+  :where(.cui-multi-select[data-variant="plain"] .cui-multi-select__control){padding-inline:0}
+  :where(.cui-multi-select__control:focus-visible){outline:2px solid var(--_cui-multi-select-focus-color);outline-offset:2px}
+  :where(.cui-multi-select[data-disabled] .cui-multi-select__control){color:var(--_cui-multi-select-muted-color);cursor:not-allowed;opacity:.72}
+  :where(.cui-multi-select[data-readonly]:not([data-disabled]) .cui-multi-select__control){cursor:default}
+  :where(.cui-multi-select[data-invalid] .cui-multi-select__control){border-color:light-dark(#d92d20,#f97066)}
+  :where(.cui-multi-select__values){display:flex;flex-wrap:wrap;align-items:center;gap:.25rem;min-inline-size:0;overflow-wrap:anywhere}
+  :where(.cui-multi-select [data-citry-ui-part="placeholder"]){color:var(--_cui-multi-select-placeholder-color)}
+  :where(.cui-multi-select__chip){display:inline-flex;max-inline-size:100%;padding:.15rem .4rem;border-radius:calc(var(--_cui-multi-select-radius) - .2rem);background:var(--_cui-multi-select-chip-background);color:var(--_cui-multi-select-chip-foreground);overflow-wrap:anywhere}
+  :where(.cui-multi-select__indicator){transition:transform var(--_cui-multi-select-duration) ease-out}
+  :where(.cui-multi-select[data-open] .cui-multi-select__indicator){transform:rotate(180deg)}
+  :where(.cui-multi-select__popup){position:fixed;box-sizing:border-box;inline-size:min(14rem,calc(100vw - 2rem));max-inline-size:calc(100vw - 2rem);max-block-size:min(var(--_cui-multi-select-max-block-size),calc(100vh - 2rem));margin:0;padding:.25rem;overflow:auto;border:1px solid var(--_cui-multi-select-border-color);border-radius:var(--_cui-multi-select-radius);background:var(--_cui-multi-select-background);color:var(--_cui-multi-select-foreground);box-shadow:var(--_cui-multi-select-shadow);font:inherit;overscroll-behavior:contain}
+  :where(.cui-multi-select__popup:not(:popover-open)){display:none}
+  :where(.cui-multi-select[data-match-width] .cui-multi-select__popup){inline-size:min(anchor-size(width),calc(100vw - 2rem))}
+  :where(.cui-multi-select__popup[data-placement="bottom-start"]){position-area:block-end span-inline-end;margin-block-start:var(--_cui-multi-select-offset)}
+  :where(.cui-multi-select__popup[data-placement="bottom-end"]){position-area:block-end span-inline-start;margin-block-start:var(--_cui-multi-select-offset)}
+  :where(.cui-multi-select__popup[data-placement="top-start"]){position-area:block-start span-inline-end;margin-block-end:var(--_cui-multi-select-offset)}
+  :where(.cui-multi-select__popup[data-placement="top-end"]){position-area:block-start span-inline-start;margin-block-end:var(--_cui-multi-select-offset)}
+  :where(.cui-multi-select__listbox),:where(.cui-multi-select__group){display:grid;gap:.125rem;min-inline-size:0}
+  :where(.cui-multi-select__group-label){padding:.5rem .625rem .25rem;color:var(--_cui-multi-select-muted-color);font-size:.8125em;font-weight:700;overflow-wrap:anywhere}
+  :where(.cui-multi-select__option){box-sizing:border-box;display:grid;grid-template-columns:1rem minmax(0,1fr);gap:.5rem;min-inline-size:0;padding:var(--_cui-multi-select-option-padding);border-radius:calc(var(--_cui-multi-select-radius) - .125rem);line-height:1.35;cursor:default}
+  :where(.cui-multi-select__option[data-highlighted]:not([data-disabled])){background:var(--_cui-multi-select-hover-background);outline:2px solid var(--_cui-multi-select-focus-color);outline-offset:-2px}
+  :where(.cui-multi-select__option[data-selected]){background:var(--_cui-multi-select-selected-background);color:var(--_cui-multi-select-selected-foreground)}
+  :where(.cui-multi-select__option[data-disabled]){color:var(--_cui-multi-select-muted-color);opacity:.72}
+  :where(.cui-multi-select__check){visibility:hidden}:where(.cui-multi-select__option[data-selected] .cui-multi-select__check){visibility:visible}
+  :where(.cui-multi-select__option [data-citry-ui-part="option-label"]),:where(.cui-multi-select__option [data-citry-ui-part="option-description"]){display:block;min-inline-size:0;overflow-wrap:anywhere}
+  :where(.cui-multi-select__option [data-citry-ui-part="option-description"]){color:var(--_cui-multi-select-muted-color);font-size:.875em}
+  :where(.cui-multi-select__option[data-selected] [data-citry-ui-part="option-description"]){color:currentColor;opacity:.82}
+  @media(prefers-reduced-motion:reduce){:where(.cui-multi-select){--_cui-multi-select-duration:0ms}}
+  @media(forced-colors:active){:where(.cui-multi-select__control),:where(.cui-multi-select__popup){border-color:CanvasText}:where(.cui-multi-select__option[data-selected]){background:Highlight;color:HighlightText;forced-color-adjust:none}}
+  @media print{:where(.cui-multi-select__popup){display:none!important}:where(.cui-multi-select__control){border-color:CanvasText;background:transparent;color:CanvasText;box-shadow:none}}
+}</style></head><body><main><!--citry:g1:81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3:0:i:2:s--><div data-cid=cn6tn8uk3 data-cid-cn6tn8uk3 data-citry-root x-data><!--citry:g1:81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3:0:i:3:s--><div class=cui-multi-select data-cid=cn6tn8uk4 data-cid-cn6tn8uk4 data-citry-root data-citry-ui-part=root data-match-width data-size=md data-variant=outline><button aria-label="Notification channels" style="anchor-name: --_cui-multi-select-anchor-cn6tn8uk4;" aria-controls=cui-multi-select-cn6tn8uk4-listbox aria-expanded=false aria-haspopup=listbox class=cui-multi-select__control data-citry-ui-part=control id=cui-multi-select-cn6tn8uk4-trigger role=combobox type=button><span class=cui-multi-select__values data-citry-ui-part=values> <span class=cui-multi-select__chip data-citry-ui-part=chip data-value=email>Email</span> </span> <span aria-hidden=true class=cui-multi-select__indicator data-citry-ui-part=indicator>▾</span></button><select aria-label="Notification channels" class=cui-multi-select__native data-cui-multi-select-native id=cui-multi-select-cn6tn8uk4 multiple><option selected value=email>Email</option><option value=push>Push</option><option value=sms>SMS</option></select><span data-cui-multi-select-readonly-values hidden> </span><div style="position-anchor: --_cui-multi-select-anchor-cn6tn8uk4;" class=cui-multi-select__popup data-citry-ui-part=popup data-placement=bottom-start hidden id=cui-multi-select-cn6tn8uk4-popup inert popover=manual><div aria-label="Notification channels" aria-multiselectable=true class=cui-multi-select__listbox data-citry-ui-part=listbox id=cui-multi-select-cn6tn8uk4-listbox role=listbox><div aria-disabled=false aria-labelledby=cui-multi-select-cn6tn8uk4-option-0-82244417f956-label aria-selected=true class=cui-multi-select__option data-citry-ui-part=option data-selected data-value=email id=cui-multi-select-cn6tn8uk4-option-0-82244417f956 role=option><span aria-hidden=true class=cui-multi-select__check>✓</span><span> <span data-citry-ui-part=option-label id=cui-multi-select-cn6tn8uk4-option-0-82244417f956-label>Email</span> </span></div><div aria-disabled=false aria-labelledby=cui-multi-select-cn6tn8uk4-option-1-d107ea3629c3-label aria-selected=false class=cui-multi-select__option data-citry-ui-part=option data-value=push id=cui-multi-select-cn6tn8uk4-option-1-d107ea3629c3 role=option><span aria-hidden=true class=cui-multi-select__check>✓</span><span> <span data-citry-ui-part=option-label id=cui-multi-select-cn6tn8uk4-option-1-d107ea3629c3-label>Push</span> </span></div><div aria-disabled=false aria-labelledby=cui-multi-select-cn6tn8uk4-option-2-9582d03046bd-label aria-selected=false class=cui-multi-select__option data-citry-ui-part=option data-value=sms id=cui-multi-select-cn6tn8uk4-option-2-9582d03046bd role=option><span aria-hidden=true class=cui-multi-select__check>✓</span><span> <span data-citry-ui-part=option-label id=cui-multi-select-cn6tn8uk4-option-2-9582d03046bd-label>SMS</span> </span></div></div></div></div><!--citry:g1:81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3:0:i:3:e--><p>Current: <strong x-text="$store.multiSelectExample.value.join(', ')"></strong></p></div><!--citry:g1:81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ControlledMultiSelect_397bf9","className":"ControlledMultiSelect"},{"classId":"CMultiSelect_e37e33","className":"CMultiSelect"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8uk4","invocationId":2,"parentRenderId":"cn6tn8uk3"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8uk2","transparent":false},{"classId":"ControlledMultiSelect_397bf9","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8uk3","transparent":false},{"classId":"CMultiSelect_e37e33","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8uk3","renderId":"cn6tn8uk4","transparent":false}],"fills":[],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{\n      value:$store.multiSelectExample.value,\n      onValueChange:(next) => $store.multiSelectExample.value = next,\n    }","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ControlledMultiSelect_397bf9","sourceRenderId":"cn6tn8uk3","tagName":"cmultiselect","targetClassId":"CMultiSelect_e37e33","targetRenderId":"cn6tn8uk4"}],"slotRegions":[],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NvbnRyb2xsZWRNdWx0aVNlbGVjdF8zOTdiZjkuMzU3MmUxZDI1ZGI0Lmpz", "L2NpdHJ5L2NhY2hlL0NNdWx0aVNlbGVjdF9lMzdlMzMuZjRiYWQwNGZmN2VkLmpz", "L2NpdHJ5L2NhY2hlL0NNdWx0aVNlbGVjdF9lMzdlMzMuMDc0N2ZkNWI4ZTMwMDIzYTljYjA2ZDllZmViYjViMGMuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NNdWx0aVNlbGVjdF9lMzdlMzMuMWQ1NTc1NDY4ZDM0LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q011bHRpU2VsZWN0X2UzN2UzMw==", "Y242dG44dWs0", "MDc0N2ZkNWI4ZTMwMDIzYTljYjA2ZDllZmViYjViMGM=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dWsy"]], "graph": "81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const anchoredLayerRuntime = (() => {
+        const runtimeKey = Symbol.for("citry-ui:anchored-layer-runtime");
+        const runtimeGeneration = 3;
+        const ancestorCloseCapability = "ancestor-close-transaction-v1";
+        const installed = globalThis[runtimeKey];
+        if (
+          installed?.generation === runtimeGeneration
+          && installed?.capabilities?.includes?.(ancestorCloseCapability)
+        ) {
+          return installed;
+        }
+        if (installed !== undefined) {
+          throw new Error(
+            "[citry-ui] cannot replace an incompatible anchored-layer runtime; "
+              + "a full page reload is required.",
+          );
+        }
+
+        const coordinators = new WeakMap();
+        const activeCoordinators = new Set();
+        const stats = installed?.stats ?? {
+          listenerSets: 0,
+          reconciliations: 0,
+        };
+        stats.activeListenerSets ??= 0;
+        stats.activeCoordinators ??= 0;
+
+        const isOpenShadowRoot = (value) => (
+          value instanceof ShadowRoot && value.host.shadowRoot === value
+        );
+        const actualRoot = (element) => {
+          const root = element?.getRootNode?.() ?? null;
+          if (root instanceof Document || isOpenShadowRoot(root)) {
+            return root;
+          }
+          return null;
+        };
+        const composedParent = (node) => {
+          if (node?.parentNode) {
+            return node.parentNode;
+          }
+          const root = node?.getRootNode?.() ?? null;
+          return root instanceof ShadowRoot ? root.host : null;
+        };
+        const composedContains = (container, target) => {
+          if (!(container instanceof Node) || !(target instanceof Node)) {
+            return false;
+          }
+          let current = target;
+          while (current) {
+            if (current === container || container.contains(current)) {
+              return true;
+            }
+            const root = current.getRootNode?.() ?? null;
+            if (root instanceof ShadowRoot && root !== container) {
+              current = root.host;
+              continue;
+            }
+            current = composedParent(current);
+          }
+          return false;
+        };
+        const composedAncestors = (node) => {
+          const ancestors = [];
+          let current = node;
+          while (current) {
+            ancestors.push(current);
+            const root = current.getRootNode?.() ?? null;
+            if (root instanceof ShadowRoot && current === root) {
+              current = root.host;
+            } else {
+              current = composedParent(current);
+            }
+          }
+          return ancestors;
+        };
+        const layerElements = (layer) => [
+          layer.trigger,
+          layer.surface,
+          ...(layer.insideElements ?? []),
+        ].filter((value) => value instanceof Node);
+
+        const createCoordinator = (ownerDocument) => {
+          const layers = [];
+          const scopes = new Map();
+          const discoveredRoots = new Set();
+          const processedEvents = new WeakSet();
+          const modalSequence = new WeakMap();
+          const modalOpenState = new WeakMap();
+          const ancestorCloseTransactions = new Set();
+          let nextModalSequence = 0;
+          let nextRegistrationGeneration = 0;
+          let bootstrappedModals = false;
+          let bootstrapAmbiguous = false;
+          let currentModal = null;
+          let rootsDirty = true;
+          let pendingPointerFocus = null;
+          let pointerFocusTimer = null;
+
+          const coordinator = {
+            ownerDocument,
+            layers,
+            tooltipLayer: null,
+            tooltipWarmUntil: 0,
+          };
+
+          const discoverOpenRoots = () => {
+            if (!rootsDirty) {
+              return;
+            }
+            for (const root of discoveredRoots) {
+              if (!root.host.isConnected || root.host.ownerDocument !== ownerDocument) {
+                discoveredRoots.delete(root);
+              }
+            }
+            const pending = [ownerDocument, ...discoveredRoots];
+            const visited = new Set();
+            while (pending.length > 0) {
+              const root = pending.pop();
+              if (visited.has(root)) {
+                continue;
+              }
+              visited.add(root);
+              for (const element of root.querySelectorAll?.("*") ?? []) {
+                if (isOpenShadowRoot(element.shadowRoot)) {
+                  discoveredRoots.add(element.shadowRoot);
+                  pending.push(element.shadowRoot);
+                }
+              }
+            }
+            rootsDirty = false;
+          };
+          const knownRoots = () => {
+            discoverOpenRoots();
+            const roots = new Set([ownerDocument, ...discoveredRoots]);
+            for (const layer of layers) {
+              const root = actualRoot(layer.surface) ?? actualRoot(layer.trigger);
+              if (root) {
+                roots.add(root);
+              }
+            }
+            return roots;
+          };
+          const allModalDialogs = () => {
+            const dialogs = [];
+            for (const root of knownRoots()) {
+              try {
+                dialogs.push(...root.querySelectorAll("dialog:modal"));
+              } catch {
+                // Current supported browsers implement :modal. Treat an
+                // unavailable selector as no eligible modal rather than
+                // guessing from the open attribute.
+              }
+            }
+            return [...new Set(dialogs)];
+          };
+          const deepActiveElement = () => {
+            let active = ownerDocument.activeElement;
+            while (active?.shadowRoot?.activeElement) {
+              active = active.shadowRoot.activeElement;
+            }
+            return active;
+          };
+          const modalContaining = (node, dialogs) => {
+            const matches = dialogs.filter((dialog) => composedContains(dialog, node));
+            if (matches.length === 0) {
+              return null;
+            }
+            return matches.reduce((latest, dialog) => (
+              (modalSequence.get(dialog) ?? 0) >= (modalSequence.get(latest) ?? 0)
+                ? dialog
+                : latest
+            ));
+          };
+          const recordModalTransition = (dialog, explicitState = null) => {
+            if (!(dialog instanceof HTMLDialogElement)) {
+              return;
+            }
+            const isModal = explicitState ?? dialog.matches(":modal");
+            const wasModal = modalOpenState.get(dialog) === true;
+            modalOpenState.set(dialog, isModal);
+            if (!isModal) {
+              if (currentModal === dialog) {
+                currentModal = null;
+              }
+              return;
+            }
+            if (wasModal) {
+              return;
+            }
+            modalSequence.set(dialog, ++nextModalSequence);
+            bootstrapAmbiguous = false;
+            currentModal = dialog;
+          };
+
+          const descendantsOf = (layer) => layers.filter((candidate) => {
+            let parent = candidate.__citryAnchoredParent ?? null;
+            const seen = new Set();
+            while (parent && !seen.has(parent)) {
+              seen.add(parent);
+              if (parent === layer) {
+                return true;
+              }
+              parent = parent.__citryAnchoredParent ?? null;
+            }
+            return false;
+          });
+          const forceClose = (layer, reason, source) => {
+            layer.__citryAnchoredSuppressed = true;
+            layer.__citryAnchoredBlockedReason = reason;
+            layer.__citryAnchoredRegistration = null;
+            layer.forceClose?.(reason, source);
+            const index = layers.indexOf(layer);
+            if (index !== -1) {
+              layers.splice(index, 1);
+            }
+          };
+          const closeDescendants = (layer, reason = "ancestor", source = layer.surface) => {
+            const descendants = descendantsOf(layer);
+            for (let index = descendants.length - 1; index >= 0; index -= 1) {
+              const descendant = descendants[index];
+              if (layers.includes(descendant)) {
+                forceClose(descendant, reason, source);
+              }
+            }
+            syncScopes();
+          };
+
+          const reconcileModal = (event = null) => {
+            stats.reconciliations += 1;
+            const eventPath = event?.composedPath?.() ?? [];
+            const pathHasModal = eventPath.some((node) => (
+              node instanceof HTMLDialogElement && node.matches(":modal")
+            ));
+            if (pathHasModal) {
+              for (const node of eventPath) {
+                if (isOpenShadowRoot(node)) {
+                  discoveredRoots.add(node);
+                }
+              }
+            }
+            const dialogs = allModalDialogs();
+            if (!bootstrappedModals) {
+              bootstrappedModals = true;
+              if (dialogs.length === 1) {
+                modalSequence.set(dialogs[0], ++nextModalSequence);
+                currentModal = dialogs[0];
+              } else if (dialogs.length > 1) {
+                bootstrapAmbiguous = true;
+                currentModal = null;
+              }
+              for (const dialog of dialogs) {
+                modalOpenState.set(dialog, true);
+              }
+            }
+
+            const newlyDiscovered = dialogs.filter((dialog) => (
+              modalOpenState.get(dialog) !== true
+            ));
+            if (newlyDiscovered.length === 1) {
+              const dialog = newlyDiscovered[0];
+              modalOpenState.set(dialog, true);
+              modalSequence.set(dialog, ++nextModalSequence);
+              bootstrapAmbiguous = false;
+              currentModal = dialog;
+            } else if (newlyDiscovered.length > 1) {
+              for (const dialog of newlyDiscovered) {
+                modalOpenState.set(dialog, true);
+              }
+              bootstrapAmbiguous = true;
+              currentModal = null;
+            }
+
+            const eventDialog = eventPath
+              .filter((node) => node instanceof HTMLDialogElement && dialogs.includes(node))
+              .at(0) ?? null;
+            const focusDialog = modalContaining(deepActiveElement(), dialogs);
+            if (dialogs.length === 0) {
+              currentModal = null;
+              bootstrapAmbiguous = false;
+            } else if (bootstrapAmbiguous && (eventDialog || focusDialog)) {
+              // An event can resolve unknown initial order. It must not
+              // promote a modal whose open transition was already observed.
+              bootstrapAmbiguous = false;
+              currentModal = eventDialog ?? focusDialog;
+              if (!modalSequence.has(currentModal)) {
+                modalSequence.set(currentModal, ++nextModalSequence);
+              }
+            } else if (!bootstrapAmbiguous) {
+              if (!currentModal || !dialogs.includes(currentModal)) {
+                currentModal = dialogs.reduce((latest, dialog) => (
+                  (modalSequence.get(dialog) ?? 0) >= (modalSequence.get(latest) ?? 0)
+                    ? dialog
+                    : latest
+                ));
+              }
+            }
+
+            if (currentModal && !dialogs.includes(currentModal)) {
+              currentModal = null;
+            }
+
+            for (const layer of [...layers]) {
+              if (!layers.includes(layer)) {
+                continue;
+              }
+              if (!structurallyEligible(layer)) {
+                forceClose(layer, "ancestor", event?.target ?? currentModal);
+                continue;
+              }
+              if (
+                bootstrapAmbiguous
+                || (currentModal && !composedContains(currentModal, layer.trigger))
+              ) {
+                forceClose(layer, "modal", currentModal);
+              }
+            }
+            syncScopes(true);
+            return { current: currentModal, ambiguous: bootstrapAmbiguous };
+          };
+
+          const inferLogicalParent = (layer) => {
+            if (layer.logicalParent) {
+              return layer.logicalParent;
+            }
+            const childElements = layerElements(layer);
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const candidate = layers[index];
+              if (candidate === layer || !candidate.isOpen()) {
+                continue;
+              }
+              if (layerElements(candidate).some((parentElement) => (
+                childElements.some((childElement) => composedContains(parentElement, childElement))
+              ))) {
+                return candidate;
+              }
+            }
+            return null;
+          };
+          const structurallyEligible = (layer) => {
+            if (
+              !layer.trigger?.isConnected
+              || !layer.surface?.isConnected
+              || !actualRoot(layer.trigger)
+              || !actualRoot(layer.surface)
+              || layer.trigger.getClientRects().length === 0
+              || (layer.isEligible && !layer.isEligible())
+            ) {
+              return false;
+            }
+            const activeSurface = layer.isOpen?.() === true;
+            if (activeSurface) {
+              const surfaceStyle = getComputedStyle(layer.surface);
+              if (
+                layer.surface.getClientRects().length === 0
+                || surfaceStyle.visibility === "hidden"
+                || surfaceStyle.visibility === "collapse"
+              ) {
+                return false;
+              }
+            }
+            const ancestors = new Set([
+              ...composedAncestors(layer.trigger),
+              ...composedAncestors(layer.surface),
+            ]);
+            for (const ancestor of ancestors) {
+              if (!(ancestor instanceof Element)) {
+                continue;
+              }
+              const inactiveSurface = ancestor === layer.surface && !activeSurface;
+              if (!inactiveSurface && (ancestor.hidden || ancestor.inert)) {
+                return false;
+              }
+              if (ancestor instanceof HTMLDialogElement && !ancestor.open) {
+                return false;
+              }
+              if (
+                ancestor !== layer.surface
+                && ancestor.hasAttribute("popover")
+                && !ancestor.matches(":popover-open")
+              ) {
+                return false;
+              }
+            }
+            const parent = layer.logicalParent ?? layer.__citryAnchoredParent ?? inferLogicalParent(layer);
+            if (parent && (!layers.includes(parent) || !parent.isOpen())) {
+              return false;
+            }
+            return true;
+          };
+          const mayOpen = (layer) => {
+            const modal = reconcileModal();
+            if (layer.__citryAnchoredSuppressed) {
+              return false;
+            }
+            if (!structurallyEligible(layer)) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "ancestor";
+              return false;
+            }
+            if (modal.ambiguous) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "modal";
+              return false;
+            }
+            if (modal.current && !composedContains(modal.current, layer.trigger)) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "modal";
+              return false;
+            }
+            layer.__citryAnchoredBlockedReason = null;
+            return true;
+          };
+
+          const containsEvent = (layer, event) => {
+            const path = event?.composedPath?.() ?? [];
+            let current = layer;
+            const seen = new Set();
+            while (current && !seen.has(current)) {
+              seen.add(current);
+              for (const element of layerElements(current)) {
+                if (path.includes(element)) {
+                  return true;
+                }
+                if (path.some((node) => composedContains(element, node))) {
+                  return true;
+                }
+              }
+              current = current.__citryAnchoredParent ?? null;
+            }
+            return false;
+          };
+          const topLayer = () => {
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const candidate = layers[index];
+              if (candidate.isOpen()) {
+                return candidate;
+              }
+            }
+            return null;
+          };
+          const isAncestorClosing = (layer) => (
+            [...ancestorCloseTransactions].some((transaction) => (
+              transaction.layers.has(layer)
+            ))
+          );
+
+          const localScopeForEvent = (event) => {
+            const path = event.composedPath?.() ?? [];
+            return path.find((node) => node instanceof ShadowRoot && scopes.has(node))
+              ?? ownerDocument;
+          };
+          const handleEvent = (scopeRoot, event) => {
+            if (scopeRoot === ownerDocument && localScopeForEvent(event) !== ownerDocument) {
+              return;
+            }
+            if (scopeRoot !== localScopeForEvent(event) || processedEvents.has(event)) {
+              return;
+            }
+            processedEvents.add(event);
+            reconcileModal(event);
+            if (event.type === "focusin" && pendingPointerFocus) {
+              const pointerTarget = pendingPointerFocus.target;
+              const focusTarget = event.composedPath?.()[0] ?? event.target;
+              const labelControl = pointerTarget instanceof HTMLLabelElement
+                ? pointerTarget.control
+                : null;
+              const followsPointer = (
+                composedContains(pointerTarget, focusTarget)
+                || composedContains(focusTarget, pointerTarget)
+                || labelControl === focusTarget
+              );
+              pendingPointerFocus = null;
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = null;
+              if (followsPointer) {
+                return;
+              }
+            }
+            const layer = topLayer();
+            if (!layer) {
+              return;
+            }
+            if (
+              event.type === "focusin"
+              && isAncestorClosing(layer)
+            ) {
+              // An ancestor such as Disclosure must move focus before it can
+              // make the owned subtree inert. Preserve that focus ordering and
+              // let the transaction deliver the structural forced close.
+              return;
+            }
+            if (event.type === "keydown") {
+              if (event.key !== "Escape" || event.isComposing) {
+                return;
+              }
+              event.preventDefault();
+              const registration = layer.__citryAnchoredRegistration;
+              queueMicrotask(() => {
+                if (
+                  registration
+                  && layer.__citryAnchoredRegistration === registration
+                  && layers.includes(layer)
+                  && layer.isOpen()
+                ) {
+                  layer.requestDismiss("escape", event.target);
+                }
+              });
+              return;
+            }
+            if (containsEvent(layer, event)) {
+              return;
+            }
+            if (event.type === "pointerdown") {
+              pendingPointerFocus = {
+                layer,
+                registration: layer.__citryAnchoredRegistration,
+                target: event.composedPath?.()[0] ?? event.target,
+              };
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = setTimeout(() => {
+                pendingPointerFocus = null;
+                pointerFocusTimer = null;
+              }, 0);
+            }
+            layer.requestDismiss(
+              event.type === "pointerdown" ? "outside" : "focus-outside",
+              event.target,
+            );
+          };
+
+          const attachScope = (root) => {
+            const pointerdown = (event) => handleEvent(root, event);
+            const focusin = (event) => handleEvent(root, event);
+            const keydown = (event) => handleEvent(root, event);
+            const beforetoggle = (event) => {
+              if (
+                event.target instanceof HTMLDialogElement
+                && event.oldState === "open"
+                && event.newState === "closed"
+              ) {
+                // `beforetoggle` is the only synchronous standards signal for
+                // a close/open generation completed in one JavaScript task.
+                recordModalTransition(event.target, false);
+              }
+            };
+            const toggle = (event) => {
+              if (event.target instanceof HTMLDialogElement) {
+                if (event.oldState === "open" && event.newState === "open") {
+                  recordModalTransition(event.target, false);
+                }
+                const explicitState = event.newState === "closed"
+                  ? false
+                  : event.target.matches(":modal");
+                recordModalTransition(event.target, explicitState);
+              }
+              reconcileModal(event);
+            };
+            root.addEventListener("pointerdown", pointerdown, true);
+            root.addEventListener("focusin", focusin, true);
+            root.addEventListener("keydown", keydown, true);
+            root.addEventListener("beforetoggle", beforetoggle, true);
+            root.addEventListener("toggle", toggle, true);
+            const observer = new MutationObserver((records) => {
+              for (const record of records) {
+                if (record.type === "childList") {
+                  rootsDirty = true;
+                }
+                if (
+                  record.attributeName === "open"
+                  && record.target instanceof HTMLDialogElement
+                ) {
+                  const explicitState = record.oldValue !== null
+                    ? false
+                    : record.target.matches(":modal");
+                  recordModalTransition(record.target, explicitState);
+                }
+              }
+              reconcileModal();
+            });
+            observer.observe(root, {
+              attributes: true,
+              attributeOldValue: true,
+              attributeFilter: ["open", "hidden", "inert", "style", "class"],
+              childList: true,
+              subtree: true,
+            });
+            scopes.set(root, {
+              pointerdown,
+              focusin,
+              keydown,
+              beforetoggle,
+              toggle,
+              observer,
+            });
+            stats.listenerSets += 1;
+            stats.activeListenerSets += 1;
+          };
+          const detachScope = (root, record) => {
+            root.removeEventListener("pointerdown", record.pointerdown, true);
+            root.removeEventListener("focusin", record.focusin, true);
+            root.removeEventListener("keydown", record.keydown, true);
+            root.removeEventListener("beforetoggle", record.beforetoggle, true);
+            root.removeEventListener("toggle", record.toggle, true);
+            record.observer.disconnect();
+            scopes.delete(root);
+            stats.activeListenerSets -= 1;
+          };
+          function syncScopes(preserveModal = false) {
+            const desired = layers.length > 0 ? knownRoots() : new Set();
+            for (const [root, record] of scopes) {
+              if (!desired.has(root)) {
+                detachScope(root, record);
+              }
+            }
+            for (const root of desired) {
+              if (!scopes.has(root)) {
+                attachScope(root);
+              }
+            }
+            if (layers.length > 0) {
+              activeCoordinators.add(coordinator);
+            } else {
+              activeCoordinators.delete(coordinator);
+              pendingPointerFocus = null;
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = null;
+              discoveredRoots.clear();
+              rootsDirty = true;
+              if (!preserveModal) {
+                currentModal = null;
+                bootstrappedModals = false;
+                bootstrapAmbiguous = false;
+              }
+            }
+            stats.activeCoordinators = activeCoordinators.size;
+          }
+
+          coordinator.containsEvent = containsEvent;
+          coordinator.topLayer = topLayer;
+          coordinator.mayOpen = mayOpen;
+          coordinator.deepActiveElement = deepActiveElement;
+          coordinator.isAncestorClosing = isAncestorClosing;
+          coordinator.blockedReason = (layer) => (
+            layer.__citryAnchoredBlockedReason ?? null
+          );
+          coordinator.clearSuppression = (layer) => {
+            layer.__citryAnchoredSuppressed = false;
+            layer.__citryAnchoredBlockedReason = null;
+          };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:begin */
+          coordinator.prepareModal = (container, source = container) => {
+            if (!(container instanceof HTMLDialogElement)) {
+              throw new TypeError(
+                "[citry-ui] anchored-layer modal preparation requires a native Dialog.",
+              );
+            }
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const layer = layers[index];
+              if (
+                layer.isOpen?.()
+                && !layerElements(layer).some((element) => composedContains(container, element))
+              ) {
+                forceClose(layer, "modal", source);
+              }
+            }
+            syncScopes();
+          };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:end */
+          coordinator.beginAncestorClose = (container, source = container) => {
+            if (!(container instanceof Element)) {
+              throw new TypeError(
+                "[citry-ui] an anchored-layer ancestor close requires an Element container.",
+              );
+            }
+            const transaction = {
+              layers: new Set(layers.filter((layer) => (
+                layer.isOpen?.()
+                && layerElements(layer).some((element) => composedContains(container, element))
+              ))),
+              settled: false,
+            };
+            ancestorCloseTransactions.add(transaction);
+            const settle = (commit) => {
+              if (transaction.settled) {
+                return;
+              }
+              transaction.settled = true;
+              ancestorCloseTransactions.delete(transaction);
+              if (!commit) {
+                return;
+              }
+              for (let index = layers.length - 1; index >= 0; index -= 1) {
+                const layer = layers[index];
+                if (transaction.layers.has(layer) && layer.isOpen?.()) {
+                  forceClose(layer, "ancestor", source);
+                }
+              }
+              syncScopes();
+            };
+            return {
+              commit: () => settle(true),
+              cancel: () => settle(false),
+            };
+          };
+          coordinator.closeDescendants = closeDescendants;
+          coordinator.register = (layer) => {
+            if (!mayOpen(layer)) {
+              return false;
+            }
+            const oldIndex = layers.indexOf(layer);
+            if (oldIndex === -1) {
+              layer.__citryAnchoredRegistration = {
+                generation: ++nextRegistrationGeneration,
+              };
+              layers.push(layer);
+            }
+            const nextParents = new Map(
+              layers.map((candidate) => [
+                candidate,
+                candidate.logicalParent ?? inferLogicalParent(candidate),
+              ]),
+            );
+            for (const [candidate, parent] of nextParents) {
+              candidate.__citryAnchoredParent = parent;
+            }
+            syncScopes();
+            return true;
+          };
+          coordinator.unregister = (layer, options = {}) => {
+            const {
+              reason = "ancestor",
+              source = layer.surface,
+              cascade = true,
+            } = options;
+            if (cascade) {
+              closeDescendants(layer, reason, source);
+            }
+            const index = layers.indexOf(layer);
+            if (index !== -1) {
+              layers.splice(index, 1);
+            }
+            layer.__citryAnchoredParent = null;
+            layer.__citryAnchoredRegistration = null;
+            syncScopes();
+          };
+          coordinator.dispose = () => {
+            ancestorCloseTransactions.clear();
+            for (const layer of [...layers].reverse()) {
+              forceClose(layer, "ancestor", ownerDocument);
+            }
+            syncScopes();
+          };
+          return coordinator;
+        };
+
+        const runtime = {
+          version: runtimeGeneration,
+          generation: runtimeGeneration,
+          capabilities: Object.freeze([ancestorCloseCapability]),
+          stats,
+          coordinatorFor(element) {
+            const ownerDocument = element?.ownerDocument;
+            if (!(ownerDocument instanceof Document)) {
+              throw new Error(
+                "[citry-ui] anchored layers require an element with an ownerDocument.",
+              );
+            }
+            let coordinator = coordinators.get(ownerDocument);
+            if (!coordinator) {
+              coordinator = createCoordinator(ownerDocument);
+              coordinators.set(ownerDocument, coordinator);
+            }
+            return coordinator;
+          },
+          composedContains,
+        };
+        Object.defineProperties(runtime, {
+          layers: {
+            enumerable: true,
+            get: () => [...activeCoordinators].flatMap((coordinator) => coordinator.layers),
+          },
+          listeners: {
+            enumerable: true,
+            get: () => (stats.activeListenerSets > 0 ? {} : null),
+          },
+        });
+        globalThis[runtimeKey] = runtime;
+        return runtime;
+      })();
+
+})();</script><script>(function() {
+
+      (()=>{
+        const key=Symbol.for('citry-ui:form-control-runtime'),prior=globalThis[key];
+        if(prior){if(prior.generation!==1)throw new Error('[citry-ui] cannot replace an incompatible form-control runtime; reload the page.');return}
+        const resetKey=Symbol.for('citry-ui:form-control-reset-registry');
+        const attr=(element,name,value)=>value==null||value===''?element.removeAttribute(name):element.setAttribute(name,String(value));
+        const attrs=(elements,values)=>[...elements].forEach(element=>Object.entries(values).forEach(([name,value])=>attr(element,name,value)));
+        const states=(element,values)=>Object.entries(values).forEach(([name,value])=>element.toggleAttribute(`data-${name}`,Boolean(value)));
+        const idrefs=(...items)=>{const out=[];items.filter(item=>typeof item==='string').forEach(item=>item.split(/\s+/).filter(Boolean).forEach(token=>{if(!out.includes(token))out.push(token)}));return out.join(' ')||null};
+        const relationships=(elements,field,values,invalid)=>{const described=idrefs(field?.hasDescription?field.descriptionId:null,invalid&&field?.hasError?field.errorId:null,values.describedby),error=invalid?idrefs(field?.hasError?field.errorId:null,values.errormessage):null,owned={'aria-describedby':described,'aria-errormessage':error,'aria-invalid':invalid?'true':null};if('label' in values)Object.assign(owned,{'aria-label':values.label,'aria-labelledby':field?.labelId??values.labelledby});attrs(elements,owned);const state={};for(const name of ['required','disabled','readonly'])if(name in values)state[`aria-${name}`]=values[name]?'true':null;attrs(values.control?[values.control]:elements,state)};
+        const trim=value=>value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g,'');
+        const canonical=(value,delimiters=[],strict=false)=>{if(typeof value!=='string'||!value.length||value.includes('\0'))return null;const normalized=value.replace(/\r\n?/g,'\n');if(!strict)return normalized;const trimmed=trim(normalized);return trimmed===value&&trimmed&&!trimmed.includes('\n')&&!delimiters.some(delimiter=>trimmed.includes(delimiter))?trimmed:null};
+        const stringList=(current,candidates,normalize,maximum=null)=>{const seen=new Set(current),values=[];for(const candidate of candidates){if(candidate==='')return{reason:'empty',candidate};const value=normalize(candidate);if(value===null)return{reason:'invalid-value',candidate};if(seen.has(value)){return{reason:'duplicate',candidate}}seen.add(value);values.push(value)}return maximum!==null&&current.length+values.length>maximum?{reason:'maximum',candidate:values.at(-1)??null}:{values}};
+        const split=(text,delimiters)=>{const normalized=text.replace(/\r\n?/g,'\n'),separators=new Set([...delimiters,'\n']);let fragments=[''];for(const character of normalized)separators.has(character)?fragments.push(''):fragments[fragments.length-1]+=character;return{candidates:fragments.slice(0,-1).map(trim),draft:separators.has(normalized.at(-1))?'':fragments.at(-1)}};
+        const format=(template,key,value)=>template.replaceAll(`{${key}}`,String(value));
+        const same=(left,right)=>left.length===right.length&&left.every((value,index)=>value===right[index]);
+        const commit=select=>{select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}))};
+        const resolver=(root,props,owner)=>{
+          const episodes=new Map(),retained=new Map();
+          const describe=value=>{try{return JSON.stringify(value)??String(value)}catch{return String(value)}};
+          const report=(name,value,suffix='using the previous valid value or server fallback')=>{const fingerprint=`${typeof value}:${describe(value)}`;if(episodes.get(name)===fingerprint)return;episodes.set(name,fingerprint);console.error(`[citry-ui] ${owner} ${name} received invalid client value ${describe(value)}; ${suffix}.`,root)};
+          const clear=name=>episodes.delete(name);
+          const callback=name=>{const value=props[name];if(value==null){clear(name);return null}if(typeof value==='function'){clear(name);return value}report(name,value,'ignoring it');return null};
+          const release=(name,fallback)=>{retained.delete(name);clear(name);return fallback};
+          const boolean=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='boolean'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const string=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='string'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const choice=(name,fallback,allowed)=>{const value=props[name];if(value==null)return release(name,fallback);if(allowed.includes(value)){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const maximum=(name,fallback)=>{const value=props[name];if(value===undefined)return release(name,fallback);if(value===null){retained.set(name,null);clear(name);return null}if(Number.isInteger(value)&&value>0){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          return{describe,report,clear,callback,boolean,string,choice,maximum};
+        };
+        const fieldsetDisabled=element=>{for(let node=element.parentElement;node;node=node.parentElement){if(!(node instanceof HTMLFieldSetElement)||!node.disabled)continue;const legend=[...node.children].find(child=>child instanceof HTMLLegendElement);if(!legend?.contains(element))return true}return false};
+        const syncOptions=(select,values,rebuild=false)=>{if(rebuild)select.replaceChildren(...values.map(value=>{const option=select.ownerDocument.createElement('option');option.value=value;option.textContent=value;option.defaultSelected=true;option.selected=true;return option}));else{const selected=new Set(values);[...select.options].forEach(option=>option.selected=selected.has(option.value))}};
+        const syncHidden=(container,values,name,form,enabled)=>{container.replaceChildren();if(!enabled||!name)return;values.forEach(value=>{const input=container.ownerDocument.createElement('input');input.type='hidden';input.name=name;input.value=value;if(form)input.setAttribute('form',form);container.append(input)})};
+        const syncTransport=(select,hidden,values,settings)=>{syncOptions(select,values,settings.rebuild);const readonly=settings.readonly&&!settings.disabled;select.name=readonly?'':settings.name??'';select.disabled=settings.disabled||settings.readonly;select.required=settings.required&&!settings.readonly&&!settings.disabled;if(settings.form)select.setAttribute('form',settings.form);else select.removeAttribute('form');syncHidden(hidden,values,settings.name,settings.form,readonly)};
+        const renderTokens=(container,values,settings)=>container.replaceChildren(...values.map(value=>{const token=container.ownerDocument.createElement('span');token.className=settings.className;token.dataset.citryUiPart=settings.part;token.dataset.value=value;if(settings.active?.(value))token.toggleAttribute('data-highlighted',true);const text=settings.label?.(value)??value;if(settings.labelPart){const label=container.ownerDocument.createElement('span');label.dataset.citryUiPart=settings.labelPart;label.textContent=text;token.append(label)}else token.textContent=text;if(settings.removeLabel){const remove=container.ownerDocument.createElement('button');remove.type='button';remove.tabIndex=-1;remove.disabled=Boolean(settings.removeDisabled);remove.dataset.citryUiPart='remove';remove.dataset.value=value;remove.textContent='\u00d7';remove.setAttribute('aria-label',settings.removeLabel(value));token.append(remove)}return token}));
+        const disableRemovals=(container,disabled)=>container.querySelectorAll(':scope > [data-citry-ui-part="tag"] > [data-citry-ui-part="remove"]').forEach(remove=>remove.disabled=disabled);
+        const blockedTransition=apply=>{let prior;return current=>{const next=`${Number(current.disabled)}:${Number(current.readonly)}`;if(prior!==undefined&&next!==prior)apply();prior=next}};
+        const highlight=(container,selector,value)=>container.querySelectorAll(selector).forEach(item=>item.toggleAttribute('data-highlighted',item.dataset.value===value));
+        const focus=element=>element.focus({preventScroll:true});
+        const status=(root,element)=>{let generation=0;return{announce:text=>{const token=++generation;element.textContent='';queueMicrotask(()=>{if(token===generation&&root.isConnected)element.textContent=text})},invalidate:()=>++generation}};
+        const listeners=()=>{const entries=[];return{add:(target,type,listener,options)=>{target.addEventListener(type,listener,options);entries.push([target,type,listener,options])},stop:()=>entries.splice(0).forEach(([target,type,listener,options])=>target.removeEventListener(type,listener,options))}};
+        const enhanceNative=(native,visible,settings,enabled=true)=>{if(settings.publicId){native.id=enabled?settings.nativeId:settings.publicId;visible.id=enabled?settings.publicId:settings.visibleId}attr(native,'aria-hidden',enabled?'true':null);if(enabled)native.tabIndex=-1;else native.removeAttribute('tabindex');if(settings.className)native.classList.toggle(settings.className,enabled)};
+        const ownership=(root,key)=>{const retained=root[key]??null,state=retained??{},owner=Symbol();root[key]=state;state.owner=owner;return{retained,state,owns:()=>state.owner===owner}};
+        const tokenHandoff=(root,key,server,editor,name)=>{const handle=ownership(root,key),retained=handle.retained,[structure,value,draft,full,serverValues,serverDraft]=server,sameStructure=retained?.s===structure,sameValue=retained?.v===value,sameDraft=retained?.d===draft,prior=Array.isArray(retained?.V)?retained.V:[],values=sameValue?[...prior]:[...serverValues],input=sameDraft&&typeof retained?.I==='string'?retained.I:serverDraft,valueBaseline=sameValue&&Array.isArray(retained?.B)?[...retained.B]:[...serverValues],draftBaseline=sameDraft&&typeof retained?.J==='string'?retained.J:serverDraft,index=prior.indexOf(retained?.A),active=values.includes(retained?.A)?retained.A:values[index]??values[index-1]??null,composing=Boolean(sameDraft&&retained?.C);if(composing&&retained.E!==editor)throw new Error(`[citry-ui] ${name} cannot replace its editor during composition.`);return[handle,sameStructure,sameValue,sameDraft,values,input,valueBaseline,draftBaseline,active,composing,sameDraft?retained?.S:null,Boolean(sameDraft&&retained?.E===editor&&retained?.F),Boolean(sameStructure&&retained?.X),sameStructure&&typeof retained?.T==='string'?retained.T:null]};
+        const restoreTokenHandoff=(handoff,editor,status,owned)=>{const[,sameStructure,,sameDraft,,draft,,,,composing,selection,focused,,,]=handoff;owned(()=>{if(sameStructure&&handoff[13]!==null)status.textContent=handoff[13];if(sameDraft&&!composing&&Array.isArray(selection)){const start=Math.min(selection[0]??draft.length,draft.length),end=Math.min(selection[1]??start,draft.length);try{editor.setSelectionRange(start,end)}catch{}}});if(focused&&!editor.disabled)focus(editor)};
+        const saveTokenHandoff=(handoff,server,editor,current)=>{const handle=handoff[0];if(!handle.owns())return false;const [structure,value,draft,full]=server,[values,valueBaseline,input,draftBaseline,active,composing,invalid,status]=current;Object.assign(handle.state,{s:structure,v:value,d:draft,z:full,V:[...values],B:[...valueBaseline],I:input,J:draftBaseline,A:active,C:composing,E:editor,S:[editor.selectionStart??input.length,editor.selectionEnd??editor.selectionStart??input.length],F:editor.matches(':focus'),X:invalid,T:status});return true};
+        const exactAnatomy=entries=>entries.every(([parent,selector,node])=>parent.querySelectorAll(`:scope > ${selector}`).length===1&&parent.querySelector(`:scope > ${selector}`)===node);
+        const sanitizeFormControl=(root,input)=>{['id','role','part','hidden','inert','popover','contenteditable','tabindex','name','form','type','value','required','disabled','readonly','aria-label','aria-labelledby','aria-describedby','aria-errormessage','aria-invalid','aria-required','aria-disabled','aria-readonly'].forEach(name=>root.removeAttribute(name));input.type='text';['name','form','required','role','tabindex','hidden','inert','popover'].forEach(name=>input.removeAttribute(name))};
+        const mutations=root=>{let observer=null,timer=null;const observe=()=>observer?.observe(root,{subtree:true,childList:true,attributes:true});return{owned:fn=>{observer?.disconnect();try{fn()}finally{observe()}},start:reconcile=>{observer=new MutationObserver(()=>{if(timer!==null)clearTimeout(timer);timer=setTimeout(()=>{timer=null;reconcile()},0)});observe()},stop:()=>{observer?.disconnect();if(timer!==null)clearTimeout(timer);timer=null}}};
+        const watchFieldset=(root,control,apply)=>{let observer,scope;const observe=()=>{const next=root.getRootNode();if(next===scope)return;observer?.disconnect();scope=next;observer=new MutationObserver(records=>{const relevant=records.some(record=>record.type==='attributes'?record.target instanceof HTMLFieldSetElement&&record.target.contains(root):[...record.addedNodes,...record.removedNodes].some(node=>node===root||node.contains?.(root)||(node instanceof HTMLLegendElement&&record.target.contains(root))));if(!relevant)return;if(root.getRootNode()!==scope)observe();apply()});observer.observe(next instanceof Document?next.documentElement:next,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']})};observe();return()=>observer?.disconnect()};
+        const registerReset=(root,proxy,entry)=>{let unregister=()=>{};const register=()=>{const scope=root.getRootNode();let registry=scope[resetKey];if(!registry){const entries=new Map(),timers=new Set(),handler=event=>{const form=event.target,current=[...entries.entries()].filter(([control])=>control.form===form).map(([control,item])=>[control,item,++item.sequence]),timer=setTimeout(()=>{timers.delete(timer);if(event.defaultPrevented)return;current.filter(([control,item,sequence])=>entries.get(control)===item&&item.sequence===sequence&&control.isConnected&&control.form===form).forEach(([,item])=>{item.invalidate?.();item.reset(event)})},0);timers.add(timer)},observer=new MutationObserver(()=>entries.forEach(item=>item.refresh()));scope.addEventListener('reset',handler,true);observer.observe(scope instanceof Document?scope.documentElement:scope,{subtree:true,childList:true});registry={entries,timers,handler,observer};scope[resetKey]=registry}const item={...entry,sequence:0,refresh:()=>{if(root.isConnected&&root.getRootNode()!==scope){unregister();unregister=register()}}};registry.entries.set(proxy,item);return()=>{if(registry.entries.get(proxy)!==item)return;registry.entries.delete(proxy);if(!registry.entries.size&&scope[resetKey]===registry){scope.removeEventListener('reset',registry.handler,true);registry.observer.disconnect();registry.timers.forEach(clearTimeout);registry.timers.clear();delete scope[resetKey]}}};unregister=register();return()=>unregister()};
+        const deepActive=document=>{let active=document.activeElement;while(active?.shadowRoot?.activeElement)active=active.shadowRoot.activeElement;return active};
+        const composedParent=node=>node?.assignedSlot??node?.parentNode??(node?.getRootNode() instanceof ShadowRoot?node.getRootNode().host:null);
+        const invalidFocus=(root,editor,current)=>{const document=root.ownerDocument,snapshot=deepActive(document);let node=root,dialog=null;while(node){if(node instanceof HTMLDialogElement&&node.open){dialog=node;break}node=composedParent(node)}requestAnimationFrame(()=>{if(!current()||!root.isConnected)return;const active=deepActive(document);if(active!==snapshot&&!root.contains(active))return;if(editor.isConnected&&!editor.disabled&&editor.getClientRects().length&&!editor.closest('[inert]')){editor.focus({preventScroll:true});if(deepActive(document)===editor)return}const target=dialog?.isConnected&&dialog.open&&dialog.getClientRects().length?dialog:document.body;if(!target?.isConnected)return;const temporary=!target.hasAttribute('tabindex');if(temporary)target.tabIndex=-1;target.focus({preventScroll:true});if(temporary)queueMicrotask(()=>target.removeAttribute('tabindex'))})};
+        globalThis[key]={generation:1,attr,attrs,states,idrefs,relationships,trim,canonical,stringList,split,format,same,commit,resolver,fieldsetDisabled,syncOptions,syncHidden,syncTransport,renderTokens,disableRemovals,blockedTransition,highlight,focus,status,listeners,enhanceNative,ownership,tokenHandoff,restoreTokenHandoff,saveTokenHandoff,exactAnatomy,sanitizeFormControl,mutations,watchFieldset,registerReset,invalidFocus};
+      })();
+    
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+Alpine.store('multiSelectExample', {value:['email']});
+})();</script><script>(function() {
+
+const anchoredLayerRuntime = globalThis[
+  Symbol.for("citry-ui:anchored-layer-runtime")
+];
+if (
+  anchoredLayerRuntime?.generation !== 3
+  || !anchoredLayerRuntime?.capabilities?.includes?.(
+    "ancestor-close-transaction-v1",
+  )
+) {
+  throw new Error("[citry-ui] anchored-layer runtime dependency did not load.");
+}
+
+const multiSelectHandoffKey = Symbol.for('citry-ui:multi-select-handoff');
+Citry.manager.registerComponent("CMultiSelect_e37e33", {
+  props: {
+    value:{}, open:{}, required:{}, disabled:{}, readonly:{}, invalid:{}, loop:{},
+    closeOnSelect:{}, placement:{}, matchWidth:{}, variant:{}, size:{},
+    onValueChange:{}, onOpenChange:{},
+  },
+  init: ({els, data, props, effect, inject}) => {
+    const root=els[0];
+    const trigger=root.querySelector(':scope > [data-citry-ui-part="control"]');
+    const nativeSelect=root.querySelector(':scope > [data-cui-multi-select-native]');
+    const readonlyValues=root.querySelector(':scope > [data-cui-multi-select-readonly-values]');
+    const popup=root.querySelector(':scope > [data-citry-ui-part="popup"]');
+    const listbox=popup?.querySelector(':scope > [data-citry-ui-part="listbox"]');
+    const valuesSurface=trigger?.querySelector('[data-citry-ui-part="values"]');
+    if (!(trigger instanceof HTMLButtonElement) || !(nativeSelect instanceof HTMLSelectElement)
+      || !(readonlyValues instanceof HTMLElement) || !(popup instanceof HTMLElement)
+      || !(listbox instanceof HTMLElement) || !(valuesSurface instanceof HTMLElement)) {
+      throw new Error('[citry-ui] CMultiSelect settled anatomy is invalid.');
+    }
+    const field=inject(Symbol.for('citry-ui:field'),null);
+    const form=inject(Symbol.for('citry-ui:form'),null);
+    const formRuntime=globalThis[Symbol.for('citry-ui:form-control-runtime')];
+    if(formRuntime?.generation!==1)throw new Error('[citry-ui] CMultiSelect form-control runtime dependency did not load.');
+    const listeners=formRuntime.listeners();
+    const nativeForm=nativeSelect.form;
+    const coordinator=anchoredLayerRuntime.coordinatorFor(popup);
+    const invalidEpisodes=new Set();
+    const options=()=>[...listbox.querySelectorAll('[role="option"]')]
+      .filter(option=>option.closest('[role="listbox"]')===listbox);
+    const enabledOptions=()=>options().filter(option=>!option.hasAttribute('data-disabled'));
+    const optionFor=value=>options().find(option=>option.dataset.value===value)??null;
+    const canonical=value=>formRuntime.canonical(value);
+    const normalize=value=>{
+      if(!Array.isArray(value)) return null;
+      const result=formRuntime.stringList([],value,canonical);if(result.reason)return null;
+      const seen=new Set(result.values), output=[];if(result.values.some(item=>!optionFor(item)))return null;
+      options().forEach(option=>{if(seen.has(option.dataset.value))output.push(option.dataset.value);});
+      return output;
+    };
+    const report=(name,value,suffix='')=>{if(invalidEpisodes.has(name))return;invalidEpisodes.add(name);console.error(`[citry-ui] CMultiSelect ${name} received invalid client value${suffix}`,value);};
+    const boolean=(name,fallback)=>{const value=props[name];if(value===undefined){invalidEpisodes.delete(name);return fallback;}if(typeof value==='boolean'){invalidEpisodes.delete(name);return value;}report(name,value,'; using the server fallback');return fallback;};
+    const choice=(name,fallback,allowed)=>{const value=props[name];if(value===undefined){invalidEpisodes.delete(name);return fallback;}if(typeof value==='string'&&allowed.includes(value)){invalidEpisodes.delete(name);return value;}report(name,value,'; using the server fallback');return fallback;};
+    const prior=root[multiSelectHandoffKey];delete root[multiSelectHandoffKey];
+    const serverFingerprint=JSON.stringify(data.value);
+    let committed=prior?.serverFingerprint===serverFingerprint?[...prior.committed]:[...data.value];
+    let current=[...committed];
+    let internalOpen=prior?.serverFingerprint===serverFingerprint?Boolean(prior.internalOpen):data.open;
+    let logicalOpen=false, highlightedValue=prior?.highlightedValue??null;
+    let controlledValue=false, controlledOpen=false, clientValue, clientOpen;
+    let onValueChange=null,onOpenChange=null,nativeInvalid=false,active=true,generation=0;
+    let typeBuffer='',typeTimer=null,tabGesture=false,pendingDirection=1,selectionTransaction=false,pendingForced=null;
+    let configuration={required:data.required,disabled:data.disabled,readonly:data.readonly,invalid:data.invalid,loop:data.loop,closeOnSelect:data.closeOnSelect,placement:data.placement,matchWidth:data.matchWidth,variant:data.variant,size:data.size};
+    const anchorName=data.anchorName;
+    if(!anchorName.startsWith('--'))throw new Error('[citry-ui] CMultiSelect could not resolve its anchor.');
+    trigger.style.setProperty('anchor-name',anchorName);popup.style.setProperty('position-anchor',anchorName);
+    const same=formRuntime.same;
+    const effectiveDisabled=()=>configuration.disabled||trigger.matches(':disabled');
+    const eligible=()=>!effectiveDisabled()&&!configuration.readonly&&enabledOptions().length>0;
+    const syncValue=()=>{
+      const selected=new Set(current);root.toggleAttribute('data-empty',!current.length);
+      if(!current.length){const placeholder=root.ownerDocument.createElement('span');placeholder.dataset.citryUiPart='placeholder';placeholder.textContent=data.placeholder;valuesSurface.replaceChildren(placeholder);}
+      else formRuntime.renderTokens(valuesSurface,current,{className:'cui-multi-select__chip',part:'chip',
+        label:value=>data.options.find(option=>option.value===value)?.label??value});
+      options().forEach(option=>{const chosen=selected.has(option.dataset.value);option.setAttribute('aria-selected',chosen?'true':'false');option.toggleAttribute('data-selected',chosen);});
+      formRuntime.highlight(listbox,'[role="option"]',logicalOpen?highlightedValue:null);
+      formRuntime.syncTransport(nativeSelect,readonlyValues,current,{name:data.name,form:data.form,required:configuration.required,
+        readonly:configuration.readonly,disabled:effectiveDisabled()});
+      if(current.length)nativeInvalid=false;const invalid=configuration.invalid||nativeInvalid;root.toggleAttribute('data-invalid',invalid);formRuntime.relationships([trigger],field,{describedby:data.externalDescribedBy,errormessage:data.externalErrorMessage,required:configuration.required,disabled:effectiveDisabled(),readonly:configuration.readonly},invalid);field?.setNativeInvalid(nativeInvalid);
+    };
+    const sync=()=>{const disabled=effectiveDisabled();formRuntime.states(root,{open:logicalOpen,required:configuration.required,disabled,readonly:configuration.readonly,'close-on-select':configuration.closeOnSelect,'match-width':configuration.matchWidth});root.dataset.variant=configuration.variant;root.dataset.size=configuration.size;popup.dataset.placement=configuration.placement;trigger.disabled=configuration.disabled;formRuntime.attrs([trigger],{'aria-expanded':logicalOpen?'true':'false','aria-activedescendant':logicalOpen&&highlightedValue?optionFor(highlightedValue)?.id:null});syncValue();};
+    const chooseHighlight=direction=>{const enabled=enabledOptions();const selected=direction<0?[...current].reverse():current;const match=selected.map(optionFor).find(option=>option&&!option.hasAttribute('data-disabled'));return match?.dataset.value??(direction<0?enabled.at(-1):enabled[0])?.dataset.value??null;};
+    const layer={trigger,surface:popup,isOpen:()=>active&&logicalOpen,isEligible:eligible,requestDismiss:(reason,source)=>{if(!(tabGesture&&reason==='focus-outside'))requestOpen(false,reason,source);},forceClose:(reason,source)=>forceClose(reason==='modal'?'ancestor':reason,source)};
+    const notifyOpen=(next,reason,source,forced=false)=>onOpenChange?.(next,{open:next,reason,controlled:controlledOpen,forced,source});
+    const applyOpen=(next,{reason=null,source=null,focus=false}={})=>{if(next===logicalOpen){if(next&&!coordinator.register(layer))forceClose('ancestor',popup);return;}generation+=1;if(next){if(!eligible()||!coordinator.mayOpen(layer)){internalOpen=false;logicalOpen=false;popup.hidden=true;popup.inert=true;sync();return;}highlightedValue=chooseHighlight(pendingDirection);pendingDirection=1;popup.hidden=false;popup.inert=false;try{if(!popup.matches(':popover-open'))popup.showPopover();}catch(error){console.error('[citry-ui] CMultiSelect could not open:',error);popup.hidden=true;popup.inert=true;internalOpen=false;sync();return;}logicalOpen=true;popup.setAttribute('data-open','');if(!coordinator.register(layer)){logicalOpen=false;popup.hidePopover();popup.hidden=true;popup.inert=true;popup.removeAttribute('data-open');sync();return;}sync();if(focus)formRuntime.focus(trigger);optionFor(highlightedValue)?.scrollIntoView({block:'nearest'});return;}logicalOpen=false;highlightedValue=null;popup.inert=true;popup.removeAttribute('data-open');coordinator.unregister(layer);if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;sync();void reason;void source;};
+    const requestOpen=(next,reason,source,focus=false,direction=1)=>{if(next===logicalOpen)return;if(next){pendingDirection=direction;coordinator.clearSuppression(layer);}if(controlledOpen){notifyOpen(next,reason,source);return;}internalOpen=next;applyOpen(next,{reason,source,focus});notifyOpen(next,reason,source);};
+    const forceClose=(reason,source)=>{if(!logicalOpen){internalOpen=false;return;}internalOpen=false;applyOpen(false,{reason,source});if(selectionTransaction)pendingForced={reason,source};else notifyOpen(false,reason,source,true);};
+    const nativeCommit=()=>formRuntime.commit(nativeSelect);
+    const requestValue=(next,option,selected,source,event)=>{if(same(next,current))return false;const previous=[...current],detail={value:[...next],previousValue:previous,option,selected,controlled:controlledValue,source,sourceEvent:event};if(!controlledValue){current=[...next];committed=[...next];syncValue();}onValueChange?.([...next],detail);if(!controlledValue)nativeCommit();return true;};
+    const toggleOption=(option,event,source)=>{if(!(option instanceof HTMLElement)||option.hasAttribute('data-disabled'))return;const selected=current.includes(option.dataset.value);const wanted=new Set(current);if(selected)wanted.delete(option.dataset.value);else wanted.add(option.dataset.value);const next=options().filter(item=>wanted.has(item.dataset.value)).map(item=>item.dataset.value);selectionTransaction=true;const transaction=generation;requestValue(next,option,!selected,source,event);selectionTransaction=false;if(pendingForced){const notice=pendingForced;pendingForced=null;notifyOpen(false,notice.reason,notice.source,true);return;}if(!active||transaction!==generation||!root.isConnected)return;if(configuration.closeOnSelect)requestOpen(false,'selection',option);};
+    const localeLower=value=>{const lang=root.closest('[lang]')?.getAttribute('lang')??root.ownerDocument.documentElement.lang??'';try{return lang?value.toLocaleLowerCase(lang):value.toLocaleLowerCase();}catch{return value.toLowerCase();}};
+    const typeahead=event=>{const altGraph=event.getModifierState?.('AltGraph')??false;if(event.isComposing||event.ctrlKey||event.metaKey||(event.altKey&&!altGraph)||event.key.length!==1)return false;const key=localeLower(event.key);typeBuffer=typeBuffer.length===1&&typeBuffer===key?key:typeBuffer+key;if(typeTimer!==null)clearTimeout(typeTimer);typeTimer=setTimeout(()=>{typeBuffer='';typeTimer=null;},500);const enabled=enabledOptions(),index=enabled.findIndex(option=>option.dataset.value===highlightedValue),ordered=[...enabled.slice(index+1),...enabled.slice(0,index+1)],match=ordered.find(option=>localeLower(option.querySelector('[data-citry-ui-part="option-label"]')?.textContent?.trim().replace(/\s+/g,' ')??'').startsWith(typeBuffer));if(!match)return false;highlightedValue=match.dataset.value;sync();match.scrollIntoView({block:'nearest'});return true;};
+    const move=direction=>{const enabled=enabledOptions();if(!enabled.length)return;const index=enabled.findIndex(option=>option.dataset.value===highlightedValue),edge=direction>0?enabled[0]:enabled.at(-1),next=index<0?edge:enabled[index+direction]??(configuration.loop?edge:enabled[index]);highlightedValue=next?.dataset.value??null;sync();next?.scrollIntoView({block:'nearest'});};
+    const onClick=event=>{const path=event.composedPath();if(path.includes(trigger)){if(eligible())requestOpen(!logicalOpen,'trigger',trigger,true);return;}const option=path.find(node=>node instanceof HTMLElement&&node.getAttribute('role')==='option'&&node.closest('[role="listbox"]')===listbox);if(option)toggleOption(option,event,'pointer');};
+    const onPointer=event=>{if(!logicalOpen||(event.pointerType==='pen'&&(event.buttons>0||event.pressure>0)))return;const option=event.composedPath().find(node=>node instanceof HTMLElement&&node.getAttribute('role')==='option'&&node.closest('[role="listbox"]')===listbox);if(!(option instanceof HTMLElement)||option.hasAttribute('data-disabled'))return;highlightedValue=option.dataset.value;sync();};
+    const onKey=event=>{if(event.target!==trigger||!eligible())return;if(!logicalOpen){if(['Enter',' ','ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();requestOpen(true,'keyboard',trigger,true,event.key==='ArrowUp'?-1:1);}return;}if(event.key==='ArrowDown'){event.preventDefault();move(1);}else if(event.key==='ArrowUp'){event.preventDefault();move(-1);}else if(event.key==='Home'){event.preventDefault();highlightedValue=enabledOptions()[0]?.dataset.value??null;sync();}else if(event.key==='End'){event.preventDefault();highlightedValue=enabledOptions().at(-1)?.dataset.value??null;sync();}else if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleOption(optionFor(highlightedValue),event,'keyboard');}else if(event.key==='Escape'){event.preventDefault();requestOpen(false,'escape',trigger);}else if(event.key==='Tab'){tabGesture=true;setTimeout(()=>{tabGesture=false;},0);requestOpen(false,'tab',trigger);}else if(typeahead(event))event.preventDefault();};
+    const onToggle=event=>{if(event.target!==popup)return;const nativeOpen=popup.matches(':popover-open');if(nativeOpen===logicalOpen)return;if(nativeOpen){if(!coordinator.mayOpen(layer)||controlledOpen){popup.hidePopover();if(controlledOpen)notifyOpen(true,'native',popup);return;}internalOpen=true;logicalOpen=true;popup.hidden=false;popup.inert=false;popup.setAttribute('data-open','');highlightedValue=chooseHighlight(1);coordinator.register(layer);sync();notifyOpen(true,'native',popup);return;}if(controlledOpen&&coordinator.mayOpen(layer)){popup.hidden=false;popup.showPopover();notifyOpen(false,'native',popup);return;}internalOpen=false;logicalOpen=false;popup.inert=true;popup.hidden=true;popup.removeAttribute('data-open');highlightedValue=null;coordinator.unregister(layer);sync();notifyOpen(false,'native',popup);};
+    const onInvalid=event=>{nativeInvalid=true;syncValue();event.preventDefault();formRuntime.focus(trigger);};
+    const onProxyFocus=()=>{if(root.hasAttribute('data-citry-multi-select-initialized'))formRuntime.focus(trigger);};
+    const onReset=event=>{const scheduled=generation;setTimeout(()=>{if(!active||event.defaultPrevented||scheduled!==generation)return;if(!controlledValue&&!same(current,data.value)){const previous=[...current];current=[...data.value];committed=[...data.value];syncValue();onValueChange?.([...current],{value:[...current],previousValue:previous,option:null,selected:false,controlled:false,source:'reset',sourceEvent:event});}else if(controlledValue&&!same(current,data.value))onValueChange?.([...data.value],{value:[...data.value],previousValue:[...current],option:null,selected:false,controlled:true,source:'reset',sourceEvent:event});if(logicalOpen)requestOpen(false,'reset',nativeForm);},0);};
+    const reconcile=()=>{if(clientValue===undefined||clientValue===null){invalidEpisodes.delete('value');if(controlledValue)committed=[...current];controlledValue=false;current=[...committed];}else{const normalized=normalize(clientValue);if(normalized===null){report('value',clientValue,'; releasing control from committed selection');if(controlledValue)committed=[...current];controlledValue=false;current=[...committed];}else{invalidEpisodes.delete('value');controlledValue=true;current=normalized;}}const existing=new Set(options().map(option=>option.dataset.value));if(current.some(value=>!existing.has(value))){const previous=[...current];const next=current.filter(value=>existing.has(value));current=next;if(!controlledValue)committed=[...next];queueMicrotask(()=>onValueChange?.([...next],{value:[...next],previousValue:previous,option:null,selected:false,controlled:controlledValue,source:'structure',sourceEvent:null}));}if(clientOpen===undefined||clientOpen===null){invalidEpisodes.delete('open');controlledOpen=false;applyOpen(internalOpen,{reason:'owner',source:trigger});}else if(typeof clientOpen==='boolean'){invalidEpisodes.delete('open');controlledOpen=true;applyOpen(clientOpen,{reason:'owner',source:trigger,focus:clientOpen});}else{report('open',clientOpen,'; releasing control from committed visibility');controlledOpen=false;applyOpen(internalOpen,{reason:'owner',source:trigger});}if((effectiveDisabled()||configuration.readonly)&&logicalOpen)forceClose('ancestor',trigger);sync();};
+    listeners.add(root,'click',onClick,true);listeners.add(root,'pointerover',onPointer,true);listeners.add(trigger,'keydown',onKey,true);listeners.add(popup,'toggle',onToggle);listeners.add(nativeSelect,'invalid',onInvalid);listeners.add(nativeSelect,'focus',onProxyFocus);
+    const unregisterReset=formRuntime.registerReset(root,nativeSelect,{invalidate:()=>generation+=1,reset:onReset});
+    const stopFieldsets=formRuntime.watchFieldset(root,trigger,reconcile);
+    const stop=effect(()=>{clientValue=props.value;clientOpen=props.open;onValueChange=typeof props.onValueChange==='function'?props.onValueChange:null;onOpenChange=typeof props.onOpenChange==='function'?props.onOpenChange:null;if(props.onValueChange!=null&&onValueChange===null)report('onValueChange',props.onValueChange);else invalidEpisodes.delete('onValueChange');if(props.onOpenChange!=null&&onOpenChange===null)report('onOpenChange',props.onOpenChange);else invalidEpisodes.delete('onOpenChange');configuration={required:field?field.required:boolean('required',data.required),disabled:field?field.disabled:(form?.disabled||boolean('disabled',data.disabled)),readonly:field?field.readonly:(form?.readonly||boolean('readonly',data.readonly)),invalid:field?field.invalid:boolean('invalid',data.invalid),loop:boolean('loop',data.loop),closeOnSelect:boolean('closeOnSelect',data.closeOnSelect),placement:choice('placement',data.placement,['bottom-start','bottom-end','top-start','top-end']),matchWidth:boolean('matchWidth',data.matchWidth),variant:choice('variant',data.variant,['outline','filled','plain']),size:choice('size',data.size,['sm','md','lg'])};reconcile();});
+    const nativeMode={className:'cui-form-control__native--enhanced'};
+    root.setAttribute('data-citry-multi-select-initialized','');formRuntime.enhanceNative(nativeSelect,trigger,nativeMode);reconcile();
+    return()=>{active=false;generation+=1;if(typeTimer!==null)clearTimeout(typeTimer);root[multiSelectHandoffKey]={serverFingerprint,committed:[...committed],internalOpen,highlightedValue};stop?.();stopFieldsets();unregisterReset();listeners.stop();coordinator.unregister(layer,{reason:'ancestor',source:root,cascade:true});field?.setNativeInvalid(false);root.removeAttribute('data-citry-multi-select-initialized');formRuntime.enhanceNative(nativeSelect,trigger,nativeMode,false);};
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CMultiSelect_e37e33", "0747fd5b8e30023a9cb06d9efebb5b0c", atob("eyJ2YWx1ZSI6WyJlbWFpbCJdLCJvcGVuIjpmYWxzZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsInJlYWRvbmx5IjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsImxvb3AiOmZhbHNlLCJjbG9zZU9uU2VsZWN0IjpmYWxzZSwicGxhY2VtZW50IjoiYm90dG9tLXN0YXJ0IiwibWF0Y2hXaWR0aCI6dHJ1ZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJwbGFjZWhvbGRlciI6IkNob29zZSBjaGFubmVscyIsIm5hbWUiOm51bGwsImZvcm0iOm51bGwsImFuY2hvck5hbWUiOiItLV9jdWktbXVsdGktc2VsZWN0LWFuY2hvci1jbjZ0bjh1azQiLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbCwib3B0aW9ucyI6W3sidmFsdWUiOiJlbWFpbCIsImxhYmVsIjoiRW1haWwiLCJkaXNhYmxlZCI6ZmFsc2UsImlkIjoiY3VpLW11bHRpLXNlbGVjdC1jbjZ0bjh1azQtb3B0aW9uLTAtODIyNDQ0MTdmOTU2In0seyJ2YWx1ZSI6InB1c2giLCJsYWJlbCI6IlB1c2giLCJkaXNhYmxlZCI6ZmFsc2UsImlkIjoiY3VpLW11bHRpLXNlbGVjdC1jbjZ0bjh1azQtb3B0aW9uLTEtZDEwN2VhMzYyOWMzIn0seyJ2YWx1ZSI6InNtcyIsImxhYmVsIjoiU01TIiwiZGlzYWJsZWQiOmZhbHNlLCJpZCI6ImN1aS1tdWx0aS1zZWxlY3QtY242dG44dWs0LW9wdGlvbi0yLTk1ODJkMDMwNDZiZCJ9XX0="));
+})();</script></body></html><!--citry:g1:81c5cff63994902aa070fe7139ac1ebf93039b13de0a42e43dcde6ba4250b8e3:0:i:1:e-->

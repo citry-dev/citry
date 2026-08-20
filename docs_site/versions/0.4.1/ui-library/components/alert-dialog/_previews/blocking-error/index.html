@@ -1,0 +1,1146 @@
+<!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:1:s--><!doctype html><html data-cid-cn6tn8wvl lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Acknowledge a blocking error</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style>@layer citry-ui.theme {
+        :where(.cui-dialog-host) {
+          display: contents;
+          color: CanvasText;
+          font-family: ui-sans-serif, system-ui, sans-serif;
+        }
+
+        :where(.cui-dialog) {
+          --_cui-dialog-backdrop: var(--cui-dialog-backdrop, rgb(15 23 42 / 58%));
+          --_cui-dialog-background: var(--cui-dialog-background, Canvas);
+          --_cui-dialog-foreground: var(--cui-dialog-foreground, CanvasText);
+          --_cui-dialog-border-color: var(
+            --cui-dialog-border-color,
+            color-mix(in srgb, CanvasText 16%, transparent)
+          );
+          --_cui-dialog-radius: var(--cui-dialog-radius, 0.875rem);
+          --_cui-dialog-shadow: var(
+            --cui-dialog-shadow,
+            0 1.5rem 4rem rgb(15 23 42 / 28%)
+          );
+          --_cui-dialog-inline-size: var(--cui-dialog-inline-size, 36rem);
+          --_cui-dialog-max-block-size: var(
+            --cui-dialog-max-block-size,
+            calc(100dvb - 2rem)
+          );
+          --_cui-dialog-padding: var(--cui-dialog-padding, 1.25rem);
+          --_cui-dialog-gap: var(--cui-dialog-gap, 1rem);
+          --_cui-dialog-close-size: var(--cui-dialog-close-size, 2.5rem);
+          --_cui-dialog-close-radius: var(--cui-dialog-close-radius, 0.5rem);
+
+          box-sizing: border-box;
+          inline-size: min(var(--_cui-dialog-inline-size), calc(100dvi - 2rem));
+          max-inline-size: none;
+          max-block-size: var(--_cui-dialog-max-block-size);
+          margin: auto;
+          padding: 0;
+          overflow: hidden;
+          border: 1px solid var(--_cui-dialog-border-color);
+          border-radius: var(--_cui-dialog-radius);
+          background: var(--_cui-dialog-background);
+          color: var(--_cui-dialog-foreground);
+          box-shadow: var(--_cui-dialog-shadow);
+        }
+
+        :where(.cui-dialog::backdrop) {
+          background: var(--_cui-dialog-backdrop);
+        }
+
+        :where(.cui-dialog[data-size="sm"]) {
+          --_cui-dialog-inline-size: var(--cui-dialog-inline-size, 26rem);
+        }
+
+        :where(.cui-dialog[data-size="lg"]) {
+          --_cui-dialog-inline-size: var(--cui-dialog-inline-size, 52rem);
+        }
+
+        :where(.cui-dialog[data-size="full"]) {
+          --_cui-dialog-inline-size: var(--cui-dialog-inline-size, 100dvi);
+          --_cui-dialog-max-block-size: var(--cui-dialog-max-block-size, 100dvb);
+          --_cui-dialog-radius: var(--cui-dialog-radius, 0);
+          --_cui-dialog-shadow: var(--cui-dialog-shadow, none);
+
+          inline-size: var(--_cui-dialog-inline-size);
+          block-size: var(--_cui-dialog-max-block-size);
+          margin: 0;
+          border-width: 0;
+        }
+
+        :where(.cui-dialog__surface) {
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+          gap: var(--_cui-dialog-gap);
+          max-block-size: inherit;
+          padding: var(--_cui-dialog-padding);
+        }
+
+        :where(.cui-dialog[data-size="full"] .cui-dialog__surface) {
+          min-block-size: 100%;
+        }
+
+        :where(.cui-dialog[data-scroll="dialog"]) {
+          overflow: auto;
+          overscroll-behavior: contain;
+        }
+
+        :where(.cui-dialog[data-scroll="dialog"] .cui-dialog__surface) {
+          max-block-size: none;
+        }
+
+        :where(.cui-dialog__header) {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: var(--_cui-dialog-gap);
+          align-items: start;
+        }
+
+        :where(.cui-dialog__title) {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 700;
+          line-height: 1.3;
+        }
+
+        :where(.cui-dialog__description) {
+          color: color-mix(in srgb, currentColor 72%, transparent);
+          line-height: 1.5;
+        }
+
+        :where(.cui-dialog__body) {
+          flex: 1 1 auto;
+          min-block-size: 0;
+          line-height: 1.5;
+        }
+
+        :where(.cui-dialog[data-scroll="body"] .cui-dialog__body) {
+          overflow: auto;
+          overscroll-behavior: contain;
+        }
+
+        :where(.cui-dialog__actions) {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          justify-content: end;
+        }
+
+        :where(.cui-dialog__close) {
+          display: inline-grid;
+          place-items: center;
+          inline-size: var(--_cui-dialog-close-size);
+          block-size: var(--_cui-dialog-close-size);
+          padding: 0;
+          border: 0;
+          border-radius: var(--_cui-dialog-close-radius);
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          font-size: 1.5rem;
+          line-height: 1;
+          cursor: pointer;
+        }
+
+        :where(.cui-dialog__close[hidden]) {
+          display: none;
+        }
+
+        @media (hover: hover) {
+          :where(.cui-dialog__close:hover) {
+            background: color-mix(in srgb, currentColor 10%, transparent);
+          }
+        }
+
+        :where(.cui-dialog__close:focus-visible) {
+          outline: 0.1875rem solid Highlight;
+          outline-offset: 0.125rem;
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-dialog) {
+            border-color: CanvasText;
+          }
+
+          :where(.cui-dialog__close) {
+            border: 1px solid ButtonText;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CAlertDialog_4d9fc7>@layer citry-ui.theme {
+  :where(.cui-alert-dialog) {
+    --_cui-alert-dialog-backdrop: var(
+      --cui-alert-dialog-backdrop,
+      rgb(15 23 42 / 58%)
+    );
+    --_cui-alert-dialog-background: var(
+      --cui-alert-dialog-background,
+      Canvas
+    );
+    --_cui-alert-dialog-foreground: var(
+      --cui-alert-dialog-foreground,
+      CanvasText
+    );
+    --_cui-alert-dialog-border-color: var(
+      --cui-alert-dialog-border-color,
+      color-mix(in srgb, CanvasText 16%, transparent)
+    );
+    --_cui-alert-dialog-radius: var(
+      --cui-alert-dialog-radius,
+      0.875rem
+    );
+    --_cui-alert-dialog-shadow: var(
+      --cui-alert-dialog-shadow,
+      0 1.5rem 4rem rgb(15 23 42 / 28%)
+    );
+    --_cui-alert-dialog-inline-size: var(
+      --cui-alert-dialog-inline-size,
+      26rem
+    );
+    --_cui-alert-dialog-max-block-size: var(
+      --cui-alert-dialog-max-block-size,
+      calc(100dvb - 2rem)
+    );
+    --_cui-alert-dialog-padding: var(
+      --cui-alert-dialog-padding,
+      1.25rem
+    );
+    --_cui-alert-dialog-gap: var(
+      --cui-alert-dialog-gap,
+      1rem
+    );
+
+    --_cui-dialog-backdrop: var(--_cui-alert-dialog-backdrop);
+    --_cui-dialog-background: var(--_cui-alert-dialog-background);
+    --_cui-dialog-foreground: var(--_cui-alert-dialog-foreground);
+    --_cui-dialog-border-color: var(--_cui-alert-dialog-border-color);
+    --_cui-dialog-radius: var(--_cui-alert-dialog-radius);
+    --_cui-dialog-shadow: var(--_cui-alert-dialog-shadow);
+    --_cui-dialog-inline-size: var(--_cui-alert-dialog-inline-size);
+    --_cui-dialog-max-block-size: var(--_cui-alert-dialog-max-block-size);
+    --_cui-dialog-padding: var(--_cui-alert-dialog-padding);
+    --_cui-dialog-gap: var(--_cui-alert-dialog-gap);
+  }
+
+  :where(.cui-alert-dialog[data-size="sm"]) {
+    --_cui-alert-dialog-inline-size: var(
+      --cui-alert-dialog-inline-size,
+      26rem
+    );
+  }
+
+  :where(.cui-alert-dialog[data-size="md"]) {
+    --_cui-alert-dialog-inline-size: var(
+      --cui-alert-dialog-inline-size,
+      36rem
+    );
+  }
+
+  :where(.cui-alert-dialog[data-size="lg"]) {
+    --_cui-alert-dialog-inline-size: var(
+      --cui-alert-dialog-inline-size,
+      52rem
+    );
+  }
+}</style></head><body><main><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:2:s--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:3:s--><div class="cui-dialog-host cui-alert-dialog-host" data-cid=cn6tn8wvn data-cid-cn6tn8wvm data-cid-cn6tn8wvn data-citry-dialog-host data-citry-root><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:1:s--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:4:s--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:5:s--><button aria-controls=sync-error aria-expanded=false aria-haspopup=dialog class=cui-button data-cid=cn6tn8wvo data-cid-cn6tn8wvo data-citry-dialog-trigger data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:7:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:8:s--> <span class=cui-button__spinner></span> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:8:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:9:s-->Show sync error<!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:9:e--> </span><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:7:e--></button><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:5:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:4:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:1:e--><dialog class="cui-dialog cui-alert-dialog" aria-describedby=sync-error-description aria-labelledby=sync-error-title aria-modal=true data-citry-dialog-surface data-citry-ui-part=alert-dialog data-scroll=body data-size=md id=sync-error role=alertdialog><div class=cui-dialog__surface data-citry-ui-part=surface><header class=cui-dialog__header data-citry-ui-part=header><h2 class=cui-dialog__title data-citry-ui-part=title id=sync-error-title><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:2:s-->Changes could not be synchronized<!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:2:e--></h2></header><div class=cui-dialog__description data-citry-ui-part=description id=sync-error-description><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:3:s-->Reconnect before continuing so this draft is not overwritten.<!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:3:e--></div><div class=cui-dialog__body data-citry-ui-part=body><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:4:s-->Your local draft remains available in this browser.<!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:4:e--></div><footer class=cui-dialog__actions data-citry-ui-part=actions><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:5:s--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:6:s--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:7:s--><button autofocus class=cui-button data-cid=cn6tn8wvq data-cid-cn6tn8wvq data-citry-dialog-close data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=outline type=button value=cancel><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:10:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:11:s--> <span class=cui-button__spinner></span> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:11:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:12:s-->Review draft<!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:12:e--> </span><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:10:e--></button><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:7:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:6:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:5:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:6:s--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:8:s--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:9:s--><button class=cui-button data-cid=cn6tn8wvs data-cid-cn6tn8wvs data-citry-dialog-close data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid type=button value=action><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:13:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:14:s--> <span class=cui-button__spinner></span> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:14:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:15:s-->Retry connection<!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:15:e--> </span><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:13:e--></button><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:9:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:8:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:r:6:e--></footer></div></dialog></div><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:3:e--><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"BlockingError_10bba5","className":"BlockingError"},{"classId":"CAlertDialog_4d9fc7","className":"CAlertDialog"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8wvn","invocationId":2,"parentRenderId":"cn6tn8wvm"},{"childRenderId":"cn6tn8wvo","invocationId":3,"parentRenderId":"cn6tn8wvm"},{"childRenderId":"cn6tn8wvq","invocationId":4,"parentRenderId":"cn6tn8wvm"},{"childRenderId":"cn6tn8wvs","invocationId":5,"parentRenderId":"cn6tn8wvm"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8wvl","transparent":false},{"classId":"BlockingError_10bba5","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8wvm","transparent":false},{"classId":"CAlertDialog_4d9fc7","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8wvm","renderId":"cn6tn8wvn","transparent":false},{"classId":"CButton_353146","instanceId":4,"invocationId":3,"parentRenderId":"cn6tn8wvm","renderId":"cn6tn8wvo","transparent":false},{"classId":"DynamicElement_29900a","instanceId":5,"invocationId":6,"parentRenderId":"cn6tn8wvo","renderId":"cn6tn8wvp","transparent":true},{"classId":"CButton_353146","instanceId":6,"invocationId":4,"parentRenderId":"cn6tn8wvm","renderId":"cn6tn8wvq","transparent":false},{"classId":"DynamicElement_29900a","instanceId":7,"invocationId":7,"parentRenderId":"cn6tn8wvq","renderId":"cn6tn8wvr","transparent":true},{"classId":"CButton_353146","instanceId":8,"invocationId":5,"parentRenderId":"cn6tn8wvm","renderId":"cn6tn8wvs","transparent":false},{"classId":"DynamicElement_29900a","instanceId":9,"invocationId":8,"parentRenderId":"cn6tn8wvs","renderId":"cn6tn8wvt","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CAlertDialog_4d9fc7","receiverRenderId":"cn6tn8wvn","slotName":"activator","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CAlertDialog_4d9fc7","receiverRenderId":"cn6tn8wvn","slotName":"title","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CAlertDialog_4d9fc7","receiverRenderId":"cn6tn8wvn","slotName":"description","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CAlertDialog_4d9fc7","receiverRenderId":"cn6tn8wvn","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CAlertDialog_4d9fc7","receiverRenderId":"cn6tn8wvn","slotName":"cancel","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CAlertDialog_4d9fc7","receiverRenderId":"cn6tn8wvn","slotName":"action","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":8,"kind":"implicit","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8wvo","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":13,"kind":"implicit","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8wvq","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":15,"kind":"implicit","locationId":null,"ownerClassId":"BlockingError_10bba5","ownerRenderId":"cn6tn8wvm","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8wvs","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":16,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8wvo","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8wvp","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":18,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8wvo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8wvo","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":20,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8wvq","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8wvr","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":22,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8wvq","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8wvq","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":24,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8wvs","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8wvt","slotName":"default","sourceInvocationId":8},{"fallbackLocationId":null,"fillId":26,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8wvs","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8wvs","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"BlockingError_10bba5","sourceRenderId":"cn6tn8wvm","tagName":"calertdialog","targetClassId":"CAlertDialog_4d9fc7","targetRenderId":"cn6tn8wvn"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"BlockingError_10bba5","sourceRenderId":"cn6tn8wvm","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cn6tn8wvo"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":5,"sourceClassId":"BlockingError_10bba5","sourceRenderId":"cn6tn8wvm","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cn6tn8wvq"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":6,"sourceClassId":"BlockingError_10bba5","sourceRenderId":"cn6tn8wvm","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cn6tn8wvs"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CButton_353146","sourceRenderId":"cn6tn8wvo","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8wvp"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":5,"sourceClassId":"CButton_353146","sourceRenderId":"cn6tn8wvq","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8wvr"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":6,"sourceClassId":"CButton_353146","sourceRenderId":"cn6tn8wvs","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8wvt"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cn6tn8wvm","parentRegionId":null,"receiverRenderId":"cn6tn8wvn","regionId":1,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvn"},{"fillId":2,"ownerRenderId":"cn6tn8wvm","parentRegionId":null,"receiverRenderId":"cn6tn8wvn","regionId":2,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvn"},{"fillId":3,"ownerRenderId":"cn6tn8wvm","parentRegionId":null,"receiverRenderId":"cn6tn8wvn","regionId":3,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvn"},{"fillId":4,"ownerRenderId":"cn6tn8wvm","parentRegionId":null,"receiverRenderId":"cn6tn8wvn","regionId":4,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvn"},{"fillId":5,"ownerRenderId":"cn6tn8wvm","parentRegionId":null,"receiverRenderId":"cn6tn8wvn","regionId":5,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvn"},{"fillId":6,"ownerRenderId":"cn6tn8wvm","parentRegionId":null,"receiverRenderId":"cn6tn8wvn","regionId":6,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvn"},{"fillId":16,"ownerRenderId":"cn6tn8wvo","parentRegionId":1,"receiverRenderId":"cn6tn8wvp","regionId":7,"resultOwnerRenderId":"cn6tn8wvo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvm"},{"fillId":18,"ownerRenderId":"cn6tn8wvo","parentRegionId":7,"receiverRenderId":"cn6tn8wvo","regionId":8,"resultOwnerRenderId":"cn6tn8wvo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvo"},{"fillId":8,"ownerRenderId":"cn6tn8wvm","parentRegionId":7,"receiverRenderId":"cn6tn8wvo","regionId":9,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvo"},{"fillId":20,"ownerRenderId":"cn6tn8wvq","parentRegionId":5,"receiverRenderId":"cn6tn8wvr","regionId":10,"resultOwnerRenderId":"cn6tn8wvq","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvm"},{"fillId":22,"ownerRenderId":"cn6tn8wvq","parentRegionId":10,"receiverRenderId":"cn6tn8wvq","regionId":11,"resultOwnerRenderId":"cn6tn8wvq","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvq"},{"fillId":13,"ownerRenderId":"cn6tn8wvm","parentRegionId":10,"receiverRenderId":"cn6tn8wvq","regionId":12,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvq"},{"fillId":24,"ownerRenderId":"cn6tn8wvs","parentRegionId":6,"receiverRenderId":"cn6tn8wvt","regionId":13,"resultOwnerRenderId":"cn6tn8wvs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvm"},{"fillId":26,"ownerRenderId":"cn6tn8wvs","parentRegionId":13,"receiverRenderId":"cn6tn8wvs","regionId":14,"resultOwnerRenderId":"cn6tn8wvs","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvs"},{"fillId":15,"ownerRenderId":"cn6tn8wvm","parentRegionId":13,"receiverRenderId":"cn6tn8wvs","regionId":15,"resultOwnerRenderId":"cn6tn8wvm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8wvs"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjM2NWE5MGIyNDBkYmM4OWE2ZWRkYjUzODQwMzAyNzZlLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz", "L2NpdHJ5L2NhY2hlL0NBbGVydERpYWxvZ180ZDlmYzcuMGUyNDg1NjFlMmJkLmpz", "L2NpdHJ5L2NhY2hlL0NBbGVydERpYWxvZ180ZDlmYzcuZmIyODM1YjY5ZmI0MzIyYmZmNGE5ZWVmNjQzMGE3ZWMuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NBbGVydERpYWxvZ180ZDlmYzcuOGFiZDY3YjYzNzExLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y242dG44d3Zv", "MzY1YTkwYjI0MGRiYzg5YTZlZGRiNTM4NDAzMDI3NmU=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y242dG44d3Zx", "MzY1YTkwYjI0MGRiYzg5YTZlZGRiNTM4NDAzMDI3NmU=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y242dG44d3Zz", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"], ["Q0FsZXJ0RGlhbG9nXzRkOWZjNw==", "Y242dG44d3Zu", "ZmIyODM1YjY5ZmI0MzIyYmZmNGE5ZWVmNjQzMGE3ZWM=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44d3Zs"]], "graph": "0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "365a90b240dbc89a6eddb5384030276e", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+
+const runtimeKey = Symbol.for("citry-ui:dialog-runtime");
+const runtime = globalThis[runtimeKey] ?? {
+  dialogs: [],
+  overflow: "",
+  paddingInlineEnd: "",
+};
+globalThis[runtimeKey] = runtime;
+
+Citry.manager.registerComponent("CAlertDialog_4d9fc7", {
+  props: {
+    open: {},
+    dismissible: {},
+    closeOnEscape: {},
+    closeOnOutside: {},
+    initialFocus: {},
+    size: {},
+    scroll: {},
+    onOpenChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const host = els[0];
+    const nearestHost = (element) => element?.closest?.("[data-citry-dialog-host]") ?? null;
+    const dialog = [...host.querySelectorAll('[data-citry-dialog-surface]')]
+      .find((candidate) => nearestHost(candidate) === host);
+    const surface = dialog.querySelector(':scope > [data-citry-ui-part="surface"]');
+    const title = surface.querySelector('[data-citry-ui-part="title"]');
+    const closeButton = surface.querySelector('[data-citry-dialog-built-in-close]');
+    const controllerRuntime = globalThis[Symbol.for("citry-ui:dialog-controller-runtime")];
+    if (controllerRuntime?.generation !== 1) {
+      throw new Error("[citry-ui] CDialog controller runtime dependency did not load.");
+    }
+    const allowedValues = {
+      initialFocus: ["auto", "title"],
+      size: ["sm", "md", "lg", "full"],
+      scroll: ["body", "dialog"],
+    };
+    const invalidEpisodes = new Map();
+    let internalOpen = data.open;
+    let controlled = false;
+    let appliedOpen = false;
+    let suppressStaleControlledOpen = false;
+    let pendingControlledReturnValue = "";
+    let onOpenChange = null;
+    let configuration = {
+      dismissible: data.dismissible,
+      closeOnEscape: data.closeOnEscape,
+      closeOnOutside: data.closeOnOutside,
+      initialFocus: data.initialFocus,
+      size: data.size,
+      scroll: data.scroll,
+    };
+    const syncRuntimeDialog = (open) => {
+      const index = runtime.dialogs.indexOf(dialog);
+      if (open && index < 0) runtime.dialogs.push(dialog);
+      if (!open && index >= 0) runtime.dialogs.splice(index, 1);
+    };
+
+    const ownedElements = (selector) => [...host.querySelectorAll(selector)]
+      .filter((element) => nearestHost(element) === host);
+    const ownedActivators = () => ownedElements("[data-citry-dialog-trigger]");
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CDialog ${name} received invalid client value ${describedValue}; `
+          + "using the current or server-rendered fallback.",
+        dialog,
+      );
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveEnum = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveCallback = () => {
+      const value = props.onOpenChange;
+      if (value === undefined || value === null || typeof value === "function") {
+        invalidEpisodes.delete("onOpenChange");
+        return value ?? null;
+      }
+      reportInvalid("onOpenChange", value);
+      return null;
+    };
+    const updateActivators = (open) => {
+      for (const activator of ownedActivators()) {
+        activator.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+    };
+    let controller;
+    const applyOpen = (nextOpen, source = null, returnValue = "") => {
+      if (nextOpen === appliedOpen && dialog.open === nextOpen) {
+        return;
+      }
+      controller.setOpen(nextOpen, source, returnValue);
+      appliedOpen = controller.isOpen();
+      dialog.toggleAttribute("data-open", appliedOpen);
+      updateActivators(appliedOpen);
+      syncRuntimeDialog(appliedOpen);
+    };
+    const notify = (nextOpen, reason, source, returnValue = "") => {
+      onOpenChange?.(nextOpen, {
+        reason,
+        controlled,
+        source,
+        returnValue,
+      });
+    };
+    const requestOpen = (nextOpen, reason, source, returnValue = "") => {
+      if (nextOpen === appliedOpen) {
+        return;
+      }
+      if (
+        nextOpen
+        && controlled
+        && suppressStaleControlledOpen
+        && props.open === true
+      ) {
+        suppressStaleControlledOpen = false;
+        applyOpen(true, source);
+        notify(true, reason, source, returnValue);
+        return;
+      }
+      if (controlled) {
+        pendingControlledReturnValue = nextOpen ? "" : returnValue;
+        notify(nextOpen, reason, source, returnValue);
+        return;
+      }
+      internalOpen = nextOpen;
+      applyOpen(nextOpen, source, returnValue);
+      notify(nextOpen, reason, source, returnValue);
+    };
+    const onHostClick = (event) => {
+      const trigger = event.target.closest?.("[data-citry-dialog-trigger]");
+      if (trigger && nearestHost(trigger) === host) {
+        requestOpen(true, "trigger", trigger);
+        return;
+      }
+      const close = event.target.closest?.("[data-citry-dialog-close]");
+      if (!close || nearestHost(close) !== host || !dialog.contains(close)) {
+        return;
+      }
+      const builtIn = close.hasAttribute("data-citry-dialog-built-in-close");
+      if (builtIn && !configuration.dismissible) {
+        return;
+      }
+      const returnValue = close instanceof HTMLButtonElement ? close.value : "";
+      requestOpen(false, builtIn ? "close-button" : "action", close, returnValue);
+    };
+    controller = controllerRuntime.create({
+      host,
+      dialog,
+      surface,
+      title,
+      closeButton,
+      signature: `CDialog:${data.initialFocus}`,
+      policy: () => configuration,
+      initialFocus: () => configuration.initialFocus === "title" ? title : null,
+      containmentFallback: () => configuration.initialFocus === "title" ? title : dialog,
+      escapeBlocked: () => false,
+      interceptDialogSubmit: () => controlled,
+      requestClose: (reason, source, returnValue) => {
+        requestOpen(false, reason, source, returnValue);
+      },
+      nativeClosed: (reason, source, returnValue) => {
+        suppressStaleControlledOpen = controlled && props.open === true;
+        appliedOpen = false;
+        internalOpen = false;
+        dialog.removeAttribute("data-open");
+        updateActivators(false);
+        syncRuntimeDialog(false);
+        notify(false, reason, source, returnValue);
+      },
+      forceClose: (_reason, source) => {
+        suppressStaleControlledOpen = false;
+        appliedOpen = false;
+        internalOpen = false;
+        dialog.removeAttribute("data-open");
+        updateActivators(false);
+        syncRuntimeDialog(false);
+        notify(false, "native", source, "");
+      },
+      failed: () => {
+        appliedOpen = false;
+        updateActivators(false);
+        syncRuntimeDialog(false);
+        console.error("[citry-ui] CDialog could not enter modal state.");
+      },
+      handoffAborted: () => {
+        appliedOpen = false;
+        updateActivators(false);
+        syncRuntimeDialog(false);
+      },
+    });
+
+    if (controller.retained) {
+      appliedOpen = controller.isOpen();
+      dialog.toggleAttribute("data-open", appliedOpen);
+      updateActivators(appliedOpen);
+      syncRuntimeDialog(appliedOpen);
+    }
+
+    host.addEventListener("click", onHostClick);
+    effect(() => {
+      const suppliedOpen = props.open;
+      let nextOpen = internalOpen;
+      if (suppliedOpen === undefined || suppliedOpen === null) {
+        suppressStaleControlledOpen = false;
+        pendingControlledReturnValue = "";
+        if (controlled) {
+          internalOpen = appliedOpen;
+        }
+        controlled = false;
+        nextOpen = internalOpen;
+        invalidEpisodes.delete("open");
+      } else if (typeof suppliedOpen === "boolean") {
+        controlled = true;
+        if (!suppliedOpen) {
+          suppressStaleControlledOpen = false;
+        }
+        nextOpen = suppressStaleControlledOpen ? false : suppliedOpen;
+        invalidEpisodes.delete("open");
+      } else {
+        suppressStaleControlledOpen = false;
+        pendingControlledReturnValue = "";
+        reportInvalid("open", suppliedOpen);
+        if (controlled) {
+          internalOpen = appliedOpen;
+        }
+        controlled = false;
+        nextOpen = internalOpen;
+      }
+      configuration = {
+        dismissible: resolveBoolean("dismissible"),
+        closeOnEscape: resolveBoolean("closeOnEscape"),
+        closeOnOutside: resolveBoolean("closeOnOutside"),
+        initialFocus: resolveEnum("initialFocus"),
+        size: resolveEnum("size"),
+        scroll: resolveEnum("scroll"),
+      };
+      onOpenChange = resolveCallback();
+      if (closeButton) {
+        closeButton.hidden = !configuration.dismissible;
+      }
+      if (configuration.initialFocus === "title") {
+        title.setAttribute("tabindex", "-1");
+      } else {
+        title.removeAttribute("tabindex");
+      }
+      dialog.dataset.size = configuration.size;
+      dialog.dataset.scroll = configuration.scroll;
+      applyOpen(nextOpen, null, nextOpen ? "" : pendingControlledReturnValue);
+      if ((nextOpen && appliedOpen) || (!nextOpen && !appliedOpen)) {
+        pendingControlledReturnValue = "";
+      }
+    });
+    host.setAttribute("data-citry-dialog-initialized", "");
+    if (dialog.getAttribute("role") === "alertdialog") {
+      host.setAttribute("data-citry-alert-dialog-initialized", "");
+    }
+
+    return () => {
+      host.removeEventListener("click", onHostClick);
+      const handedOff = controller.cleanup({ handoff: true });
+      appliedOpen = false;
+      updateActivators(false);
+      syncRuntimeDialog(false);
+      if (!handedOff) {
+        host.removeAttribute("data-citry-dialog-initialized");
+        host.removeAttribute("data-citry-alert-dialog-initialized");
+      }
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CAlertDialog_4d9fc7", "fb2835b69fb4322bff4a9eef6430a7ec", atob("eyJvcGVuIjpmYWxzZSwiZGlzbWlzc2libGUiOnRydWUsImNsb3NlT25Fc2NhcGUiOnRydWUsImNsb3NlT25PdXRzaWRlIjpmYWxzZSwiaW5pdGlhbEZvY3VzIjoiYXV0byIsInNpemUiOiJtZCIsInNjcm9sbCI6ImJvZHkifQ=="));
+})();</script></body></html><!--citry:g1:0b2d8d8a5a1af902396d9569b203fd9a127d47c7d62df2c510f5a2bec11d8036:0:i:1:e-->

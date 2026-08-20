@@ -1,0 +1,926 @@
+<!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:1:s--><!doctype html><html data-cid-cn6tn8voa lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Build an observation catalog</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=ObservationCatalog_72fc8b>:where(.observation-catalog) {
+  max-width: 58rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.visibility) {
+  display: inline-flex;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+:where(.visibility--excellent) {
+  color: light-dark(#166534, #bbf7d0);
+  background: light-dark(#dcfce7, #14532d);
+}
+
+:where(.visibility--limited) {
+  color: light-dark(#9a3412, #fed7aa);
+  background: light-dark(#ffedd5, #7c2d12);
+}</style><style data-citry-css-class=CTable_6b499b>@layer citry-ui.theme {
+  :where(.cui-table-root) {
+    --_cui-table-background: var(--cui-table-background, Canvas);
+    --_cui-table-foreground: var(--cui-table-foreground, CanvasText);
+    --_cui-table-muted-foreground: var(
+      --cui-table-muted-foreground,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-table-border-color: var(
+      --cui-table-border-color,
+      color-mix(in srgb, CanvasText 22%, transparent)
+    );
+    --_cui-table-header-background: var(
+      --cui-table-header-background,
+      color-mix(in srgb, CanvasText 5%, Canvas)
+    );
+    --_cui-table-footer-background: var(
+      --cui-table-footer-background,
+      color-mix(in srgb, CanvasText 5%, Canvas)
+    );
+    --_cui-table-striped-background: var(
+      --cui-table-striped-background,
+      color-mix(in srgb, CanvasText 3%, Canvas)
+    );
+    --_cui-table-hover-background: var(
+      --cui-table-hover-background,
+      color-mix(in srgb, Highlight 9%, Canvas)
+    );
+    --_cui-table-error-foreground: var(
+      --cui-table-error-foreground,
+      light-dark(#b42318, #fda29b)
+    );
+    --_cui-table-focus-color: var(--cui-table-focus-color, Highlight);
+    --_cui-table-radius: var(--cui-table-radius, 0.625rem);
+    --_cui-table-cell-block-padding: var(--cui-table-cell-block-padding, 0.75rem);
+    --_cui-table-cell-inline-padding: var(--cui-table-cell-inline-padding, 1rem);
+    --_cui-table-caption-padding: var(--cui-table-caption-padding, 0.75rem 1rem);
+    --_cui-table-min-width: var(--cui-table-min-width, 32rem);
+    --_cui-table-sticky-offset: var(--cui-table-sticky-offset, 0px);
+
+    max-width: 100%;
+    color: var(--_cui-table-foreground);
+    background: var(--_cui-table-background);
+    border-radius: var(--_cui-table-radius);
+  }
+
+  :where(.cui-table-announcer) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  :where(.cui-table-root[data-overflow="auto"]) {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  :where(.cui-table-root[data-variant="outline"]) {
+    border: 1px solid var(--_cui-table-border-color);
+  }
+
+  :where(.cui-table) {
+    width: 100%;
+    min-width: var(--_cui-table-min-width);
+    border-spacing: 0;
+    border-collapse: separate;
+    table-layout: auto;
+    color: inherit;
+    background: inherit;
+  }
+
+  :where(.cui-table-root[data-overflow="visible"] > .cui-table) {
+    min-width: 0;
+  }
+
+  :where(.cui-table-root[data-layout="fixed"] > .cui-table) {
+    table-layout: fixed;
+  }
+
+  :where(.cui-table > [data-citry-ui-part="caption"]) {
+    padding: var(--_cui-table-caption-padding);
+    color: var(--_cui-table-muted-foreground);
+    font-weight: 600;
+    text-align: start;
+    caption-side: top;
+  }
+
+  :where(
+    .cui-table-root[data-caption-side="bottom"]
+    > .cui-table
+    > [data-citry-ui-part="caption"]
+  ) {
+    caption-side: bottom;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="header"]
+    > [data-citry-ui-part="header-row"]
+    > [data-citry-ui-part="header-cell"]
+  ) {
+    padding-block: var(--_cui-table-cell-block-padding);
+    padding-inline: var(--_cui-table-cell-inline-padding);
+    border-block-end: 1px solid var(--_cui-table-border-color);
+    color: var(--_cui-table-muted-foreground);
+    background: var(--_cui-table-header-background);
+    font-size: 0.875em;
+    font-weight: 650;
+    text-align: start;
+    vertical-align: bottom;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > :is([data-citry-ui-part="row"], [data-citry-ui-part="state-row"])
+    > :is([data-citry-ui-part="cell"], [data-citry-ui-part="state-cell"]),
+    .cui-table
+    > [data-citry-ui-part="footer"]
+    > [data-citry-ui-part="footer-row"]
+    > [data-citry-ui-part="footer-cell"]
+  ) {
+    padding-block: var(--_cui-table-cell-block-padding);
+    padding-inline: var(--_cui-table-cell-inline-padding);
+    border-block-end: 1px solid var(--_cui-table-border-color);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  :where(
+    .cui-table
+    > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+    > :is([data-citry-ui-part="header-row"], [data-citry-ui-part="row"], [data-citry-ui-part="footer-row"])
+    > [data-align="center"]
+  ) {
+    text-align: center;
+  }
+
+  :where(
+    .cui-table
+    > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+    > :is([data-citry-ui-part="header-row"], [data-citry-ui-part="row"], [data-citry-ui-part="footer-row"])
+    > [data-align="end"]
+  ) {
+    text-align: end;
+  }
+
+  :where(.cui-table-root[data-density="default"]) {
+    --_cui-table-cell-block-padding: var(--cui-table-cell-block-padding, 1rem);
+  }
+
+  :where(.cui-table-root[data-density="compact"]) {
+    --_cui-table-cell-block-padding: var(--cui-table-cell-block-padding, 0.5rem);
+    --_cui-table-cell-inline-padding: var(--cui-table-cell-inline-padding, 0.75rem);
+  }
+
+  :where(
+    .cui-table-root[data-column-borders]
+    > .cui-table
+    > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+    > :is(
+      [data-citry-ui-part="header-row"],
+      [data-citry-ui-part="row"],
+      [data-citry-ui-part="footer-row"]
+    )
+    > :is(
+      [data-citry-ui-part="header-cell"],
+      [data-citry-ui-part="cell"],
+      [data-citry-ui-part="footer-cell"]
+    ):not(:last-child)
+  ) {
+    border-inline-end: 1px solid var(--_cui-table-border-color);
+  }
+
+  :where(
+    .cui-table-root[data-striped]
+    > .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="row"]:nth-child(even)
+    > [data-citry-ui-part="cell"]
+  ) {
+    background: var(--_cui-table-striped-background);
+  }
+
+  :where(
+    .cui-table-root[data-hover]
+    > .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="row"]:hover
+    > [data-citry-ui-part="cell"]
+  ) {
+    background: var(--_cui-table-hover-background);
+  }
+
+  :where(
+    .cui-table-root[data-sticky-header]
+    > .cui-table
+    > [data-citry-ui-part="header"]
+    > [data-citry-ui-part="header-row"]
+    > [data-citry-ui-part="header-cell"]
+  ) {
+    position: sticky;
+    z-index: 1;
+    inset-block-start: var(--_cui-table-sticky-offset);
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="state-row"]
+    > [data-citry-ui-part="state-cell"]
+  ) {
+    color: var(--_cui-table-muted-foreground);
+    text-align: center;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="state-row"]
+    > [data-citry-ui-part="state-cell"]
+    > [data-citry-ui-part="error"]
+  ) {
+    color: var(--_cui-table-error-foreground);
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="row"]:last-child
+    > [data-citry-ui-part="cell"]
+  ) {
+    border-block-end-color: transparent;
+  }
+
+  :where(
+    .cui-table
+    > [data-citry-ui-part="footer"]
+    > [data-citry-ui-part="footer-row"]
+    > [data-citry-ui-part="footer-cell"]
+  ) {
+    border-block-start: 1px solid var(--_cui-table-border-color);
+    border-block-end: 0;
+    background: var(--_cui-table-footer-background);
+    font-weight: 650;
+  }
+
+  :where(.cui-table-root[data-overflow="auto"]:focus-visible) {
+    outline: 2px solid var(--_cui-table-focus-color);
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-table-root[data-variant="outline"]) {
+      border-color: CanvasText;
+    }
+
+    :where(
+      .cui-table
+      > :is([data-citry-ui-part="header"], [data-citry-ui-part="body"], [data-citry-ui-part="footer"])
+      > :is(
+        [data-citry-ui-part="header-row"],
+        [data-citry-ui-part="row"],
+        [data-citry-ui-part="state-row"],
+        [data-citry-ui-part="footer-row"]
+      )
+      > :is(
+        [data-citry-ui-part="header-cell"],
+        [data-citry-ui-part="cell"],
+        [data-citry-ui-part="state-cell"],
+        [data-citry-ui-part="footer-cell"]
+      )
+    ) {
+      border-color: CanvasText;
+    }
+  }
+
+  @media print {
+    :where(.cui-table-root) {
+      overflow: visible;
+      border-color: CanvasText;
+    }
+
+    :where(.cui-table) {
+      min-width: 0;
+    }
+
+    :where(
+      .cui-table-root[data-sticky-header]
+      > .cui-table
+      > [data-citry-ui-part="header"]
+      > [data-citry-ui-part="header-row"]
+      > [data-citry-ui-part="header-cell"]
+    ) {
+      position: static;
+    }
+  }
+}</style></head><body><main><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:2:s--><section class=observation-catalog data-cid-cn6tn8vob><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:3:s--><div aria-labelledby=cui-table-cn6tn8voc-caption class=cui-table-root data-caption-side=top data-cid-cn6tn8voc data-citry-ui-part=root data-density=comfortable data-hover data-layout=auto data-overflow=auto data-state=ready data-variant=outline id=cui-table-cn6tn8voc role=region tabindex=0><span aria-atomic=true aria-live=polite class=cui-table-announcer role=status></span><table class=cui-table data-citry-ui-part=table><caption data-citry-ui-part=caption id=cui-table-cn6tn8voc-caption><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:1:s--> Tonight's observation catalog <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:1:e--></caption><thead data-citry-ui-part=header><tr data-citry-ui-part=header-row><th data-align=start data-citry-ui-part=header-cell data-column-key=target scope=col><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:2:s--> Target <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:2:e--></th><th data-align=start data-citry-ui-part=header-cell data-column-key=type scope=col><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:3:s--> Type <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:3:e--></th><th data-align=start data-citry-ui-part=header-cell data-column-key=visibility scope=col><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:4:s--> Visibility <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:4:e--></th><th data-align=start data-citry-ui-part=header-cell data-column-key=action scope=col><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:5:s--> Actions <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:5:e--></th></tr></thead><tbody data-citry-ui-part=body><tr data-citry-key=:orion-nebula data-citry-ui-part=row data-row-key=orion-nebula><th data-align=start data-citry-ui-part=cell data-column-key=target scope=row><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:6:s--> Orion Nebula <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:6:e--></th><td data-align=start data-citry-ui-part=cell data-column-key=type><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:7:s--> Nebula <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:7:e--></td><td data-align=start data-citry-ui-part=cell data-column-key=visibility><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:8:s--> <span class="visibility visibility--excellent"> excellent </span> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:8:e--></td><td data-align=start data-citry-ui-part=cell data-column-key=action><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:9:s--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:4:s--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:5:s--><button class=cui-button data-cid=cn6tn8vod data-cid-cn6tn8vod data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=sm data-variant=outline type=button><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:14:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:15:s--> <span class=cui-button__spinner></span> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:15:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:16:s--> View orion-nebula <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:16:e--> </span><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:14:e--></button><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:5:e--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:4:e--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:9:e--></td></tr><tr data-citry-key=:andromeda data-citry-ui-part=row data-row-key=andromeda><th class=featured-target data-align=start data-citry-ui-part=cell data-column-key=target scope=row><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:10:s--> Andromeda Galaxy <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:10:e--></th><td data-align=start data-citry-ui-part=cell data-column-key=type><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:11:s--> Galaxy <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:11:e--></td><td data-align=start data-citry-ui-part=cell data-column-key=visibility><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:12:s--> <span class="visibility visibility--limited"> limited </span> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:12:e--></td><td data-align=start data-citry-ui-part=cell data-column-key=action><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:13:s--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:6:s--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:7:s--><button class=cui-button data-cid=cn6tn8vof data-cid-cn6tn8vof data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=sm data-variant=outline type=button><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:17:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:18:s--> <span class=cui-button__spinner></span> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:18:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:19:s--> View andromeda <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:19:e--> </span><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:17:e--></button><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:7:e--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:6:e--> <!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:r:13:e--></td></tr></tbody></table></div><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:3:e--></section><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ObservationCatalog_72fc8b","className":"ObservationCatalog"},{"classId":"CTable_6b499b","className":"CTable"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8voc","invocationId":2,"parentRenderId":"cn6tn8vob"},{"childRenderId":"cn6tn8vod","invocationId":3,"parentRenderId":"cn6tn8vob"},{"childRenderId":"cn6tn8vof","invocationId":4,"parentRenderId":"cn6tn8vob"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8voa","transparent":false},{"classId":"ObservationCatalog_72fc8b","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8vob","transparent":false},{"classId":"CTable_6b499b","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8vob","renderId":"cn6tn8voc","transparent":false},{"classId":"CButton_353146","instanceId":4,"invocationId":3,"parentRenderId":"cn6tn8vob","renderId":"cn6tn8vod","transparent":false},{"classId":"DynamicElement_29900a","instanceId":5,"invocationId":5,"parentRenderId":"cn6tn8vod","renderId":"cn6tn8voe","transparent":true},{"classId":"CButton_353146","instanceId":6,"invocationId":4,"parentRenderId":"cn6tn8vob","renderId":"cn6tn8vof","transparent":false},{"classId":"DynamicElement_29900a","instanceId":7,"invocationId":6,"parentRenderId":"cn6tn8vof","renderId":"cn6tn8vog","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"ObservationCatalog_72fc8b","ownerRenderId":"cn6tn8vob","policy":"template","receiverClassId":"CTable_6b499b","receiverRenderId":"cn6tn8voc","slotName":"caption","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"ObservationCatalog_72fc8b","ownerRenderId":"cn6tn8vob","policy":"template","receiverClassId":"CTable_6b499b","receiverRenderId":"cn6tn8voc","slotName":"cell","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":4,"kind":"fallback","locationId":null,"ownerClassId":"CTable_6b499b","ownerRenderId":"cn6tn8voc","policy":"template","receiverClassId":"CTable_6b499b","receiverRenderId":"cn6tn8voc","slotName":"header","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":5,"kind":"fallback","locationId":null,"ownerClassId":"CTable_6b499b","ownerRenderId":"cn6tn8voc","policy":"template","receiverClassId":"CTable_6b499b","receiverRenderId":"cn6tn8voc","slotName":"header","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":6,"kind":"fallback","locationId":null,"ownerClassId":"CTable_6b499b","ownerRenderId":"cn6tn8voc","policy":"template","receiverClassId":"CTable_6b499b","receiverRenderId":"cn6tn8voc","slotName":"header","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":7,"kind":"fallback","locationId":null,"ownerClassId":"CTable_6b499b","ownerRenderId":"cn6tn8voc","policy":"template","receiverClassId":"CTable_6b499b","receiverRenderId":"cn6tn8voc","slotName":"header","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":12,"kind":"implicit","locationId":null,"ownerClassId":"ObservationCatalog_72fc8b","ownerRenderId":"cn6tn8vob","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8vod","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":17,"kind":"implicit","locationId":null,"ownerClassId":"ObservationCatalog_72fc8b","ownerRenderId":"cn6tn8vob","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8vof","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":18,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8vod","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8voe","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":20,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8vod","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8vod","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":22,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8vof","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cn6tn8vog","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":24,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cn6tn8vof","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cn6tn8vof","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ObservationCatalog_72fc8b","sourceRenderId":"cn6tn8vob","tagName":"ctable","targetClassId":"CTable_6b499b","targetRenderId":"cn6tn8voc"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":9,"sourceClassId":"ObservationCatalog_72fc8b","sourceRenderId":"cn6tn8vob","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cn6tn8vod"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":13,"sourceClassId":"ObservationCatalog_72fc8b","sourceRenderId":"cn6tn8vob","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cn6tn8vof"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":9,"sourceClassId":"CButton_353146","sourceRenderId":"cn6tn8vod","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8voe"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":13,"sourceClassId":"CButton_353146","sourceRenderId":"cn6tn8vof","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cn6tn8vog"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":1,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":4,"ownerRenderId":"cn6tn8voc","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":2,"resultOwnerRenderId":"cn6tn8voc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":5,"ownerRenderId":"cn6tn8voc","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":3,"resultOwnerRenderId":"cn6tn8voc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":6,"ownerRenderId":"cn6tn8voc","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":4,"resultOwnerRenderId":"cn6tn8voc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":7,"ownerRenderId":"cn6tn8voc","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":5,"resultOwnerRenderId":"cn6tn8voc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":6,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":7,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":8,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":9,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":10,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":11,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":12,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":2,"ownerRenderId":"cn6tn8vob","parentRegionId":null,"receiverRenderId":"cn6tn8voc","regionId":13,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8voc"},{"fillId":18,"ownerRenderId":"cn6tn8vod","parentRegionId":9,"receiverRenderId":"cn6tn8voe","regionId":14,"resultOwnerRenderId":"cn6tn8vod","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vob"},{"fillId":20,"ownerRenderId":"cn6tn8vod","parentRegionId":14,"receiverRenderId":"cn6tn8vod","regionId":15,"resultOwnerRenderId":"cn6tn8vod","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vod"},{"fillId":12,"ownerRenderId":"cn6tn8vob","parentRegionId":14,"receiverRenderId":"cn6tn8vod","regionId":16,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vod"},{"fillId":22,"ownerRenderId":"cn6tn8vof","parentRegionId":13,"receiverRenderId":"cn6tn8vog","regionId":17,"resultOwnerRenderId":"cn6tn8vof","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vob"},{"fillId":24,"ownerRenderId":"cn6tn8vof","parentRegionId":17,"receiverRenderId":"cn6tn8vof","regionId":18,"resultOwnerRenderId":"cn6tn8vof","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vof"},{"fillId":17,"ownerRenderId":"cn6tn8vob","parentRegionId":17,"receiverRenderId":"cn6tn8vof","regionId":19,"resultOwnerRenderId":"cn6tn8vob","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8vof"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjAzNTBkYmE4OTAxNGMxNWQ4NjA5MDM0OWYwNGM3NjU5Lmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL09ic2VydmF0aW9uQ2F0YWxvZ183MmZjOGIuNzQyODk4YzBjMWRkLmNzcw==", "L2NpdHJ5L2NhY2hlL0NUYWJsZV82YjQ5OWIuYjQ2NTc1MjgwNzMyLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y242dG44dm9k", "MDM1MGRiYTg5MDE0YzE1ZDg2MDkwMzQ5ZjA0Yzc2NTk=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y242dG44dm9m", "MDM1MGRiYTg5MDE0YzE1ZDg2MDkwMzQ5ZjA0Yzc2NTk=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dm9h"], ["T2JzZXJ2YXRpb25DYXRhbG9nXzcyZmM4Yg==", "Y242dG44dm9i"], ["Q1RhYmxlXzZiNDk5Yg==", "Y242dG44dm9j"]], "graph": "1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "0350dba89014c15d86090349f04c7659", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6InNtIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script></body></html><!--citry:g1:1e9e8f701fb35d81e267bde2870d2a7324ca0dd6f9851398508daaae6ab14a7b:0:i:1:e-->

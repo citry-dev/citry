@@ -1,0 +1,704 @@
+<!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:1:s--><!doctype html><html data-cid-cn6tn8w3m lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Align and orient Tabs</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=TabsAlignmentAndOrientation_c1b512>:where(.tabs-layout) {
+  --cui-tabs-accent: light-dark(#0f766e, #5eead4);
+  --cui-tabs-focus-color: light-dark(#0d9488, #2dd4bf);
+  max-width: 52rem;
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--cui-tabs-accent) 46%, transparent);
+  border-radius: 0.75rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tabs-layout header) {
+  margin-block-end: 1rem;
+}
+
+:where(.tabs-layout h2, .tabs-layout p) {
+  margin-block: 0;
+}
+
+:where(.tabs-layout header p) {
+  color: var(--cui-tabs-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+:where(.tabs-eyebrow) {
+  color: var(--cui-tabs-accent, LinkText);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}</style><style data-citry-css-class=CTabs_437718>@layer citry-ui.theme {
+  :where(.cui-tabs) {
+    --_cui-tabs-accent: var(--cui-tabs-accent, LinkText);
+    --_cui-tabs-border-color: var(
+      --cui-tabs-border-color,
+      color-mix(in srgb, currentColor 22%, transparent)
+    );
+    --_cui-tabs-muted-color: var(
+      --cui-tabs-muted-color,
+      color-mix(in srgb, currentColor 68%, transparent)
+    );
+    --_cui-tabs-list-background: var(--cui-tabs-list-background, transparent);
+    --_cui-tabs-active-background: var(--cui-tabs-active-background, Canvas);
+    --_cui-tabs-hover-background: var(
+      --cui-tabs-hover-background,
+      color-mix(in srgb, currentColor 8%, transparent)
+    );
+    --_cui-tabs-focus-color: var(--cui-tabs-focus-color, Highlight);
+    --_cui-tabs-radius: var(--cui-tabs-radius, 0.5rem);
+    --_cui-tabs-gap: var(--cui-tabs-gap, 1rem);
+    --_cui-tabs-tab-inline-padding: var(--cui-tabs-tab-inline-padding, 0.875rem);
+    --_cui-tabs-tab-block-padding: var(--cui-tabs-tab-block-padding, 0.625rem);
+    --_cui-tabs-panel-padding: var(--cui-tabs-panel-padding, 1rem);
+
+    display: grid;
+    gap: var(--_cui-tabs-gap);
+    min-inline-size: 0;
+    color: CanvasText;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  :where(.cui-tabs[data-orientation="vertical"]) {
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: start;
+  }
+
+  :where(.cui-tabs[data-density="comfortable"]) {
+    --_cui-tabs-tab-inline-padding: var(--cui-tabs-tab-inline-padding, 0.75rem);
+    --_cui-tabs-tab-block-padding: var(--cui-tabs-tab-block-padding, 0.5rem);
+  }
+
+  :where(.cui-tabs[data-density="compact"]) {
+    --_cui-tabs-tab-inline-padding: var(--cui-tabs-tab-inline-padding, 0.625rem);
+    --_cui-tabs-tab-block-padding: var(--cui-tabs-tab-block-padding, 0.375rem);
+  }
+
+  :where(.cui-tabs[data-variant="pill"]) {
+    --_cui-tabs-list-background: var(
+      --cui-tabs-list-background,
+      color-mix(in srgb, var(--_cui-tabs-accent) 12%, transparent)
+    );
+  }
+
+  :where(.cui-tab-list) {
+    display: flex;
+    justify-content: flex-start;
+    gap: 0.25rem;
+    min-inline-size: 0;
+    overflow: auto hidden;
+    border-block-end: 1px solid var(--_cui-tabs-border-color);
+    background: var(--_cui-tabs-list-background);
+    scrollbar-width: thin;
+  }
+
+  :where(.cui-tabs[data-align="center"] > .cui-tab-list) {
+    justify-content: safe center;
+  }
+
+  :where(.cui-tabs[data-align="end"] > .cui-tab-list) {
+    justify-content: safe flex-end;
+  }
+
+  :where(.cui-tabs[data-orientation="vertical"] > .cui-tab-list) {
+    flex-direction: column;
+    overflow: hidden auto;
+    border-block-end: 0;
+    border-inline-end: 1px solid var(--_cui-tabs-border-color);
+  }
+
+  :where(.cui-tabs[data-grow] > .cui-tab-list > .cui-tab) {
+    flex: 1 1 0;
+  }
+
+  :where(.cui-tabs[data-variant="pill"] > .cui-tab-list) {
+    padding: 0.25rem;
+    border: 0;
+    border-radius: var(--_cui-tabs-radius);
+    background: var(--_cui-tabs-list-background);
+  }
+
+  :where(.cui-tab) {
+    position: relative;
+    min-block-size: 2.75rem;
+    padding-block: var(--_cui-tabs-tab-block-padding);
+    padding-inline: var(--_cui-tabs-tab-inline-padding);
+    border: 0;
+    border-block-end: 0.1875rem solid transparent;
+    background: transparent;
+    color: var(--_cui-tabs-muted-color);
+    font: inherit;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+
+  :where(.cui-tabs[data-density="comfortable"] > .cui-tab-list > .cui-tab) {
+    min-block-size: 2.5rem;
+  }
+
+  :where(.cui-tabs[data-density="compact"] > .cui-tab-list > .cui-tab) {
+    min-block-size: 2.25rem;
+  }
+
+  :where(.cui-tabs[data-orientation="vertical"] > .cui-tab-list > .cui-tab) {
+    border-block-end: 0;
+    border-inline-end: 0.1875rem solid transparent;
+    text-align: start;
+  }
+
+  :where(.cui-tab:hover:not(:disabled)) {
+    background: var(--_cui-tabs-hover-background);
+    color: CanvasText;
+  }
+
+  :where(.cui-tab[data-state="active"]) {
+    border-color: var(--_cui-tabs-accent);
+    color: var(--_cui-tabs-accent);
+  }
+
+  :where(.cui-tabs[data-variant="pill"] > .cui-tab-list > .cui-tab) {
+    border: 0;
+    border-radius: calc(var(--_cui-tabs-radius) - 0.125rem);
+  }
+
+  :where(.cui-tabs[data-variant="pill"] > .cui-tab-list > .cui-tab[data-state="active"]) {
+    background: var(--_cui-tabs-active-background);
+    box-shadow: 0 1px 3px color-mix(in srgb, currentColor 22%, transparent);
+  }
+
+  :where(.cui-tab:focus-visible) {
+    z-index: 1;
+    outline: 0.1875rem solid var(--_cui-tabs-focus-color);
+    outline-offset: -0.1875rem;
+  }
+
+  :where(.cui-tab:disabled) {
+    opacity: 0.48;
+    cursor: not-allowed;
+  }
+
+  :where(.cui-tab-panel) {
+    min-inline-size: 0;
+    padding: var(--_cui-tabs-panel-padding);
+  }
+
+  :where(.cui-tab-panel:focus-visible) {
+    outline: 0.1875rem solid var(--_cui-tabs-focus-color);
+    outline-offset: 0.125rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-tab) {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-tab[data-state="active"]) {
+      border-color: Highlight;
+      color: Highlight;
+      forced-color-adjust: none;
+    }
+
+    :where(.cui-tabs[data-variant="pill"] > .cui-tab-list > .cui-tab[data-state="active"]) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+}</style></head><body><main><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:2:s--><section @citry-ui-preview-controls.window="Object.assign($data, $event.detail)" x-data="{ align: 'start', orientation: 'horizontal' }" class=tabs-layout data-cid=cn6tn8w3n data-cid-cn6tn8w3n data-citry-root><header><p class=tabs-eyebrow>Observatory catalog</p><h2>Targets for tonight</h2></header><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:3:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:4:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:1:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:2:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:5:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:5:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:6:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:6:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:7:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:7:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:8:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:8:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:9:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:9:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:10:s--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:10:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:2:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:1:e--><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:4:e--><div class=cui-tabs data-activation=automatic data-align=start data-cid=cn6tn8w3o data-cid-cn6tn8w3o data-citry-root data-citry-tabs-root data-citry-ui-part=tabs data-density=default data-loop data-orientation=horizontal data-value=planets data-variant=underline id=cui-tabs-cn6tn8w3o><div aria-label="Observatory target categories" aria-orientation=horizontal class=cui-tab-list data-citry-tabs-list data-citry-ui-part=tab-list data-orientation=horizontal role=tablist><button aria-controls=cui-tabs-cn6tn8w3o-panel-b2547aa06de5 aria-selected=false class=cui-tab data-citry-key=:stars data-citry-tabs-tab data-citry-ui-part=tab data-state=inactive data-value=stars id=cui-tabs-cn6tn8w3o-tab-b2547aa06de5 role=tab tabindex=-1 type=button><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:3:s--> Stars <!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:3:e--></button><button aria-controls=cui-tabs-cn6tn8w3o-panel-9efa8ea33d7b aria-selected=true class=cui-tab data-citry-key=:planets data-citry-tabs-tab data-citry-ui-part=tab data-state=active data-value=planets id=cui-tabs-cn6tn8w3o-tab-9efa8ea33d7b role=tab tabindex=0 type=button><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:4:s--> Planets <!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:4:e--></button><button aria-controls=cui-tabs-cn6tn8w3o-panel-73ff6b77cd0d aria-selected=false class=cui-tab data-citry-key=:nebulae data-citry-tabs-tab data-citry-ui-part=tab data-state=inactive data-value=nebulae id=cui-tabs-cn6tn8w3o-tab-73ff6b77cd0d role=tab tabindex=-1 type=button><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:5:s--> Nebulae <!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:5:e--></button></div><div aria-labelledby=cui-tabs-cn6tn8w3o-tab-b2547aa06de5 class=cui-tab-panel data-citry-key=:stars data-citry-tabs-panel data-citry-ui-part=tab-panel data-state=inactive data-value=stars hidden id=cui-tabs-cn6tn8w3o-panel-b2547aa06de5 role=tabpanel tabindex=0><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:6:s--> Compare color, brightness, and spectral class. <!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:6:e--></div><div aria-labelledby=cui-tabs-cn6tn8w3o-tab-9efa8ea33d7b class=cui-tab-panel data-citry-key=:planets data-citry-tabs-panel data-citry-ui-part=tab-panel data-state=active data-value=planets id=cui-tabs-cn6tn8w3o-panel-9efa8ea33d7b role=tabpanel tabindex=0><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:7:s--> Follow bright worlds as they move against the stars. <!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:7:e--></div><div aria-labelledby=cui-tabs-cn6tn8w3o-tab-73ff6b77cd0d class=cui-tab-panel data-citry-key=:nebulae data-citry-tabs-panel data-citry-ui-part=tab-panel data-state=inactive data-value=nebulae hidden id=cui-tabs-cn6tn8w3o-panel-73ff6b77cd0d role=tabpanel tabindex=0><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:8:s--> Find emission and reflection clouds in dark skies. <!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:r:8:e--></div></div><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:3:e--></section><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"TabsAlignmentAndOrientation_c1b512","className":"TabsAlignmentAndOrientation"},{"classId":"CTabs_437718","className":"CTabs"},{"classId":"CInternalTabsDeclarations_ce9244","className":"CInternalTabsDeclarations"},{"classId":"CTab_fa91c9","className":"CTab"},{"classId":"CTabPanel_78fbac","className":"CTabPanel"}],"componentExecutionOrderConstraints":[{"childRenderId":"cn6tn8w3o","invocationId":2,"parentRenderId":"cn6tn8w3n"},{"childRenderId":"cn6tn8w3q","invocationId":5,"parentRenderId":"cn6tn8w3n"},{"childRenderId":"cn6tn8w3r","invocationId":6,"parentRenderId":"cn6tn8w3n"},{"childRenderId":"cn6tn8w3s","invocationId":7,"parentRenderId":"cn6tn8w3n"},{"childRenderId":"cn6tn8w3t","invocationId":8,"parentRenderId":"cn6tn8w3n"},{"childRenderId":"cn6tn8w3u","invocationId":9,"parentRenderId":"cn6tn8w3n"},{"childRenderId":"cn6tn8w3v","invocationId":10,"parentRenderId":"cn6tn8w3n"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8w3m","transparent":false},{"classId":"TabsAlignmentAndOrientation_c1b512","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cn6tn8w3n","transparent":false},{"classId":"CTabs_437718","instanceId":3,"invocationId":2,"parentRenderId":"cn6tn8w3n","renderId":"cn6tn8w3o","transparent":false},{"classId":"CInternalTabsDeclarations_ce9244","instanceId":4,"invocationId":3,"parentRenderId":"cn6tn8w3o","renderId":"cn6tn8w3p","transparent":true},{"classId":"CTab_fa91c9","instanceId":5,"invocationId":5,"parentRenderId":"cn6tn8w3n","renderId":"cn6tn8w3q","transparent":false},{"classId":"CTab_fa91c9","instanceId":6,"invocationId":6,"parentRenderId":"cn6tn8w3n","renderId":"cn6tn8w3r","transparent":false},{"classId":"CTab_fa91c9","instanceId":7,"invocationId":7,"parentRenderId":"cn6tn8w3n","renderId":"cn6tn8w3s","transparent":false},{"classId":"CTabPanel_78fbac","instanceId":8,"invocationId":8,"parentRenderId":"cn6tn8w3n","renderId":"cn6tn8w3t","transparent":false},{"classId":"CTabPanel_78fbac","instanceId":9,"invocationId":9,"parentRenderId":"cn6tn8w3n","renderId":"cn6tn8w3u","transparent":false},{"classId":"CTabPanel_78fbac","instanceId":10,"invocationId":10,"parentRenderId":"cn6tn8w3n","renderId":"cn6tn8w3v","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"TabsAlignmentAndOrientation_c1b512","ownerRenderId":"cn6tn8w3n","policy":"template","receiverClassId":"CTabs_437718","receiverRenderId":"cn6tn8w3o","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CTabs_437718","ownerRenderId":"cn6tn8w3o","policy":"template","receiverClassId":"CInternalTabsDeclarations_ce9244","receiverRenderId":"cn6tn8w3p","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"TabsAlignmentAndOrientation_c1b512","ownerRenderId":"cn6tn8w3n","policy":"template","receiverClassId":"CTab_fa91c9","receiverRenderId":"cn6tn8w3q","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":6,"kind":"implicit","locationId":null,"ownerClassId":"TabsAlignmentAndOrientation_c1b512","ownerRenderId":"cn6tn8w3n","policy":"template","receiverClassId":"CTab_fa91c9","receiverRenderId":"cn6tn8w3r","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"TabsAlignmentAndOrientation_c1b512","ownerRenderId":"cn6tn8w3n","policy":"template","receiverClassId":"CTab_fa91c9","receiverRenderId":"cn6tn8w3s","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":8,"kind":"implicit","locationId":null,"ownerClassId":"TabsAlignmentAndOrientation_c1b512","ownerRenderId":"cn6tn8w3n","policy":"template","receiverClassId":"CTabPanel_78fbac","receiverRenderId":"cn6tn8w3t","slotName":"default","sourceInvocationId":8},{"fallbackLocationId":null,"fillId":9,"kind":"implicit","locationId":null,"ownerClassId":"TabsAlignmentAndOrientation_c1b512","ownerRenderId":"cn6tn8w3n","policy":"template","receiverClassId":"CTabPanel_78fbac","receiverRenderId":"cn6tn8w3u","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":10,"kind":"implicit","locationId":null,"ownerClassId":"TabsAlignmentAndOrientation_c1b512","ownerRenderId":"cn6tn8w3n","policy":"template","receiverClassId":"CTabPanel_78fbac","receiverRenderId":"cn6tn8w3v","slotName":"default","sourceInvocationId":10}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{ align, orientation }","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"TabsAlignmentAndOrientation_c1b512","sourceRenderId":"cn6tn8w3n","tagName":"ctabs","targetClassId":"CTabs_437718","targetRenderId":"cn6tn8w3o"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CTabs_437718","sourceRenderId":"cn6tn8w3o","tagName":"cinternaltabsdeclarations","targetClassId":"CInternalTabsDeclarations_ce9244","targetRenderId":"cn6tn8w3p"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"TabsAlignmentAndOrientation_c1b512","sourceRenderId":"cn6tn8w3n","tagName":"ctab","targetClassId":"CTab_fa91c9","targetRenderId":"cn6tn8w3q"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"TabsAlignmentAndOrientation_c1b512","sourceRenderId":"cn6tn8w3n","tagName":"ctab","targetClassId":"CTab_fa91c9","targetRenderId":"cn6tn8w3r"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"TabsAlignmentAndOrientation_c1b512","sourceRenderId":"cn6tn8w3n","tagName":"ctab","targetClassId":"CTab_fa91c9","targetRenderId":"cn6tn8w3s"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"TabsAlignmentAndOrientation_c1b512","sourceRenderId":"cn6tn8w3n","tagName":"ctabpanel","targetClassId":"CTabPanel_78fbac","targetRenderId":"cn6tn8w3t"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"TabsAlignmentAndOrientation_c1b512","sourceRenderId":"cn6tn8w3n","tagName":"ctabpanel","targetClassId":"CTabPanel_78fbac","targetRenderId":"cn6tn8w3u"},{"clientBindings":[],"invocationId":10,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"TabsAlignmentAndOrientation_c1b512","sourceRenderId":"cn6tn8w3n","tagName":"ctabpanel","targetClassId":"CTabPanel_78fbac","targetRenderId":"cn6tn8w3v"}],"slotRegions":[{"fillId":2,"ownerRenderId":"cn6tn8w3o","parentRegionId":null,"receiverRenderId":"cn6tn8w3p","regionId":1,"resultOwnerRenderId":"cn6tn8w3o","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3p"},{"fillId":1,"ownerRenderId":"cn6tn8w3n","parentRegionId":1,"receiverRenderId":"cn6tn8w3o","regionId":2,"resultOwnerRenderId":"cn6tn8w3n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3o"},{"fillId":5,"ownerRenderId":"cn6tn8w3n","parentRegionId":null,"receiverRenderId":"cn6tn8w3q","regionId":3,"resultOwnerRenderId":"cn6tn8w3n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3q"},{"fillId":6,"ownerRenderId":"cn6tn8w3n","parentRegionId":null,"receiverRenderId":"cn6tn8w3r","regionId":4,"resultOwnerRenderId":"cn6tn8w3n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3r"},{"fillId":7,"ownerRenderId":"cn6tn8w3n","parentRegionId":null,"receiverRenderId":"cn6tn8w3s","regionId":5,"resultOwnerRenderId":"cn6tn8w3n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3s"},{"fillId":8,"ownerRenderId":"cn6tn8w3n","parentRegionId":null,"receiverRenderId":"cn6tn8w3t","regionId":6,"resultOwnerRenderId":"cn6tn8w3n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3t"},{"fillId":9,"ownerRenderId":"cn6tn8w3n","parentRegionId":null,"receiverRenderId":"cn6tn8w3u","regionId":7,"resultOwnerRenderId":"cn6tn8w3n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3u"},{"fillId":10,"ownerRenderId":"cn6tn8w3n","parentRegionId":null,"receiverRenderId":"cn6tn8w3v","regionId":8,"resultOwnerRenderId":"cn6tn8w3n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cn6tn8w3v"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NUYWJzXzQzNzcxOC43ZmMxMGM2NTY4YjQuanM=", "L2NpdHJ5L2NhY2hlL0NUYWJzXzQzNzcxOC43MjcxZmY1YzVlZTdjNjBiNThjMGQ5OTFhYWNlZDMxMS5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL1RhYnNBbGlnbm1lbnRBbmRPcmllbnRhdGlvbl9jMWI1MTIuNTUxNjA1ZGY3MDg5LmNzcw==", "L2NpdHJ5L2NhY2hlL0NUYWJzXzQzNzcxOC5mNWM5NGMxZDI4YjEuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q1RhYnNfNDM3NzE4", "Y242dG44dzNv", "NzI3MWZmNWM1ZWU3YzYwYjU4YzBkOTkxYWFjZWQzMTE=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y242dG44dzNt"], ["VGFic0FsaWdubWVudEFuZE9yaWVudGF0aW9uX2MxYjUxMg==", "Y242dG44dzNu"]], "graph": "c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CTabs_437718", {
+  props: {
+    value: {},
+    onValueChange: {},
+    activation: {},
+    orientation: {},
+    direction: {},
+    loop: {},
+    disabled: {},
+    variant: {},
+    density: {},
+    align: {},
+    grow: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const root = els[0];
+    const rootSelector = "[data-citry-tabs-root]";
+    const listSelector = "[data-citry-tabs-list]";
+    const tabSelector = "[data-citry-tabs-tab]";
+    const panelSelector = "[data-citry-tabs-panel]";
+    const allowedValues = {
+      activation: ["automatic", "manual"],
+      orientation: ["horizontal", "vertical"],
+      direction: ["ltr", "rtl", null],
+      variant: ["underline", "pill"],
+      density: ["default", "comfortable", "compact"],
+      align: ["start", "center", "end"],
+    };
+    const invalidConfigurationEpisodes = new Map();
+    // Events can recreate this initializer while preserving the Tabs
+    // root. Keep only the focus and ordering history needed to recover
+    // from a server-rendered tab removal on that preserved DOM node.
+    const runtimeState = root.__citryUiTabsRuntime ?? {
+      lastFocusedValue: null,
+      lastTabValues: [],
+    };
+    root.__citryUiTabsRuntime = runtimeState;
+    let currentValue = data.value;
+    let onValueChange = null;
+    let lastFocusedValue = runtimeState.lastFocusedValue;
+    let lastTabValues = runtimeState.lastTabValues;
+    let configuration = {
+      activation: data.activation,
+      orientation: data.orientation,
+      direction: data.direction,
+      loop: data.loop,
+      disabled: data.disabled,
+      variant: data.variant,
+      density: data.density,
+      align: data.align,
+      grow: data.grow,
+    };
+
+    const isOwned = (element) => element?.closest(rootSelector) === root;
+    const tabs = () => [...root.querySelectorAll(tabSelector)].filter(isOwned);
+    const panels = () => [...root.querySelectorAll(panelSelector)].filter(isOwned);
+    const tabList = () => [...root.querySelectorAll(listSelector)].find(isOwned);
+    const ownDisabled = (tab) => tab.hasAttribute("data-citry-tabs-own-disabled");
+    const isInteractionDisabled = (tab) => configuration.disabled || ownDisabled(tab);
+    const enabledTabs = () => tabs().filter((tab) => !isInteractionDisabled(tab));
+
+    const tabForValue = (value) => tabs().find((tab) => tab.dataset.value === value);
+    const hasDocumentFallbackFocus = () => (
+      document.activeElement === document.body
+      || document.activeElement === document.documentElement
+    );
+    const recordTabValues = () => {
+      lastTabValues = tabs().map((tab) => tab.dataset.value);
+      runtimeState.lastTabValues = lastTabValues;
+    };
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalidValue = (value) => {
+      console.error(
+        `[citry-ui] CTabs value ${describeValue(value)} does not identify an enabled tab.`,
+        root,
+      );
+    };
+    const reportInvalidConfiguration = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidConfigurationEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidConfigurationEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CTabs ${name} received invalid client value ${describedValue}; `
+          + "using the server-rendered fallback.",
+        root,
+      );
+    };
+    const resolveCallback = () => {
+      const value = props.onValueChange;
+      if (value === undefined || typeof value === "function") {
+        invalidConfigurationEpisodes.delete("onValueChange");
+        return value ?? null;
+      }
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidConfigurationEpisodes.get("onValueChange") !== fingerprint) {
+        invalidConfigurationEpisodes.set("onValueChange", fingerprint);
+        console.error(
+          `[citry-ui] CTabs onValueChange received invalid client value ${describedValue}; `
+            + "ignoring the callback.",
+          root,
+        );
+      }
+      return null;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidConfigurationEpisodes.delete(name);
+        return value;
+      }
+      reportInvalidConfiguration(name, value);
+      return data[name];
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "boolean") {
+        invalidConfigurationEpisodes.delete(name);
+        return value;
+      }
+      reportInvalidConfiguration(name, value);
+      return data[name];
+    };
+
+    const setRovingTab = (nextTab) => {
+      tabs().forEach((tab) => {
+        tab.tabIndex = tab === nextTab && !isInteractionDisabled(tab) ? 0 : -1;
+      });
+    };
+
+    const applySelection = (value, { preserveFocus = false, scroll = false } = {}) => {
+      const selectedTab = tabForValue(value);
+      if (!selectedTab || ownDisabled(selectedTab)) {
+        reportInvalidValue(value);
+        return false;
+      }
+
+      const focusedTab = isOwned(document.activeElement) && document.activeElement.matches(tabSelector)
+        ? document.activeElement
+        : null;
+      tabs().forEach((tab) => {
+        const selected = tab === selectedTab;
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.dataset.state = selected ? "active" : "inactive";
+      });
+      panels().forEach((panel) => {
+        const selected = panel.dataset.value === value;
+        panel.hidden = !selected;
+        panel.dataset.state = selected ? "active" : "inactive";
+      });
+      currentValue = value;
+      root.dataset.value = value;
+      setRovingTab(preserveFocus && focusedTab ? focusedTab : selectedTab);
+      if (scroll) {
+        selectedTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      return true;
+    };
+
+    const applyDisabled = (disabled) => {
+      const focusedTab = isOwned(document.activeElement) && document.activeElement.matches(tabSelector)
+        ? document.activeElement
+        : null;
+      root.toggleAttribute("data-disabled", disabled);
+      const list = tabList();
+      if (disabled) {
+        list?.setAttribute("aria-disabled", "true");
+      } else {
+        list?.removeAttribute("aria-disabled");
+      }
+      tabs().forEach((tab) => {
+        const tabDisabled = disabled || ownDisabled(tab);
+        tab.disabled = tabDisabled;
+        tab.toggleAttribute("data-disabled", tabDisabled);
+        if (tabDisabled) {
+          tab.tabIndex = -1;
+        }
+      });
+      if (!disabled) {
+        const selectedTab = tabForValue(currentValue);
+        const rovingTab = focusedTab && !isInteractionDisabled(focusedTab)
+          ? focusedTab
+          : selectedTab;
+        if (rovingTab && !isInteractionDisabled(rovingTab)) {
+          setRovingTab(rovingTab);
+        }
+      }
+    };
+
+    const applyConfiguration = (next) => {
+      configuration = next;
+      root.dataset.activation = next.activation;
+      root.dataset.orientation = next.orientation;
+      root.toggleAttribute("data-loop", next.loop);
+      root.dataset.variant = next.variant;
+      root.dataset.density = next.density;
+      root.dataset.align = next.align;
+      root.toggleAttribute("data-grow", next.grow);
+
+      if (next.direction === null) {
+        root.removeAttribute("dir");
+        root.removeAttribute("data-direction");
+      } else {
+        root.setAttribute("dir", next.direction);
+        root.dataset.direction = next.direction;
+      }
+
+      const list = tabList();
+      list?.setAttribute("aria-orientation", next.orientation);
+      list?.setAttribute("data-orientation", next.orientation);
+      applyDisabled(next.disabled);
+    };
+
+    const requestSelection = (tab, source) => {
+      const value = tab.dataset.value;
+      const previousValue = currentValue;
+      if (!value || value === previousValue || isInteractionDisabled(tab)) {
+        return;
+      }
+      const detail = { value, previousValue, source };
+      onValueChange?.(value, detail);
+      if (props.value === undefined) {
+        applySelection(value, { preserveFocus: true, scroll: true });
+      }
+    };
+
+    const fallbackAfterRemoval = (removedValue) => {
+      const available = enabledTabs();
+      if (available.length === 0) {
+        return null;
+      }
+      const removedIndex = lastTabValues.indexOf(removedValue);
+      if (removedIndex < 0) {
+        return available[0];
+      }
+      const currentTabs = tabs();
+      for (let offset = 0; offset < currentTabs.length; offset += 1) {
+        const after = currentTabs[removedIndex + offset];
+        if (after && !isInteractionDisabled(after)) {
+          return after;
+        }
+        const before = currentTabs[removedIndex - offset - 1];
+        if (before && !isInteractionDisabled(before)) {
+          return before;
+        }
+      }
+      return available[0];
+    };
+
+    const reconcileStructure = () => {
+      applyDisabled(configuration.disabled);
+      const serverValue = root.dataset.value;
+      const serverTab = serverValue ? tabForValue(serverValue) : null;
+      const currentTab = tabForValue(currentValue);
+      const lostFocusedTab = lastFocusedValue !== null && !tabForValue(lastFocusedValue);
+
+      if (serverTab && !isInteractionDisabled(serverTab) && serverValue !== currentValue) {
+        applySelection(serverValue, { preserveFocus: true });
+        if (lostFocusedTab && hasDocumentFallbackFocus()) {
+          serverTab.focus({ preventScroll: true });
+        }
+      } else if (!currentTab || isInteractionDisabled(currentTab)) {
+        const previousValue = currentValue;
+        const fallback = fallbackAfterRemoval(previousValue);
+        if (fallback) {
+          const value = fallback.dataset.value;
+          const detail = { value, previousValue, source: "removal" };
+          onValueChange?.(value, detail);
+          applySelection(value, { scroll: true });
+          if (lostFocusedTab && hasDocumentFallbackFocus()) {
+            fallback.focus({ preventScroll: true });
+          }
+        } else {
+          tabs().forEach((tab) => {
+            tab.setAttribute("aria-selected", "false");
+            tab.dataset.state = "inactive";
+            tab.tabIndex = -1;
+          });
+          panels().forEach((panel) => {
+            panel.hidden = true;
+            panel.dataset.state = "inactive";
+          });
+          root.removeAttribute("data-value");
+        }
+      } else {
+        applySelection(currentValue, { preserveFocus: true });
+      }
+      recordTabValues();
+    };
+
+    const onClick = (event) => {
+      const tab = event.target.closest?.(tabSelector);
+      if (!isOwned(tab) || isInteractionDisabled(tab)) {
+        return;
+      }
+      setRovingTab(tab);
+      requestSelection(tab, "pointer");
+    };
+
+    const onFocusIn = (event) => {
+      const tab = event.target.closest?.(tabSelector);
+      if (isOwned(tab)) {
+        lastFocusedValue = tab.dataset.value;
+        runtimeState.lastFocusedValue = lastFocusedValue;
+      }
+    };
+
+    const onKeydown = (event) => {
+      const tab = event.target.closest?.(tabSelector);
+      if (!isOwned(tab) || isInteractionDisabled(tab)) {
+        return;
+      }
+
+      if (configuration.activation === "manual" && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        requestSelection(tab, "keyboard");
+        return;
+      }
+
+      const available = enabledTabs();
+      const index = available.indexOf(tab);
+      if (index < 0) {
+        return;
+      }
+
+      let nextIndex = null;
+      if (event.key === "Home") {
+        nextIndex = 0;
+      } else if (event.key === "End") {
+        nextIndex = available.length - 1;
+      } else if (configuration.orientation === "vertical" && event.key === "ArrowDown") {
+        nextIndex = index + 1;
+      } else if (configuration.orientation === "vertical" && event.key === "ArrowUp") {
+        nextIndex = index - 1;
+      } else if (configuration.orientation === "horizontal" && event.key === "ArrowRight") {
+        const rtl = getComputedStyle(root).direction === "rtl";
+        nextIndex = index + (rtl ? -1 : 1);
+      } else if (configuration.orientation === "horizontal" && event.key === "ArrowLeft") {
+        const rtl = getComputedStyle(root).direction === "rtl";
+        nextIndex = index + (rtl ? 1 : -1);
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      if (configuration.loop) {
+        nextIndex = (nextIndex + available.length) % available.length;
+      } else {
+        nextIndex = Math.max(0, Math.min(available.length - 1, nextIndex));
+      }
+      const nextTab = available[nextIndex];
+      setRovingTab(nextTab);
+      nextTab.focus();
+      if (configuration.activation === "automatic") {
+        requestSelection(nextTab, "keyboard");
+      }
+    };
+
+    root.addEventListener("click", onClick);
+    root.addEventListener("keydown", onKeydown);
+    root.addEventListener("focusin", onFocusIn);
+    effect(() => {
+      applyConfiguration({
+        activation: resolveChoice("activation"),
+        orientation: resolveChoice("orientation"),
+        direction: resolveChoice("direction"),
+        loop: resolveBoolean("loop"),
+        disabled: resolveBoolean("disabled"),
+        variant: resolveChoice("variant"),
+        density: resolveChoice("density"),
+        align: resolveChoice("align"),
+        grow: resolveBoolean("grow"),
+      });
+    });
+    effect(() => {
+      onValueChange = resolveCallback();
+    });
+    effect(() => {
+      const value = props.value;
+      if (value !== undefined) {
+        applySelection(value, { preserveFocus: true });
+      }
+    });
+    const list = tabList();
+    const hasInvalidPhysicalStructure = list?.parentElement !== root
+      || tabs().some((tab) => tab.parentElement !== list)
+      || panels().some((panel) => panel.parentElement !== root);
+    if (hasInvalidPhysicalStructure) {
+      console.error(
+        "[citry-ui] CTabs requires its generated tab list and TabPanels to be direct "
+          + "DOM children of the Tabs root, and Tabs to be direct DOM children of "
+          + "the generated tab list. "
+          + "Component wrappers are allowed only when they render no extra element.",
+        root,
+      );
+    }
+    const focusedValueWasRemoved = lastFocusedValue !== null && !tabForValue(lastFocusedValue);
+    const selectedTab = tabForValue(currentValue);
+    if (focusedValueWasRemoved && selectedTab && hasDocumentFallbackFocus()) {
+      selectedTab.focus({ preventScroll: true });
+    }
+    recordTabValues();
+    const structureObserver = new MutationObserver(reconcileStructure);
+    structureObserver.observe(root, { childList: true, subtree: true });
+    root.setAttribute("data-citry-tabs-initialized", "");
+
+    return () => {
+      structureObserver.disconnect();
+      root.removeEventListener("click", onClick);
+      root.removeEventListener("keydown", onKeydown);
+      root.removeEventListener("focusin", onFocusIn);
+      root.removeAttribute("data-citry-tabs-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CTabs_437718", "7271ff5c5ee7c60b58c0d991aaced311", atob("eyJ2YWx1ZSI6InBsYW5ldHMiLCJhY3RpdmF0aW9uIjoiYXV0b21hdGljIiwib3JpZW50YXRpb24iOiJob3Jpem9udGFsIiwiZGlyZWN0aW9uIjpudWxsLCJsb29wIjp0cnVlLCJkaXNhYmxlZCI6ZmFsc2UsInZhcmlhbnQiOiJ1bmRlcmxpbmUiLCJkZW5zaXR5IjoiZGVmYXVsdCIsImFsaWduIjoic3RhcnQiLCJncm93IjpmYWxzZX0="));
+})();</script></body></html><!--citry:g1:c49836e544a6139e3c806d46816f6fe9c12a4e476c1db19f925ebf81d81381a4:0:i:1:e-->
