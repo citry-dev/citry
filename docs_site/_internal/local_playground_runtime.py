@@ -182,7 +182,11 @@ def build_local_playground_runtime(*, repo_root: Path, output_dir: Path) -> Loca
     )
     if not has_citry:
         raise LocalPlaygroundRuntimeError("the committed playground runtime has no Citry package")
-    next_packages = list(packages)
+    next_packages = [
+        package
+        for package in packages
+        if not isinstance(package, dict) or _normalized_distribution(str(package.get("name", ""))) != "citry-ui"
+    ]
     next_packages.append(_local_package(citry_ui))
     manifest["packages"] = next_packages
     manifest["citry"] = {**citry_config, "ui_version": citry_ui.version}

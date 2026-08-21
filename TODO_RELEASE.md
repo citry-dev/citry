@@ -1,6 +1,6 @@
 # Citry beta release tracker
 
-Updated: 2026-08-20
+Updated: 2026-08-21
 
 This file is the working checklist for the next public release set. It records
 release intent; checking it in does not itself authorize publishing, tagging,
@@ -19,6 +19,9 @@ or deploying anything.
 - [x] Released `citry` **0.4.1** and `citry-lsp` **0.1.1** on 2026-08-20 so
   editor formatting keeps ordinary triple-quoted asset quotes and uses
   canonical JavaScript/CSS host framing.
+- [x] Released `citry-core` **1.5.1** and `citry` **0.4.2** on 2026-08-21 with
+  the render-path performance work, compact ownership aliases, and the Fluent
+  link-unit punctuation fix.
 - [x] Released `citry-ui` **0.1.0** on 2026-08-19 as an early-access release
   intended to generate real-world feedback.
 - [x] Published the VS Code extension `citry-dev.citry` **0.1.0** on
@@ -31,8 +34,8 @@ or deploying anything.
 
 | Artifact | Public state found during audit | Repository state | Target |
 | --- | --- | --- | --- |
-| `citry-core` | PyPI 1.5.0 | tagged and released at `citry-core@1.5.0` | 1.5.0 complete |
-| `citry` | PyPI 0.4.1 | tagged and released at `citry@0.4.1` | 0.4.1 formatter patch complete |
+| `citry-core` | PyPI 1.5.1 | tagged and released at `citry-core@1.5.1` | 1.5.1 performance patch complete |
+| `citry` | PyPI 0.4.2 | tagged and released at `citry@0.4.2` | 0.4.2 performance patch complete |
 | `pygments-citry` | PyPI 0.2.0 | tagged and released at `pygments-citry@0.2.0` | 0.2.0 complete |
 | `citry-lsp` | PyPI 0.1.1 | tagged and released at `citry-lsp@0.1.1` | 0.1.1 formatter patch complete |
 | `citry-ui` | PyPI 0.1.0 | tagged and released at `citry-ui@0.1.0` | 0.1.0 early access complete |
@@ -46,10 +49,10 @@ third-party, research, historical, or internal files.
 ## Dependency and publication order
 
 ```text
-citry-core 1.5.0, published for native platforms and Pyodide/WebAssembly
+citry-core 1.5.1, published for native platforms and Pyodide/WebAssembly
         |
         v
-citry 0.4.1 beta
+citry 0.4.2 beta
    |             |
    v             v
 citry-lsp 0.1.1  citry-ui 0.1.0
@@ -665,9 +668,10 @@ The release VSIX is 359,430 bytes with SHA-256
 ## 8. Promote the new playground runtime tuple
 
 The committed `docs_site/static/playground/runtime.json` is one atomic,
-compatible public-artifact tuple. It currently pins Citry 0.3.1 and
-`citry-core` 1.4.0 with immutable wheel URLs. A normal deployed build does not
-silently substitute workspace packages.
+compatible public-artifact tuple. It now pins Citry 0.4.2, `citry-core` 1.5.1,
+and `citry-ui` 0.1.0 with immutable wheel URLs while retaining Pyodide 314.0.3
+and Python 3.14.2. A normal deployed build does not silently substitute
+workspace packages.
 
 - [x] Refresh the server, browser, and i18n benchmarks before promoting the
   tuple. The 2026-08-20 runs record the beta feature set, fixed a quadratic
@@ -676,28 +680,41 @@ silently substitute workspace packages.
   browser runner's obsolete destroy/recreate expectation for keyed morphs.
   The published server chart and permanent performance notes use the new
   baseline; all i18n gates and browser orientation targets pass.
-- [x] Wait until `citry-core` 1.5.0 and `citry` 0.4.0 are publicly
-  downloadable. `citry-ui` 0.1.0 must also be public before enabling live UI
-  examples.
-- [ ] Update the entire tuple together: Pyodide/Python if intentionally
+- [x] Wait until the current patch releases, `citry-core` 1.5.1 and `citry`
+  0.4.2, are publicly downloadable. `citry-ui` 0.1.0 is also public before
+  enabling live UI examples.
+- [x] Update the entire tuple together: Pyodide/Python if intentionally
   changing it; Citry/core/UI versions; immutable wheel URLs; integrity and
   metadata fields; and compatibility notes.
-- [ ] Add the `citry-ui` wheel and `citry.ui_version` metadata if public docs
-  will offer live UI previews. The current committed static runtime does not
-  include UI merely because the local authoring server can build a workspace
-  UI wheel.
-- [ ] Confirm the core wheel's CPython/PyEmscripten ABI matches the pinned
+- [x] Add the universal `citry-ui` wheel and the general first-party runtime
+  version field `citry.ui_version`. Public builds use the published wheel;
+  local authoring replaces that one package entry with a workspace wheel.
+- [x] Confirm the core wheel's CPython/PyEmscripten ABI matches the pinned
   Pyodide runtime.
-- [ ] Run the real Chromium browser/playground tests, not only pure-Python unit
+- [x] Run the real Chromium browser/playground tests, not only pure-Python unit
   tests, and exercise APIs introduced in the beta.
 - [ ] Update current docs/examples/tests to the released tuple and deploy the
   public site from `main`.
 
-Because immutable PyPI URLs do not exist before publication, the
-`citry@0.4.0` tag may deploy the version snapshot while the live playground is
-still on the old known-good tuple. Follow it with a `main` commit that promotes
-the new tuple once all required public files can be fetched. The release set is
-not considered finished until that follow-up and repository-wide pin sweep are
+**Promotion evidence:** the core wheel is the exact
+`cp314-cp314-pyemscripten_2026_0_wasm32` build for the retained Pyodide
+314.0.3/Python 3.14.2 ABI. Its immutable PyPI file is 4,507,957 bytes with
+SHA-256 `081e1e2a8adfb2a51a49de1dc34749f0325dfd3861bd6960640beee5286bc52f`.
+The Citry wheel is 1,019,189 bytes with SHA-256
+`b5bdceaac5d6db5bb2f4f2d7af76de8c7285d61a78c0f5e7a65679509b2418b2`;
+the Citry UI wheel is 525,573 bytes with SHA-256
+`8fc344fc634a702dc8da093b68ea5c55acc5487bf6180082b080a314ea59da92`.
+The complete real Chromium playground suite passed, including repeated UI
+registration, direct `ComponentLike` rendering, UI assets and interactions,
+Events fragments, and the beta getting-started example. Strict docs guards and
+the focused runtime/unit suite also pass. Public deployment remains the final
+unchecked step above.
+
+Because immutable PyPI URLs do not exist before publication, a Citry tag may
+deploy its version snapshot while the live playground remains on the previous
+known-good tuple. Follow it with a `main` commit that promotes the new tuple
+once all required public files can be fetched. The release set is not
+considered finished until that follow-up and repository-wide pin sweep are
 complete.
 
 ## 9. Public docs and site

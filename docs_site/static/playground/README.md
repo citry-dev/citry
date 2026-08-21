@@ -98,10 +98,11 @@ inline consumer. Python source changes restart the server. Browser bundle
 changes require another frontend build and page refresh.
 
 The live server builds a temporary wheel from the workspace `citry-ui` source
-and adds it to the published Citry tuple in `runtime.json`. It serves that local
-wheel without changing this committed directory. Static builds, CI, and
-deployed docs use only the exact published versions in the committed
-`runtime.json`. The pinned Citry wheel owns the Events client in both cases.
+and replaces the published Citry UI entry in its generated copy of
+`runtime.json`. It serves that local wheel without changing this committed
+directory or installing two UI copies. Static builds, CI, and deployed docs use
+only the exact published versions in the committed `runtime.json`. The pinned
+Citry wheel owns the Events client in both cases.
 
 The workspace `citry-ui` usually requires a Citry that is newer than the pinned
 release, for the whole stretch between releases. The server then prints which
@@ -117,13 +118,14 @@ Treat `runtime.json` as one compatible tuple. When any runtime package changes:
 1. Pin the full Pyodide and Python versions.
 2. Pin each package version and immutable wheel URL.
 3. Confirm compiled wheels match the Pyodide Python and PyEmscripten ABI.
-4. Keep `citry.version` and `citry.core_version` equal to their package entries.
+4. Keep `citry.version`, `citry.core_version`, and `citry.ui_version` equal to
+   their package entries.
 5. Run the real browser tests. Import success alone does not prove that
    rendering, scripts, Events, and interaction work together.
 
-The Worker verifies installed Python, Citry, and Citry Core versions before it
-accepts a run. A local runtime may also add `citry.ui_version`, which makes the
-Worker verify Citry UI.
+The Worker verifies installed Python, Citry, Citry Core, and Citry UI versions
+before it accepts a run. A local runtime retains `citry.ui_version` while
+replacing the public UI wheel with the workspace build.
 
 ## Keep the protocols synchronized
 

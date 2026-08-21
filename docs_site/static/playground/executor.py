@@ -20,7 +20,9 @@ import traceback
 from types import ModuleType
 from typing import Any
 
-from citry import Citry, CitryElement, CitryRender, Component, citry
+import citry_ui
+from citry import Citry, CitryElement, CitryRender, Component, ComponentLike, citry
+from citry.component_like import _resolve_component_like
 from citry.ext.events import EventRequest, EventsDispatcher, TransportContext
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
@@ -121,12 +123,16 @@ def _normalize_preview(value: object) -> str:
         return str(value)
     if isinstance(value, CitryRender):
         return value.serialize()
+    if isinstance(value, ComponentLike):
+        return str(_resolve_component_like(value, citry))
     if value is None:
         raise NonePreviewError(
-            "The preview expression returned None. End the module with HTML, a CitryElement, or a CitryRender."
+            "The preview expression returned None. End the module with HTML, a CitryElement, a ComponentLike, "
+            "or a CitryRender."
         )
     raise UnsupportedPreviewTypeError(
-        f"Cannot preview {type(value).__name__}. End the module with HTML, a CitryElement, or a CitryRender."
+        f"Cannot preview {type(value).__name__}. End the module with HTML, a CitryElement, a ComponentLike, "
+        "or a CitryRender."
     )
 
 
@@ -265,6 +271,7 @@ def _diagnostic(error: BaseException) -> dict[str, object]:
 
 def _fresh_module(source: str, extra: dict[str, Any]) -> ModuleType:
     citry.clear()
+    citry.register_library(citry_ui)
     module = ModuleType(PLAYGROUND_MODULE_NAME)
     module.__file__ = PLAYGROUND_FILENAME
     module.__package__ = None
@@ -549,7 +556,8 @@ def run_source_json(source: str, run_id: int = 1) -> str:
             exec(code, namespace, namespace)
         if expression is None:
             raise MissingPreviewError(
-                "No preview value was found. End the module with HTML, a CitryElement, or a CitryRender.",
+                "No preview value was found. End the module with HTML, a CitryElement, a ComponentLike, "
+                "or a CitryRender.",
                 line=_last_statement_line(tree),
                 column=0,
             )

@@ -20,18 +20,25 @@ from docs_site._internal.project import load_docs_project
 from docs_site._internal.versioning import materialize_alias, update_manifest
 
 
-def _default_declarations() -> dict[str, Path]:
-    return {
+def _empty_redirects(tmp_path: Path) -> Path:
+    redirects = tmp_path / "redirects.yml"
+    redirects.write_text("redirects: []\n", encoding="utf-8")
+    return redirects
+
+
+def _default_declarations(tmp_path: Path) -> dict[str, Path]:
+    declarations = {
         name: getattr(default_config, name)
         for name in (
             "settings_config",
             "reference_config",
             "ui_library_config",
-            "redirects_config",
             "versions_config",
             "people_sources_config",
         )
     }
+    declarations["redirects_config"] = _empty_redirects(tmp_path)
+    return declarations
 
 
 def _write_blog(content: Path) -> Path:
@@ -73,7 +80,16 @@ def _config(tmp_path: Path) -> tuple[DocsConfig, Path, Path]:
     content = tmp_path / "content"
     content.mkdir()
     out = tmp_path / "site"
-    return DocsConfig(content_dir=content, site_dir=out, repo_root=tmp_path), content, out
+    return (
+        DocsConfig(
+            content_dir=content,
+            site_dir=out,
+            repo_root=tmp_path,
+            redirects_config=_empty_redirects(tmp_path),
+        ),
+        content,
+        out,
+    )
 
 
 def test_output_safety_rejects_source_ancestors_and_descendants(tmp_path: Path) -> None:
@@ -374,7 +390,7 @@ def test_build_copies_static_assets(tmp_path: Path) -> None:
         site_dir=tmp_path / "site",
         repo_root=tmp_path,
         base_dir=tmp_path,
-        **_default_declarations(),
+        **_default_declarations(tmp_path),
     )
 
     build_site(config=config)
@@ -437,6 +453,7 @@ def test_ui_projection_preflight_preserves_existing_output(tmp_path: Path) -> No
         content_dir=content,
         site_dir=output,
         ui_library_config=ui_manifest,
+        redirects_config=_empty_redirects(tmp_path),
     )
 
     with pytest.raises(DocsConfigError, match="title and description"):
@@ -526,6 +543,7 @@ def test_build_renders_ui_library_source_directly_to_its_catalog_route(tmp_path:
         content_dir=content,
         site_dir=output,
         ui_library_config=ui_manifest,
+        redirects_config=_empty_redirects(tmp_path),
     )
 
     outcome = build_site(config=cfg, minify=False, search=False, social_cards=False)
@@ -551,9 +569,9 @@ def test_build_renders_ui_library_source_directly_to_its_catalog_route(tmp_path:
     assert 'name="disabled"' in page_source
     assert "Show code" in page_source
     assert "BuildPreviewSmoke" in page_source
-    assert "data-citry-live-code" not in page_source
-    assert "Try live" not in page_source
-    assert "/static/playground/live_code.js" not in page_source
+    assert "data-citry-live-code" in page_source
+    assert "Try live" in page_source
+    assert "/static/playground/live_code.js" in page_source
     assert "Direct source marker." in companion_source
     assert "## API reference" in companion_source
     assert "### Interfaces" in companion_source
@@ -871,7 +889,7 @@ def test_build_generates_social_cards_from_a_running_event_loop(tmp_path: Path) 
         site_dir=tmp_path / "site",
         repo_root=tmp_path,
         base_dir=tmp_path,
-        **_default_declarations(),
+        **_default_declarations(tmp_path),
     )
 
     async def _build() -> BuildOutcome:
@@ -900,7 +918,13 @@ def test_build_writes_md_companions(tmp_path: Path) -> None:
     content = tmp_path / "content"
     content.mkdir()
     out = tmp_path / "site"
-    config = DocsConfig(content_dir=content, site_dir=out, repo_root=tmp_path, site_url="https://citry.dev/")
+    config = DocsConfig(
+        content_dir=content,
+        site_dir=out,
+        repo_root=tmp_path,
+        redirects_config=_empty_redirects(tmp_path),
+        site_url="https://citry.dev/",
+    )
     (content / "index.md").write_text(
         "---\ntitle: Home\ndescription: The home page.\n---\n\nHome page.\n", encoding="utf-8"
     )
@@ -944,7 +968,7 @@ def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
         site_dir=out,
         repo_root=tmp_path,
         site_url="https://citry.dev/",
-        **_default_declarations(),
+        **_default_declarations(tmp_path),
     )
     (content / "_nav.yml").write_text(
         "areas:\n  - label: Docs\n    items:\n      - { title: Home, path: / }\n",
@@ -979,7 +1003,7 @@ def test_build_projects_base_path_in_markdown_outputs(tmp_path: Path) -> None:
         site_dir=out,
         repo_root=tmp_path,
         site_url="https://owner.github.io/citry/",
-        **_default_declarations(),
+        **_default_declarations(tmp_path),
     )
     (content / "_nav.yml").write_text(
         "areas:\n  - label: Docs\n    items:\n      - { title: Home, path: / }\n",

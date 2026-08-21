@@ -492,6 +492,8 @@ def test_single_h1_flags_a_blog_post_heading_expanded_from_a_snippet(tmp_path: P
     )
     (tmp_path / "included-heading.md").write_text("# Included heading\n", encoding="utf-8")
     output = tmp_path / "site"
+    redirects = tmp_path / "redirects.yml"
+    redirects.write_text("redirects: []\n", encoding="utf-8")
     config = DocsConfig(
         base_dir=tmp_path,
         content_dir=content,
@@ -500,7 +502,7 @@ def test_single_h1_flags_a_blog_post_heading_expanded_from_a_snippet(tmp_path: P
         settings_config=default_config.settings_config,
         reference_config=default_config.reference_config,
         ui_library_config=default_config.ui_library_config,
-        redirects_config=default_config.redirects_config,
+        redirects_config=redirects,
         versions_config=default_config.versions_config,
         people_sources_config=default_config.people_sources_config,
     )

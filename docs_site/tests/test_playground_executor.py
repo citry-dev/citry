@@ -11,6 +11,7 @@ _EXECUTOR = Path(__file__).parents[1] / "static" / "playground" / "executor.py"
 _SNIPPETS = Path(__file__).parents[1] / "live_snippets"
 _STARTER = _SNIPPETS / "welcome.py"
 _WORKER = Path(__file__).parents[1] / "static" / "playground" / "worker.js"
+_RUNTIME = Path(__file__).parents[1] / "static" / "playground" / "runtime.json"
 
 
 def _run_sources(*sources: str) -> list[dict]:
@@ -142,6 +143,37 @@ def test_worker_revalidates_the_coupled_runtime_files() -> None:
     assert "install_events_client_runtime" not in worker
 
 
+def test_runtime_manifest_pins_the_complete_published_tuple() -> None:
+    runtime = json.loads(_RUNTIME.read_text(encoding="utf-8"))
+    packages = {package["name"]: package for package in runtime["packages"]}
+
+    assert runtime["pyodide"] == {
+        "version": "314.0.3",
+        "python": "3.14.2",
+        "index_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/",
+        "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs",
+    }
+    assert runtime["citry"] == {
+        "version": "0.4.2",
+        "core_version": "1.5.1",
+        "ui_version": "0.1.0",
+    }
+    assert len(packages) == len(runtime["packages"])
+    assert packages["citry-core"] == {
+        "name": "citry-core",
+        "version": "1.5.1",
+        "url": (
+            "https://files.pythonhosted.org/packages/e8/e3/"
+            "a3f65946b66fb78f6395c71f1d81c5db2dc48eaeea807ac8db4d1d31a238/"
+            "citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+        ),
+    }
+    assert packages["citry"]["version"] == "0.4.2"
+    assert packages["citry"]["url"].endswith("/citry-0.4.2-py3-none-any.whl")
+    assert packages["citry-ui"]["version"] == "0.1.0"
+    assert packages["citry-ui"]["url"].endswith("/citry_ui-0.1.0-py3-none-any.whl")
+
+
 def test_executor_accepts_html_markup_element_render_and_starter() -> None:
     string, markup, element, render, starter = _run_sources(
         "value = '<p>string</p>'\nvalue",
@@ -161,6 +193,33 @@ def test_executor_accepts_html_markup_element_render_and_starter() -> None:
     assert ">render</p>" in render["html"]
     assert starter["ok"]
     assert "Welcome, <strong>Ada Lovelace</strong>" in starter["html"]
+
+
+def test_executor_registers_and_resolves_citry_ui_on_every_run() -> None:
+    direct, registered, repeated = _run_sources(
+        """from citry_ui import CButton
+
+CButton(slots={"default": "Direct save"})
+""",
+        """from citry import Component
+
+class Page(Component):
+    template = "<main><c-CButton>Registered save</c-CButton></main>"
+
+Page()
+""",
+        """from citry_ui import CButton
+
+CButton(slots={"default": "Second run"})
+""",
+    )
+
+    assert direct["ok"] is True
+    assert "Direct save" in direct["html"]
+    assert registered["ok"] is True
+    assert "Registered save" in registered["html"]
+    assert repeated["ok"] is True
+    assert "Second run" in repeated["html"]
 
 
 def test_successful_run_publishes_a_bounded_component_catalog() -> None:

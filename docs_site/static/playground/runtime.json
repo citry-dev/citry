@@ -8,14 +8,15 @@
     "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs"
   },
   "citry": {
-    "version": "0.3.1",
-    "core_version": "1.4.0"
+    "version": "0.4.2",
+    "core_version": "1.5.1",
+    "ui_version": "0.1.0"
   },
   "packages": [
     {
       "name": "citry-core",
-      "version": "1.4.0",
-      "url": "https://files.pythonhosted.org/packages/9b/2e/7e3505ff7c085c3d8eae715976520306c9689bb570909451edf79f8f78de/citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+      "version": "1.5.1",
+      "url": "https://files.pythonhosted.org/packages/e8/e3/a3f65946b66fb78f6395c71f1d81c5db2dc48eaeea807ac8db4d1d31a238/citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
     },
     {
       "name": "MarkupSafe",
@@ -34,8 +35,13 @@
     },
     {
       "name": "citry",
-      "version": "0.3.1",
-      "url": "https://files.pythonhosted.org/packages/98/61/5199900c193b7d42f491ac64454b4b9c98f4a1a53b3c70e49610c6747453/citry-0.3.1-py3-none-any.whl"
+      "version": "0.4.2",
+      "url": "https://files.pythonhosted.org/packages/9f/e4/ede947f8b917b3b68fa0b7f8da014f8039ead18335c55491f61076d3802f/citry-0.4.2-py3-none-any.whl"
+    },
+    {
+      "name": "citry-ui",
+      "version": "0.1.0",
+      "url": "https://files.pythonhosted.org/packages/c9/83/746de52b70a8e9a97ad28cd926ea7375aa0c5515426c03259304c15ce806/citry_ui-0.1.0-py3-none-any.whl"
     }
   ]
 }

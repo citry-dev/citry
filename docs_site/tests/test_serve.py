@@ -231,7 +231,7 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
     local_dir = tmp_path / "local-runtime"
     local_wheels = local_dir / "local"
     local_wheels.mkdir(parents=True)
-    citry_wheel = local_wheels / "citry-0.4.0-py3-none-any.whl"
+    citry_wheel = local_wheels / "citry-0.4.2-py3-none-any.whl"
     citry_wheel.write_bytes(b"local Citry wheel")
     ui_wheel = local_wheels / "citry_ui-0.1.0-py3-none-any.whl"
     ui_wheel.write_bytes(b"local Citry UI wheel")
@@ -241,11 +241,11 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
                 "source": "local",
                 "schema_version": 1,
                 "protocol_version": 1,
-                "citry": {"version": "0.4.0", "core_version": "1.5.0", "ui_version": "0.1.0"},
+                "citry": {"version": "0.4.2", "core_version": "1.5.1", "ui_version": "0.1.0"},
                 "packages": [
                     {
                         "name": "citry",
-                        "version": "0.4.0",
+                        "version": "0.4.2",
                         "url": f"./local/{citry_wheel.name}",
                     },
                     {

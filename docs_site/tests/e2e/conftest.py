@@ -179,28 +179,26 @@ def local_docs_site_url() -> Iterator[str]:
         process.terminate()
         pytest.fail("Local docs server did not start within 30 seconds")
 
-    # The server falls back to the committed runtime when the workspace Citry UI
-    # does not fit the pinned Citry, and these tests exist to exercise the local
-    # wheel, so say why they cannot run instead of testing the wrong runtime.
-    ui_version = None
+    # These tests specifically exercise the workspace wheel. The committed
+    # runtime also includes Citry UI now, so identify the local wheel by URL
+    # rather than by the shared ui_version field.
+    local_ui_version = None
     try:
         with urllib.request.urlopen(f"{url}/static/playground/runtime.json", timeout=5) as response:  # noqa: S310
             runtime = json.loads(response.read())
-        # Only a locally built runtime carries ui_version, so it is the one field
-        # that separates the workspace wheel from the committed pins.
-        if isinstance(runtime, dict) and isinstance(runtime.get("citry"), dict):
-            ui_version = runtime["citry"].get("ui_version")
+        if isinstance(runtime, dict) and isinstance(runtime.get("packages"), list):
+            for package in runtime["packages"]:
+                if (
+                    isinstance(package, dict)
+                    and package.get("name") == "citry-ui"
+                    and str(package.get("url", "")).startswith("./local/")
+                ):
+                    local_ui_version = package.get("version")
     except (OSError, ValueError) as error:
         process.terminate()
         pytest.fail(f"Local docs server did not serve a playground runtime: {error}")
-    if not ui_version:
+    if not local_ui_version:
         process.terminate()
-        committed_version = runtime.get("citry", {}).get("version") if isinstance(runtime, dict) else None
-        if committed_version == "0.3.1":
-            pytest.skip(
-                "workspace Citry UI requires Citry 0.4.x; local-wheel browser coverage resumes "
-                "after the immutable playground tuple is promoted"
-            )
         pytest.fail(
             "Local docs server is serving the committed playground runtime without the workspace "
             "Citry UI wheel. Its startup output reports why the local wheel was rejected."

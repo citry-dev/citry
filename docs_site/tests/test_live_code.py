@@ -181,7 +181,7 @@ def test_live_code_full_height_is_opt_in(tmp_path: Path) -> None:
     assert list(live_code_guard.check(_guard_context(tmp_path, full_height))) == []
 
 
-def test_static_component_snippet_uses_live_code_presentation_without_activation(tmp_path: Path) -> None:
+def test_published_ui_runtime_activates_a_static_component_snippet(tmp_path: Path) -> None:
     source = "import citry_ui\nfrom citry_ui import CTabs\nCTabs\n"
     path = _component_snippet_path(tmp_path, source)
     directive = f'<c-live-code path="{path}" title="Tabs" static />'
@@ -190,12 +190,11 @@ def test_static_component_snippet_uses_live_code_presentation_without_activation
     result = render_page(directive, config=cfg)
 
     assert source in result.markdown_body
-    assert "data-citry-live-code" not in result.html
-    assert "Try live" not in result.html
-    assert "Open the current playground" not in result.html
-    assert "data-live-workspace" not in result.html
+    assert "data-citry-live-code" in result.html
+    assert "Try live" in result.html
+    assert "data-live-workspace" in result.html
     assert "live_code.css" in result.html
-    assert "live_code.js" not in result.html
+    assert "live_code.js" in result.html
     assert list(live_code_guard.check(_guard_context(tmp_path, directive))) == []
 
 

@@ -54,6 +54,7 @@ def test_default_project_loads_every_manifest() -> None:
         ("listbox", "listbox"),
         ("select", "select"),
         ("multi-select", "multi-select"),
+        ("transfer-list", "transfer-list"),
         ("tags-input", "tags-input"),
         ("number-input", "number-input"),
         ("slider", "slider"),
@@ -81,6 +82,8 @@ def test_default_project_loads_every_manifest() -> None:
         ("icon", "icon"),
         ("list", "list"),
         ("timeline", "timeline"),
+        ("virtual-list", "virtual-list"),
+        ("data-grid", "data-grid"),
         ("table", "table"),
         ("tag", "tag"),
         ("tree", "tree"),
@@ -100,6 +103,7 @@ def test_default_project_loads_every_manifest() -> None:
         ("alert-dialog", "alert-dialog"),
         ("dialog", "dialog"),
         ("drawer", "drawer"),
+        ("tour", "tour"),
         ("menu", "menu"),
         ("context-menu", "context-menu"),
         ("command-palette", "command-palette"),
@@ -107,7 +111,7 @@ def test_default_project_loads_every_manifest() -> None:
         ("tooltip", "tooltip"),
         ("hover-card", "hover-card"),
     ]
-    assert project.redirects.redirects == ()
+    assert project.redirects.redirects == (("/advanced/const-optimization/", "/advanced/performance/"),)
     assert project.versions.index_keep_recent == 2
 
 
@@ -119,12 +123,12 @@ def test_ui_catalog_groups_drive_sidebar_order_and_breadcrumbs() -> None:
     assert [(group.label, len(group.items), group.collapsible) for group in area.groups] == [
         ("Get started", 2, False),
         ("Actions", 5, True),
-        ("Forms and inputs", 24, True),
+        ("Forms and inputs", 25, True),
         ("Layout", 5, True),
-        ("Data display", 11, True),
+        ("Data display", 13, True),
         ("Navigation", 6, True),
         ("Feedback and status", 5, True),
-        ("Overlays and disclosure", 11, True),
+        ("Overlays and disclosure", 12, True),
     ]
     assert tree.find_breadcrumbs("/ui-library/components/tree/") == [
         ("Citry UI", "/ui-library/"),

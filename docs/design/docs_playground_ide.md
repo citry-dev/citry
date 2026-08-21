@@ -300,12 +300,10 @@ again before replacing its previous facts.
 
 #### Phase 2B: released full Citry analysis
 
-The hosted playground currently installs `citry==0.3.1` and
-`citry-core==1.4.0`. The portable template-variable, Alpine, JavaScript, CSS,
-lint, source-map, and Python component-asset APIs used by the desktop IDE are
-part of the unreleased local `citry==0.4.0` and `citry-core==1.5.0` sources.
-Phase 2B starts when matching wheels are published and pinned by the playground
-runtime. It will then:
+The hosted playground installs `citry==0.4.2` and `citry-core==1.5.1`. Those
+published wheels provide the portable template-variable, Alpine, JavaScript,
+CSS, lint, source-map, and Python component-asset APIs used by the desktop IDE.
+Phase 2B can now:
 
 - replace the Phase 1 direct-triple-quoted extractor with the shared
   escape-aware Python component-asset discovery and source maps;

@@ -33,14 +33,14 @@ def test_workspace_wheel_build_uses_a_temporary_source_copy(
         assert source_dir.is_relative_to(output_dir.parent)
         assert (source_dir / "citry" / "__init__.py").is_file()
         assert not (source_dir / "build").exists()
-        (output_dir / "citry-0.4.0-py3-none-any.whl").write_bytes(b"wheel")
+        (output_dir / "citry-0.4.2-py3-none-any.whl").write_bytes(b"wheel")
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(local_playground_runtime.subprocess, "run", fake_run)
 
     wheel = local_playground_runtime._build_workspace_wheel(package_dir, output_dir)
 
-    assert wheel == output_dir / "citry-0.4.0-py3-none-any.whl"
+    assert wheel == output_dir / "citry-0.4.2-py3-none-any.whl"
 
 
 def _write_wheel(
@@ -75,10 +75,11 @@ def test_build_local_runtime_keeps_compatible_citry_and_adds_workspace_citry_ui(
                 "schema_version": 1,
                 "protocol_version": 1,
                 "pyodide": {"version": "test", "python": "3.14.2"},
-                "citry": {"version": "0.4.0", "core_version": "1.5.0"},
+                "citry": {"version": "0.4.2", "core_version": "1.5.1", "ui_version": "0.1.0"},
                 "packages": [
-                    {"name": "citry-core", "version": "1.5.0", "url": "https://example.test/core.whl"},
-                    {"name": "citry", "version": "0.4.0", "url": "https://example.test/citry.whl"},
+                    {"name": "citry-core", "version": "1.5.1", "url": "https://example.test/core.whl"},
+                    {"name": "citry", "version": "0.4.2", "url": "https://example.test/citry.whl"},
+                    {"name": "citry-ui", "version": "0.1.0", "url": "https://example.test/ui.whl"},
                 ],
             }
         ),
@@ -105,15 +106,16 @@ def test_build_local_runtime_keeps_compatible_citry_and_adds_workspace_citry_ui(
     packages = {package["name"]: package for package in manifest["packages"]}
 
     assert manifest["citry"] == {
-        "version": "0.4.0",
-        "core_version": "1.5.0",
+        "version": "0.4.2",
+        "core_version": "1.5.1",
         "ui_version": "0.1.0",
     }
     assert packages["citry-core"]["url"] == "https://example.test/core.whl"
-    assert packages["citry"]["version"] == "0.4.0"
+    assert packages["citry"]["version"] == "0.4.2"
     assert packages["citry"]["url"] == "https://example.test/citry.whl"
     assert packages["citry-ui"]["version"] == "0.1.0"
     assert packages["citry-ui"]["url"] == "./local/citry_ui-0.1.0-py3-none-any.whl"
+    assert [package["name"] for package in manifest["packages"]].count("citry-ui") == 1
     assert local.wheel_names == {"citry_ui-0.1.0-py3-none-any.whl"}
 
 
@@ -168,7 +170,7 @@ def test_local_runtime_can_be_loaded_from_its_generated_directory(tmp_path: Path
         wheels,
         distribution="citry",
         import_name="citry",
-        version="0.4.0",
+        version="0.4.2",
     )
     ui_wheel = _write_wheel(
         wheels,
@@ -179,11 +181,11 @@ def test_local_runtime_can_be_loaded_from_its_generated_directory(tmp_path: Path
     manifest = {
         "schema_version": 1,
         "protocol_version": 1,
-        "citry": {"version": "0.4.0", "core_version": "1.5.0", "ui_version": "0.1.0"},
+        "citry": {"version": "0.4.2", "core_version": "1.5.1", "ui_version": "0.1.0"},
         "packages": [
             {
                 "name": "citry",
-                "version": "0.4.0",
+                "version": "0.4.2",
                 "url": f"./local/{citry_wheel.name}",
             },
             {
@@ -209,18 +211,18 @@ def test_local_runtime_rejects_a_manifest_without_local_citry_ui(tmp_path: Path)
         wheels,
         distribution="citry",
         import_name="citry",
-        version="0.4.0",
+        version="0.4.2",
     )
     (local_dir / "runtime.json").write_text(
         json.dumps(
             {
                 "schema_version": 1,
                 "protocol_version": 1,
-                "citry": {"version": "0.4.0", "core_version": "1.5.0", "ui_version": "0.1.0"},
+                "citry": {"version": "0.4.2", "core_version": "1.5.1", "ui_version": "0.1.0"},
                 "packages": [
                     {
                         "name": "citry",
-                        "version": "0.4.0",
+                        "version": "0.4.2",
                         "url": f"./local/{citry_wheel.name}",
                     }
                 ],
@@ -245,7 +247,7 @@ def test_local_runtime_rejects_unsupported_manifest_versions(tmp_path: Path, fie
         "schema_version": 1,
         "protocol_version": 1,
         "packages": [],
-        "citry": {"version": "0.4.0", "ui_version": "0.1.0"},
+        "citry": {"version": "0.4.2", "ui_version": "0.1.0"},
     }
     if value is None:
         manifest.pop(field)

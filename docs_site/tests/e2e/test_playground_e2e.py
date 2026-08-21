@@ -164,7 +164,7 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.0 · Citry UI 0.1.0")
+    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.2 · Citry UI 0.1.0")
 
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')
@@ -176,7 +176,47 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
     assert console_errors == []
 
 
-def test_local_authoring_runtime_activates_inline_citry_ui(page: Any, local_docs_site_url: str) -> None:
+def test_published_runtime_runs_citry_ui_twice(page: Any, docs_site_url: str) -> None:
+    console_errors: list[str] = []
+    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
+    page.wait_for_function("window.citryPlayground !== undefined")
+    _set_source(page, _CITRY_UI_TABS.read_text(encoding="utf-8"))
+
+    _run_and_wait(page)
+    _run_and_wait(page)
+    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.2 · Citry UI 0.1.0")
+
+    preview = page.frame_locator("#citry-playground-preview")
+    tabs = preview.locator('[role="tab"]')
+    expect(tabs).to_have_count(3, timeout=120_000)
+    tabs.nth(1).click()
+    expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
+    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
+    assert console_errors == []
+
+
+def test_published_runtime_resolves_a_direct_ui_component(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
+    page.wait_for_function("window.citryPlayground !== undefined")
+    _set_source(
+        page,
+        """from citry_ui import CButton
+
+CButton(slots={"default": "Save changes"})
+""",
+    )
+
+    _run_and_wait(page)
+    _run_and_wait(page)
+
+    preview = page.frame_locator("#citry-playground-preview")
+    button = preview.locator("button", has_text="Save changes")
+    expect(button).to_be_visible(timeout=120_000)
+    expect(button).to_have_class("cui-button")
+
+
+def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: str) -> None:
     console_errors: list[str] = []
     page.on(
         "console",
@@ -184,7 +224,7 @@ def test_local_authoring_runtime_activates_inline_citry_ui(page: Any, local_docs
         if message.type == "error"
         else None,
     )
-    page.goto(local_docs_site_url + "/ui-library/components/tabs/", wait_until="domcontentloaded")
+    page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="domcontentloaded")
     root = page.locator("[data-citry-ui-demo]").nth(1)
     built_preview = root.locator("[data-ui-preview-frame]")
 
@@ -205,7 +245,7 @@ def test_local_authoring_runtime_activates_inline_citry_ui(page: Any, local_docs
     if root.locator("[data-live-status]").text_content() == "Runner unavailable":
         summary = root.locator("[data-live-python-summary]").text_content()
         details = root.locator("[data-live-python-details]").text_content()
-        pytest.fail(f"Local Citry UI runtime failed: {summary}\n{details}")
+        pytest.fail(f"Published Citry UI runtime failed: {summary}\n{details}")
 
     run = root.locator("[data-live-run]")
     run.click()

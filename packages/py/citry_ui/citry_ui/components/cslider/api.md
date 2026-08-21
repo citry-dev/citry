@@ -19,6 +19,10 @@ Use `CSlider` to choose one value from a bounded exact-decimal scale. Use
 </c-CField>
 ```
 
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/basic.py" title="Choose one value" />
+
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/range.py" title="Choose a value range" />
+
 ## Choose exact values
 
 Server inputs accept `int`, `Decimal`, or a canonical plain-decimal string.
@@ -31,6 +35,10 @@ Form submission and callbacks use canonical ASCII strings, so values such as
 label selected grid positions; they do not add selectable values or alter the
 step grid.
 
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/exact_decimals.py" title="Use an exact decimal scale" />
+
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/marks.py" title="Label selected values" />
+
 ## Pick one value or an interval
 
 `CSlider` contributes one form entry. `CRangeSlider name="price"` contributes
@@ -40,6 +48,8 @@ together when the server expects distinct field names.
 Range thumbs keep their lower and upper identities, remain in the same Tab
 order, and do not cross, swap, or push each other. `min_steps_between_thumbs`
 sets a grid-step gap between them.
+
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/forms.py" title="Submit Slider values" />
 
 ## Keyboard and pointer behavior
 
@@ -52,6 +62,8 @@ The no-JavaScript fallback is one native range input for `CSlider` and two
 clearly labeled native range inputs for `CRangeSlider`. Once enhanced, the
 styled thumbs take over interaction while the native controls continue to own
 form submission and reset.
+
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/vertical.py" title="Use vertical Sliders" />
 
 ## Controlled values and callbacks
 
@@ -73,6 +85,8 @@ gesture and once after a keyboard request.
 </div>
 ```
 
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/controlled.py" title="Control Slider values" />
+
 ## Labels, fields, and localization
 
 Wrap either component in `CField` for its visible label, description, error,
@@ -86,6 +100,8 @@ Displayed values and `aria-valuetext` use the `number.citry-ui-slider` profile.
 Under a client-enabled `c-i18n` provider, thumb labels and formatted values
 update after a browser-side locale switch. Canonical form values never change.
 
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/locales.py" title="Format localized Slider values" />
+
 ## State and customization
 
 `readonly` preserves a submitted value and focusable slider semantics while
@@ -95,3 +111,5 @@ and `never`, `interaction`, or `always` value bubbles. Use the documented CSS
 variables and part selectors for styling; `attrs` and input-attribute mappings
 cannot replace state, form, identity, or accessibility attributes owned by the
 component.
+
+<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cslider/snippets/states.py" title="Compare Slider states" />

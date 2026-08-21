@@ -214,8 +214,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     runtime_version = page.evaluate(
         "async () => (await (await fetch('/static/playground/runtime.json')).json()).citry.version"
     )
-    if runtime_version != "0.4.0":
-        pytest.skip("direct js_data scope seeding needs the post-release Citry 0.4.0 playground pin")
+    assert runtime_version == "0.4.2"
     examples = page.locator("[data-citry-live-code]")
     expect(examples).to_have_count(1)
 

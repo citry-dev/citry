@@ -5,6 +5,6 @@ previews:
   - constraints
   - controlled
   - locales
-  - natural_weeks
+  - natural-weeks
   - states
   - styling

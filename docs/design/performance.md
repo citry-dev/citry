@@ -136,9 +136,9 @@ some of it into Rust (section 6).
 On the 2026-06-22 feature set, after the passes in section 4, Citry's repeat
 render was about 1.29x a bare Django template and about 3.4x faster than
 django-components. Those numbers are historical: the current beta-feature
-baseline is 7.83x bare Django and 1.76x django-components on a materially
-richer and larger render. The cost-model work below explains the June profile;
-future optimization decisions must be re-profiled against the current baseline
+baseline is 3.53x bare Django and 0.76x django-components on a materially richer
+and larger render. The cost-model work below explains the June profile; future
+optimization decisions must be re-profiled against the current baseline
 recorded in [`benchmarking.md`](benchmarking.md).
 
 It is tempting to call the rest "the structural cost of Python components," and

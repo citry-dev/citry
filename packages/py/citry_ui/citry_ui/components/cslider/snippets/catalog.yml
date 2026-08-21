@@ -3,9 +3,9 @@ previews:
   - basic
   - range
   - exact-decimals
-  - controlled
   - marks
-  - vertical
-  - locales
   - forms
+  - vertical
+  - controlled
+  - locales
   - states

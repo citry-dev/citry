@@ -172,7 +172,7 @@ def create_app(
             blog_post=blog_post,
             is_blog_index=catalog.index_path is not None and md_path.resolve() == catalog.index_path.resolve(),
             blog_feed_url=feed_path if catalog.posts else "",
-            allow_citry_ui=local_playground_runtime is not None,
+            allow_citry_ui=True,
             source_to_public_path={
                 **catalog.source_to_public_path,
                 **ui_library_source_routes(project.ui_library, repo_root=config.repo_root),
@@ -249,7 +249,7 @@ def create_app(
             version=version,
             blog_catalog=catalog,
             blog_feed_url=feed_path if catalog.posts else "",
-            allow_citry_ui=local_playground_runtime is not None,
+            allow_citry_ui=True,
             project=project,
         ).html
         return HTMLResponse(html)

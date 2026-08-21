@@ -254,7 +254,7 @@ def render_page(
     blog_feed_url: str = "",
     version_prefix: str = "",
     source_to_public_path: Mapping[Path, str] | None = None,
-    allow_citry_ui: bool = False,
+    allow_citry_ui: bool = True,
     project: DocsProject | None = None,
 ) -> RenderResult:
     """

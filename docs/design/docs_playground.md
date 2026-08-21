@@ -1,12 +1,12 @@
 # Design: Citry docs playground
 
-**Status (2026-08-05):** The playground is implemented at the
+**Status (2026-08-21):** The playground is implemented at the
 canonical, unversioned `/playground/` route. The shipped baseline includes the
-mixed-language editor, pinned Pyodide runtime, Citry 0.3.1 and Citry Core 1.4.0,
-final-expression execution, automatic and manual runs, isolated previews,
-responsive layout, diagnostics, browser coverage, and the custom Events
-transport for Data, Dispatch, Render, and signed State. Stage 9 reuses the
-browser host for opt-in live examples. Deferred
+mixed-language editor, pinned Pyodide runtime, Citry 0.4.2, Citry Core 1.5.1,
+and Citry UI 0.1.0, final-expression execution, automatic and manual runs,
+isolated previews, responsive layout, diagnostics, browser coverage, and the
+custom Events transport for Data, Dispatch, Render, and signed State. Stage 9
+reuses the browser host for opt-in live examples. Deferred
 hardening and rollout work is collected in the final appendix.
 
 [`docs_site.md`](docs_site.md) remains the design and history of the docs-site
@@ -101,6 +101,7 @@ The final expression accepts:
 | --- | --- |
 | `str` or `Markup` | Use it as rendered HTML. |
 | `CitryElement` | Serialize with `str(value)`. |
+| `ComponentLike` | Resolve it against the Worker's Citry instance, then serialize the element. |
 | `CitryRender` | Serialize with `value.serialize()`. |
 | Missing or unsupported value | Return an actionable Python diagnostic. |
 
@@ -135,16 +136,17 @@ CodeMirror or textarea
 `docs_site/static/playground/runtime.json` is the runtime manifest. It pins:
 
 - Pyodide 314.0.3;
-- `citry==0.3.1`;
-- `citry_core==1.4.0` using the published PyEmscripten wheel;
+- `citry==0.4.2`;
+- `citry_core==1.5.1` using the matching CPython 3.14/PyEmscripten 2026.0 wheel;
+- `citry-ui==0.1.0`;
 - exact compatible browser dependency URLs.
 
-The Worker installs those exact files directly and verifies the imported Citry
-and Citry Core versions. It does not ask a live resolver to select package
-versions. Runtime initialization is lazy: it starts with the first automatic or
-manual run rather than blocking the page shell. Each new Worker revalidates the
-first-party runtime manifest and executor so a docs deployment does not reuse
-an older browser-cached adapter with a newer Worker.
+The Worker installs those exact files directly and verifies the imported Citry,
+Citry Core, and Citry UI versions. It does not ask a live resolver to select
+package versions. Runtime initialization is lazy: it starts with the first
+automatic or manual run rather than blocking the page shell. Each new Worker
+revalidates the first-party runtime manifest and executor so a docs deployment
+does not reuse an older browser-cached adapter with a newer Worker.
 
 Citry 0.3.1 includes its generated Events browser runtime. The docs runtime
 uses that package-owned file, keeping Python emission and client behavior on
@@ -643,30 +645,29 @@ body. This can be added with a dedicated parser-delivery contract and tests.
 
 ### Published Citry UI runtime
 
-Local authoring already builds the workspace Citry UI wheel against the pinned
-published Citry runtime so component examples can be tested before
-publication. Once `citry-ui` is published as a
-universal pure-Python wheel compatible with
-the playground's pinned Citry, Citry Core, and Pyodide tuple, the playground
-and live-component Worker should include it by default. This is a pinned
-runtime capability, not an unconstrained package installer:
+The playground and live-component Worker include the published universal
+`citry-ui` wheel as part of the pinned Citry, Citry Core, and Pyodide tuple.
+Local authoring replaces that package entry with a workspace-built wheel; it
+does not install a second copy. This is a pinned runtime capability, not an
+unconstrained package installer:
 
-1. Add the exact `citry-ui` version and wheel URL to `runtime.json`, load it
+1. Keep the exact `citry-ui` version and wheel URL in `runtime.json`, load it
    with the existing package sequence, and verify
    `importlib.metadata.version("citry-ui")` alongside Citry and Citry Core.
-2. Allow `citry_ui` imports in authored live-code modules.
+2. Allow `citry_ui` imports in authored live-code modules without allowing
+   arbitrary third-party packages.
 3. After every `citry.clear()`, import `citry_ui` and call
    `citry.register_library(citry_ui)`. Clearing Citry removes the installed
    library classes, so registration must happen for every run rather than only
    during Worker startup.
 4. Extend final-expression normalization to accept a Citry `ComponentLike`
    and resolve it against the Worker's exact Citry instance. This makes a final
-   expression such as `CButton(content="Save")` work as naturally as direct
+   expression such as `CButton(slots={"default": "Save"})` work as naturally as direct
    `<c-CButton>` use inside an authored component.
 5. Keep component CSS and JavaScript on Citry's ordinary dependency path so
    direct invocations and registered template tags activate the same assets.
 
-The browser suite must cover a direct `citry_ui` import, final-expression
+The browser suite covers a direct `citry_ui` import, final-expression
 composition, registered `C*` tags, library assets, and two consecutive runs.
 The second run is essential because it proves registration after `clear()`.
 Live-code validation must accept `citry_ui` without broadening the import
@@ -675,8 +676,8 @@ allowlist to arbitrary packages.
 A missing, incompatible, or incorrectly versioned wheel is a Worker runtime
 initialization failure with the normal Retry action. A registration or render
 failure is reported for that run and must not replace the last successful
-preview. The runtime manifest, worker version checks, library registration,
-allowed imports, and browser tests land together so the docs never advertise a
+preview. The runtime manifest, Worker version checks, library registration,
+allowed imports, and browser tests move together so the docs never advertise a
 partially available built-in library.
 
 ### Production, device, and accessibility rollout
