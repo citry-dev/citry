@@ -667,6 +667,8 @@ The release VSIX is 359,430 bytes with SHA-256
 
 ## 8. Promote the new playground runtime tuple
 
+**Status: complete on 2026-08-21.**
+
 The committed `docs_site/static/playground/runtime.json` is one atomic,
 compatible public-artifact tuple. It now pins Citry 0.4.2, `citry-core` 1.5.1,
 and `citry-ui` 0.1.0 with immutable wheel URLs while retaining Pyodide 314.0.3
@@ -693,7 +695,7 @@ workspace packages.
   Pyodide runtime.
 - [x] Run the real Chromium browser/playground tests, not only pure-Python unit
   tests, and exercise APIs introduced in the beta.
-- [ ] Update current docs/examples/tests to the released tuple and deploy the
+- [x] Update current docs/examples/tests to the released tuple and deploy the
   public site from `main`.
 
 **Promotion evidence:** the core wheel is the exact
@@ -707,8 +709,14 @@ the Citry UI wheel is 525,573 bytes with SHA-256
 The complete real Chromium playground suite passed, including repeated UI
 registration, direct `ComponentLike` rendering, UI assets and interactions,
 Events fragments, and the beta getting-started example. Strict docs guards and
-the focused runtime/unit suite also pass. Public deployment remains the final
-unchecked step above.
+the focused runtime/unit suite also pass. Main promotion commit `35df09ad`
+deployed the root site in
+[run 32494109403](https://github.com/citry-dev/citry/actions/runs/32494109403).
+Release-docs recovery
+[run 32491123833](https://github.com/citry-dev/citry/actions/runs/32491123833)
+then built the exact `citry@0.4.2` snapshot, committed it back to `main` as
+`d5fd4b78`, and deployed it. The live snapshot build stamp records source
+commit `f1b18c7c`, and `/v/versions.json` makes 0.4.2 the `latest` alias.
 
 Because immutable PyPI URLs do not exist before publication, a Citry tag may
 deploy its version snapshot while the live playground remains on the previous
