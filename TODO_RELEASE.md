@@ -26,7 +26,7 @@ or deploying anything.
   intended to generate real-world feedback.
 - [x] Published the VS Code extension `citry-dev.citry` **0.1.0** on
   2026-08-20 after `citry-lsp` became installable.
-- [ ] Once the new Python artifacts exist, update the playground's complete,
+- [x] Once the new Python artifacts exist, update the playground's complete,
   compatible runtime tuple and sweep all current version constraints, pins,
   examples, tests, and release documentation across the repository.
 
@@ -727,35 +727,85 @@ complete.
 
 ## 9. Public docs and site
 
-- [ ] Keep `docs_site/settings.yml`, deployment workflow URL settings, and
+**Status: complete on 2026-08-21.**
+
+- [x] Keep `docs_site/settings.yml`, deployment workflow URL settings, and
   `https://citry.dev/` aligned.
-- [ ] Preserve the deliberate removal of the dummy blog post. Its old URL is
+- [x] Preserve the deliberate removal of the dummy blog post. Its old URL is
   intended to disappear with no redirect because it was never meant to be
   public. An empty blog index and absent feed are valid.
-- [ ] Update package/extension availability and install commands only when the
+- [x] Update package/extension availability and install commands only when the
   corresponding public artifact exists.
-- [ ] Assemble production docs with `python -m docs_site assemble`; do not
+- [x] Assemble production docs with `python -m docs_site assemble`; do not
   commit or hand-edit ignored root `site/` output.
-- [ ] Run the strict docs checks and browser suite when time permits. Current
+- [x] Run the strict docs checks and browser suite when time permits. Current
   failing CI/docs checks should be triaged explicitly, but the decision to
   launch `citry-ui` early should not be replaced with an indefinite “defer
   until qualification is complete.”
-- [ ] Merge/push the current docs changes to `main` to trigger the routine
-  GitHub Pages deployment. Use the `citry@0.4.0` tag workflow for the versioned
-  0.4.0 snapshot.
-- [ ] Verify the homepage, install pages, playground, version selector, sitemap,
+- [x] Promote the named docs changes to `main` to trigger the routine GitHub
+  Pages deployment. The `citry@0.4.2` release workflow already produced the
+  exact 0.4.2 version snapshot.
+- [x] Verify the homepage, install pages, playground, version selector, sitemap,
   indexing files, and expected 404 for the removed blog URL after deployment.
+
+The public entry-point refresh was promoted as `a52fcb19` and deployed by
+[run 32499729531](https://github.com/citry-dev/citry/actions/runs/32499729531).
+The root README now leads with the beta installation and first component,
+public IDE/package availability is current, and the production assembly mounts
+0.4.2, 0.4.1, 0.4.0, 0.3.1, and 0.3.0. The strict guards, docs tests, and real
+browser suite passed in
+[Docs check 32499729326](https://github.com/citry-dev/citry/actions/runs/32499729326).
+The live root, docs, installation, IDE, UI, playground, sitemap, indexing data,
+and 0.4.2 snapshot return 200; the removed dummy post and empty Atom feed return
+the intentional 404. The already-published PyPI 0.4.2 description is immutable;
+the refreshed root README will become its package description on the next Citry
+release rather than creating a docs-only patch release.
 
 ## 10. Final verification and closeout
 
-- [ ] Verify public package pages and exact versions for all five Python
+**Status: complete on 2026-08-21.**
+
+- [x] Verify public package pages and exact versions for all five Python
   distributions.
-- [ ] Install the public dependency chain in clean environments rather than
+- [x] Install the public dependency chain in clean environments rather than
   relying on workspace resolution.
-- [ ] Verify both VS Code registries install the published 0.1.0 extension and
+- [x] Verify both VS Code registries install the published 0.1.0 extension and
   that it can find/start public `citry-lsp`.
-- [ ] Verify `citry.dev` serves the new docs and the promoted playground tuple.
-- [ ] Re-run a final targeted version/pin search and record every intentional
+- [x] Verify `citry.dev` serves the new docs and the promoted playground tuple.
+- [x] Re-run a final targeted version/pin search and record every intentional
   old-version occurrence left behind.
-- [ ] Record release URLs, tag SHAs, workflow runs, and any consciously accepted
+- [x] Record release URLs, tag SHAs, workflow runs, and any consciously accepted
   failures in this tracker or the permanent release record.
+
+| Artifact | Public version | Tag object / peeled commit | Publish run |
+| --- | --- | --- | --- |
+| [`citry-core`](https://github.com/citry-dev/citry/releases/tag/citry-core%401.5.1) | [1.5.1](https://pypi.org/project/citry-core/1.5.1/) | `ede7de12` / `f1b18c7c` | [32490618135](https://github.com/citry-dev/citry/actions/runs/32490618135) |
+| [`citry`](https://github.com/citry-dev/citry/releases/tag/citry%400.4.2) | [0.4.2](https://pypi.org/project/citry/0.4.2/) | `24f208db` / `f1b18c7c` | [32491123786](https://github.com/citry-dev/citry/actions/runs/32491123786) |
+| [`citry-lsp`](https://github.com/citry-dev/citry/releases/tag/citry-lsp%400.1.1) | [0.1.1](https://pypi.org/project/citry-lsp/0.1.1/) | `29371668` / `591f0e18` | [32365923630](https://github.com/citry-dev/citry/actions/runs/32365923630) |
+| [`citry-ui`](https://github.com/citry-dev/citry/releases/tag/citry-ui%400.1.0) | [0.1.0](https://pypi.org/project/citry-ui/0.1.0/) | `c7746ed2` / `7cc690ac` | [32249108125](https://github.com/citry-dev/citry/actions/runs/32249108125) |
+| [`pygments-citry`](https://github.com/citry-dev/citry/releases/tag/pygments-citry%400.2.0) | [0.2.0](https://pypi.org/project/pygments-citry/0.2.0/) | `139e395c` / `782111a9` | [32261269454](https://github.com/citry-dev/citry/actions/runs/32261269454) |
+| [`citry-dev.citry`](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.0) | [0.1.0 Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry) / [Open VSX](https://open-vsx.org/extension/citry-dev/citry) | `d5228e8c` / `7d115e07` | [32386904887](https://github.com/citry-dev/citry/actions/runs/32386904887) |
+
+All six GitHub releases exist and are neither drafts nor prereleases. Fresh,
+no-cache CPython 3.10 and 3.14 environments installed the exact public Python
+chain and passed imports, core parsing, UI registration/rendering, Pygments
+entry-point, CLI, and real LSP startup smokes. The Marketplace and Open VSX
+VSIX files are byte-identical at 359,430 bytes with SHA-256
+`7d8ff6a69ff63a954037368d4ad3af507aee3c325f1ce3e9c79efe8484c2f7be`;
+both installed and passed extension activation plus structural completion tests
+against the public LSP.
+
+The final pin sweep retains old versions only where they are evidence or part
+of a deliberate contract: minimum compatible LSP constraints and fixtures;
+the exact versions measured by dated benchmarks; changelog, versioned-doc, and
+research history; old playground reproduction proofs; illustrative release-tag
+examples; and unrelated third-party/internal package versions. Living status
+text in `TODO.md` and `docs/design/ide_integration.md` was advanced to the final
+public versions.
+
+Consciously accepted observations: macOS arm64 free-threaded CPython 3.14 has no
+matching `citry-core` wheel and therefore falls back to a source build requiring
+Rust 1.95; ordinary supported CPython 3.14 installs the abi3 wheel successfully.
+Open VSX serves 0.1.0 while its publisher-verified flag remains pending; the
+six-month Marketplace verification follow-up is tracked separately. No other
+release or deployment failure is accepted.

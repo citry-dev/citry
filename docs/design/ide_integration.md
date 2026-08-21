@@ -1,15 +1,14 @@
 # Design: IDE integration (editor tooling for citry)
 
-**Status (2026-08-05): refreshed after maintainer review and accepted for
+**Status (2026-08-21): refreshed after maintainer review and accepted for
 implementation.** Steps 1 through 9 at the end of this document are complete.
 The portable syntax corpus drives the aligned Pygments lexers and declarative
 VS Code highlighting, `citry check` provides parser-grade batch validation
 with an explicitly bounded static fallback, and the companion language server
 plus VS Code client provide the implemented editor intelligence. The VS Code
-extension remains release-prepared rather than published. `citry-lsp` 0.1.0
-is published and 0.1.1 is release-prepared. `pygments-citry` 0.1.2 is
-published, with 0.2.0 release-prepared. The original design is the
-synthesis of a research and design-panel process: five recon reports,
+extension 0.1.0 is published on Visual Studio Marketplace and Open VSX.
+`citry-lsp` 0.1.1 and `pygments-citry` 0.2.0 are published on PyPI. The
+original design is the synthesis of a research and design-panel process: five recon reports,
 three competing design drafts, and two adversarial judge verdicts, all in
 [`ide_research/`](ide_research/README.md) and all dated 2026-07-07. Both
 judges ranked the ship-first draft
@@ -255,12 +254,12 @@ server reuse the shipped runtime catalog, plus two small engine changes. No new
 binaries are distributed in the committed scope.
 
 ```
-packages/py/pygments_citry/        0.1.2 published; 0.2.0 prepared    (Python)
+packages/py/pygments_citry/        0.2.0 published                    (Python)
 packages/editors/syntax-fixtures/  exists; portable conformance data  (JSON)
-packages/editors/vscode/           0.1.0 release-prepared              (JSON at v0; TypeScript with LSP)
+packages/editors/vscode/           0.1.0 published                     (JSON at v0; TypeScript with LSP)
 packages/py/citry/                 existing `citry inspect`;          (Python, reuses citry_core)
                                      new `citry check`
-packages/py/citry_lsp/             0.1.0 published; pygls server      (Python, reuses citry_core + citry)
+packages/py/citry_lsp/             0.1.1 published; pygls server      (Python, reuses citry_core + citry)
 crates/citry_template_parser/ +    two small additive changes         (Rust; Mechanism 2 + 4
 crates/citry_core_py/                (structured diagnostics, kind)     when implemented)
 ```
@@ -804,11 +803,11 @@ This table records the implemented and proposed locations.
 
 | Artifact | Location | Language | Status |
 |---|---|---|---|
-| Pygments lexers | `packages/py/pygments_citry/` | Python | aligned 0.1.1 package published |
+| Pygments lexers | `packages/py/pygments_citry/` | Python | aligned 0.2.0 package published |
 | Shared syntax corpus | `packages/editors/syntax-fixtures/` | JSON | exists; consumed by each highlighter's tests |
 | `citry inspect` and `citry check` subcommands | `packages/py/citry/` (CLI + the #26 introspection API) | Python | implemented, including `check --format json` schema v1 |
-| Language server | `packages/py/citry_lsp/` | Python | v0.1.0 published on 2026-08-19 |
-| VS Code extension + grammars | `packages/editors/vscode/` | JSON + TypeScript | v0.1.0 client and universal VSIX implemented; not yet published |
+| Language server | `packages/py/citry_lsp/` | Python | v0.1.1 published on 2026-08-20 |
+| VS Code extension + grammars | `packages/editors/vscode/` | JSON + TypeScript | v0.1.0 client and universal VSIX published on 2026-08-20 |
 | Structured diagnostics and `kind` getter | `crates/citry_template_parser/` + `crates/citry_core_py/` + `_rust.pyi` + Python wrapper | Rust + stubs | implemented 2026-07-30 through the required prior-art, plan, and cross-binding audit |
 | Syntax corpus and authoritative-set validator | Highlighting tests plus `scripts/validators/` if cross-package validation needs it | Fixtures + Python | implemented with v0.1 highlighting |
 | Editor setup docs, LSP4IJ template JSON, troubleshooting page | docs site (`docs_site/`) + `packages/editors/jetbrains/lsp4ij/` | Markdown/JSON | VS Code setup/troubleshooting and the tested PyCharm LSP4IJ template are implemented; remaining long-tail editor snippets stay in v1.2 |
