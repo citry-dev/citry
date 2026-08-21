@@ -191,7 +191,7 @@ def test_incomplete_inline_example_can_be_edited_into_a_renderable_module(
     root.locator("[data-live-activate]").click()
     expect(root.locator(".cm-content")).to_be_attached(timeout=15_000)
     expect(root.locator("[data-live-python-summary]")).to_have_text(
-        "No preview value was found. End the module with HTML, a CitryElement, or a CitryRender.",
+        "No preview value was found. End the module with HTML, a CitryElement, a ComponentLike, or a CitryRender.",
         timeout=120_000,
     )
 

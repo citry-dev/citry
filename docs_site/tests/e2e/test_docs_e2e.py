@@ -801,7 +801,7 @@ def test_tabs_ui_preview_is_keyboard_operable_at_a_narrow_viewport(
     frame_element.wait_for()
     assert demo.locator(".citry-ui-demo__source").get_attribute("open") is None
     assert tabs.count() == 3
-    assert demo.locator("[data-live-activate]").count() == 0
+    assert demo.locator("[data-live-activate]").count() == 1
 
     tabs.first.focus()
     page.keyboard.press("ArrowRight")

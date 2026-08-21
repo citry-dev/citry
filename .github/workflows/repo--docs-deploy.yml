@@ -17,6 +17,8 @@ on:
       - "main"
     paths:
       - "docs_site/**"
+      # Tests affect the docs gate, not the assembled production artifact.
+      - "!docs_site/tests/**"
       - "CHANGELOG.md"
       - "CODE_OF_CONDUCT.md"
       - "LICENSE"
