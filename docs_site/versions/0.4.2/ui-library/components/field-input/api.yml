@@ -1,0 +1,216 @@
+schema_version: 1
+family: field-input
+
+components:
+  - CField
+  - CInput
+
+inputs:
+  - id: cfield-server-inputs
+    component: CField
+    channel: server
+    column_widths: [fit, 12rem, 8rem, auto]
+    entries:
+      - {id: control-id, name: control_id, type: 'str | None', default: {kind: generated}, effect: 'Sets the control ID and related label, description, and error IDs.'}
+      - {id: required, name: required, type: bool, default: {kind: literal, value: false}, effect: Supplies required state to a supporting control; an unsupported true value raises after server control registration.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets local disabled state; an enclosing disabled `CForm` always wins.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: derived, display: Inherits `CForm`.}, effect: Supplies read-only state to a supporting control; an unsupported true value raises after server control registration.}
+      - {id: invalid, name: invalid, type: bool, default: {kind: literal, value: false}, effect: Supplies application-owned invalid state.}
+      - id: orientation
+        name: orientation
+        type: {display: '"vertical" | "horizontal"', interfaces: [CFieldOrientation]}
+        default: {kind: literal, value: vertical}
+        effect: Selects label and control layout.
+      - id: density
+        name: density
+        type: {display: '"default" | "comfortable" | "compact"', interfaces: [CFieldDensity]}
+        default: {kind: literal, value: default}
+        effect: Selects spacing.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds Field-root classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds Field-root inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed attributes to the Field root; prefer the top-level inputs for class and style.}
+
+  - id: cfield-client-inputs
+    component: CField
+    channel: client
+    column_widths: [fit, 12rem, 12rem, auto]
+    entries:
+      - {id: required, name: required, type: boolean, omitted: Uses the server input., effect: Controls required state for supporting controls; an unsupported true value resolves to false and reports once.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls local disabled state; an enclosing disabled `CForm` always wins.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses the server input or reactive Form value., effect: Controls read-only state for supporting controls; an unsupported true value resolves to false and reports once.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses the server input., effect: Controls application invalid state; native invalid state still combines with it.}
+      - id: orientation
+        name: orientation
+        type: {display: '"vertical" | "horizontal"', interfaces: [CFieldOrientation]}
+        omitted: Uses the server input.
+        effect: Controls label and control layout.
+      - id: density
+        name: density
+        type: {display: '"default" | "comfortable" | "compact"', interfaces: [CFieldDensity]}
+        omitted: Uses the server input.
+        effect: Controls spacing.
+
+  - id: cinput-server-inputs
+    component: CInput
+    channel: server
+    column_widths: [fit, 12rem, 9rem, auto]
+    entries:
+      - {id: name, name: name, type: 'non-empty str | None', default: {kind: literal, value: null}, effect: Sets the native submitted name; an unnamed Input contributes no `FormData` entry.}
+      - id: type
+        name: type
+        type: {display: '"text" | "email" | "password" | "search" | "tel" | "url"', interfaces: [CInputType]}
+        default: {kind: literal, value: text}
+        effect: Sets the native input type.
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Uses the Field control ID when composed, otherwise sets or generates native identity.'}
+      - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the server initial and default value.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets native required state when standalone; omit it inside `CField`, which owns the state.'}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets local native disabled state when standalone; omit it inside `CField`, and note that disabled `CForm` always wins.'}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: derived, display: Inherits `CForm` when standalone.}, effect: Sets native read-only state when standalone; omit it inside `CField`.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets application invalid state when standalone; omit it inside `CField`.}
+      - {id: autocomplete, name: autocomplete, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native autocomplete hint.}
+      - {id: inputmode, name: inputmode, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the virtual keyboard hint.}
+      - {id: placeholder, name: placeholder, type: 'str | None', default: {kind: literal, value: null}, effect: Sets placeholder text; do not use it instead of a label.}
+      - id: variant
+        name: variant
+        type: {display: '"outline" | "filled" | "plain"', interfaces: [CInputVariant]}
+        default: {kind: literal, value: outline}
+        effect: Selects presentation.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CInputSize]}
+        default: {kind: literal, value: md}
+        effect: Selects visual height, padding, and text size; use `attrs["size"]` for native character width.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native Input classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native Input inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native constraints, ARIA, Alpine, and data attributes; prefer the top-level inputs for class and style.'}
+
+  - id: cinput-client-inputs
+    component: CInput
+    channel: client
+    column_widths: [fit, 12rem, 12rem, auto]
+    entries:
+      - {id: value, name: value, type: string, omitted: Continues uncontrolled from the current value., effect: Controls the native value while supplied.}
+      - {id: required, name: required, type: boolean, omitted: Uses the server value., effect: Controls native required state only when standalone; `CField` owns it when composed.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Controls local disabled state only when standalone; disabled `CForm` always wins and `CField` owns it when composed.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses the server or reactive Form value., effect: Controls native read-only state only when standalone; `CField` owns it when composed.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses the server value., effect: Controls application invalid state only when standalone; `CField` owns it when composed.}
+      - id: variant
+        name: variant
+        type: {display: '"outline" | "filled" | "plain"', interfaces: [CInputVariant]}
+        omitted: Uses the server input.
+        effect: Controls presentation.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CInputSize]}
+        omitted: Uses the server input.
+        effect: Controls geometry.
+
+slots:
+  - id: cfield-slots
+    component: CField
+    entries:
+      - {id: label, name: label, required: true, data: {display: '{}', interfaces: [CFieldLabelSlotData]}, fallback: none}
+      - id: default
+        name: default
+        required: true
+        data:
+          display: '{control_attrs: dict[str, object], control_id: str, label_id: str, description_id: str, error_id: str, is_required: bool, is_disabled: bool, is_readonly: bool, is_invalid: bool}'
+          interfaces: [CFieldDefaultSlotData]
+        fallback: none
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CFieldDescriptionSlotData]}, fallback: omitted}
+      - {id: error, name: error, required: false, data: {display: '{}', interfaces: [CFieldErrorSlotData]}, fallback: Mounted empty live region.}
+
+events: []
+methods: []
+
+css:
+  - id: cfield-css-variables
+    component: CField
+    entries:
+      - {id: cui-field-gap, name: --cui-field-gap, type: length, purpose: Gap between Field regions., default: '0.5rem, density adjusted'}
+      - {id: cui-field-label-color, name: --cui-field-label-color, type: color, purpose: Label color., default: CanvasText}
+      - {id: cui-field-label-weight, name: --cui-field-label-weight, type: 'number | keyword', purpose: Label font weight., default: '600'}
+      - {id: cui-field-description-color, name: --cui-field-description-color, type: color, purpose: Description color., default: Muted CanvasText mix.}
+      - {id: cui-field-error-color, name: --cui-field-error-color, type: color, purpose: Error color., default: Scheme-aware negative color.}
+      - {id: cui-field-required-color, name: --cui-field-required-color, type: color, purpose: Required-indicator color., default: Effective Field error color.}
+  - id: cinput-css-variables
+    component: CInput
+    entries:
+      - {id: cui-input-background, name: --cui-input-background, type: color, purpose: Control background., default: 'Canvas, variant adjusted'}
+      - {id: cui-input-foreground, name: --cui-input-foreground, type: color, purpose: Input text., default: CanvasText}
+      - {id: cui-input-border-color, name: --cui-input-border-color, type: color, purpose: Resting border., default: 'Subtle CanvasText mix, variant adjusted'}
+      - {id: cui-input-hover-border-color, name: --cui-input-hover-border-color, type: color, purpose: Hover border., default: Stronger CanvasText mix.}
+      - {id: cui-input-focus-color, name: --cui-input-focus-color, type: color, purpose: Focus outline and border., default: Highlight}
+      - {id: cui-input-invalid-border-color, name: --cui-input-invalid-border-color, type: color, purpose: Invalid border., default: Scheme-aware negative color.}
+      - {id: cui-input-disabled-background, name: --cui-input-disabled-background, type: color, purpose: Disabled background., default: Subtle CanvasText/Canvas mix.}
+      - {id: cui-input-placeholder-color, name: --cui-input-placeholder-color, type: color, purpose: Placeholder text color., default: Muted CanvasText mix.}
+      - {id: cui-input-radius, name: --cui-input-radius, type: length, purpose: Corner radius., default: '0.5rem; 0 for plain'}
+      - {id: cui-input-height, name: --cui-input-height, type: length, purpose: Minimum control height., default: Size-derived length.}
+      - {id: cui-input-inline-padding, name: --cui-input-inline-padding, type: length, purpose: Logical inline padding., default: Size-derived length.}
+      - {id: cui-input-block-padding, name: --cui-input-block-padding, type: length, purpose: Logical block padding., default: Size-derived length.}
+      - {id: cui-input-font-size, name: --cui-input-font-size, type: length, purpose: Input text size., default: Size-derived length.}
+
+attributes:
+  - id: cfield
+    component: CField
+    entries:
+      - {id: data-required, name: data-required, element: Field root, type: 'present | absent', meaning: Mirrors effective required state.}
+      - {id: data-disabled, name: data-disabled, element: Field root, type: 'present | absent', meaning: Mirrors effective disabled state.}
+      - {id: data-readonly, name: data-readonly, element: Field root, type: 'present | absent', meaning: Mirrors effective read-only state.}
+      - {id: data-invalid, name: data-invalid, element: Field root, type: 'present | absent', meaning: Mirrors effective invalid state.}
+      - {id: data-orientation, name: data-orientation, element: Field root, type: '"vertical" | "horizontal"', meaning: Mirrors effective orientation.}
+      - {id: data-density, name: data-density, element: Field root, type: '"default" | "comfortable" | "compact"', meaning: Mirrors effective density.}
+  - id: cinput
+    component: CInput
+    entries:
+      - {id: data-required, name: data-required, element: Native Input, type: 'present | absent', meaning: Mirrors effective required state.}
+      - {id: data-disabled, name: data-disabled, element: Native Input, type: 'present | absent', meaning: Mirrors effective disabled state.}
+      - {id: data-readonly, name: data-readonly, element: Native Input, type: 'present | absent', meaning: Mirrors effective read-only state.}
+      - {id: data-invalid, name: data-invalid, element: Native Input, type: 'present | absent', meaning: Mirrors combined application and native invalid state.}
+      - {id: data-variant, name: data-variant, element: Native Input, type: '"outline" | "filled" | "plain"', meaning: Mirrors effective presentation variant.}
+      - {id: data-size, name: data-size, element: Native Input, type: '"sm" | "md" | "lg"', meaning: Mirrors effective visual size.}
+
+selectors:
+  - id: cfield
+    component: CField
+    entries:
+      - {id: field, selector: '[data-citry-ui-part="field"]', element: Field root, purpose: Root and `attrs` destination.}
+      - {id: label, selector: '[data-citry-ui-part="label"]', element: Native label, purpose: Generated relationship owner.}
+      - {id: required-indicator, selector: '[data-citry-ui-part="required-indicator"]', element: Required marker, purpose: Visual required-state hook.}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Control wrapper, purpose: Control-slot hook.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Description region, purpose: Optional description hook.}
+      - {id: error, selector: '[data-citry-ui-part="error"]', element: Error region, purpose: Stable validation-message live region.}
+  - id: cinput
+    component: CInput
+    entries:
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native Input, purpose: Root and `attrs` destination.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-cfield-orientation, name: CFieldOrientation, definition: 'Literal["vertical", "horizontal"]'}
+      - {id: input-type-aliases-cfield-density, name: CFieldDensity, definition: 'Literal["default", "comfortable", "compact"]'}
+      - {id: input-type-aliases-cinput-type, name: CInputType, definition: 'Literal["text", "email", "password", "search", "tel", "url"]'}
+      - {id: input-type-aliases-cinput-variant, name: CInputVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: input-type-aliases-cinput-size, name: CInputSize, definition: 'Literal["sm", "md", "lg"]'}
+  - id: cfield-default-slot-data
+    kind: record
+    name: CFieldDefaultSlotData
+    entries:
+      - {id: control-attrs, name: control_attrs, type: 'dict[str, object]', meaning: Attributes for the slotted native control.}
+      - {id: control-id, name: control_id, type: str, meaning: Generated or supplied control ID.}
+      - {id: label-id, name: label_id, type: str, meaning: Generated label ID.}
+      - {id: description-id, name: description_id, type: str, meaning: Generated description ID.}
+      - {id: error-id, name: error_id, type: str, meaning: Generated error-region ID.}
+      - {id: is-required, name: is_required, type: bool, meaning: Effective server required state.}
+      - {id: is-disabled, name: is_disabled, type: bool, meaning: Effective server disabled state.}
+      - {id: is-readonly, name: is_readonly, type: bool, meaning: Effective server read-only state.}
+      - {id: is-invalid, name: is_invalid, type: bool, meaning: Effective server invalid state.}
+  - {id: cfield-label-slot-data, kind: record, name: CFieldLabelSlotData, entries: []}
+  - {id: cfield-description-slot-data, kind: record, name: CFieldDescriptionSlotData, entries: []}
+  - {id: cfield-error-slot-data, kind: record, name: CFieldErrorSlotData, entries: []}
+
+translations: []

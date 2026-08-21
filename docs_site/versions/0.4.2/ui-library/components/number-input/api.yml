@@ -1,0 +1,182 @@
+schema_version: 1
+family: number-input
+
+components:
+  - CNumberInput
+
+inputs:
+  - id: cnumber-input-server-inputs
+    component: CNumberInput
+    channel: server
+    column_widths: [fit, 17rem, 12rem, auto]
+    entries:
+      - {id: value, name: value, type: {display: 'CNumberInputExact | None', interfaces: [CNumberInputExact]}, default: {kind: literal, value: null}, effect: Sets the initial exact canonical decimal or empty value.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the progressive native Form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the visible fallback and enhanced transport with an external Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the public editor ID and bases the private transport ID.}
+      - {id: min, name: min, type: {display: 'CNumberInputExact | None', interfaces: [CNumberInputExact]}, default: {kind: literal, value: null}, effect: Sets the inclusive exact minimum and step-grid base.}
+      - {id: max, name: max, type: {display: 'CNumberInputExact | None', interfaces: [CNumberInputExact]}, default: {kind: literal, value: null}, effect: Sets the inclusive exact maximum.}
+      - {id: step, name: step, type: {display: CNumberInputExact, interfaces: [CNumberInputExact]}, default: {kind: literal, value: 1}, effect: Sets a positive exact step.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables empty-value validity outside Field; Field owns it inside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks focus mutation and Form submission outside Field; Form disabledness also wins.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Keeps a focusable submitted value while blocking mutation.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds application invalid state to native component validity.}
+      - {id: show-controls, name: show_controls, type: bool, default: {kind: literal, value: true}, effect: Shows or hides adjacent decrement and increment Buttons.}
+      - {id: wheel, name: wheel, type: bool, default: {kind: literal, value: false}, effect: Opts a focused editor into wheel and trackpad stepping.}
+      - {id: commit-behavior, name: commit_behavior, type: {display: '"validate" | "clamp"', interfaces: [CNumberInputCommitBehavior]}, default: {kind: literal, value: validate}, effect: Leaves an invalid committed draft visible or clamps a parse-valid out-of-range value.}
+      - {id: placeholder, name: placeholder, type: 'str | None', default: {kind: literal, value: null}, effect: Sets ordinary editor placeholder text.}
+      - {id: autocomplete, name: autocomplete, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native autocomplete hint.}
+      - {id: increment-label, name: increment_label, type: str, default: {kind: literal, value: Increase value}, effect: Overrides the catalog-backed increment Button accessible name.}
+      - {id: decrement-label, name: decrement_label, type: str, default: {kind: literal, value: Decrease value}, effect: Overrides the catalog-backed decrement Button accessible name.}
+      - {id: required-message, name: required_message, type: str, default: {kind: literal, value: Enter a number.}, effect: Overrides catalog-backed empty required validity.}
+      - {id: invalid-message, name: invalid_message, type: str, default: {kind: literal, value: Enter a valid number.}, effect: Overrides catalog-backed parse validity.}
+      - {id: minimum-message, name: minimum_message, type: "str containing '{min}'", default: {kind: literal, value: 'Enter a value of at least {min}.'}, effect: Overrides catalog-backed minimum validity.}
+      - {id: maximum-message, name: maximum_message, type: "str containing '{max}'", default: {kind: literal, value: 'Enter a value of at most {max}.'}, effect: Overrides catalog-backed maximum validity.}
+      - {id: step-message, name: step_message, type: "str containing '{step}'", default: {kind: literal, value: 'Enter a value in increments of {step}.'}, effect: Overrides catalog-backed step-grid validity.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CNumberInputVariant]}, default: {kind: literal, value: outline}, effect: Selects visual treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CNumberInputSize]}, default: {kind: literal, value: md}, effect: Selects coordinated editor and control sizing.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the documented root and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the documented root and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned state or runtime identity.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed editor attributes including accessible naming and native event observers.}
+
+  - id: cnumber-input-client-inputs
+    component: CNumberInput
+    channel: client
+    column_widths: [fit, 17rem, 18rem, auto]
+    entries:
+      - {id: value, name: value, type: 'canonical string | null', omitted: Releases control to the last uncontrolled committed value., effect: Controls the exact canonical value while supplied.}
+      - {id: min, name: min, type: 'canonical string | null', omitted: Uses the server minimum., effect: Replaces or removes the inclusive minimum.}
+      - {id: max, name: max, type: 'canonical string | null', omitted: Uses the server maximum., effect: Replaces or removes the inclusive maximum.}
+      - {id: step, name: step, type: positive canonical string, omitted: Uses the server step., effect: Replaces the exact step grid.}
+      - {id: required, name: required, type: boolean, omitted: Uses server or Field state., effect: Controls standalone required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or owner state., effect: Controls mutation and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or owner state., effect: Controls focusable nonmutable state.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server or Field state., effect: Controls application invalid state.}
+      - {id: show-controls, name: showControls, type: boolean, omitted: Uses the server input., effect: Controls adjacent Button visibility.}
+      - {id: wheel, name: wheel, type: boolean, omitted: Uses the server input., effect: Controls focused wheel stepping.}
+      - {id: commit-behavior, name: commitBehavior, type: {display: '"validate" | "clamp"', interfaces: [CNumberInputCommitBehavior]}, omitted: Uses the server input., effect: Controls out-of-range commit policy.}
+      - {id: placeholder, name: placeholder, type: 'string | null', omitted: Uses the server input., effect: Controls visible placeholder text.}
+      - {id: autocomplete, name: autocomplete, type: 'string | null', omitted: Uses the server input., effect: Controls the autocomplete hint.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CNumberInputVariant]}, omitted: Uses the server input., effect: Controls visual treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CNumberInputSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic value callback., effect: Receives successful commit and reset requests.}
+      - {id: on-input-value-change, name: onInputValueChange, type: function, omitted: No semantic draft callback., effect: Receives literal draft edits and parse status.}
+
+slots: []
+
+events:
+  - id: cnumber-input-events
+    component: CNumberInput
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: {display: '(value: string | null, detail: CNumberInputValueChangeDetail) => void', interfaces: [CNumberInputValueChangeDetail]}
+        trigger: A valid blur, Enter, step, bound jump, wheel step, or reset requests a changed canonical value.
+        detail: {display: '{value, previousValue, inputValue, controlled, source, sourceEvent}', interfaces: [CNumberInputValueChangeDetail]}
+        behavior: Uncontrolled state and canonical Form transport commit before notification; controlled state is request-only.
+      - id: on-input-value-change
+        name: onInputValueChange
+        signature: {display: '(inputValue: string, detail: CNumberInputInputValueChangeDetail) => void', interfaces: [CNumberInputInputValueChangeDetail]}
+        trigger: A native input or completed IME composition changes the literal editor draft.
+        detail: {display: '{inputValue, previousInputValue, status, controlled, composing, sourceEvent}', interfaces: [CNumberInputInputValueChangeDetail]}
+        behavior: Reports the draft without committing or reformatting it; native input remains observable through input_attrs.
+
+methods: []
+
+css:
+  - id: cnumber-input-css-variables
+    component: CNumberInput
+    entries:
+      - {id: background, name: --cui-number-input-background, type: color, purpose: Control background., default: Canvas}
+      - {id: foreground, name: --cui-number-input-foreground, type: color, purpose: Editor and icon foreground., default: CanvasText}
+      - {id: border-color, name: --cui-number-input-border-color, type: color, purpose: Control and step-divider border., default: Mixed CanvasText.}
+      - {id: focus-color, name: --cui-number-input-focus-color, type: color, purpose: Focus border and ring., default: Highlight}
+      - {id: invalid-border-color, name: --cui-number-input-invalid-border-color, type: color, purpose: Invalid border., default: Theme error.}
+      - {id: radius, name: --cui-number-input-radius, type: length, purpose: Control corner radius., default: 0.5rem}
+      - {id: height, name: --cui-number-input-height, type: length, purpose: Editor and Button height., default: 2.5rem}
+      - {id: inline-padding, name: --cui-number-input-inline-padding, type: length, purpose: Editor inline inset., default: 0.75rem}
+      - {id: control-size, name: --cui-number-input-control-size, type: length, purpose: Step Button inline size., default: 2.5rem}
+
+attributes:
+  - id: cnumber-input-root-attributes
+    component: CNumberInput
+    entries:
+      - {id: data-empty, name: data-empty, element: Root div, type: present | absent, meaning: Mirrors an empty canonical value.}
+      - {id: data-required, name: data-required, element: Root div, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root div, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root div, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root div, type: present | absent, meaning: Mirrors application or revealed component invalidity.}
+      - {id: data-variant, name: data-variant, element: Root div, type: {display: CNumberInputVariant, interfaces: [CNumberInputVariant]}, meaning: Mirrors visual treatment.}
+      - {id: data-size, name: data-size, element: Root div, type: {display: CNumberInputSize, interfaces: [CNumberInputSize]}, meaning: Mirrors coordinated sizing.}
+  - id: cnumber-input-editor-attributes
+    component: CNumberInput
+    entries:
+      - {id: role, name: role, element: Editor input, type: '"spinbutton"', meaning: Exposes numeric stepping semantics while preserving text editing.}
+      - {id: inputmode, name: inputmode, element: Editor input, type: '"decimal"', meaning: Requests a decimal-capable virtual keyboard.}
+      - {id: aria-valuenow, name: aria-valuenow, element: Editor input, type: canonical decimal | absent, meaning: Exposes a valid committed canonical value.}
+      - {id: aria-valuetext, name: aria-valuetext, element: Editor input, type: localized string | absent, meaning: Exposes the locale-formatted committed value.}
+      - {id: aria-valuemin, name: aria-valuemin, element: Editor input, type: canonical decimal | absent, meaning: Exposes the inclusive minimum.}
+      - {id: aria-valuemax, name: aria-valuemax, element: Editor input, type: canonical decimal | absent, meaning: Exposes the inclusive maximum.}
+      - {id: aria-invalid, name: aria-invalid, element: Editor input, type: '"true" | absent', meaning: Mirrors application or revealed native validity.}
+  - id: cnumber-input-control-attributes
+    component: CNumberInput
+    entries:
+      - {id: button-type, name: type, element: Step Buttons, type: '"button"', meaning: Prevents accidental Form submission.}
+      - {id: button-tabindex, name: tabindex, element: Step Buttons, type: '"-1"', meaning: Keeps the editor as the sole sequential Tab stop.}
+      - {id: button-aria-label, name: aria-label, element: Step Buttons, type: localized string, meaning: Names increment or decrement.}
+
+selectors:
+  - id: cnumber-input-selectors
+    component: CNumberInput
+    entries:
+      - {id: number-input, selector: '[data-citry-ui-part="number-input"]', element: Root div, purpose: 'State reflections and class_, style, and attrs destination.'}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Control div, purpose: Contains the editor and optional step Buttons.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Text input, purpose: Public focus target and input_attrs destination.}
+      - {id: decrement, selector: '[data-citry-ui-part="decrement"]', element: Button, purpose: Requests one exact decrement.}
+      - {id: increment, selector: '[data-citry-ui-part="increment"]', element: Button, purpose: Requests one exact increment.}
+
+interfaces:
+  - id: cnumber-input-aliases
+    kind: aliases
+    entries:
+      - {id: exact, name: CNumberInputExact, definition: 'int | Decimal | str'}
+      - {id: commit-behavior, name: CNumberInputCommitBehavior, definition: 'Literal["validate", "clamp"]'}
+      - {id: variant, name: CNumberInputVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CNumberInputSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: parse-status, name: CNumberInputParseStatus, definition: 'Literal["empty", "incomplete", "invalid", "valid"]'}
+      - {id: change-source, name: CNumberInputChangeSource, definition: 'Literal["blur", "enter", "increment", "decrement", "page", "home", "end", "wheel", "reset"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - id: cnumber-input-value-change-detail
+    kind: record
+    name: CNumberInputValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'string | null', meaning: Requested exact canonical value.}
+      - {id: previous-value, name: previousValue, type: 'string | null', meaning: Effective canonical value before the request.}
+      - {id: input-value, name: inputValue, type: string, meaning: Visible formatted text associated with the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns canonical state.}
+      - {id: source, name: source, type: {display: CNumberInputChangeSource, interfaces: [CNumberInputChangeSource]}, meaning: Interaction or reset cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native interaction event when one exists.}
+  - id: cnumber-input-input-value-change-detail
+    kind: record
+    name: CNumberInputInputValueChangeDetail
+    entries:
+      - {id: input-value, name: inputValue, type: string, meaning: Current literal draft.}
+      - {id: previous-input-value, name: previousInputValue, type: string, meaning: Literal draft before this native input.}
+      - {id: status, name: status, type: {display: CNumberInputParseStatus, interfaces: [CNumberInputParseStatus]}, meaning: Locale-aware parse state.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns canonical state.}
+      - {id: composing, name: composing, type: boolean, meaning: Whether an input method composition remains active.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native input or composition event.}
+
+translations:
+  - id: cnumber-input-translations
+    component: CNumberInput
+    entries:
+      - {id: decrement, key: citry-ui-number-input-decrement, purpose: Names the decrement Button., variables: None, override: '`decrement_label`', updates: '$c-tr updates the stable aria-label.'}
+      - {id: increment, key: citry-ui-number-input-increment, purpose: Names the increment Button., variables: None, override: '`increment_label`', updates: '$c-tr updates the stable aria-label.'}
+      - {id: required, key: citry-ui-number-input-required, purpose: Supplies empty required validity., variables: None, override: '`required_message`', updates: 'Active `i18n.bind()` custom-validity destination.'}
+      - {id: invalid, key: citry-ui-number-input-invalid, purpose: Supplies malformed or incomplete draft validity., variables: None, override: '`invalid_message`', updates: 'Active `i18n.bind()` custom-validity destination.'}
+      - {id: minimum, key: citry-ui-number-input-minimum, purpose: Supplies inclusive-minimum validity., variables: 'min: str', override: '`minimum_message`', updates: '`i18n.bind()` with locale-formatted min.'}
+      - {id: maximum, key: citry-ui-number-input-maximum, purpose: Supplies inclusive-maximum validity., variables: 'max: str', override: '`maximum_message`', updates: '`i18n.bind()` with locale-formatted max.'}
+      - {id: step, key: citry-ui-number-input-step, purpose: Supplies exact step-grid validity., variables: 'step: str', override: '`step_message`', updates: '`i18n.bind()` with locale-formatted step.'}

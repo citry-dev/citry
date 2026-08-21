@@ -1,0 +1,364 @@
+<!--citry:g1:036b861f:0:i:1:s--><!doctype html><html data-cid-cipfhvk9m lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Control Splitter sizes</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CSplitter_bff85e>@layer citry-ui.theme{:where(.cui-splitter){--_cui-splitter-min-block-size:var(--cui-splitter-min-block-size,12rem);--_cui-splitter-radius:var(--cui-splitter-radius,.75rem);--_cui-splitter-background:var(--cui-splitter-background,transparent);--_cui-splitter-border-color:var(--cui-splitter-border-color,light-dark(#d0d5dd,#535862));--_cui-splitter-handle-size:var(--cui-splitter-handle-size,.75rem);--_cui-splitter-handle-color:var(--cui-splitter-handle-color,light-dark(#98a2b3,#717680));--_cui-splitter-handle-active-color:var(--cui-splitter-handle-active-color,light-dark(#175cd3,#84adff));--_cui-splitter-focus-color:var(--cui-splitter-focus-color,Highlight);box-sizing:border-box;min-inline-size:0;max-inline-size:100%;min-block-size:var(--_cui-splitter-min-block-size);border-radius:var(--_cui-splitter-radius);background:var(--_cui-splitter-background);color:canvastext;border:1px solid #0000;flex-direction:row;display:flex;overflow:hidden}:where(.cui-splitter[data-orientation=vertical]){flex-direction:column}:where(.cui-splitter[data-variant=soft]){--_cui-splitter-background:var(--cui-splitter-background,color-mix(in srgb, CanvasText 5%, Canvas))}:where(.cui-splitter[data-variant=outline]){border-color:var(--_cui-splitter-border-color)}:where(.cui-splitter__panel){box-sizing:border-box;flex:none;min-block-size:0;min-inline-size:0;padding:.75rem;overflow:auto}:where(.cui-splitter__handle){z-index:1;box-sizing:border-box;flex:0 0 var(--_cui-splitter-handle-size);min-inline-size:var(--_cui-splitter-handle-size);touch-action:none;cursor:col-resize;outline:none;justify-content:center;align-items:center;min-block-size:2.75rem;display:flex;position:relative}:where(.cui-splitter[data-orientation=vertical] .cui-splitter__handle){min-inline-size:2.75rem;min-block-size:var(--_cui-splitter-handle-size);cursor:row-resize}:where(.cui-splitter__handle-line){background:var(--_cui-splitter-handle-color);block-size:100%;inline-size:2px}:where(.cui-splitter[data-orientation=vertical] .cui-splitter__handle-line){block-size:2px;inline-size:100%}:where(.cui-splitter__handle-grip){background:var(--_cui-splitter-handle-color);border-radius:999px;block-size:2rem;inline-size:.25rem;position:absolute}:where(.cui-splitter[data-orientation=vertical] .cui-splitter__handle-grip){block-size:.25rem;inline-size:2rem}:where(.cui-splitter__handle:hover:not([data-disabled]),.cui-splitter__handle[data-active]) .cui-splitter__handle-grip{background:var(--_cui-splitter-handle-active-color)}:where(.cui-splitter__handle:focus-visible){outline:3px solid var(--_cui-splitter-focus-color);outline-offset:-3px}:where(.cui-splitter__handle[data-disabled]){cursor:not-allowed;opacity:.55}:where(.cui-splitter[data-resizing]){user-select:none}:where(.cui-splitter[data-size=sm]){--_cui-splitter-handle-size:var(--cui-splitter-handle-size,.5rem)}:where(.cui-splitter[data-size=lg]){--_cui-splitter-handle-size:var(--cui-splitter-handle-size,1rem)}@media (prefers-reduced-motion:reduce){:where(.cui-splitter *){transition-duration:.001ms!important}}@media (forced-colors:active){:where(.cui-splitter__handle-line,.cui-splitter__handle-grip){background:canvastext}}@media print{:where(.cui-splitter){background:0 0;border-color:currentColor;min-block-size:0;overflow:visible}:where(.cui-splitter__panel){overflow:visible}:where(.cui-splitter__handle-grip){display:none}}}</style></head><body><main><!--citry:g1:036b861f:0:i:2:s--><section x-data="{ sizes: [25, 75], saved: '' }" data-cid=cipfhvk9n data-cid-cipfhvk9n data-citry-root><!--citry:g1:036b861f:0:i:3:s--><!--citry:g1:036b861f:0:i:4:s--><!--citry:g1:036b861f:0:r:1:s--><!--citry:g1:036b861f:0:r:2:s--><!--citry:g1:036b861f:0:i:5:s--><!--citry:g1:036b861f:0:i:5:e--><!--citry:g1:036b861f:0:i:6:s--><!--citry:g1:036b861f:0:i:6:e--><!--citry:g1:036b861f:0:r:2:e--><!--citry:g1:036b861f:0:r:1:e--><!--citry:g1:036b861f:0:i:4:e--><div class=cui-splitter data-cid=cipfhvk9o data-cid-cipfhvk9o data-citry-root data-citry-ui-part=splitter data-orientation=horizontal data-size=md data-variant=plain><div style="flex: 25 1 0px;" aria-label=Filters class=cui-splitter__panel data-citry-key=:filters data-citry-ui-part=panel data-index=0 data-max-size=100.0 data-min-size=10.0 data-panel-id=filters data-size-percent=25.0 id=cui-splitter-cipfhvk9o-panel-47e227677199 role=group><!--citry:g1:036b861f:0:r:3:s-->Filters<!--citry:g1:036b861f:0:r:3:e--></div><div aria-controls="cui-splitter-cipfhvk9o-panel-47e227677199 cui-splitter-cipfhvk9o-panel-c099142bc318" aria-label="Filters / Results" aria-orientation=vertical aria-valuemax=90.0 aria-valuemin=10.0 aria-valuenow=25.0 class=cui-splitter__handle data-citry-ui-part=handle data-handle-index=0 role=separator tabindex=0><span aria-hidden=true class=cui-splitter__handle-line data-citry-ui-part=handle-line></span><span aria-hidden=true class=cui-splitter__handle-grip data-citry-ui-part=handle-grip></span></div><div style="flex: 75 1 0px;" aria-label=Results class=cui-splitter__panel data-citry-key=:results data-citry-ui-part=panel data-index=1 data-max-size=100.0 data-min-size=10.0 data-panel-id=results data-size-percent=75.0 id=cui-splitter-cipfhvk9o-panel-c099142bc318 role=group><!--citry:g1:036b861f:0:r:4:s-->Results<!--citry:g1:036b861f:0:r:4:e--></div></div><!--citry:g1:036b861f:0:i:3:e--><output x-text="saved ? `Saved: ${saved}` : 'Resize to save the layout'"></output></section><!--citry:g1:036b861f:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ControlledSplitter_f41ce1","className":"ControlledSplitter"},{"classId":"CSplitter_bff85e","className":"CSplitter"},{"classId":"CInternalSplitterDeclarations_fb5367","className":"CInternalSplitterDeclarations"},{"classId":"CSplitterPanel_44198d","className":"CSplitterPanel"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhvk9o","invocationId":2,"parentRenderId":"cipfhvk9n"},{"childRenderId":"cipfhvk9q","invocationId":5,"parentRenderId":"cipfhvk9n"},{"childRenderId":"cipfhvk9r","invocationId":6,"parentRenderId":"cipfhvk9n"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvk9m","transparent":false},{"classId":"ControlledSplitter_f41ce1","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvk9n","transparent":false},{"classId":"CSplitter_bff85e","instanceId":3,"invocationId":2,"parentRenderId":"cipfhvk9n","renderId":"cipfhvk9o","transparent":false},{"classId":"CInternalSplitterDeclarations_fb5367","instanceId":4,"invocationId":3,"parentRenderId":"cipfhvk9o","renderId":"cipfhvk9p","transparent":true},{"classId":"CSplitterPanel_44198d","instanceId":5,"invocationId":5,"parentRenderId":"cipfhvk9n","renderId":"cipfhvk9q","transparent":false},{"classId":"CSplitterPanel_44198d","instanceId":6,"invocationId":6,"parentRenderId":"cipfhvk9n","renderId":"cipfhvk9r","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ControlledSplitter_f41ce1","ownerRenderId":"cipfhvk9n","policy":"template","receiverClassId":"CSplitter_bff85e","receiverRenderId":"cipfhvk9o","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CSplitter_bff85e","ownerRenderId":"cipfhvk9o","policy":"template","receiverClassId":"CInternalSplitterDeclarations_fb5367","receiverRenderId":"cipfhvk9p","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"ControlledSplitter_f41ce1","ownerRenderId":"cipfhvk9n","policy":"template","receiverClassId":"CSplitterPanel_44198d","receiverRenderId":"cipfhvk9q","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":6,"kind":"implicit","locationId":null,"ownerClassId":"ControlledSplitter_f41ce1","ownerRenderId":"cipfhvk9n","policy":"template","receiverClassId":"CSplitterPanel_44198d","receiverRenderId":"cipfhvk9r","slotName":"default","sourceInvocationId":6}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{\n      sizes,\n      onResize: (next) => sizes = next,\n      onResizeEnd: (next) => saved = next.map(value => value.toFixed(0)).join(' / ')\n    }","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ControlledSplitter_f41ce1","sourceRenderId":"cipfhvk9n","tagName":"csplitter","targetClassId":"CSplitter_bff85e","targetRenderId":"cipfhvk9o"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CSplitter_bff85e","sourceRenderId":"cipfhvk9o","tagName":"cinternalsplitterdeclarations","targetClassId":"CInternalSplitterDeclarations_fb5367","targetRenderId":"cipfhvk9p"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"ControlledSplitter_f41ce1","sourceRenderId":"cipfhvk9n","tagName":"csplitterpanel","targetClassId":"CSplitterPanel_44198d","targetRenderId":"cipfhvk9q"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"ControlledSplitter_f41ce1","sourceRenderId":"cipfhvk9n","tagName":"csplitterpanel","targetClassId":"CSplitterPanel_44198d","targetRenderId":"cipfhvk9r"}],"slotRegions":[{"fillId":2,"ownerRenderId":"cipfhvk9o","parentRegionId":null,"receiverRenderId":"cipfhvk9p","regionId":1,"resultOwnerRenderId":"cipfhvk9o","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvk9p"},{"fillId":1,"ownerRenderId":"cipfhvk9n","parentRegionId":1,"receiverRenderId":"cipfhvk9o","regionId":2,"resultOwnerRenderId":"cipfhvk9n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvk9o"},{"fillId":5,"ownerRenderId":"cipfhvk9n","parentRegionId":null,"receiverRenderId":"cipfhvk9q","regionId":3,"resultOwnerRenderId":"cipfhvk9n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvk9q"},{"fillId":6,"ownerRenderId":"cipfhvk9n","parentRegionId":null,"receiverRenderId":"cipfhvk9r","regionId":4,"resultOwnerRenderId":"cipfhvk9n","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvk9r"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"036b861f9d2d6a0317b0c20e16b1222a11072209d556c51e23527614371fa7a5"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTcGxpdHRlcl9iZmY4NWUuYTU2MzdhZTk3OWVjLmpz", "L2NpdHJ5L2NhY2hlL0NTcGxpdHRlcl9iZmY4NWUuMDk5YWNmNDU1MDc0MDgzNjQzNzgxM2U2NzQwOWQ3N2IuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NTcGxpdHRlcl9iZmY4NWUuNzcwOTVmZTA1ZTkyLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1NwbGl0dGVyX2JmZjg1ZQ==", "Y2lwZmh2azlv", "MDk5YWNmNDU1MDc0MDgzNjQzNzgxM2U2NzQwOWQ3N2I=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2azlt"]], "graph": "036b861f9d2d6a0317b0c20e16b1222a11072209d556c51e23527614371fa7a5", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CSplitter_bff85e", {
+  props: {
+    sizes: {}, orientation: {}, disabled: {}, keyboardStep: {}, variant: {}, size: {},
+    onResizeStart: {}, onResize: {}, onResizeEnd: {},
+  },
+  init: ({els, data, props, effect}) => {
+    const root = els[0];
+    const invalidEpisodes = new Set();
+    const panels = () => [...root.querySelectorAll(':scope > [data-citry-ui-part="panel"]')];
+    const handles = () => [...root.querySelectorAll(':scope > [data-citry-ui-part="handle"]')];
+    const initial = panels().map((panel) => Number(panel.dataset.sizePercent));
+    const panelIds = panels().map((panel) => panel.dataset.panelId);
+    const fingerprint = JSON.stringify(data.sizes ?? initial);
+    const prior = root.__citryUiSplitterRuntime;
+    let committed = prior && prior.serverFingerprint === fingerprint
+      && JSON.stringify(prior.panelIds) === JSON.stringify(panelIds)
+      ? [...prior.committed]
+      : [...initial];
+    let current = [...committed];
+    let controlled = false;
+    let callbackStart = null;
+    let callbackResize = null;
+    let callbackEnd = null;
+    let configuration = {
+      orientation: data.orientation,
+      disabled: data.disabled,
+      keyboardStep: data.keyboardStep,
+      variant: data.variant,
+      size: data.size,
+    };
+    let drag = null;
+    let task = null;
+    let generation = 0;
+    let structureValid = false;
+
+    const report = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CSplitter ${name} received invalid client value`, value);
+    };
+    const resolveBoolean = (name, fallback) => {
+      const supplied = props[name];
+      if (supplied === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof supplied === 'boolean') { invalidEpisodes.delete(name); return supplied; }
+      report(name, supplied); return fallback;
+    };
+    const resolveNumber = (name, fallback, minimum, maximum) => {
+      const supplied = props[name];
+      if (supplied === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof supplied === 'number' && Number.isFinite(supplied)
+          && supplied >= minimum && supplied <= maximum) {
+        invalidEpisodes.delete(name); return supplied;
+      }
+      report(name, supplied); return fallback;
+    };
+    const resolveChoice = (name, fallback, allowed) => {
+      const supplied = props[name];
+      if (supplied === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof supplied === 'string' && allowed.includes(supplied)) {
+        invalidEpisodes.delete(name); return supplied;
+      }
+      report(name, supplied); return fallback;
+    };
+    const effectivelyDisabled = () => {
+      if (configuration.disabled) return true;
+      for (let node = root.parentElement; node; node = node.parentElement) {
+        if (!(node instanceof HTMLFieldSetElement) || !node.disabled) continue;
+        const legend = [...node.children].find((child) => child instanceof HTMLLegendElement);
+        if (!(legend instanceof Element) || !legend.contains(root)) return true;
+      }
+      return false;
+    };
+    const limits = (index, sizes = current) => {
+      const entries = panels();
+      const before = entries[index];
+      const after = entries[index + 1];
+      const total = sizes[index] + sizes[index + 1];
+      return {
+        minimum: Math.max(Number(before.dataset.minSize), total - Number(after.dataset.maxSize)),
+        maximum: Math.min(Number(before.dataset.maxSize), total - Number(after.dataset.minSize)),
+      };
+    };
+    const validSizes = (value) => {
+      const entries = panels();
+      if (!Array.isArray(value) || value.length !== entries.length) return false;
+      if (!value.every((item) => typeof item === 'number' && Number.isFinite(item))) return false;
+      if (Math.abs(value.reduce((sum, item) => sum + item, 0) - 100) > 0.01) return false;
+      return value.every((item, index) => item >= Number(entries[index].dataset.minSize)
+        && item <= Number(entries[index].dataset.maxSize));
+    };
+    const invalidStructure = () => {
+      const children = [...root.children];
+      const entries = panels();
+      const bars = handles();
+      if (entries.length < 2 || bars.length !== entries.length - 1) return 'requires two or more panels';
+      if (children.length !== entries.length + bars.length) return 'contains an unknown direct child';
+      for (let index = 0; index < children.length; index += 1) {
+        const expected = index % 2 === 0 ? 'panel' : 'handle';
+        if (children[index].dataset.citryUiPart !== expected) return 'panel and handle order is invalid';
+      }
+      return null;
+    };
+    const sync = () => {
+      const problem = invalidStructure();
+      if (problem) {
+        structureValid = false;
+        report('structure', problem);
+        root.removeAttribute('data-citry-splitter-initialized');
+        handles().forEach((handle) => { handle.tabIndex = -1; handle.setAttribute('aria-disabled', 'true'); });
+        return;
+      }
+      invalidEpisodes.delete('structure');
+      structureValid = true;
+      let supplied = props.sizes;
+      if (supplied === null) supplied = undefined;
+      if (supplied === undefined) {
+        invalidEpisodes.delete('sizes');
+        if (controlled) committed = [...current];
+        controlled = false;
+        current = [...committed];
+      } else if (validSizes(supplied)) {
+        invalidEpisodes.delete('sizes');
+        controlled = true;
+        current = [...supplied];
+      } else {
+        report('sizes', supplied);
+        controlled = true;
+        current = [...committed];
+      }
+      const disabled = effectivelyDisabled();
+      if (disabled && drag) endDrag(drag.lastEvent, true);
+      root.dataset.orientation = configuration.orientation;
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.toggleAttribute('data-disabled', disabled);
+      panels().forEach((panel, index) => {
+        const value = Math.round(current[index] * 10000) / 10000;
+        panel.dataset.sizePercent = String(value);
+        panel.style.flex = `${value} 1 0px`;
+      });
+      handles().forEach((handle, index) => {
+        const range = limits(index);
+        handle.setAttribute(
+          'aria-orientation', configuration.orientation === 'horizontal' ? 'vertical' : 'horizontal'
+        );
+        handle.setAttribute('aria-valuemin', String(Math.round(range.minimum * 100) / 100));
+        handle.setAttribute('aria-valuemax', String(Math.round(range.maximum * 100) / 100));
+        handle.setAttribute('aria-valuenow', String(Math.round(current[index] * 100) / 100));
+        handle.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        handle.tabIndex = disabled ? -1 : 0;
+        handle.toggleAttribute('data-disabled', disabled);
+      });
+      root.__citryUiSplitterRuntime = {
+        serverFingerprint: fingerprint, panelIds, committed: [...committed],
+      };
+      root.setAttribute('data-citry-splitter-initialized', '');
+    };
+    const schedule = () => {
+      if (task !== null) return;
+      const scheduled = generation;
+      task = setTimeout(() => { task = null; if (scheduled === generation) sync(); }, 0);
+    };
+    const detail = (sizes, previous, index, source, event) => ({
+      sizes: [...sizes], previousSizes: [...previous], handleIndex: index,
+      controlled, source, sourceEvent: event,
+    });
+    const request = (next, previous, index, source, event) => {
+      callbackResize?.([...next], detail(next, previous, index, source, event));
+      if (!controlled) { committed = [...next]; current = [...next]; sync(); }
+      else schedule();
+    };
+    const handleForEvent = (event) => event.composedPath().find(
+      (node) => node instanceof Element && node.matches?.('[data-citry-ui-part="handle"]')
+        && node.closest('[data-citry-ui-part="splitter"]') === root
+    );
+    const coordinate = (event) => configuration.orientation === 'horizontal' ? event.clientX : event.clientY;
+    const onPointerDown = (event) => {
+      const handle = handleForEvent(event);
+      if (!(handle instanceof HTMLElement) || event.button !== 0
+          || effectivelyDisabled() || !structureValid) return;
+      event.preventDefault();
+      const index = Number(handle.dataset.handleIndex);
+      const startSizes = [...current];
+      drag = {
+        handle, index, pointerId: event.pointerId, start: coordinate(event),
+        startSizes, lastSizes: startSizes, lastEvent: event,
+      };
+      handle.setPointerCapture(event.pointerId);
+      handle.setAttribute('data-active', '');
+      root.setAttribute('data-resizing', '');
+      callbackStart?.(detail(startSizes, startSizes, index, 'pointer', event));
+    };
+    const onPointerMove = (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const rect = root.getBoundingClientRect();
+      const dimension = configuration.orientation === 'horizontal' ? rect.width : rect.height;
+      if (!(dimension > 0)) return;
+      let delta = (coordinate(event) - drag.start) / dimension * 100;
+      if (configuration.orientation === 'horizontal' && getComputedStyle(root).direction === 'rtl') delta *= -1;
+      const range = limits(drag.index, drag.startSizes);
+      const before = Math.max(range.minimum, Math.min(range.maximum, drag.startSizes[drag.index] + delta));
+      const next = [...drag.startSizes];
+      const total = drag.startSizes[drag.index] + drag.startSizes[drag.index + 1];
+      next[drag.index] = before;
+      next[drag.index + 1] = total - before;
+      drag.lastSizes = next;
+      drag.lastEvent = event;
+      request(next, drag.startSizes, drag.index, 'pointer', event);
+    };
+    function endDrag(event, cancelled = false) {
+      if (!drag) return;
+      const transaction = drag;
+      drag = null;
+      if (transaction.handle.hasPointerCapture?.(transaction.pointerId)) {
+        transaction.handle.releasePointerCapture(transaction.pointerId);
+      }
+      transaction.handle.removeAttribute('data-active');
+      root.removeAttribute('data-resizing');
+      const finalSizes = cancelled ? current : transaction.lastSizes;
+      callbackEnd?.([...finalSizes], detail(
+        finalSizes, transaction.startSizes, transaction.index, 'pointer', event ?? transaction.lastEvent
+      ));
+    }
+    const onPointerEnd = (event) => {
+      if (drag && event.pointerId === drag.pointerId) endDrag(event);
+    };
+    const onKeyDown = (event) => {
+      const handle = handleForEvent(event);
+      if (!(handle instanceof HTMLElement) || effectivelyDisabled() || !structureValid) return;
+      const index = Number(handle.dataset.handleIndex);
+      const range = limits(index);
+      let nextBefore = null;
+      const multiplier = event.shiftKey ? 4 : 1;
+      const amount = configuration.keyboardStep * multiplier;
+      if (event.key === 'Home') nextBefore = range.minimum;
+      else if (event.key === 'End') nextBefore = range.maximum;
+      else if (configuration.orientation === 'horizontal' && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        const physical = event.key === 'ArrowRight' ? amount : -amount;
+        nextBefore = current[index] + (getComputedStyle(root).direction === 'rtl' ? -physical : physical);
+      } else if (configuration.orientation === 'vertical' && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+        nextBefore = current[index] + (event.key === 'ArrowDown' ? amount : -amount);
+      }
+      if (nextBefore === null) return;
+      event.preventDefault();
+      nextBefore = Math.max(range.minimum, Math.min(range.maximum, nextBefore));
+      if (Math.abs(nextBefore - current[index]) < 0.0001) return;
+      const previous = [...current];
+      const total = current[index] + current[index + 1];
+      const next = [...current];
+      next[index] = nextBefore;
+      next[index + 1] = total - nextBefore;
+      callbackStart?.(detail(previous, previous, index, 'keyboard', event));
+      request(next, previous, index, 'keyboard', event);
+      callbackEnd?.([...next], detail(next, previous, index, 'keyboard', event));
+    };
+    root.addEventListener('pointerdown', onPointerDown);
+    root.addEventListener('pointermove', onPointerMove);
+    root.addEventListener('pointerup', onPointerEnd);
+    root.addEventListener('pointercancel', onPointerEnd);
+    root.addEventListener('keydown', onKeyDown);
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, {childList: true});
+    const fieldsets = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (!(ancestor instanceof HTMLFieldSetElement)) continue;
+      const item = new MutationObserver(schedule);
+      item.observe(ancestor, {childList: true, attributes: true, attributeFilter: ['disabled']});
+      fieldsets.push(item);
+    }
+    const stop = effect(() => {
+      callbackStart = typeof props.onResizeStart === 'function' ? props.onResizeStart : null;
+      callbackResize = typeof props.onResize === 'function' ? props.onResize : null;
+      callbackEnd = typeof props.onResizeEnd === 'function' ? props.onResizeEnd : null;
+      configuration = {
+        orientation: resolveChoice('orientation', data.orientation, ['horizontal', 'vertical']),
+        disabled: resolveBoolean('disabled', data.disabled),
+        keyboardStep: resolveNumber('keyboardStep', data.keyboardStep, 0.1, 25),
+        variant: resolveChoice('variant', data.variant, ['plain', 'soft', 'outline']),
+        size: resolveChoice('size', data.size, ['sm', 'md', 'lg']),
+      };
+      schedule();
+    });
+    schedule();
+    return () => {
+      generation += 1;
+      if (task !== null) clearTimeout(task);
+      if (drag) endDrag(drag.lastEvent, true);
+      root.__citryUiSplitterRuntime = {serverFingerprint: fingerprint, panelIds, committed: [...committed]};
+      stop?.(); observer.disconnect(); fieldsets.forEach((item) => item.disconnect());
+      root.removeEventListener('pointerdown', onPointerDown);
+      root.removeEventListener('pointermove', onPointerMove);
+      root.removeEventListener('pointerup', onPointerEnd);
+      root.removeEventListener('pointercancel', onPointerEnd);
+      root.removeEventListener('keydown', onKeyDown);
+      root.removeAttribute('data-resizing');
+      root.removeAttribute('data-citry-splitter-initialized');
+    };
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSplitter_bff85e", "099acf4550740836437813e67409d77b", atob("eyJzaXplcyI6WzI1LjAsNzUuMF0sIm9yaWVudGF0aW9uIjoiaG9yaXpvbnRhbCIsImRpc2FibGVkIjpmYWxzZSwia2V5Ym9hcmRTdGVwIjoyLjAsInZhcmlhbnQiOiJwbGFpbiIsInNpemUiOiJtZCJ9"));
+})();</script></body></html><!--citry:g1:036b861f:0:i:1:e-->

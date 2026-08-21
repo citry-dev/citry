@@ -1,0 +1,67 @@
+<!doctype html><html data-cid-cipfhvlcd lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Customize Breadcrumbs with public CSS</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CustomBreadcrumbs_123a60>:where(.rare-trail) {
+  --cui-breadcrumbs-link-color: light-dark(#7c2d12, #fdba74);
+  --cui-breadcrumbs-current-color: light-dark(#4c1d95, #c4b5fd);
+  --cui-breadcrumbs-separator-color: light-dark(#9a3412, #fb923c);
+  --cui-breadcrumbs-gap: 0.8rem;
+  padding: 1rem;
+  border-block: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+}</style><style data-citry-css-class=CBreadcrumbs_f70ab1>@layer citry-ui.theme{:where(.cui-breadcrumbs){--_cui-breadcrumbs-foreground:var(--cui-breadcrumbs-foreground,CanvasText);--_cui-breadcrumbs-link-color:var(--cui-breadcrumbs-link-color,LinkText);--_cui-breadcrumbs-current-color:var(--cui-breadcrumbs-current-color,CanvasText);--_cui-breadcrumbs-separator-color:var(--cui-breadcrumbs-separator-color,color-mix(in srgb, CanvasText 54%, transparent));--_cui-breadcrumbs-gap:var(--cui-breadcrumbs-gap,.5rem);--_cui-breadcrumbs-focus-color:var(--cui-breadcrumbs-focus-color,Highlight);color:var(--_cui-breadcrumbs-foreground);font:inherit;font-size:.875rem}:where(.cui-breadcrumbs[data-size=sm]){font-size:.75rem}:where(.cui-breadcrumbs[data-size=lg]){font-size:1rem}:where(.cui-breadcrumbs>[data-citry-ui-part=list]){align-items:center;gap:var(--_cui-breadcrumbs-gap);flex-wrap:wrap;min-inline-size:0;margin:0;padding:0;list-style:none;display:flex}:where(.cui-breadcrumbs:not([data-wrap])>[data-citry-ui-part=list]){scrollbar-width:thin;flex-wrap:nowrap;overflow-x:auto}:where(.cui-breadcrumbs>[data-citry-ui-part=list]>[data-citry-ui-part=item]){align-items:center;gap:var(--_cui-breadcrumbs-gap);min-inline-size:0;display:inline-flex}:where(.cui-breadcrumbs>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=link]){color:var(--_cui-breadcrumbs-link-color);text-underline-offset:.16em;overflow-wrap:anywhere;text-decoration-thickness:.08em}:where(.cui-breadcrumbs>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=link]:focus-visible){outline:.1875rem solid color-mix(in srgb, var(--_cui-breadcrumbs-focus-color) 44%, transparent);outline-offset:.125rem;border-radius:.15rem}:where(.cui-breadcrumbs>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=current]){color:var(--_cui-breadcrumbs-current-color);overflow-wrap:anywhere;font-weight:600}:where(.cui-breadcrumbs>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=separator]){color:var(--_cui-breadcrumbs-separator-color);user-select:none}:where(.cui-breadcrumbs:not([data-wrap])>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=link]),:where(.cui-breadcrumbs:not([data-wrap])>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=current]){white-space:nowrap}@media (forced-colors:active){:where(.cui-breadcrumbs>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=separator]){color:canvastext}}@media print{:where(.cui-breadcrumbs>[data-citry-ui-part=list]>[data-citry-ui-part=item]>[data-citry-ui-part=link]){color:currentColor}}}</style></head><body><main><nav aria-label="Archive location" class="cui-breadcrumbs rare-trail" data-cid-cipfhvlce data-cid-cipfhvlcf data-citry-ui-part=breadcrumbs data-size=md data-wrap><ol data-citry-ui-part=list><li data-citry-ui-part=item><a data-citry-ui-part=link href=/archive> Archive </a> <span aria-hidden=true data-citry-ui-part=separator> ✦ </span></li><li data-citry-ui-part=item><span aria-current=page data-citry-ui-part=current> Rare books </span></li></ol></nav></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0N1c3RvbUJyZWFkY3J1bWJzXzEyM2E2MC5lZjJlMzJmZDcwNzguY3Nz", "L2NpdHJ5L2NhY2hlL0NCcmVhZGNydW1ic19mNzBhYjEuNTE3MjUyMmU5OWJkLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2bGNk"], ["Q3VzdG9tQnJlYWRjcnVtYnNfMTIzYTYw", "Y2lwZmh2bGNl"], ["Q0JyZWFkY3J1bWJzX2Y3MGFiMQ==", "Y2lwZmh2bGNm"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

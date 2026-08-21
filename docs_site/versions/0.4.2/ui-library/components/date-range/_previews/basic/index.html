@@ -1,0 +1,1691 @@
+<!--citry:g1:34e2f03c:0:i:1:s--><!doctype html><html data-cid-cipfhvjis lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Choose one date range</title><style>@layer citry-ui.theme {
+        :where(.cui-form-control__native--enhanced, .cui-form-control__status) {
+          position: absolute !important;
+          inline-size: 1px !important;
+          block-size: 1px !important;
+          padding: 0 !important;
+          margin: -1px !important;
+          overflow: hidden !important;
+          clip-path: inset(50%) !important;
+          white-space: nowrap !important;
+          border: 0 !important;
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CDateRange_f0cd44>@layer citry-ui.theme{:where(.cui-date-range){--_cui-date-range-background:var(--cui-date-range-background,Canvas);--_cui-date-range-foreground:var(--cui-date-range-foreground,CanvasText);--_cui-date-range-border-color:var(--cui-date-range-border-color,color-mix(in srgb, CanvasText 38%, transparent));--_cui-date-range-invalid-border-color:var(--cui-date-range-invalid-border-color,light-dark(#d92d20,#f97066));--_cui-date-range-focus-color:var(--cui-date-range-focus-color,Highlight);--_cui-date-range-range-background:var(--cui-date-range-range-background,color-mix(in srgb, Highlight 18%, Canvas));--_cui-date-range-endpoint-background:var(--cui-date-range-endpoint-background,light-dark(#175cd3,#2563eb));--_cui-date-range-endpoint-foreground:var(--cui-date-range-endpoint-foreground,#fff);--_cui-date-range-radius:var(--cui-date-range-radius,.625rem);--_cui-date-range-min-block-size:var(--cui-date-range-min-block-size,2.5rem);--_cui-date-range-padding-inline:var(--cui-date-range-padding-inline,.75rem);--_cui-date-range-gap:var(--cui-date-range-gap,.5rem);box-sizing:border-box;inline-size:100%;min-inline-size:0;color:var(--_cui-date-range-foreground);font:inherit;display:grid}:where(.cui-date-range__fallback){gap:var(--_cui-date-range-gap);grid-template-columns:repeat(2,minmax(0,1fr));display:grid}:where(.cui-date-range__fallback-field){gap:.25rem;min-inline-size:0;display:grid}:where(.cui-date-range__fallback-field>input){box-sizing:border-box;inline-size:100%;min-block-size:var(--_cui-date-range-min-block-size);padding-inline:var(--_cui-date-range-padding-inline);border:1px solid var(--_cui-date-range-border-color);border-radius:var(--_cui-date-range-radius);background:var(--_cui-date-range-background);color:inherit;font:inherit}:where(.cui-date-range__enhanced){grid-template-columns:minmax(0,1fr) auto;align-items:stretch;gap:.25rem;min-inline-size:0;display:none}:where(.cui-date-range[data-enhanced]>.cui-date-range__fallback){clip-path:inset(50%);white-space:nowrap;block-size:1px;inline-size:1px;margin:-1px;position:absolute;overflow:hidden}:where(.cui-date-range[data-enhanced]>.cui-date-range__enhanced){display:grid}:where(.cui-date-range__control,.cui-date-range__clear){box-sizing:border-box;min-block-size:var(--_cui-date-range-min-block-size);border:1px solid var(--_cui-date-range-border-color);border-radius:var(--_cui-date-range-radius);background:var(--_cui-date-range-background);color:inherit;font:inherit;cursor:pointer}:where(.cui-date-range__control){align-items:center;gap:var(--_cui-date-range-gap);inline-size:100%;padding-inline:var(--_cui-date-range-padding-inline);text-align:start;grid-template-columns:minmax(0,1fr) auto;display:grid}:where(.cui-date-range__value){text-overflow:ellipsis;white-space:nowrap;min-inline-size:0;overflow:hidden}:where(.cui-date-range__clear){aspect-ratio:1;padding:0 .625rem;font-size:1.25em}:where(.cui-date-range[data-variant=filled] .cui-date-range__control,.cui-date-range[data-variant=filled] .cui-date-range__clear){background:color-mix(in srgb, CanvasText 7%, Canvas);border-color:#0000}:where(.cui-date-range[data-variant=plain] .cui-date-range__control,.cui-date-range[data-variant=plain] .cui-date-range__clear){background:0 0;border-color:#0000;border-radius:0}:where(.cui-date-range[data-size=sm]){--_cui-date-range-min-block-size:var(--cui-date-range-min-block-size,2.25rem);font-size:.875rem}:where(.cui-date-range[data-size=lg]){--_cui-date-range-min-block-size:var(--cui-date-range-min-block-size,2.75rem);font-size:1.0625rem}:where(.cui-date-range[data-invalid] .cui-date-range__control){border-color:var(--_cui-date-range-invalid-border-color)}:where(.cui-date-range__control:focus-visible,.cui-date-range__clear:focus-visible,.cui-date-range__fallback-field>input:focus-visible){outline:.1875rem solid color-mix(in srgb, var(--_cui-date-range-focus-color) 42%, transparent);outline-offset:.0625rem}:where(.cui-date-range__calendar [data-citry-ui-part=day][data-in-range]){background:var(--_cui-date-range-range-background)}:where(.cui-date-range__calendar [data-citry-ui-part=day][data-range-start],.cui-date-range__calendar [data-citry-ui-part=day][data-range-end]){background:var(--_cui-date-range-endpoint-background);color:var(--_cui-date-range-endpoint-foreground)}:where(.cui-date-range__calendar [data-citry-ui-part=day][data-range-preview]){outline:1px dashed color-mix(in srgb, var(--_cui-date-range-focus-color) 70%, transparent);outline-offset:-2px}:where(.cui-date-range__popover){--cui-popover-inline-size:auto;--cui-popover-padding:.5rem}:where(.cui-date-range__control:disabled,.cui-date-range__clear:disabled){color:graytext;cursor:not-allowed}@media (pointer:coarse){:where(.cui-date-range){--_cui-date-range-min-block-size:max(var(--cui-date-range-min-block-size,2.5rem), 2.75rem)}}@media (forced-colors:active){:where(.cui-date-range__control,.cui-date-range__clear,.cui-date-range__fallback-field>input){forced-color-adjust:auto;border-color:buttontext}:where(.cui-date-range__calendar [data-citry-ui-part=day][data-in-range]){outline:1px solid highlight}}@media print{:where(.cui-date-range__icon,.cui-date-range__clear){display:none}:where(.cui-date-range__control){border-color:#0000;padding-inline:0}}@media (width<=30rem){:where(.cui-date-range__fallback){grid-template-columns:1fr}}}</style><style data-citry-css-class=CIcon_8e5345>@layer citry-ui.theme{:where(.cui-icon){--_cui-icon-size:var(--cui-icon-size,1em);--_cui-icon-stroke-width:var(--cui-icon-stroke-width,2);inline-size:var(--_cui-icon-size);block-size:var(--_cui-icon-size);color:inherit;stroke-width:var(--_cui-icon-stroke-width);vertical-align:-.125em;pointer-events:none;user-select:none;flex:none;display:inline-block;overflow:visible}:where(.cui-icon[data-size=sm]){--_cui-icon-size:var(--cui-icon-size,.875em)}:where(.cui-icon[data-size=lg]){--_cui-icon-size:var(--cui-icon-size,1.25em)}:where(.cui-icon--logical:dir(rtl)>.cui-icon__glyph){transform-origin:50%;transform:scaleX(-1)}}</style><style data-citry-css-class=CCalendar_6c8cea>@layer citry-ui.theme{:where(.cui-calendar){--_cui-calendar-background:var(--cui-calendar-background,Canvas);--_cui-calendar-foreground:var(--cui-calendar-foreground,CanvasText);--_cui-calendar-border-color:var(--cui-calendar-border-color,color-mix(in srgb, CanvasText 28%, transparent));--_cui-calendar-focus-color:var(--cui-calendar-focus-color,Highlight);--_cui-calendar-selected-background:var(--cui-calendar-selected-background,light-dark(#175cd3,#2563eb));--_cui-calendar-selected-foreground:var(--cui-calendar-selected-foreground,#fff);--_cui-calendar-today-color:var(--cui-calendar-today-color,LinkText);--_cui-calendar-adjacent-color:var(--cui-calendar-adjacent-color,color-mix(in srgb, CanvasText 58%, transparent));--_cui-calendar-unavailable-color:var(--cui-calendar-unavailable-color,GrayText);--_cui-calendar-radius:var(--cui-calendar-radius,.75rem);--_cui-calendar-padding:var(--cui-calendar-padding,.75rem);--_cui-calendar-gap:var(--cui-calendar-gap,.25rem);--_cui-calendar-cell-size:var(--cui-calendar-cell-size,2.5rem);--_cui-calendar-navigation-size:var(--cui-calendar-navigation-size,2.5rem);--_cui-calendar-font-size:var(--cui-calendar-font-size,1rem);box-sizing:border-box;inline-size:min(100%, calc(7 * var(--_cui-calendar-cell-size) + 2 * var(--_cui-calendar-padding)));gap:var(--_cui-calendar-gap);padding:var(--_cui-calendar-padding);border:1px solid var(--_cui-calendar-border-color);border-radius:var(--_cui-calendar-radius);background:var(--_cui-calendar-background);color:var(--_cui-calendar-foreground);font:inherit;font-size:var(--_cui-calendar-font-size);display:grid}:where(.cui-calendar[data-variant=plain]){background:0 0;border-color:#0000}:where(.cui-calendar[data-size=sm]){--_cui-calendar-cell-size:var(--cui-calendar-cell-size,2.25rem);--_cui-calendar-navigation-size:var(--cui-calendar-navigation-size,2.25rem);--_cui-calendar-font-size:var(--cui-calendar-font-size,.875rem)}:where(.cui-calendar[data-size=lg]){--_cui-calendar-cell-size:var(--cui-calendar-cell-size,2.75rem);--_cui-calendar-navigation-size:var(--cui-calendar-navigation-size,2.75rem);--_cui-calendar-font-size:var(--cui-calendar-font-size,1.0625rem)}:where(.cui-calendar:not([data-enhanced])>.cui-calendar__header),:where(.cui-calendar:not([data-enhanced])>.cui-calendar__grid){display:none}:where(.cui-calendar[data-enhanced]>.cui-calendar__fallback){clip-path:inset(50%);white-space:nowrap;border:0;block-size:1px;inline-size:1px;margin:-1px;padding:0;position:absolute;overflow:hidden}:where(.cui-calendar:not([data-enhanced])>.cui-calendar__fallback){box-sizing:border-box;inline-size:100%;min-block-size:var(--_cui-calendar-cell-size);border:1px solid var(--_cui-calendar-border-color);border-radius:calc(var(--_cui-calendar-radius) * .75);background:var(--_cui-calendar-background);color:var(--_cui-calendar-foreground);font:inherit;padding:.5rem .75rem}:where(.cui-calendar__header){grid-template-columns:var(--_cui-calendar-navigation-size) minmax(0, 1fr) var(--_cui-calendar-navigation-size);align-items:center;gap:var(--_cui-calendar-gap);display:grid}:where(.cui-calendar__navigation){inline-size:var(--_cui-calendar-navigation-size);block-size:var(--_cui-calendar-navigation-size);color:inherit;font:inherit;cursor:pointer;background:0 0;border:1px solid #0000;border-radius:50%;place-items:center;padding:0;font-size:1.5em;display:inline-grid}:where(.cui-calendar__navigation:disabled){color:graytext;cursor:not-allowed}:where(.cui-calendar__navigation:focus-visible){outline:.1875rem solid color-mix(in srgb, var(--_cui-calendar-focus-color) 42%, transparent);outline-offset:.0625rem}:where(.cui-calendar__heading){overflow-wrap:anywhere;text-align:center;min-inline-size:0;font:inherit;margin:0;font-weight:650}:where(.cui-calendar__grid){border-collapse:separate;inline-size:100%;border-spacing:var(--_cui-calendar-gap);table-layout:fixed}:where(.cui-calendar__grid th){block-size:1.75rem;color:var(--_cui-calendar-adjacent-color);text-align:center;font-size:.8em;font-weight:600}:where(.cui-calendar__grid abbr){text-decoration:none}:where(.cui-calendar__grid td[role=gridcell]){box-sizing:border-box;inline-size:var(--_cui-calendar-cell-size);block-size:var(--_cui-calendar-cell-size);text-align:center;vertical-align:middle;cursor:pointer;user-select:none;border:1px solid #0000;border-radius:50%;padding:0}:where(.cui-calendar__grid td[data-outside]){color:var(--_cui-calendar-adjacent-color)}:where(.cui-calendar__grid td[data-unavailable]){color:var(--_cui-calendar-unavailable-color);cursor:not-allowed;text-decoration:line-through}:where(.cui-calendar__grid td[data-today]){border-color:var(--_cui-calendar-today-color)}:where(.cui-calendar__grid td[data-selected]){border-color:var(--_cui-calendar-selected-background);background:var(--_cui-calendar-selected-background);color:var(--_cui-calendar-selected-foreground)}:where(.cui-calendar__grid td:focus-visible){outline:.1875rem solid color-mix(in srgb, var(--_cui-calendar-focus-color) 42%, transparent);outline-offset:.0625rem}:where(.cui-calendar[data-disabled]){color:graytext}:where(.cui-calendar[data-disabled] .cui-calendar__grid td){cursor:not-allowed}:where(.cui-calendar[data-invalid]){border-color:var(--cui-calendar-invalid-border-color,light-dark(#d92d20,#f97066))}:where(.cui-calendar:dir(rtl) .cui-calendar__arrow){display:inline-block;transform:scaleX(-1)}@media (hover:hover){:where(.cui-calendar:not([data-disabled]):not([data-readonly]) .cui-calendar__grid td[data-date]:not([data-unavailable]):not([data-selected]):hover),:where(.cui-calendar__navigation:not(:disabled):hover){background:color-mix(in srgb, CanvasText 8%, transparent)}}@media (pointer:coarse){:where(.cui-calendar){--_cui-calendar-cell-size:max(var(--cui-calendar-cell-size,2.5rem), 2.75rem)}}@media (prefers-reduced-motion:reduce){:where(.cui-calendar *){scroll-behavior:auto;transition:none}}@media (forced-colors:active){:where(.cui-calendar){forced-color-adjust:auto;border-color:buttontext}:where(.cui-calendar__grid td[data-selected]){color:highlighttext;background:highlight;border-color:highlight}:where(.cui-calendar__grid td[data-today]){outline:1px solid linktext}:where(.cui-calendar__grid td[data-unavailable]){color:graytext}}@media print{:where(.cui-calendar__navigation){visibility:hidden}:where(.cui-calendar){break-inside:avoid}}}</style><style data-citry-css-class=CPopover_d4bf44>@layer citry-ui.theme{:where(.cui-popover-host){display:contents}:where(.cui-popover){--_cui-popover-background:var(--cui-popover-background,Canvas);--_cui-popover-foreground:var(--cui-popover-foreground,CanvasText);--_cui-popover-border-color:var(--cui-popover-border-color,color-mix(in srgb, CanvasText 16%, transparent));--_cui-popover-border-width:var(--cui-popover-border-width,1px);--_cui-popover-radius:var(--cui-popover-radius,.75rem);--_cui-popover-shadow:var(--cui-popover-shadow,0 1rem 3rem #0f172a38);--_cui-popover-inline-size:var(--cui-popover-inline-size,20rem);--_cui-popover-max-inline-size:var(--cui-popover-max-inline-size,calc(100dvi - 1rem));--_cui-popover-max-block-size:var(--cui-popover-max-block-size,calc(100dvb - 1rem));--_cui-popover-padding:var(--cui-popover-padding,1rem);--_cui-popover-gap:var(--cui-popover-gap,.75rem);--_cui-popover-offset:var(--cui-popover-offset,.5rem);--_cui-popover-duration:var(--cui-popover-duration,.14s);--_cui-popover-easing:var(--cui-popover-easing,cubic-bezier(.2, .8, .2, 1));--_cui-popover-focus-color:var(--cui-popover-focus-color,Highlight);box-sizing:border-box;position-anchor:var(--_cui-popover-anchor);position-try-fallbacks:flip-block, flip-inline, flip-block flip-inline;position-visibility:anchors-visible;inline-size:min(var(--_cui-popover-inline-size), var(--_cui-popover-max-inline-size));max-inline-size:var(--_cui-popover-max-inline-size);max-block-size:var(--_cui-popover-max-block-size);border:var(--_cui-popover-border-width) solid var(--_cui-popover-border-color);border-radius:var(--_cui-popover-radius);background:var(--_cui-popover-background);color:var(--_cui-popover-foreground);box-shadow:var(--_cui-popover-shadow);overscroll-behavior:contain;grid-template-rows:auto minmax(0,1fr) auto;margin:0;padding:0;font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.5;display:grid;position:fixed;overflow:hidden}:where(.cui-popover:not(:popover-open):not([data-open]):not([data-citry-popover-exiting])){display:none}:where(.cui-popover[data-open]:not(:popover-open)){inline-size:min(100%, var(--_cui-popover-max-inline-size));margin-block:.5rem;display:grid;position:static}:where(.cui-popover[data-citry-popover-exiting]){pointer-events:none;user-select:none}:where(.cui-popover[data-placement=bottom-start]){position-area:block-end span-inline-end;margin-block-start:var(--_cui-popover-offset)}:where(.cui-popover[data-placement=bottom]){position-area:block-end;margin-block-start:var(--_cui-popover-offset)}:where(.cui-popover[data-placement=bottom-end]){position-area:block-end span-inline-start;margin-block-start:var(--_cui-popover-offset)}:where(.cui-popover[data-placement=top-start]){position-area:block-start span-inline-end;margin-block-end:var(--_cui-popover-offset)}:where(.cui-popover[data-placement=top]){position-area:block-start;margin-block-end:var(--_cui-popover-offset)}:where(.cui-popover[data-placement=top-end]){position-area:block-start span-inline-start;margin-block-end:var(--_cui-popover-offset)}:where(.cui-popover[data-match-width]){min-inline-size:anchor-size(width)}:where(.cui-popover__header),:where(.cui-popover__body),:where(.cui-popover__actions){box-sizing:border-box;min-inline-size:0;padding-inline:var(--_cui-popover-padding);overflow-wrap:anywhere}:where(.cui-popover__header){gap:.25rem;padding-block-start:var(--_cui-popover-padding);display:grid}:where(.cui-popover__title){margin:0;font-size:1rem;font-weight:700;line-height:1.3}:where(.cui-popover__description){color:color-mix(in srgb, currentColor 72%, transparent);font-size:.875rem}:where(.cui-popover__body){min-block-size:0;padding-block:var(--_cui-popover-gap);overflow:auto}:where(.cui-popover__body>:first-child){margin-block-start:0}:where(.cui-popover__body>:last-child){margin-block-end:0}:where(.cui-popover__actions){flex-wrap:wrap;justify-content:end;gap:.5rem;padding-block-end:var(--_cui-popover-padding);display:flex}:where(.cui-popover__actions>*){min-inline-size:0;max-inline-size:100%}:where(.cui-popover:focus-visible){outline:.1875rem solid var(--_cui-popover-focus-color);outline-offset:.125rem}@media (prefers-reduced-motion:reduce){:where(.cui-popover){--_cui-popover-duration:0s}}@media (forced-colors:active){:where(.cui-popover){color:canvastext;box-shadow:none;background:canvas;border-color:canvastext}}@media print{:where(.cui-popover){color:#000;max-block-size:none;inline-size:auto;max-inline-size:none;box-shadow:none;background:0 0;border-color:currentColor;margin-block:1rem;display:none;position:static}:where(.cui-popover[data-open]){display:grid}}}</style></head><body><main><!--citry:g1:34e2f03c:0:i:2:s--><fieldset data-cid-cipfhvjit><legend>Travel dates</legend><!--citry:g1:34e2f03c:0:i:3:s--><div aria-label="Choose date range" class=cui-date-range data-cid=cipfhvjiu data-cid-cipfhvjiu data-citry-root data-citry-ui-part=date-range data-size=md data-variant=outline id=cui-date-range-cipfhvjiu-root role=group><div class=cui-date-range__fallback data-citry-ui-part=fallback-group><label class=cui-date-range__fallback-field><span>Start date</span> <input data-citry-ui-part=start-input id=cui-date-range-cipfhvjiu-start max=2026-08-23 name=arrival type=date value=2026-08-19></label><label class=cui-date-range__fallback-field><span>End date</span> <input data-citry-ui-part=end-input id=cui-date-range-cipfhvjiu-end min=2026-08-19 name=departure type=date value=2026-08-23></label></div><div class=cui-date-range__enhanced data-citry-ui-part=enhanced-control><!--citry:g1:34e2f03c:0:i:4:s--><div class=cui-popover-host data-cid=cipfhvjiv data-cid-cipfhvjiv data-citry-popover-host data-citry-root><!--citry:g1:34e2f03c:0:r:1:s--><button aria-label="Change date range, ⁨August 19, 2026⁩ to ⁨August 23, 2026⁩" style="anchor-name: --_cui-popover-anchor-ref-cipfhvjiv;" aria-controls=cui-date-range-cipfhvjiu-popover aria-expanded=false aria-haspopup=dialog class=cui-date-range__control data-citry-date-range-trigger data-citry-popover-trigger data-citry-ui-part=control id=cui-date-range-cipfhvjiu type=button><span class=cui-date-range__value data-citry-ui-part=value>August 19, 2026 – August 23, 2026</span> <!--citry:g1:34e2f03c:0:i:5:s--> <svg class="cui-icon cui-date-range__icon" viewbox="0 0 24 24" aria-hidden=true data-cid=cipfhvjiw data-cid-cipfhvjiw data-citry-root data-citry-ui-part=icon data-name=calendar data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="M8 2v3"></path><path d="M16 2v3"></path><rect height=18 rx=2 width=18 x=3 y=3></rect><path d="M3 9h18"></path></g></svg> <!--citry:g1:34e2f03c:0:i:5:e--></button><!--citry:g1:34e2f03c:0:r:1:e--><div class="cui-popover cui-date-range__popover" style="--_cui-popover-anchor: --_cui-popover-anchor-ref-cipfhvjiv;" aria-labelledby=cui-date-range-cipfhvjiu-popover-title data-citry-ui-part=popover data-match-width data-placement=bottom-start id=cui-date-range-cipfhvjiu-popover inert popover=manual role=dialog tabindex=-1><header class=cui-popover__header data-citry-ui-part=header><h2 class=cui-popover__title data-citry-ui-part=title id=cui-date-range-cipfhvjiu-popover-title><!--citry:g1:34e2f03c:0:r:2:s--> <span>Choose date range</span> <!--citry:g1:34e2f03c:0:r:2:e--></h2></header><div class=cui-popover__body data-citry-ui-part=body><!--citry:g1:34e2f03c:0:r:3:s--><!--citry:g1:34e2f03c:0:i:6:s--><div aria-label="Choose date range" class="cui-calendar cui-date-range__calendar" data-cid=cipfhvjix data-cid-cipfhvjix data-citry-root data-citry-ui-part=calendar data-size=md data-variant=plain id=cui-date-range-cipfhvjiu-calendar-calendar role=group><div class=cui-calendar__header data-citry-ui-part=header><button aria-label="Previous month" class=cui-calendar__navigation data-citry-ui-part=previous type=button><span aria-hidden=true class=cui-calendar__arrow>‹</span></button><h2 aria-atomic=true aria-live=polite class=cui-calendar__heading data-citry-ui-part=heading id=cui-date-range-cipfhvjiu-calendar-heading></h2><button aria-label="Next month" class=cui-calendar__navigation data-citry-ui-part=next type=button><span aria-hidden=true class=cui-calendar__arrow>›</span></button></div><table aria-labelledby=cui-date-range-cipfhvjiu-calendar-heading class=cui-calendar__grid data-citry-ui-part=grid role=grid><thead><tr data-citry-ui-part=weekday-row></tr></thead><tbody></tbody></table><input aria-label="Choose date range" class=cui-calendar__fallback data-citry-ui-part=fallback-input id=cui-date-range-cipfhvjiu-calendar type=date value=2026-08-23></div><!--citry:g1:34e2f03c:0:i:6:e--><!--citry:g1:34e2f03c:0:r:3:e--></div></div></div><!--citry:g1:34e2f03c:0:i:4:e--><button aria-label="Clear date range" class=cui-date-range__clear data-citry-ui-part=clear type=button><span aria-hidden=true>×</span></button></div></div><!--citry:g1:34e2f03c:0:i:3:e--></fieldset><!--citry:g1:34e2f03c:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"BasicDateRange_1d0e65","className":"BasicDateRange"},{"classId":"CDateRange_f0cd44","className":"CDateRange"},{"classId":"CPopover_d4bf44","className":"CPopover"},{"classId":"CIcon_8e5345","className":"CIcon"},{"classId":"CCalendar_6c8cea","className":"CCalendar"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhvjiu","invocationId":2,"parentRenderId":"cipfhvjit"},{"childRenderId":"cipfhvjiv","invocationId":3,"parentRenderId":"cipfhvjiu"},{"childRenderId":"cipfhvjiw","invocationId":4,"parentRenderId":"cipfhvjiu"},{"childRenderId":"cipfhvjix","invocationId":5,"parentRenderId":"cipfhvjiu"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvjis","transparent":false},{"classId":"BasicDateRange_1d0e65","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvjit","transparent":false},{"classId":"CDateRange_f0cd44","instanceId":3,"invocationId":2,"parentRenderId":"cipfhvjit","renderId":"cipfhvjiu","transparent":false},{"classId":"CPopover_d4bf44","instanceId":4,"invocationId":3,"parentRenderId":"cipfhvjiu","renderId":"cipfhvjiv","transparent":false},{"classId":"CIcon_8e5345","instanceId":5,"invocationId":4,"parentRenderId":"cipfhvjiu","renderId":"cipfhvjiw","transparent":false},{"classId":"CCalendar_6c8cea","instanceId":6,"invocationId":5,"parentRenderId":"cipfhvjiu","renderId":"cipfhvjix","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"CDateRange_f0cd44","ownerRenderId":"cipfhvjiu","policy":"template","receiverClassId":"CPopover_d4bf44","receiverRenderId":"cipfhvjiv","slotName":"activator","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"CDateRange_f0cd44","ownerRenderId":"cipfhvjiu","policy":"template","receiverClassId":"CPopover_d4bf44","receiverRenderId":"cipfhvjiv","slotName":"title","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"CDateRange_f0cd44","ownerRenderId":"cipfhvjiu","policy":"template","receiverClassId":"CPopover_d4bf44","receiverRenderId":"cipfhvjiv","slotName":"default","sourceInvocationId":3}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"BasicDateRange_1d0e65","sourceRenderId":"cipfhvjit","tagName":"cdaterange","targetClassId":"CDateRange_f0cd44","targetRenderId":"cipfhvjiu"},{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{open:dateRangeOpen,dismissible:dateRangeDismissible,placement:dateRangePlacement,matchWidth:dateRangeMatchWidth,onOpenChange:dateRangeOnPopoverOpenChange}","type":"props"},"source":"direct"}],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CDateRange_f0cd44","sourceRenderId":"cipfhvjiu","tagName":"cpopover","targetClassId":"CPopover_d4bf44","targetRenderId":"cipfhvjiv"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CDateRange_f0cd44","sourceRenderId":"cipfhvjiu","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cipfhvjiw"},{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{value:dateRangeCalendarValue,disabled:dateRangeCalendarDisabled,readonly:dateRangeCalendarReadonly,rangeStart:dateRangeRangeStart,rangeEnd:dateRangeRangeEnd,rangePreview:dateRangeRangePreview,rangeStartLabel:dateRangeStartLabel,rangeEndLabel:dateRangeEndLabel,accessibleLabel:dateRangeAccessibleLabel,onValueChange:dateRangeOnCalendarValueChange}","type":"props"},"source":"direct"}],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":3,"sourceClassId":"CDateRange_f0cd44","sourceRenderId":"cipfhvjiu","tagName":"ccalendar","targetClassId":"CCalendar_6c8cea","targetRenderId":"cipfhvjix"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cipfhvjiu","parentRegionId":null,"receiverRenderId":"cipfhvjiv","regionId":1,"resultOwnerRenderId":"cipfhvjiu","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvjiv"},{"fillId":2,"ownerRenderId":"cipfhvjiu","parentRegionId":null,"receiverRenderId":"cipfhvjiv","regionId":2,"resultOwnerRenderId":"cipfhvjiu","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvjiv"},{"fillId":3,"ownerRenderId":"cipfhvjiu","parentRegionId":null,"receiverRenderId":"cipfhvjiv","regionId":3,"resultOwnerRenderId":"cipfhvjiu","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvjiv"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"34e2f03ca8449957be107292fa27b573b9eeba896949555bf101742fee15054b"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NEYXRlUmFuZ2VfZjBjZDQ0LmY4NzRlMzY4MzdkYi5qcw==", "L2NpdHJ5L2NhY2hlL0NEYXRlUmFuZ2VfZjBjZDQ0LjgyNmUzYWYyNzZkMjQ3MjQ0NWI1MTkxZTI5NmZhYzc0Lmpz", "L2NpdHJ5L2NhY2hlL0NDYWxlbmRhcl82YzhjZWEuZDg5YzNkYmFhNmQ1Lmpz", "L2NpdHJ5L2NhY2hlL0NDYWxlbmRhcl82YzhjZWEuOGM2YTYzZDk4MTI2MjU1YTNkYWY2YjgxZjRlNDU2YWQuanM=", "L2NpdHJ5L2NhY2hlL0NQb3BvdmVyX2Q0YmY0NC5iYTlhMGUzMzI3MjMuanM=", "L2NpdHJ5L2NhY2hlL0NQb3BvdmVyX2Q0YmY0NC5jOTlkOTk3ZjFkZjM5MjU4ODg1MDNmZjMzNmQyMzVmZS5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NEYXRlUmFuZ2VfZjBjZDQ0LjVkOGM4OGE4ZTM2ZS5jc3M=", "L2NpdHJ5L2NhY2hlL0NJY29uXzhlNTM0NS5iMDBlNmMzZWI5OTEuY3Nz", "L2NpdHJ5L2NhY2hlL0NDYWxlbmRhcl82YzhjZWEuMmRkYTkzZjY2ODE3LmNzcw==", "L2NpdHJ5L2NhY2hlL0NQb3BvdmVyX2Q0YmY0NC4xYTc5YjJlMDA3MWUuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0RhdGVSYW5nZV9mMGNkNDQ=", "Y2lwZmh2aml1", "ODI2ZTNhZjI3NmQyNDcyNDQ1YjUxOTFlMjk2ZmFjNzQ=", "init"], ["Q0NhbGVuZGFyXzZjOGNlYQ==", "Y2lwZmh2aml4", "OGM2YTYzZDk4MTI2MjU1YTNkYWY2YjgxZjRlNDU2YWQ=", "init"], ["Q1BvcG92ZXJfZDRiZjQ0", "Y2lwZmh2aml2", "Yzk5ZDk5N2YxZGYzOTI1ODg4NTAzZmYzMzZkMjM1ZmU=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2amlz"], ["Q0ljb25fOGU1MzQ1", "Y2lwZmh2aml3"]], "graph": "34e2f03ca8449957be107292fa27b573b9eeba896949555bf101742fee15054b", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      (()=>{
+        const key=Symbol.for('citry-ui:form-control-runtime'),prior=globalThis[key];
+        if(prior){if(prior.generation!==1)throw new Error('[citry-ui] cannot replace an incompatible form-control runtime; reload the page.');return}
+        const resetKey=Symbol.for('citry-ui:form-control-reset-registry');
+        const attr=(element,name,value)=>value==null||value===''?element.removeAttribute(name):element.setAttribute(name,String(value));
+        const attrs=(elements,values)=>[...elements].forEach(element=>Object.entries(values).forEach(([name,value])=>attr(element,name,value)));
+        const states=(element,values)=>Object.entries(values).forEach(([name,value])=>element.toggleAttribute(`data-${name}`,Boolean(value)));
+        const idrefs=(...items)=>{const out=[];items.filter(item=>typeof item==='string').forEach(item=>item.split(/\s+/).filter(Boolean).forEach(token=>{if(!out.includes(token))out.push(token)}));return out.join(' ')||null};
+        const relationships=(elements,field,values,invalid)=>{const described=idrefs(field?.hasDescription?field.descriptionId:null,invalid&&field?.hasError?field.errorId:null,values.describedby),error=invalid?idrefs(field?.hasError?field.errorId:null,values.errormessage):null,owned={'aria-describedby':described,'aria-errormessage':error,'aria-invalid':invalid?'true':null};if('label' in values)Object.assign(owned,{'aria-label':values.label,'aria-labelledby':field?.labelId??values.labelledby});attrs(elements,owned);const state={};for(const name of ['required','disabled','readonly'])if(name in values)state[`aria-${name}`]=values[name]?'true':null;attrs(values.control?[values.control]:elements,state)};
+        const trim=value=>value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g,'');
+        const canonical=(value,delimiters=[],strict=false)=>{if(typeof value!=='string'||!value.length||value.includes('\0'))return null;const normalized=value.replace(/\r\n?/g,'\n');if(!strict)return normalized;const trimmed=trim(normalized);return trimmed===value&&trimmed&&!trimmed.includes('\n')&&!delimiters.some(delimiter=>trimmed.includes(delimiter))?trimmed:null};
+        const stringList=(current,candidates,normalize,maximum=null)=>{const seen=new Set(current),values=[];for(const candidate of candidates){if(candidate==='')return{reason:'empty',candidate};const value=normalize(candidate);if(value===null)return{reason:'invalid-value',candidate};if(seen.has(value)){return{reason:'duplicate',candidate}}seen.add(value);values.push(value)}return maximum!==null&&current.length+values.length>maximum?{reason:'maximum',candidate:values.at(-1)??null}:{values}};
+        const split=(text,delimiters)=>{const normalized=text.replace(/\r\n?/g,'\n'),separators=new Set([...delimiters,'\n']);let fragments=[''];for(const character of normalized)separators.has(character)?fragments.push(''):fragments[fragments.length-1]+=character;return{candidates:fragments.slice(0,-1).map(trim),draft:separators.has(normalized.at(-1))?'':fragments.at(-1)}};
+        const format=(template,key,value)=>template.replaceAll(`{${key}}`,String(value));
+        const same=(left,right)=>left.length===right.length&&left.every((value,index)=>value===right[index]);
+        const commit=select=>{select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}))};
+        const resolver=(root,props,owner)=>{
+          const episodes=new Map(),retained=new Map();
+          const describe=value=>{try{return JSON.stringify(value)??String(value)}catch{return String(value)}};
+          const report=(name,value,suffix='using the previous valid value or server fallback')=>{const fingerprint=`${typeof value}:${describe(value)}`;if(episodes.get(name)===fingerprint)return;episodes.set(name,fingerprint);console.error(`[citry-ui] ${owner} ${name} received invalid client value ${describe(value)}; ${suffix}.`,root)};
+          const clear=name=>episodes.delete(name);
+          const callback=name=>{const value=props[name];if(value==null){clear(name);return null}if(typeof value==='function'){clear(name);return value}report(name,value,'ignoring it');return null};
+          const release=(name,fallback)=>{retained.delete(name);clear(name);return fallback};
+          const boolean=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='boolean'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const string=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='string'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const choice=(name,fallback,allowed)=>{const value=props[name];if(value==null)return release(name,fallback);if(allowed.includes(value)){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const maximum=(name,fallback)=>{const value=props[name];if(value===undefined)return release(name,fallback);if(value===null){retained.set(name,null);clear(name);return null}if(Number.isInteger(value)&&value>0){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          return{describe,report,clear,callback,boolean,string,choice,maximum};
+        };
+        const fieldsetDisabled=element=>{for(let node=element.parentElement;node;node=node.parentElement){if(!(node instanceof HTMLFieldSetElement)||!node.disabled)continue;const legend=[...node.children].find(child=>child instanceof HTMLLegendElement);if(!legend?.contains(element))return true}return false};
+        const syncOptions=(select,values,rebuild=false)=>{if(rebuild)select.replaceChildren(...values.map(value=>{const option=select.ownerDocument.createElement('option');option.value=value;option.textContent=value;option.defaultSelected=true;option.selected=true;return option}));else{const selected=new Set(values);[...select.options].forEach(option=>option.selected=selected.has(option.value))}};
+        const syncHidden=(container,values,name,form,enabled)=>{container.replaceChildren();if(!enabled||!name)return;values.forEach(value=>{const input=container.ownerDocument.createElement('input');input.type='hidden';input.name=name;input.value=value;if(form)input.setAttribute('form',form);container.append(input)})};
+        const syncTransport=(select,hidden,values,settings)=>{syncOptions(select,values,settings.rebuild);const readonly=settings.readonly&&!settings.disabled;select.name=readonly?'':settings.name??'';select.disabled=settings.disabled||settings.readonly;select.required=settings.required&&!settings.readonly&&!settings.disabled;if(settings.form)select.setAttribute('form',settings.form);else select.removeAttribute('form');syncHidden(hidden,values,settings.name,settings.form,readonly)};
+        const renderTokens=(container,values,settings)=>container.replaceChildren(...values.map(value=>{const token=container.ownerDocument.createElement('span');token.className=settings.className;token.dataset.citryUiPart=settings.part;token.dataset.value=value;if(settings.active?.(value))token.toggleAttribute('data-highlighted',true);const text=settings.label?.(value)??value;if(settings.labelPart){const label=container.ownerDocument.createElement('span');label.dataset.citryUiPart=settings.labelPart;label.textContent=text;token.append(label)}else token.textContent=text;if(settings.removeLabel){const remove=container.ownerDocument.createElement('button');remove.type='button';remove.tabIndex=-1;remove.disabled=Boolean(settings.removeDisabled);remove.dataset.citryUiPart='remove';remove.dataset.value=value;remove.textContent='\u00d7';remove.setAttribute('aria-label',settings.removeLabel(value));token.append(remove)}return token}));
+        const disableRemovals=(container,disabled)=>container.querySelectorAll(':scope > [data-citry-ui-part="tag"] > [data-citry-ui-part="remove"]').forEach(remove=>remove.disabled=disabled);
+        const blockedTransition=apply=>{let prior;return current=>{const next=`${Number(current.disabled)}:${Number(current.readonly)}`;if(prior!==undefined&&next!==prior)apply();prior=next}};
+        const highlight=(container,selector,value)=>container.querySelectorAll(selector).forEach(item=>item.toggleAttribute('data-highlighted',item.dataset.value===value));
+        const focus=element=>element.focus({preventScroll:true});
+        const status=(root,element)=>{let generation=0;return{announce:text=>{const token=++generation;element.textContent='';queueMicrotask(()=>{if(token===generation&&root.isConnected)element.textContent=text})},invalidate:()=>++generation}};
+        const listeners=()=>{const entries=[];return{add:(target,type,listener,options)=>{target.addEventListener(type,listener,options);entries.push([target,type,listener,options])},stop:()=>entries.splice(0).forEach(([target,type,listener,options])=>target.removeEventListener(type,listener,options))}};
+        const enhanceNative=(native,visible,settings,enabled=true)=>{if(settings.publicId){native.id=enabled?settings.nativeId:settings.publicId;visible.id=enabled?settings.publicId:settings.visibleId}attr(native,'aria-hidden',enabled?'true':null);if(enabled)native.tabIndex=-1;else native.removeAttribute('tabindex');if(settings.className)native.classList.toggle(settings.className,enabled)};
+        const ownership=(root,key)=>{const retained=root[key]??null,state=retained??{},owner=Symbol();root[key]=state;state.owner=owner;return{retained,state,owns:()=>state.owner===owner}};
+        const tokenHandoff=(root,key,server,editor,name)=>{const handle=ownership(root,key),retained=handle.retained,[structure,value,draft,full,serverValues,serverDraft]=server,sameStructure=retained?.s===structure,sameValue=retained?.v===value,sameDraft=retained?.d===draft,prior=Array.isArray(retained?.V)?retained.V:[],values=sameValue?[...prior]:[...serverValues],input=sameDraft&&typeof retained?.I==='string'?retained.I:serverDraft,valueBaseline=sameValue&&Array.isArray(retained?.B)?[...retained.B]:[...serverValues],draftBaseline=sameDraft&&typeof retained?.J==='string'?retained.J:serverDraft,index=prior.indexOf(retained?.A),active=values.includes(retained?.A)?retained.A:values[index]??values[index-1]??null,composing=Boolean(sameDraft&&retained?.C);if(composing&&retained.E!==editor)throw new Error(`[citry-ui] ${name} cannot replace its editor during composition.`);return[handle,sameStructure,sameValue,sameDraft,values,input,valueBaseline,draftBaseline,active,composing,sameDraft?retained?.S:null,Boolean(sameDraft&&retained?.E===editor&&retained?.F),Boolean(sameStructure&&retained?.X),sameStructure&&typeof retained?.T==='string'?retained.T:null]};
+        const restoreTokenHandoff=(handoff,editor,status,owned)=>{const[,sameStructure,,sameDraft,,draft,,,,composing,selection,focused,,,]=handoff;owned(()=>{if(sameStructure&&handoff[13]!==null)status.textContent=handoff[13];if(sameDraft&&!composing&&Array.isArray(selection)){const start=Math.min(selection[0]??draft.length,draft.length),end=Math.min(selection[1]??start,draft.length);try{editor.setSelectionRange(start,end)}catch{}}});if(focused&&!editor.disabled)focus(editor)};
+        const saveTokenHandoff=(handoff,server,editor,current)=>{const handle=handoff[0];if(!handle.owns())return false;const [structure,value,draft,full]=server,[values,valueBaseline,input,draftBaseline,active,composing,invalid,status]=current;Object.assign(handle.state,{s:structure,v:value,d:draft,z:full,V:[...values],B:[...valueBaseline],I:input,J:draftBaseline,A:active,C:composing,E:editor,S:[editor.selectionStart??input.length,editor.selectionEnd??editor.selectionStart??input.length],F:editor.matches(':focus'),X:invalid,T:status});return true};
+        const exactAnatomy=entries=>entries.every(([parent,selector,node])=>parent.querySelectorAll(`:scope > ${selector}`).length===1&&parent.querySelector(`:scope > ${selector}`)===node);
+        const sanitizeFormControl=(root,input)=>{['id','role','part','hidden','inert','popover','contenteditable','tabindex','name','form','type','value','required','disabled','readonly','aria-label','aria-labelledby','aria-describedby','aria-errormessage','aria-invalid','aria-required','aria-disabled','aria-readonly'].forEach(name=>root.removeAttribute(name));input.type='text';['name','form','required','role','tabindex','hidden','inert','popover'].forEach(name=>input.removeAttribute(name))};
+        const mutations=root=>{let observer=null,timer=null;const observe=()=>observer?.observe(root,{subtree:true,childList:true,attributes:true});return{owned:fn=>{observer?.disconnect();try{fn()}finally{observe()}},start:reconcile=>{observer=new MutationObserver(()=>{if(timer!==null)clearTimeout(timer);timer=setTimeout(()=>{timer=null;reconcile()},0)});observe()},stop:()=>{observer?.disconnect();if(timer!==null)clearTimeout(timer);timer=null}}};
+        const watchFieldset=(root,control,apply)=>{let observer,scope;const observe=()=>{const next=root.getRootNode();if(next===scope)return;observer?.disconnect();scope=next;observer=new MutationObserver(records=>{const relevant=records.some(record=>record.type==='attributes'?record.target instanceof HTMLFieldSetElement&&record.target.contains(root):[...record.addedNodes,...record.removedNodes].some(node=>node===root||node.contains?.(root)||(node instanceof HTMLLegendElement&&record.target.contains(root))));if(!relevant)return;if(root.getRootNode()!==scope)observe();apply()});observer.observe(next instanceof Document?next.documentElement:next,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']})};observe();return()=>observer?.disconnect()};
+        const registerReset=(root,proxy,entry)=>{let unregister=()=>{};const register=()=>{const scope=root.getRootNode();let registry=scope[resetKey];if(!registry){const entries=new Map(),timers=new Set(),handler=event=>{const form=event.target,current=[...entries.entries()].filter(([control])=>control.form===form).map(([control,item])=>[control,item,++item.sequence]),timer=setTimeout(()=>{timers.delete(timer);if(event.defaultPrevented)return;current.filter(([control,item,sequence])=>entries.get(control)===item&&item.sequence===sequence&&control.isConnected&&control.form===form).forEach(([,item])=>{item.invalidate?.();item.reset(event)})},0);timers.add(timer)},observer=new MutationObserver(()=>entries.forEach(item=>item.refresh()));scope.addEventListener('reset',handler,true);observer.observe(scope instanceof Document?scope.documentElement:scope,{subtree:true,childList:true});registry={entries,timers,handler,observer};scope[resetKey]=registry}const item={...entry,sequence:0,refresh:()=>{if(root.isConnected&&root.getRootNode()!==scope){unregister();unregister=register()}}};registry.entries.set(proxy,item);return()=>{if(registry.entries.get(proxy)!==item)return;registry.entries.delete(proxy);if(!registry.entries.size&&scope[resetKey]===registry){scope.removeEventListener('reset',registry.handler,true);registry.observer.disconnect();registry.timers.forEach(clearTimeout);registry.timers.clear();delete scope[resetKey]}}};unregister=register();return()=>unregister()};
+        const deepActive=document=>{let active=document.activeElement;while(active?.shadowRoot?.activeElement)active=active.shadowRoot.activeElement;return active};
+        const composedParent=node=>node?.assignedSlot??node?.parentNode??(node?.getRootNode() instanceof ShadowRoot?node.getRootNode().host:null);
+        const invalidFocus=(root,editor,current)=>{const document=root.ownerDocument,snapshot=deepActive(document);let node=root,dialog=null;while(node){if(node instanceof HTMLDialogElement&&node.open){dialog=node;break}node=composedParent(node)}requestAnimationFrame(()=>{if(!current()||!root.isConnected)return;const active=deepActive(document);if(active!==snapshot&&!root.contains(active))return;if(editor.isConnected&&!editor.disabled&&editor.getClientRects().length&&!editor.closest('[inert]')){editor.focus({preventScroll:true});if(deepActive(document)===editor)return}const target=dialog?.isConnected&&dialog.open&&dialog.getClientRects().length?dialog:document.body;if(!target?.isConnected)return;const temporary=!target.hasAttribute('tabindex');if(temporary)target.tabIndex=-1;target.focus({preventScroll:true});if(temporary)queueMicrotask(()=>target.removeAttribute('tabindex'))})};
+        globalThis[key]={generation:1,attr,attrs,states,idrefs,relationships,trim,canonical,stringList,split,format,same,commit,resolver,fieldsetDisabled,syncOptions,syncHidden,syncTransport,renderTokens,disableRemovals,blockedTransition,highlight,focus,status,listeners,enhanceNative,ownership,tokenHandoff,restoreTokenHandoff,saveTokenHandoff,exactAnatomy,sanitizeFormControl,mutations,watchFieldset,registerReset,invalidFocus};
+      })();
+    
+})();</script><script>(function() {
+
+      const anchoredLayerRuntime = (() => {
+        const runtimeKey = Symbol.for("citry-ui:anchored-layer-runtime");
+        const runtimeGeneration = 3;
+        const ancestorCloseCapability = "ancestor-close-transaction-v1";
+        const installed = globalThis[runtimeKey];
+        if (
+          installed?.generation === runtimeGeneration
+          && installed?.capabilities?.includes?.(ancestorCloseCapability)
+        ) {
+          return installed;
+        }
+        if (installed !== undefined) {
+          throw new Error(
+            "[citry-ui] cannot replace an incompatible anchored-layer runtime; "
+              + "a full page reload is required.",
+          );
+        }
+
+        const coordinators = new WeakMap();
+        const activeCoordinators = new Set();
+        const stats = installed?.stats ?? {
+          listenerSets: 0,
+          reconciliations: 0,
+        };
+        stats.activeListenerSets ??= 0;
+        stats.activeCoordinators ??= 0;
+
+        const isOpenShadowRoot = (value) => (
+          value instanceof ShadowRoot && value.host.shadowRoot === value
+        );
+        const actualRoot = (element) => {
+          const root = element?.getRootNode?.() ?? null;
+          if (root instanceof Document || isOpenShadowRoot(root)) {
+            return root;
+          }
+          return null;
+        };
+        const composedParent = (node) => {
+          if (node?.parentNode) {
+            return node.parentNode;
+          }
+          const root = node?.getRootNode?.() ?? null;
+          return root instanceof ShadowRoot ? root.host : null;
+        };
+        const composedContains = (container, target) => {
+          if (!(container instanceof Node) || !(target instanceof Node)) {
+            return false;
+          }
+          let current = target;
+          while (current) {
+            if (current === container || container.contains(current)) {
+              return true;
+            }
+            const root = current.getRootNode?.() ?? null;
+            if (root instanceof ShadowRoot && root !== container) {
+              current = root.host;
+              continue;
+            }
+            current = composedParent(current);
+          }
+          return false;
+        };
+        const composedAncestors = (node) => {
+          const ancestors = [];
+          let current = node;
+          while (current) {
+            ancestors.push(current);
+            const root = current.getRootNode?.() ?? null;
+            if (root instanceof ShadowRoot && current === root) {
+              current = root.host;
+            } else {
+              current = composedParent(current);
+            }
+          }
+          return ancestors;
+        };
+        const layerElements = (layer) => [
+          layer.trigger,
+          layer.surface,
+          ...(layer.insideElements ?? []),
+        ].filter((value) => value instanceof Node);
+
+        const createCoordinator = (ownerDocument) => {
+          const layers = [];
+          const scopes = new Map();
+          const discoveredRoots = new Set();
+          const processedEvents = new WeakSet();
+          const modalSequence = new WeakMap();
+          const modalOpenState = new WeakMap();
+          const ancestorCloseTransactions = new Set();
+          let nextModalSequence = 0;
+          let nextRegistrationGeneration = 0;
+          let bootstrappedModals = false;
+          let bootstrapAmbiguous = false;
+          let currentModal = null;
+          let rootsDirty = true;
+          let pendingPointerFocus = null;
+          let pointerFocusTimer = null;
+
+          const coordinator = {
+            ownerDocument,
+            layers,
+            tooltipLayer: null,
+            tooltipWarmUntil: 0,
+          };
+
+          const discoverOpenRoots = () => {
+            if (!rootsDirty) {
+              return;
+            }
+            for (const root of discoveredRoots) {
+              if (!root.host.isConnected || root.host.ownerDocument !== ownerDocument) {
+                discoveredRoots.delete(root);
+              }
+            }
+            const pending = [ownerDocument, ...discoveredRoots];
+            const visited = new Set();
+            while (pending.length > 0) {
+              const root = pending.pop();
+              if (visited.has(root)) {
+                continue;
+              }
+              visited.add(root);
+              for (const element of root.querySelectorAll?.("*") ?? []) {
+                if (isOpenShadowRoot(element.shadowRoot)) {
+                  discoveredRoots.add(element.shadowRoot);
+                  pending.push(element.shadowRoot);
+                }
+              }
+            }
+            rootsDirty = false;
+          };
+          const knownRoots = () => {
+            discoverOpenRoots();
+            const roots = new Set([ownerDocument, ...discoveredRoots]);
+            for (const layer of layers) {
+              const root = actualRoot(layer.surface) ?? actualRoot(layer.trigger);
+              if (root) {
+                roots.add(root);
+              }
+            }
+            return roots;
+          };
+          const allModalDialogs = () => {
+            const dialogs = [];
+            for (const root of knownRoots()) {
+              try {
+                dialogs.push(...root.querySelectorAll("dialog:modal"));
+              } catch {
+                // Current supported browsers implement :modal. Treat an
+                // unavailable selector as no eligible modal rather than
+                // guessing from the open attribute.
+              }
+            }
+            return [...new Set(dialogs)];
+          };
+          const deepActiveElement = () => {
+            let active = ownerDocument.activeElement;
+            while (active?.shadowRoot?.activeElement) {
+              active = active.shadowRoot.activeElement;
+            }
+            return active;
+          };
+          const modalContaining = (node, dialogs) => {
+            const matches = dialogs.filter((dialog) => composedContains(dialog, node));
+            if (matches.length === 0) {
+              return null;
+            }
+            return matches.reduce((latest, dialog) => (
+              (modalSequence.get(dialog) ?? 0) >= (modalSequence.get(latest) ?? 0)
+                ? dialog
+                : latest
+            ));
+          };
+          const recordModalTransition = (dialog, explicitState = null) => {
+            if (!(dialog instanceof HTMLDialogElement)) {
+              return;
+            }
+            const isModal = explicitState ?? dialog.matches(":modal");
+            const wasModal = modalOpenState.get(dialog) === true;
+            modalOpenState.set(dialog, isModal);
+            if (!isModal) {
+              if (currentModal === dialog) {
+                currentModal = null;
+              }
+              return;
+            }
+            if (wasModal) {
+              return;
+            }
+            modalSequence.set(dialog, ++nextModalSequence);
+            bootstrapAmbiguous = false;
+            currentModal = dialog;
+          };
+
+          const descendantsOf = (layer) => layers.filter((candidate) => {
+            let parent = candidate.__citryAnchoredParent ?? null;
+            const seen = new Set();
+            while (parent && !seen.has(parent)) {
+              seen.add(parent);
+              if (parent === layer) {
+                return true;
+              }
+              parent = parent.__citryAnchoredParent ?? null;
+            }
+            return false;
+          });
+          const forceClose = (layer, reason, source) => {
+            layer.__citryAnchoredSuppressed = true;
+            layer.__citryAnchoredBlockedReason = reason;
+            layer.__citryAnchoredRegistration = null;
+            layer.forceClose?.(reason, source);
+            const index = layers.indexOf(layer);
+            if (index !== -1) {
+              layers.splice(index, 1);
+            }
+          };
+          const closeDescendants = (layer, reason = "ancestor", source = layer.surface) => {
+            const descendants = descendantsOf(layer);
+            for (let index = descendants.length - 1; index >= 0; index -= 1) {
+              const descendant = descendants[index];
+              if (layers.includes(descendant)) {
+                forceClose(descendant, reason, source);
+              }
+            }
+            syncScopes();
+          };
+
+          const reconcileModal = (event = null) => {
+            stats.reconciliations += 1;
+            const eventPath = event?.composedPath?.() ?? [];
+            const pathHasModal = eventPath.some((node) => (
+              node instanceof HTMLDialogElement && node.matches(":modal")
+            ));
+            if (pathHasModal) {
+              for (const node of eventPath) {
+                if (isOpenShadowRoot(node)) {
+                  discoveredRoots.add(node);
+                }
+              }
+            }
+            const dialogs = allModalDialogs();
+            if (!bootstrappedModals) {
+              bootstrappedModals = true;
+              if (dialogs.length === 1) {
+                modalSequence.set(dialogs[0], ++nextModalSequence);
+                currentModal = dialogs[0];
+              } else if (dialogs.length > 1) {
+                bootstrapAmbiguous = true;
+                currentModal = null;
+              }
+              for (const dialog of dialogs) {
+                modalOpenState.set(dialog, true);
+              }
+            }
+
+            const newlyDiscovered = dialogs.filter((dialog) => (
+              modalOpenState.get(dialog) !== true
+            ));
+            if (newlyDiscovered.length === 1) {
+              const dialog = newlyDiscovered[0];
+              modalOpenState.set(dialog, true);
+              modalSequence.set(dialog, ++nextModalSequence);
+              bootstrapAmbiguous = false;
+              currentModal = dialog;
+            } else if (newlyDiscovered.length > 1) {
+              for (const dialog of newlyDiscovered) {
+                modalOpenState.set(dialog, true);
+              }
+              bootstrapAmbiguous = true;
+              currentModal = null;
+            }
+
+            const eventDialog = eventPath
+              .filter((node) => node instanceof HTMLDialogElement && dialogs.includes(node))
+              .at(0) ?? null;
+            const focusDialog = modalContaining(deepActiveElement(), dialogs);
+            if (dialogs.length === 0) {
+              currentModal = null;
+              bootstrapAmbiguous = false;
+            } else if (bootstrapAmbiguous && (eventDialog || focusDialog)) {
+              // An event can resolve unknown initial order. It must not
+              // promote a modal whose open transition was already observed.
+              bootstrapAmbiguous = false;
+              currentModal = eventDialog ?? focusDialog;
+              if (!modalSequence.has(currentModal)) {
+                modalSequence.set(currentModal, ++nextModalSequence);
+              }
+            } else if (!bootstrapAmbiguous) {
+              if (!currentModal || !dialogs.includes(currentModal)) {
+                currentModal = dialogs.reduce((latest, dialog) => (
+                  (modalSequence.get(dialog) ?? 0) >= (modalSequence.get(latest) ?? 0)
+                    ? dialog
+                    : latest
+                ));
+              }
+            }
+
+            if (currentModal && !dialogs.includes(currentModal)) {
+              currentModal = null;
+            }
+
+            for (const layer of [...layers]) {
+              if (!layers.includes(layer)) {
+                continue;
+              }
+              if (!structurallyEligible(layer)) {
+                forceClose(layer, "ancestor", event?.target ?? currentModal);
+                continue;
+              }
+              if (
+                bootstrapAmbiguous
+                || (currentModal && !composedContains(currentModal, layer.trigger))
+              ) {
+                forceClose(layer, "modal", currentModal);
+              }
+            }
+            syncScopes(true);
+            return { current: currentModal, ambiguous: bootstrapAmbiguous };
+          };
+
+          const inferLogicalParent = (layer) => {
+            if (layer.logicalParent) {
+              return layer.logicalParent;
+            }
+            const childElements = layerElements(layer);
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const candidate = layers[index];
+              if (candidate === layer || !candidate.isOpen()) {
+                continue;
+              }
+              if (layerElements(candidate).some((parentElement) => (
+                childElements.some((childElement) => composedContains(parentElement, childElement))
+              ))) {
+                return candidate;
+              }
+            }
+            return null;
+          };
+          const structurallyEligible = (layer) => {
+            if (
+              !layer.trigger?.isConnected
+              || !layer.surface?.isConnected
+              || !actualRoot(layer.trigger)
+              || !actualRoot(layer.surface)
+              || layer.trigger.getClientRects().length === 0
+              || (layer.isEligible && !layer.isEligible())
+            ) {
+              return false;
+            }
+            const activeSurface = layer.isOpen?.() === true;
+            if (activeSurface) {
+              const surfaceStyle = getComputedStyle(layer.surface);
+              if (
+                layer.surface.getClientRects().length === 0
+                || surfaceStyle.visibility === "hidden"
+                || surfaceStyle.visibility === "collapse"
+              ) {
+                return false;
+              }
+            }
+            const ancestors = new Set([
+              ...composedAncestors(layer.trigger),
+              ...composedAncestors(layer.surface),
+            ]);
+            for (const ancestor of ancestors) {
+              if (!(ancestor instanceof Element)) {
+                continue;
+              }
+              const inactiveSurface = ancestor === layer.surface && !activeSurface;
+              if (!inactiveSurface && (ancestor.hidden || ancestor.inert)) {
+                return false;
+              }
+              if (ancestor instanceof HTMLDialogElement && !ancestor.open) {
+                return false;
+              }
+              if (
+                ancestor !== layer.surface
+                && ancestor.hasAttribute("popover")
+                && !ancestor.matches(":popover-open")
+              ) {
+                return false;
+              }
+            }
+            const parent = layer.logicalParent ?? layer.__citryAnchoredParent ?? inferLogicalParent(layer);
+            if (parent && (!layers.includes(parent) || !parent.isOpen())) {
+              return false;
+            }
+            return true;
+          };
+          const mayOpen = (layer) => {
+            const modal = reconcileModal();
+            if (layer.__citryAnchoredSuppressed) {
+              return false;
+            }
+            if (!structurallyEligible(layer)) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "ancestor";
+              return false;
+            }
+            if (modal.ambiguous) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "modal";
+              return false;
+            }
+            if (modal.current && !composedContains(modal.current, layer.trigger)) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "modal";
+              return false;
+            }
+            layer.__citryAnchoredBlockedReason = null;
+            return true;
+          };
+
+          const containsEvent = (layer, event) => {
+            const path = event?.composedPath?.() ?? [];
+            let current = layer;
+            const seen = new Set();
+            while (current && !seen.has(current)) {
+              seen.add(current);
+              for (const element of layerElements(current)) {
+                if (path.includes(element)) {
+                  return true;
+                }
+                if (path.some((node) => composedContains(element, node))) {
+                  return true;
+                }
+              }
+              current = current.__citryAnchoredParent ?? null;
+            }
+            return false;
+          };
+          const topLayer = () => {
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const candidate = layers[index];
+              if (candidate.isOpen()) {
+                return candidate;
+              }
+            }
+            return null;
+          };
+          const isAncestorClosing = (layer) => (
+            [...ancestorCloseTransactions].some((transaction) => (
+              transaction.layers.has(layer)
+            ))
+          );
+
+          const localScopeForEvent = (event) => {
+            const path = event.composedPath?.() ?? [];
+            return path.find((node) => node instanceof ShadowRoot && scopes.has(node))
+              ?? ownerDocument;
+          };
+          const handleEvent = (scopeRoot, event) => {
+            if (scopeRoot === ownerDocument && localScopeForEvent(event) !== ownerDocument) {
+              return;
+            }
+            if (scopeRoot !== localScopeForEvent(event) || processedEvents.has(event)) {
+              return;
+            }
+            processedEvents.add(event);
+            reconcileModal(event);
+            if (event.type === "focusin" && pendingPointerFocus) {
+              const pointerTarget = pendingPointerFocus.target;
+              const focusTarget = event.composedPath?.()[0] ?? event.target;
+              const labelControl = pointerTarget instanceof HTMLLabelElement
+                ? pointerTarget.control
+                : null;
+              const followsPointer = (
+                composedContains(pointerTarget, focusTarget)
+                || composedContains(focusTarget, pointerTarget)
+                || labelControl === focusTarget
+              );
+              pendingPointerFocus = null;
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = null;
+              if (followsPointer) {
+                return;
+              }
+            }
+            const layer = topLayer();
+            if (!layer) {
+              return;
+            }
+            if (
+              event.type === "focusin"
+              && isAncestorClosing(layer)
+            ) {
+              // An ancestor such as Disclosure must move focus before it can
+              // make the owned subtree inert. Preserve that focus ordering and
+              // let the transaction deliver the structural forced close.
+              return;
+            }
+            if (event.type === "keydown") {
+              if (event.key !== "Escape" || event.isComposing) {
+                return;
+              }
+              event.preventDefault();
+              const registration = layer.__citryAnchoredRegistration;
+              queueMicrotask(() => {
+                if (
+                  registration
+                  && layer.__citryAnchoredRegistration === registration
+                  && layers.includes(layer)
+                  && layer.isOpen()
+                ) {
+                  layer.requestDismiss("escape", event.target);
+                }
+              });
+              return;
+            }
+            if (containsEvent(layer, event)) {
+              return;
+            }
+            if (event.type === "pointerdown") {
+              pendingPointerFocus = {
+                layer,
+                registration: layer.__citryAnchoredRegistration,
+                target: event.composedPath?.()[0] ?? event.target,
+              };
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = setTimeout(() => {
+                pendingPointerFocus = null;
+                pointerFocusTimer = null;
+              }, 0);
+            }
+            layer.requestDismiss(
+              event.type === "pointerdown" ? "outside" : "focus-outside",
+              event.target,
+            );
+          };
+
+          const attachScope = (root) => {
+            const pointerdown = (event) => handleEvent(root, event);
+            const focusin = (event) => handleEvent(root, event);
+            const keydown = (event) => handleEvent(root, event);
+            const beforetoggle = (event) => {
+              if (
+                event.target instanceof HTMLDialogElement
+                && event.oldState === "open"
+                && event.newState === "closed"
+              ) {
+                // `beforetoggle` is the only synchronous standards signal for
+                // a close/open generation completed in one JavaScript task.
+                recordModalTransition(event.target, false);
+              }
+            };
+            const toggle = (event) => {
+              if (event.target instanceof HTMLDialogElement) {
+                if (event.oldState === "open" && event.newState === "open") {
+                  recordModalTransition(event.target, false);
+                }
+                const explicitState = event.newState === "closed"
+                  ? false
+                  : event.target.matches(":modal");
+                recordModalTransition(event.target, explicitState);
+              }
+              reconcileModal(event);
+            };
+            root.addEventListener("pointerdown", pointerdown, true);
+            root.addEventListener("focusin", focusin, true);
+            root.addEventListener("keydown", keydown, true);
+            root.addEventListener("beforetoggle", beforetoggle, true);
+            root.addEventListener("toggle", toggle, true);
+            const observer = new MutationObserver((records) => {
+              for (const record of records) {
+                if (record.type === "childList") {
+                  rootsDirty = true;
+                }
+                if (
+                  record.attributeName === "open"
+                  && record.target instanceof HTMLDialogElement
+                ) {
+                  const explicitState = record.oldValue !== null
+                    ? false
+                    : record.target.matches(":modal");
+                  recordModalTransition(record.target, explicitState);
+                }
+              }
+              reconcileModal();
+            });
+            observer.observe(root, {
+              attributes: true,
+              attributeOldValue: true,
+              attributeFilter: ["open", "hidden", "inert", "style", "class"],
+              childList: true,
+              subtree: true,
+            });
+            scopes.set(root, {
+              pointerdown,
+              focusin,
+              keydown,
+              beforetoggle,
+              toggle,
+              observer,
+            });
+            stats.listenerSets += 1;
+            stats.activeListenerSets += 1;
+          };
+          const detachScope = (root, record) => {
+            root.removeEventListener("pointerdown", record.pointerdown, true);
+            root.removeEventListener("focusin", record.focusin, true);
+            root.removeEventListener("keydown", record.keydown, true);
+            root.removeEventListener("beforetoggle", record.beforetoggle, true);
+            root.removeEventListener("toggle", record.toggle, true);
+            record.observer.disconnect();
+            scopes.delete(root);
+            stats.activeListenerSets -= 1;
+          };
+          function syncScopes(preserveModal = false) {
+            const desired = layers.length > 0 ? knownRoots() : new Set();
+            for (const [root, record] of scopes) {
+              if (!desired.has(root)) {
+                detachScope(root, record);
+              }
+            }
+            for (const root of desired) {
+              if (!scopes.has(root)) {
+                attachScope(root);
+              }
+            }
+            if (layers.length > 0) {
+              activeCoordinators.add(coordinator);
+            } else {
+              activeCoordinators.delete(coordinator);
+              pendingPointerFocus = null;
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = null;
+              discoveredRoots.clear();
+              rootsDirty = true;
+              if (!preserveModal) {
+                currentModal = null;
+                bootstrappedModals = false;
+                bootstrapAmbiguous = false;
+              }
+            }
+            stats.activeCoordinators = activeCoordinators.size;
+          }
+
+          coordinator.containsEvent = containsEvent;
+          coordinator.topLayer = topLayer;
+          coordinator.mayOpen = mayOpen;
+          coordinator.deepActiveElement = deepActiveElement;
+          coordinator.isAncestorClosing = isAncestorClosing;
+          coordinator.blockedReason = (layer) => (
+            layer.__citryAnchoredBlockedReason ?? null
+          );
+          coordinator.clearSuppression = (layer) => {
+            layer.__citryAnchoredSuppressed = false;
+            layer.__citryAnchoredBlockedReason = null;
+          };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:begin */
+          coordinator.prepareModal = (container, source = container) => {
+            if (!(container instanceof HTMLDialogElement)) {
+              throw new TypeError(
+                "[citry-ui] anchored-layer modal preparation requires a native Dialog.",
+              );
+            }
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const layer = layers[index];
+              if (
+                layer.isOpen?.()
+                && !layerElements(layer).some((element) => composedContains(container, element))
+              ) {
+                forceClose(layer, "modal", source);
+              }
+            }
+            syncScopes();
+          };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:end */
+          coordinator.beginAncestorClose = (container, source = container) => {
+            if (!(container instanceof Element)) {
+              throw new TypeError(
+                "[citry-ui] an anchored-layer ancestor close requires an Element container.",
+              );
+            }
+            const transaction = {
+              layers: new Set(layers.filter((layer) => (
+                layer.isOpen?.()
+                && layerElements(layer).some((element) => composedContains(container, element))
+              ))),
+              settled: false,
+            };
+            ancestorCloseTransactions.add(transaction);
+            const settle = (commit) => {
+              if (transaction.settled) {
+                return;
+              }
+              transaction.settled = true;
+              ancestorCloseTransactions.delete(transaction);
+              if (!commit) {
+                return;
+              }
+              for (let index = layers.length - 1; index >= 0; index -= 1) {
+                const layer = layers[index];
+                if (transaction.layers.has(layer) && layer.isOpen?.()) {
+                  forceClose(layer, "ancestor", source);
+                }
+              }
+              syncScopes();
+            };
+            return {
+              commit: () => settle(true),
+              cancel: () => settle(false),
+            };
+          };
+          coordinator.closeDescendants = closeDescendants;
+          coordinator.register = (layer) => {
+            if (!mayOpen(layer)) {
+              return false;
+            }
+            const oldIndex = layers.indexOf(layer);
+            if (oldIndex === -1) {
+              layer.__citryAnchoredRegistration = {
+                generation: ++nextRegistrationGeneration,
+              };
+              layers.push(layer);
+            }
+            const nextParents = new Map(
+              layers.map((candidate) => [
+                candidate,
+                candidate.logicalParent ?? inferLogicalParent(candidate),
+              ]),
+            );
+            for (const [candidate, parent] of nextParents) {
+              candidate.__citryAnchoredParent = parent;
+            }
+            syncScopes();
+            return true;
+          };
+          coordinator.unregister = (layer, options = {}) => {
+            const {
+              reason = "ancestor",
+              source = layer.surface,
+              cascade = true,
+            } = options;
+            if (cascade) {
+              closeDescendants(layer, reason, source);
+            }
+            const index = layers.indexOf(layer);
+            if (index !== -1) {
+              layers.splice(index, 1);
+            }
+            layer.__citryAnchoredParent = null;
+            layer.__citryAnchoredRegistration = null;
+            syncScopes();
+          };
+          coordinator.dispose = () => {
+            ancestorCloseTransactions.clear();
+            for (const layer of [...layers].reverse()) {
+              forceClose(layer, "ancestor", ownerDocument);
+            }
+            syncScopes();
+          };
+          return coordinator;
+        };
+
+        const runtime = {
+          version: runtimeGeneration,
+          generation: runtimeGeneration,
+          capabilities: Object.freeze([ancestorCloseCapability]),
+          stats,
+          coordinatorFor(element) {
+            const ownerDocument = element?.ownerDocument;
+            if (!(ownerDocument instanceof Document)) {
+              throw new Error(
+                "[citry-ui] anchored layers require an element with an ownerDocument.",
+              );
+            }
+            let coordinator = coordinators.get(ownerDocument);
+            if (!coordinator) {
+              coordinator = createCoordinator(ownerDocument);
+              coordinators.set(ownerDocument, coordinator);
+            }
+            return coordinator;
+          },
+          composedContains,
+        };
+        Object.defineProperties(runtime, {
+          layers: {
+            enumerable: true,
+            get: () => [...activeCoordinators].flatMap((coordinator) => coordinator.layers),
+          },
+          listeners: {
+            enumerable: true,
+            get: () => (stats.activeListenerSets > 0 ? {} : null),
+          },
+        });
+        globalThis[runtimeKey] = runtime;
+        return runtime;
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CDateRange_f0cd44", {
+  props: {
+    value: {}, open: {}, required: {}, disabled: {}, readonly: {}, invalid: {}, clearable: {},
+    dismissible: {}, placement: {}, matchWidth: {}, variant: {}, size: {}, onValueChange: {}, onOpenChange: {},
+  },
+  init: ({ els, data, props, scope, effect, inject, i18n }) => {
+    const root = els[0];
+    const fallback = root.querySelector(':scope > [data-citry-ui-part="fallback-group"]');
+    const startInput = fallback?.querySelector('[data-citry-ui-part="start-input"]');
+    const endInput = fallback?.querySelector('[data-citry-ui-part="end-input"]');
+    const enhanced = root.querySelector(':scope > [data-citry-ui-part="enhanced-control"]');
+    const trigger = root.querySelector('[data-citry-date-range-trigger]');
+    const valueText = trigger?.querySelector('[data-citry-ui-part="value"]');
+    const clear = enhanced?.querySelector(':scope > [data-citry-ui-part="clear"]');
+    const calendar = root.querySelector('.cui-date-range__calendar[data-citry-ui-part="calendar"]');
+    if (!(root instanceof HTMLElement) || !(fallback instanceof HTMLElement) || !(startInput instanceof HTMLInputElement) || startInput.type !== 'date' || !(endInput instanceof HTMLInputElement) || endInput.type !== 'date' || !(enhanced instanceof HTMLElement) || !(trigger instanceof HTMLButtonElement) || !(valueText instanceof HTMLElement) || !(clear instanceof HTMLButtonElement) || !(calendar instanceof HTMLElement)) throw new Error('[citry-ui] CDateRange settled anatomy is invalid.');
+
+    const form = inject(Symbol.for('citry-ui:form'), null);
+    const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
+    if (runtime?.generation !== 1) throw new Error('[citry-ui] CDateRange form-control runtime is unavailable.');
+    const resolver = runtime.resolver(root, props, 'CDateRange');
+    const listeners = runtime.listeners();
+    const mutations = runtime.mutations(root);
+    const owned = mutations.owned;
+    const unavailable = new Set(data.unavailableDates);
+    const allowedPlacements = ['top-start','top','top-end','bottom-start','bottom','bottom-end'];
+    let current = data.value ? { ...data.value } : null;
+    const initialValue = data.value ? { ...data.value } : null;
+    let draftStart = null;
+    let previewEnd = null;
+    let internalOpen = false;
+    let controlledValue = false;
+    let controlledOpen = false;
+    let nativeInvalid = false;
+    let unavailableMessage = data.unavailableMessage;
+    let invalidGeneration = 0;
+    let dispatching = false;
+    let ready = false;
+    let configuration = null;
+    let lastRangePresentation = null;
+
+    const canonicalDate = value => {
+      if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return null;
+      const [year, month, day] = value.split('-').map(Number);
+      if (year < 1 || year > 9999) return null;
+      const result = new Date(0); result.setUTCHours(12, 0, 0, 0); result.setUTCFullYear(year, month - 1, day);
+      return result.getUTCFullYear() === year && result.getUTCMonth() === month - 1 && result.getUTCDate() === day ? value : null;
+    };
+    const fields = value => { const [year, month, day] = value.split('-').map(Number); return { year, month, day }; };
+    const fromIso = value => { const [year, month, day] = value.split('-').map(Number); const result = new Date(0); result.setUTCHours(12, 0, 0, 0); result.setUTCFullYear(year, month - 1, day); return result; };
+    const formatDate = value => i18n
+      ? i18n.format.date(fields(value), { format:'citry-ui-date-picker-display' })
+      : new Intl.DateTimeFormat(data.locale, { day:'numeric', month:'long', timeZone:'UTC', year:'numeric' }).format(fromIso(value));
+    const translated = (owner, message, fallback, values = undefined) => i18n && data.catalog[owner] ? i18n.tr(message, values) : fallback;
+    const placeholderText = () => translated('placeholder', 'citry-ui-date-range-placeholder', data.placeholder);
+    const rangeLabel = () => translated('range_label', 'citry-ui-date-range-label', data.rangeLabel);
+    const startLabel = () => translated('start_label', 'citry-ui-date-range-start-label', data.startLabel);
+    const endLabel = () => translated('end_label', 'citry-ui-date-range-end-label', data.endLabel);
+    const triggerLabel = value => value
+      ? translated('change_label', 'citry-ui-date-range-change', data.changeLabel.replaceAll('{start}', formatDate(value.start)).replaceAll('{end}', formatDate(value.end)), { start:formatDate(value.start), end:formatDate(value.end) })
+      : rangeLabel();
+    const rangeCrossesUnavailable = value => value !== null && data.unavailableDates.some(item => item >= value.start && item <= value.end);
+    const normalizePair = (start, end) => start <= end ? { start, end } : { start:end, end:start };
+    const validPair = value => value !== null && canonicalDate(value.start) !== null && canonicalDate(value.end) !== null && value.start <= value.end && (data.min === null || value.start >= data.min) && (data.max === null || value.end <= data.max) && !rangeCrossesUnavailable(value);
+    const samePair = (left, right) => left === right || (left !== null && right !== null && left.start === right.start && left.end === right.end);
+    const resolveConfiguration = () => ({
+      required: resolver.boolean('required', data.required),
+      disabled: Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(startInput) || runtime.fieldsetDisabled(endInput),
+      readonly: resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
+      invalid: resolver.boolean('invalid', data.invalid),
+      clearable: resolver.boolean('clearable', data.clearable),
+      dismissible: resolver.boolean('dismissible', data.dismissible),
+      placement: resolver.choice('placement', data.placement, allowedPlacements),
+      matchWidth: resolver.boolean('matchWidth', data.matchWidth),
+      variant: resolver.choice('variant', data.variant, ['outline','filled','plain']),
+      size: resolver.choice('size', data.size, ['sm','md','lg']),
+    });
+    const valueDetail = (value, previousValue, source, sourceEvent) => ({ value, previousValue, controlled:controlledValue, source, sourceEvent });
+    const openDetail = (reason, source, forced = false) => ({ reason, controlled:controlledOpen, forced, source });
+    const emitNative = (previous, next) => {
+      dispatching = true;
+      try {
+        if (previous?.start !== next?.start) { startInput.dispatchEvent(new Event('input', { bubbles:true })); startInput.dispatchEvent(new Event('change', { bubbles:true })); }
+        if (previous?.end !== next?.end) { endInput.dispatchEvent(new Event('input', { bubbles:true })); endInput.dispatchEvent(new Event('change', { bubbles:true })); }
+      } finally { dispatching = false; }
+    };
+    const focusCalendar = () => requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!root.isConnected || !scope.dateRangeOpen) return;
+      calendar.querySelector('[data-citry-ui-part="day"][tabindex="0"]')?.focus({ preventScroll:true });
+    }));
+    const requestOpen = (next, reason, source = null, forced = false) => {
+      if (next === scope.dateRangeOpen && !forced) return;
+      if (next) { draftStart = null; previewEnd = null; scope.dateRangeCalendarValue = null; }
+      else { draftStart = null; previewEnd = null; scope.dateRangeCalendarValue = current?.end ?? null; }
+      if (!controlledOpen || forced) { internalOpen = next; scope.dateRangeOpen = next; }
+      resolver.callback('onOpenChange')?.(next, openDetail(reason, source, forced));
+    };
+    const requestValue = (next, source, event) => {
+      if (configuration.disabled || configuration.readonly || samePair(next, current)) return false;
+      if (next !== null && !validPair(next)) return false;
+      const previous = current ? { ...current } : null;
+      if (!controlledValue) current = next ? { ...next } : null;
+      resolver.callback('onValueChange')?.(next ? { ...next } : null, valueDetail(next ? { ...next } : null, previous, source, event));
+      if (!controlledValue) { render(); emitNative(previous, current); }
+      return true;
+    };
+    const commitCalendarDate = (next, event) => {
+      if (configuration.disabled || configuration.readonly || unavailable.has(next)) return false;
+      if (draftStart === null) {
+        draftStart = next; previewEnd = next; scope.dateRangeCalendarValue = next; render(); return true;
+      }
+      const pair = normalizePair(draftStart, next);
+      if (!validPair(pair)) { previewEnd = next; render(); return false; }
+      draftStart = null; previewEnd = null;
+      requestValue(pair, 'calendar', event);
+      requestOpen(false, 'selection', event);
+      render();
+      return true;
+    };
+    const syncRangePresentation = () => {
+      const preview = draftStart !== null ? normalizePair(draftStart, previewEnd ?? draftStart) : null;
+      const shown = preview ?? current;
+      const presentation = {
+        rangeStart:shown?.start ?? null,
+        rangeEnd:shown?.end ?? null,
+        rangePreview:preview !== null,
+        rangeStartLabel:startLabel(),
+        rangeEndLabel:endLabel(),
+        accessibleLabel:rangeLabel(),
+      };
+      scope.dateRangeRangeStart = presentation.rangeStart;
+      scope.dateRangeRangeEnd = presentation.rangeEnd;
+      scope.dateRangeRangePreview = presentation.rangePreview;
+      scope.dateRangeStartLabel = presentation.rangeStartLabel;
+      scope.dateRangeEndLabel = presentation.rangeEndLabel;
+      scope.dateRangeAccessibleLabel = presentation.accessibleLabel;
+      const serialized = JSON.stringify(presentation);
+      if (serialized === lastRangePresentation) return;
+      lastRangePresentation = serialized;
+      calendar.dispatchEvent(new CustomEvent('citry-ui:calendar-range-presentation', { detail:presentation }));
+    };
+    const render = () => owned(() => {
+      startInput.value = current?.start ?? '';
+      endInput.value = current?.end ?? '';
+      startInput.required = configuration.required; endInput.required = configuration.required;
+      startInput.disabled = configuration.disabled; endInput.disabled = configuration.disabled;
+      startInput.readOnly = configuration.readonly; endInput.readOnly = configuration.readonly;
+      startInput.min = data.min ?? ''; startInput.max = current?.end ?? data.max ?? '';
+      endInput.min = current?.start ?? data.min ?? ''; endInput.max = data.max ?? '';
+      const unavailableValue = current !== null && !validPair(current);
+      startInput.setCustomValidity(unavailableValue ? unavailableMessage : '');
+      endInput.setCustomValidity(unavailableValue ? unavailableMessage : '');
+      const invalid = configuration.invalid || nativeInvalid || unavailableValue;
+      trigger.disabled = configuration.disabled;
+      trigger.setAttribute('aria-label', triggerLabel(current));
+      valueText.textContent = current ? `${formatDate(current.start)} – ${formatDate(current.end)}` : placeholderText();
+      clear.hidden = !configuration.clearable || configuration.required || current === null;
+      clear.disabled = configuration.disabled || configuration.readonly;
+      runtime.states(root, { empty:current === null, open:scope.dateRangeOpen, required:configuration.required, disabled:configuration.disabled, readonly:configuration.readonly, invalid });
+      root.dataset.variant = configuration.variant; root.dataset.size = configuration.size;
+      root.setAttribute('aria-disabled', configuration.disabled ? 'true' : 'false');
+      root.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+      scope.dateRangeCalendarDisabled = configuration.disabled;
+      scope.dateRangeCalendarReadonly = configuration.readonly;
+      scope.dateRangeDismissible = configuration.dismissible;
+      scope.dateRangePlacement = configuration.placement;
+      scope.dateRangeMatchWidth = configuration.matchWidth;
+      syncRangePresentation();
+    });
+
+    scope.dateRangeOpen = internalOpen;
+    scope.dateRangeCalendarValue = current?.end ?? null;
+    scope.dateRangeCalendarDisabled = false;
+    scope.dateRangeCalendarReadonly = false;
+    scope.dateRangeRangeStart = current?.start ?? null;
+    scope.dateRangeRangeEnd = current?.end ?? null;
+    scope.dateRangeRangePreview = false;
+    scope.dateRangeStartLabel = startLabel();
+    scope.dateRangeEndLabel = endLabel();
+    scope.dateRangeAccessibleLabel = rangeLabel();
+    scope.dateRangeOnPopoverOpenChange = (next, detail) => {
+      if (detail?.forced) { internalOpen = false; scope.dateRangeOpen = false; draftStart = null; previewEnd = null; resolver.callback('onOpenChange')?.(false, { ...detail, controlled:controlledOpen }); if (ready) render(); return; }
+      requestOpen(next, detail?.reason ?? 'native', detail?.source ?? null);
+      if (next) focusCalendar();
+      if (ready) render();
+    };
+    scope.dateRangeOnCalendarValueChange = (next, detail) => commitCalendarDate(next, detail?.sourceEvent ?? null);
+
+    listeners.add(clear, 'click', event => { if (requestValue(null, 'clear', event)) requestOpen(false, 'clear', event); });
+    listeners.add(calendar, 'pointerover', event => { const cell = event.target.closest?.('[data-citry-ui-part="day"][data-date]'); if (draftStart !== null && cell instanceof HTMLElement) { previewEnd = cell.dataset.date; render(); } });
+    listeners.add(calendar, 'focusin', event => { const cell = event.target.closest?.('[data-citry-ui-part="day"][data-date]'); if (draftStart !== null && cell instanceof HTMLElement) { previewEnd = cell.dataset.date; render(); } });
+    listeners.add(calendar, 'click', event => { const cell = event.target.closest?.('[data-citry-ui-part="day"][data-date]'); if (draftStart !== null && cell instanceof HTMLElement && cell.dataset.date === draftStart) { event.stopImmediatePropagation(); commitCalendarDate(draftStart, event); } }, true);
+    listeners.add(calendar, 'keydown', event => { const cell = event.target.closest?.('[data-citry-ui-part="day"][data-date]'); if (draftStart !== null && cell instanceof HTMLElement && cell.dataset.date === draftStart && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopImmediatePropagation(); commitCalendarDate(draftStart, event); } }, true);
+    const nativeCommit = event => {
+      if (dispatching) return;
+      const start = startInput.value || null; const end = endInput.value || null;
+      if (start === null || end === null) { if (!configuration.required && start === null && end === null) requestValue(null, 'native', event); return; }
+      const pair = { start, end };
+      if (validPair(pair)) { nativeInvalid = false; requestValue(pair, 'native', event); }
+    };
+    listeners.add(startInput, 'input', nativeCommit); listeners.add(endInput, 'input', nativeCommit);
+    listeners.add(startInput, 'change', nativeCommit); listeners.add(endInput, 'change', nativeCommit);
+    const onInvalid = event => {
+      event.preventDefault(); nativeInvalid = true; requestOpen(true, 'native', event); render();
+      const token = ++invalidGeneration; runtime.invalidFocus(root, trigger, () => token === invalidGeneration && !configuration.disabled); focusCalendar();
+    };
+    listeners.add(startInput, 'invalid', onInvalid, true); listeners.add(endInput, 'invalid', onInvalid, true);
+    const reset = runtime.registerReset(root, startInput, {
+      reset: event => { if (event.defaultPrevented) return; nativeInvalid = false; draftStart = null; previewEnd = null; const previous = current; if (!controlledValue) current = initialValue ? { ...initialValue } : null; else resolver.callback('onValueChange')?.(initialValue ? { ...initialValue } : null, valueDetail(initialValue, previous, 'reset', event)); requestOpen(false, 'reset', event); render(); },
+      invalidate: () => { invalidGeneration += 1; },
+    });
+    const stopFieldset = runtime.watchFieldset(root, startInput, () => { configuration = resolveConfiguration(); render(); });
+    const unavailableBinding = i18n && data.catalog.unavailable_message ? i18n.bind({ message:'citry-ui-date-range-unavailable', onChange:text => { unavailableMessage = text; if (ready) render(); } }) : null;
+    const unsubscribe = i18n?.subscribe(() => { if (ready) render(); });
+
+    effect(() => {
+      configuration = resolveConfiguration();
+      const requestedValue = props.value;
+      if (requestedValue === undefined) { controlledValue = false; resolver.clear('value'); }
+      else if (requestedValue === null) { controlledValue = true; current = null; resolver.clear('value'); }
+      else if (typeof requestedValue === 'object' && validPair(requestedValue)) { controlledValue = true; current = { start:requestedValue.start, end:requestedValue.end }; resolver.clear('value'); }
+      else resolver.report('value', requestedValue);
+      const requestedOpen = props.open;
+      if (requestedOpen === undefined || requestedOpen === null) { if (controlledOpen) internalOpen = scope.dateRangeOpen; controlledOpen = false; resolver.clear('open'); }
+      else if (typeof requestedOpen === 'boolean') { const opening = !scope.dateRangeOpen && requestedOpen; controlledOpen = true; internalOpen = requestedOpen; scope.dateRangeOpen = requestedOpen; resolver.clear('open'); if (opening) { draftStart = null; previewEnd = null; scope.dateRangeCalendarValue = null; focusCalendar(); } }
+      else { resolver.report('open', requestedOpen); if (controlledOpen) internalOpen = scope.dateRangeOpen; controlledOpen = false; }
+      ready = true; render();
+    });
+    mutations.start(() => render());
+    owned(() => { startInput.tabIndex = -1; endInput.tabIndex = -1; root.toggleAttribute('data-enhanced', true); root.setAttribute('data-citry-date-range-initialized', ''); });
+    render();
+
+    return () => {
+      ready = false; invalidGeneration += 1; unavailableBinding?.dispose(); unsubscribe?.(); listeners.stop(); mutations.stop(); stopFieldset(); reset();
+      owned(() => { startInput.removeAttribute('tabindex'); endInput.removeAttribute('tabindex'); root.removeAttribute('data-enhanced'); root.removeAttribute('data-citry-date-range-initialized'); });
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CDateRange_f0cd44", "826e3af276d2472445b5191e296fac74", atob("eyJwdWJsaWNJZCI6ImN1aS1kYXRlLXJhbmdlLWNpcGZodmppdSIsInN0YXJ0SWQiOiJjdWktZGF0ZS1yYW5nZS1jaXBmaHZqaXUtc3RhcnQiLCJlbmRJZCI6ImN1aS1kYXRlLXJhbmdlLWNpcGZodmppdS1lbmQiLCJ2YWx1ZSI6eyJzdGFydCI6IjIwMjYtMDgtMTkiLCJlbmQiOiIyMDI2LTA4LTIzIn0sIm1pbiI6bnVsbCwibWF4IjpudWxsLCJ1bmF2YWlsYWJsZURhdGVzIjpbXSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsInJlYWRvbmx5IjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOnRydWUsImNsZWFyYWJsZSI6dHJ1ZSwiZGlzbWlzc2libGUiOnRydWUsInBsYWNlbWVudCI6ImJvdHRvbS1zdGFydCIsIm1hdGNoV2lkdGgiOnRydWUsInBsYWNlaG9sZGVyIjoiQ2hvb3NlIGRhdGVzIiwicmFuZ2VMYWJlbCI6IkNob29zZSBkYXRlIHJhbmdlIiwiY2hhbmdlTGFiZWwiOiJDaGFuZ2UgZGF0ZSByYW5nZSwge3N0YXJ0fSB0byB7ZW5kfSIsInN0YXJ0TGFiZWwiOiJTdGFydCBkYXRlIiwiZW5kTGFiZWwiOiJFbmQgZGF0ZSIsImNsZWFyTGFiZWwiOiJDbGVhciBkYXRlIHJhbmdlIiwidW5hdmFpbGFibGVNZXNzYWdlIjoiQ2hvb3NlIGFuIGF2YWlsYWJsZSBkYXRlIHJhbmdlLiIsImNhdGFsb2ciOnsicGxhY2Vob2xkZXIiOnRydWUsInJhbmdlX2xhYmVsIjp0cnVlLCJjaGFuZ2VfbGFiZWwiOnRydWUsInN0YXJ0X2xhYmVsIjp0cnVlLCJlbmRfbGFiZWwiOnRydWUsImNsZWFyX2xhYmVsIjp0cnVlLCJ1bmF2YWlsYWJsZV9tZXNzYWdlIjp0cnVlfSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJsb2NhbGUiOiJlbi1VUyIsImRlc2NyaWJlZGJ5IjpudWxsLCJlcnJvcm1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponent("CCalendar_6c8cea", {props:{value:{},visibleDate:{},min:{},max:{},unavailableDates:{},required:{},disabled:{},readonly:{},invalid:{},firstDayOfWeek:{},showAdjacentDays:{},fixedWeeks:{},variant:{},size:{},onValueChange:{},onVisibleDateChange:{},rangeStart:{},rangeEnd:{},rangePreview:{},rangeStartLabel:{},rangeEndLabel:{},accessibleLabel:{}},init:({els:e,data:t,props:a,effect:n,inject:r,i18n:l})=>{const i=e[0],o=i.querySelector(':scope > [data-citry-ui-part="header"]'),s=o?.querySelector(':scope > [data-citry-ui-part="previous"]'),d=o?.querySelector(':scope > [data-citry-ui-part="heading"]'),u=o?.querySelector(':scope > [data-citry-ui-part="next"]'),c=i.querySelector(':scope > [data-citry-ui-part="grid"]'),b=c?.querySelector(':scope > thead > [data-citry-ui-part="weekday-row"]'),y=c?.querySelector(":scope > tbody"),g=i.querySelector(':scope > [data-citry-ui-part="fallback-input"]');if(!(i instanceof HTMLElement&&o instanceof HTMLElement&&s instanceof HTMLButtonElement&&d instanceof HTMLElement&&u instanceof HTMLButtonElement&&c instanceof HTMLTableElement&&b instanceof HTMLTableRowElement&&y instanceof HTMLTableSectionElement&&g instanceof HTMLInputElement&&"date"===g.type))throw new Error("[citry-ui] CCalendar settled anatomy is invalid.");const m=r(Symbol.for("citry-ui:field"),null),f=r(Symbol.for("citry-ui:form"),null),v=globalThis[Symbol.for("citry-ui:form-control-runtime")];if(1!==v?.generation)throw new Error("[citry-ui] CCalendar form-control runtime is unavailable.");const p=v.resolver(i,a,"CCalendar"),h=v.listeners(),k=v.mutations(i),w=k.owned,D=Object.freeze({heading:"citry-ui-calendar-heading",year:"citry-ui-calendar-year",weekday:"citry-ui-calendar-weekday",weekdayLong:"citry-ui-calendar-weekday-long",day:"citry-ui-calendar-day",label:"citry-ui-calendar-date-label"}),C=Object.freeze({[D.heading]:{month:"long",year:"numeric"},[D.year]:{year:"numeric"},[D.weekday]:{weekday:"short"},[D.weekdayLong]:{weekday:"long"},[D.day]:{day:"numeric"},[D.label]:{day:"numeric",month:"long",weekday:"long",year:"numeric"}});let A=g.value||t.value,L=t.visibleDate||A||null,E=A,T=null,x=!1,S=!1,M=null,q={min:t.min,max:t.max,unavailableDates:[...t.unavailableDates]},U=t.value,I=t.visibleDate,$=!1,H=0,W=t.unavailableMessage,z=null,F=!1,O={start:null,end:null,preview:!1,startLabel:null,endLabel:null,accessibleLabel:null},j=!1;const N=e=>String(e).padStart(2,"0"),V=e=>{if("string"!=typeof e||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(e))return null;const[t,a,n]=e.split("-").map(Number);if(t<1||t>9999)return null;const r=new Date(0);return r.setUTCHours(12,0,0,0),r.setUTCFullYear(t,a-1,n),r.getUTCFullYear()===t&&r.getUTCMonth()===a-1&&r.getUTCDate()===n?e:null},P=e=>{const t=null==e?.rangeStart?null:V(e.rangeStart),a=null==e?.rangeEnd?null:V(e.rangeEnd),n={start:t,end:null!==t&&null!==a?a:t,preview:!0===e?.rangePreview,startLabel:"string"==typeof e?.rangeStartLabel&&e.rangeStartLabel?e.rangeStartLabel:null,endLabel:"string"==typeof e?.rangeEndLabel&&e.rangeEndLabel?e.rangeEndLabel:null,accessibleLabel:"string"==typeof e?.accessibleLabel&&e.accessibleLabel?e.accessibleLabel:null};return!Object.keys(n).every(e=>n[e]===O[e])&&(O=n,F&&de(),!0)},Y=e=>{const[t,a,n]=e.split("-").map(Number),r=new Date(0);return r.setUTCHours(12,0,0,0),r.setUTCFullYear(t,a-1,n),r},R=(e,t)=>{const a=Y(e);a.setUTCDate(a.getUTCDate()+t);const n=a.getUTCFullYear();return n<1||n>9999?null:(e=>`${String(e.getUTCFullYear()).padStart(4,"0")}-${N(e.getUTCMonth()+1)}-${N(e.getUTCDate())}`)(a)},B=(e,t)=>Math.round((Y(t)-Y(e))/864e5),Z=e=>Y(e).getUTCDay()||7,K=()=>l?.context.locale??t.locale,_=()=>l?.context.direction??getComputedStyle(i).direction??t.direction,G=(e,t)=>l?l.format.date((e=>{const t=Y(e);return{year:t.getUTCFullYear(),month:t.getUTCMonth()+1,day:t.getUTCDate()}})(e),{format:t}):new Intl.DateTimeFormat(K(),{...C[t],timeZone:"UTC"}).format(Y(e)),J=()=>{const e=l?.context.time_zone??t.timeZone,a=new Date;if(!e)return`${String(a.getFullYear()).padStart(4,"0")}-${N(a.getMonth()+1)}-${N(a.getDate())}`;const n=Object.fromEntries(new Intl.DateTimeFormat("en-CA-u-ca-gregory-nu-latn",{day:"2-digit",month:"2-digit",timeZone:e,year:"numeric"}).formatToParts(a).filter(e=>"literal"!==e.type).map(e=>[e.type,e.value]));return`${String(n.year).padStart(4,"0")}-${n.month}-${n.day}`},Q=()=>{const e=new Intl.Locale(K()),t="function"==typeof e.getWeekInfo?e.getWeekInfo():e.weekInfo;return Number.isInteger(t?.firstDay)?t.firstDay:7},X=e=>{const t=G(e,D.heading);let a=e,n=e,r=0;for(;r<40;){const e=R(a,-1);if(null===e||G(e,D.heading)!==t)break;a=e,r+=1}if(40===r)throw new Error("[citry-ui] CCalendar could not find a bounded calendar-month start.");for(r=0;r<40;){const e=R(n,1);if(null===e||G(e,D.heading)!==t)break;n=e,r+=1}if(40===r)throw new Error("[citry-ui] CCalendar could not find a bounded calendar-month end.");return{start:a,end:n,key:t,count:B(a,n)+1}},ee=(e,t)=>G(e,D.heading)===G(t,D.heading),te=e=>{const t=G(e,D.year);let a=X(e),n=0;for(;n<15;){const e=R(a.start,-1);if(null===e||G(e,D.year)!==t)break;a=X(e),n+=1}if(15===n)throw new Error("[citry-ui] CCalendar could not find a bounded calendar-year start.");const r=[];let l=a;for(;r.length<15&&G(l.start,D.year)===t;){r.push(l);const e=R(l.end,1);if(null===e||G(e,D.year)!==t)break;l=X(e)}if(15===r.length&&null!==R(r.at(-1).end,1)&&G(R(r.at(-1).end,1),D.year)===t)throw new Error("[citry-ui] CCalendar calendar year exceeds 15 months.");const i=Math.max(0,r.findIndex(t=>ee(t.start,e)));return{months:r,index:i}},ae=e=>M.disabled||null!==M.min&&e<M.min||null!==M.max&&e>M.max,ne=e=>M.unavailable.has(e),re=e=>null!==M.min&&e<M.min?M.min:null!==M.max&&e>M.max?M.max:e,le=(e,t)=>{const n=a[e];if(void 0===n)return p.clear(e),t;if(null===n)return p.clear(e),null;const r=V(n);return null!==r?(p.clear(e),r):(p.report(e,n),q[e])},ie=()=>{const e=a.firstDayOfWeek;return void 0===e?t.firstDayOfWeek:null===e?(p.clear("firstDayOfWeek"),null):Number.isInteger(e)&&e>=1&&e<=7?(p.clear("firstDayOfWeek"),e):(p.report("firstDayOfWeek",e),t.firstDayOfWeek)},oe=()=>{const e=(()=>{const e=le("min",t.min),n=le("max",t.max),r=(()=>{const e=a.unavailableDates;if(void 0===e)return p.clear("unavailableDates"),[...t.unavailableDates];if(!Array.isArray(e)||e.length>4096)return p.report("unavailableDates",e),q.unavailableDates;const n=e.map(V);return n.some(e=>null===e)||new Set(n).size!==n.length?(p.report("unavailableDates",e),q.unavailableDates):(p.clear("unavailableDates"),n)})();return null!==e&&null!==n&&e>n?(p.report("min/max",{min:e,max:n}),q):(p.clear("min/max"),q={min:e,max:n,unavailableDates:r},q)})();return{min:e.min,max:e.max,unavailable:new Set(e.unavailableDates),required:m?m.required:p.boolean("required",t.required),disabled:m?m.disabled:Boolean(f?.disabled)||p.boolean("disabled",t.disabled)||v.fieldsetDisabled(g),readonly:m?m.readonly:p.boolean("readonly",t.inheritsReadonly&&f?f.readonly:t.readonly),invalid:m?m.invalid:p.boolean("invalid",t.invalid),firstDay:ie(),showAdjacentDays:p.boolean("showAdjacentDays",t.showAdjacentDays),fixedWeeks:p.boolean("fixedWeeks",t.fixedWeeks),variant:p.choice("variant",t.variant,["outline","plain"]),size:p.choice("size",t.size,["sm","md","lg"])}},se=()=>{g.value=A??"",g.min=M.min??"",g.max=M.max??"",g.required=M.required,g.disabled=M.disabled,g.readOnly=M.readonly,g.tabIndex=-1,g.setCustomValidity(null!==A&&M.unavailable.has(A)?W:"")},de=(e=!1)=>w(()=>{(()=>{const e=J();L=re(null===L?A??e:L);const t=X(L);null!==E&&!ae(E)&&ee(E,L)||(E=null!==A&&!ae(A)&&ee(A,L)?A:!ae(e)&&ee(e,L)?e:(e=>{for(let t=e.start,a=0;null!==t&&a<40&&!(t>e.end);t=R(t,1),a+=1)if(!ae(t))return t;return null})(t))})();const a=X(L),n=M.firstDay??Q(),r=J(),l=M.invalid||$||null!==A&&M.unavailable.has(A);i.dataset.variant=M.variant,i.dataset.size=M.size,i.toggleAttribute("data-disabled",M.disabled),i.toggleAttribute("data-readonly",M.readonly),i.toggleAttribute("data-required",M.required),i.toggleAttribute("data-invalid",l),i.toggleAttribute("data-empty",null===A),i.setAttribute("aria-disabled",M.disabled?"true":"false"),c.setAttribute("aria-readonly",M.readonly?"true":"false"),i.setAttribute("aria-invalid",l?"true":"false"),d.textContent=a.key;const o=[];for(let e=0;e<7;e+=1){const t=R("2026-08-17",(n-1+e)%7+1-1),a=document.createElement("th");a.scope="col",a.setAttribute("role","columnheader"),a.setAttribute("data-citry-ui-part","weekday");const r=document.createElement("abbr");r.textContent=G(t,D.weekday),r.title=G(t,D.weekdayLong),a.append(r),o.push(a)}b.replaceChildren(...o);const f=(Z(a.start)-n+7)%7,p=7*Math.ceil((f+a.count)/7),h=M.fixedWeeks?42:p,k=[];for(let e=0;e<h/7;e+=1){const t=document.createElement("tr");t.setAttribute("role","row"),t.setAttribute("data-citry-ui-part","week");for(let n=0;n<7;n+=1){const l=R(a.start,7*e+n-f),i=document.createElement("td");if(i.setAttribute("role","gridcell"),i.setAttribute("data-citry-ui-part","day"),null===l){i.setAttribute("aria-disabled","true"),t.append(i);continue}const o=l<a.start||l>a.end;if(o&&!M.showAdjacentDays){i.setAttribute("aria-disabled","true"),i.setAttribute("data-outside",""),t.append(i);continue}const s=ae(l),d=ne(l),u=null!==O.start&&null!==O.end&&l>=O.start&&l<=O.end&&!d;i.dataset.date=l;const c=G(l,D.label);null!==O.start&&l===O.start&&O.startLabel?i.setAttribute("aria-label",`${O.startLabel}: ${c}`):null!==O.end&&l===O.end&&O.endLabel?i.setAttribute("aria-label",`${O.endLabel}: ${c}`):i.setAttribute("aria-label",c),i.setAttribute("aria-selected",l===A?"true":"false"),i.setAttribute("aria-disabled",s||d?"true":"false"),l===r&&i.setAttribute("aria-current","date"),i.tabIndex=s||l!==E?-1:0,i.textContent=G(l,D.day),i.toggleAttribute("data-selected",l===A),i.toggleAttribute("data-today",l===r),i.toggleAttribute("data-outside",o),i.toggleAttribute("data-unavailable",d),i.toggleAttribute("data-focused",l===E),i.toggleAttribute("data-in-range",u),i.toggleAttribute("data-range-start",null!==O.start&&l===O.start),i.toggleAttribute("data-range-end",null!==O.end&&l===O.end),i.toggleAttribute("data-range-preview",O.preview&&u),t.append(i)}k.push(t)}y.replaceChildren(...k);const w=R(a.start,-1),C=R(a.end,1);s.disabled=M.disabled||null===w||null!==M.min&&X(w).end<M.min,u.disabled=M.disabled||null===C||null!==M.max&&X(C).start>M.max,se(),(e=>{v.relationships([i,g],m,{describedby:t.describedby,errormessage:t.errormessage,control:g,required:M.required,disabled:M.disabled,readonly:M.readonly},e)})(l),i.toggleAttribute("data-enhanced",!0),i.setAttribute("data-citry-calendar-initialized",""),O.accessibleLabel&&(i.setAttribute("aria-label",O.accessibleLabel),i.removeAttribute("aria-labelledby"),g.setAttribute("aria-label",O.accessibleLabel),g.removeAttribute("aria-labelledby")),e&&null!==E&&y.querySelector(`[data-date="${E}"]`)?.focus()}),ue=(e,t,a,n)=>({value:e,previousValue:t,controlled:x,source:a,sourceEvent:n}),ce=(e,t,a,n=null)=>{const r=re(e);if(ee(r,L))return null!==n&&(E=n),de(null!==n),!0;const l=L;return S?T=n:(L=r,E=n??r),p.callback("onVisibleDateChange")?.(r,((e,t,a,n)=>({visibleDate:e,previousVisibleDate:t,controlled:S,source:a,sourceEvent:n}))(r,l,t,a)),de(!S&&null!==n),!S},be=(e,t,a)=>{if(e===A||ae(e)||ne(e)||M.readonly)return!1;const n=A;return x||(A=e),p.callback("onValueChange")?.(e,ue(e,n,t,a)),x||(se(),g.dispatchEvent(new Event("input",{bubbles:!0})),g.dispatchEvent(new Event("change",{bubbles:!0}))),ee(e,L)?(E=e,de(!0)):ce(e,t,a,e),!0},ye=(e,t,a)=>null!==e&&!ae(e)&&(ee(e,L)?(E=e,de(!0),!0):ce(e,t,a,e)),ge=(e,t,a)=>{const n=X(L),r=e<0?R(n.start,-1):R(n.end,1);if(null===r)return!1;const l=X(r),i=null!==E&&E>=n.start&&E<=n.end?B(n.start,E):0,o=R(l.start,Math.min(i,l.count-1));return null===o||ae(re(o))?ce(re(o),t,a,re(o)):ce(o,t,a,o)},me=(e,t,a)=>{const n=te(L),r=e<0?R(n.months[0].start,-1):R(n.months.at(-1).end,1);if(null===r)return!1;const l=te(r),i=l.months[Math.min(n.index,l.months.length-1)],o=X(L),s=null!==E&&E>=o.start&&E<=o.end?B(o.start,E):0,d=re(R(i.start,Math.min(s,i.count-1)));return ce(d,t,a,d)},fe=()=>{$&&g.validity.valid&&($=!1,m?.setNativeInvalid(!1))};h.add(s,"click",e=>ge(-1,"button",e)),h.add(u,"click",e=>ge(1,"button",e)),h.add(i,"citry-ui:calendar-range-presentation",e=>{e instanceof CustomEvent&&(e.stopPropagation(),j=!0,P(e.detail))}),h.add(y,"click",e=>{const t=e.target.closest?.('[role="gridcell"][data-date]');t instanceof HTMLTableCellElement&&y.contains(t)&&(E=t.dataset.date,be(t.dataset.date,"pointer",e)||de(!0))}),h.add(y,"focusin",e=>{const t=e.target.closest?.('[role="gridcell"][data-date]');t instanceof HTMLTableCellElement&&!ae(t.dataset.date)&&(E=t.dataset.date)}),h.add(y,"keydown",e=>{const t=e.target.closest?.('[role="gridcell"][data-date]');if(!(t instanceof HTMLTableCellElement))return;const a=t.dataset.date;let n=!0;"ArrowLeft"===e.key?ye(R(a,"rtl"===_()?1:-1),"keyboard",e):"ArrowRight"===e.key?ye(R(a,"rtl"===_()?-1:1),"keyboard",e):"ArrowUp"===e.key?ye(R(a,-7),"keyboard",e):"ArrowDown"===e.key?ye(R(a,7),"keyboard",e):"Home"===e.key?ye(R(a,-(Z(a)-(M.firstDay??Q())+7)%7),"keyboard",e):"End"===e.key?ye(R(a,6-(Z(a)-(M.firstDay??Q())+7)%7),"keyboard",e):"PageUp"===e.key?e.shiftKey?me(-1,"keyboard",e):ge(-1,"keyboard",e):"PageDown"===e.key?e.shiftKey?me(1,"keyboard",e):ge(1,"keyboard",e):"Enter"===e.key||" "===e.key?be(a,"keyboard",e):n=!1,n&&e.preventDefault()}),h.add(g,"focus",()=>{M.disabled||queueMicrotask(()=>de(!0))}),h.add(g,"change",fe),h.add(g,"invalid",e=>{e.preventDefault(),$=!0,m?.setNativeInvalid(!0),de();const t=++H;v.invalidFocus(g,i,()=>t===H&&!M.disabled),queueMicrotask(()=>{t===H&&de(!0)})},!0);const ve=v.registerReset(g,i,{reset:e=>{if(e.defaultPrevented)return;$=!1,m?.setNativeInvalid(!1);const t=A;x||(A=U),S||(L=I||A||J()),E=A,t!==A&&p.callback("onValueChange")?.(A,ue(A,t,"reset",e)),de()},invalidate:()=>{H+=1}}),pe=v.watchFieldset(g,i,()=>{M=oe(),de()});l&&t.catalogUnavailableMessage&&(z=l.bind({message:"citry-ui-calendar-unavailable",onChange:e=>{W=e,F&&de()}}));const he=l?.subscribe(()=>{F&&de(document.activeElement?.matches?.('[data-citry-ui-part="day"]')??!1)});return n(()=>{m&&["required","disabled","readonly","invalid"].forEach(e=>{void 0===a[e]?p.clear(e):p.report(e,a[e],"ignoring it because the enclosing CField owns this state")}),M=oe(),j||P(a);const e=A,t=a.value;if(void 0===t)x=!1,p.clear("value");else if(null===t)x=!0,A=null,p.clear("value");else{const e=V(t);null===e||ae(e)||ne(e)?p.report("value",t):(x=!0,A=e,p.clear("value"))}const n=a.visibleDate;if(void 0===n)S=!1,p.clear("visibleDate");else{const e=V(n);null===e?p.report("visibleDate",n):(S=!0,L=re(e),null!==T&&ee(T,L)&&(E=T),T=null,p.clear("visibleDate"))}A===e||S||null===A||ee(A,L??A)||(L=A),fe(),F=!0,de()}),k.start(()=>de()),()=>{F=!1,H+=1,z?.dispose(),he?.(),h.stop(),k.stop(),pe(),ve(),$&&m?.setNativeInvalid(!1),w(()=>{i.removeAttribute("data-enhanced"),i.removeAttribute("data-citry-calendar-initialized"),b.replaceChildren(),y.replaceChildren()})}}});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCalendar_6c8cea", "8c6a63d98126255a3daf6b81f4e456ad", atob("eyJ2YWx1ZSI6IjIwMjYtMDgtMjMiLCJ2aXNpYmxlRGF0ZSI6bnVsbCwibWluIjpudWxsLCJtYXgiOm51bGwsInVuYXZhaWxhYmxlRGF0ZXMiOltdLCJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwiaW5oZXJpdHNSZWFkb25seSI6ZmFsc2UsImZpcnN0RGF5T2ZXZWVrIjpudWxsLCJzaG93QWRqYWNlbnREYXlzIjp0cnVlLCJmaXhlZFdlZWtzIjp0cnVlLCJ1bmF2YWlsYWJsZU1lc3NhZ2UiOiJDaG9vc2UgYW4gYXZhaWxhYmxlIGRhdGUuIiwiY2F0YWxvZ1VuYXZhaWxhYmxlTWVzc2FnZSI6dHJ1ZSwidmFyaWFudCI6InBsYWluIiwic2l6ZSI6Im1kIiwibG9jYWxlIjoiZW4tVVMiLCJkaXJlY3Rpb24iOiJsdHIiLCJ0aW1lWm9uZSI6bnVsbCwiZGVzY3JpYmVkYnkiOm51bGwsImVycm9ybWVzc2FnZSI6bnVsbH0="));
+})();</script><script>(function() {
+
+const anchoredLayerRuntime = globalThis[
+  Symbol.for("citry-ui:anchored-layer-runtime")
+];
+if (
+  anchoredLayerRuntime?.generation !== 3
+  || !anchoredLayerRuntime?.capabilities?.includes?.(
+    "ancestor-close-transaction-v1",
+  )
+) {
+  throw new Error("[citry-ui] anchored-layer runtime dependency did not load.");
+}
+
+const handoffKey = Symbol.for("citry-ui:popover-handoff");
+
+Citry.manager.registerComponent("CPopover_d4bf44", {
+  props: {
+    open: {},
+    dismissible: {},
+    placement: {},
+    matchWidth: {},
+    onOpenChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const host = els[0];
+    const nearestHost = (element) => (
+      element?.closest?.("[data-citry-popover-host]") ?? null
+    );
+    const surface = [...host.querySelectorAll('[data-citry-ui-part="popover"]')]
+      .find((candidate) => nearestHost(candidate) === host);
+    const triggers = [...host.querySelectorAll("[data-citry-popover-trigger]")]
+      .filter((candidate) => nearestHost(candidate) === host);
+    if (!surface || triggers.length !== 1 || !(triggers[0] instanceof HTMLButtonElement)) {
+      throw new Error(
+        "[citry-ui] CPopover activator must spread activator_attrs onto exactly one native Button.",
+      );
+    }
+    const trigger = triggers[0];
+    const layerCoordinator = anchoredLayerRuntime.coordinatorFor(surface);
+    // Both declarations exist in server HTML for the no-JavaScript
+    // fallback. Reassert them after all authored Button/surface styles
+    // have initialized so the component keeps its private anchor owner.
+    const anchorName = getComputedStyle(surface)
+      .getPropertyValue("--_cui-popover-anchor")
+      .trim();
+    if (!anchorName.startsWith("--")) {
+      throw new Error("[citry-ui] CPopover could not resolve its CSS anchor name.");
+    }
+    trigger.style.setProperty("anchor-name", anchorName);
+    surface.style.setProperty("position-anchor", anchorName);
+    const allowedPlacements = [
+      "top-start",
+      "top",
+      "top-end",
+      "bottom-start",
+      "bottom",
+      "bottom-end",
+    ];
+    const invalidEpisodes = new Set();
+    const scheduledTasks = new Set();
+    const initialHandoff = surface[handoffKey];
+    delete surface[handoffKey];
+    let active = true;
+    let controlled = false;
+    let logicalOpen = false;
+    let internalOpen = initialHandoff?.open ?? data.open;
+    let onOpenChange = null;
+    let animation = null;
+    let generation = 0;
+    let pendingRequest = null;
+    let configuration = {
+      dismissible: data.dismissible,
+      placement: data.placement,
+      matchWidth: data.matchWidth,
+    };
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CPopover ${name} received invalid client value `
+          + `${describeValue(value)}; using the current or server-rendered fallback.`,
+        surface,
+      );
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolvePlacement = () => {
+      const value = props.placement === undefined ? data.placement : props.placement;
+      if (allowedPlacements.includes(value)) {
+        invalidEpisodes.delete("placement");
+        return value;
+      }
+      reportInvalid("placement", value);
+      return data.placement;
+    };
+    const resolveCallback = () => {
+      const value = props.onOpenChange;
+      if (value === undefined || value === null || typeof value === "function") {
+        invalidEpisodes.delete("onOpenChange");
+        return value ?? null;
+      }
+      reportInvalid("onOpenChange", value);
+      return null;
+    };
+    const scheduleTask = (callback) => {
+      const task = setTimeout(() => {
+        scheduledTasks.delete(task);
+        if (active) {
+          callback();
+        }
+      }, 0);
+      scheduledTasks.add(task);
+    };
+    const cancelAnimation = () => {
+      generation += 1;
+      animation?.cancel();
+      animation = null;
+    };
+    const duration = () => {
+      const raw = getComputedStyle(surface)
+        .getPropertyValue("--_cui-popover-duration")
+        .trim();
+      if (raw.endsWith("ms")) {
+        return Math.max(0, Number.parseFloat(raw) || 0);
+      }
+      if (raw.endsWith("s")) {
+        return Math.max(0, (Number.parseFloat(raw) || 0) * 1000);
+      }
+      return Math.max(0, Number.parseFloat(raw) || 0);
+    };
+    const easing = () => getComputedStyle(surface)
+      .getPropertyValue("--_cui-popover-easing")
+      .trim() || "ease";
+    const updateTrigger = () => {
+      trigger.setAttribute("aria-expanded", logicalOpen ? "true" : "false");
+    };
+    const focusable = () => [...surface.querySelectorAll(
+      'a[href], area[href], button:not(:disabled), input:not(:disabled):not([type="hidden"]), '
+        + 'select:not(:disabled), textarea:not(:disabled), iframe, object, embed, '
+        + 'audio[controls], video[controls], summary, '
+        + '[contenteditable]:not([contenteditable="false"]), '
+        + '[tabindex]:not([tabindex="-1"]):not([inert])',
+    )].filter((element) => (
+      element instanceof HTMLElement
+      && element.closest("[popover]") === surface
+      && !element.hidden
+      && !element.closest("[inert]")
+      && element.getClientRects().length > 0
+      && getComputedStyle(element).visibility !== "hidden"
+    ));
+    const placeInitialFocus = (currentGeneration) => {
+      queueMicrotask(() => {
+        if (!active || !logicalOpen || currentGeneration !== generation) {
+          return;
+        }
+        const autofocus = [...surface.querySelectorAll("[autofocus]")]
+          .find((element) => element instanceof HTMLElement
+            && element.closest("[popover]") === surface);
+        const target = autofocus ?? focusable()[0] ?? surface;
+        target.focus({ preventScroll: true });
+      });
+    };
+    const finishNativeClose = (currentGeneration) => {
+      if (!active || logicalOpen || currentGeneration !== generation) {
+        return;
+      }
+      if (surface.matches(":popover-open")) {
+        surface.hidePopover();
+      }
+      surface.removeAttribute("data-citry-popover-exiting");
+    };
+    const animateEntry = (currentGeneration) => {
+      const milliseconds = duration();
+      if (milliseconds === 0) {
+        return;
+      }
+      animation = surface.animate(
+        [
+          { opacity: 0, transform: "translateY(-0.25rem) scale(0.98)" },
+          { opacity: 1, transform: "none" },
+        ],
+        { duration: milliseconds, easing: easing() },
+      );
+      animation.finished.catch(() => {}).finally(() => {
+        if (currentGeneration === generation) {
+          animation = null;
+        }
+      });
+    };
+    const animateExit = (currentGeneration) => {
+      const milliseconds = duration();
+      if (milliseconds === 0 || !surface.matches(":popover-open")) {
+        finishNativeClose(currentGeneration);
+        return;
+      }
+      animation = surface.animate(
+        [
+          { opacity: 1, transform: "none" },
+          { opacity: 0, transform: "translateY(-0.25rem) scale(0.98)" },
+        ],
+        { duration: milliseconds, easing: easing() },
+      );
+      animation.finished.catch(() => {}).finally(() => {
+        if (currentGeneration !== generation) {
+          return;
+        }
+        animation = null;
+        finishNativeClose(currentGeneration);
+      });
+    };
+    const restoreFocus = (reason) => {
+      if (
+        reason === "outside"
+        || reason === "focus-outside"
+        || reason === "ancestor"
+        || reason === "modal"
+        || !anchoredLayerRuntime.composedContains(
+          surface,
+          layerCoordinator.deepActiveElement(),
+        )
+        || trigger.disabled
+        || !trigger.isConnected
+      ) {
+        return;
+      }
+      trigger.focus({ preventScroll: true });
+    };
+    const layer = {
+      surface,
+      trigger,
+      isOpen: () => active && logicalOpen,
+      requestDismiss: (reason, source) => {
+        if (configuration.dismissible) {
+          requestOpen(false, reason, source);
+        }
+      },
+      forceClose: (reason, source) => forceCloseLayer(reason, source),
+    };
+    const applyOpen = (nextOpen, context = null) => {
+      if (nextOpen === logicalOpen) {
+        if (
+          nextOpen
+          && !layerCoordinator.register(layer)
+          && logicalOpen
+        ) {
+          forceCloseLayer(
+            layerCoordinator.blockedReason(layer) ?? "ancestor",
+            surface,
+          );
+        }
+        return;
+      }
+      cancelAnimation();
+      const currentGeneration = generation;
+      if (nextOpen) {
+        if (!layerCoordinator.mayOpen(layer)) {
+          if (!controlled) {
+            internalOpen = false;
+          }
+          updateTrigger();
+          return;
+        }
+        try {
+          if (!surface.matches(":popover-open")) {
+            surface.showPopover();
+          }
+        } catch (error) {
+          console.error("[citry-ui] CPopover could not enter the top layer:", error, surface);
+          logicalOpen = false;
+          internalOpen = false;
+          updateTrigger();
+          return;
+        }
+        logicalOpen = true;
+        surface.inert = false;
+        surface.removeAttribute("data-citry-popover-exiting");
+        surface.setAttribute("data-open", "");
+        if (!layerCoordinator.register(layer)) {
+          logicalOpen = false;
+          surface.hidePopover();
+          surface.inert = true;
+          surface.removeAttribute("data-open");
+          updateTrigger();
+          return;
+        }
+        updateTrigger();
+        animateEntry(currentGeneration);
+        placeInitialFocus(currentGeneration);
+        return;
+      }
+      logicalOpen = false;
+      surface.removeAttribute("data-open");
+      surface.setAttribute("data-citry-popover-exiting", "");
+      surface.inert = true;
+      layerCoordinator.unregister(layer);
+      updateTrigger();
+      restoreFocus(context?.reason ?? null);
+      animateExit(currentGeneration);
+    };
+    const notify = (nextOpen, reason, source, forced = false) => {
+      onOpenChange?.(nextOpen, {
+        reason,
+        controlled,
+        forced,
+        source,
+      });
+    };
+    const requestOpen = (nextOpen, reason, source) => {
+      if (nextOpen === logicalOpen) {
+        return;
+      }
+      if (nextOpen) {
+        layerCoordinator.clearSuppression(layer);
+      }
+      if (controlled) {
+        pendingRequest = { nextOpen, reason, source };
+        notify(nextOpen, reason, source);
+        return;
+      }
+      internalOpen = nextOpen;
+      applyOpen(nextOpen, { reason, source });
+      notify(nextOpen, reason, source);
+    };
+    const forceCloseLayer = (reason, source) => {
+      if (!logicalOpen) {
+        internalOpen = false;
+        pendingRequest = null;
+        return;
+      }
+      pendingRequest = null;
+      internalOpen = false;
+      applyOpen(false, { reason, source });
+      notify(false, reason, source, true);
+    };
+    const onHostClick = (event) => {
+      const source = event.target?.closest?.(
+        "[data-citry-popover-trigger], [data-citry-popover-close]",
+      );
+      if (!source || nearestHost(source) !== host) {
+        return;
+      }
+      scheduleTask(() => {
+        if (event.defaultPrevented) {
+          return;
+        }
+        if (source.hasAttribute("data-citry-popover-trigger")) {
+          if (source.disabled || source.matches('[aria-disabled="true"]')) {
+            return;
+          }
+          requestOpen(!logicalOpen, "trigger", source);
+          return;
+        }
+        requestOpen(false, "action", source);
+      });
+    };
+    const onToggle = (event) => {
+      if (event.target !== surface) {
+        return;
+      }
+      const nativeOpen = surface.matches(":popover-open");
+      if (nativeOpen === logicalOpen || (!logicalOpen && animation)) {
+        return;
+      }
+      cancelAnimation();
+      if (nativeOpen) {
+        if (!layerCoordinator.mayOpen(layer)) {
+          surface.hidePopover();
+          notify(
+            false,
+            layerCoordinator.blockedReason(layer) ?? "ancestor",
+            surface,
+            true,
+          );
+          return;
+        }
+        if (controlled) {
+          surface.hidePopover();
+          notify(true, "native", surface);
+          return;
+        }
+        internalOpen = true;
+        logicalOpen = true;
+        surface.inert = false;
+        surface.setAttribute("data-open", "");
+        if (!layerCoordinator.register(layer)) {
+          logicalOpen = false;
+          internalOpen = false;
+          surface.hidePopover();
+          surface.inert = true;
+          surface.removeAttribute("data-open");
+          notify(
+            false,
+            layerCoordinator.blockedReason(layer) ?? "ancestor",
+            surface,
+            true,
+          );
+          return;
+        }
+        updateTrigger();
+        notify(true, "native", surface);
+        return;
+      }
+      if (controlled) {
+        if (!layerCoordinator.mayOpen(layer)) {
+          forceCloseLayer(
+            layerCoordinator.blockedReason(layer) ?? "ancestor",
+            surface,
+          );
+          return;
+        }
+        try {
+          surface.showPopover();
+        } catch (error) {
+          console.error(
+            "[citry-ui] CPopover could not restore controlled native visibility:",
+            error,
+            surface,
+          );
+        }
+        notify(false, "native", surface);
+        return;
+      }
+      logicalOpen = false;
+      internalOpen = false;
+      surface.inert = true;
+      surface.removeAttribute("data-open");
+      surface.removeAttribute("data-citry-popover-exiting");
+      layerCoordinator.unregister(layer);
+      updateTrigger();
+      notify(false, "native", surface);
+    };
+
+    host.addEventListener("click", onHostClick, true);
+    surface.addEventListener("toggle", onToggle);
+    effect(() => {
+      const suppliedOpen = props.open;
+      let nextOpen = internalOpen;
+      if (suppliedOpen === undefined || suppliedOpen === null) {
+        if (controlled) {
+          internalOpen = logicalOpen;
+        }
+        controlled = false;
+        pendingRequest = null;
+        nextOpen = internalOpen;
+        invalidEpisodes.delete("open");
+      } else if (typeof suppliedOpen === "boolean") {
+        controlled = true;
+        nextOpen = suppliedOpen;
+        invalidEpisodes.delete("open");
+      } else {
+        reportInvalid("open", suppliedOpen);
+        if (controlled) {
+          internalOpen = logicalOpen;
+        }
+        controlled = false;
+        pendingRequest = null;
+        nextOpen = internalOpen;
+      }
+      configuration = {
+        dismissible: resolveBoolean("dismissible"),
+        placement: resolvePlacement(),
+        matchWidth: resolveBoolean("matchWidth"),
+      };
+      onOpenChange = resolveCallback();
+      surface.dataset.placement = configuration.placement;
+      surface.toggleAttribute("data-match-width", configuration.matchWidth);
+      if (!nextOpen) {
+        layerCoordinator.clearSuppression(layer);
+      }
+      const context = pendingRequest?.nextOpen === nextOpen ? pendingRequest : null;
+      applyOpen(nextOpen, context);
+      if (context || nextOpen === logicalOpen) {
+        pendingRequest = null;
+      }
+    });
+    host.setAttribute("data-citry-popover-initialized", "");
+
+    return () => {
+      active = false;
+      surface[handoffKey] = { open: logicalOpen };
+      host.removeEventListener("click", onHostClick, true);
+      surface.removeEventListener("toggle", onToggle);
+      for (const task of scheduledTasks) {
+        clearTimeout(task);
+      }
+      scheduledTasks.clear();
+      cancelAnimation();
+      layerCoordinator.unregister(layer);
+      if (surface.matches(":popover-open")) {
+        surface.hidePopover();
+      }
+      surface.inert = true;
+      surface.removeAttribute("data-open");
+      surface.removeAttribute("data-citry-popover-exiting");
+      trigger.setAttribute("aria-expanded", "false");
+      host.removeAttribute("data-citry-popover-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CPopover_d4bf44", "c99d997f1df3925888503ff336d235fe", atob("eyJvcGVuIjpmYWxzZSwiZGlzbWlzc2libGUiOnRydWUsInBsYWNlbWVudCI6ImJvdHRvbS1zdGFydCIsIm1hdGNoV2lkdGgiOnRydWV9"));
+})();</script></body></html><!--citry:g1:34e2f03c:0:i:1:e-->

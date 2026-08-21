@@ -1,0 +1,490 @@
+<!--citry:g1:a978b547:0:i:1:s--><!doctype html><html data-cid-cipfhvltu lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Controlled NavigationMenu</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CNavigationMenu_3d3ab8>@layer citry-ui.theme{:where([data-citry-ui-part=navigation-menu]){--_cui-navigation-menu-background:var(--cui-navigation-menu-background,transparent);--_cui-navigation-menu-foreground:var(--cui-navigation-menu-foreground,CanvasText);--_cui-navigation-menu-border-color:var(--cui-navigation-menu-border-color,light-dark(#e7e5e4,#44403c));--_cui-navigation-menu-trigger-background:var(--cui-navigation-menu-trigger-background,transparent);--_cui-navigation-menu-trigger-hover-background:var(--cui-navigation-menu-trigger-hover-background,light-dark(#f5f5f4,#292524));--_cui-navigation-menu-trigger-open-background:var(--cui-navigation-menu-trigger-open-background,light-dark(#e7e5e4,#44403c));--_cui-navigation-menu-focus-color:var(--cui-navigation-menu-focus-color,Highlight);--_cui-navigation-menu-radius:var(--cui-navigation-menu-radius,.75rem);--_cui-navigation-menu-gap:var(--cui-navigation-menu-gap,.25rem);--_cui-navigation-menu-padding:var(--cui-navigation-menu-padding,.35rem);--_cui-navigation-menu-panel-background:var(--cui-navigation-menu-panel-background,Canvas);--_cui-navigation-menu-panel-inline-size:var(--cui-navigation-menu-panel-inline-size,24rem);--_cui-navigation-menu-panel-max-inline-size:var(--cui-navigation-menu-panel-max-inline-size,calc(100vw - 2rem));--_cui-navigation-menu-panel-padding:var(--cui-navigation-menu-panel-padding,1rem);--_cui-navigation-menu-panel-shadow:var(--cui-navigation-menu-panel-shadow,0 18px 45px light-dark(#1c191729,#00000073));--_cui-navigation-menu-offset:var(--cui-navigation-menu-offset,.45rem);--_cui-navigation-menu-duration:var(--cui-navigation-menu-duration,.15s);--_cui-navigation-menu-easing:var(--cui-navigation-menu-easing,ease-out);z-index:1;color:var(--_cui-navigation-menu-foreground);background:var(--_cui-navigation-menu-background);position:relative}:where([data-citry-ui-part=navigation-menu]>[data-citry-ui-part=list]){align-items:center;gap:var(--_cui-navigation-menu-gap);padding:var(--_cui-navigation-menu-padding);margin:0;list-style:none;display:flex}:where([data-citry-ui-part=navigation-menu][data-orientation=vertical]>[data-citry-ui-part=list]){align-items:stretch;display:grid}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=link-item]),:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=item]){min-inline-size:0;position:relative}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=link]),:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=trigger]){box-sizing:border-box;border-radius:calc(var(--_cui-navigation-menu-radius) - .2rem);min-block-size:2.5rem;color:inherit;background:var(--_cui-navigation-menu-trigger-background);font:inherit;text-align:start;cursor:pointer;border:0;justify-content:center;align-items:center;gap:.45rem;padding:.55rem .8rem;font-weight:620;line-height:1.2;text-decoration:none;display:inline-flex}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=link]:hover),:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=trigger]:hover){background:var(--_cui-navigation-menu-trigger-hover-background)}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=trigger][data-open]){background:var(--_cui-navigation-menu-trigger-open-background)}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=link]:focus-visible),:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=trigger]:focus-visible),:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=panel] :focus-visible){outline:3px solid var(--_cui-navigation-menu-focus-color);outline-offset:2px}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=indicator]){block-size:.48rem;inline-size:.48rem;transition:transform var(--_cui-navigation-menu-duration) var(--_cui-navigation-menu-easing);border-block-end:.12rem solid;border-inline-end:.12rem solid;transform:translateY(-.12rem)rotate(45deg)}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=trigger][data-open] [data-citry-ui-part=indicator]){transform:translateY(.08rem)rotate(225deg)}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=panel]){box-sizing:border-box;z-index:2;inline-size:min(var(--_cui-navigation-menu-panel-inline-size), var(--_cui-navigation-menu-panel-max-inline-size));min-inline-size:0;max-inline-size:var(--_cui-navigation-menu-panel-max-inline-size);padding:var(--_cui-navigation-menu-panel-padding);overflow-wrap:anywhere;border:1px solid var(--_cui-navigation-menu-border-color);border-radius:var(--_cui-navigation-menu-radius);color:var(--_cui-navigation-menu-foreground);background:var(--_cui-navigation-menu-panel-background);box-shadow:var(--_cui-navigation-menu-panel-shadow);transform:translateX(var(--_cui-navigation-menu-panel-shift,0px));position:absolute;inset-block-start:calc(100% + var(--_cui-navigation-menu-offset));inset-inline-start:0}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=panel][data-cui-navigation-menu-align-end]){inset-inline:auto 0}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=panel][hidden]){display:none!important}:where([data-citry-ui-part=navigation-menu][data-orientation=vertical] [data-citry-ui-part=panel]){inline-size:100%;box-shadow:none;margin-block-start:var(--_cui-navigation-menu-offset);position:static}:where([data-citry-ui-part=navigation-menu][data-variant=surface]){border:1px solid var(--_cui-navigation-menu-border-color);border-radius:var(--_cui-navigation-menu-radius);background:var(--_cui-navigation-menu-panel-background)}:where([data-citry-ui-part=navigation-menu][data-size=sm]){--_cui-navigation-menu-padding:.25rem;font-size:.875rem}:where([data-citry-ui-part=navigation-menu][data-size=lg]){--_cui-navigation-menu-padding:.45rem;font-size:1.0625rem}:where([data-citry-ui-part=navigation-menu][data-disabled]),:where([data-citry-ui-part=navigation-menu] [data-disabled]){opacity:.55}:where([data-citry-ui-part=navigation-menu][data-disabled] [data-citry-ui-part=link]),:where([data-citry-ui-part=navigation-menu] [data-disabled] [data-citry-ui-part=trigger]){cursor:not-allowed}@media (prefers-reduced-motion:reduce){:where([data-citry-ui-part=navigation-menu]){--_cui-navigation-menu-duration:0s}}@media (forced-colors:active){:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=panel]){box-shadow:none;border-color:canvastext}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=trigger][data-open]){outline:1px solid canvastext}}@media print{:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=item]){display:none}:where([data-citry-ui-part=navigation-menu] [data-citry-ui-part=link]){color:#000;background:0 0}}}</style></head><body><main><!--citry:g1:a978b547:0:i:2:s--><section data-cid=cipfhvltv data-cid-cipfhvltv data-citry-root x-data={open:null}><p>Open: <strong x-text="open ?? 'none'"></strong></p><!--citry:g1:a978b547:0:i:3:s--><nav aria-label="Controlled navigation" class=cui-navigation-menu data-cid=cipfhvltw data-cid-cipfhvltw data-citry-navigation-menu-root data-citry-root data-citry-ui-part=navigation-menu data-orientation=horizontal data-size=md data-variant=plain id=cui-navigation-menu-cipfhvltw><ul data-citry-ui-part=list><!--citry:g1:a978b547:0:r:1:s--><!--citry:g1:a978b547:0:i:4:s--><li class=cui-navigation-menu__link-item data-cid=cipfhvltx data-cid-cipfhvltx data-citry-root data-citry-ui-part=link-item><a data-citry-navigation-menu-link data-citry-ui-part=link href=#home><!--citry:g1:a978b547:0:r:2:s-->Home<!--citry:g1:a978b547:0:r:2:e--></a></li><!--citry:g1:a978b547:0:i:4:e--><!--citry:g1:a978b547:0:i:5:s--><li class=cui-navigation-menu__item data-cid=cipfhvlty data-cid-cipfhvlty data-citry-navigation-menu-item data-citry-root data-citry-ui-part=item data-value=learn><button aria-controls=cui-navigation-menu-cipfhvltw-panel-cipfhvlty aria-expanded=false class=cui-navigation-menu__trigger data-citry-navigation-menu-trigger data-citry-ui-part=trigger data-value=learn id=cui-navigation-menu-cipfhvltw-trigger-cipfhvlty type=button><span><!--citry:g1:a978b547:0:r:3:s-->Learn<!--citry:g1:a978b547:0:r:3:e--></span> <span aria-hidden=true data-citry-ui-part=indicator></span></button> <div class=cui-navigation-menu__panel data-citry-navigation-menu-panel data-citry-ui-part=panel data-value=learn hidden id=cui-navigation-menu-cipfhvltw-panel-cipfhvlty inert><!--citry:g1:a978b547:0:r:4:s--><a href=#tutorials>Tutorials</a><!--citry:g1:a978b547:0:r:4:e--></div></li><!--citry:g1:a978b547:0:i:5:e--><!--citry:g1:a978b547:0:r:1:e--></ul></nav><!--citry:g1:a978b547:0:i:3:e--></section><!--citry:g1:a978b547:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ControlledNavigation_3e1ce0","className":"ControlledNavigation"},{"classId":"CNavigationMenu_3d3ab8","className":"CNavigationMenu"},{"classId":"CNavigationMenuLink_2c9996","className":"CNavigationMenuLink"},{"classId":"CNavigationMenuItem_4751b5","className":"CNavigationMenuItem"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhvltw","invocationId":2,"parentRenderId":"cipfhvltv"},{"childRenderId":"cipfhvltx","invocationId":3,"parentRenderId":"cipfhvltv"},{"childRenderId":"cipfhvlty","invocationId":4,"parentRenderId":"cipfhvltv"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvltu","transparent":false},{"classId":"ControlledNavigation_3e1ce0","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvltv","transparent":false},{"classId":"CNavigationMenu_3d3ab8","instanceId":3,"invocationId":2,"parentRenderId":"cipfhvltv","renderId":"cipfhvltw","transparent":false},{"classId":"CNavigationMenuLink_2c9996","instanceId":4,"invocationId":3,"parentRenderId":"cipfhvltv","renderId":"cipfhvltx","transparent":false},{"classId":"CNavigationMenuItem_4751b5","instanceId":5,"invocationId":4,"parentRenderId":"cipfhvltv","renderId":"cipfhvlty","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ControlledNavigation_3e1ce0","ownerRenderId":"cipfhvltv","policy":"template","receiverClassId":"CNavigationMenu_3d3ab8","receiverRenderId":"cipfhvltw","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"ControlledNavigation_3e1ce0","ownerRenderId":"cipfhvltv","policy":"template","receiverClassId":"CNavigationMenuLink_2c9996","receiverRenderId":"cipfhvltx","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"ControlledNavigation_3e1ce0","ownerRenderId":"cipfhvltv","policy":"template","receiverClassId":"CNavigationMenuItem_4751b5","receiverRenderId":"cipfhvlty","slotName":"label","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"ControlledNavigation_3e1ce0","ownerRenderId":"cipfhvltv","policy":"template","receiverClassId":"CNavigationMenuItem_4751b5","receiverRenderId":"cipfhvlty","slotName":"default","sourceInvocationId":4}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{value:open,onValueChange:(next)=>open=next}","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ControlledNavigation_3e1ce0","sourceRenderId":"cipfhvltv","tagName":"cnavigationmenu","targetClassId":"CNavigationMenu_3d3ab8","targetRenderId":"cipfhvltw"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ControlledNavigation_3e1ce0","sourceRenderId":"cipfhvltv","tagName":"cnavigationmenulink","targetClassId":"CNavigationMenuLink_2c9996","targetRenderId":"cipfhvltx"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ControlledNavigation_3e1ce0","sourceRenderId":"cipfhvltv","tagName":"cnavigationmenuitem","targetClassId":"CNavigationMenuItem_4751b5","targetRenderId":"cipfhvlty"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cipfhvltv","parentRegionId":null,"receiverRenderId":"cipfhvltw","regionId":1,"resultOwnerRenderId":"cipfhvltv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvltw"},{"fillId":3,"ownerRenderId":"cipfhvltv","parentRegionId":1,"receiverRenderId":"cipfhvltx","regionId":2,"resultOwnerRenderId":"cipfhvltv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvltv"},{"fillId":4,"ownerRenderId":"cipfhvltv","parentRegionId":1,"receiverRenderId":"cipfhvlty","regionId":3,"resultOwnerRenderId":"cipfhvltv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvltv"},{"fillId":5,"ownerRenderId":"cipfhvltv","parentRegionId":1,"receiverRenderId":"cipfhvlty","regionId":4,"resultOwnerRenderId":"cipfhvltv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvltv"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"a978b547be8d6ff8a19769dc8664f88c98e7f363b2995a42dc600ef856c1f01c"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NOYXZpZ2F0aW9uTWVudV8zZDNhYjguODE0ZmJjNThjYWY5Lmpz", "L2NpdHJ5L2NhY2hlL0NOYXZpZ2F0aW9uTWVudV8zZDNhYjguOWM1N2E5Zjk2ZDU1ZmFkYTM4ZDJhYzAxOWMzYmYwM2UuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NOYXZpZ2F0aW9uTWVudV8zZDNhYjguNGFmM2MxYjVmMzhjLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q05hdmlnYXRpb25NZW51XzNkM2FiOA==", "Y2lwZmh2bHR3", "OWM1N2E5Zjk2ZDU1ZmFkYTM4ZDJhYzAxOWMzYmYwM2U=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2bHR1"]], "graph": "a978b547be8d6ff8a19769dc8664f88c98e7f363b2995a42dc600ef856c1f01c", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CNavigationMenu_3d3ab8", {
+  props: {
+    value: {},
+    disabled: {},
+    delay: {},
+    closeDelay: {},
+    loop: {},
+    orientation: {},
+    variant: {},
+    size: {},
+    onValueChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const root = els[0];
+    const list = root.querySelector(':scope > [data-citry-ui-part="list"]');
+    if (!(root instanceof HTMLElement) || !(list instanceof HTMLUListElement)) {
+      throw new Error("[citry-ui] CNavigationMenu requires its owned nav/list anatomy.");
+    }
+    const handoffKey = Symbol.for("citry-ui:navigation-menu-handoff");
+    const previous = root[handoffKey];
+    delete root[handoffKey];
+    let active = true;
+    let controlled = false;
+    let internalValue = previous?.serverValue === data.value ? previous.value : data.value;
+    let effectiveValue = null;
+    let onValueChange = null;
+    let entries = [];
+    let invalidStructure = false;
+    let openTimer = null;
+    let closeTimer = null;
+    let reconcileFrame = null;
+    let geometryFrame = null;
+    let geometryListening = false;
+    let outsideListening = false;
+    const invalidEpisodes = new Set();
+    let configuration = {
+      disabled: data.disabled,
+      delay: data.delay,
+      closeDelay: data.closeDelay,
+      loop: data.loop,
+      orientation: data.orientation,
+      variant: data.variant,
+      size: data.size,
+    };
+
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CNavigationMenu ${name} received invalid client value.`, value, root);
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveDelay = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (Number.isInteger(value) && value >= 0 && value <= 60000) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveChoice = (name, allowed) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowed.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveCallback = () => {
+      const value = props.onValueChange;
+      if (value === undefined || value === null || typeof value === "function") {
+        invalidEpisodes.delete("onValueChange");
+        return value ?? null;
+      }
+      reportInvalid("onValueChange", value);
+      return null;
+    };
+    const clearTimers = () => {
+      clearTimeout(openTimer);
+      clearTimeout(closeTimer);
+      openTimer = null;
+      closeTimer = null;
+    };
+    const directChildren = () => [...list.children].filter((element) => (
+      element.matches(':scope[data-citry-ui-part="link-item"], :scope[data-citry-ui-part="item"]')
+    ));
+    const collect = () => {
+      const children = directChildren();
+      const next = [];
+      const values = new Set();
+      let valid = children.length > 0 && children.length === list.children.length;
+      for (const child of children) {
+        const trigger = child.querySelector(':scope > [data-citry-navigation-menu-trigger]');
+        if (!trigger) continue;
+        const panel = child.querySelector(':scope > [data-citry-navigation-menu-panel]');
+        const value = trigger.dataset.value;
+        if (
+          !(trigger instanceof HTMLButtonElement)
+          || trigger.type !== "button"
+          || !panel
+          || !value
+          || values.has(value)
+        ) {
+          valid = false;
+          continue;
+        }
+        values.add(value);
+        next.push({ item: child, trigger, panel, value });
+      }
+      entries = next;
+      invalidStructure = !valid;
+      if (!valid) reportInvalid("structure", children.length);
+      else invalidEpisodes.delete("structure");
+    };
+    const entryFor = (value) => entries.find((entry) => entry.value === value) ?? null;
+    const deepActive = () => {
+      let current = root.ownerDocument.activeElement;
+      while (current?.shadowRoot?.activeElement) current = current.shadowRoot.activeElement;
+      return current;
+    };
+    const composedContains = (container, target) => {
+      let current = target;
+      while (current) {
+        if (current === container) return true;
+        current = current.parentNode ?? current.getRootNode?.()?.host ?? null;
+      }
+      return false;
+    };
+    const focusTargets = () => [...list.querySelectorAll(
+      ':scope > li > a[href], :scope > li > button:not(:disabled)',
+    )].filter((element) => element.offsetParent !== null);
+    const panelFocusTarget = (panel) => panel.querySelector(
+      'a[href], button:not(:disabled), input:not(:disabled), '
+        + 'select:not(:disabled), textarea:not(:disabled), '
+        + '[tabindex]:not([tabindex="-1"])',
+    );
+    const alignOpenPanel = () => {
+      geometryFrame = null;
+      for (const entry of entries) {
+        entry.panel.removeAttribute("data-cui-navigation-menu-align-end");
+        entry.panel.style.removeProperty("--_cui-navigation-menu-panel-shift");
+      }
+      if (configuration.orientation !== "horizontal") return;
+      const entry = entryFor(effectiveValue);
+      if (!entry || entry.panel.hidden) return;
+      const view = root.ownerDocument.defaultView;
+      const viewportWidth = view?.visualViewport?.width ?? view?.innerWidth ?? 0;
+      if (!viewportWidth) return;
+      const margin = 16;
+      let rect = entry.panel.getBoundingClientRect();
+      const rtl = getComputedStyle(root).direction === "rtl";
+      const overInlineEnd = rtl ? rect.left < margin : rect.right > viewportWidth - margin;
+      entry.panel.toggleAttribute("data-cui-navigation-menu-align-end", overInlineEnd);
+      rect = entry.panel.getBoundingClientRect();
+      let shift = 0;
+      if (rect.right > viewportWidth - margin) shift -= rect.right - (viewportWidth - margin);
+      if (rect.left + shift < margin) shift += margin - (rect.left + shift);
+      if (Math.abs(shift) > 0.5) {
+        entry.panel.style.setProperty("--_cui-navigation-menu-panel-shift", `${shift}px`);
+      }
+    };
+    const scheduleGeometry = () => {
+      if (geometryFrame !== null) return;
+      geometryFrame = requestAnimationFrame(alignOpenPanel);
+    };
+    const startGeometry = () => {
+      if (!geometryListening) {
+        geometryListening = true;
+        root.ownerDocument.defaultView?.addEventListener("resize", scheduleGeometry);
+        root.ownerDocument.addEventListener("scroll", scheduleGeometry, true);
+      }
+      scheduleGeometry();
+    };
+    const stopGeometry = () => {
+      if (geometryListening) {
+        geometryListening = false;
+        root.ownerDocument.defaultView?.removeEventListener("resize", scheduleGeometry);
+        root.ownerDocument.removeEventListener("scroll", scheduleGeometry, true);
+      }
+      cancelAnimationFrame(geometryFrame);
+      geometryFrame = null;
+    };
+    const startOutside = () => {
+      if (outsideListening || effectiveValue === null) return;
+      outsideListening = true;
+      root.ownerDocument.addEventListener("pointerdown", onDocumentPointerDown, true);
+      root.ownerDocument.addEventListener("focusin", onDocumentFocusIn, true);
+    };
+    const stopOutside = () => {
+      if (!outsideListening) return;
+      outsideListening = false;
+      root.ownerDocument.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      root.ownerDocument.removeEventListener("focusin", onDocumentFocusIn, true);
+    };
+    const apply = (value) => {
+      const next = configuration.disabled || invalidStructure || !entryFor(value) ? null : value;
+      effectiveValue = next;
+      root.toggleAttribute("data-disabled", configuration.disabled);
+      root.dataset.orientation = configuration.orientation;
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.toggleAttribute("data-loop", configuration.loop);
+      if (next === null) delete root.dataset.value;
+      else root.dataset.value = next;
+      for (const entry of entries) {
+        const open = entry.value === next;
+        const disabled = configuration.disabled || entry.trigger.disabled;
+        entry.item.toggleAttribute("data-open", open);
+        entry.item.toggleAttribute("data-disabled", disabled);
+        entry.trigger.toggleAttribute("data-open", open);
+        entry.trigger.toggleAttribute("data-disabled", disabled);
+        entry.trigger.setAttribute("aria-expanded", String(open));
+        entry.panel.toggleAttribute("data-open", open);
+        entry.panel.hidden = !open;
+        entry.panel.inert = !open;
+      }
+      if (next === null) {
+        stopOutside();
+        stopGeometry();
+      } else {
+        startOutside();
+        startGeometry();
+      }
+    };
+    const notify = (next, previousValue, reason, source, forced = false) => {
+      onValueChange?.(next, {
+        value: next,
+        previousValue,
+        reason,
+        controlled,
+        forced,
+        source,
+      });
+    };
+    const request = (next, reason, source, forced = false) => {
+      clearTimers();
+      const previousValue = effectiveValue;
+      if (forced) {
+        internalValue = null;
+        apply(null);
+        if (previousValue !== null) notify(null, previousValue, reason, source, true);
+        return;
+      }
+      if (!controlled) {
+        internalValue = next;
+        apply(next);
+      }
+      if (next !== previousValue) notify(next, previousValue, reason, source, false);
+    };
+    function onDocumentPointerDown(event) {
+      if (!event.composedPath().includes(root)) request(null, "outside", event.target);
+    }
+    function onDocumentFocusIn(event) {
+      if (!event.composedPath().includes(root)) request(null, "focus-outside", event.target);
+    }
+    const onClick = (event) => {
+      const path = event.composedPath();
+      const trigger = path.find((element) => element?.matches?.("[data-citry-navigation-menu-trigger]"));
+      if (trigger && root.contains(trigger)) {
+        const entry = entries.find((candidate) => candidate.trigger === trigger);
+        if (entry && !configuration.disabled && !trigger.disabled) {
+          request(effectiveValue === entry.value ? null : entry.value, "trigger", trigger);
+        }
+        return;
+      }
+      const link = path.find((element) => element?.matches?.("a[href]"));
+      if (link && root.contains(link) && effectiveValue !== null) request(null, "link", link);
+    };
+    const onKeyDown = (event) => {
+      const target = event.target;
+      const controls = focusTargets();
+      const index = controls.indexOf(target);
+      if (event.key === "Escape" && effectiveValue !== null) {
+        const entry = entryFor(effectiveValue);
+        request(null, "escape", target);
+        entry?.trigger.focus();
+        event.preventDefault();
+        return;
+      }
+      if (index < 0) return;
+      const rtl = getComputedStyle(root).direction === "rtl";
+      let delta = 0;
+      if (configuration.orientation === "horizontal") {
+        if (event.key === (rtl ? "ArrowLeft" : "ArrowRight")) delta = 1;
+        if (event.key === (rtl ? "ArrowRight" : "ArrowLeft")) delta = -1;
+        if (event.key === "ArrowDown") {
+          const entry = entries.find((candidate) => (
+            candidate.trigger === target && candidate.value === effectiveValue
+          ));
+          const focusTarget = entry && panelFocusTarget(entry.panel);
+          if (focusTarget) {
+            focusTarget.focus();
+            event.preventDefault();
+            return;
+          }
+        }
+      } else {
+        if (event.key === "ArrowDown") delta = 1;
+        if (event.key === "ArrowUp") delta = -1;
+      }
+      if (event.key === "Home") {
+        controls[0]?.focus();
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "End") {
+        controls.at(-1)?.focus();
+        event.preventDefault();
+        return;
+      }
+      if (!delta) return;
+      let next = index + delta;
+      if (configuration.loop) next = (next + controls.length) % controls.length;
+      if (next >= 0 && next < controls.length) controls[next].focus();
+      event.preventDefault();
+    };
+    const hoverEligible = (event) => event.pointerType === "mouse" || (
+      event.pointerType === "pen" && event.buttons === 0 && event.pressure === 0
+    );
+    const onPointerOver = (event) => {
+      if (!hoverEligible(event) || configuration.disabled) return;
+      const trigger = event.target.closest?.("[data-citry-navigation-menu-trigger]");
+      if (!trigger || !root.contains(trigger) || trigger.disabled) return;
+      const entry = entries.find((candidate) => candidate.trigger === trigger);
+      if (!entry || trigger.contains(event.relatedTarget)) return;
+      clearTimeout(closeTimer);
+      clearTimeout(openTimer);
+      openTimer = setTimeout(() => request(entry.value, "hover", trigger), configuration.delay);
+    };
+    const onPointerOut = (event) => {
+      if (!hoverEligible(event) || root.contains(event.relatedTarget)) return;
+      clearTimeout(openTimer);
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(() => request(null, "hover", event.target), configuration.closeDelay);
+    };
+    const reconcile = () => {
+      reconcileFrame = null;
+      const previousValue = effectiveValue;
+      collect();
+      if (invalidStructure) {
+        apply(null);
+        if (previousValue !== null) notify(null, previousValue, "structure", root, true);
+        return;
+      }
+      if (previousValue !== null && !entryFor(previousValue)) {
+        internalValue = null;
+        apply(null);
+        notify(null, previousValue, "structure", root, true);
+        return;
+      }
+      apply(controlled ? effectiveValue : internalValue);
+    };
+    const scheduleReconcile = () => {
+      if (reconcileFrame !== null) return;
+      reconcileFrame = requestAnimationFrame(reconcile);
+    };
+    const observer = new MutationObserver(scheduleReconcile);
+    observer.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });
+    root.addEventListener("click", onClick, true);
+    root.addEventListener("keydown", onKeyDown, true);
+    root.addEventListener("pointerover", onPointerOver);
+    root.addEventListener("pointerout", onPointerOut);
+    collect();
+
+    effect(() => {
+      configuration = {
+        disabled: resolveBoolean("disabled"),
+        delay: resolveDelay("delay"),
+        closeDelay: resolveDelay("closeDelay"),
+        loop: resolveBoolean("loop"),
+        orientation: resolveChoice("orientation", ["horizontal", "vertical"]),
+        variant: resolveChoice("variant", ["plain", "surface"]),
+        size: resolveChoice("size", ["sm", "md", "lg"]),
+      };
+      onValueChange = resolveCallback();
+      const supplied = props.value !== undefined;
+      let next = internalValue;
+      if (supplied) {
+        if (props.value === null || (typeof props.value === "string" && entryFor(props.value))) {
+          controlled = true;
+          invalidEpisodes.delete("value");
+          next = props.value;
+          internalValue = props.value;
+        } else {
+          controlled = false;
+          reportInvalid("value", props.value);
+          next = internalValue;
+        }
+      } else {
+        controlled = false;
+        invalidEpisodes.delete("value");
+      }
+      if (configuration.disabled && effectiveValue !== null) {
+        request(null, "disabled", root, true);
+      } else {
+        apply(next);
+      }
+      root.setAttribute("data-citry-navigation-menu-initialized", "");
+    });
+
+    return () => {
+      active = false;
+      clearTimers();
+      cancelAnimationFrame(reconcileFrame);
+      stopGeometry();
+      observer.disconnect();
+      stopOutside();
+      root.removeEventListener("click", onClick, true);
+      root.removeEventListener("keydown", onKeyDown, true);
+      root.removeEventListener("pointerover", onPointerOver);
+      root.removeEventListener("pointerout", onPointerOut);
+      root[handoffKey] = { value: internalValue, serverValue: data.value };
+      root.removeAttribute("data-citry-navigation-menu-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CNavigationMenu_3d3ab8", "9c57a9f96d55fada38d2ac019c3bf03e", atob("eyJ2YWx1ZSI6bnVsbCwib3JpZW50YXRpb24iOiJob3Jpem9udGFsIiwiZGlzYWJsZWQiOmZhbHNlLCJkZWxheSI6MjAwLCJjbG9zZURlbGF5IjozMDAsImxvb3AiOmZhbHNlLCJ2YXJpYW50IjoicGxhaW4iLCJzaXplIjoibWQifQ=="));
+})();</script></body></html><!--citry:g1:a978b547:0:i:1:e-->

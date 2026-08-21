@@ -1,0 +1,631 @@
+<!--citry:g1:80468a19:0:i:1:s--><!doctype html><html data-cid-cipfhvkp3 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compose Icons with Buttons</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=IconComposition_bc0c35>:where(.icon-composition) {
+  display: grid;
+  gap: 1rem;
+  max-width: 62rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.icon-composition__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+:where(.icon-composition__warning) {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  width: fit-content;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-inline-start: 0.25rem solid light-dark(#d97706, #fbbf24);
+  color: light-dark(#78350f, #fde68a);
+  background: light-dark(#fffbeb, #451a03);
+}</style><style data-citry-css-class=CIcon_8e5345>@layer citry-ui.theme{:where(.cui-icon){--_cui-icon-size:var(--cui-icon-size,1em);--_cui-icon-stroke-width:var(--cui-icon-stroke-width,2);inline-size:var(--_cui-icon-size);block-size:var(--_cui-icon-size);color:inherit;stroke-width:var(--_cui-icon-stroke-width);vertical-align:-.125em;pointer-events:none;user-select:none;flex:none;display:inline-block;overflow:visible}:where(.cui-icon[data-size=sm]){--_cui-icon-size:var(--cui-icon-size,.875em)}:where(.cui-icon[data-size=lg]){--_cui-icon-size:var(--cui-icon-size,1.25em)}:where(.cui-icon--logical:dir(rtl)>.cui-icon__glyph){transform-origin:50%;transform:scaleX(-1)}}</style></head><body><main><!--citry:g1:80468a19:0:i:2:s--><section class=icon-composition data-cid-cipfhvkp4><div class=icon-composition__actions><!--citry:g1:80468a19:0:i:3:s--><!--citry:g1:80468a19:0:i:4:s--><button class=cui-button data-cid=cipfhvkp5 data-cid-cipfhvkp5 data-citry-button-has-start data-citry-root data-citry-ui-part=button data-intent=neutral data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:80468a19:0:r:1:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:80468a19:0:r:2:s--> <span class=cui-button__spinner></span> <!--citry:g1:80468a19:0:r:2:e--> </span> <span class=cui-button__decoration data-citry-ui-part=start> <!--citry:g1:80468a19:0:r:3:s--> <!--citry:g1:80468a19:0:i:5:s--> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-icon data-cid-cipfhvkp7 data-citry-ui-part=icon data-name=search data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="m21 21-4.34-4.34"></path><circle cx=11 cy=11 r=8></circle></g></svg> <!--citry:g1:80468a19:0:i:5:e--> <!--citry:g1:80468a19:0:r:3:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:80468a19:0:r:4:s--> Search specimens <!--citry:g1:80468a19:0:r:4:e--> </span><!--citry:g1:80468a19:0:r:1:e--></button><!--citry:g1:80468a19:0:i:4:e--><!--citry:g1:80468a19:0:i:3:e--><!--citry:g1:80468a19:0:i:6:s--><!--citry:g1:80468a19:0:i:7:s--><button class=cui-button data-cid=cipfhvkp8 data-cid-cipfhvkp8 data-citry-button-has-start data-citry-root data-citry-ui-part=button data-intent=success data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:80468a19:0:r:5:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:80468a19:0:r:6:s--> <span class=cui-button__spinner></span> <!--citry:g1:80468a19:0:r:6:e--> </span> <span class=cui-button__decoration data-citry-ui-part=start> <!--citry:g1:80468a19:0:r:7:s--> <!--citry:g1:80468a19:0:i:8:s--> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-icon data-cid-cipfhvkpa data-citry-ui-part=icon data-name=success data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><circle cx=12 cy=12 r=10></circle><path d="m9 12 2 2 4-4"></path></g></svg> <!--citry:g1:80468a19:0:i:8:e--> <!--citry:g1:80468a19:0:r:7:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:80468a19:0:r:8:s--> Save field note <!--citry:g1:80468a19:0:r:8:e--> </span><!--citry:g1:80468a19:0:r:5:e--></button><!--citry:g1:80468a19:0:i:7:e--><!--citry:g1:80468a19:0:i:6:e--><!--citry:g1:80468a19:0:i:9:s--><!--citry:g1:80468a19:0:i:10:s--><button class=cui-button data-cid=cipfhvkpb data-cid-cipfhvkpb data-citry-button-has-end data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=ghost type=button><!--citry:g1:80468a19:0:r:9:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:80468a19:0:r:10:s--> <span class=cui-button__spinner></span> <!--citry:g1:80468a19:0:r:10:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:80468a19:0:r:11:s--> Next trail <!--citry:g1:80468a19:0:r:11:e--> </span> <span class=cui-button__decoration data-citry-ui-part=end> <!--citry:g1:80468a19:0:r:12:s--> <!--citry:g1:80468a19:0:i:11:s--> <svg class="cui-icon cui-icon--logical" viewbox="0 0 24 24" aria-hidden=true data-cid-cipfhvkpd data-citry-ui-part=icon data-name=next data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="m9 18 6-6-6-6"></path></g></svg> <!--citry:g1:80468a19:0:i:11:e--> <!--citry:g1:80468a19:0:r:12:e--> </span><!--citry:g1:80468a19:0:r:9:e--></button><!--citry:g1:80468a19:0:i:10:e--><!--citry:g1:80468a19:0:i:9:e--><!--citry:g1:80468a19:0:i:12:s--><!--citry:g1:80468a19:0:i:13:s--><button aria-label="Open field settings" class=cui-button data-cid=cipfhvkpe data-cid-cipfhvkpe data-citry-root data-citry-ui-part=button data-intent=neutral data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:80468a19:0:r:13:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:80468a19:0:r:14:s--> <span class=cui-button__spinner></span> <!--citry:g1:80468a19:0:r:14:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:80468a19:0:r:15:s--> <!--citry:g1:80468a19:0:i:14:s--> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-icon data-cid-cipfhvkpg data-citry-ui-part=icon data-name=settings data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx=12 cy=12 r=3></circle></g></svg> <!--citry:g1:80468a19:0:i:14:e--> <!--citry:g1:80468a19:0:r:15:e--> </span><!--citry:g1:80468a19:0:r:13:e--></button><!--citry:g1:80468a19:0:i:13:e--><!--citry:g1:80468a19:0:i:12:e--></div><p class=icon-composition__warning><!--citry:g1:80468a19:0:i:15:s--> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-icon data-cid-cipfhvkph data-citry-ui-part=icon data-name=warn data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></g></svg> <!--citry:g1:80468a19:0:i:15:e--> The western footbridge is closed after rain.</p></section><!--citry:g1:80468a19:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"IconComposition_bc0c35","className":"IconComposition"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CIcon_8e5345","className":"CIcon"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhvkp5","invocationId":2,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkp7","invocationId":8,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkp8","invocationId":3,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkpa","invocationId":10,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkpb","invocationId":4,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkpd","invocationId":12,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkpe","invocationId":5,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkpg","invocationId":14,"parentRenderId":"cipfhvkp4"},{"childRenderId":"cipfhvkph","invocationId":6,"parentRenderId":"cipfhvkp4"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvkp3","transparent":false},{"classId":"IconComposition_bc0c35","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvkp4","transparent":false},{"classId":"CButton_353146","instanceId":3,"invocationId":2,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkp5","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":7,"parentRenderId":"cipfhvkp5","renderId":"cipfhvkp6","transparent":true},{"classId":"CIcon_8e5345","instanceId":5,"invocationId":8,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkp7","transparent":false},{"classId":"CButton_353146","instanceId":6,"invocationId":3,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkp8","transparent":false},{"classId":"DynamicElement_29900a","instanceId":7,"invocationId":9,"parentRenderId":"cipfhvkp8","renderId":"cipfhvkp9","transparent":true},{"classId":"CIcon_8e5345","instanceId":8,"invocationId":10,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkpa","transparent":false},{"classId":"CButton_353146","instanceId":9,"invocationId":4,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkpb","transparent":false},{"classId":"DynamicElement_29900a","instanceId":10,"invocationId":11,"parentRenderId":"cipfhvkpb","renderId":"cipfhvkpc","transparent":true},{"classId":"CIcon_8e5345","instanceId":11,"invocationId":12,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkpd","transparent":false},{"classId":"CButton_353146","instanceId":12,"invocationId":5,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkpe","transparent":false},{"classId":"DynamicElement_29900a","instanceId":13,"invocationId":13,"parentRenderId":"cipfhvkpe","renderId":"cipfhvkpf","transparent":true},{"classId":"CIcon_8e5345","instanceId":14,"invocationId":14,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkpg","transparent":false},{"classId":"CIcon_8e5345","instanceId":15,"invocationId":6,"parentRenderId":"cipfhvkp4","renderId":"cipfhvkph","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"IconComposition_bc0c35","ownerRenderId":"cipfhvkp4","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkp5","slotName":"start","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"IconComposition_bc0c35","ownerRenderId":"cipfhvkp4","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkp5","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"IconComposition_bc0c35","ownerRenderId":"cipfhvkp4","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkp8","slotName":"start","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"IconComposition_bc0c35","ownerRenderId":"cipfhvkp4","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkp8","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"IconComposition_bc0c35","ownerRenderId":"cipfhvkp4","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkpb","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"IconComposition_bc0c35","ownerRenderId":"cipfhvkp4","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkpb","slotName":"end","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"IconComposition_bc0c35","ownerRenderId":"cipfhvkp4","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkpe","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":8,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkp5","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvkp6","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":10,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkp5","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkp5","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":13,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkp8","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvkp9","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":15,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkp8","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkp8","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":18,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkpb","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvkpc","slotName":"default","sourceInvocationId":11},{"fallbackLocationId":null,"fillId":20,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkpb","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkpb","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":23,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkpe","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvkpf","slotName":"default","sourceInvocationId":13},{"fallbackLocationId":null,"fillId":25,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkpe","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkpe","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvkp5"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvkp8"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvkpb"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvkpe"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cipfhvkph"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvkp5","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvkp6"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":3,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cipfhvkp7"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvkp8","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvkp9"},{"clientBindings":[],"invocationId":10,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":7,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cipfhvkpa"},{"clientBindings":[],"invocationId":11,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvkpb","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvkpc"},{"clientBindings":[],"invocationId":12,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":12,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cipfhvkpd"},{"clientBindings":[],"invocationId":13,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvkpe","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvkpf"},{"clientBindings":[],"invocationId":14,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":15,"sourceClassId":"IconComposition_bc0c35","sourceRenderId":"cipfhvkp4","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cipfhvkpg"}],"slotRegions":[{"fillId":8,"ownerRenderId":"cipfhvkp5","parentRegionId":null,"receiverRenderId":"cipfhvkp6","regionId":1,"resultOwnerRenderId":"cipfhvkp5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp6"},{"fillId":10,"ownerRenderId":"cipfhvkp5","parentRegionId":1,"receiverRenderId":"cipfhvkp5","regionId":2,"resultOwnerRenderId":"cipfhvkp5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp5"},{"fillId":1,"ownerRenderId":"cipfhvkp4","parentRegionId":1,"receiverRenderId":"cipfhvkp5","regionId":3,"resultOwnerRenderId":"cipfhvkp4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp5"},{"fillId":2,"ownerRenderId":"cipfhvkp4","parentRegionId":1,"receiverRenderId":"cipfhvkp5","regionId":4,"resultOwnerRenderId":"cipfhvkp4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp5"},{"fillId":13,"ownerRenderId":"cipfhvkp8","parentRegionId":null,"receiverRenderId":"cipfhvkp9","regionId":5,"resultOwnerRenderId":"cipfhvkp8","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp9"},{"fillId":15,"ownerRenderId":"cipfhvkp8","parentRegionId":5,"receiverRenderId":"cipfhvkp8","regionId":6,"resultOwnerRenderId":"cipfhvkp8","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp8"},{"fillId":3,"ownerRenderId":"cipfhvkp4","parentRegionId":5,"receiverRenderId":"cipfhvkp8","regionId":7,"resultOwnerRenderId":"cipfhvkp4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp8"},{"fillId":4,"ownerRenderId":"cipfhvkp4","parentRegionId":5,"receiverRenderId":"cipfhvkp8","regionId":8,"resultOwnerRenderId":"cipfhvkp4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkp8"},{"fillId":18,"ownerRenderId":"cipfhvkpb","parentRegionId":null,"receiverRenderId":"cipfhvkpc","regionId":9,"resultOwnerRenderId":"cipfhvkpb","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkpc"},{"fillId":20,"ownerRenderId":"cipfhvkpb","parentRegionId":9,"receiverRenderId":"cipfhvkpb","regionId":10,"resultOwnerRenderId":"cipfhvkpb","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkpb"},{"fillId":5,"ownerRenderId":"cipfhvkp4","parentRegionId":9,"receiverRenderId":"cipfhvkpb","regionId":11,"resultOwnerRenderId":"cipfhvkp4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkpb"},{"fillId":6,"ownerRenderId":"cipfhvkp4","parentRegionId":9,"receiverRenderId":"cipfhvkpb","regionId":12,"resultOwnerRenderId":"cipfhvkp4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkpb"},{"fillId":23,"ownerRenderId":"cipfhvkpe","parentRegionId":null,"receiverRenderId":"cipfhvkpf","regionId":13,"resultOwnerRenderId":"cipfhvkpe","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkpf"},{"fillId":25,"ownerRenderId":"cipfhvkpe","parentRegionId":13,"receiverRenderId":"cipfhvkpe","regionId":14,"resultOwnerRenderId":"cipfhvkpe","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkpe"},{"fillId":7,"ownerRenderId":"cipfhvkp4","parentRegionId":13,"receiverRenderId":"cipfhvkpe","regionId":15,"resultOwnerRenderId":"cipfhvkp4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkpe"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"80468a192925f0d5d747c9b02b5c352c0f3514d9dea599c7baee94f3d7774f16"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjRlNTRjZGIzMzljNTA0ZjdkODBjZGMzMWVkNzQ0OTJjLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LmY2MWY2M2FmMmQxNzcxNmVjYTEwZTg3YjY2NmMzN2U0Lmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2Ljk4N2Y0OTE0NGE1ODMwNjM1MzRmMDg1ODRhZTIwYzYwLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0ljb25Db21wb3NpdGlvbl9iYzBjMzUuZDdiMDE3NWMzZmQ3LmNzcw==", "L2NpdHJ5L2NhY2hlL0NJY29uXzhlNTM0NS5iMDBlNmMzZWI5OTEuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2a3A1", "NGU1NGNkYjMzOWM1MDRmN2Q4MGNkYzMxZWQ3NDQ5MmM=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2a3A4", "ZjYxZjYzYWYyZDE3NzE2ZWNhMTBlODdiNjY2YzM3ZTQ=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2a3Bi", "OTg3ZjQ5MTQ0YTU4MzA2MzUzNGYwODU4NGFlMjBjNjA=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2a3Bl", "NGU1NGNkYjMzOWM1MDRmN2Q4MGNkYzMxZWQ3NDQ5MmM=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2a3Az"], ["SWNvbkNvbXBvc2l0aW9uX2JjMGMzNQ==", "Y2lwZmh2a3A0"], ["Q0ljb25fOGU1MzQ1", "Y2lwZmh2a3A3"], ["Q0ljb25fOGU1MzQ1", "Y2lwZmh2a3Bh"], ["Q0ljb25fOGU1MzQ1", "Y2lwZmh2a3Bk"], ["Q0ljb25fOGU1MzQ1", "Y2lwZmh2a3Bn"], ["Q0ljb25fOGU1MzQ1", "Y2lwZmh2a3Bo"]], "graph": "80468a192925f0d5d747c9b02b5c352c0f3514d9dea599c7baee94f3d7774f16", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "4e54cdb339c504f7d80cdc31ed74492c", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJuZXV0cmFsIiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "f61f63af2d17716eca10e87b666c37e4", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50Ijoic3VjY2VzcyIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "987f49144a583063534f08584ae20c60", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Imdob3N0IiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script></body></html><!--citry:g1:80468a19:0:i:1:e-->

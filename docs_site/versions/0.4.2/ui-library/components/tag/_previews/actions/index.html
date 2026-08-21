@@ -1,0 +1,511 @@
+<!--citry:g1:4d864415:0:i:1:s--><!doctype html><html data-cid-cipfhvl7y lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Run Tag actions</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CTag_ae7eea>@layer citry-ui.theme{:where([data-citry-ui-part=tag-group]){--_cui-tag-gap:var(--cui-tag-gap,.5rem);--_cui-tag-row-gap:var(--cui-tag-row-gap,.5rem);--_cui-tag-label-color:var(--cui-tag-label-color,CanvasText);--_cui-tag-description-color:var(--cui-tag-description-color,light-dark(#57534e,#d6d3d1));gap:.4rem;min-inline-size:0;max-inline-size:100%;display:grid}:where([data-citry-ui-part=group-label]){color:var(--_cui-tag-label-color);overflow-wrap:anywhere;font-weight:650;line-height:1.3}:where([data-citry-ui-part=description]){color:var(--_cui-tag-description-color);overflow-wrap:anywhere;font-size:.925em;line-height:1.45}:where([data-citry-ui-part=list]){gap:var(--_cui-tag-row-gap) var(--_cui-tag-gap);outline:none;flex-wrap:wrap;min-inline-size:0;max-inline-size:100%;display:flex}:where([data-citry-ui-part=tag]){--_cui-tag-background:var(--cui-tag-background,light-dark(#f5f5f4,#292524));--_cui-tag-foreground:var(--cui-tag-foreground,light-dark(#292524,#fafaf9));--_cui-tag-border-color:var(--cui-tag-border-color,light-dark(#d6d3d1,#57534e));--_cui-tag-selected-background:var(--cui-tag-selected-background,light-dark(#175cd3,#2563eb));--_cui-tag-selected-foreground:var(--cui-tag-selected-foreground,#fff);--_cui-tag-selected-border-color:var(--cui-tag-selected-border-color,var(--_cui-tag-selected-background));--_cui-tag-focus-color:var(--cui-tag-focus-color,Highlight);--_cui-tag-radius:var(--cui-tag-radius,999px);--_cui-tag-min-height:var(--cui-tag-min-height,2rem);--_cui-tag-padding-inline:var(--cui-tag-padding-inline,.7rem);--_cui-tag-internal-gap:var(--cui-tag-internal-gap,.35rem);--_cui-tag-font-size:var(--cui-tag-font-size,.875rem);box-sizing:border-box;min-block-size:var(--_cui-tag-min-height);border:1px solid var(--_cui-tag-border-color);border-radius:var(--_cui-tag-radius);min-inline-size:0;max-inline-size:100%;color:var(--_cui-tag-foreground);background:var(--_cui-tag-background);font:inherit;font-size:var(--_cui-tag-font-size);cursor:default;user-select:none;line-height:1.2;display:inline-flex}:where([data-citry-ui-part=tag][role=row]){cursor:pointer}:where([data-citry-ui-part=tag]:focus-visible),:where([data-citry-ui-part=remove]:focus-visible){outline:2px solid var(--_cui-tag-focus-color);outline-offset:2px}:where([data-citry-ui-part=tag][data-selected]){border-color:var(--_cui-tag-selected-border-color);color:var(--_cui-tag-selected-foreground);background:var(--_cui-tag-selected-background)}:where([data-citry-ui-part=tag][data-variant=solid]:not([data-selected])){--_cui-tag-background:var(--cui-tag-background,light-dark(#44403c,#d6d3d1));--_cui-tag-foreground:var(--cui-tag-foreground,light-dark(#fff,#1c1917));--_cui-tag-border-color:var(--cui-tag-border-color,var(--_cui-tag-background))}:where([data-citry-ui-part=tag][data-variant=outline]:not([data-selected])){--_cui-tag-background:var(--cui-tag-background,transparent)}:where([data-citry-ui-part=tag][data-size=sm]){--_cui-tag-min-height:var(--cui-tag-min-height,1.75rem);--_cui-tag-padding-inline:var(--cui-tag-padding-inline,.55rem);--_cui-tag-font-size:var(--cui-tag-font-size,.8125rem)}:where([data-citry-ui-part=tag][data-size=lg]){--_cui-tag-min-height:var(--cui-tag-min-height,2.5rem);--_cui-tag-padding-inline:var(--cui-tag-padding-inline,.9rem);--_cui-tag-font-size:var(--cui-tag-font-size,1rem)}:where([data-citry-ui-part=tag][data-disabled]){cursor:not-allowed}:where(.cui-tag__cell){align-items:center;gap:var(--_cui-tag-internal-gap);min-inline-size:0;padding-inline:var(--_cui-tag-padding-inline);grid-template-columns:auto auto minmax(0,auto) auto;display:inline-grid}:where([data-citry-ui-part=indicator]),:where([data-citry-ui-part=start]){flex:none;justify-content:center;align-items:center;display:inline-flex}:where([data-citry-ui-part=indicator][hidden]){display:none!important}:where([data-citry-ui-part=tag-label]){overflow-wrap:anywhere;min-inline-size:0}:where([data-citry-ui-part=remove]){box-sizing:border-box;block-size:1.5rem;inline-size:1.5rem;color:inherit;font:inherit;cursor:pointer;background:0 0;border:0;border-radius:999px;place-items:center;margin-inline-end:-.35rem;padding:0;display:inline-grid}:where([data-citry-ui-part=remove]:hover){background:color-mix(in srgb, currentColor 14%, transparent)}:where([data-citry-ui-part=remove]:disabled){cursor:not-allowed}:where(.cui-tag__remove-text){clip-path:inset(50%);white-space:nowrap;block-size:1px;inline-size:1px;position:absolute;overflow:hidden}}@media (forced-colors:active){@layer citry-ui.theme{:where([data-citry-ui-part=tag]){color:buttontext;forced-color-adjust:auto;background:canvas;border-color:buttontext}:where([data-citry-ui-part=tag][data-selected]){color:highlighttext;background:highlight;border-color:highlight}:where([data-citry-ui-part=tag][data-disabled]){color:graytext}}}@media print{@layer citry-ui.theme{:where([data-citry-ui-part=tag]){color:canvastext;background:0 0;border-color:currentColor}:where([data-citry-ui-part=tag][data-selected]){border-width:2px}}}</style></head><body><main><!--citry:g1:4d864415:0:i:2:s--><div x-data="{last: 'None'}" class=citry-ui-demo-stack data-cid=cipfhvl7z data-cid-cipfhvl7z data-citry-root><!--citry:g1:4d864415:0:i:3:s--><div class=cui-tag-group data-actionable data-cid=cipfhvl80 data-cid-cipfhvl80 data-citry-root data-citry-ui-part=tag-group data-selection-mode=none data-size=md data-variant=soft id=cui-tag-group-cipfhvl80><div class=cui-tag-group__label data-citry-ui-part=group-label id=cui-tag-group-cipfhvl80-label>Open view</div><div aria-labelledby=cui-tag-group-cipfhvl80-label class=cui-tag-group__list data-citry-ui-part=list role=grid tabindex=-1><!--citry:g1:4d864415:0:r:1:s--><!--citry:g1:4d864415:0:i:4:s--><div aria-disabled=false aria-labelledby=cui-tag-group-cipfhvl80-tag-0-label class=cui-tag data-cid=cipfhvl81 data-cid-cipfhvl81 data-citry-root data-citry-ui-part=tag data-size=md data-value=overview data-variant=soft role=row tabindex=0><span class=cui-tag__cell role=gridcell> <span aria-hidden=true class=cui-tag__indicator data-citry-ui-part=indicator hidden>✓</span> <span class=cui-tag__label data-citry-ui-part=tag-label id=cui-tag-group-cipfhvl80-tag-0-label><!--citry:g1:4d864415:0:r:2:s-->Overview<!--citry:g1:4d864415:0:r:2:e--></span> </span></div><!--citry:g1:4d864415:0:i:4:e--><!--citry:g1:4d864415:0:i:5:s--><div aria-disabled=false aria-labelledby=cui-tag-group-cipfhvl80-tag-1-label class=cui-tag data-cid=cipfhvl82 data-cid-cipfhvl82 data-citry-root data-citry-ui-part=tag data-size=md data-value=activity data-variant=soft role=row tabindex=-1><span class=cui-tag__cell role=gridcell> <span aria-hidden=true class=cui-tag__indicator data-citry-ui-part=indicator hidden>✓</span> <span class=cui-tag__label data-citry-ui-part=tag-label id=cui-tag-group-cipfhvl80-tag-1-label><!--citry:g1:4d864415:0:r:3:s-->Activity<!--citry:g1:4d864415:0:r:3:e--></span> </span></div><!--citry:g1:4d864415:0:i:5:e--><!--citry:g1:4d864415:0:i:6:s--><div aria-disabled=false aria-labelledby=cui-tag-group-cipfhvl80-tag-2-label class=cui-tag data-cid=cipfhvl83 data-cid-cipfhvl83 data-citry-root data-citry-ui-part=tag data-size=md data-value=settings data-variant=soft role=row tabindex=-1><span class=cui-tag__cell role=gridcell> <span aria-hidden=true class=cui-tag__indicator data-citry-ui-part=indicator hidden>✓</span> <span class=cui-tag__label data-citry-ui-part=tag-label id=cui-tag-group-cipfhvl80-tag-2-label><!--citry:g1:4d864415:0:r:4:s-->Settings<!--citry:g1:4d864415:0:r:4:e--></span> </span></div><!--citry:g1:4d864415:0:i:6:e--><!--citry:g1:4d864415:0:r:1:e--></div></div><!--citry:g1:4d864415:0:i:3:e--><output x-text="`Last action: ${last}`"></output></div><!--citry:g1:4d864415:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"TagActions_658904","className":"TagActions"},{"classId":"CTagGroup_765ed5","className":"CTagGroup"},{"classId":"CTag_ae7eea","className":"CTag"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhvl80","invocationId":2,"parentRenderId":"cipfhvl7z"},{"childRenderId":"cipfhvl81","invocationId":3,"parentRenderId":"cipfhvl7z"},{"childRenderId":"cipfhvl82","invocationId":4,"parentRenderId":"cipfhvl7z"},{"childRenderId":"cipfhvl83","invocationId":5,"parentRenderId":"cipfhvl7z"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvl7y","transparent":false},{"classId":"TagActions_658904","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvl7z","transparent":false},{"classId":"CTagGroup_765ed5","instanceId":3,"invocationId":2,"parentRenderId":"cipfhvl7z","renderId":"cipfhvl80","transparent":false},{"classId":"CTag_ae7eea","instanceId":4,"invocationId":3,"parentRenderId":"cipfhvl7z","renderId":"cipfhvl81","transparent":false},{"classId":"CTag_ae7eea","instanceId":5,"invocationId":4,"parentRenderId":"cipfhvl7z","renderId":"cipfhvl82","transparent":false},{"classId":"CTag_ae7eea","instanceId":6,"invocationId":5,"parentRenderId":"cipfhvl7z","renderId":"cipfhvl83","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"TagActions_658904","ownerRenderId":"cipfhvl7z","policy":"template","receiverClassId":"CTagGroup_765ed5","receiverRenderId":"cipfhvl80","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"TagActions_658904","ownerRenderId":"cipfhvl7z","policy":"template","receiverClassId":"CTag_ae7eea","receiverRenderId":"cipfhvl81","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"TagActions_658904","ownerRenderId":"cipfhvl7z","policy":"template","receiverClassId":"CTag_ae7eea","receiverRenderId":"cipfhvl82","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"TagActions_658904","ownerRenderId":"cipfhvl7z","policy":"template","receiverClassId":"CTag_ae7eea","receiverRenderId":"cipfhvl83","slotName":"default","sourceInvocationId":5}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{onAction: (value) => last = value}","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"TagActions_658904","sourceRenderId":"cipfhvl7z","tagName":"ctaggroup","targetClassId":"CTagGroup_765ed5","targetRenderId":"cipfhvl80"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"TagActions_658904","sourceRenderId":"cipfhvl7z","tagName":"ctag","targetClassId":"CTag_ae7eea","targetRenderId":"cipfhvl81"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"TagActions_658904","sourceRenderId":"cipfhvl7z","tagName":"ctag","targetClassId":"CTag_ae7eea","targetRenderId":"cipfhvl82"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"TagActions_658904","sourceRenderId":"cipfhvl7z","tagName":"ctag","targetClassId":"CTag_ae7eea","targetRenderId":"cipfhvl83"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cipfhvl7z","parentRegionId":null,"receiverRenderId":"cipfhvl80","regionId":1,"resultOwnerRenderId":"cipfhvl7z","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvl80"},{"fillId":3,"ownerRenderId":"cipfhvl7z","parentRegionId":1,"receiverRenderId":"cipfhvl81","regionId":2,"resultOwnerRenderId":"cipfhvl7z","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvl7z"},{"fillId":4,"ownerRenderId":"cipfhvl7z","parentRegionId":1,"receiverRenderId":"cipfhvl82","regionId":3,"resultOwnerRenderId":"cipfhvl7z","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvl7z"},{"fillId":5,"ownerRenderId":"cipfhvl7z","parentRegionId":1,"receiverRenderId":"cipfhvl83","regionId":4,"resultOwnerRenderId":"cipfhvl7z","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvl7z"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"4d86441528be716bfb1e77647d58dae8c5eb39da273117e7c6df0ac7eecc27c0"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NUYWdfYWU3ZWVhLjUwNDBlZGJkMGI0MC5qcw==", "L2NpdHJ5L2NhY2hlL0NUYWdfYWU3ZWVhLmMxMTYyMGViZTliZDBkYTFlMmU0YWJlNjkyMzliZTAwLmpz", "L2NpdHJ5L2NhY2hlL0NUYWdHcm91cF83NjVlZDUuYzIyMzAwNmRiODA3Lmpz", "L2NpdHJ5L2NhY2hlL0NUYWdHcm91cF83NjVlZDUuMzA3ODcyYTUyMWIxNmFmYjkxNzVhYTNhMWIxNWZjYTguanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NUYWdfYWU3ZWVhLmZkNzQwYTY5NGU4Yi5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1RhZ19hZTdlZWE=", "Y2lwZmh2bDgx", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q1RhZ19hZTdlZWE=", "Y2lwZmh2bDgy", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q1RhZ19hZTdlZWE=", "Y2lwZmh2bDgz", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q1RhZ0dyb3VwXzc2NWVkNQ==", "Y2lwZmh2bDgw", "MzA3ODcyYTUyMWIxNmFmYjkxNzVhYTNhMWIxNWZjYTg=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2bDd5"]], "graph": "4d86441528be716bfb1e77647d58dae8c5eb39da273117e7c6df0ac7eecc27c0", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CTag_ae7eea", {
+  props: {disabled: {}, textValue: {}},
+  init: ({els, data, props, effect}) => {
+    const root = els[0];
+    const group = root.closest('[data-citry-ui-part="tag-group"]');
+    if (!group || root.parentElement !== group.querySelector(':scope > [data-citry-ui-part="list"]')) {
+      console.error("[citry-ui] CTag must be a direct child of CTagGroup collection output.");
+      root.setAttribute("inert", "");
+      return () => {};
+    }
+    const label = root.querySelector(':scope > .cui-tag__cell > [data-citry-ui-part="tag-label"]');
+    const indicator = root.querySelector(':scope > .cui-tag__cell > [data-citry-ui-part="indicator"]');
+    const remove = root.querySelector(':scope > .cui-tag__cell > [data-citry-ui-part="remove"]');
+    const invalid = new Set();
+    let localDisabled = data.disabled;
+    let textValue = data.textValue;
+    let unregister = null;
+    const report = (name, value) => {
+      if (invalid.has(name)) return;
+      invalid.add(name);
+      console.error(`[citry-ui] CTag ${name} received invalid client value`, value);
+    };
+    const entry = {
+      root, label, indicator, remove, value: root.dataset.value,
+      localDisabled, disabled: localDisabled, textValue,
+    };
+    unregister = group.__citryTagRegister?.(entry) ?? null;
+    const apply = () => {
+      if (props.disabled === undefined) { invalid.delete("disabled"); localDisabled = data.disabled; }
+      else if (typeof props.disabled === "boolean") {
+        invalid.delete("disabled"); localDisabled = props.disabled;
+      }
+      else report("disabled", props.disabled);
+      if (props.textValue === undefined || props.textValue === null) {
+        invalid.delete("textValue"); textValue = data.textValue;
+      } else if (typeof props.textValue === "string"
+        && props.textValue.length && !props.textValue.includes("\0")) {
+        invalid.delete("textValue"); textValue = props.textValue.replace(/\r\n?/g, "\n");
+      } else report("textValue", props.textValue);
+      entry.localDisabled = localDisabled;
+      entry.textValue = textValue;
+      group.__citryTagRegister?.(entry);
+    };
+    const stop = effect(apply);
+    root.setAttribute("data-citry-tag-initialized", "");
+    return () => {
+      stop?.(); unregister?.();
+      root.removeAttribute("data-citry-tag-initialized");
+    };
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CTag_ae7eea", "c11620ebe9bd0da1e2e4abe69239be00", atob("eyJkaXNhYmxlZCI6ZmFsc2UsInRleHRWYWx1ZSI6bnVsbH0="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CTagGroup_765ed5", {
+  props: {
+    value: {}, disabled: {}, variant: {}, size: {},
+    onValueChange: {}, onAction: {}, onRemove: {},
+  },
+  init: ({els, data, props, effect, inject}) => {
+    const root = els[0];
+    const list = root.querySelector(':scope > [data-citry-ui-part="list"]');
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const invalidEpisodes = new Set();
+    const registrations = new Map();
+    const runtime = root.__citryUiTagRuntime ?? {
+      selection: data.selectionMode === "multiple" ? [] : null,
+      serverValueFingerprint: null,
+      focusedValue: null,
+      order: [],
+    };
+    root.__citryUiTagRuntime = runtime;
+    if (runtime.serverValueFingerprint !== data.serverValueFingerprint) {
+      runtime.selection = data.selectionMode === "multiple" ? [...(data.value ?? [])] : data.value;
+      runtime.serverValueFingerprint = data.serverValueFingerprint;
+    }
+    let committed = data.selectionMode === "multiple"
+      ? new Set(runtime.selection ?? [])
+      : runtime.selection;
+    let controlled = false;
+    let reconcileTimer = null;
+    let typeaheadTimer = null;
+    let typeaheadBuffer = "";
+    let focusWithin = false;
+    let structureInvalid = false;
+    let generation = 1;
+    const report = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CTagGroup ${name} received invalid client value`, value);
+    };
+    const clearEpisode = (name) => invalidEpisodes.delete(name);
+    const directTags = () => [...list.querySelectorAll(':scope > [data-citry-ui-part="tag"]')];
+    const entries = () => directTags().map((tag) => registrations.get(tag)).filter(Boolean);
+    const canonical = (value) => typeof value === "string" && !value.includes("\0")
+      ? value.replace(/\r\n?/g, "\n") : null;
+    const known = () => new Set(entries().map((entry) => entry.value));
+    const publicValue = (value) => data.selectionMode === "multiple" ? [...value] : value;
+    const selectedSet = (value) => data.selectionMode === "multiple"
+      ? value : new Set(value === null ? [] : [value]);
+    const validCallback = (name) => {
+      const supplied = props[name];
+      if (supplied === undefined || supplied === null) { clearEpisode(name); return null; }
+      if (typeof supplied === "function") { clearEpisode(name); return supplied; }
+      report(name, supplied);
+      return null;
+    };
+    const resolveChoice = (name, fallback, allowed) => {
+      const supplied = props[name];
+      if (supplied === undefined) { clearEpisode(name); return fallback; }
+      if (typeof supplied === "string" && allowed.includes(supplied)) {
+        clearEpisode(name); return supplied;
+      }
+      report(name, supplied);
+      return fallback;
+    };
+    const inDisabledFieldset = () => {
+      let node = root.parentElement;
+      while (node) {
+        if (node instanceof HTMLFieldSetElement && node.disabled) {
+          const firstLegend = [...node.children].find((child) => child instanceof HTMLLegendElement);
+          if (!firstLegend || !firstLegend.contains(root)) return true;
+        }
+        node = node.parentElement;
+      }
+      return false;
+    };
+    const localDisabled = () => {
+      if (props.disabled === undefined) { clearEpisode("disabled"); return data.disabled; }
+      if (typeof props.disabled === "boolean") { clearEpisode("disabled"); return props.disabled; }
+      report("disabled", props.disabled);
+      return data.disabled;
+    };
+    const effectiveGroupDisabled = () => Boolean(form?.disabled) || inDisabledFieldset() || localDisabled();
+    const validStructure = () => {
+      const children = [...list.children];
+      if (children.some((child) => !child.matches('[data-citry-ui-part="tag"]'))) return false;
+      if (children.some((child) => !registrations.has(child))) return false;
+      const values = children.map((child) => child.dataset.value);
+      if (values.length !== new Set(values).size) return false;
+      const interactiveSelector = [
+        "a[href]", "button", "input", "select", "textarea", "label",
+        "[contenteditable]:not([contenteditable='false'])", "[tabindex]",
+      ].join(",");
+      return !children.some((tag) => [...tag.querySelectorAll(
+        '[data-citry-ui-part="tag-label"], [data-citry-ui-part="start"]'
+      )].some((region) => region.matches(interactiveSelector) || region.querySelector(interactiveSelector)));
+    };
+    const nearest = (priorOrder, missingValue, candidates) => {
+      const priorIndex = priorOrder.indexOf(missingValue);
+      if (priorIndex < 0) return candidates[0] ?? null;
+      for (let distance = 1; distance <= priorOrder.length; distance += 1) {
+        const following = priorOrder[priorIndex + distance];
+        const preceding = priorOrder[priorIndex - distance];
+        const foundFollowing = candidates.find((entry) => entry.value === following);
+        if (foundFollowing) return foundFollowing;
+        const foundPreceding = candidates.find((entry) => entry.value === preceding);
+        if (foundPreceding) return foundPreceding;
+      }
+      return candidates[0] ?? null;
+    };
+    const normalizeClientValue = (supplied) => {
+      const values = known();
+      if (data.selectionMode === "multiple") {
+        if (!Array.isArray(supplied)) return null;
+        const normalized = supplied.map(canonical);
+        if (normalized.includes(null) || new Set(normalized).size !== normalized.length) return null;
+        const knownValues = normalized.filter((value) => values.has(value));
+        return {value: new Set(knownValues), invalid: knownValues.length !== normalized.length};
+      }
+      if (supplied === null) return {value: null, invalid: false};
+      const normalized = canonical(supplied);
+      if (normalized === null) return null;
+      return {value: values.has(normalized) ? normalized : null, invalid: !values.has(normalized)};
+    };
+    const applySelection = (value) => {
+      committed = value;
+      runtime.selection = publicValue(value);
+      const selected = selectedSet(value);
+      entries().forEach((entry) => {
+        const isSelected = selected.has(entry.value);
+        entry.root.toggleAttribute("data-selected", isSelected);
+        if (data.selectionMode !== "none") entry.root.setAttribute("aria-selected", String(isSelected));
+        else entry.root.removeAttribute("aria-selected");
+        entry.indicator.hidden = !isSelected;
+      });
+    };
+    const applyRoving = (groupDisabled) => {
+      const enabled = entries().filter((entry) => !groupDisabled && !entry.disabled);
+      let current = enabled.find((entry) => entry.value === runtime.focusedValue) ?? enabled[0] ?? null;
+      if (runtime.focusedValue && !entries().some((entry) => entry.value === runtime.focusedValue)) {
+        current = nearest(runtime.order, runtime.focusedValue, enabled);
+        if (focusWithin && current) queueMicrotask(() => current.root.focus());
+        else if (focusWithin && !current) queueMicrotask(() => list.focus());
+      }
+      runtime.focusedValue = current?.value ?? null;
+      entries().forEach((entry) => { entry.root.tabIndex = entry === current ? 0 : -1; });
+    };
+    const reconcile = () => {
+      reconcileTimer = null;
+      if (!validStructure()) {
+        structureInvalid = true;
+        report("structure", "Tag content must remain direct and noninteractive");
+        list.inert = true;
+        entries().forEach((entry) => { entry.root.tabIndex = -1; });
+        root.removeAttribute("data-citry-tag-group-initialized");
+        return;
+      }
+      structureInvalid = false;
+      clearEpisode("structure");
+      list.inert = false;
+      const currentEntries = entries();
+      const currentOrder = currentEntries.map((entry) => entry.value);
+      const groupDisabled = effectiveGroupDisabled();
+      const variant = resolveChoice("variant", data.variant, ["soft", "solid", "outline"]);
+      const size = resolveChoice("size", data.size, ["sm", "md", "lg"]);
+      root.toggleAttribute("data-disabled", groupDisabled);
+      root.dataset.variant = variant;
+      root.dataset.size = size;
+      currentEntries.forEach((entry) => {
+        entry.disabled = groupDisabled || entry.localDisabled;
+        entry.root.toggleAttribute("data-disabled", entry.disabled);
+        entry.root.setAttribute("aria-disabled", String(entry.disabled));
+        entry.root.dataset.variant = variant;
+        entry.root.dataset.size = size;
+        if (entry.remove) entry.remove.disabled = entry.disabled;
+      });
+      controlled = props.value !== undefined;
+      if (controlled && data.selectionMode !== "none") {
+        const normalized = normalizeClientValue(props.value);
+        if (normalized === null) report("value", props.value);
+        else {
+          if (normalized.invalid) report("value", props.value); else clearEpisode("value");
+          applySelection(normalized.value);
+        }
+      } else if (!controlled) {
+        clearEpisode("value");
+        if (data.selectionMode === "multiple") {
+          const surviving = new Set([...committed].filter((value) => known().has(value)));
+          applySelection(surviving);
+        } else if (committed !== null && !known().has(committed)) applySelection(null);
+        else applySelection(committed);
+      }
+      applyRoving(groupDisabled);
+      runtime.order = currentOrder;
+      if (groupDisabled && focusWithin) queueMicrotask(() => list.focus());
+      root.setAttribute("data-citry-tag-group-initialized", "");
+    };
+    const schedule = () => {
+      if (reconcileTimer !== null) return;
+      reconcileTimer = setTimeout(reconcile, 0);
+    };
+    root.__citryTagRegister = (entry) => {
+      registrations.set(entry.root, entry);
+      schedule();
+      return () => { registrations.delete(entry.root); schedule(); };
+    };
+    const ownedEntry = (target) => {
+      const tag = target.closest?.('[data-citry-ui-part="tag"]');
+      return tag?.closest('[data-citry-ui-part="tag-group"]') === root ? registrations.get(tag) : null;
+    };
+    const focusEntry = (entry) => {
+      if (!entry || entry.disabled) return;
+      runtime.focusedValue = entry.value;
+      entries().forEach((candidate) => { candidate.root.tabIndex = candidate === entry ? 0 : -1; });
+      entry.root.focus();
+    };
+    const requestRemove = (entry, source, nativeEvent) => {
+      if (structureInvalid || !data.removable || entry.disabled) return;
+      const callback = validCallback("onRemove");
+      const selected = selectedSet(committed);
+      const values = data.selectionMode === "multiple" && selected.has(entry.value)
+        ? entries().filter((item) => selected.has(item.value) && !item.disabled).map((item) => item.value)
+        : [entry.value];
+      callback?.([...values], {
+        values: [...values], tagValue: entry.value, source, nativeEvent,
+      });
+    };
+    const activate = (entry, nativeEvent) => {
+      if (structureInvalid || !entry || entry.disabled) return;
+      const beforeGeneration = generation;
+      if (data.selectionMode !== "none") {
+        const previous = publicValue(committed);
+        let next;
+        if (data.selectionMode === "multiple") {
+          next = new Set(committed);
+          if (next.has(entry.value)) {
+            if (!data.mandatory || next.size > 1) next.delete(entry.value);
+          } else next.add(entry.value);
+        } else {
+          next = committed === entry.value && !data.mandatory ? null : entry.value;
+        }
+        const changed = JSON.stringify(publicValue(next)) !== JSON.stringify(previous);
+        if (changed) {
+          validCallback("onValueChange")?.(publicValue(next), {
+            value: publicValue(next), previousValue: previous, tagValue: entry.value,
+            source: "activation", controlled, nativeEvent,
+          });
+          if (!controlled) applySelection(next);
+          else schedule();
+        }
+      }
+      if (generation === beforeGeneration && data.actionable) {
+        validCallback("onAction")?.(entry.value, {
+          value: entry.value, source: "activation", nativeEvent,
+        });
+      }
+    };
+    const onClick = (event) => {
+      const entry = ownedEntry(event.target);
+      if (!entry) return;
+      if (event.target.closest?.('[data-citry-ui-part="remove"]')) {
+        event.preventDefault();
+        event.stopPropagation();
+        requestRemove(entry, "remove-button", event);
+        return;
+      }
+      focusEntry(entry);
+      activate(entry, event);
+    };
+    const normalizedText = (entry) => {
+      const raw = entry.textValue || entry.label.textContent || "";
+      return raw.replace(/\s+/g, " ").trim();
+    };
+    const lower = (value) => {
+      const lang = root.closest("[lang]")?.getAttribute("lang") || document.documentElement.lang;
+      try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
+      catch { return value.toLowerCase(); }
+    };
+    const move = (entry, direction) => {
+      const enabled = entries().filter((candidate) => !candidate.disabled);
+      const index = enabled.indexOf(entry);
+      if (index < 0 || !enabled.length) return;
+      focusEntry(enabled[(index + direction + enabled.length) % enabled.length]);
+    };
+    const onKeyDown = (event) => {
+      const entry = ownedEntry(event.target);
+      if (!entry) return;
+      if (event.target.closest?.('[data-citry-ui-part="remove"]')) {
+        if (event.key === "Tab" && event.shiftKey) {
+          event.preventDefault(); focusEntry(entry);
+        }
+        return;
+      }
+      const rtl = getComputedStyle(root).direction === "rtl";
+      if (["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        const forward = event.key === "ArrowDown" || event.key === (rtl ? "ArrowLeft" : "ArrowRight");
+        move(entry, forward ? 1 : -1); return;
+      }
+      if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        const enabled = entries().filter((candidate) => !candidate.disabled);
+        focusEntry(event.key === "Home" ? enabled[0] : enabled.at(-1)); return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && data.removable) {
+        event.preventDefault(); requestRemove(entry, "delete-key", event); return;
+      }
+      if (event.key === "Tab" && !event.shiftKey && data.removable && entry.remove && !entry.disabled) {
+        event.preventDefault(); entry.remove.focus(); return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault(); activate(entry, event); return;
+      }
+      if (!event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey
+          && event.key.length === 1) {
+        event.preventDefault();
+        const char = lower(event.key);
+        typeaheadBuffer = typeaheadBuffer && [...typeaheadBuffer].every((item) => item === char)
+          ? char : typeaheadBuffer + char;
+        clearTimeout(typeaheadTimer);
+        typeaheadTimer = setTimeout(() => { typeaheadBuffer = ""; }, 500);
+        const enabled = entries().filter((candidate) => !candidate.disabled);
+        const start = enabled.indexOf(entry);
+        for (let offset = 1; offset <= enabled.length; offset += 1) {
+          const candidate = enabled[(start + offset) % enabled.length];
+          if (lower(normalizedText(candidate)).startsWith(typeaheadBuffer)) {
+            focusEntry(candidate); break;
+          }
+        }
+      }
+    };
+    const onFocusIn = (event) => {
+      focusWithin = true;
+      const entry = ownedEntry(event.target);
+      if (entry) runtime.focusedValue = entry.value;
+    };
+    const onFocusOut = () => setTimeout(() => {
+      focusWithin = root.contains(root.ownerDocument.activeElement);
+    }, 0);
+    root.addEventListener("click", onClick, true);
+    root.addEventListener("keydown", onKeyDown, true);
+    root.addEventListener("focusin", onFocusIn, true);
+    root.addEventListener("focusout", onFocusOut);
+    const fieldsets = [];
+    let ancestor = root.parentElement;
+    while (ancestor) {
+      if (ancestor instanceof HTMLFieldSetElement) fieldsets.push(ancestor);
+      ancestor = ancestor.parentElement;
+    }
+    const fieldsetObserver = fieldsets.length ? new MutationObserver(schedule) : null;
+    fieldsets.forEach((fieldset) => fieldsetObserver.observe(fieldset, {
+      attributes: true, attributeFilter: ["disabled"], childList: true,
+    }));
+    const structureObserver = new MutationObserver((records) => {
+      if (records.some((record) => record.type === "childList"
+        || record.target.closest?.('[data-citry-ui-part="tag-label"], [data-citry-ui-part="start"]'))) {
+        schedule();
+      }
+    });
+    structureObserver.observe(list, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["contenteditable", "href", "tabindex"],
+    });
+    const stop = effect(() => {
+      void props.value;
+      void props.disabled;
+      void props.variant;
+      void props.size;
+      void props.onValueChange;
+      void props.onAction;
+      void props.onRemove;
+      void form?.disabled;
+      schedule();
+    });
+    schedule();
+    return () => {
+      generation += 1;
+      stop?.();
+      fieldsetObserver?.disconnect();
+      structureObserver.disconnect();
+      clearTimeout(reconcileTimer);
+      clearTimeout(typeaheadTimer);
+      root.removeEventListener("click", onClick, true);
+      root.removeEventListener("keydown", onKeyDown, true);
+      root.removeEventListener("focusin", onFocusIn, true);
+      root.removeEventListener("focusout", onFocusOut);
+      root.removeAttribute("data-citry-tag-group-initialized");
+      delete root.__citryTagRegister;
+    };
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CTagGroup_765ed5", "307872a521b16afb9175aa3a1b15fca8", atob("eyJ2YWx1ZSI6bnVsbCwic2VydmVyVmFsdWVGaW5nZXJwcmludCI6Ik5vbmUiLCJzZWxlY3Rpb25Nb2RlIjoibm9uZSIsIm1hbmRhdG9yeSI6ZmFsc2UsImFjdGlvbmFibGUiOnRydWUsInJlbW92YWJsZSI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwidmFyaWFudCI6InNvZnQiLCJzaXplIjoibWQifQ=="));
+})();</script></body></html><!--citry:g1:4d864415:0:i:1:e-->

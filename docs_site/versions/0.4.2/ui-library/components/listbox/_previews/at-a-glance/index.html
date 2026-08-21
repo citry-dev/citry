@@ -1,0 +1,606 @@
+<!--citry:g1:7f62640a:0:i:1:s--><!doctype html><html data-cid-cipfhviyu lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Listbox at a glance</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CListbox_1a159f>@layer citry-ui.theme{:where(.cui-listbox){--_cui-listbox-gap:var(--cui-listbox-gap,.375rem);--_cui-listbox-max-block-size:var(--cui-listbox-max-block-size,18rem);--_cui-listbox-background:var(--cui-listbox-background,Canvas);--_cui-listbox-foreground:var(--cui-listbox-foreground,CanvasText);--_cui-listbox-muted-color:var(--cui-listbox-muted-color,light-dark(#667085,#a4a7ae));--_cui-listbox-border-color:var(--cui-listbox-border-color,light-dark(#d0d5dd,#535862));--_cui-listbox-hover-background:var(--cui-listbox-hover-background,color-mix(in srgb, CanvasText 7%, transparent));--_cui-listbox-selected-background:var(--cui-listbox-selected-background,light-dark(#dbeafe,#1e3a5f));--_cui-listbox-selected-foreground:var(--cui-listbox-selected-foreground,light-dark(#1849a9,#d1e9ff));--_cui-listbox-focus-color:var(--cui-listbox-focus-color,Highlight);--_cui-listbox-radius:var(--cui-listbox-radius,.625rem);--_cui-listbox-option-padding:var(--cui-listbox-option-padding,.5rem .625rem);box-sizing:border-box;gap:var(--_cui-listbox-gap);min-inline-size:0;color:var(--_cui-listbox-foreground);font-family:ui-sans-serif,system-ui,sans-serif;display:grid}:where(.cui-listbox[data-size=sm]){--_cui-listbox-option-padding:var(--cui-listbox-option-padding,.375rem .5rem);font-size:.875rem}:where(.cui-listbox[data-size=lg]){--_cui-listbox-option-padding:var(--cui-listbox-option-padding,.625rem .75rem);font-size:1.0625rem}:where(.cui-listbox__label){overflow-wrap:anywhere;font-size:.9375em;font-weight:650;line-height:1.35}:where(.cui-listbox__surface){box-sizing:border-box;min-inline-size:0;max-block-size:var(--_cui-listbox-max-block-size);border-radius:var(--_cui-listbox-radius);background:var(--_cui-listbox-background);color:var(--_cui-listbox-foreground);overscroll-behavior:contain;border:1px solid #0000;align-content:start;gap:.125rem;margin:0;padding:.25rem;display:grid;overflow:auto}:where(.cui-listbox[data-variant=soft] .cui-listbox__surface){--_cui-listbox-background:var(--cui-listbox-background,color-mix(in srgb, CanvasText 5%, Canvas))}:where(.cui-listbox[data-variant=outline] .cui-listbox__surface){border-color:var(--_cui-listbox-border-color)}:where(.cui-listbox__option){box-sizing:border-box;min-inline-size:0;padding:var(--_cui-listbox-option-padding);border-radius:calc(var(--_cui-listbox-radius) - .125rem);cursor:default;outline:none;grid-template-columns:1rem auto minmax(0,1fr) auto;grid-template-areas:"indicator start copy end";align-items:center;gap:.5rem;display:grid}:where(.cui-listbox__option:not([data-disabled]):hover){background:var(--_cui-listbox-hover-background)}:where(.cui-listbox__option[data-selected]){background:var(--_cui-listbox-selected-background);color:var(--_cui-listbox-selected-foreground)}:where(.cui-listbox__option:focus-visible){outline:2px solid var(--_cui-listbox-focus-color);outline-offset:-2px}:where(.cui-listbox__option[data-disabled]){color:var(--_cui-listbox-muted-color);cursor:not-allowed;opacity:.7}:where(.cui-listbox__indicator){opacity:0;grid-area:indicator;place-items:center;block-size:1rem;inline-size:1rem;font-weight:800;transition:opacity .1s ease-out,transform .1s ease-out;display:grid;transform:scale(.75)}:where(){content:"✓"}:where(.cui-listbox__option[data-selected]>.cui-listbox__indicator){opacity:1;transform:none}:where(.cui-listbox__option-start){grid-area:start;min-inline-size:0}:where(.cui-listbox__option-copy){grid-area:copy;gap:.125rem;min-inline-size:0;display:grid}:where(.cui-listbox__option-label){overflow-wrap:anywhere;min-inline-size:0;line-height:1.35}:where(.cui-listbox__option-description){min-inline-size:0;color:var(--_cui-listbox-muted-color);overflow-wrap:anywhere;font-size:.875em;line-height:1.35}:where(.cui-listbox__option[data-selected] .cui-listbox__option-description){color:currentColor;opacity:.82}:where(.cui-listbox__option-end){min-inline-size:0;color:var(--_cui-listbox-muted-color);grid-area:end;font-size:.875em}:where(.cui-listbox__option[data-selected] .cui-listbox__option-end){color:currentColor;opacity:.82}:where(.cui-listbox__group){gap:.125rem;min-inline-size:0;display:grid}:where(.cui-listbox__group-label){color:var(--_cui-listbox-muted-color);letter-spacing:.025em;overflow-wrap:anywhere;text-transform:uppercase;padding:.5rem .625rem .25rem;font-size:.8125em;font-weight:700;line-height:1.3}:where(.cui-listbox[data-disabled] .cui-listbox__label){color:var(--_cui-listbox-muted-color)}@media (prefers-reduced-motion:reduce){:where(.cui-listbox__indicator){transition:none}}@media (forced-colors:active){:where(.cui-listbox__surface){border-color:canvastext}:where(.cui-listbox__option[data-selected]){color:highlighttext;forced-color-adjust:none;background:highlight}:where(.cui-listbox__option:focus-visible){outline-color:highlight}}@media print{:where(.cui-listbox__surface){background:0 0;border-color:canvastext;max-block-size:none;overflow:visible}:where(.cui-listbox__option:focus-visible){outline:none}}}</style></head><body><main><!--citry:g1:7f62640a:0:i:2:s--><!--citry:g1:7f62640a:0:i:3:s--><div class=cui-listbox data-cid=cipfhviyw data-cid-cipfhviyv data-cid-cipfhviyw data-citry-root data-citry-ui-part=listbox-root data-size=md data-variant=soft id=cui-listbox-cipfhviyw><span class=cui-listbox__label data-citry-ui-part=listbox-label id=cui-listbox-cipfhviyw-label>Choose a workspace</span><div aria-labelledby=cui-listbox-cipfhviyw-label class=cui-listbox__surface data-citry-ui-part=listbox id=cui-listbox-cipfhviyw-surface role=listbox><!--citry:g1:7f62640a:0:r:1:s--><!--citry:g1:7f62640a:0:i:4:s--><div aria-describedby=cui-listbox-cipfhviyw-option-7c8260250085-description aria-disabled=false aria-labelledby=cui-listbox-cipfhviyw-option-7c8260250085-label aria-selected=true class=cui-listbox__option data-active data-cid=cipfhviyx data-cid-cipfhviyx data-citry-key=:atlas data-citry-root data-citry-ui-part=listbox-option data-selected data-value=atlas id=cui-listbox-cipfhviyw-option-7c8260250085 role=option tabindex=0><span aria-hidden=true class=cui-listbox__indicator data-citry-ui-part=listbox-indicator></span><span class=cui-listbox__option-copy data-citry-ui-part=listbox-option-copy> <span class=cui-listbox__option-label data-citry-ui-part=listbox-option-label data-cui-listbox-slot-region id=cui-listbox-cipfhviyw-option-7c8260250085-label> <!--citry:g1:7f62640a:0:r:2:s-->Atlas research<!--citry:g1:7f62640a:0:r:2:e--> </span> <span class=cui-listbox__option-description data-citry-ui-part=listbox-option-description data-cui-listbox-slot-region id=cui-listbox-cipfhviyw-option-7c8260250085-description> <!--citry:g1:7f62640a:0:r:3:s-->12 collaborators<!--citry:g1:7f62640a:0:r:3:e--> </span> </span><span aria-hidden=true class=cui-listbox__option-end data-citry-ui-part=listbox-option-end data-cui-listbox-slot-region> <!--citry:g1:7f62640a:0:r:4:s-->Active<!--citry:g1:7f62640a:0:r:4:e--> </span></div><!--citry:g1:7f62640a:0:i:4:e--><!--citry:g1:7f62640a:0:i:5:s--><div aria-describedby=cui-listbox-cipfhviyw-option-9b89025ce7a6-description aria-disabled=false aria-labelledby=cui-listbox-cipfhviyw-option-9b89025ce7a6-label aria-selected=false class=cui-listbox__option data-cid=cipfhviyy data-cid-cipfhviyy data-citry-key=:aurora data-citry-root data-citry-ui-part=listbox-option data-value=aurora id=cui-listbox-cipfhviyw-option-9b89025ce7a6 role=option tabindex=-1><span aria-hidden=true class=cui-listbox__indicator data-citry-ui-part=listbox-indicator></span><span class=cui-listbox__option-copy data-citry-ui-part=listbox-option-copy> <span class=cui-listbox__option-label data-citry-ui-part=listbox-option-label data-cui-listbox-slot-region id=cui-listbox-cipfhviyw-option-9b89025ce7a6-label> <!--citry:g1:7f62640a:0:r:5:s-->Aurora field notes<!--citry:g1:7f62640a:0:r:5:e--> </span> <span class=cui-listbox__option-description data-citry-ui-part=listbox-option-description data-cui-listbox-slot-region id=cui-listbox-cipfhviyw-option-9b89025ce7a6-description> <!--citry:g1:7f62640a:0:r:6:s-->7 collaborators<!--citry:g1:7f62640a:0:r:6:e--> </span> </span></div><!--citry:g1:7f62640a:0:i:5:e--><!--citry:g1:7f62640a:0:i:6:s--><div aria-disabled=true aria-labelledby=cui-listbox-cipfhviyw-option-0eb3e36bfb24-label aria-selected=false class=cui-listbox__option data-cid=cipfhviyz data-cid-cipfhviyz data-citry-key=:archive data-citry-root data-citry-ui-part=listbox-option data-cui-listbox-option-disabled data-disabled data-value=archive id=cui-listbox-cipfhviyw-option-0eb3e36bfb24 role=option tabindex=-1><span aria-hidden=true class=cui-listbox__indicator data-citry-ui-part=listbox-indicator></span><span class=cui-listbox__option-copy data-citry-ui-part=listbox-option-copy> <span class=cui-listbox__option-label data-citry-ui-part=listbox-option-label data-cui-listbox-slot-region id=cui-listbox-cipfhviyw-option-0eb3e36bfb24-label> <!--citry:g1:7f62640a:0:r:7:s-->Archived studies<!--citry:g1:7f62640a:0:r:7:e--> </span> </span></div><!--citry:g1:7f62640a:0:i:6:e--><!--citry:g1:7f62640a:0:r:1:e--></div></div><!--citry:g1:7f62640a:0:i:3:e--><!--citry:g1:7f62640a:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ListboxAtAGlance_fc021f","className":"ListboxAtAGlance"},{"classId":"CListbox_1a159f","className":"CListbox"},{"classId":"CListboxOption_dfb80c","className":"CListboxOption"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhviyw","invocationId":2,"parentRenderId":"cipfhviyv"},{"childRenderId":"cipfhviyx","invocationId":3,"parentRenderId":"cipfhviyv"},{"childRenderId":"cipfhviyy","invocationId":4,"parentRenderId":"cipfhviyv"},{"childRenderId":"cipfhviyz","invocationId":5,"parentRenderId":"cipfhviyv"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhviyu","transparent":false},{"classId":"ListboxAtAGlance_fc021f","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhviyv","transparent":false},{"classId":"CListbox_1a159f","instanceId":3,"invocationId":2,"parentRenderId":"cipfhviyv","renderId":"cipfhviyw","transparent":false},{"classId":"CListboxOption_dfb80c","instanceId":4,"invocationId":3,"parentRenderId":"cipfhviyv","renderId":"cipfhviyx","transparent":false},{"classId":"CListboxOption_dfb80c","instanceId":5,"invocationId":4,"parentRenderId":"cipfhviyv","renderId":"cipfhviyy","transparent":false},{"classId":"CListboxOption_dfb80c","instanceId":6,"invocationId":5,"parentRenderId":"cipfhviyv","renderId":"cipfhviyz","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ListboxAtAGlance_fc021f","ownerRenderId":"cipfhviyv","policy":"template","receiverClassId":"CListbox_1a159f","receiverRenderId":"cipfhviyw","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"ListboxAtAGlance_fc021f","ownerRenderId":"cipfhviyv","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cipfhviyx","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"ListboxAtAGlance_fc021f","ownerRenderId":"cipfhviyv","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cipfhviyx","slotName":"description","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"ListboxAtAGlance_fc021f","ownerRenderId":"cipfhviyv","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cipfhviyx","slotName":"end","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"ListboxAtAGlance_fc021f","ownerRenderId":"cipfhviyv","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cipfhviyy","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":7,"kind":"named","locationId":null,"ownerClassId":"ListboxAtAGlance_fc021f","ownerRenderId":"cipfhviyv","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cipfhviyy","slotName":"description","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":8,"kind":"implicit","locationId":null,"ownerClassId":"ListboxAtAGlance_fc021f","ownerRenderId":"cipfhviyv","policy":"template","receiverClassId":"CListboxOption_dfb80c","receiverRenderId":"cipfhviyz","slotName":"default","sourceInvocationId":5}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ListboxAtAGlance_fc021f","sourceRenderId":"cipfhviyv","tagName":"clistbox","targetClassId":"CListbox_1a159f","targetRenderId":"cipfhviyw"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ListboxAtAGlance_fc021f","sourceRenderId":"cipfhviyv","tagName":"clistboxoption","targetClassId":"CListboxOption_dfb80c","targetRenderId":"cipfhviyx"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ListboxAtAGlance_fc021f","sourceRenderId":"cipfhviyv","tagName":"clistboxoption","targetClassId":"CListboxOption_dfb80c","targetRenderId":"cipfhviyy"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ListboxAtAGlance_fc021f","sourceRenderId":"cipfhviyv","tagName":"clistboxoption","targetClassId":"CListboxOption_dfb80c","targetRenderId":"cipfhviyz"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cipfhviyv","parentRegionId":null,"receiverRenderId":"cipfhviyw","regionId":1,"resultOwnerRenderId":"cipfhviyv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhviyw"},{"fillId":3,"ownerRenderId":"cipfhviyv","parentRegionId":1,"receiverRenderId":"cipfhviyx","regionId":2,"resultOwnerRenderId":"cipfhviyv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhviyv"},{"fillId":4,"ownerRenderId":"cipfhviyv","parentRegionId":1,"receiverRenderId":"cipfhviyx","regionId":3,"resultOwnerRenderId":"cipfhviyv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhviyv"},{"fillId":5,"ownerRenderId":"cipfhviyv","parentRegionId":1,"receiverRenderId":"cipfhviyx","regionId":4,"resultOwnerRenderId":"cipfhviyv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhviyv"},{"fillId":6,"ownerRenderId":"cipfhviyv","parentRegionId":1,"receiverRenderId":"cipfhviyy","regionId":5,"resultOwnerRenderId":"cipfhviyv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhviyv"},{"fillId":7,"ownerRenderId":"cipfhviyv","parentRegionId":1,"receiverRenderId":"cipfhviyy","regionId":6,"resultOwnerRenderId":"cipfhviyv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhviyv"},{"fillId":8,"ownerRenderId":"cipfhviyv","parentRegionId":1,"receiverRenderId":"cipfhviyz","regionId":7,"resultOwnerRenderId":"cipfhviyv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhviyv"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"7f62640acbc0ce53d63209a10696269ba8cac762db67a240c4974aebc57eb1ad"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94T3B0aW9uX2RmYjgwYy45YjI5YjM2OGMyMmYuanM=", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94T3B0aW9uX2RmYjgwYy5jMTE2MjBlYmU5YmQwZGExZTJlNGFiZTY5MjM5YmUwMC5qcw==", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94T3B0aW9uX2RmYjgwYy4xY2RmODFjYjQzM2ZmZGI5N2I5OWMxYzM3ODRlZDgzMi5qcw==", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94XzFhMTU5Zi5iNmJhOWMwNDhkZjcuanM=", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94XzFhMTU5Zi5jMWUyODdiYWI5MmQ2MGM0ZGE4ODAxNmE2ZTg0NWE4ZC5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NMaXN0Ym94XzFhMTU5Zi4yNDgyOGExOWYwMDkuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0xpc3Rib3hPcHRpb25fZGZiODBj", "Y2lwZmh2aXl4", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q0xpc3Rib3hPcHRpb25fZGZiODBj", "Y2lwZmh2aXl5", "YzExNjIwZWJlOWJkMGRhMWUyZTRhYmU2OTIzOWJlMDA=", "init"], ["Q0xpc3Rib3hPcHRpb25fZGZiODBj", "Y2lwZmh2aXl6", "MWNkZjgxY2I0MzNmZmRiOTdiOTljMWMzNzg0ZWQ4MzI=", "init"], ["Q0xpc3Rib3hfMWExNTlm", "Y2lwZmh2aXl3", "YzFlMjg3YmFiOTJkNjBjNGRhODgwMTZhNmU4NDVhOGQ=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2aXl1"]], "graph": "7f62640acbc0ce53d63209a10696269ba8cac762db67a240c4974aebc57eb1ad", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CListboxOption_dfb80c", {
+  props: {disabled: {}, textValue: {}},
+  init: ({els, data, props, effect}) => {
+    const option = els[0];
+    const invalidEpisodes = new Set();
+    const report = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CListboxOption ${name} received invalid client value`, value);
+    };
+    const stop = effect(() => {
+      const suppliedDisabled = props.disabled;
+      const disabled = suppliedDisabled === undefined
+        ? data.disabled
+        : typeof suppliedDisabled === 'boolean'
+          ? suppliedDisabled
+          : data.disabled;
+      if (suppliedDisabled !== undefined && typeof suppliedDisabled !== 'boolean') {
+        report('disabled', suppliedDisabled);
+      } else invalidEpisodes.delete('disabled');
+      option.toggleAttribute('data-cui-listbox-option-disabled', disabled);
+      const suppliedText = props.textValue;
+      let textValue = data.textValue;
+      if (suppliedText === null || suppliedText === undefined) {
+        invalidEpisodes.delete('textValue');
+      } else if (typeof suppliedText === 'string' && suppliedText.trim() && !suppliedText.includes('\0')) {
+        textValue = suppliedText.replace(/\r\n?/g, '\n');
+        invalidEpisodes.delete('textValue');
+      } else report('textValue', suppliedText);
+      if (textValue === null) option.removeAttribute('data-cui-listbox-text-value');
+      else option.setAttribute('data-cui-listbox-text-value', textValue);
+    });
+    return () => stop?.();
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CListboxOption_dfb80c", "c11620ebe9bd0da1e2e4abe69239be00", atob("eyJkaXNhYmxlZCI6ZmFsc2UsInRleHRWYWx1ZSI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CListboxOption_dfb80c", "1cdf81cb433ffdb97b99c1c3784ed832", atob("eyJkaXNhYmxlZCI6dHJ1ZSwidGV4dFZhbHVlIjpudWxsfQ=="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CListbox_1a159f", {
+  props: {
+    value: {}, mandatory: {}, disabled: {}, loop: {}, variant: {}, size: {}, onValueChange: {},
+  },
+  init: ({els, data, props, effect}) => {
+    const root = els[0];
+    const surface = root.querySelector(':scope > [data-citry-ui-part="listbox"]');
+    const invalidEpisodes = new Set();
+    const prior = root.__citryUiListboxRuntime;
+    const serverFingerprint = JSON.stringify(data.value);
+    let committed = prior?.serverFingerprint === serverFingerprint
+      ? [...prior.committed]
+      : [...data.value];
+    let current = [...committed];
+    let controlled = false;
+    let activeValue = prior?.activeValue ?? null;
+    let previousOrder = Array.isArray(prior?.order) ? [...prior.order] : [];
+    let pendingStructural = prior?.pendingStructural ?? null;
+    let configuration = {
+      mandatory: data.mandatory,
+      disabled: data.disabled,
+      loop: data.loop,
+      variant: data.variant,
+      size: data.size,
+    };
+    let onValueChange = null;
+    let clientValue;
+    let structureValid = false;
+    let task = null;
+    let generation = 0;
+    let typeBuffer = '';
+    let typeTimer = null;
+
+    const options = () => [...surface.querySelectorAll('[role="option"]')]
+      .filter((option) => option.closest('[role="listbox"]') === surface);
+    const canonicalString = (value) => (
+      typeof value === 'string' && value.length > 0 && !value.includes('\0')
+        ? value.replace(/\r\n?/g, '\n')
+        : null
+    );
+    const report = (name, value, suffix = '') => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CListbox ${name} received invalid client value${suffix}`, value);
+    };
+    const resolveBoolean = (name, fallback) => {
+      const supplied = props[name];
+      if (supplied === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof supplied === 'boolean') { invalidEpisodes.delete(name); return supplied; }
+      report(name, supplied, '; using the server fallback');
+      return fallback;
+    };
+    const resolveChoice = (name, fallback, allowed) => {
+      const supplied = props[name];
+      if (supplied === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof supplied === 'string' && allowed.includes(supplied)) {
+        invalidEpisodes.delete(name);
+        return supplied;
+      }
+      report(name, supplied, '; using the server fallback');
+      return fallback;
+    };
+    const deepActiveElement = (documentRoot) => {
+      let active = documentRoot.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+      return active;
+    };
+    const composedContains = (ancestor, node) => {
+      for (let currentNode = node; currentNode;) {
+        if (currentNode === ancestor) return true;
+        currentNode = currentNode.parentNode ?? currentNode.getRootNode?.().host ?? null;
+      }
+      return false;
+    };
+    const focusBody = () => {
+      const body = root.ownerDocument.body;
+      if (!(body instanceof HTMLElement)) return;
+      const hadTabIndex = body.hasAttribute('tabindex');
+      if (!hadTabIndex) body.tabIndex = -1;
+      body.focus({preventScroll:true});
+      if (!hadTabIndex) queueMicrotask(() => body.removeAttribute('tabindex'));
+    };
+    const fieldsetDisabled = () => {
+      for (let node = root.parentElement; node; node = node.parentElement) {
+        if (!(node instanceof HTMLFieldSetElement) || !node.disabled) continue;
+        const legend = [...node.children].find((child) => child instanceof HTMLLegendElement);
+        if (!(legend instanceof Element) || !legend.contains(root)) return true;
+      }
+      return false;
+    };
+    const rootDisabled = () => configuration.disabled || fieldsetDisabled();
+    const ownDisabled = (option) => option.hasAttribute('data-cui-listbox-option-disabled');
+    const optionDisabled = (option) => rootDisabled() || ownDisabled(option);
+    const enabledOptions = () => options().filter((option) => !optionDisabled(option));
+    const valueOf = (option) => option.dataset.value;
+    const optionFor = (value) => options().find((option) => valueOf(option) === value) ?? null;
+    const values = () => options().map(valueOf);
+    const isOption = (node) => node instanceof HTMLElement
+      && node.getAttribute('role') === 'option'
+      && node.closest('[role="listbox"]') === surface;
+    const optionFromEvent = (event) => event.composedPath().find(isOption) ?? null;
+    const formatValue = (vector) => data.multiple ? [...vector] : (vector[0] ?? null);
+    const normalizeSupplied = (supplied) => {
+      if (supplied === null) return {valid:true, values:[]};
+      if (data.multiple) {
+        if (!Array.isArray(supplied)) return {valid:false, values:[]};
+        const normalized = supplied.map(canonicalString);
+        if (normalized.some((value) => value === null) || new Set(normalized).size !== normalized.length) {
+          return {valid:false, values:[]};
+        }
+        return {valid:true, values:normalized};
+      }
+      const normalized = canonicalString(supplied);
+      return normalized === null ? {valid:false, values:[]} : {valid:true, values:[normalized]};
+    };
+    const nearestSurvivor = (removedValue) => {
+      const enabled = new Set(enabledOptions().map(valueOf));
+      const oldIndex = previousOrder.indexOf(removedValue);
+      if (oldIndex >= 0) {
+        for (let distance = 1; distance < previousOrder.length; distance += 1) {
+          const following = previousOrder[oldIndex + distance];
+          if (enabled.has(following)) return optionFor(following);
+          const preceding = previousOrder[oldIndex - distance];
+          if (enabled.has(preceding)) return optionFor(preceding);
+        }
+      }
+      return enabledOptions()[0] ?? null;
+    };
+    const structureProblem = () => {
+      const entries = options();
+      if (entries.length === 0) return 'requires one or more Options';
+      if (new Set(values()).size !== entries.length) return 'contains duplicate Option values';
+      for (const child of surface.children) {
+        if (isOption(child)) continue;
+        if (child.getAttribute?.('role') !== 'group') return 'contains an unknown direct child';
+        const groupChildren = [...child.children];
+        if (!groupChildren[0]?.matches?.('[data-citry-ui-part="listbox-group-label"]')) {
+          return 'Group label anatomy is invalid';
+        }
+        const grouped = groupChildren.slice(1);
+        if (grouped.length === 0 || grouped.some((option) => !isOption(option))) {
+          return 'Group must contain direct Options';
+        }
+      }
+      const forbidden = [
+        'a[href]', 'button', 'input', 'select', 'textarea', 'summary', 'label',
+        '[contenteditable]:not([contenteditable="false"])',
+        '[tabindex]:not([tabindex="-1"])', '[role="listbox"]', '[role="option"]',
+      ].join(',');
+      for (const option of entries) {
+        const regions = option.querySelectorAll('[data-cui-listbox-slot-region]');
+        if ([...regions].some((region) => region.querySelector(forbidden))) {
+          return 'Option content must remain noninteractive';
+        }
+      }
+      return null;
+    };
+    const saveRuntime = () => {
+      root.__citryUiListboxRuntime = {
+        serverFingerprint,
+        committed:[...committed],
+        activeValue,
+        order:[...previousOrder],
+        pendingStructural,
+      };
+    };
+    const focusOption = (option, {moveFocus = true} = {}) => {
+      if (!(option instanceof HTMLElement) || optionDisabled(option)) return;
+      activeValue = valueOf(option);
+      options().forEach((entry) => {
+        const active = entry === option;
+        entry.tabIndex = active && !rootDisabled() ? 0 : -1;
+        entry.toggleAttribute('data-active', active);
+      });
+      if (moveFocus) option.focus({preventScroll:false});
+    };
+    const callbackDetail = (next, previous, option, selected, source, sourceEvent) => ({
+      value:formatValue(next),
+      previousValue:formatValue(previous),
+      option,
+      selected,
+      controlled,
+      source,
+      sourceEvent,
+    });
+    const emitChange = (next, previous, option, selected, source, sourceEvent) => {
+      onValueChange?.(
+        formatValue(next),
+        callbackDetail(next, previous, option, selected, source, sourceEvent),
+      );
+    };
+    const applyState = () => {
+      const disabled = rootDisabled();
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.toggleAttribute('data-multiple', data.multiple);
+      root.toggleAttribute('data-mandatory', configuration.mandatory);
+      root.toggleAttribute('data-disabled', disabled);
+      surface.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      if (data.multiple) surface.setAttribute('aria-multiselectable', 'true');
+      else surface.removeAttribute('aria-multiselectable');
+      options().forEach((option) => {
+        const selected = current.includes(valueOf(option));
+        const itemDisabled = optionDisabled(option);
+        option.setAttribute('aria-selected', selected ? 'true' : 'false');
+        option.setAttribute('aria-disabled', itemDisabled ? 'true' : 'false');
+        option.toggleAttribute('data-selected', selected);
+        option.toggleAttribute('data-disabled', itemDisabled);
+      });
+      let active = optionFor(activeValue);
+      if (!(active instanceof HTMLElement) || optionDisabled(active)) {
+        active = options().find((option) => current.includes(valueOf(option)) && !optionDisabled(option))
+          ?? enabledOptions()[0]
+          ?? null;
+      }
+      options().forEach((option) => {
+        const isActive = option === active;
+        option.tabIndex = isActive && !disabled ? 0 : -1;
+        option.toggleAttribute('data-active', isActive);
+      });
+      activeValue = active ? valueOf(active) : null;
+      previousOrder = values();
+      saveRuntime();
+    };
+    const failClosed = (problem) => {
+      const active = deepActiveElement(root.ownerDocument);
+      if (composedContains(surface, active)) focusBody();
+      structureValid = false;
+      report('structure', problem);
+      root.removeAttribute('data-citry-listbox-initialized');
+      surface.inert = true;
+      surface.setAttribute('aria-disabled', 'true');
+      options().forEach((option) => { option.tabIndex = -1; });
+    };
+    const reconcileValue = () => {
+      const allowed = new Set(values());
+      const supplied = clientValue;
+      if (supplied === undefined) {
+        invalidEpisodes.delete('value');
+        if (controlled) committed = [...current];
+        controlled = false;
+        current = committed.filter((value) => allowed.has(value));
+      } else {
+        const normalized = normalizeSupplied(supplied);
+        if (!normalized.valid) {
+          report('value', supplied, '; releasing control from the committed selection');
+          if (controlled) committed = [...current];
+          controlled = false;
+          current = committed.filter((value) => allowed.has(value));
+        } else {
+          controlled = true;
+          const missing = normalized.values.filter((value) => !allowed.has(value));
+          current = normalized.values.filter((value) => allowed.has(value));
+          if (missing.length === 0) {
+            invalidEpisodes.delete('value');
+            pendingStructural = null;
+          } else {
+            report('value', supplied, '; filtering values missing from the settled collection');
+            const fingerprint = JSON.stringify([missing, current]);
+            if (pendingStructural !== fingerprint) {
+              const previous = [...normalized.values];
+              const next = [...current];
+              const scheduled = generation;
+              pendingStructural = fingerprint;
+              queueMicrotask(() => {
+                if (generation === scheduled && pendingStructural === fingerprint) {
+                  emitChange(next, previous, null, false, 'structure', null);
+                }
+              });
+            }
+          }
+        }
+      }
+      const removedCommitted = committed.filter((value) => !allowed.has(value));
+      if (!controlled && removedCommitted.length > 0) {
+        const previous = [...committed];
+        committed = committed.filter((value) => allowed.has(value));
+        current = [...committed];
+        emitChange(current, previous, null, false, 'structure', null);
+      }
+      if (!controlled && configuration.mandatory && current.length === 0) {
+        const first = enabledOptions()[0];
+        if (first) {
+          const previous = [...current];
+          current = [valueOf(first)];
+          if (!controlled) committed = [...current];
+          if (previousOrder.length > 0) {
+            emitChange(current, previous, first, true, 'structure', null);
+          }
+        }
+      }
+    };
+    const sync = () => {
+      const focusBefore = deepActiveElement(root.ownerDocument);
+      const focusRoot = root.getRootNode();
+      const focusWasOwned = composedContains(surface, focusBefore);
+      const focusWasLost = focusBefore === root.ownerDocument.body
+        || (focusRoot instanceof ShadowRoot && focusBefore === focusRoot.host);
+      const priorActive = activeValue;
+      const disabled = rootDisabled();
+      if (!wasDisabled && disabled) {
+        const active = deepActiveElement(root.ownerDocument);
+        if (composedContains(root, active)) focusBody();
+      }
+      wasDisabled = disabled;
+      const problem = structureProblem();
+      if (problem) { failClosed(problem); return; }
+      structureValid = true;
+      invalidEpisodes.delete('structure');
+      surface.inert = false;
+      reconcileValue();
+      const activeOption = optionFor(activeValue);
+      const activeUnavailable = activeValue !== null
+        && (!(activeOption instanceof HTMLElement) || optionDisabled(activeOption));
+      if (activeUnavailable) {
+        const replacement = nearestSurvivor(activeValue);
+        activeValue = replacement ? valueOf(replacement) : null;
+      }
+      applyState();
+      if (activeUnavailable && (focusWasOwned || focusWasLost)) {
+        const replacement = optionFor(activeValue);
+        if (replacement instanceof HTMLElement) replacement.focus({preventScroll:true});
+        else focusBody();
+      } else if (priorActive !== null && activeValue === null && focusWasOwned) {
+        focusBody();
+      }
+      root.setAttribute('data-citry-listbox-initialized', '');
+    };
+    const schedule = () => {
+      if (task !== null) return;
+      const scheduled = generation;
+      task = setTimeout(() => {
+        task = null;
+        if (scheduled === generation) sync();
+      }, 0);
+    };
+    const requestSelection = (option, event, source) => {
+      if (!structureValid || !isOption(option) || optionDisabled(option)) return;
+      const value = valueOf(option);
+      const previous = [...current];
+      const wasSelected = previous.includes(value);
+      let next;
+      if (data.multiple) {
+        if (wasSelected && configuration.mandatory && previous.length === 1) return;
+        next = wasSelected
+          ? previous.filter((entry) => entry !== value)
+          : [...previous, value];
+      } else {
+        if (wasSelected) return;
+        next = [value];
+      }
+      if (!controlled) {
+        committed = [...next];
+        current = [...next];
+        applyState();
+      }
+      emitChange(next, previous, option, !wasSelected, source, event);
+      if (controlled) schedule();
+    };
+    const clearSelection = (event) => {
+      if (configuration.mandatory || current.length === 0 || rootDisabled()) return false;
+      const previous = [...current];
+      const next = [];
+      if (!controlled) {
+        committed = [];
+        current = [];
+        applyState();
+      }
+      emitChange(next, previous, optionFor(activeValue), false, 'keyboard', event);
+      if (controlled) schedule();
+      return true;
+    };
+    const localeLower = (value) => {
+      const lang = root.closest('[lang]')?.getAttribute('lang')
+        ?? root.ownerDocument.documentElement.lang
+        ?? '';
+      try { return lang ? value.toLocaleLowerCase(lang) : value.toLocaleLowerCase(); }
+      catch { return value.toLowerCase(); }
+    };
+    const typeaheadText = (option) => {
+      const explicit = option.getAttribute('data-cui-listbox-text-value');
+      const label = option.querySelector('[data-citry-ui-part="listbox-option-label"]');
+      const raw = explicit ?? label?.textContent ?? '';
+      return localeLower(raw.trim().replace(/\s+/g, ' '));
+    };
+    const onClick = (event) => {
+      const option = optionFromEvent(event);
+      if (!isOption(option) || optionDisabled(option)) return;
+      focusOption(option);
+      requestSelection(option, event, 'pointer');
+    };
+    const onKeyDown = (event) => {
+      const option = optionFromEvent(event);
+      if (!isOption(option) || optionDisabled(option) || rootDisabled()) return;
+      const enabled = enabledOptions();
+      const index = enabled.indexOf(option);
+      let destination = null;
+      if (event.key === 'ArrowDown') {
+        destination = enabled[index + 1] ?? (configuration.loop ? enabled[0] : null);
+      } else if (event.key === 'ArrowUp') {
+        destination = enabled[index - 1] ?? (configuration.loop ? enabled.at(-1) : null);
+      } else if (event.key === 'Home') destination = enabled[0] ?? null;
+      else if (event.key === 'End') destination = enabled.at(-1) ?? null;
+      else if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
+        requestSelection(option, event, 'keyboard');
+        return;
+      } else if (event.key === 'Escape') {
+        if (clearSelection(event)) event.preventDefault();
+        return;
+      } else {
+        const altGraph = event.getModifierState?.('AltGraph') ?? false;
+        if (
+          event.isComposing
+          || event.ctrlKey
+          || event.metaKey
+          || (event.altKey && !altGraph)
+          || event.key.length !== 1
+        ) return;
+        const key = localeLower(event.key);
+        typeBuffer = typeBuffer.length === 1 && typeBuffer === key ? key : typeBuffer + key;
+        if (typeTimer !== null) clearTimeout(typeTimer);
+        typeTimer = setTimeout(() => { typeBuffer = ''; typeTimer = null; }, 500);
+        const ordered = [...enabled.slice(index + 1), ...enabled.slice(0, index + 1)];
+        destination = ordered.find((entry) => typeaheadText(entry).startsWith(typeBuffer)) ?? null;
+      }
+      if (destination instanceof HTMLElement) {
+        event.preventDefault();
+        focusOption(destination);
+      }
+    };
+    const onFocusIn = (event) => {
+      const option = optionFromEvent(event);
+      if (isOption(option) && !optionDisabled(option)) focusOption(option, {moveFocus:false});
+    };
+    const observeStructure = (records) => {
+      const relevant = records.some((record) => {
+        if (record.type === 'childList') return true;
+        if (record.attributeName === 'tabindex' && isOption(record.target)) return false;
+        return true;
+      });
+      if (relevant) schedule();
+    };
+    root.addEventListener('click', onClick, true);
+    root.addEventListener('keydown', onKeyDown, true);
+    root.addEventListener('focusin', onFocusIn, true);
+    const observer = new MutationObserver(observeStructure);
+    observer.observe(surface, {
+      childList:true,
+      subtree:true,
+      attributes:true,
+      attributeFilter:[
+        'data-cui-listbox-option-disabled', 'data-cui-listbox-text-value',
+        'href', 'tabindex', 'contenteditable', 'role',
+      ],
+    });
+    const fieldsets = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (!(ancestor instanceof HTMLFieldSetElement)) continue;
+      const fieldsetObserver = new MutationObserver(schedule);
+      fieldsetObserver.observe(ancestor, {
+        attributes:true,
+        childList:true,
+        attributeFilter:['disabled'],
+      });
+      fieldsets.push(fieldsetObserver);
+    }
+    let wasDisabled = rootDisabled();
+    const stop = effect(() => {
+      clientValue = props.value;
+      onValueChange = typeof props.onValueChange === 'function' ? props.onValueChange : null;
+      if (props.onValueChange !== undefined && props.onValueChange !== null && onValueChange === null) {
+        report('onValueChange', props.onValueChange, '; ignoring the callback');
+      } else invalidEpisodes.delete('onValueChange');
+      configuration = {
+        mandatory: resolveBoolean('mandatory', data.mandatory),
+        disabled: resolveBoolean('disabled', data.disabled),
+        loop: resolveBoolean('loop', data.loop),
+        variant: resolveChoice('variant', data.variant, ['plain','soft','outline']),
+        size: resolveChoice('size', data.size, ['sm','md','lg']),
+      };
+      schedule();
+    });
+    schedule();
+    return () => {
+      generation += 1;
+      if (task !== null) clearTimeout(task);
+      if (typeTimer !== null) clearTimeout(typeTimer);
+      saveRuntime();
+      stop?.();
+      observer.disconnect();
+      fieldsets.forEach((item) => item.disconnect());
+      root.removeEventListener('click', onClick, true);
+      root.removeEventListener('keydown', onKeyDown, true);
+      root.removeEventListener('focusin', onFocusIn, true);
+      root.removeAttribute('data-citry-listbox-initialized');
+    };
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CListbox_1a159f", "c1e287bab92d60c4da88016a6e845a8d", atob("eyJ2YWx1ZSI6WyJhdGxhcyJdLCJtdWx0aXBsZSI6ZmFsc2UsIm1hbmRhdG9yeSI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwibG9vcCI6ZmFsc2UsInZhcmlhbnQiOiJzb2Z0Iiwic2l6ZSI6Im1kIn0="));
+})();</script></body></html><!--citry:g1:7f62640a:0:i:1:e-->

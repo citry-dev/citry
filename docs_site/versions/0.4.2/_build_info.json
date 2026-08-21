@@ -1,0 +1,22 @@
+{
+  "version": "0.4.2",
+  "source_sha": "f1b18c7c51beedfe55e02acde1e5d320d087e072",
+  "source_tag": "0.4.2",
+  "built_at": "2026-08-21T15:14:10.407971+00:00",
+  "builder_version": "1.1.0",
+  "site_routes": [
+    "/",
+    "/blog/",
+    "/blog/*",
+    "/community/*",
+    "/community/ai-bot-policy/",
+    "/community/code-of-conduct/",
+    "/community/contributing/",
+    "/community/development/",
+    "/community/help/",
+    "/community/license/",
+    "/community/people/",
+    "/playground/",
+    "/playground/*"
+  ]
+}

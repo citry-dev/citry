@@ -1,0 +1,602 @@
+<!--citry:g1:28fd6ea1:0:i:1:s--><!doctype html><html data-cid-cipfhvkr4 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compose List actions</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CList_34f50c>@layer citry-ui.theme{:where([data-citry-ui-part=list]){--_cui-list-gap:var(--cui-list-gap,.25rem);--_cui-list-padding:var(--cui-list-padding,.35rem);--_cui-list-item-padding:var(--cui-list-item-padding,.7rem);--_cui-list-radius:var(--cui-list-radius,.65rem);--_cui-list-foreground:var(--cui-list-foreground,CanvasText);--_cui-list-muted:var(--cui-list-muted,light-dark(#57534e,#d6d3d1));--_cui-list-background:var(--cui-list-background,transparent);--_cui-list-hover-background:var(--cui-list-hover-background,light-dark(#f5f5f4,#292524));--_cui-list-current-background:var(--cui-list-current-background,light-dark(#dbeafe,#1e3a5f));--_cui-list-divider-color:var(--cui-list-divider-color,light-dark(#e7e5e4,#44403c));--_cui-list-marker-color:var(--cui-list-marker-color,currentColor);--_cui-list-focus-ring:var(--cui-list-focus-ring,Highlight);gap:var(--_cui-list-gap);padding:var(--_cui-list-padding);color:var(--_cui-list-foreground);background:var(--_cui-list-background);margin:0;list-style-position:outside;display:grid}:where([data-citry-ui-part=list][data-marker=none]){list-style:none}:where([data-citry-ui-part=list][data-marker=disc]){padding-inline-start:calc(var(--_cui-list-padding) + 1.25rem);list-style-type:disc}:where([data-citry-ui-part=list][data-marker=decimal]){padding-inline-start:calc(var(--_cui-list-padding) + 1.75rem);list-style-type:decimal}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item])::marker{color:var(--_cui-list-marker-color)}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]){min-inline-size:0}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface]){box-sizing:border-box;inline-size:100%;min-inline-size:0;padding:var(--_cui-list-item-padding);border-radius:var(--_cui-list-radius);color:inherit;font:inherit;text-align:start;background:0 0;border:0;grid-template-columns:minmax(0,1fr);align-items:center;gap:.75rem;text-decoration:none;display:grid}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface][data-cui-list-has-start]){grid-template-columns:auto minmax(0,1fr)}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface][data-cui-list-has-end]){grid-template-columns:minmax(0,1fr) auto}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface][data-cui-list-has-start][data-cui-list-has-end]){grid-template-columns:auto minmax(0,1fr) auto}:where([data-citry-ui-part=list][data-variant=surface]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface]){background:var(--_cui-list-hover-background)}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item][data-current]>[data-citry-ui-part=surface]){background:var(--_cui-list-current-background);font-weight:650}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item][data-interactive]>[data-citry-ui-part=surface]:hover){background:var(--_cui-list-hover-background)}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item][data-disabled]){opacity:.55}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface]:focus-visible){outline:3px solid var(--_cui-list-focus-ring);outline-offset:2px}:where([data-citry-ui-part=list][data-divided]>[data-citry-ui-part=list-item]+[data-citry-ui-part=list-item]){border-block-start:1px solid var(--_cui-list-divider-color);padding-block-start:var(--_cui-list-gap)}:where([data-citry-ui-part=list][data-density=compact]){--_cui-list-item-padding:.45rem .6rem;--_cui-list-gap:.1rem}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface]>[data-citry-ui-part=body]){overflow-wrap:anywhere;min-inline-size:0}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface]>[data-citry-ui-part=body]>[data-citry-ui-part=description]){color:var(--_cui-list-muted);overflow-wrap:anywhere;margin-block-start:.15rem;font-size:.875em;font-weight:400;display:block}:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface]>[data-citry-ui-part=start]),:where([data-citry-ui-part=list]>[data-citry-ui-part=list-item]>[data-citry-ui-part=surface]>[data-citry-ui-part=end]){min-inline-size:0}}</style></head><body><main><!--citry:g1:28fd6ea1:0:i:2:s--><!--citry:g1:28fd6ea1:0:i:3:s--><ul aria-label="Observation queue" data-cid="cipfhvkr5 cipfhvkr6" class=cui-list data-cid-cipfhvkr5 data-cid-cipfhvkr6 data-citry-root data-citry-ui-part=list data-density=comfortable data-marker=none data-variant=surface><!--citry:g1:28fd6ea1:0:r:1:s--><!--citry:g1:28fd6ea1:0:i:4:s--><li class=cui-list-item data-cid=cipfhvkr7 data-cid-cipfhvkr7 data-citry-root data-citry-ui-part=list-item data-interactive><button data-citry-ui-part=surface type=button><span data-citry-ui-part=body> <!--citry:g1:28fd6ea1:0:r:2:s-->Open current session<!--citry:g1:28fd6ea1:0:r:2:e--> </span></button></li><!--citry:g1:28fd6ea1:0:i:4:e--><!--citry:g1:28fd6ea1:0:i:5:s--><li class=cui-list-item data-cid=cipfhvkr8 data-cid-cipfhvkr8 data-citry-root data-citry-ui-part=list-item><div data-citry-ui-part=surface data-cui-list-has-end><div data-citry-ui-part=body><!--citry:g1:28fd6ea1:0:r:3:s-->Nightly calibration<!--citry:g1:28fd6ea1:0:r:3:e--><div data-citry-ui-part=description><!--citry:g1:28fd6ea1:0:r:4:s-->Ready to archive<!--citry:g1:28fd6ea1:0:r:4:e--></div></div><span data-citry-ui-part=end><!--citry:g1:28fd6ea1:0:r:5:s--><!--citry:g1:28fd6ea1:0:i:6:s--> <!--citry:g1:28fd6ea1:0:i:7:s--><button class=cui-button data-cid=cipfhvkr9 data-cid-cipfhvkr9 data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=sm data-variant=outline type=button><!--citry:g1:28fd6ea1:0:r:6:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:28fd6ea1:0:r:7:s--> <span class=cui-button__spinner></span> <!--citry:g1:28fd6ea1:0:r:7:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:28fd6ea1:0:r:8:s-->Archive<!--citry:g1:28fd6ea1:0:r:8:e--> </span><!--citry:g1:28fd6ea1:0:r:6:e--></button><!--citry:g1:28fd6ea1:0:i:7:e--> <!--citry:g1:28fd6ea1:0:i:6:e--><!--citry:g1:28fd6ea1:0:r:5:e--></span></div></li><!--citry:g1:28fd6ea1:0:i:5:e--><!--citry:g1:28fd6ea1:0:r:1:e--></ul><!--citry:g1:28fd6ea1:0:i:3:e--><!--citry:g1:28fd6ea1:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ListActions_58732e","className":"ListActions"},{"classId":"CList_34f50c","className":"CList"},{"classId":"CListItem_4d2caa","className":"CListItem"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhvkr6","invocationId":2,"parentRenderId":"cipfhvkr5"},{"childRenderId":"cipfhvkr7","invocationId":3,"parentRenderId":"cipfhvkr5"},{"childRenderId":"cipfhvkr8","invocationId":4,"parentRenderId":"cipfhvkr5"},{"childRenderId":"cipfhvkr9","invocationId":5,"parentRenderId":"cipfhvkr5"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvkr4","transparent":false},{"classId":"ListActions_58732e","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvkr5","transparent":false},{"classId":"CList_34f50c","instanceId":3,"invocationId":2,"parentRenderId":"cipfhvkr5","renderId":"cipfhvkr6","transparent":false},{"classId":"CListItem_4d2caa","instanceId":4,"invocationId":3,"parentRenderId":"cipfhvkr5","renderId":"cipfhvkr7","transparent":false},{"classId":"CListItem_4d2caa","instanceId":5,"invocationId":4,"parentRenderId":"cipfhvkr5","renderId":"cipfhvkr8","transparent":false},{"classId":"CButton_353146","instanceId":6,"invocationId":5,"parentRenderId":"cipfhvkr5","renderId":"cipfhvkr9","transparent":false},{"classId":"DynamicElement_29900a","instanceId":7,"invocationId":6,"parentRenderId":"cipfhvkr9","renderId":"cipfhvkra","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ListActions_58732e","ownerRenderId":"cipfhvkr5","policy":"template","receiverClassId":"CList_34f50c","receiverRenderId":"cipfhvkr6","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"ListActions_58732e","ownerRenderId":"cipfhvkr5","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cipfhvkr7","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"ListActions_58732e","ownerRenderId":"cipfhvkr5","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cipfhvkr8","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"ListActions_58732e","ownerRenderId":"cipfhvkr5","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cipfhvkr8","slotName":"description","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"ListActions_58732e","ownerRenderId":"cipfhvkr5","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cipfhvkr8","slotName":"end","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":11,"kind":"implicit","locationId":null,"ownerClassId":"ListActions_58732e","ownerRenderId":"cipfhvkr5","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkr9","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":12,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkr9","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvkra","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":14,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvkr9","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvkr9","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ListActions_58732e","sourceRenderId":"cipfhvkr5","tagName":"clist","targetClassId":"CList_34f50c","targetRenderId":"cipfhvkr6"},{"clientBindings":[{"key":"@click","locationId":null,"payload":{"expression":"console.log('opened')","type":"alpine-handler"},"source":"direct"}],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ListActions_58732e","sourceRenderId":"cipfhvkr5","tagName":"clistitem","targetClassId":"CListItem_4d2caa","targetRenderId":"cipfhvkr7"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ListActions_58732e","sourceRenderId":"cipfhvkr5","tagName":"clistitem","targetClassId":"CListItem_4d2caa","targetRenderId":"cipfhvkr8"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":5,"sourceClassId":"ListActions_58732e","sourceRenderId":"cipfhvkr5","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvkr9"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":5,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvkr9","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvkra"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cipfhvkr5","parentRegionId":null,"receiverRenderId":"cipfhvkr6","regionId":1,"resultOwnerRenderId":"cipfhvkr5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr6"},{"fillId":3,"ownerRenderId":"cipfhvkr5","parentRegionId":1,"receiverRenderId":"cipfhvkr7","regionId":2,"resultOwnerRenderId":"cipfhvkr5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr5"},{"fillId":4,"ownerRenderId":"cipfhvkr5","parentRegionId":1,"receiverRenderId":"cipfhvkr8","regionId":3,"resultOwnerRenderId":"cipfhvkr5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr5"},{"fillId":5,"ownerRenderId":"cipfhvkr5","parentRegionId":1,"receiverRenderId":"cipfhvkr8","regionId":4,"resultOwnerRenderId":"cipfhvkr5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr5"},{"fillId":6,"ownerRenderId":"cipfhvkr5","parentRegionId":1,"receiverRenderId":"cipfhvkr8","regionId":5,"resultOwnerRenderId":"cipfhvkr5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr5"},{"fillId":12,"ownerRenderId":"cipfhvkr9","parentRegionId":5,"receiverRenderId":"cipfhvkra","regionId":6,"resultOwnerRenderId":"cipfhvkr9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr5"},{"fillId":14,"ownerRenderId":"cipfhvkr9","parentRegionId":6,"receiverRenderId":"cipfhvkr9","regionId":7,"resultOwnerRenderId":"cipfhvkr9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr9"},{"fillId":11,"ownerRenderId":"cipfhvkr5","parentRegionId":6,"receiverRenderId":"cipfhvkr9","regionId":8,"resultOwnerRenderId":"cipfhvkr5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvkr9"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"28fd6ea160b77746cf6472339689cd3d13bd36b770a24ea8b3c1ff4c1479d8f9"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjAzNTBkYmE4OTAxNGMxNWQ4NjA5MDM0OWYwNGM3NjU5Lmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NMaXN0XzM0ZjUwYy5hZmFiYTU2NDEyNWIuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2a3I5", "MDM1MGRiYTg5MDE0YzE1ZDg2MDkwMzQ5ZjA0Yzc2NTk=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2a3I0"], ["Q0xpc3RfMzRmNTBj", "Y2lwZmh2a3I2"]], "graph": "28fd6ea160b77746cf6472339689cd3d13bd36b770a24ea8b3c1ff4c1479d8f9", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "0350dba89014c15d86090349f04c7659", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6InNtIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script></body></html><!--citry:g1:28fd6ea1:0:i:1:e-->

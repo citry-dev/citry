@@ -1,0 +1,666 @@
+<!--citry:g1:a1450e2f:0:i:1:s--><!doctype html><html data-cid-cipfhvi4p lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compare Button loading states</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=ButtonLoadingStates_34cede>:where(.button-loading) {
+  display: grid;
+  gap: 1rem;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.button-loading__interactive) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid light-dark(#bbd6c5, #355e48);
+  border-radius: 0.75rem;
+  background: Canvas;
+}
+
+:where(.button-loading__interactive h2, .button-loading__interactive p) {
+  margin-block: 0;
+}
+
+:where(.button-loading__interactive p) {
+  margin-block-end: 0.3rem;
+  color: light-dark(#19704a, #74d9a3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.button-loading__interactive > span) {
+  grid-column: 1 / -1;
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  font-size: 0.8125rem;
+}
+
+:where(.button-loading__positions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid light-dark(#d5ddd8, #40594b);
+  border-radius: 0.75rem;
+  background: Canvas;
+}
+
+@media (max-width: 34rem) {
+  :where(.button-loading__interactive) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}</style></head><body><main><!--citry:g1:a1450e2f:0:i:2:s--><section x-data="{ scanning: false }" class=button-loading data-cid=cipfhvi4q data-cid-cipfhvi4q data-citry-root><article class=button-loading__interactive><div><p>Interactive pending state</p><h2>Listen for woodland birds</h2></div><!--citry:g1:a1450e2f:0:i:3:s--><!--citry:g1:a1450e2f:0:i:4:s--><button class=cui-button data-cid=cipfhvi4r data-cid-cipfhvi4r data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:a1450e2f:0:r:1:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:a1450e2f:0:r:2:s--> <span class=cui-button__spinner></span> <!--citry:g1:a1450e2f:0:r:2:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:a1450e2f:0:r:3:s--> Begin listening <!--citry:g1:a1450e2f:0:r:3:e--> </span><!--citry:g1:a1450e2f:0:r:1:e--></button><!--citry:g1:a1450e2f:0:i:4:e--><!--citry:g1:a1450e2f:0:i:3:e--><span x-text="scanning ? 'Listening…' : 'Ready'" aria-live=polite></span></article><div class=button-loading__positions><!--citry:g1:a1450e2f:0:i:5:s--><!--citry:g1:a1450e2f:0:i:6:s--><button aria-busy=true aria-disabled=true class=cui-button data-cid=cipfhvi4t data-cid-cipfhvi4t data-citry-button-has-start data-citry-root data-citry-ui-part=button data-intent=primary data-loading data-loading-position=start data-size=md data-variant=outline disabled type=button><!--citry:g1:a1450e2f:0:r:4:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator> <!--citry:g1:a1450e2f:0:r:5:s--> <span class=cui-button__spinner></span> <!--citry:g1:a1450e2f:0:r:5:e--> </span> <span class=cui-button__decoration data-citry-ui-part=start> <!--citry:g1:a1450e2f:0:r:6:s--> <span aria-hidden=true>✿</span> <!--citry:g1:a1450e2f:0:r:6:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:a1450e2f:0:r:7:s--> Identifying spores <!--citry:g1:a1450e2f:0:r:7:e--> </span><!--citry:g1:a1450e2f:0:r:4:e--></button><!--citry:g1:a1450e2f:0:i:6:e--><!--citry:g1:a1450e2f:0:i:5:e--><!--citry:g1:a1450e2f:0:i:7:s--><!--citry:g1:a1450e2f:0:i:8:s--><button aria-busy=true aria-disabled=true class=cui-button data-cid=cipfhvi4v data-cid-cipfhvi4v data-citry-root data-citry-ui-part=button data-intent=primary data-loading data-loading-position=center data-size=md data-variant=solid disabled type=button><!--citry:g1:a1450e2f:0:r:8:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator> <!--citry:g1:a1450e2f:0:r:9:s--> <span class=cui-button__spinner></span> <!--citry:g1:a1450e2f:0:r:9:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:a1450e2f:0:r:10:s--> Mapping the trail <!--citry:g1:a1450e2f:0:r:10:e--> </span><!--citry:g1:a1450e2f:0:r:8:e--></button><!--citry:g1:a1450e2f:0:i:8:e--><!--citry:g1:a1450e2f:0:i:7:e--><!--citry:g1:a1450e2f:0:i:9:s--><!--citry:g1:a1450e2f:0:i:10:s--><button aria-busy=true aria-disabled=true class=cui-button data-cid=cipfhvi4x data-cid-cipfhvi4x data-citry-button-has-end data-citry-root data-citry-ui-part=button data-intent=primary data-loading data-loading-position=end data-size=md data-variant=outline disabled type=button><!--citry:g1:a1450e2f:0:r:11:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator> <!--citry:g1:a1450e2f:0:r:12:s--> <span class=cui-button__spinner></span> <!--citry:g1:a1450e2f:0:r:12:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:a1450e2f:0:r:13:s--> Tracing migration <!--citry:g1:a1450e2f:0:r:13:e--> </span> <span class=cui-button__decoration data-citry-ui-part=end> <!--citry:g1:a1450e2f:0:r:14:s--> <span aria-hidden=true>→</span> <!--citry:g1:a1450e2f:0:r:14:e--> </span><!--citry:g1:a1450e2f:0:r:11:e--></button><!--citry:g1:a1450e2f:0:i:10:e--><!--citry:g1:a1450e2f:0:i:9:e--><!--citry:g1:a1450e2f:0:i:11:s--><!--citry:g1:a1450e2f:0:i:12:s--><button aria-busy=true aria-disabled=true class=cui-button data-cid=cipfhvi4z data-cid-cipfhvi4z data-citry-root data-citry-ui-part=button data-intent=success data-loading data-loading-position=center data-size=md data-variant=solid disabled type=button><!--citry:g1:a1450e2f:0:r:15:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator> <!--citry:g1:a1450e2f:0:r:16:s--> <span aria-hidden=true>✺</span> <!--citry:g1:a1450e2f:0:r:16:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:a1450e2f:0:r:17:s--> Pressing specimen <!--citry:g1:a1450e2f:0:r:17:e--> </span><!--citry:g1:a1450e2f:0:r:15:e--></button><!--citry:g1:a1450e2f:0:i:12:e--><!--citry:g1:a1450e2f:0:i:11:e--><!--citry:g1:a1450e2f:0:i:13:s--><!--citry:g1:a1450e2f:0:i:14:s--><button aria-disabled=true class=cui-button data-cid=cipfhvi51 data-cid-cipfhvi51 data-citry-root data-citry-ui-part=button data-disabled data-intent=neutral data-loading-position=center data-size=md data-variant=outline disabled type=button><!--citry:g1:a1450e2f:0:r:18:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:a1450e2f:0:r:19:s--> <span class=cui-button__spinner></span> <!--citry:g1:a1450e2f:0:r:19:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:a1450e2f:0:r:20:s--> Trail unavailable <!--citry:g1:a1450e2f:0:r:20:e--> </span><!--citry:g1:a1450e2f:0:r:18:e--></button><!--citry:g1:a1450e2f:0:i:14:e--><!--citry:g1:a1450e2f:0:i:13:e--></div></section><!--citry:g1:a1450e2f:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ButtonLoadingStates_34cede","className":"ButtonLoadingStates"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"cipfhvi4r","invocationId":2,"parentRenderId":"cipfhvi4q"},{"childRenderId":"cipfhvi4t","invocationId":3,"parentRenderId":"cipfhvi4q"},{"childRenderId":"cipfhvi4v","invocationId":4,"parentRenderId":"cipfhvi4q"},{"childRenderId":"cipfhvi4x","invocationId":5,"parentRenderId":"cipfhvi4q"},{"childRenderId":"cipfhvi4z","invocationId":6,"parentRenderId":"cipfhvi4q"},{"childRenderId":"cipfhvi51","invocationId":7,"parentRenderId":"cipfhvi4q"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvi4p","transparent":false},{"classId":"ButtonLoadingStates_34cede","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvi4q","transparent":false},{"classId":"CButton_353146","instanceId":3,"invocationId":2,"parentRenderId":"cipfhvi4q","renderId":"cipfhvi4r","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":8,"parentRenderId":"cipfhvi4r","renderId":"cipfhvi4s","transparent":true},{"classId":"CButton_353146","instanceId":5,"invocationId":3,"parentRenderId":"cipfhvi4q","renderId":"cipfhvi4t","transparent":false},{"classId":"DynamicElement_29900a","instanceId":6,"invocationId":9,"parentRenderId":"cipfhvi4t","renderId":"cipfhvi4u","transparent":true},{"classId":"CButton_353146","instanceId":7,"invocationId":4,"parentRenderId":"cipfhvi4q","renderId":"cipfhvi4v","transparent":false},{"classId":"DynamicElement_29900a","instanceId":8,"invocationId":10,"parentRenderId":"cipfhvi4v","renderId":"cipfhvi4w","transparent":true},{"classId":"CButton_353146","instanceId":9,"invocationId":5,"parentRenderId":"cipfhvi4q","renderId":"cipfhvi4x","transparent":false},{"classId":"DynamicElement_29900a","instanceId":10,"invocationId":11,"parentRenderId":"cipfhvi4x","renderId":"cipfhvi4y","transparent":true},{"classId":"CButton_353146","instanceId":11,"invocationId":6,"parentRenderId":"cipfhvi4q","renderId":"cipfhvi4z","transparent":false},{"classId":"DynamicElement_29900a","instanceId":12,"invocationId":12,"parentRenderId":"cipfhvi4z","renderId":"cipfhvi50","transparent":true},{"classId":"CButton_353146","instanceId":13,"invocationId":7,"parentRenderId":"cipfhvi4q","renderId":"cipfhvi51","transparent":false},{"classId":"DynamicElement_29900a","instanceId":14,"invocationId":13,"parentRenderId":"cipfhvi51","renderId":"cipfhvi52","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4r","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4t","slotName":"start","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4t","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4v","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4x","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4x","slotName":"end","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":7,"kind":"named","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4z","slotName":"loading","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":8,"kind":"named","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4z","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":9,"kind":"implicit","locationId":null,"ownerClassId":"ButtonLoadingStates_34cede","ownerRenderId":"cipfhvi4q","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi51","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":10,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4r","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvi4s","slotName":"default","sourceInvocationId":8},{"fallbackLocationId":null,"fillId":12,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4r","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4r","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":14,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4t","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvi4u","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":16,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4t","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4t","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":19,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4v","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvi4w","slotName":"default","sourceInvocationId":10},{"fallbackLocationId":null,"fillId":21,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4v","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4v","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":23,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4x","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvi4y","slotName":"default","sourceInvocationId":11},{"fallbackLocationId":null,"fillId":25,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4x","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi4x","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":28,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi4z","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvi50","slotName":"default","sourceInvocationId":12},{"fallbackLocationId":null,"fillId":32,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi51","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cipfhvi52","slotName":"default","sourceInvocationId":13},{"fallbackLocationId":null,"fillId":34,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cipfhvi51","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cipfhvi51","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{ loading: scanning }","type":"props"},"source":"direct"},{"key":"@click","locationId":null,"payload":{"expression":"scanning = true; setTimeout(() => { scanning = false }, 2400)","type":"alpine-handler"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonLoadingStates_34cede","sourceRenderId":"cipfhvi4q","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvi4r"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonLoadingStates_34cede","sourceRenderId":"cipfhvi4q","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvi4t"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonLoadingStates_34cede","sourceRenderId":"cipfhvi4q","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvi4v"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonLoadingStates_34cede","sourceRenderId":"cipfhvi4q","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvi4x"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonLoadingStates_34cede","sourceRenderId":"cipfhvi4q","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvi4z"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonLoadingStates_34cede","sourceRenderId":"cipfhvi4q","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cipfhvi51"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvi4r","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvi4s"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvi4t","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvi4u"},{"clientBindings":[],"invocationId":10,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvi4v","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvi4w"},{"clientBindings":[],"invocationId":11,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvi4x","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvi4y"},{"clientBindings":[],"invocationId":12,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvi4z","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvi50"},{"clientBindings":[],"invocationId":13,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"cipfhvi51","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cipfhvi52"}],"slotRegions":[{"fillId":10,"ownerRenderId":"cipfhvi4r","parentRegionId":null,"receiverRenderId":"cipfhvi4s","regionId":1,"resultOwnerRenderId":"cipfhvi4r","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4s"},{"fillId":12,"ownerRenderId":"cipfhvi4r","parentRegionId":1,"receiverRenderId":"cipfhvi4r","regionId":2,"resultOwnerRenderId":"cipfhvi4r","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4r"},{"fillId":1,"ownerRenderId":"cipfhvi4q","parentRegionId":1,"receiverRenderId":"cipfhvi4r","regionId":3,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4r"},{"fillId":14,"ownerRenderId":"cipfhvi4t","parentRegionId":null,"receiverRenderId":"cipfhvi4u","regionId":4,"resultOwnerRenderId":"cipfhvi4t","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4u"},{"fillId":16,"ownerRenderId":"cipfhvi4t","parentRegionId":4,"receiverRenderId":"cipfhvi4t","regionId":5,"resultOwnerRenderId":"cipfhvi4t","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4t"},{"fillId":2,"ownerRenderId":"cipfhvi4q","parentRegionId":4,"receiverRenderId":"cipfhvi4t","regionId":6,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4t"},{"fillId":3,"ownerRenderId":"cipfhvi4q","parentRegionId":4,"receiverRenderId":"cipfhvi4t","regionId":7,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4t"},{"fillId":19,"ownerRenderId":"cipfhvi4v","parentRegionId":null,"receiverRenderId":"cipfhvi4w","regionId":8,"resultOwnerRenderId":"cipfhvi4v","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4w"},{"fillId":21,"ownerRenderId":"cipfhvi4v","parentRegionId":8,"receiverRenderId":"cipfhvi4v","regionId":9,"resultOwnerRenderId":"cipfhvi4v","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4v"},{"fillId":4,"ownerRenderId":"cipfhvi4q","parentRegionId":8,"receiverRenderId":"cipfhvi4v","regionId":10,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4v"},{"fillId":23,"ownerRenderId":"cipfhvi4x","parentRegionId":null,"receiverRenderId":"cipfhvi4y","regionId":11,"resultOwnerRenderId":"cipfhvi4x","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4y"},{"fillId":25,"ownerRenderId":"cipfhvi4x","parentRegionId":11,"receiverRenderId":"cipfhvi4x","regionId":12,"resultOwnerRenderId":"cipfhvi4x","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4x"},{"fillId":5,"ownerRenderId":"cipfhvi4q","parentRegionId":11,"receiverRenderId":"cipfhvi4x","regionId":13,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4x"},{"fillId":6,"ownerRenderId":"cipfhvi4q","parentRegionId":11,"receiverRenderId":"cipfhvi4x","regionId":14,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4x"},{"fillId":28,"ownerRenderId":"cipfhvi4z","parentRegionId":null,"receiverRenderId":"cipfhvi50","regionId":15,"resultOwnerRenderId":"cipfhvi4z","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi50"},{"fillId":7,"ownerRenderId":"cipfhvi4q","parentRegionId":15,"receiverRenderId":"cipfhvi4z","regionId":16,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4z"},{"fillId":8,"ownerRenderId":"cipfhvi4q","parentRegionId":15,"receiverRenderId":"cipfhvi4z","regionId":17,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi4z"},{"fillId":32,"ownerRenderId":"cipfhvi51","parentRegionId":null,"receiverRenderId":"cipfhvi52","regionId":18,"resultOwnerRenderId":"cipfhvi51","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi52"},{"fillId":34,"ownerRenderId":"cipfhvi51","parentRegionId":18,"receiverRenderId":"cipfhvi51","regionId":19,"resultOwnerRenderId":"cipfhvi51","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi51"},{"fillId":9,"ownerRenderId":"cipfhvi4q","parentRegionId":18,"receiverRenderId":"cipfhvi51","regionId":20,"resultOwnerRenderId":"cipfhvi4q","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvi51"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"a1450e2f43727a3aaae014d78afadda9f63deab298651fc6e73feb7ebed35b25"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LmYyMTAxNjgyYjljMmNmZTNiM2RkZWM2OTQxZDhlNTk4Lmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjI4MTYwYTE1ZTVhYjExYmZlMjkxYzYyZjNiMzBlZGZlLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LmM1N2RjMzVmMDZmODQ4ZTIyNGY2NTdlNDc2ODgzYjIxLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LmM0NDlhYjk2MjZjNmIxYmQ1NDg3OTQ4OGZkZDM2ZjJkLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjI4YzU3MjI4MGEzNTlhODc3OTc5Yzc0MjQ4NDNiOGFlLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0J1dHRvbkxvYWRpbmdTdGF0ZXNfMzRjZWRlLjcyYzk3ZDMxNjNkYi5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2aTRy", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2aTR0", "ZjIxMDE2ODJiOWMyY2ZlM2IzZGRlYzY5NDFkOGU1OTg=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2aTR2", "MjgxNjBhMTVlNWFiMTFiZmUyOTFjNjJmM2IzMGVkZmU=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2aTR4", "YzU3ZGMzNWYwNmY4NDhlMjI0ZjY1N2U0NzY4ODNiMjE=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2aTR6", "YzQ0OWFiOTYyNmM2YjFiZDU0ODc5NDg4ZmRkMzZmMmQ=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y2lwZmh2aTUx", "MjhjNTcyMjgwYTM1OWE4Nzc5NzljNzQyNDg0M2I4YWU=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2aTRw"], ["QnV0dG9uTG9hZGluZ1N0YXRlc18zNGNlZGU=", "Y2lwZmh2aTRx"]], "graph": "a1450e2f43727a3aaae014d78afadda9f63deab298651fc6e73feb7ebed35b25", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "f2101682b9c2cfe3b3ddec6941d8e598", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjp0cnVlLCJ2YXJpYW50Ijoib3V0bGluZSIsImludGVudCI6InByaW1hcnkiLCJzaXplIjoibWQiLCJibG9jayI6ZmFsc2UsImxvYWRpbmdQb3NpdGlvbiI6InN0YXJ0In0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "28160a15e5ab11bfe291c62f3b30edfe", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjp0cnVlLCJ2YXJpYW50Ijoic29saWQiLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "c57dc35f06f848e224f657e476883b21", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjp0cnVlLCJ2YXJpYW50Ijoib3V0bGluZSIsImludGVudCI6InByaW1hcnkiLCJzaXplIjoibWQiLCJibG9jayI6ZmFsc2UsImxvYWRpbmdQb3NpdGlvbiI6ImVuZCJ9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "c449ab9626c6b1bd54879488fdd36f2d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjp0cnVlLCJ2YXJpYW50Ijoic29saWQiLCJpbnRlbnQiOiJzdWNjZXNzIiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "28c572280a359a877979c7424843b8ae", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOnRydWUsImxvYWRpbmciOmZhbHNlLCJ2YXJpYW50Ijoib3V0bGluZSIsImludGVudCI6Im5ldXRyYWwiLCJzaXplIjoibWQiLCJibG9jayI6ZmFsc2UsImxvYWRpbmdQb3NpdGlvbiI6ImNlbnRlciJ9"));
+})();</script></body></html><!--citry:g1:a1450e2f:0:i:1:e-->

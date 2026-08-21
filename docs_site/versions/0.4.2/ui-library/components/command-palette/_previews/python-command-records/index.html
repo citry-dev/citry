@@ -1,0 +1,2954 @@
+<!--citry:g1:1b6aed97:0:i:1:s--><!doctype html><html data-cid-cipfhvn3c lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Build command records in Python</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=PythonCommandRecords_5a902f>:where(.command-palette-records) {
+  display: grid;
+  gap: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.command-palette-records h2, .command-palette-records p) { margin: 0; }</style><style data-citry-css-class=CCommandPalette_28a050>/* citry-ui:command-palette-attribution:css:begin */
+@layer citry-ui.theme {
+  :where(.cui-command-palette-host) {
+    display: contents;
+  }
+
+  :where(.cui-command-palette [hidden]) {
+    display: none !important;
+  }
+
+  :where(.cui-command-palette) {
+    --_cui-command-palette-backdrop: var(
+      --cui-command-palette-backdrop,
+      color-mix(in srgb, CanvasText 48%, transparent)
+    );
+    --_cui-command-palette-background: var(--cui-command-palette-background, Canvas);
+    --_cui-command-palette-foreground: var(--cui-command-palette-foreground, CanvasText);
+    --_cui-command-palette-muted: var(
+      --cui-command-palette-muted,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-command-palette-border-color: var(
+      --cui-command-palette-border-color,
+      color-mix(in srgb, CanvasText 22%, transparent)
+    );
+    --_cui-command-palette-active-background: var(
+      --cui-command-palette-active-background,
+      color-mix(in srgb, Highlight 15%, Canvas)
+    );
+    --_cui-command-palette-active-foreground: var(
+      --cui-command-palette-active-foreground,
+      CanvasText
+    );
+    --_cui-command-palette-danger: var(
+      --cui-command-palette-danger,
+      light-dark(#b42318, #f97066)
+    );
+    --_cui-command-palette-radius: var(--cui-command-palette-radius, 0.875rem);
+    --_cui-command-palette-shadow: var(
+      --cui-command-palette-shadow,
+      0 1.5rem 4rem color-mix(in srgb, CanvasText 28%, transparent)
+    );
+    --_cui-command-palette-inline-size: var(
+      --cui-command-palette-inline-size,
+      36rem
+    );
+    --_cui-command-palette-max-block-size: var(
+      --cui-command-palette-max-block-size,
+      calc(100dvb - 2rem)
+    );
+    --_cui-command-palette-padding: var(--cui-command-palette-padding, 0.75rem);
+    --_cui-command-palette-gap: var(--cui-command-palette-gap, 0.5rem);
+    --_cui-command-palette-input-block-size: var(
+      --cui-command-palette-input-block-size,
+      2.75rem
+    );
+    --_cui-command-palette-row-min-block-size: var(
+      --cui-command-palette-row-min-block-size,
+      2.75rem
+    );
+    --_cui-command-palette-row-padding-inline: var(
+      --cui-command-palette-row-padding-inline,
+      0.75rem
+    );
+    --_cui-command-palette-group-gap: var(--cui-command-palette-group-gap, 0.5rem);
+    --_cui-command-palette-focus-ring: var(--cui-command-palette-focus-ring, Highlight);
+    background: transparent;
+    border: 0;
+    color: var(--_cui-command-palette-foreground);
+    inline-size: min(var(--_cui-command-palette-inline-size), calc(100vi - 2rem));
+    margin: auto;
+    max-block-size: var(--_cui-command-palette-max-block-size);
+    max-inline-size: calc(100vi - 2rem);
+    padding: 0;
+  }
+
+  :where(.cui-command-palette[data-size="sm"]) {
+    --_cui-command-palette-inline-size: var(--cui-command-palette-inline-size, 28rem);
+    --_cui-command-palette-input-block-size: var(
+      --cui-command-palette-input-block-size,
+      2.5rem
+    );
+  }
+
+  :where(.cui-command-palette[data-size="lg"]) {
+    --_cui-command-palette-inline-size: var(--cui-command-palette-inline-size, 44rem);
+    --_cui-command-palette-input-block-size: var(
+      --cui-command-palette-input-block-size,
+      3rem
+    );
+    --_cui-command-palette-row-min-block-size: var(
+      --cui-command-palette-row-min-block-size,
+      3rem
+    );
+  }
+
+  :where(.cui-command-palette)::backdrop {
+    background: var(--_cui-command-palette-backdrop);
+  }
+
+  :where(.cui-command-palette__surface) {
+    background: var(--_cui-command-palette-background);
+    border: 1px solid var(--_cui-command-palette-border-color);
+    border-radius: var(--_cui-command-palette-radius);
+    box-shadow: var(--_cui-command-palette-shadow);
+    display: grid;
+    gap: var(--_cui-command-palette-gap);
+    max-block-size: inherit;
+    min-inline-size: 0;
+    overflow: hidden;
+    padding: var(--_cui-command-palette-padding);
+  }
+
+  :where(.cui-command-palette__header) {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="command-palette-title"]) {
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 650;
+    margin: 0;
+    min-inline-size: 0;
+  }
+
+  :where([data-citry-ui-part="command-palette-close"]) {
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    flex: none;
+    font: inherit;
+    inline-size: 2.75rem;
+    justify-content: center;
+    min-block-size: 2.75rem;
+    padding: 0;
+  }
+
+  :where([data-citry-ui-part="command-palette-close"]:hover) {
+    background: var(--_cui-command-palette-active-background);
+  }
+
+  :where([data-citry-ui-part="command-palette-close"]:focus-visible) {
+    outline: 2px solid var(--_cui-command-palette-focus-ring);
+    outline-offset: 2px;
+  }
+
+  :where([data-citry-ui-part="command-palette-search"]) {
+    display: block;
+  }
+
+  :where([data-citry-ui-part="command-palette-input"]) {
+    appearance: none;
+    background: var(--_cui-command-palette-background);
+    block-size: var(--_cui-command-palette-input-block-size);
+    border: 1px solid var(--_cui-command-palette-border-color);
+    border-radius: 0.625rem;
+    color: inherit;
+    font: inherit;
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-inline: 0.75rem;
+  }
+
+  :where([data-citry-ui-part="command-palette-input"]:focus-visible) {
+    border-color: var(--_cui-command-palette-focus-ring);
+    outline: 2px solid var(--_cui-command-palette-focus-ring);
+    outline-offset: 1px;
+  }
+
+  :where([data-citry-ui-part="command-palette-listbox"]) {
+    display: grid;
+    gap: 0.25rem;
+    max-block-size: min(26rem, calc(100dvb - 10rem));
+    min-block-size: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"]) {
+    align-items: center;
+    border-radius: 0.625rem;
+    color: inherit;
+    cursor: default;
+    display: grid;
+    gap: 0.125rem var(--_cui-command-palette-gap);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-block-size: var(--_cui-command-palette-row-min-block-size);
+    padding-block: 0.375rem;
+    padding-inline: var(--_cui-command-palette-row-padding-inline);
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-active]) {
+    background: var(--_cui-command-palette-active-background);
+    color: var(--_cui-command-palette-active-foreground);
+    outline: 1px solid color-mix(in srgb, var(--_cui-command-palette-focus-ring) 55%, transparent);
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-disabled]) {
+    cursor: not-allowed;
+    opacity: 0.52;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-intent="danger"]:not([data-disabled])) {
+    color: var(--_cui-command-palette-danger);
+  }
+
+  :where(.cui-command-palette__description) {
+    color: var(--_cui-command-palette-muted);
+    font-size: 0.875em;
+    grid-column: 2;
+  }
+
+  :where(.cui-command-palette__shortcut) {
+    color: var(--_cui-command-palette-muted);
+    font: inherit;
+    font-size: 0.8125em;
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    margin-inline-start: auto;
+    white-space: nowrap;
+  }
+
+  :where([data-citry-ui-part="command-palette-item-start"]) {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  :where([data-citry-ui-part="command-palette-item-end"]) {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  :where([data-citry-ui-part="command-palette-group"]) {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  :where([data-citry-ui-part="command-palette-group"] + [data-citry-ui-part="command-palette-group"]) {
+    margin-block-start: var(--_cui-command-palette-group-gap);
+  }
+
+  :where([data-citry-ui-part="command-palette-group-label"]) {
+    color: var(--_cui-command-palette-muted);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    padding-block: 0.375rem 0.125rem;
+    padding-inline: var(--_cui-command-palette-row-padding-inline);
+    text-transform: uppercase;
+  }
+
+  :where([data-citry-ui-part="command-palette-separator"]) {
+    border: 0;
+    border-block-start: 1px solid var(--_cui-command-palette-border-color);
+    margin: 0.25rem var(--_cui-command-palette-row-padding-inline);
+  }
+
+  :where([data-citry-ui-part="command-palette-empty"]) {
+    color: var(--_cui-command-palette-muted);
+    padding: 1.5rem var(--_cui-command-palette-row-padding-inline);
+    text-align: center;
+  }
+
+  :where(.cui-command-palette__visually-hidden) {
+    block-size: 1px;
+    clip-path: inset(50%);
+    inline-size: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+  }
+
+  :where(.cui-command-palette[data-disabled]) {
+    opacity: 0.65;
+  }
+}
+
+@media (pointer: coarse) {
+  :where(.cui-command-palette) {
+    --_cui-command-palette-row-min-block-size: max(
+      var(--cui-command-palette-row-min-block-size, 2.75rem),
+      44px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :where([data-citry-ui-part="command-palette-command"]) {
+    transition: background-color 100ms ease, color 100ms ease;
+  }
+}
+
+@media (forced-colors: active) {
+  :where(.cui-command-palette__surface),
+  :where([data-citry-ui-part="command-palette-input"]) {
+    border-color: CanvasText;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-active]) {
+    outline: 2px solid Highlight;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-disabled]) {
+    color: GrayText;
+    opacity: 1;
+  }
+}
+
+@media print {
+  :where(.cui-command-palette) {
+    display: none !important;
+  }
+}
+/* citry-ui:command-palette-attribution:css:end */</style></head><body><main><!--citry:g1:1b6aed97:0:i:2:s--><section class=command-palette-records data-cid-cipfhvn3d><h2>Frozen Python records</h2><p>The rendered palette preserves group, separator, and command order.</p><!--citry:g1:1b6aed97:0:i:3:s--><span class=cui-command-palette-host data-cid=cipfhvn3e data-cid-cipfhvn3e data-citry-command-palette-host data-citry-root> <dialog aria-labelledby=cui-command-palette-cipfhvn3e-title class=cui-command-palette data-citry-command-palette-root data-citry-ui-part=command-palette data-open data-size=md id=cui-command-palette-cipfhvn3e open><section class=cui-command-palette__surface data-citry-ui-part=command-palette-surface><header class=cui-command-palette__header data-citry-ui-part=command-palette-header><h2 data-citry-ui-part=command-palette-title id=cui-command-palette-cipfhvn3e-title>Project commands</h2><button aria-label="Close command palette" data-citry-command-palette-close data-citry-ui-part=command-palette-close type=button><span aria-hidden=true>×</span></button></header><search data-citry-ui-part=command-palette-search> <label class=cui-command-palette__visually-hidden data-citry-ui-part=command-palette-search-label for=cui-command-palette-cipfhvn3e-input><span>Search commands</span></label> <input placeholder="Search commands" aria-autocomplete=list aria-controls=cui-command-palette-cipfhvn3e-listbox aria-expanded=true autocomplete=off autofocus data-citry-ui-part=command-palette-input disabled id=cui-command-palette-cipfhvn3e-input role=combobox> </search><div data-citry-ui-part=command-palette-listbox id=cui-command-palette-cipfhvn3e-listbox role=listbox><section aria-labelledby=cui-command-palette-cipfhvn3e-group-0-label data-citry-ui-part=command-palette-group data-region-index=0 id=cui-command-palette-cipfhvn3e-group-0 role=group><div data-citry-ui-part=command-palette-group-label id=cui-command-palette-cipfhvn3e-group-0-label>Project navigation</div><div aria-labelledby=cui-command-palette-cipfhvn3e-command-0-d5be7a4c1861-label aria-selected=false data-citry-ui-part=command-palette-command data-intent=default data-value=project-overview id=cui-command-palette-cipfhvn3e-command-0-d5be7a4c1861 role=option><span id=cui-command-palette-cipfhvn3e-command-0-d5be7a4c1861-label> Open project overview </span></div><div aria-labelledby=cui-command-palette-cipfhvn3e-command-1-2293a5b3f6d4-label aria-selected=false data-citry-ui-part=command-palette-command data-intent=default data-value=project-files id=cui-command-palette-cipfhvn3e-command-1-2293a5b3f6d4 role=option><span id=cui-command-palette-cipfhvn3e-command-1-2293a5b3f6d4-label> Browse project files </span></div></section><hr aria-hidden=true data-citry-ui-part=command-palette-separator data-region-index=1><section aria-labelledby=cui-command-palette-cipfhvn3e-group-2-label data-citry-ui-part=command-palette-group data-region-index=2 id=cui-command-palette-cipfhvn3e-group-2 role=group><div data-citry-ui-part=command-palette-group-label id=cui-command-palette-cipfhvn3e-group-2-label>Draft actions</div><div aria-labelledby=cui-command-palette-cipfhvn3e-command-2-002b87a2f7cf-label aria-selected=false data-citry-ui-part=command-palette-command data-intent=default data-value=save-draft id=cui-command-palette-cipfhvn3e-command-2-002b87a2f7cf role=option><span id=cui-command-palette-cipfhvn3e-command-2-002b87a2f7cf-label> Save draft </span><span aria-hidden=true class=cui-command-palette__shortcut data-citry-ui-part=command-palette-item-end inert> Ctrl S </span></div><div aria-describedby=cui-command-palette-cipfhvn3e-command-3-9bce3ff4a485-description aria-labelledby=cui-command-palette-cipfhvn3e-command-3-9bce3ff4a485-label aria-selected=false data-citry-ui-part=command-palette-command data-intent=danger data-value=delete-draft id=cui-command-palette-cipfhvn3e-command-3-9bce3ff4a485 role=option><span id=cui-command-palette-cipfhvn3e-command-3-9bce3ff4a485-label> Delete draft </span><span class=cui-command-palette__description id=cui-command-palette-cipfhvn3e-command-3-9bce3ff4a485-description> Moves this draft to Trash </span></div></section></div><div data-citry-command-palette-visual data-citry-ui-part=command-palette-empty hidden role=status><!--citry:g1:1b6aed97:0:r:1:s--><span>No commands found</span><!--citry:g1:1b6aed97:0:r:1:e--></div></section></dialog> </span><!--citry:g1:1b6aed97:0:i:3:e--></section><!--citry:g1:1b6aed97:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"PythonCommandRecords_5a902f","className":"PythonCommandRecords"},{"classId":"CCommandPalette_28a050","className":"CCommandPalette"}],"componentExecutionOrderConstraints":[],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvn3c","transparent":false},{"classId":"PythonCommandRecords_5a902f","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvn3d","transparent":false},{"classId":"CCommandPalette_28a050","instanceId":3,"invocationId":null,"parentRenderId":null,"renderId":"cipfhvn3e","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"fallback","locationId":null,"ownerClassId":"CCommandPalette_28a050","ownerRenderId":"cipfhvn3e","policy":"template","receiverClassId":"CCommandPalette_28a050","receiverRenderId":"cipfhvn3e","slotName":"empty","sourceInvocationId":null}],"graphId":0,"nestedComponents":[],"slotRegions":[{"fillId":1,"ownerRenderId":"cipfhvn3e","parentRegionId":null,"receiverRenderId":"cipfhvn3e","regionId":1,"resultOwnerRenderId":"cipfhvn3e","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cipfhvn3e"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"1b6aed971c78a6aafbbd4bfa4977a31ebb26876ade148becc9665321872b86e5"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NDb21tYW5kUGFsZXR0ZV8yOGEwNTAuM2U4MmY3MjIzNjA4Lmpz", "L2NpdHJ5L2NhY2hlL0NDb21tYW5kUGFsZXR0ZV8yOGEwNTAuYzk2YTI0ZjczZjM0ZWEyZmI2NzRkY2IyZDcxMjcxNzUuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1B5dGhvbkNvbW1hbmRSZWNvcmRzXzVhOTAyZi40ZmIwYTA4MDg4MWQuY3Nz", "L2NpdHJ5L2NhY2hlL0NDb21tYW5kUGFsZXR0ZV8yOGEwNTAuNDdjODIzYmVkY2ZjLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0NvbW1hbmRQYWxldHRlXzI4YTA1MA==", "Y2lwZmh2bjNl", "Yzk2YTI0ZjczZjM0ZWEyZmI2NzRkY2IyZDcxMjcxNzU=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2lwZmh2bjNj"], ["UHl0aG9uQ29tbWFuZFJlY29yZHNfNWE5MDJm", "Y2lwZmh2bjNk"]], "graph": "1b6aed971c78a6aafbbd4bfa4977a31ebb26876ade148becc9665321872b86e5", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const anchoredLayerRuntime = (() => {
+        const runtimeKey = Symbol.for("citry-ui:anchored-layer-runtime");
+        const runtimeGeneration = 3;
+        const ancestorCloseCapability = "ancestor-close-transaction-v1";
+        const installed = globalThis[runtimeKey];
+        if (
+          installed?.generation === runtimeGeneration
+          && installed?.capabilities?.includes?.(ancestorCloseCapability)
+        ) {
+          return installed;
+        }
+        if (installed !== undefined) {
+          throw new Error(
+            "[citry-ui] cannot replace an incompatible anchored-layer runtime; "
+              + "a full page reload is required.",
+          );
+        }
+
+        const coordinators = new WeakMap();
+        const activeCoordinators = new Set();
+        const stats = installed?.stats ?? {
+          listenerSets: 0,
+          reconciliations: 0,
+        };
+        stats.activeListenerSets ??= 0;
+        stats.activeCoordinators ??= 0;
+
+        const isOpenShadowRoot = (value) => (
+          value instanceof ShadowRoot && value.host.shadowRoot === value
+        );
+        const actualRoot = (element) => {
+          const root = element?.getRootNode?.() ?? null;
+          if (root instanceof Document || isOpenShadowRoot(root)) {
+            return root;
+          }
+          return null;
+        };
+        const composedParent = (node) => {
+          if (node?.parentNode) {
+            return node.parentNode;
+          }
+          const root = node?.getRootNode?.() ?? null;
+          return root instanceof ShadowRoot ? root.host : null;
+        };
+        const composedContains = (container, target) => {
+          if (!(container instanceof Node) || !(target instanceof Node)) {
+            return false;
+          }
+          let current = target;
+          while (current) {
+            if (current === container || container.contains(current)) {
+              return true;
+            }
+            const root = current.getRootNode?.() ?? null;
+            if (root instanceof ShadowRoot && root !== container) {
+              current = root.host;
+              continue;
+            }
+            current = composedParent(current);
+          }
+          return false;
+        };
+        const composedAncestors = (node) => {
+          const ancestors = [];
+          let current = node;
+          while (current) {
+            ancestors.push(current);
+            const root = current.getRootNode?.() ?? null;
+            if (root instanceof ShadowRoot && current === root) {
+              current = root.host;
+            } else {
+              current = composedParent(current);
+            }
+          }
+          return ancestors;
+        };
+        const layerElements = (layer) => [
+          layer.trigger,
+          layer.surface,
+          ...(layer.insideElements ?? []),
+        ].filter((value) => value instanceof Node);
+
+        const createCoordinator = (ownerDocument) => {
+          const layers = [];
+          const scopes = new Map();
+          const discoveredRoots = new Set();
+          const processedEvents = new WeakSet();
+          const modalSequence = new WeakMap();
+          const modalOpenState = new WeakMap();
+          const ancestorCloseTransactions = new Set();
+          let nextModalSequence = 0;
+          let nextRegistrationGeneration = 0;
+          let bootstrappedModals = false;
+          let bootstrapAmbiguous = false;
+          let currentModal = null;
+          let rootsDirty = true;
+          let pendingPointerFocus = null;
+          let pointerFocusTimer = null;
+
+          const coordinator = {
+            ownerDocument,
+            layers,
+            tooltipLayer: null,
+            tooltipWarmUntil: 0,
+          };
+
+          const discoverOpenRoots = () => {
+            if (!rootsDirty) {
+              return;
+            }
+            for (const root of discoveredRoots) {
+              if (!root.host.isConnected || root.host.ownerDocument !== ownerDocument) {
+                discoveredRoots.delete(root);
+              }
+            }
+            const pending = [ownerDocument, ...discoveredRoots];
+            const visited = new Set();
+            while (pending.length > 0) {
+              const root = pending.pop();
+              if (visited.has(root)) {
+                continue;
+              }
+              visited.add(root);
+              for (const element of root.querySelectorAll?.("*") ?? []) {
+                if (isOpenShadowRoot(element.shadowRoot)) {
+                  discoveredRoots.add(element.shadowRoot);
+                  pending.push(element.shadowRoot);
+                }
+              }
+            }
+            rootsDirty = false;
+          };
+          const knownRoots = () => {
+            discoverOpenRoots();
+            const roots = new Set([ownerDocument, ...discoveredRoots]);
+            for (const layer of layers) {
+              const root = actualRoot(layer.surface) ?? actualRoot(layer.trigger);
+              if (root) {
+                roots.add(root);
+              }
+            }
+            return roots;
+          };
+          const allModalDialogs = () => {
+            const dialogs = [];
+            for (const root of knownRoots()) {
+              try {
+                dialogs.push(...root.querySelectorAll("dialog:modal"));
+              } catch {
+                // Current supported browsers implement :modal. Treat an
+                // unavailable selector as no eligible modal rather than
+                // guessing from the open attribute.
+              }
+            }
+            return [...new Set(dialogs)];
+          };
+          const deepActiveElement = () => {
+            let active = ownerDocument.activeElement;
+            while (active?.shadowRoot?.activeElement) {
+              active = active.shadowRoot.activeElement;
+            }
+            return active;
+          };
+          const modalContaining = (node, dialogs) => {
+            const matches = dialogs.filter((dialog) => composedContains(dialog, node));
+            if (matches.length === 0) {
+              return null;
+            }
+            return matches.reduce((latest, dialog) => (
+              (modalSequence.get(dialog) ?? 0) >= (modalSequence.get(latest) ?? 0)
+                ? dialog
+                : latest
+            ));
+          };
+          const recordModalTransition = (dialog, explicitState = null) => {
+            if (!(dialog instanceof HTMLDialogElement)) {
+              return;
+            }
+            const isModal = explicitState ?? dialog.matches(":modal");
+            const wasModal = modalOpenState.get(dialog) === true;
+            modalOpenState.set(dialog, isModal);
+            if (!isModal) {
+              if (currentModal === dialog) {
+                currentModal = null;
+              }
+              return;
+            }
+            if (wasModal) {
+              return;
+            }
+            modalSequence.set(dialog, ++nextModalSequence);
+            bootstrapAmbiguous = false;
+            currentModal = dialog;
+          };
+
+          const descendantsOf = (layer) => layers.filter((candidate) => {
+            let parent = candidate.__citryAnchoredParent ?? null;
+            const seen = new Set();
+            while (parent && !seen.has(parent)) {
+              seen.add(parent);
+              if (parent === layer) {
+                return true;
+              }
+              parent = parent.__citryAnchoredParent ?? null;
+            }
+            return false;
+          });
+          const forceClose = (layer, reason, source) => {
+            layer.__citryAnchoredSuppressed = true;
+            layer.__citryAnchoredBlockedReason = reason;
+            layer.__citryAnchoredRegistration = null;
+            layer.forceClose?.(reason, source);
+            const index = layers.indexOf(layer);
+            if (index !== -1) {
+              layers.splice(index, 1);
+            }
+          };
+          const closeDescendants = (layer, reason = "ancestor", source = layer.surface) => {
+            const descendants = descendantsOf(layer);
+            for (let index = descendants.length - 1; index >= 0; index -= 1) {
+              const descendant = descendants[index];
+              if (layers.includes(descendant)) {
+                forceClose(descendant, reason, source);
+              }
+            }
+            syncScopes();
+          };
+
+          const reconcileModal = (event = null) => {
+            stats.reconciliations += 1;
+            const eventPath = event?.composedPath?.() ?? [];
+            const pathHasModal = eventPath.some((node) => (
+              node instanceof HTMLDialogElement && node.matches(":modal")
+            ));
+            if (pathHasModal) {
+              for (const node of eventPath) {
+                if (isOpenShadowRoot(node)) {
+                  discoveredRoots.add(node);
+                }
+              }
+            }
+            const dialogs = allModalDialogs();
+            if (!bootstrappedModals) {
+              bootstrappedModals = true;
+              if (dialogs.length === 1) {
+                modalSequence.set(dialogs[0], ++nextModalSequence);
+                currentModal = dialogs[0];
+              } else if (dialogs.length > 1) {
+                bootstrapAmbiguous = true;
+                currentModal = null;
+              }
+              for (const dialog of dialogs) {
+                modalOpenState.set(dialog, true);
+              }
+            }
+
+            const newlyDiscovered = dialogs.filter((dialog) => (
+              modalOpenState.get(dialog) !== true
+            ));
+            if (newlyDiscovered.length === 1) {
+              const dialog = newlyDiscovered[0];
+              modalOpenState.set(dialog, true);
+              modalSequence.set(dialog, ++nextModalSequence);
+              bootstrapAmbiguous = false;
+              currentModal = dialog;
+            } else if (newlyDiscovered.length > 1) {
+              for (const dialog of newlyDiscovered) {
+                modalOpenState.set(dialog, true);
+              }
+              bootstrapAmbiguous = true;
+              currentModal = null;
+            }
+
+            const eventDialog = eventPath
+              .filter((node) => node instanceof HTMLDialogElement && dialogs.includes(node))
+              .at(0) ?? null;
+            const focusDialog = modalContaining(deepActiveElement(), dialogs);
+            if (dialogs.length === 0) {
+              currentModal = null;
+              bootstrapAmbiguous = false;
+            } else if (bootstrapAmbiguous && (eventDialog || focusDialog)) {
+              // An event can resolve unknown initial order. It must not
+              // promote a modal whose open transition was already observed.
+              bootstrapAmbiguous = false;
+              currentModal = eventDialog ?? focusDialog;
+              if (!modalSequence.has(currentModal)) {
+                modalSequence.set(currentModal, ++nextModalSequence);
+              }
+            } else if (!bootstrapAmbiguous) {
+              if (!currentModal || !dialogs.includes(currentModal)) {
+                currentModal = dialogs.reduce((latest, dialog) => (
+                  (modalSequence.get(dialog) ?? 0) >= (modalSequence.get(latest) ?? 0)
+                    ? dialog
+                    : latest
+                ));
+              }
+            }
+
+            if (currentModal && !dialogs.includes(currentModal)) {
+              currentModal = null;
+            }
+
+            for (const layer of [...layers]) {
+              if (!layers.includes(layer)) {
+                continue;
+              }
+              if (!structurallyEligible(layer)) {
+                forceClose(layer, "ancestor", event?.target ?? currentModal);
+                continue;
+              }
+              if (
+                bootstrapAmbiguous
+                || (currentModal && !composedContains(currentModal, layer.trigger))
+              ) {
+                forceClose(layer, "modal", currentModal);
+              }
+            }
+            syncScopes(true);
+            return { current: currentModal, ambiguous: bootstrapAmbiguous };
+          };
+
+          const inferLogicalParent = (layer) => {
+            if (layer.logicalParent) {
+              return layer.logicalParent;
+            }
+            const childElements = layerElements(layer);
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const candidate = layers[index];
+              if (candidate === layer || !candidate.isOpen()) {
+                continue;
+              }
+              if (layerElements(candidate).some((parentElement) => (
+                childElements.some((childElement) => composedContains(parentElement, childElement))
+              ))) {
+                return candidate;
+              }
+            }
+            return null;
+          };
+          const structurallyEligible = (layer) => {
+            if (
+              !layer.trigger?.isConnected
+              || !layer.surface?.isConnected
+              || !actualRoot(layer.trigger)
+              || !actualRoot(layer.surface)
+              || layer.trigger.getClientRects().length === 0
+              || (layer.isEligible && !layer.isEligible())
+            ) {
+              return false;
+            }
+            const activeSurface = layer.isOpen?.() === true;
+            if (activeSurface) {
+              const surfaceStyle = getComputedStyle(layer.surface);
+              if (
+                layer.surface.getClientRects().length === 0
+                || surfaceStyle.visibility === "hidden"
+                || surfaceStyle.visibility === "collapse"
+              ) {
+                return false;
+              }
+            }
+            const ancestors = new Set([
+              ...composedAncestors(layer.trigger),
+              ...composedAncestors(layer.surface),
+            ]);
+            for (const ancestor of ancestors) {
+              if (!(ancestor instanceof Element)) {
+                continue;
+              }
+              const inactiveSurface = ancestor === layer.surface && !activeSurface;
+              if (!inactiveSurface && (ancestor.hidden || ancestor.inert)) {
+                return false;
+              }
+              if (ancestor instanceof HTMLDialogElement && !ancestor.open) {
+                return false;
+              }
+              if (
+                ancestor !== layer.surface
+                && ancestor.hasAttribute("popover")
+                && !ancestor.matches(":popover-open")
+              ) {
+                return false;
+              }
+            }
+            const parent = layer.logicalParent ?? layer.__citryAnchoredParent ?? inferLogicalParent(layer);
+            if (parent && (!layers.includes(parent) || !parent.isOpen())) {
+              return false;
+            }
+            return true;
+          };
+          const mayOpen = (layer) => {
+            const modal = reconcileModal();
+            if (layer.__citryAnchoredSuppressed) {
+              return false;
+            }
+            if (!structurallyEligible(layer)) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "ancestor";
+              return false;
+            }
+            if (modal.ambiguous) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "modal";
+              return false;
+            }
+            if (modal.current && !composedContains(modal.current, layer.trigger)) {
+              layer.__citryAnchoredSuppressed = true;
+              layer.__citryAnchoredBlockedReason = "modal";
+              return false;
+            }
+            layer.__citryAnchoredBlockedReason = null;
+            return true;
+          };
+
+          const containsEvent = (layer, event) => {
+            const path = event?.composedPath?.() ?? [];
+            let current = layer;
+            const seen = new Set();
+            while (current && !seen.has(current)) {
+              seen.add(current);
+              for (const element of layerElements(current)) {
+                if (path.includes(element)) {
+                  return true;
+                }
+                if (path.some((node) => composedContains(element, node))) {
+                  return true;
+                }
+              }
+              current = current.__citryAnchoredParent ?? null;
+            }
+            return false;
+          };
+          const topLayer = () => {
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const candidate = layers[index];
+              if (candidate.isOpen()) {
+                return candidate;
+              }
+            }
+            return null;
+          };
+          const isAncestorClosing = (layer) => (
+            [...ancestorCloseTransactions].some((transaction) => (
+              transaction.layers.has(layer)
+            ))
+          );
+
+          const localScopeForEvent = (event) => {
+            const path = event.composedPath?.() ?? [];
+            return path.find((node) => node instanceof ShadowRoot && scopes.has(node))
+              ?? ownerDocument;
+          };
+          const handleEvent = (scopeRoot, event) => {
+            if (scopeRoot === ownerDocument && localScopeForEvent(event) !== ownerDocument) {
+              return;
+            }
+            if (scopeRoot !== localScopeForEvent(event) || processedEvents.has(event)) {
+              return;
+            }
+            processedEvents.add(event);
+            reconcileModal(event);
+            if (event.type === "focusin" && pendingPointerFocus) {
+              const pointerTarget = pendingPointerFocus.target;
+              const focusTarget = event.composedPath?.()[0] ?? event.target;
+              const labelControl = pointerTarget instanceof HTMLLabelElement
+                ? pointerTarget.control
+                : null;
+              const followsPointer = (
+                composedContains(pointerTarget, focusTarget)
+                || composedContains(focusTarget, pointerTarget)
+                || labelControl === focusTarget
+              );
+              pendingPointerFocus = null;
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = null;
+              if (followsPointer) {
+                return;
+              }
+            }
+            const layer = topLayer();
+            if (!layer) {
+              return;
+            }
+            if (
+              event.type === "focusin"
+              && isAncestorClosing(layer)
+            ) {
+              // An ancestor such as Disclosure must move focus before it can
+              // make the owned subtree inert. Preserve that focus ordering and
+              // let the transaction deliver the structural forced close.
+              return;
+            }
+            if (event.type === "keydown") {
+              if (event.key !== "Escape" || event.isComposing) {
+                return;
+              }
+              event.preventDefault();
+              const registration = layer.__citryAnchoredRegistration;
+              queueMicrotask(() => {
+                if (
+                  registration
+                  && layer.__citryAnchoredRegistration === registration
+                  && layers.includes(layer)
+                  && layer.isOpen()
+                ) {
+                  layer.requestDismiss("escape", event.target);
+                }
+              });
+              return;
+            }
+            if (containsEvent(layer, event)) {
+              return;
+            }
+            if (event.type === "pointerdown") {
+              pendingPointerFocus = {
+                layer,
+                registration: layer.__citryAnchoredRegistration,
+                target: event.composedPath?.()[0] ?? event.target,
+              };
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = setTimeout(() => {
+                pendingPointerFocus = null;
+                pointerFocusTimer = null;
+              }, 0);
+            }
+            layer.requestDismiss(
+              event.type === "pointerdown" ? "outside" : "focus-outside",
+              event.target,
+            );
+          };
+
+          const attachScope = (root) => {
+            const pointerdown = (event) => handleEvent(root, event);
+            const focusin = (event) => handleEvent(root, event);
+            const keydown = (event) => handleEvent(root, event);
+            const beforetoggle = (event) => {
+              if (
+                event.target instanceof HTMLDialogElement
+                && event.oldState === "open"
+                && event.newState === "closed"
+              ) {
+                // `beforetoggle` is the only synchronous standards signal for
+                // a close/open generation completed in one JavaScript task.
+                recordModalTransition(event.target, false);
+              }
+            };
+            const toggle = (event) => {
+              if (event.target instanceof HTMLDialogElement) {
+                if (event.oldState === "open" && event.newState === "open") {
+                  recordModalTransition(event.target, false);
+                }
+                const explicitState = event.newState === "closed"
+                  ? false
+                  : event.target.matches(":modal");
+                recordModalTransition(event.target, explicitState);
+              }
+              reconcileModal(event);
+            };
+            root.addEventListener("pointerdown", pointerdown, true);
+            root.addEventListener("focusin", focusin, true);
+            root.addEventListener("keydown", keydown, true);
+            root.addEventListener("beforetoggle", beforetoggle, true);
+            root.addEventListener("toggle", toggle, true);
+            const observer = new MutationObserver((records) => {
+              for (const record of records) {
+                if (record.type === "childList") {
+                  rootsDirty = true;
+                }
+                if (
+                  record.attributeName === "open"
+                  && record.target instanceof HTMLDialogElement
+                ) {
+                  const explicitState = record.oldValue !== null
+                    ? false
+                    : record.target.matches(":modal");
+                  recordModalTransition(record.target, explicitState);
+                }
+              }
+              reconcileModal();
+            });
+            observer.observe(root, {
+              attributes: true,
+              attributeOldValue: true,
+              attributeFilter: ["open", "hidden", "inert", "style", "class"],
+              childList: true,
+              subtree: true,
+            });
+            scopes.set(root, {
+              pointerdown,
+              focusin,
+              keydown,
+              beforetoggle,
+              toggle,
+              observer,
+            });
+            stats.listenerSets += 1;
+            stats.activeListenerSets += 1;
+          };
+          const detachScope = (root, record) => {
+            root.removeEventListener("pointerdown", record.pointerdown, true);
+            root.removeEventListener("focusin", record.focusin, true);
+            root.removeEventListener("keydown", record.keydown, true);
+            root.removeEventListener("beforetoggle", record.beforetoggle, true);
+            root.removeEventListener("toggle", record.toggle, true);
+            record.observer.disconnect();
+            scopes.delete(root);
+            stats.activeListenerSets -= 1;
+          };
+          function syncScopes(preserveModal = false) {
+            const desired = layers.length > 0 ? knownRoots() : new Set();
+            for (const [root, record] of scopes) {
+              if (!desired.has(root)) {
+                detachScope(root, record);
+              }
+            }
+            for (const root of desired) {
+              if (!scopes.has(root)) {
+                attachScope(root);
+              }
+            }
+            if (layers.length > 0) {
+              activeCoordinators.add(coordinator);
+            } else {
+              activeCoordinators.delete(coordinator);
+              pendingPointerFocus = null;
+              clearTimeout(pointerFocusTimer);
+              pointerFocusTimer = null;
+              discoveredRoots.clear();
+              rootsDirty = true;
+              if (!preserveModal) {
+                currentModal = null;
+                bootstrappedModals = false;
+                bootstrapAmbiguous = false;
+              }
+            }
+            stats.activeCoordinators = activeCoordinators.size;
+          }
+
+          coordinator.containsEvent = containsEvent;
+          coordinator.topLayer = topLayer;
+          coordinator.mayOpen = mayOpen;
+          coordinator.deepActiveElement = deepActiveElement;
+          coordinator.isAncestorClosing = isAncestorClosing;
+          coordinator.blockedReason = (layer) => (
+            layer.__citryAnchoredBlockedReason ?? null
+          );
+          coordinator.clearSuppression = (layer) => {
+            layer.__citryAnchoredSuppressed = false;
+            layer.__citryAnchoredBlockedReason = null;
+          };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:begin */
+          coordinator.prepareModal = (container, source = container) => {
+            if (!(container instanceof HTMLDialogElement)) {
+              throw new TypeError(
+                "[citry-ui] anchored-layer modal preparation requires a native Dialog.",
+              );
+            }
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const layer = layers[index];
+              if (
+                layer.isOpen?.()
+                && !layerElements(layer).some((element) => composedContains(container, element))
+              ) {
+                forceClose(layer, "modal", source);
+              }
+            }
+            syncScopes();
+          };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:end */
+          coordinator.beginAncestorClose = (container, source = container) => {
+            if (!(container instanceof Element)) {
+              throw new TypeError(
+                "[citry-ui] an anchored-layer ancestor close requires an Element container.",
+              );
+            }
+            const transaction = {
+              layers: new Set(layers.filter((layer) => (
+                layer.isOpen?.()
+                && layerElements(layer).some((element) => composedContains(container, element))
+              ))),
+              settled: false,
+            };
+            ancestorCloseTransactions.add(transaction);
+            const settle = (commit) => {
+              if (transaction.settled) {
+                return;
+              }
+              transaction.settled = true;
+              ancestorCloseTransactions.delete(transaction);
+              if (!commit) {
+                return;
+              }
+              for (let index = layers.length - 1; index >= 0; index -= 1) {
+                const layer = layers[index];
+                if (transaction.layers.has(layer) && layer.isOpen?.()) {
+                  forceClose(layer, "ancestor", source);
+                }
+              }
+              syncScopes();
+            };
+            return {
+              commit: () => settle(true),
+              cancel: () => settle(false),
+            };
+          };
+          coordinator.closeDescendants = closeDescendants;
+          coordinator.register = (layer) => {
+            if (!mayOpen(layer)) {
+              return false;
+            }
+            const oldIndex = layers.indexOf(layer);
+            if (oldIndex === -1) {
+              layer.__citryAnchoredRegistration = {
+                generation: ++nextRegistrationGeneration,
+              };
+              layers.push(layer);
+            }
+            const nextParents = new Map(
+              layers.map((candidate) => [
+                candidate,
+                candidate.logicalParent ?? inferLogicalParent(candidate),
+              ]),
+            );
+            for (const [candidate, parent] of nextParents) {
+              candidate.__citryAnchoredParent = parent;
+            }
+            syncScopes();
+            return true;
+          };
+          coordinator.unregister = (layer, options = {}) => {
+            const {
+              reason = "ancestor",
+              source = layer.surface,
+              cascade = true,
+            } = options;
+            if (cascade) {
+              closeDescendants(layer, reason, source);
+            }
+            const index = layers.indexOf(layer);
+            if (index !== -1) {
+              layers.splice(index, 1);
+            }
+            layer.__citryAnchoredParent = null;
+            layer.__citryAnchoredRegistration = null;
+            syncScopes();
+          };
+          coordinator.dispose = () => {
+            ancestorCloseTransactions.clear();
+            for (const layer of [...layers].reverse()) {
+              forceClose(layer, "ancestor", ownerDocument);
+            }
+            syncScopes();
+          };
+          return coordinator;
+        };
+
+        const runtime = {
+          version: runtimeGeneration,
+          generation: runtimeGeneration,
+          capabilities: Object.freeze([ancestorCloseCapability]),
+          stats,
+          coordinatorFor(element) {
+            const ownerDocument = element?.ownerDocument;
+            if (!(ownerDocument instanceof Document)) {
+              throw new Error(
+                "[citry-ui] anchored layers require an element with an ownerDocument.",
+              );
+            }
+            let coordinator = coordinators.get(ownerDocument);
+            if (!coordinator) {
+              coordinator = createCoordinator(ownerDocument);
+              coordinators.set(ownerDocument, coordinator);
+            }
+            return coordinator;
+          },
+          composedContains,
+        };
+        Object.defineProperties(runtime, {
+          layers: {
+            enumerable: true,
+            get: () => [...activeCoordinators].flatMap((coordinator) => coordinator.layers),
+          },
+          listeners: {
+            enumerable: true,
+            get: () => (stats.activeListenerSets > 0 ? {} : null),
+          },
+        });
+        globalThis[runtimeKey] = runtime;
+        return runtime;
+      })();
+
+})();</script><script>(function() {
+
+  (() => {
+    const key = Symbol.for("citry-ui:dialog-controller-runtime");
+    const installed = globalThis[key];
+    if (installed !== undefined) {
+      if (installed.generation !== 1) {
+        throw new Error(
+          "[citry-ui] cannot replace an incompatible Dialog controller; "
+            + "a full page reload is required.",
+        );
+      }
+      return;
+    }
+
+    const modalRecords = [];
+    /* citry-ui:command-palette-attribution:dialog-document-lock-state:begin */
+    const documentLocks = new WeakMap();
+    /* citry-ui:command-palette-attribution:dialog-document-lock-state:end */
+    /* citry-ui:command-palette-attribution:dialog-handoff-keys:begin */
+    const handoffKey = Symbol.for("citry-ui:dialog-controller-handoff");
+    const ownerKey = Symbol.for("citry-ui:dialog-controller-owner");
+    /* citry-ui:command-palette-attribution:dialog-handoff-keys:end */
+    /* citry-ui:command-palette-attribution:dialog-root-scope-state:begin */
+    const scopeManagers = new WeakMap();
+
+    const deepActive = (documentOwner) => {
+      let active = documentOwner.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+      return active;
+    };
+    const supportedRoot = (element, documentOwner) => {
+      const root = element.getRootNode();
+      return root === documentOwner
+        || (root instanceof ShadowRoot
+          && root.mode === "open"
+          && root.host.ownerDocument === documentOwner
+          && root.host.shadowRoot === root);
+    };
+    /* citry-ui:command-palette-attribution:dialog-root-scope-state:end */
+    const isFocusable = (element) => element instanceof HTMLElement
+      && element.isConnected
+      && !element.hidden
+      && !element.matches(":disabled,[inert]")
+      && !element.closest("[inert]")
+      && element.getClientRects().length > 0
+      && getComputedStyle(element).visibility !== "hidden";
+    /* citry-ui:command-palette-attribution:dialog-document-lock:begin */
+    const lock = (documentOwner, dialog) => {
+      let state = documentLocks.get(documentOwner);
+      if (!state) {
+        state = { dialogs: [], overflow: "", paddingInlineEnd: "" };
+        documentLocks.set(documentOwner, state);
+      }
+      if (state.dialogs.includes(dialog)) return;
+      if (state.dialogs.length === 0) {
+        const root = documentOwner.documentElement;
+        state.overflow = root.style.overflow;
+        state.paddingInlineEnd = root.style.paddingInlineEnd;
+        const view = documentOwner.defaultView;
+        const scrollbarWidth = Math.max(0, (view?.innerWidth ?? root.clientWidth) - root.clientWidth);
+        const currentPadding = Number.parseFloat(view?.getComputedStyle(root).paddingInlineEnd) || 0;
+        root.style.overflow = "hidden";
+        if (scrollbarWidth > 0) root.style.paddingInlineEnd = `${currentPadding + scrollbarWidth}px`;
+      }
+      state.dialogs.push(dialog);
+    };
+    const unlock = (documentOwner, dialog) => {
+      const state = documentLocks.get(documentOwner);
+      if (!state) return;
+      const index = state.dialogs.indexOf(dialog);
+      if (index < 0) return;
+      state.dialogs.splice(index, 1);
+      if (state.dialogs.length === 0) {
+        const root = documentOwner.documentElement;
+        root.style.overflow = state.overflow;
+        root.style.paddingInlineEnd = state.paddingInlineEnd;
+        documentLocks.delete(documentOwner);
+      }
+    };
+    /* citry-ui:command-palette-attribution:dialog-document-lock:end */
+    const register = (record) => {
+      if (!modalRecords.includes(record)) modalRecords.push(record);
+    };
+    const unregister = (record) => {
+      const index = modalRecords.indexOf(record);
+      if (index >= 0) modalRecords.splice(index, 1);
+    };
+    /* citry-ui:command-palette-attribution:dialog-root-scope-manager:begin */
+    const watchScope = (scope, owner) => {
+      let manager = scopeManagers.get(scope);
+      if (!manager) {
+        const owners = new Set();
+        const observer = new MutationObserver(() => {
+          for (const candidate of [...owners]) candidate.validate();
+        });
+        observer.observe(scope instanceof Document ? scope.documentElement : scope, {
+          subtree: true,
+          childList: true,
+        });
+        manager = { owners, observer };
+        scopeManagers.set(scope, manager);
+      }
+      manager.owners.add(owner);
+      return () => {
+        manager.owners.delete(owner);
+        if (manager.owners.size === 0) {
+          manager.observer.disconnect();
+          scopeManagers.delete(scope);
+        }
+      };
+    };
+    /* citry-ui:command-palette-attribution:dialog-root-scope-manager:end */
+
+    const create = ({
+      host,
+      dialog,
+      surface,
+      title,
+      closeButton,
+      signature,
+      policy,
+      initialFocus,
+      containmentFallback,
+      escapeBlocked,
+      interceptDialogSubmit,
+      requestClose,
+      nativeClosed,
+      forceClose,
+      failed,
+      handoffAborted,
+    }) => {
+      if (
+        !(host instanceof HTMLElement)
+        || !(dialog instanceof HTMLDialogElement)
+        || !(surface instanceof HTMLElement)
+        || !(title instanceof HTMLElement)
+        || !(closeButton instanceof HTMLButtonElement)
+        || dialog.parentElement !== host
+        || surface.parentElement !== dialog
+      ) {
+        throw new TypeError("[citry-ui] Dialog controller received invalid owned anatomy.");
+      }
+      const documentOwner = host.ownerDocument;
+      if (!supportedRoot(host, documentOwner)) {
+        throw new TypeError("[citry-ui] Dialog controller requires a Document or open ShadowRoot.");
+      }
+      let active = true;
+      let appliedOpen = false;
+      let expectedNativeClose = false;
+      let pointerStartedOutside = false;
+      let previousFocus = null;
+      let focusGeneration = 0;
+      let handedOff = false;
+      /* citry-ui:command-palette-attribution:dialog-handoff-close-state:begin */
+      let handoffCloseGuard = false;
+      let handoffCloseIntent = false;
+      let handoffFrame = null;
+      /* citry-ui:command-palette-attribution:dialog-handoff-close-state:end */
+      let actualRoot = host.getRootNode();
+      const liveOwner = dialog[ownerKey] ?? null;
+      liveOwner?.transfer?.();
+      const owner = {
+        active: true,
+        transfer: null,
+        validate: null,
+      };
+      /* citry-ui:command-palette-attribution:dialog-focus-target:begin */
+      const initialFocusTarget = initialFocus?.() ?? null;
+      /* citry-ui:command-palette-attribution:dialog-focus-target:end */
+
+      /* citry-ui:command-palette-attribution:dialog-handoff-consume:begin */
+      const previous = dialog[handoffKey] ?? null;
+      const abortPrevious = () => {
+        if (!previous) return;
+        if (previous.timer !== null) clearTimeout(previous.timer);
+        previous.abort();
+        if (dialog[handoffKey] === previous) delete dialog[handoffKey];
+      };
+      const retained = Boolean(previous
+        && previous.host === host
+        && previous.dialog === dialog
+        && previous.surface === surface
+        && previous.title === title
+        && previous.closeButton === closeButton
+        && previous.documentOwner === documentOwner
+        && previous.actualRoot === actualRoot
+        && previous.signature === signature
+        && previous.initialFocusTarget === initialFocusTarget);
+      if (previous && !retained) abortPrevious();
+      if (retained) {
+        if (previous.timer !== null) clearTimeout(previous.timer);
+        appliedOpen = previous.appliedOpen && dialog.open;
+        previousFocus = previous.previousFocus;
+        handoffCloseGuard = true;
+        handoffFrame = requestAnimationFrame(() => {
+          handoffFrame = requestAnimationFrame(() => {
+            handoffFrame = null;
+            handoffCloseGuard = false;
+            handoffCloseIntent = false;
+          });
+        });
+        delete dialog[handoffKey];
+      }
+      /* citry-ui:command-palette-attribution:dialog-handoff-consume:end */
+
+      const currentPolicy = () => policy?.() ?? {};
+      const ownedFocusables = () => {
+        const elements = [...dialog.querySelectorAll(
+          'a[href], area[href], button:not(:disabled), input:not(:disabled):not([type="hidden"]), '
+            + 'select:not(:disabled), textarea:not(:disabled), iframe, object, embed, '
+            + 'audio[controls], video[controls], summary, '
+            + '[contenteditable]:not([contenteditable="false"]), '
+            + '[tabindex]:not([tabindex="-1"]):not([inert])',
+        )].filter((element) => isFocusable(element) && element.closest("dialog") === dialog);
+        return elements
+          .map((element, index) => ({ element, index, tabIndex: element.tabIndex }))
+          .filter(({ tabIndex }) => tabIndex >= 0)
+          .sort((left, right) => {
+            if (left.tabIndex > 0 && right.tabIndex === 0) return -1;
+            if (left.tabIndex === 0 && right.tabIndex > 0) return 1;
+            if (left.tabIndex > 0 && right.tabIndex > 0 && left.tabIndex !== right.tabIndex) {
+              return left.tabIndex - right.tabIndex;
+            }
+            return left.index - right.index;
+          })
+          .map(({ element }) => element);
+      };
+      /* citry-ui:command-palette-attribution:dialog-focus-hooks:begin */
+      const focusInitial = () => {
+        const generation = ++focusGeneration;
+        queueMicrotask(() => {
+          if (!active || generation !== focusGeneration || !appliedOpen || !dialog.open) return;
+          const target = initialFocus?.() ?? null;
+          if (isFocusable(target)) target.focus({ preventScroll: true });
+        });
+      };
+      /* citry-ui:command-palette-attribution:dialog-focus-hooks:end */
+      /* citry-ui:command-palette-attribution:dialog-focus-restore:begin */
+      const restoreFocus = (browserFocus = null) => {
+        const generation = ++focusGeneration;
+        queueMicrotask(() => {
+          if (!active || generation !== focusGeneration || appliedOpen) return;
+          const current = deepActive(documentOwner);
+          const browserNeedsHelp = current === null
+            || current === documentOwner.body
+            || current === documentOwner.documentElement
+            || current === dialog
+            || dialog.contains(current)
+            || current === browserFocus;
+          if (browserNeedsHelp && isFocusable(previousFocus)) {
+            previousFocus.focus({ preventScroll: true });
+          }
+        });
+      };
+      /* citry-ui:command-palette-attribution:dialog-focus-restore:end */
+      const eventIsOutside = (event) => {
+        if (event.target !== dialog) return false;
+        const rect = surface.getBoundingClientRect();
+        return event.clientX < rect.left
+          || event.clientX > rect.right
+          || event.clientY < rect.top
+          || event.clientY > rect.bottom;
+      };
+      const closeDescendants = (reason = "ancestor") => {
+        for (const candidate of [...modalRecords].reverse()) {
+          if (candidate !== record && dialog.contains(candidate.dialog) && candidate.dialog.open) {
+            candidate.force(reason, dialog);
+          }
+        }
+      };
+      const setOpen = (nextOpen, source = null, returnValue = "") => {
+        if (!active) return false;
+        const next = Boolean(nextOpen);
+        if (!next) closeDescendants();
+        if (next === appliedOpen && dialog.open === next) return true;
+        if (next) {
+          if (!supportedRoot(host, documentOwner)) return false;
+          previousFocus = source instanceof Element ? source : deepActive(documentOwner);
+          dialog.returnValue = "";
+          if (dialog.open) dialog.removeAttribute("open");
+          try {
+            const anchoredRuntime = globalThis[Symbol.for("citry-ui:anchored-layer-runtime")];
+            anchoredRuntime?.coordinatorFor?.(dialog)?.prepareModal?.(dialog, source ?? dialog);
+            dialog.showModal();
+          } catch {
+            appliedOpen = false;
+            failed?.();
+            return false;
+          }
+          appliedOpen = true;
+          register(record);
+          lock(documentOwner, dialog);
+          focusInitial();
+          return true;
+        }
+        expectedNativeClose = dialog.open;
+        if (dialog.open) dialog.close(returnValue);
+        const browserFocus = deepActive(documentOwner);
+        appliedOpen = false;
+        unregister(record);
+        unlock(documentOwner, dialog);
+        restoreFocus(browserFocus);
+        return true;
+      };
+      const onCancel = (event) => {
+        event.preventDefault();
+        if (escapeBlocked?.()) return;
+        const configuration = currentPolicy();
+        if (configuration.dismissible !== false && configuration.closeOnEscape !== false) {
+          requestClose?.("escape", dialog, "");
+        }
+      };
+      const onKeyDown = (event) => {
+        if (event.key !== "Tab" || event.target.closest?.("dialog") !== dialog) return;
+        const focusable = ownedFocusables();
+        if (!focusable.length) {
+          event.preventDefault();
+          const target = initialFocus?.() ?? containmentFallback?.() ?? dialog;
+          if (isFocusable(target)) target.focus({ preventScroll: true });
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        const current = deepActive(documentOwner);
+        if (event.shiftKey && (current === first || current === dialog || current === title)) {
+          event.preventDefault();
+          last.focus({ preventScroll: true });
+        } else if (!event.shiftKey && current === last) {
+          event.preventDefault();
+          first.focus({ preventScroll: true });
+        }
+      };
+      const onPointerDown = (event) => {
+        pointerStartedOutside = eventIsOutside(event);
+      };
+      const onPointerCancel = () => {
+        pointerStartedOutside = false;
+      };
+      const onClick = (event) => {
+        const shouldClose = pointerStartedOutside && eventIsOutside(event);
+        pointerStartedOutside = false;
+        const configuration = currentPolicy();
+        if (
+          shouldClose
+          && configuration.dismissible !== false
+          && configuration.closeOnOutside !== false
+        ) requestClose?.("outside", dialog, "");
+      };
+      const onSubmit = (event) => {
+        if (!interceptDialogSubmit?.()) return;
+        const form = event.target;
+        if (event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
+        if (form.closest("dialog") !== dialog) return;
+        const submitter = event.submitter;
+        const override = (submitter instanceof HTMLButtonElement
+          || submitter instanceof HTMLInputElement) && submitter.hasAttribute("formmethod");
+        const method = override ? submitter.formMethod : form.method;
+        if (method.toLowerCase() !== "dialog") return;
+        event.preventDefault();
+        const returnValue = submitter instanceof HTMLButtonElement
+          || submitter instanceof HTMLInputElement ? submitter.value : "";
+        requestClose?.("native", submitter ?? form, returnValue);
+      };
+      /* citry-ui:command-palette-attribution:dialog-handoff-close-intent:begin */
+      const onBeforeToggle = (event) => {
+        if (handoffCloseGuard && event.newState === "closed") handoffCloseIntent = true;
+      };
+      /* citry-ui:command-palette-attribution:dialog-handoff-close-intent:end */
+      const onNativeClose = () => {
+        if (expectedNativeClose) {
+          expectedNativeClose = false;
+          /* citry-ui:command-palette-attribution:dialog-handoff-close-expected:begin */
+          handoffCloseIntent = false;
+          /* citry-ui:command-palette-attribution:dialog-handoff-close-expected:end */
+          return;
+        }
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-reclaim:begin */
+        if (
+          handoffCloseGuard
+          && !handoffCloseIntent
+          && active
+          && dialog[ownerKey] === owner
+          && appliedOpen
+        ) {
+          try {
+            dialog.showModal();
+          } catch {
+            appliedOpen = false;
+            failed?.();
+            return;
+          }
+          register(record);
+          lock(documentOwner, dialog);
+          focusInitial();
+          return;
+        }
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-reclaim:end */
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-retire:begin */
+        handoffCloseIntent = false;
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-retire:end */
+        closeDescendants();
+        appliedOpen = false;
+        unregister(record);
+        unlock(documentOwner, dialog);
+        const browserFocus = deepActive(documentOwner);
+        nativeClosed?.("native", dialog, dialog.returnValue);
+        restoreFocus(browserFocus);
+      };
+      const force = (reason = "ancestor", source = dialog) => {
+        forceClose?.(reason, source);
+        if (dialog.open || appliedOpen) setOpen(false, source);
+      };
+
+      const record = { dialog, force };
+      /* citry-ui:command-palette-attribution:dialog-root-scope-refresh:begin */
+      let unwatchScope = watchScope(actualRoot, owner);
+      const refreshRoot = () => {
+        const nextRoot = host.getRootNode();
+        if (nextRoot === actualRoot) return true;
+        if (
+          !supportedRoot(host, documentOwner)
+          || dialog.getRootNode() !== nextRoot
+          || surface.getRootNode() !== nextRoot
+          || title.getRootNode() !== nextRoot
+          || closeButton.getRootNode() !== nextRoot
+        ) return false;
+        if (dialog.open || appliedOpen) force("ancestor", host);
+        unwatchScope();
+        actualRoot = nextRoot;
+        unwatchScope = watchScope(actualRoot, owner);
+        return true;
+      };
+      owner.validate = () => {
+        if (!active || dialog[ownerKey] !== owner) return;
+        if (
+          !host.isConnected
+          || host.ownerDocument !== documentOwner
+          || !supportedRoot(host, documentOwner)
+          || !refreshRoot()
+        ) force("ancestor", host);
+      };
+      /* citry-ui:command-palette-attribution:dialog-root-scope-refresh:end */
+      dialog.addEventListener("cancel", onCancel);
+      dialog.addEventListener("keydown", onKeyDown);
+      dialog.addEventListener("pointerdown", onPointerDown);
+      dialog.addEventListener("pointercancel", onPointerCancel);
+      dialog.addEventListener("click", onClick);
+      dialog.addEventListener("submit", onSubmit);
+      /* citry-ui:command-palette-attribution:dialog-handoff-close-listener:begin */
+      dialog.addEventListener("beforetoggle", onBeforeToggle);
+      /* citry-ui:command-palette-attribution:dialog-handoff-close-listener:end */
+      dialog.addEventListener("close", onNativeClose);
+      if (retained && appliedOpen) register(record);
+
+      const cleanup = ({ handoff = false } = {}) => {
+        if (!active) return false;
+        active = false;
+        owner.active = false;
+        focusGeneration += 1;
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-cleanup:begin */
+        if (handoffFrame !== null) cancelAnimationFrame(handoffFrame);
+        handoffFrame = null;
+        handoffCloseGuard = false;
+        handoffCloseIntent = false;
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-cleanup:end */
+        dialog.removeEventListener("cancel", onCancel);
+        dialog.removeEventListener("keydown", onKeyDown);
+        dialog.removeEventListener("pointerdown", onPointerDown);
+        dialog.removeEventListener("pointercancel", onPointerCancel);
+        dialog.removeEventListener("click", onClick);
+        dialog.removeEventListener("submit", onSubmit);
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-unlisten:begin */
+        dialog.removeEventListener("beforetoggle", onBeforeToggle);
+        /* citry-ui:command-palette-attribution:dialog-handoff-close-unlisten:end */
+        dialog.removeEventListener("close", onNativeClose);
+        unwatchScope();
+        if (dialog[ownerKey] === owner) delete dialog[ownerKey];
+        const canHandoff = handoff
+          && host.isConnected
+          && dialog.isConnected
+          && supportedRoot(host, documentOwner);
+        /* citry-ui:command-palette-attribution:dialog-handoff-produce:begin */
+        if (canHandoff) {
+          handedOff = true;
+          unregister(record);
+          const handoffRecord = {
+            host,
+            dialog,
+            surface,
+            title,
+            closeButton,
+            documentOwner,
+            actualRoot: host.getRootNode(),
+            signature,
+            initialFocusTarget,
+            appliedOpen,
+            previousFocus,
+            timer: null,
+            abort() {
+              closeDescendants();
+              expectedNativeClose = dialog.open;
+              if (dialog.open) dialog.close();
+              appliedOpen = false;
+              unlock(documentOwner, dialog);
+              handoffAborted?.();
+            },
+          };
+          dialog[handoffKey] = handoffRecord;
+          handoffRecord.timer = setTimeout(() => {
+            if (dialog[handoffKey] !== handoffRecord) return;
+            handoffRecord.abort();
+            delete dialog[handoffKey];
+          }, 1000);
+          return true;
+        }
+        /* citry-ui:command-palette-attribution:dialog-handoff-produce:end */
+        closeDescendants();
+        expectedNativeClose = dialog.open;
+        if (dialog.open) dialog.close();
+        appliedOpen = false;
+        unregister(record);
+        unlock(documentOwner, dialog);
+        restoreFocus();
+        return false;
+      };
+      owner.transfer = () => cleanup({ handoff: true });
+      dialog[ownerKey] = owner;
+
+      return {
+        setOpen,
+        isOpen: () => appliedOpen && dialog.open,
+        focusInitial,
+        refreshRoot,
+        force,
+        cleanup,
+        retained,
+        handedOff: () => handedOff,
+      };
+    };
+
+    /* citry-ui:command-palette-attribution:dialog-handoff-abort:begin */
+    const abortHandoff = (dialog) => {
+      const record = dialog?.[handoffKey] ?? null;
+      if (!record) return false;
+      if (record.timer !== null) clearTimeout(record.timer);
+      record.abort();
+      if (dialog[handoffKey] === record) delete dialog[handoffKey];
+      return true;
+    };
+    /* citry-ui:command-palette-attribution:dialog-handoff-abort:end */
+
+    globalThis[key] = {
+      generation: 1,
+      create,
+      abortHandoff,
+      deepActive,
+      isFocusable,
+      counts: () => ({ modals: modalRecords.length }),
+    };
+  })();
+
+})();</script><script>(function() {
+
+  (() => {
+    const key = Symbol.for("citry-ui:active-descendant-runtime");
+    const installed = globalThis[key];
+    if (installed !== undefined) {
+      if (installed.generation !== 1) {
+        throw new Error(
+          "[citry-ui] cannot replace an incompatible active-descendant runtime; "
+            + "a full page reload is required.",
+        );
+      }
+      return;
+    }
+
+    /* citry-ui:command-palette-attribution:active-owner-key:begin */
+    const ownerKey = Symbol.for("citry-ui:active-descendant-owner");
+    /* citry-ui:command-palette-attribution:active-owner-key:end */
+    const canonicalizeText = (
+      value,
+      { compatibility = false, collapseWhitespace = false, trim = false } = {},
+    ) => {
+      let text = String(value);
+      if (compatibility) text = text.normalize("NFKC");
+      if (collapseWhitespace) text = text.replace(/\s+/gu, " ");
+      if (trim) text = text.trim();
+      return text.toLowerCase();
+    };
+    const canonicalText = (value) => canonicalizeText(value, {
+      compatibility: true,
+      collapseWhitespace: true,
+      trim: true,
+    });
+
+    const create = ({ input, listbox, idPrefix }) => {
+      if (!(input instanceof HTMLElement) || !(listbox instanceof HTMLElement)) {
+        throw new TypeError("[citry-ui] active-descendant requires an input and listbox.");
+      }
+      /* citry-ui:command-palette-attribution:active-owner-transfer:begin */
+      const previous = listbox[ownerKey] ?? null;
+      const retained = Boolean(previous
+        && previous.input === input
+        && previous.listbox === listbox
+        && previous.idPrefix === idPrefix);
+      if (previous && !retained) previous.abort();
+      const owner = {
+        active: true,
+        input,
+        listbox,
+        idPrefix,
+        ids: retained ? previous.ids : new Map(),
+        nextId: retained ? previous.nextId : 1,
+        lastScrolled: retained ? previous.lastScrolled : null,
+        abort() {
+          input.removeAttribute("aria-activedescendant");
+          owner.ids.clear();
+          owner.lastScrolled = null;
+          owner.active = false;
+        },
+      };
+      listbox[ownerKey] = owner;
+      /* citry-ui:command-palette-attribution:active-owner-transfer:end */
+
+      const idFor = (value) => {
+        if (!owner.ids.has(value)) {
+          owner.ids.set(value, `${idPrefix}-${owner.nextId}`);
+          owner.nextId += 1;
+        }
+        return owner.ids.get(value);
+      };
+      const retain = (values) => {
+        const current = new Set(values);
+        for (const value of owner.ids.keys()) {
+          if (!current.has(value)) owner.ids.delete(value);
+        }
+      };
+      const eligible = (items) => items.filter((item) => !item.disabled && item.visible !== false);
+      const edge = (items, direction = 1) => {
+        const available = eligible(items);
+        return direction < 0 ? available.at(-1)?.value ?? null : available[0]?.value ?? null;
+      };
+      const move = (items, activeValue, delta, loop = true) => {
+        const available = eligible(items);
+        if (!available.length) return null;
+        const current = available.findIndex((item) => item.value === activeValue);
+        if (current < 0) return delta < 0 ? available.at(-1).value : available[0].value;
+        const candidate = current + delta;
+        if (candidate >= 0 && candidate < available.length) return available[candidate].value;
+        if (!loop) return activeValue;
+        return candidate < 0 ? available.at(-1).value : available[0].value;
+      };
+      /* citry-ui:command-palette-attribution:active-neighbor-handoff:begin */
+      const nearest = (items, activeValue, previousOrder = []) => {
+        const available = eligible(items);
+        if (available.some((item) => item.value === activeValue)) return activeValue;
+        const availableValues = new Set(available.map((item) => item.value));
+        const index = previousOrder.indexOf(activeValue);
+        if (index >= 0) {
+          for (let offset = 1; offset < previousOrder.length; offset += 1) {
+            const following = previousOrder[index + offset];
+            if (following !== undefined && availableValues.has(following)) return following;
+            const preceding = previousOrder[index - offset];
+            if (preceding !== undefined && availableValues.has(preceding)) return preceding;
+          }
+        }
+        return available[0]?.value ?? null;
+      };
+      /* citry-ui:command-palette-attribution:active-neighbor-handoff:end */
+      const sync = ({
+        items,
+        activeValue,
+        selectedValue = null,
+        open = true,
+        unavailable = false,
+        optionFor,
+        selectedAttribute = "data-selected",
+        activeAttribute = "data-active",
+        scroll = true,
+      }) => {
+        let activeElement = null;
+        for (const item of items) {
+          const option = optionFor(item.value);
+          /* citry-ui:command-palette-attribution:active-group-registration:begin */
+          if (
+            !(option instanceof HTMLElement)
+            || !option.isConnected
+            || option.getRootNode() !== listbox.getRootNode()
+            || !listbox.contains(option)
+          ) continue;
+          /* citry-ui:command-palette-attribution:active-group-registration:end */
+          const active = open && !unavailable && !item.disabled && item.value === activeValue;
+          const selected = item.value === selectedValue;
+          const selectedWithoutActive = selected && (!open || activeValue === null);
+          option.setAttribute("aria-selected", active || selectedWithoutActive ? "true" : "false");
+          option.toggleAttribute(selectedAttribute, selected);
+          option.toggleAttribute(activeAttribute, active);
+          if (active) activeElement = option;
+        }
+        if (activeElement) {
+          input.setAttribute("aria-activedescendant", activeElement.id);
+          if (scroll && owner.lastScrolled !== activeValue) {
+            activeElement.scrollIntoView({ block: "nearest" });
+            owner.lastScrolled = activeValue;
+          }
+        } else {
+          input.removeAttribute("aria-activedescendant");
+          owner.lastScrolled = null;
+        }
+        return activeElement;
+      };
+      const resetScroll = () => {
+        owner.lastScrolled = null;
+      };
+      /* citry-ui:command-palette-attribution:active-owner-cleanup:begin */
+      const cleanup = () => {
+        owner.active = false;
+        if (listbox[ownerKey] !== owner) return;
+        owner.abort();
+        delete listbox[ownerKey];
+      };
+      /* citry-ui:command-palette-attribution:active-owner-cleanup:end */
+      return { idFor, retain, edge, move, nearest, sync, resetScroll, cleanup, retained };
+    };
+
+    globalThis[key] = { generation: 1, canonicalizeText, canonicalText, create };
+  })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+/* citry-ui:command-palette-attribution:initializer:begin */
+const readyAttribute = "data-citry-command-palette-initialized";
+const ownerKey = Symbol.for("citry-ui:command-palette-owner");
+const handoffKey = Symbol.for("citry-ui:command-palette-handoff");
+const scopeManagers = globalThis[
+  Symbol.for("citry-ui:command-palette-mutation-scopes")
+] ??= new WeakMap();
+
+const watchPalette = (root, entry) => {
+  let scope;
+  let manager;
+  let active = true;
+  const detach = () => {
+    if (manager?.entries.get(root) !== entry) return;
+    manager.entries.delete(root);
+    if (manager.entries.size === 0) {
+      manager.observer.disconnect();
+      scopeManagers.delete(scope);
+    }
+  };
+  const attach = () => {
+    scope = root.getRootNode();
+    manager = scopeManagers.get(scope);
+    if (!manager) {
+      const entries = new Map();
+      const observer = new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) {
+            if (!(node instanceof Element)) continue;
+            const candidates = node.hasAttribute(readyAttribute)
+              ? [node, ...node.querySelectorAll(`[${readyAttribute}]`)]
+              : [...node.querySelectorAll(`[${readyAttribute}]`)];
+            for (const candidate of candidates) {
+              if (!candidate[ownerKey]?.active) {
+                candidate.removeAttribute(readyAttribute);
+                candidate.querySelector(":scope > dialog")?.removeAttribute("data-open");
+              }
+            }
+          }
+        }
+        for (const [candidate, registration] of [...entries]) {
+          if (records.some((record) => record.target === candidate
+            || candidate.contains(record.target)
+            || [...record.addedNodes, ...record.removedNodes].some((node) =>
+              node === candidate || node.contains?.(candidate)))) registration.notify();
+        }
+      });
+      observer.observe(scope instanceof Document ? scope.documentElement : scope, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+      });
+      manager = { entries, observer };
+      scopeManagers.set(scope, manager);
+    }
+    manager.entries.set(root, entry);
+  };
+  attach();
+  return {
+    refresh() {
+      if (active && root.getRootNode() !== scope) {
+        detach();
+        attach();
+      }
+    },
+    cleanup() {
+      active = false;
+      detach();
+    },
+  };
+};
+
+Citry.manager.registerComponent("CCommandPalette_28a050", {
+  props: {
+    open: {},
+    query: {},
+    disabled: {},
+    loop: {},
+    closeOnAction: {},
+    size: {},
+    onOpenChange: {},
+    onQueryChange: {},
+    onAction: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const host = els[0];
+    const dialogRuntime = globalThis[Symbol.for("citry-ui:dialog-controller-runtime")];
+    const activeRuntime = globalThis[Symbol.for("citry-ui:active-descendant-runtime")];
+    if (dialogRuntime?.generation !== 1 || activeRuntime?.generation !== 1) {
+      throw new Error("[citry-ui] CCommandPalette private runtime dependency did not load.");
+    }
+    const dialog = host.querySelector(
+      ':scope > dialog[data-citry-command-palette-root]',
+    );
+    const surface = dialog?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-surface"]',
+    );
+    const header = surface?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-header"]',
+    );
+    const title = header?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-title"]',
+    );
+    const closeButton = header?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-close"]',
+    );
+    const search = surface?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-search"]',
+    );
+    const input = search?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-input"]',
+    );
+    const listbox = surface?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-listbox"]',
+    );
+    const empty = surface?.querySelector(
+      ':scope > [data-citry-ui-part="command-palette-empty"]',
+    );
+    host?.[ownerKey]?.transfer?.();
+    const previous = host?.[handoffKey] ?? null;
+    if (previous?.timer !== null && previous?.timer !== undefined) {
+      clearTimeout(previous.timer);
+    }
+    const abortPrevious = () => {
+      if (!previous) return;
+      if (previous.timer !== null) clearTimeout(previous.timer);
+      previous.abort();
+      if (host[handoffKey] === previous) delete host[handoffKey];
+    };
+    if (
+      !(host instanceof HTMLSpanElement)
+      || !(dialog instanceof HTMLDialogElement)
+      || !(surface instanceof HTMLElement)
+      || !(header instanceof HTMLElement)
+      || !(title instanceof HTMLHeadingElement)
+      || !(closeButton instanceof HTMLButtonElement)
+      || !(search instanceof HTMLElement)
+      || !(input instanceof HTMLInputElement)
+      || !(listbox instanceof HTMLElement)
+      || !(empty instanceof HTMLElement)
+    ) {
+      abortPrevious();
+      console.error(
+        "[citry-ui] CCommandPalette received invalid native anatomy; "
+          + "leaving the server fallback unchanged.",
+      );
+      return () => {};
+    }
+
+    const flattened = data.regions.flatMap((region) => region.commands);
+    const commandElements = [...listbox.querySelectorAll(
+      '[data-citry-ui-part="command-palette-command"]',
+    )];
+    const optionByValue = new Map(commandElements.map((element) => [
+      element.dataset.value,
+      element,
+    ]));
+    const regionElements = [...listbox.children];
+    const documentOwner = host.ownerDocument;
+    let actualRoot = host.getRootNode();
+    const activators = [...host.children].filter((element) => element !== dialog);
+    const ownedElements = [
+      host, dialog, surface, header, title, closeButton, search, input, listbox, empty,
+      ...regionElements, ...commandElements,
+    ];
+    const frameworkMarker = (attribute) => attribute.name === "data-citry-root"
+      || attribute.name === "data-has-alpine-state"
+      || attribute.name.startsWith("data-cid")
+      || attribute.name.startsWith("data-cev")
+      || attribute.name.startsWith("x-citry-");
+    const correlationValid = () => {
+      const identifiers = (host.getAttribute("data-cid") ?? "").split(/\s+/).filter(Boolean);
+      const markers = [...host.attributes]
+        .filter((attribute) => attribute.name.startsWith("data-cid-"))
+        .map((attribute) => attribute.name.slice(9));
+      return host.getAttribute("data-citry-root") === ""
+        && (!host.hasAttribute("data-has-alpine-state")
+          || host.getAttribute("data-has-alpine-state") === "true")
+        && (!host.hasAttribute("x-citry-boundary")
+          || host.getAttribute("x-citry-boundary") === "")
+        && identifiers.length === 1
+        && markers.length === 1
+        && markers[0] === identifiers[0]
+        && ownedElements.slice(1).every((element) =>
+          ![...element.attributes].some(frameworkMarker));
+    };
+    const frameworkBaseline = ownedElements.map((element) => JSON.stringify(
+      [...element.attributes]
+        .filter(frameworkMarker)
+        .map((attribute) => [attribute.name, attribute.value])
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ));
+    const frameworkMarkersValid = () => ownedElements.every((element, index) => JSON.stringify(
+      [...element.attributes]
+        .filter(frameworkMarker)
+        .map((attribute) => [attribute.name, attribute.value])
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ) === frameworkBaseline[index]);
+    const runtimeAttributesValid = (element, allowed = []) => [...element.attributes].every(
+      (attribute) => !attribute.name.startsWith("data-citry-")
+        || attribute.name === "data-citry-ui-part"
+        || attribute.name === "data-citry-root"
+        || allowed.includes(attribute.name),
+    );
+    const interactiveSelector = [
+      "a[href]", "area[href]", "button", "details", "embed", "iframe", "input",
+      "label", "object", "select", "summary", "textarea", "audio[controls]",
+      "video[controls]", "[contenteditable]:not([contenteditable='false'])", "[tabindex]",
+    ].join(",");
+    const visualValid = (visual) => {
+      if (!(visual instanceof Element)) return true;
+      if (visual.querySelector(interactiveSelector)) return false;
+      return [...visual.querySelectorAll("*")].every((element) => (
+        !element.localName.includes("-")
+        && !element.hasAttribute("is")
+        && element.shadowRoot === null
+        && (
+          !(element instanceof HTMLImageElement)
+          || (element.hasAttribute("alt") && element.alt === "")
+        )
+      ));
+    };
+    const structureValid = (requireReady = false) => {
+      if (
+        !(surface instanceof HTMLElement)
+        || surface.localName !== "section"
+        || header.localName !== "header"
+        || title.localName !== "h2"
+        || closeButton.type !== "button"
+        || search.localName !== "search"
+        || listbox.localName !== "div"
+        || empty.localName !== "div"
+        || host.ownerDocument !== documentOwner
+        || dialog.ownerDocument !== documentOwner
+        || host.getRootNode() !== actualRoot
+        || host.getRootNode() !== dialog.getRootNode()
+        || !correlationValid()
+        || !frameworkMarkersValid()
+        || !host.hasAttribute("data-citry-command-palette-host")
+        || (requireReady && !host.hasAttribute(readyAttribute))
+        || !runtimeAttributesValid(host, [
+          "data-citry-command-palette-host",
+          readyAttribute,
+        ])
+        || dialog.id !== data.dialogId
+        || dialog.getAttribute("aria-labelledby") !== title.id
+        || dialog.dataset.citryUiPart !== "command-palette"
+        || !dialog.hasAttribute("data-citry-command-palette-root")
+        || ["role", "aria-modal", "tabindex", "inert", "popover", "hidden"]
+          .some((name) => dialog.hasAttribute(name))
+        || !runtimeAttributesValid(dialog, ["data-citry-command-palette-root"])
+        || ![surface, header, title, search, input, listbox]
+          .every((element) => runtimeAttributesValid(element))
+        || !runtimeAttributesValid(closeButton, ["data-citry-command-palette-close"])
+        || !runtimeAttributesValid(empty, ["data-citry-command-palette-visual"])
+        || dialog.parentElement !== host
+        || surface.parentElement !== dialog
+        || header.parentElement !== surface
+        || search.parentElement !== surface
+        || listbox.parentElement !== surface
+        || empty.parentElement !== surface
+        || title.id !== data.titleId
+        || input.id !== data.inputId
+        || listbox.id !== data.listboxId
+        || input.type !== "text"
+        || input.getAttribute("role") !== "combobox"
+        || input.getAttribute("aria-controls") !== listbox.id
+        || input.getAttribute("aria-autocomplete") !== "list"
+        || input.getAttribute("autocomplete") !== "off"
+        || !input.hasAttribute("autofocus")
+        || listbox.getAttribute("role") !== "listbox"
+        || commandElements.length !== flattened.length
+        || regionElements.length !== data.regions.length
+        || activators.length !== Number(data.hasActivator)
+        || !visualValid(empty)
+      ) return false;
+      for (const activator of activators) {
+        if (
+          !(activator instanceof HTMLElement)
+          || activator instanceof HTMLUnknownElement
+          || activator.localName.includes("-")
+          || activator.hasAttribute("is")
+          || activator.shadowRoot !== null
+          || !activator.hasAttribute("data-citry-command-palette-trigger")
+          || activator.getAttribute("aria-haspopup") !== "dialog"
+          || activator.getAttribute("aria-controls") !== dialog.id
+        ) return false;
+      }
+      for (let index = 0; index < data.regions.length; index += 1) {
+        const region = data.regions[index];
+        const element = regionElements[index];
+        if (!(element instanceof HTMLElement)) return false;
+        if (region.kind === "separator") {
+          if (
+            element.localName !== "hr"
+            || element.dataset.citryUiPart !== "command-palette-separator"
+            || element.getAttribute("aria-hidden") !== "true"
+          ) return false;
+          continue;
+        }
+        if (region.kind === "group") {
+          if (
+            element.localName !== "section"
+            || element.getAttribute("role") !== "group"
+            || element.dataset.citryUiPart !== "command-palette-group"
+          ) return false;
+        } else if (
+          region.kind !== "command"
+          || element.getAttribute("role") !== "option"
+          || element.dataset.citryUiPart !== "command-palette-command"
+        ) return false;
+      }
+      for (const command of flattened) {
+        const element = optionByValue.get(command.value);
+        if (
+          !(element instanceof HTMLDivElement)
+          || element.id !== command.id
+          || element.getAttribute("role") !== "option"
+          || element.dataset.intent !== command.intent
+          || element.hasAttribute("data-disabled") !== command.disabled
+          || !runtimeAttributesValid(element)
+        ) return false;
+        for (const visual of element.querySelectorAll(
+          ':scope > [data-citry-command-palette-visual]',
+        )) {
+          if (
+            visual.getAttribute("aria-hidden") !== "true"
+            || !visual.hasAttribute("inert")
+            || !runtimeAttributesValid(visual, ["data-citry-command-palette-visual"])
+            || !visualValid(visual)
+          ) return false;
+        }
+      }
+      return true;
+    };
+    if (!structureValid()) {
+      abortPrevious();
+      console.error(
+        "[citry-ui] CCommandPalette received invalid owned anatomy; "
+          + "leaving the server fallback unchanged.",
+      );
+      return () => {};
+    }
+
+    const retained = Boolean(previous
+      && previous.host === host
+      && previous.dialog === dialog
+      && previous.surface === surface
+      && previous.title === title
+      && previous.closeButton === closeButton
+      && previous.input === input
+      && previous.listbox === listbox
+      && previous.documentOwner === host.ownerDocument
+      && previous.actualRoot === actualRoot);
+    if (previous && !retained) abortPrevious();
+    if (retained) delete host[handoffKey];
+
+    const owner = { active: true, token: Symbol(), transfer: null };
+    host[ownerKey] = owner;
+    const invalid = new Set();
+    const callbacks = { open: null, query: null, action: null };
+    const tasks = new Set();
+    const listeners = [];
+    let active = true;
+    let watcher = null;
+    let controller = null;
+    let collection = null;
+    let configuration = {
+      disabled: data.disabled,
+      loop: data.loop,
+      closeOnAction: data.closeOnAction,
+      size: data.size,
+    };
+    let internalOpen = retained ? previous.internalOpen : data.open;
+    let logicalOpen = retained ? previous.logicalOpen : false;
+    let openControlled = false;
+    let queryControlled = false;
+    let fallbackQuery = retained ? previous.fallbackQuery : data.query;
+    let query = retained ? previous.query : data.query;
+    let suppliedQuery = retained ? previous.suppliedQuery : null;
+    let activeValue = retained ? previous.activeValue : null;
+    let previousOrder = retained ? previous.previousOrder : flattened.map((item) => item.value);
+    let composing = retained ? previous.composing : false;
+    let compositionPending = false;
+    let compositionGeneration = 0;
+    let actionGeneration = 0;
+    let closeGeneration = 0;
+    let pendingControlledClose = null;
+    let formGuard = null;
+    let effectStarted = false;
+    const queue = (work) => {
+      const marker = {};
+      tasks.add(marker);
+      queueMicrotask(() => {
+        if (!tasks.delete(marker) || !active || host[ownerKey] !== owner) return;
+        work();
+      });
+    };
+    const report = (name) => {
+      if (invalid.has(name)) return;
+      invalid.add(name);
+      console.error(
+        `[citry-ui] CCommandPalette ${name} received an invalid client value; `
+          + "retaining the last valid value.",
+      );
+    };
+    const resolveCallback = (name, current) => {
+      const value = props[name];
+      if (value === undefined) {
+        invalid.delete(name);
+        return null;
+      }
+      if (value === null || typeof value === "function") {
+        invalid.delete(name);
+        return value;
+      }
+      report(name);
+      return current;
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined || props[name] === null
+        ? data[name]
+        : props[name];
+      if (typeof value === "boolean") {
+        invalid.delete(name);
+        return value;
+      }
+      report(name);
+      return fallback;
+    };
+    const resolveSize = () => {
+      const value = props.size === undefined || props.size === null ? data.size : props.size;
+      if (["sm", "md", "lg"].includes(value)) {
+        invalid.delete("size");
+        return value;
+      }
+      report("size");
+      return configuration.size;
+    };
+    const add = (target, type, listener, options) => {
+      target.addEventListener(type, listener, options);
+      listeners.push(() => target.removeEventListener(type, listener, options));
+    };
+    const commandFor = (value) => flattened.find((command) => command.value === value) ?? null;
+    const optionFor = (value) => optionByValue.get(value) ?? null;
+    const eligibleItems = () => flattened.map((command) => ({
+      value: command.value,
+      disabled: command.disabled,
+      visible: !optionFor(command.value).hidden,
+    }));
+    const removeFormGuard = () => {
+      if (!formGuard) return;
+      clearTimeout(formGuard.timer);
+      formGuard.form.removeEventListener("submit", formGuard.listener, true);
+      formGuard = null;
+    };
+    const armFormGuard = () => {
+      removeFormGuard();
+      const form = input.closest("form");
+      if (!(form instanceof HTMLFormElement)) return;
+      const generation = compositionGeneration;
+      const listener = (event) => {
+        if (
+          event.target === form
+          && generation === compositionGeneration
+          && dialogRuntime.deepActive(input.ownerDocument) === input
+        ) event.preventDefault();
+      };
+      form.addEventListener("submit", listener, true);
+      const timer = setTimeout(removeFormGuard, 0);
+      formGuard = { form, listener, timer };
+    };
+    const reflect = () => {
+      dialog.toggleAttribute("data-open", logicalOpen);
+      dialog.toggleAttribute("data-disabled", configuration.disabled);
+      dialog.dataset.size = configuration.size;
+      input.setAttribute("aria-expanded", logicalOpen ? "true" : "false");
+      input.disabled = configuration.disabled;
+      closeButton.disabled = configuration.disabled;
+      for (const activator of host.querySelectorAll(
+        ':scope > [data-citry-command-palette-trigger]',
+      )) {
+        activator.setAttribute("aria-expanded", logicalOpen ? "true" : "false");
+        if ("disabled" in activator) activator.disabled = configuration.disabled;
+        activator.toggleAttribute("data-disabled", configuration.disabled);
+      }
+    };
+    const filter = ({ preserveActive = true } = {}) => {
+      const needle = activeRuntime.canonicalText(query);
+      const visibleValues = new Set();
+      for (const command of flattened) {
+        const haystacks = [command.label, ...command.keywords]
+          .map((value) => activeRuntime.canonicalText(value));
+        const visible = needle === "" || haystacks.some((value) => value.includes(needle));
+        const option = optionFor(command.value);
+        option.hidden = !visible;
+        if (visible) visibleValues.add(command.value);
+      }
+      const contentVisibility = new Map();
+      for (let index = 0; index < data.regions.length; index += 1) {
+        const region = data.regions[index];
+        if (region.kind === "separator") continue;
+        const visible = region.commands.some((command) => visibleValues.has(command.value));
+        contentVisibility.set(index, visible);
+        regionElements[index].hidden = !visible;
+      }
+      let hasVisibleContent = false;
+      let pendingSeparator = null;
+      for (let index = 0; index < data.regions.length; index += 1) {
+        const region = data.regions[index];
+        if (region.kind === "separator") {
+          regionElements[index].hidden = true;
+          if (hasVisibleContent && pendingSeparator === null) pendingSeparator = index;
+          continue;
+        }
+        if (!contentVisibility.get(index)) continue;
+        if (hasVisibleContent && pendingSeparator !== null) {
+          regionElements[pendingSeparator].hidden = false;
+        }
+        hasVisibleContent = true;
+        pendingSeparator = null;
+      }
+      const items = eligibleItems();
+      activeValue = logicalOpen
+        ? collection.nearest(items, preserveActive ? activeValue : null, previousOrder)
+        : null;
+      collection.sync({
+        items,
+        activeValue,
+        open: logicalOpen,
+        optionFor,
+        activeAttribute: "data-active",
+      });
+      const hasResults = visibleValues.size > 0;
+      dialog.toggleAttribute("data-empty", !hasResults);
+      listbox.hidden = !hasResults;
+      empty.hidden = hasResults;
+      previousOrder = flattened.map((command) => command.value);
+    };
+    const notifyQuery = (next, reason, closeReason, source, controlled) => {
+      callbacks.query?.(next, { reason, closeReason, controlled, source });
+    };
+    const settleCloseQuery = (reason, source) => {
+      const generation = ++closeGeneration;
+      activeValue = null;
+      collection.sync({
+        items: eligibleItems(),
+        activeValue: null,
+        open: false,
+        optionFor,
+        activeAttribute: "data-active",
+      });
+      fallbackQuery = "";
+      if (queryControlled) {
+        if (query !== "") notifyQuery("", "close", reason, source, true);
+      } else if (query !== "") {
+        query = "";
+        input.value = "";
+        filter({ preserveActive: false });
+        notifyQuery("", "close", reason, source, false);
+      }
+      if (generation !== closeGeneration) return;
+    };
+    const commitVisibility = (nextOpen, reason, source, { notify = false } = {}) => {
+      const next = Boolean(nextOpen) && !configuration.disabled;
+      const wasOpen = logicalOpen;
+      controller.setOpen(next, source);
+      logicalOpen = controller.isOpen();
+      internalOpen = logicalOpen;
+      reflect();
+      filter({ preserveActive: wasOpen });
+      if (notify && wasOpen !== logicalOpen) {
+        callbacks.open?.(logicalOpen, { reason, controlled: false, source });
+      }
+      if (wasOpen && !logicalOpen) settleCloseQuery(reason, source);
+      return wasOpen !== logicalOpen;
+    };
+    const requestVisibility = (nextOpen, reason, source) => {
+      if (Boolean(nextOpen) === logicalOpen) return false;
+      if (openControlled) {
+        const closeRequest = nextOpen ? null : { reason, source };
+        pendingControlledClose = closeRequest;
+        callbacks.open?.(Boolean(nextOpen), { reason, controlled: true, source });
+        if (props.open === Boolean(nextOpen)) {
+          const wasOpen = logicalOpen;
+          controller.setOpen(Boolean(nextOpen) && !configuration.disabled, source);
+          logicalOpen = controller.isOpen();
+          reflect();
+          filter({ preserveActive: wasOpen });
+          if (wasOpen && !logicalOpen) settleCloseQuery(reason, source);
+        }
+        if (closeRequest) queue(() => {
+          if (
+            pendingControlledClose === closeRequest
+            && logicalOpen
+            && props.open === logicalOpen
+          ) pendingControlledClose = null;
+        });
+        return false;
+      }
+      return commitVisibility(nextOpen, reason, source, { notify: true });
+    };
+    const commitUserQuery = (requested, source) => {
+      if (requested === query) {
+        input.value = query;
+        return;
+      }
+      const selectionStart = input.selectionStart;
+      const selectionEnd = input.selectionEnd;
+      if (queryControlled) {
+        notifyQuery(requested, "input", null, input, true);
+        const supplied = props.query;
+        if (supplied === requested) {
+          query = requested;
+          fallbackQuery = requested;
+          suppliedQuery = requested;
+          filter();
+          return;
+        }
+        if (supplied === undefined || supplied === null) queryControlled = false;
+        input.value = query;
+        if (selectionStart !== null && selectionEnd !== null) {
+          input.setSelectionRange(
+            Math.min(selectionStart, query.length),
+            Math.min(selectionEnd, query.length),
+          );
+        }
+        filter();
+        return;
+      }
+      query = requested;
+      fallbackQuery = requested;
+      input.value = requested;
+      filter();
+      notifyQuery(requested, "input", null, source, false);
+    };
+    const act = (command, option, event, source) => {
+      if (
+        !active
+        || configuration.disabled
+        || command.disabled
+        || option.hidden
+        || !logicalOpen
+      ) return;
+      const generation = ++actionGeneration;
+      activeValue = command.value;
+      collection.sync({
+        items: eligibleItems(),
+        activeValue,
+        open: true,
+        optionFor,
+        activeAttribute: "data-active",
+      });
+      if (source === "click" && dialogRuntime.isFocusable(input)) {
+        input.focus({ preventScroll: true });
+      }
+      const close = command.closeOnAction ?? configuration.closeOnAction;
+      callbacks.action?.(command.value, {
+        query,
+        source,
+        item: option,
+        event,
+        closeOnAction: close,
+      });
+      if (
+        generation !== actionGeneration
+        || !active
+        || host[ownerKey] !== owner
+        || !option.isConnected
+      ) return;
+      if (close) requestVisibility(false, "action", option);
+    };
+
+    collection = activeRuntime.create({
+      input,
+      listbox,
+      idPrefix: `${data.listboxId}-command`,
+    });
+    collection.retain(flattened.map((command) => command.value));
+    input.disabled = configuration.disabled;
+    controller = dialogRuntime.create({
+      host,
+      dialog,
+      surface,
+      title,
+      closeButton,
+      signature: "CCommandPalette:command-input",
+      policy: () => ({ dismissible: true, closeOnEscape: true, closeOnOutside: true }),
+      initialFocus: () => input,
+      containmentFallback: () => input,
+      escapeBlocked: () => composing,
+      interceptDialogSubmit: () => false,
+      requestClose: (reason, source) => requestVisibility(false, reason, source),
+      nativeClosed: (reason, source) => {
+        const wasOpen = logicalOpen;
+        logicalOpen = false;
+        internalOpen = false;
+        reflect();
+        filter();
+        if (wasOpen) {
+          callbacks.open?.(false, { reason, controlled: openControlled, source });
+          settleCloseQuery(reason, source);
+        }
+      },
+      forceClose: (reason, source) => {
+        const wasOpen = logicalOpen;
+        logicalOpen = false;
+        internalOpen = false;
+        reflect();
+        filter();
+        if (wasOpen) {
+          callbacks.open?.(false, { reason, controlled: openControlled, source });
+          settleCloseQuery(reason, source);
+        }
+      },
+      failed: () => {
+        logicalOpen = false;
+        host.removeAttribute(readyAttribute);
+        reflect();
+        console.error("[citry-ui] CCommandPalette could not enter modal state.");
+      },
+      handoffAborted: () => {
+        logicalOpen = false;
+        host.removeAttribute(readyAttribute);
+        reflect();
+      },
+    });
+    if (retained) logicalOpen = controller.isOpen();
+
+    add(host, "click", (event) => {
+      const trigger = event.target.closest?.("[data-citry-command-palette-trigger]");
+      if (trigger && trigger.parentElement === host && !configuration.disabled) {
+        requestVisibility(true, "trigger", trigger);
+        return;
+      }
+      const close = event.target.closest?.("[data-citry-command-palette-close]");
+      if (close === closeButton && !configuration.disabled) {
+        requestVisibility(false, "close-button", closeButton);
+      }
+    });
+    add(input, "input", (event) => {
+      if (composing || event.isComposing || compositionPending) return;
+      commitUserQuery(input.value, input);
+    });
+    add(input, "compositionstart", () => {
+      composing = true;
+      compositionPending = false;
+      compositionGeneration += 1;
+    });
+    add(input, "compositionend", () => {
+      composing = false;
+      compositionPending = true;
+      const generation = ++compositionGeneration;
+      queue(() => {
+        if (generation !== compositionGeneration || !compositionPending) return;
+        compositionPending = false;
+        removeFormGuard();
+        commitUserQuery(input.value, input);
+      });
+    });
+    add(input, "keydown", (event) => {
+      const isComposition = composing || event.isComposing || event.keyCode === 229;
+      if (isComposition) {
+        if (event.key === "Enter") armFormGuard();
+        return;
+      }
+      if (configuration.disabled) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        activeValue = collection.move(
+          eligibleItems(),
+          activeValue,
+          event.key === "ArrowDown" ? 1 : -1,
+          configuration.loop,
+        );
+        collection.sync({
+          items: eligibleItems(),
+          activeValue,
+          open: logicalOpen,
+          optionFor,
+          activeAttribute: "data-active",
+        });
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const command = commandFor(activeValue);
+        const option = optionFor(activeValue);
+        if (command && option) act(command, option, event, "keyboard");
+      }
+    });
+    add(listbox, "pointerdown", (event) => {
+      const option = event.target.closest?.(
+        '[data-citry-ui-part="command-palette-command"]',
+      );
+      if (
+        optionByValue.get(option?.dataset.value) === option
+        && event.button === 0
+        && !event.altKey
+        && !event.ctrlKey
+        && !event.metaKey
+        && !event.shiftKey
+      ) event.preventDefault();
+    });
+    add(listbox, "pointermove", (event) => {
+      const option = event.target.closest?.(
+        '[data-citry-ui-part="command-palette-command"]',
+      );
+      const command = commandFor(option?.dataset.value);
+      if (!command || command.disabled || option.hidden) return;
+      activeValue = command.value;
+      collection.sync({
+        items: eligibleItems(),
+        activeValue,
+        open: logicalOpen,
+        optionFor,
+        activeAttribute: "data-active",
+      });
+    });
+    add(listbox, "click", (event) => {
+      if (
+        event.button !== 0
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || event.shiftKey
+      ) return;
+      const option = event.target.closest?.(
+        '[data-citry-ui-part="command-palette-command"]',
+      );
+      const command = commandFor(option?.dataset.value);
+      if (command && optionByValue.get(command.value) === option) {
+        act(command, option, event, "click");
+      }
+    });
+    add(input, "blur", removeFormGuard);
+
+    const registration = {
+      notify() {
+        if (!active) return;
+        if (!host.isConnected) {
+          teardown(false);
+          return;
+        }
+        if (host.ownerDocument !== dialog.ownerDocument) {
+          teardown(true);
+          return;
+        }
+        const nextRoot = host.getRootNode();
+        if (nextRoot !== actualRoot) {
+          const supported = nextRoot === documentOwner
+            || (nextRoot instanceof ShadowRoot
+              && nextRoot.mode === "open"
+              && nextRoot.host.ownerDocument === documentOwner
+              && nextRoot.host.shadowRoot === nextRoot);
+          if (!supported || dialog.getRootNode() !== nextRoot || !controller.refreshRoot()) {
+            teardown(true);
+            return;
+          }
+          actualRoot = nextRoot;
+          watcher.refresh();
+        }
+        if (!structureValid(true)) {
+          teardown(true);
+          return;
+        }
+        watcher.refresh();
+      },
+    };
+    watcher = watchPalette(host, registration);
+
+    effect(() => {
+      const priorDisabled = configuration.disabled;
+      configuration = {
+        disabled: resolveBoolean("disabled", configuration.disabled),
+        loop: resolveBoolean("loop", configuration.loop),
+        closeOnAction: resolveBoolean("closeOnAction", configuration.closeOnAction),
+        size: resolveSize(),
+      };
+      callbacks.open = resolveCallback("onOpenChange", callbacks.open);
+      callbacks.query = resolveCallback("onQueryChange", callbacks.query);
+      callbacks.action = resolveCallback("onAction", callbacks.action);
+
+      const nextQuery = props.query;
+      if (nextQuery === undefined || nextQuery === null) {
+        if (queryControlled) query = fallbackQuery;
+        queryControlled = false;
+        suppliedQuery = null;
+        invalid.delete("query");
+      } else if (typeof nextQuery === "string") {
+        queryControlled = true;
+        if (nextQuery !== suppliedQuery) {
+          query = nextQuery;
+          fallbackQuery = nextQuery;
+          suppliedQuery = nextQuery;
+        }
+        invalid.delete("query");
+      } else {
+        report("query");
+        if (queryControlled) query = fallbackQuery;
+        queryControlled = false;
+        suppliedQuery = null;
+      }
+      input.value = query;
+
+      const nextOpen = props.open;
+      let ownerOpen = internalOpen;
+      if (nextOpen === undefined || nextOpen === null) {
+        if (openControlled) internalOpen = logicalOpen;
+        openControlled = false;
+        ownerOpen = internalOpen;
+        pendingControlledClose = null;
+        invalid.delete("open");
+      } else if (typeof nextOpen === "boolean") {
+        openControlled = true;
+        ownerOpen = nextOpen;
+        invalid.delete("open");
+      } else {
+        report("open");
+        if (openControlled) internalOpen = logicalOpen;
+        openControlled = false;
+        ownerOpen = internalOpen;
+        pendingControlledClose = null;
+      }
+      if (configuration.disabled && logicalOpen) {
+        const wasControlled = openControlled;
+        controller.setOpen(false, dialog);
+        logicalOpen = false;
+        internalOpen = false;
+        callbacks.open?.(false, {
+          reason: "disabled",
+          controlled: wasControlled,
+          source: dialog,
+        });
+        settleCloseQuery("disabled", dialog);
+      } else if (!configuration.disabled) {
+        const expected = Boolean(ownerOpen);
+        if (expected !== logicalOpen) {
+          const wasOpen = logicalOpen;
+          controller.setOpen(expected, null);
+          logicalOpen = controller.isOpen();
+          internalOpen = logicalOpen;
+          if (wasOpen && !logicalOpen) {
+            const close = pendingControlledClose ?? { reason: "owner", source: null };
+            settleCloseQuery(close.reason, close.source);
+          }
+        }
+      }
+      if (!configuration.disabled && priorDisabled && openControlled && props.open === true) {
+        controller.setOpen(true, null);
+        logicalOpen = controller.isOpen();
+      }
+      pendingControlledClose = logicalOpen ? pendingControlledClose : null;
+      reflect();
+      filter({ preserveActive: effectStarted });
+      effectStarted = true;
+    });
+
+    const teardown = (diagnose = false) => {
+      if (!active) return;
+      active = false;
+      owner.active = false;
+      actionGeneration += 1;
+      compositionGeneration += 1;
+      closeGeneration += 1;
+      removeFormGuard();
+      tasks.clear();
+      watcher?.cleanup();
+      listeners.splice(0).forEach((remove) => remove());
+      const canHandoff = host.isConnected
+        && host.ownerDocument === documentOwner
+        && host.getRootNode() === actualRoot
+        && dialog.isConnected
+        && dialog.parentElement === host
+        && surface.parentElement === dialog
+        && title.isConnected
+        && closeButton.isConnected
+        && input.isConnected
+        && listbox.isConnected;
+      const handedOff = controller.cleanup({ handoff: canHandoff });
+      if (host[ownerKey] === owner) delete host[ownerKey];
+      if (handedOff) {
+        const record = {
+          host,
+          dialog,
+          surface,
+          title,
+          closeButton,
+          input,
+          listbox,
+          documentOwner: host.ownerDocument,
+          actualRoot: host.getRootNode(),
+          internalOpen,
+          logicalOpen,
+          query,
+          fallbackQuery,
+          suppliedQuery,
+          activeValue,
+          previousOrder,
+          composing,
+          collection,
+          timer: null,
+          abort() {
+            dialogRuntime.abortHandoff(dialog);
+            collection.cleanup();
+            host.removeAttribute(readyAttribute);
+            dialog.removeAttribute("data-open");
+            input.removeAttribute("aria-activedescendant");
+          },
+        };
+        host[handoffKey] = record;
+        record.timer = setTimeout(() => {
+          if (host[handoffKey] !== record || host[ownerKey]?.active) return;
+          record.abort();
+          delete host[handoffKey];
+        }, 1000);
+      } else {
+        collection.cleanup();
+        host.removeAttribute(readyAttribute);
+        dialog.removeAttribute("data-open");
+      }
+      if (diagnose) {
+        console.error(
+          "[citry-ui] CCommandPalette lost its owned anatomy; component behavior was removed.",
+        );
+      }
+    };
+
+    owner.transfer = () => teardown(false);
+
+    reflect();
+    filter({ preserveActive: retained });
+    input.disabled = configuration.disabled;
+    host.setAttribute(readyAttribute, "");
+
+    return () => teardown(false);
+  },
+});
+/* citry-ui:command-palette-attribution:initializer:end */
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCommandPalette_28a050", "c96a24f73f34ea2fb674dcb2d7127175", atob("eyJvcGVuIjp0cnVlLCJxdWVyeSI6IiIsImRpc2FibGVkIjpmYWxzZSwibG9vcCI6dHJ1ZSwiY2xvc2VPbkFjdGlvbiI6dHJ1ZSwic2l6ZSI6Im1kIiwicmVnaW9ucyI6W3sia2luZCI6Imdyb3VwIiwiaW5kZXgiOjAsImNvbW1hbmRzIjpbeyJ2YWx1ZSI6InByb2plY3Qtb3ZlcnZpZXciLCJsYWJlbCI6Ik9wZW4gcHJvamVjdCBvdmVydmlldyIsImRlc2NyaXB0aW9uIjpudWxsLCJrZXl3b3JkcyI6W10sInNob3J0Y3V0IjpudWxsLCJkaXNhYmxlZCI6ZmFsc2UsImNsb3NlT25BY3Rpb24iOm51bGwsImludGVudCI6ImRlZmF1bHQiLCJpZCI6ImN1aS1jb21tYW5kLXBhbGV0dGUtY2lwZmh2bjNlLWNvbW1hbmQtMC1kNWJlN2E0YzE4NjEifSx7InZhbHVlIjoicHJvamVjdC1maWxlcyIsImxhYmVsIjoiQnJvd3NlIHByb2plY3QgZmlsZXMiLCJkZXNjcmlwdGlvbiI6bnVsbCwia2V5d29yZHMiOltdLCJzaG9ydGN1dCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJjbG9zZU9uQWN0aW9uIjpudWxsLCJpbnRlbnQiOiJkZWZhdWx0IiwiaWQiOiJjdWktY29tbWFuZC1wYWxldHRlLWNpcGZodm4zZS1jb21tYW5kLTEtMjI5M2E1YjNmNmQ0In1dfSx7ImtpbmQiOiJzZXBhcmF0b3IiLCJpbmRleCI6MSwiY29tbWFuZHMiOltdfSx7ImtpbmQiOiJncm91cCIsImluZGV4IjoyLCJjb21tYW5kcyI6W3sidmFsdWUiOiJzYXZlLWRyYWZ0IiwibGFiZWwiOiJTYXZlIGRyYWZ0IiwiZGVzY3JpcHRpb24iOm51bGwsImtleXdvcmRzIjpbXSwic2hvcnRjdXQiOiJDdHJsIFMiLCJkaXNhYmxlZCI6ZmFsc2UsImNsb3NlT25BY3Rpb24iOm51bGwsImludGVudCI6ImRlZmF1bHQiLCJpZCI6ImN1aS1jb21tYW5kLXBhbGV0dGUtY2lwZmh2bjNlLWNvbW1hbmQtMi0wMDJiODdhMmY3Y2YifSx7InZhbHVlIjoiZGVsZXRlLWRyYWZ0IiwibGFiZWwiOiJEZWxldGUgZHJhZnQiLCJkZXNjcmlwdGlvbiI6Ik1vdmVzIHRoaXMgZHJhZnQgdG8gVHJhc2giLCJrZXl3b3JkcyI6W10sInNob3J0Y3V0IjpudWxsLCJkaXNhYmxlZCI6ZmFsc2UsImNsb3NlT25BY3Rpb24iOm51bGwsImludGVudCI6ImRhbmdlciIsImlkIjoiY3VpLWNvbW1hbmQtcGFsZXR0ZS1jaXBmaHZuM2UtY29tbWFuZC0zLTliY2UzZmY0YTQ4NSJ9XX1dLCJmaW5nZXJwcmludCI6ImFhYzY2NjEzY2IzM2E1YTdjNmY3MmU4NmE5OTUyNzBmMTY3ZDU3MWU0ZTQzNDllYzA0ZDk2ODEzMjIzNDBlNmMiLCJoYXNBY3RpdmF0b3IiOmZhbHNlLCJkaWFsb2dJZCI6ImN1aS1jb21tYW5kLXBhbGV0dGUtY2lwZmh2bjNlIiwidGl0bGVJZCI6ImN1aS1jb21tYW5kLXBhbGV0dGUtY2lwZmh2bjNlLXRpdGxlIiwiaW5wdXRJZCI6ImN1aS1jb21tYW5kLXBhbGV0dGUtY2lwZmh2bjNlLWlucHV0IiwibGlzdGJveElkIjoiY3VpLWNvbW1hbmQtcGFsZXR0ZS1jaXBmaHZuM2UtbGlzdGJveCJ9"));
+})();</script></body></html><!--citry:g1:1b6aed97:0:i:1:e-->

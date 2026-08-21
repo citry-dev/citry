@@ -1,0 +1,264 @@
+schema_version: 1
+family: data-grid
+
+components:
+  - CDataGrid
+
+inputs:
+  - id: cdata-grid-server-inputs
+    component: CDataGrid
+    channel: server
+    entries:
+      - {id: columns, name: columns, type: 'Sequence[CDataGridColumn]', default: {kind: required}, effect: Defines the nonempty ordered structural Column schema.}
+      - {id: rows, name: rows, type: 'Sequence[CDataGridRow]', default: {kind: required}, effect: Supplies a complete collection or one contiguous server window.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the required accessible grid name.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets root identity and bases stable Header Row and Cell IDs.}
+      - {id: state, name: state, type: {display: CDataGridState, interfaces: [CDataGridState]}, default: {kind: literal, value: ready}, effect: Selects ready loading or error output; zero ready Rows become empty.}
+      - {id: sort, name: sort, type: 'Sequence[CDataGridSort]', default: {kind: literal, value: '()'}, effect: Supplies the server-authoritative ordered sort model.}
+      - {id: multi-sort, name: multi_sort, type: bool, default: {kind: literal, value: true}, effect: Allows Shift-modified sort requests to preserve other Columns.}
+      - {id: selection, name: selection, type: {display: CDataGridSelection, interfaces: [CDataGridSelection]}, default: {kind: literal, value: none}, effect: Selects no single or multiple supplied-Row selection.}
+      - {id: selected, name: selected, type: 'Sequence[str]', default: {kind: literal, value: '()'}, effect: Supplies unique initially selected Row keys.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Blocks sorting selection activation and navigation.}
+      - {id: total-count, name: total_count, type: 'int | None', default: {kind: literal, value: null}, effect: Sets logical Row count; omission means the complete supplied collection.}
+      - {id: start-index, name: start_index, type: int, default: {kind: literal, value: 0}, effect: Sets the zero-based logical index of the first supplied Row.}
+      - {id: row-height, name: row_height, type: int, default: {kind: literal, value: 48}, effect: Sets the fixed Row stride in CSS pixels.}
+      - {id: viewport-size, name: viewport_size, type: int, default: {kind: literal, value: 400}, effect: Sets initial scroll-viewport block size in CSS pixels.}
+      - {id: overscan, name: overscan, type: int, default: {kind: literal, value: 3}, effect: Adds 0 through 100 Rows around each desired range.}
+      - {id: initial-index, name: initial_index, type: int, default: {kind: literal, value: 0}, effect: Performs one initial scroll to a clamped logical Row.}
+      - {id: density, name: density, type: {display: CDataGridDensity, interfaces: [CDataGridDensity]}, default: {kind: literal, value: comfortable}, effect: Selects compact comfortable or spacious Row presentation.}
+      - {id: striped, name: striped, type: bool, default: {kind: literal, value: false}, effect: Adds alternate supplied-Row surfaces.}
+      - {id: column-borders, name: column_borders, type: bool, default: {kind: literal, value: false}, effect: Shows boundaries between Columns.}
+      - {id: sticky-header, name: sticky_header, type: bool, default: {kind: literal, value: true}, effect: Keeps Headers at the viewport block start.}
+      - {id: loading-label, name: loading_label, type: str, default: {kind: literal, value: Loading data...}, effect: Overrides the localized loading state.}
+      - {id: empty-label, name: empty_label, type: str, default: {kind: literal, value: No data.}, effect: Overrides the localized empty state.}
+      - {id: error-label, name: error_label, type: str, default: {kind: literal, value: Unable to load data.}, effect: Overrides the localized error state.}
+      - {id: sort-ascending-label, name: sort_ascending_label, type: str, default: {kind: literal, value: '{column} sorted ascending'}, effect: Overrides ascending-sort announcements and must retain column.}
+      - {id: sort-descending-label, name: sort_descending_label, type: str, default: {kind: literal, value: '{column} sorted descending'}, effect: Overrides descending-sort announcements and must retain column.}
+      - {id: sort-cleared-label, name: sort_cleared_label, type: str, default: {kind: literal, value: 'Sort cleared for {column}'}, effect: Overrides cleared-sort announcements and must retain column.}
+      - {id: selected-one-label, name: selected_one_label, type: str, default: {kind: literal, value: One row selected}, effect: Overrides the one-Row selection announcement.}
+      - {id: selected-label, name: selected_label, type: str, default: {kind: literal, value: '{count} rows selected'}, effect: Overrides multi-Row selection announcements and must retain count.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles merged with owned geometry variables.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing state or runtime ownership.}
+      - {id: table-attrs, name: table_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed native table attributes without replacing Grid semantics or positions.}
+  - id: cdata-grid-client-inputs
+    component: CDataGrid
+    channel: client
+    entries:
+      - {id: sort, name: sort, type: 'Array<{key: string, direction: "asc" | "desc"}> | null', omitted: Uses the server sort model., effect: Controls accepted sort indicators while supplied.}
+      - {id: selected, name: selected, type: 'string[] | null', omitted: Omission or null releases control to committed selection., effect: Controls unique supplied-Row selection while supplied.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables owned interaction.}
+      - {id: overscan, name: overscan, type: number, omitted: Uses the server value., effect: Reactively changes desired range buffering.}
+      - {id: on-sort-change, name: onSortChange, type: function, omitted: Sort activation emits no callback., effect: Receives request-only sort changes.}
+      - {id: on-selection-change, name: onSelectionChange, type: function, omitted: Selection still commits when uncontrolled., effect: Receives selection requests or commits.}
+      - {id: on-range-change, name: onRangeChange, type: function, omitted: Uncovered ranges only reflect pending state., effect: Receives animation-frame-coalesced desired ranges.}
+      - {id: on-cell-activate, name: onCellActivate, type: function, omitted: Enter and double-click have no activation callback., effect: Receives enabled Cell activation.}
+
+slots:
+  - id: cdata-grid-slots
+    component: CDataGrid
+    entries:
+      - {id: caption, name: caption, required: false, data: {display: '{}', interfaces: [CDataGridCaptionSlotData]}, fallback: Omitted.}
+      - {id: toolbar, name: toolbar, required: false, data: {display: '{}', interfaces: [CDataGridToolbarSlotData]}, fallback: Omitted before the viewport.}
+      - {id: header, name: header, required: false, data: {display: '{column, column_index, sort_direction, sort_priority}', interfaces: [CDataGridHeaderSlotData]}, fallback: Escaped Column label plus owned sort indicator.}
+      - {id: cell, name: cell, required: false, data: {display: '{row, column, cell, row_index, column_index, selected}', interfaces: [CDataGridCellSlotData]}, fallback: Escaped or component-like Cell value.}
+      - {id: loading, name: loading, required: false, data: {display: '{}', interfaces: [CDataGridLoadingSlotData]}, fallback: Localized loading label.}
+      - {id: empty, name: empty, required: false, data: {display: '{}', interfaces: [CDataGridEmptySlotData]}, fallback: Localized empty label.}
+      - {id: error, name: error, required: false, data: {display: '{}', interfaces: [CDataGridErrorSlotData]}, fallback: Localized error label.}
+
+events:
+  - id: cdata-grid-events
+    component: CDataGrid
+    entries:
+      - {id: sort-change, name: onSortChange, signature: {display: '(sort: sort[], detail: CDataGridSortChangeDetail) => void', interfaces: [CDataGridSortChangeDetail]}, trigger: Click or Enter activates an enabled sortable Header., detail: {display: '{sort, previousSort, columnKey, direction, source, sourceEvent}', interfaces: [CDataGridSortChangeDetail]}, behavior: Always request-only; DOM Rows never reorder locally.}
+      - {id: selection-change, name: onSelectionChange, signature: {display: '(selected: string[], detail: CDataGridSelectionChangeDetail) => void', interfaces: [CDataGridSelectionChangeDetail]}, trigger: Pointer or Shift+Space requests a supplied-Row selection change., detail: {display: '{selected, previousSelected, changed, rowKey, selectedRow, controlled, source, sourceEvent}', interfaces: [CDataGridSelectionChangeDetail]}, behavior: Uncontrolled state commits first; controlled state waits for acceptance.}
+      - {id: range-change, name: onRangeChange, signature: {display: '(detail: CDataGridRangeChangeDetail) => void', interfaces: [CDataGridRangeChangeDetail]}, trigger: Scroll resize configuration or navigation exposes an uncovered desired range., detail: {display: '{startIndex, endIndex, visibleStartIndex, visibleEndIndex, requestId, reason, sourceEvent}', interfaces: [CDataGridRangeChangeDetail]}, behavior: Coalesced per animation frame with a monotonic request ID.}
+      - {id: cell-activate, name: onCellActivate, signature: {display: '(detail: CDataGridCellActivateDetail) => void', interfaces: [CDataGridCellActivateDetail]}, trigger: Enter or double-click activates an enabled body Cell., detail: {display: '{rowKey, columnKey, rowIndex, columnIndex, source, sourceEvent}', interfaces: [CDataGridCellActivateDetail]}, behavior: Does not enter edit mode or mutate data.}
+
+methods: []
+
+css:
+  - id: cdata-grid-css-variables
+    component: CDataGrid
+    entries:
+      - {id: viewport-size, name: --cui-data-grid-viewport-size, type: length, purpose: Maximum scroll-viewport block size., default: Server viewport_size or 400px}
+      - {id: row-height, name: --cui-data-grid-row-height, type: length, purpose: Fixed ready-Row and Cell block size., default: Server row_height or 48px}
+      - {id: min-width, name: --cui-data-grid-min-width, type: length, purpose: Horizontal overflow threshold., default: Sum of Column widths}
+      - {id: background, name: --cui-data-grid-background, type: color, purpose: Grid surface., default: Canvas}
+      - {id: foreground, name: --cui-data-grid-foreground, type: color, purpose: Primary text., default: CanvasText}
+      - {id: muted, name: --cui-data-grid-muted, type: color, purpose: State and secondary text., default: Accessible CanvasText mix}
+      - {id: border-color, name: --cui-data-grid-border-color, type: color, purpose: Row Column and viewport borders., default: Adaptive neutral}
+      - {id: header-background, name: --cui-data-grid-header-background, type: color, purpose: Header surface., default: Adaptive neutral}
+      - {id: selected-background, name: --cui-data-grid-selected-background, type: color, purpose: Selected Row surface., default: Adaptive blue}
+      - {id: striped-background, name: --cui-data-grid-striped-background, type: color, purpose: Alternate Row surface., default: Subtle neutral}
+      - {id: hover-background, name: --cui-data-grid-hover-background, type: color, purpose: Pointer Row feedback., default: Subtle Highlight mix}
+      - {id: focus-color, name: --cui-data-grid-focus-color, type: color, purpose: Active Header and Cell outline., default: Highlight}
+      - {id: radius, name: --cui-data-grid-radius, type: length, purpose: Viewport corners., default: 0.625rem}
+
+attributes:
+  - id: cdata-grid-attributes
+    component: CDataGrid
+    entries:
+      - {id: role-grid, name: role, element: Native table, type: grid, meaning: Exposes one composite data grid.}
+      - {id: aria-rowcount, name: aria-rowcount, element: Native table, type: integer, meaning: Reports logical Rows plus the Header Row.}
+      - {id: aria-colcount, name: aria-colcount, element: Native table, type: integer, meaning: Reports logical Column count.}
+      - {id: aria-rowindex, name: aria-rowindex, element: Header and supplied Rows, type: positive integer, meaning: Reports exact one-based logical position.}
+      - {id: aria-colindex, name: aria-colindex, element: Headers and Cells, type: positive integer, meaning: Reports exact one-based Column position.}
+      - {id: aria-sort, name: aria-sort, element: Sorted Header, type: ascending | descending | absent, meaning: Reflects accepted sort direction.}
+      - {id: aria-selected, name: aria-selected, element: Supplied Row, type: boolean-string | absent, meaning: Reflects accepted selection when selection is enabled.}
+      - {id: data-row-key, name: data-row-key, element: Supplied Row and Cells, type: string, meaning: Exposes stable Row identity.}
+      - {id: data-column-key, name: data-column-key, element: Header and Cells, type: string, meaning: Exposes stable Column identity.}
+      - {id: data-row-index, name: data-row-index, element: Supplied Row and Cells, type: nonnegative integer, meaning: Exposes zero-based logical Row position for owned navigation.}
+      - {id: data-column-index, name: data-column-index, element: Header and Cells, type: nonnegative integer, meaning: Exposes zero-based Column position for owned navigation.}
+      - {id: data-selected, name: data-selected, element: Supplied Row, type: present | absent, meaning: Reflects accepted selection for styling.}
+      - {id: data-pending, name: data-pending, element: Root, type: present | absent, meaning: Marks a desired range outside the supplied window.}
+      - {id: data-state, name: data-state, element: Root, type: ready | loading | empty | error, meaning: Reflects settled server output state.}
+      - {id: tabindex, name: tabindex, element: Viewport Header or Cell, type: '0 | -1', meaning: Maintains one composite page Tab stop.}
+
+selectors:
+  - id: cdata-grid-selectors
+    component: CDataGrid
+    entries:
+      - {id: data-grid, selector: '[data-citry-ui-part="data-grid"]', element: Root div, purpose: State reflections attrs and theme destination.}
+      - {id: toolbar, selector: '[data-citry-ui-part="toolbar"]', element: Optional toolbar wrapper, purpose: Application controls before the viewport.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Visually hidden polite live region, purpose: Accepted sort and selection announcements.}
+      - {id: viewport, selector: '[data-citry-ui-part="viewport"]', element: Scroll div, purpose: Horizontal and vertical scroll ownership.}
+      - {id: table, selector: '[data-citry-ui-part="table"]', element: Native table Grid, purpose: Semantic and keyboard owner.}
+      - {id: caption, selector: '[data-citry-ui-part="caption"]', element: Optional native caption, purpose: Supplementary visible description.}
+      - {id: header, selector: '[data-citry-ui-part="header"]', element: thead, purpose: Header Row group.}
+      - {id: header-row, selector: '[data-citry-ui-part="header-row"]', element: Header tr, purpose: Exact Header Row position.}
+      - {id: header-cell, selector: '[data-citry-ui-part="header-cell"]', element: th, purpose: Navigable sortable Column Header.}
+      - {id: sort-indicator, selector: '[data-citry-ui-part="sort-indicator"]', element: Decorative span, purpose: Accepted sort direction glyph.}
+      - {id: body, selector: '[data-citry-ui-part="body"]', element: tbody, purpose: Supplied Rows spacers and state output.}
+      - {id: row, selector: '[data-citry-ui-part="row"]', element: Supplied tr, purpose: Stable selection and Row customization.}
+      - {id: cell, selector: '[data-citry-ui-part="cell"]', element: Supplied td, purpose: Navigable application Cell.}
+      - {id: loading, selector: '[data-citry-ui-part="loading"]', element: Loading td, purpose: Localized loading output.}
+      - {id: empty, selector: '[data-citry-ui-part="empty"]', element: Empty td, purpose: Localized empty output.}
+      - {id: error, selector: '[data-citry-ui-part="error"]', element: Error td, purpose: Localized failure output.}
+      - {id: state-row, selector: '[data-citry-ui-part="state-row"]', element: State tr, purpose: Loading empty or error output.}
+      - {id: spacer-row, selector: '[data-citry-ui-part="spacer-row"]', element: Presentation tr, purpose: Represents omitted fixed-height Rows.}
+
+interfaces:
+  - id: cdata-grid-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: state, name: CDataGridState, definition: 'Literal["ready", "loading", "error"]'}
+      - {id: density, name: CDataGridDensity, definition: 'Literal["comfortable", "compact", "spacious"]'}
+      - {id: selection, name: CDataGridSelection, definition: 'Literal["none", "single", "multiple"]'}
+      - {id: align, name: CDataGridAlign, definition: 'Literal["start", "center", "end"]'}
+      - {id: sort-direction, name: CDataGridSortDirection, definition: 'Literal["asc", "desc"]'}
+      - {id: sort-source, name: CDataGridSortSource, definition: 'Literal["pointer", "keyboard", "client"]'}
+      - {id: selection-source, name: CDataGridSelectionSource, definition: 'Literal["pointer", "keyboard", "client"]'}
+      - {id: range-reason, name: CDataGridRangeReason, definition: 'Literal["initial", "scroll", "resize", "configuration", "navigation"]'}
+  - id: cdata-grid-column
+    kind: record
+    name: CDataGridColumn
+    entries:
+      - {id: key, name: key, type: str, meaning: Unique stable Column identity and Row mapping key.}
+      - {id: label, name: label, type: str, meaning: Application-localized accessible Header label.}
+      - {id: sortable, name: sortable, type: bool, meaning: Whether Header activation can request sorting.}
+      - {id: width, name: width, type: int, meaning: Initial 40 through 2000 CSS-pixel Column width.}
+      - {id: align, name: align, type: {display: CDataGridAlign, interfaces: [CDataGridAlign]}, meaning: Logical Cell text alignment.}
+      - {id: header-attrs, name: header_attrs, type: 'Mapping[str, object] | None', meaning: Copied allowed Header attributes.}
+      - {id: cell-attrs, name: cell_attrs, type: 'Mapping[str, object] | None', meaning: Copied allowed attributes merged into every Cell in the Column.}
+  - id: cdata-grid-cell
+    kind: record
+    name: CDataGridCell
+    entries:
+      - {id: value, name: value, type: object, meaning: Escaped or component-like server Cell output.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', meaning: Copied allowed attributes merged after Column Cell attributes.}
+  - id: cdata-grid-row
+    kind: record
+    name: CDataGridRow
+    entries:
+      - {id: key, name: key, type: str, meaning: Unique stable supplied-Row identity.}
+      - {id: cells, name: cells, type: 'Mapping[str, object | CDataGridCell]', meaning: Exact one-to-one mapping for every Column key.}
+      - {id: disabled, name: disabled, type: bool, meaning: Blocks selection and activation for this Row.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', meaning: Copied allowed Row attributes.}
+  - id: cdata-grid-sort
+    kind: record
+    name: CDataGridSort
+    entries:
+      - {id: key, name: key, type: str, meaning: Known sortable Column key.}
+      - {id: direction, name: direction, type: {display: CDataGridSortDirection, interfaces: [CDataGridSortDirection]}, meaning: Accepted ascending or descending direction.}
+  - {id: cdata-grid-caption-slot-data, kind: record, name: CDataGridCaptionSlotData, entries: []}
+  - {id: cdata-grid-toolbar-slot-data, kind: record, name: CDataGridToolbarSlotData, entries: []}
+  - id: cdata-grid-header-slot-data
+    kind: record
+    name: CDataGridHeaderSlotData
+    entries:
+      - {id: column, name: column, type: CDataGridColumn, meaning: Current Column record.}
+      - {id: column-index, name: column_index, type: int, meaning: Zero-based Column position.}
+      - {id: sort-direction, name: sort_direction, type: 'CDataGridSortDirection | None', meaning: Accepted direction or none.}
+      - {id: sort-priority, name: sort_priority, type: 'int | None', meaning: One-based multi-sort priority or none.}
+  - id: cdata-grid-cell-slot-data
+    kind: record
+    name: CDataGridCellSlotData
+    entries:
+      - {id: row, name: row, type: CDataGridRow, meaning: Current Row record.}
+      - {id: column, name: column, type: CDataGridColumn, meaning: Current Column record.}
+      - {id: cell, name: cell, type: CDataGridCell, meaning: Normalized Cell record.}
+      - {id: row-index, name: row_index, type: int, meaning: Zero-based logical Row position.}
+      - {id: column-index, name: column_index, type: int, meaning: Zero-based Column position.}
+      - {id: selected, name: selected, type: bool, meaning: Initial accepted supplied-Row selection.}
+  - {id: cdata-grid-loading-slot-data, kind: record, name: CDataGridLoadingSlotData, entries: []}
+  - {id: cdata-grid-empty-slot-data, kind: record, name: CDataGridEmptySlotData, entries: []}
+  - {id: cdata-grid-error-slot-data, kind: record, name: CDataGridErrorSlotData, entries: []}
+  - id: cdata-grid-sort-change-detail
+    kind: record
+    name: CDataGridSortChangeDetail
+    entries:
+      - {id: sort, name: sort, type: 'list[dict[str, str]]', meaning: Requested ordered sort model.}
+      - {id: previous-sort, name: previousSort, type: 'list[dict[str, str]]', meaning: Accepted model before the request.}
+      - {id: column-key, name: columnKey, type: str, meaning: Activated Column key.}
+      - {id: direction, name: direction, type: 'CDataGridSortDirection | None', meaning: Requested direction or none when cleared.}
+      - {id: source, name: source, type: CDataGridSortSource, meaning: Pointer keyboard or client cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | None', meaning: Native source Event.}
+  - id: cdata-grid-selection-change-detail
+    kind: record
+    name: CDataGridSelectionChangeDetail
+    entries:
+      - {id: selected, name: selected, type: 'list[str]', meaning: Requested or committed selected supplied-Row keys.}
+      - {id: previous-selected, name: previousSelected, type: 'list[str]', meaning: Accepted selection before the request.}
+      - {id: changed, name: changed, type: 'list[str]', meaning: Keys whose selection changed.}
+      - {id: row-key, name: rowKey, type: 'str | None', meaning: Directly activated Row key.}
+      - {id: selected-row, name: selectedRow, type: 'bool | None', meaning: Requested state of the directly activated Row.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client selected owns the model.}
+      - {id: source, name: source, type: CDataGridSelectionSource, meaning: Pointer keyboard or client cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | None', meaning: Native source Event.}
+  - id: cdata-grid-range-change-detail
+    kind: record
+    name: CDataGridRangeChangeDetail
+    entries:
+      - {id: start-index, name: startIndex, type: int, meaning: Desired inclusive logical start.}
+      - {id: end-index, name: endIndex, type: int, meaning: Desired exclusive logical end.}
+      - {id: visible-start-index, name: visibleStartIndex, type: int, meaning: Estimated visible inclusive start.}
+      - {id: visible-end-index, name: visibleEndIndex, type: int, meaning: Estimated visible exclusive end.}
+      - {id: request-id, name: requestId, type: int, meaning: Monotonic instance-local request ID.}
+      - {id: reason, name: reason, type: CDataGridRangeReason, meaning: Initial scroll resize configuration or navigation cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | None', meaning: Native source Event when available.}
+  - id: cdata-grid-cell-activate-detail
+    kind: record
+    name: CDataGridCellActivateDetail
+    entries:
+      - {id: row-key, name: rowKey, type: str, meaning: Activated Row key.}
+      - {id: column-key, name: columnKey, type: str, meaning: Activated Column key.}
+      - {id: row-index, name: rowIndex, type: int, meaning: Zero-based logical Row position.}
+      - {id: column-index, name: columnIndex, type: int, meaning: Zero-based Column position.}
+      - {id: source, name: source, type: keyboard | pointer, meaning: Activation cause.}
+      - {id: source-event, name: sourceEvent, type: object, meaning: Native source Event.}
+
+translations:
+  - id: cdata-grid-translations
+    component: CDataGrid
+    entries:
+      - {id: loading, key: citry-ui-data-grid-loading, purpose: Labels the loading state., variables: None., override: '`loading_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: empty, key: citry-ui-data-grid-empty, purpose: Labels the empty state., variables: None., override: '`empty_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: error, key: citry-ui-data-grid-error, purpose: Labels the error state., variables: None., override: '`error_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: sort-ascending, key: citry-ui-data-grid-sort-ascending, purpose: Announces accepted ascending sorting., variables: 'column: str', override: '`sort_ascending_label` with `{column}`', updates: One-shot `i18n.tr()` writes the live region after acceptance.}
+      - {id: sort-descending, key: citry-ui-data-grid-sort-descending, purpose: Announces accepted descending sorting., variables: 'column: str', override: '`sort_descending_label` with `{column}`', updates: One-shot `i18n.tr()` writes the live region after acceptance.}
+      - {id: sort-cleared, key: citry-ui-data-grid-sort-cleared, purpose: Announces accepted cleared sorting., variables: 'column: str', override: '`sort_cleared_label` with `{column}`', updates: One-shot `i18n.tr()` writes the live region after acceptance.}
+      - {id: selected-one, key: citry-ui-data-grid-selected-one, purpose: Announces one selected supplied Row., variables: None., override: '`selected_one_label`', updates: One-shot `i18n.tr()` writes the live region after commit or acceptance.}
+      - {id: selected, key: citry-ui-data-grid-selected, purpose: Announces multiple selected supplied Rows., variables: 'count: str', override: '`selected_label` with `{count}`', updates: One-shot `i18n.tr()` writes the live region after commit or acceptance.}

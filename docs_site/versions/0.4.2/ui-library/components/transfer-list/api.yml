@@ -1,0 +1,194 @@
+schema_version: 1
+family: transfer-list
+
+components:
+  - CTransferList
+  - CTransferListItem
+
+inputs:
+  - id: ctransfer-list-server-inputs
+    component: CTransferList
+    channel: server
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID and bases stable listbox and option IDs.}
+      - {id: value, name: value, type: 'Sequence[str]', default: {kind: literal, value: '()'}, effect: Sets the ordered initial chosen values; every unique value must name one Item.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the repeated native form-entry name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates native and enhanced form values with an external Form ID.}
+      - {id: required, name: required, type: bool, default: {kind: literal, value: false}, effect: Requires at least one chosen value.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables list selection controls and form contribution.}
+      - {id: show-move-all, name: show_move_all, type: bool, default: {kind: literal, value: true}, effect: Shows Add all and Remove all controls.}
+      - {id: show-reorder, name: show_reorder, type: bool, default: {kind: literal, value: true}, effect: Shows chosen-order controls.}
+      - {id: size, name: size, type: {display: CTransferListSize, interfaces: [CTransferListSize]}, default: {kind: literal, value: md}, effect: Selects compact default or spacious list height.}
+      - {id: available-label, name: available_label, type: str, default: {kind: literal, value: Available items}, effect: Overrides the localized available-pane title.}
+      - {id: chosen-label, name: chosen_label, type: str, default: {kind: literal, value: Chosen items}, effect: Overrides the localized chosen-pane title and native fallback label.}
+      - {id: available-empty-label, name: available_empty_label, type: str, default: {kind: literal, value: No available items}, effect: Overrides the localized available empty state.}
+      - {id: chosen-empty-label, name: chosen_empty_label, type: str, default: {kind: literal, value: No chosen items}, effect: Overrides the localized chosen empty state.}
+      - {id: count-label, name: count_label, type: str, default: {kind: literal, value: '{selected} of {total} selected'}, effect: Overrides pane counts and must retain both named placeholders.}
+      - {id: transfer-controls-label, name: transfer_controls_label, type: str, default: {kind: literal, value: Transfer controls}, effect: Overrides the transfer toolbar accessible name.}
+      - {id: add-label, name: add_label, type: str, default: {kind: literal, value: Add selected}, effect: Overrides the Add selected action.}
+      - {id: add-all-label, name: add_all_label, type: str, default: {kind: literal, value: Add all}, effect: Overrides the Add all action.}
+      - {id: remove-label, name: remove_label, type: str, default: {kind: literal, value: Remove selected}, effect: Overrides the Remove selected action.}
+      - {id: remove-all-label, name: remove_all_label, type: str, default: {kind: literal, value: Remove all}, effect: Overrides the Remove all action.}
+      - {id: reorder-controls-label, name: reorder_controls_label, type: str, default: {kind: literal, value: Chosen item order}, effect: Overrides the reorder toolbar accessible name.}
+      - {id: move-top-label, name: move_top_label, type: str, default: {kind: literal, value: Move to top}, effect: Overrides the Move to top action.}
+      - {id: move-up-label, name: move_up_label, type: str, default: {kind: literal, value: Move up}, effect: Overrides the Move up action.}
+      - {id: move-down-label, name: move_down_label, type: str, default: {kind: literal, value: Move down}, effect: Overrides the Move down action.}
+      - {id: move-bottom-label, name: move_bottom_label, type: str, default: {kind: literal, value: Move to bottom}, effect: Overrides the Move to bottom action.}
+      - {id: added-label, name: added_label, type: str, default: {kind: literal, value: '{count} items added'}, effect: Overrides multi-item Add announcements and must retain count.}
+      - {id: removed-label, name: removed_label, type: str, default: {kind: literal, value: '{count} items removed'}, effect: Overrides multi-item Remove announcements and must retain count.}
+      - {id: reordered-label, name: reordered_label, type: str, default: {kind: literal, value: '{count} items reordered'}, effect: Overrides multi-item reorder announcements and must retain count.}
+      - {id: required-label, name: required_label, type: str, default: {kind: literal, value: Choose at least one item}, effect: Overrides the required-validation announcement.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles before owned theme variables.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned form semantics state or runtime markers.}
+  - id: ctransfer-list-client-inputs
+    component: CTransferList
+    channel: client
+    entries:
+      - {id: value, name: value, type: 'string[] | null', omitted: Omission or null releases control to the committed value., effect: Controls the exact ordered chosen values while supplied.}
+      - {id: required, name: required, type: boolean, omitted: Uses the server value., effect: Reactively changes required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server and Fieldset state., effect: Reactively disables interaction and form contribution.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No component callback runs., effect: Receives transfer reorder and reset requests.}
+  - id: ctransfer-list-item-server-inputs
+    component: CTransferListItem
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies nonempty unique stable identity and submitted value.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies native fallback typeahead and accessible text.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Prevents selection transfer and reorder while preserving an initial chosen value.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the enhanced Option.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the enhanced Option.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed Option attributes without replacing owned semantics identity or state.}
+
+slots:
+  - id: ctransfer-list-slots
+    component: CTransferList
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CTransferListDefaultSlotData]}, fallback: Empty collection; accepts only CTransferListItem declarations.}
+  - id: ctransfer-list-item-slots
+    component: CTransferListItem
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{value, label, disabled, in_target, index}', interfaces: [CTransferListItemDefaultSlotData]}, fallback: Plain label text.}
+
+events:
+  - id: ctransfer-list-events
+    component: CTransferList
+    entries:
+      - id: value-change
+        name: onValueChange
+        signature: {display: '(value: string[], detail: CTransferListChangeDetail) => void', interfaces: [CTransferListChangeDetail]}
+        trigger: A transfer reorder reset or accepted client reconciliation requests another ordered value.
+        detail: {display: '{value, previousValue, moved, source, controlled, sourceEvent}', interfaces: [CTransferListChangeDetail]}
+        behavior: Uncontrolled state commits and emits native input/change first; controlled state is request-only until accepted.
+
+methods: []
+
+css:
+  - id: ctransfer-list-css-variables
+    component: CTransferList
+    entries:
+      - {id: pane-size, name: --cui-transfer-list-pane-size, type: length, purpose: Native fallback and pane inline-size preference., default: 15rem}
+      - {id: list-size, name: --cui-transfer-list-list-size, type: length, purpose: Enhanced listbox block size., default: 'sm 11rem; md 15rem; lg 20rem'}
+      - {id: gap, name: --cui-transfer-list-gap, type: length, purpose: Pane and control spacing., default: 0.75rem}
+      - {id: border, name: --cui-transfer-list-border, type: complete border value, purpose: Pane control and Button borders., default: Adaptive 1px solid neutral}
+      - {id: radius, name: --cui-transfer-list-radius, type: length, purpose: Pane and native fallback corners., default: 0.625rem}
+      - {id: surface, name: --cui-transfer-list-surface, type: color, purpose: Pane native fallback and Button surfaces., default: Canvas}
+      - {id: selected, name: --cui-transfer-list-selected, type: color, purpose: Selected Option background., default: Adaptive blue}
+      - {id: hover, name: --cui-transfer-list-hover, type: color, purpose: Hovered Option background., default: Adaptive neutral}
+      - {id: focus, name: --cui-transfer-list-focus, type: color, purpose: Listbox and Button focus outline., default: Highlight}
+      - {id: disabled-opacity, name: --cui-transfer-list-disabled-opacity, type: number, purpose: Disabled root Option and Button opacity., default: '0.55'}
+
+attributes:
+  - id: ctransfer-list-attributes
+    component: CTransferList
+    entries:
+      - {id: role-listbox, name: role, element: Available and chosen listbox divs, type: listbox, meaning: Exposes each enhanced pane as a selectable collection.}
+      - {id: aria-multiselectable, name: aria-multiselectable, element: Both listboxes, type: 'true', meaning: Declares independent multi-selection.}
+      - {id: aria-activedescendant, name: aria-activedescendant, element: Focused listbox, type: IDREF | absent, meaning: Identifies the active Option while DOM focus remains on the listbox.}
+      - {id: role-option, name: role, element: Enhanced Item div, type: option, meaning: Exposes one declared choice.}
+      - {id: aria-selected, name: aria-selected, element: Enhanced Item div, type: boolean-string, meaning: Reflects ephemeral pane selection rather than chosen membership.}
+      - {id: aria-disabled, name: aria-disabled, element: Root listboxes and disabled Items, type: boolean-string, meaning: Reflects effective unavailability.}
+      - {id: aria-invalid, name: aria-invalid, element: Root, type: 'true | absent', meaning: Marks a failed required validity check.}
+      - {id: data-value, name: data-value, element: Enhanced Item div, type: string, meaning: Exposes stable identity.}
+      - {id: data-selected, name: data-selected, element: Enhanced Item div, type: present | absent, meaning: Reflects ephemeral pane selection.}
+      - {id: data-disabled, name: data-disabled, element: Root and disabled Items, type: present | absent, meaning: Reflects effective unavailability.}
+      - {id: data-required, name: data-required, element: Root, type: present | absent, meaning: Reflects required validity.}
+      - {id: data-invalid, name: data-invalid, element: Root, type: present | absent, meaning: Reflects a failed native validity check.}
+      - {id: data-size, name: data-size, element: Root, type: {display: CTransferListSize, interfaces: [CTransferListSize]}, meaning: Mirrors list-height profile.}
+      - {id: data-available-empty, name: data-available-empty, element: Root, type: present | absent, meaning: Marks no available Items.}
+      - {id: data-chosen-empty, name: data-chosen-empty, element: Root, type: present | absent, meaning: Marks no chosen Items.}
+
+selectors:
+  - id: ctransfer-list-selectors
+    component: CTransferList
+    entries:
+      - {id: transfer-list, selector: '[data-citry-ui-part="transfer-list"]', element: Root div, purpose: State reflections attrs and theme destination.}
+      - {id: native, selector: '[data-citry-ui-part="native"]', element: Native select multiple, purpose: Progressive fallback validity reset and initial form owner.}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Enhanced grid, purpose: Contains both panes and transfer controls.}
+      - {id: pane, selector: '[data-citry-ui-part="pane"]', element: Available or chosen section, purpose: Pane surface.}
+      - {id: pane-header, selector: '[data-citry-ui-part="pane-header"]', element: Pane header, purpose: Groups title and selection count.}
+      - {id: pane-title, selector: '[data-citry-ui-part="pane-title"]', element: Pane h3, purpose: Visible listbox label.}
+      - {id: count, selector: '[data-citry-ui-part="count"]', element: Count span, purpose: Localized selected and total summary.}
+      - {id: listbox, selector: '[data-citry-ui-part="listbox"]', element: Pane listbox div, purpose: Focus selection and Item-scroll owner.}
+      - {id: option, selector: '[data-citry-ui-part="option"]', element: Item div, purpose: Rich presentation selection and stable Item customization.}
+      - {id: empty, selector: '[data-citry-ui-part="empty"]', element: Pane paragraph, purpose: Localized empty state.}
+      - {id: transfer-controls, selector: '[data-citry-ui-part="transfer-controls"]', element: Transfer toolbar, purpose: Add and Remove actions.}
+      - {id: reorder-controls, selector: '[data-citry-ui-part="reorder-controls"]', element: Reorder toolbar, purpose: Chosen-order actions.}
+      - {id: button, selector: '[data-citry-ui-part="button"]', element: Native action Button, purpose: Transfer and reorder actions.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Visually hidden polite live region, purpose: Accepted action and validation announcements.}
+
+interfaces:
+  - id: ctransfer-list-aliases
+    kind: aliases
+    entries:
+      - {id: size, name: CTransferListSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: change-source, name: CTransferListChangeSource, definition: 'Literal["add", "add-all", "remove", "remove-all", "move-top", "move-up", "move-down", "move-bottom", "reset", "client"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: ctransfer-list-default-slot-data, kind: record, name: CTransferListDefaultSlotData, entries: []}
+  - id: ctransfer-list-item-default-slot-data
+    kind: record
+    name: CTransferListItemDefaultSlotData
+    entries:
+      - {id: value, name: value, type: str, meaning: Stable declared Item value.}
+      - {id: label, name: label, type: str, meaning: Plain accessible and typeahead label.}
+      - {id: disabled, name: disabled, type: bool, meaning: Declared disabled state.}
+      - {id: in-target, name: in_target, type: bool, meaning: Whether the Item is initially chosen.}
+      - {id: index, name: index, type: int, meaning: Initial zero-based index in its pane.}
+  - id: ctransfer-list-change-detail
+    kind: record
+    name: CTransferListChangeDetail
+    entries:
+      - {id: value, name: value, type: 'list[str]', meaning: Requested or committed ordered chosen values.}
+      - {id: previous-value, name: previousValue, type: 'list[str]', meaning: Effective ordered chosen values before the request.}
+      - {id: moved, name: moved, type: 'list[str]', meaning: Values directly affected by the action in their action order.}
+      - {id: source, name: source, type: {display: CTransferListChangeSource, interfaces: [CTransferListChangeSource]}, meaning: Transfer reorder reset or client cause.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client value currently owns chosen state.}
+      - {id: source-event, name: sourceEvent, type: 'object | None', meaning: Native source Event or null for client reconciliation.}
+
+translations:
+  - id: ctransfer-list-translations
+    component: CTransferList
+    entries:
+      - {id: available, key: citry-ui-transfer-list-available, purpose: Titles the available pane., variables: None., override: '`available_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: chosen, key: citry-ui-transfer-list-chosen, purpose: Titles the chosen pane and native fallback., variables: None., override: '`chosen_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: available-empty, key: citry-ui-transfer-list-available-empty, purpose: Describes an empty available pane., variables: None., override: '`available_empty_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: chosen-empty, key: citry-ui-transfer-list-chosen-empty, purpose: Describes an empty chosen pane., variables: None., override: '`chosen_empty_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: count, key: citry-ui-transfer-list-count, purpose: Summarizes selected and total Items in one pane., variables: 'selected: str; total: str', override: '`count_label` with `{selected}` and `{total}`', updates: Two `i18n.bind()` registrations update when selection totals or locale change.}
+      - {id: transfer-controls, key: citry-ui-transfer-list-transfer-controls, purpose: Names the transfer toolbar., variables: None., override: '`transfer_controls_label`', updates: Stable `$c-tr` attribute follows client locale changes.}
+      - {id: add, key: citry-ui-transfer-list-add, purpose: Labels the Add selected action., variables: None., override: '`add_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: add-all, key: citry-ui-transfer-list-add-all, purpose: Labels the Add all action., variables: None., override: '`add_all_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: remove, key: citry-ui-transfer-list-remove, purpose: Labels the Remove selected action., variables: None., override: '`remove_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: remove-all, key: citry-ui-transfer-list-remove-all, purpose: Labels the Remove all action., variables: None., override: '`remove_all_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: reorder-controls, key: citry-ui-transfer-list-reorder-controls, purpose: Names the chosen-order toolbar., variables: None., override: '`reorder_controls_label`', updates: Stable `$c-tr` attribute follows client locale changes.}
+      - {id: move-top, key: citry-ui-transfer-list-move-top, purpose: Labels the Move to top action., variables: None., override: '`move_top_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: move-up, key: citry-ui-transfer-list-move-up, purpose: Labels the Move up action., variables: None., override: '`move_up_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: move-down, key: citry-ui-transfer-list-move-down, purpose: Labels the Move down action., variables: None., override: '`move_down_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: move-bottom, key: citry-ui-transfer-list-move-bottom, purpose: Labels the Move to bottom action., variables: None., override: '`move_bottom_label`', updates: Stable `$c-tr` text follows client locale changes.}
+      - {id: added-one, key: citry-ui-transfer-list-added-one, purpose: Announces one accepted addition., variables: None., override: '`added_label` formats the fallback', updates: One-shot `i18n.tr()` writes the live region.}
+      - {id: added, key: citry-ui-transfer-list-added, purpose: Announces multiple accepted additions., variables: 'count: str', override: '`added_label` with `{count}`', updates: One-shot `i18n.tr()` writes the live region.}
+      - {id: removed-one, key: citry-ui-transfer-list-removed-one, purpose: Announces one accepted removal., variables: None., override: '`removed_label` formats the fallback', updates: One-shot `i18n.tr()` writes the live region.}
+      - {id: removed, key: citry-ui-transfer-list-removed, purpose: Announces multiple accepted removals., variables: 'count: str', override: '`removed_label` with `{count}`', updates: One-shot `i18n.tr()` writes the live region.}
+      - {id: reordered-one, key: citry-ui-transfer-list-reordered-one, purpose: Announces one accepted reorder., variables: None., override: '`reordered_label` formats the fallback', updates: One-shot `i18n.tr()` writes the live region.}
+      - {id: reordered, key: citry-ui-transfer-list-reordered, purpose: Announces multiple accepted reorders., variables: 'count: str', override: '`reordered_label` with `{count}`', updates: One-shot `i18n.tr()` writes the live region.}
+      - {id: required, key: citry-ui-transfer-list-required, purpose: Announces failed required validity., variables: None., override: '`required_label`', updates: One-shot `i18n.tr()` writes the live region.}

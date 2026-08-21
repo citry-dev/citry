@@ -1,0 +1,146 @@
+schema_version: 1
+family: grid-container
+
+components:
+  - CContainer
+  - CGrid
+  - CGridItem
+
+inputs:
+  - id: ccontainer-server-inputs
+    component: CContainer
+    channel: server
+    column_widths: [fit, 15rem, 7rem, auto]
+    entries:
+      - {id: tag, name: tag, type: {display: '"div" | "main" | "section" | "article" | "nav" | "aside"', interfaces: [CContainerTag]}, default: {kind: literal, value: div}, effect: Selects the native root without adding a role or accessible name.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg" | "xl" | "xxl"', interfaces: [CContainerSize]}, default: {kind: literal, value: xl}, effect: Selects the centered maximum inline size from `40rem` through `96rem`.}
+      - {id: fluid, name: fluid, type: bool, default: {kind: literal, value: false}, effect: Removes the maximum width while retaining the selected inline gutter.}
+      - {id: gutter, name: gutter, type: {display: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', interfaces: [CLayoutGap]}, default: {kind: literal, value: lg}, effect: Selects logical inline padding from `0` through `1.5rem`.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+  - id: cgrid-server-inputs
+    component: CGrid
+    channel: server
+    column_widths: [fit, 15rem, 7rem, auto]
+    entries:
+      - {id: tag, name: tag, type: {display: '"div" | "main" | "section" | "article" | "ul" | "ol"', interfaces: [CGridTag]}, default: {kind: literal, value: div}, effect: Selects the native Grid root without adding semantics.}
+      - {id: cols, name: cols, type: int, default: {kind: literal, value: 1}, effect: Sets the equal base column count from 1 through 12.}
+      - {id: sm, name: sm, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `40rem` and wider.}
+      - {id: md, name: md, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `48rem` and wider.}
+      - {id: lg, name: lg, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `64rem` and wider.}
+      - {id: xl, name: xl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `80rem` and wider.}
+      - {id: xxl, name: xxl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `96rem` and wider.}
+      - {id: min-col, name: min_col, type: 'str | None', default: {kind: literal, value: null}, effect: 'Uses intrinsic auto-fit columns with one positive `px`, `rem`, `em`, `ch`, viewport-width, or viewport-height length; cannot be combined with fixed/responsive counts.'}
+      - {id: gap, name: gap, type: {display: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', interfaces: [CLayoutGap]}, default: {kind: literal, value: md}, effect: Selects row and column gap from `0` through `1.5rem`.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+  - id: cgriditem-server-inputs
+    component: CGridItem
+    channel: server
+    column_widths: [fit, 15rem, 7rem, auto]
+    entries:
+      - {id: tag, name: tag, type: {display: '"div" | "main" | "section" | "article" | "aside" | "li"', interfaces: [CGridItemTag]}, default: {kind: literal, value: div}, effect: Selects the native Grid item root without adding semantics.}
+      - {id: span, name: span, type: int, default: {kind: literal, value: 1}, effect: Sets the base column span from 1 through 12.}
+      - {id: sm, name: sm, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `40rem` and wider.}
+      - {id: md, name: md, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `48rem` and wider.}
+      - {id: lg, name: lg, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `64rem` and wider.}
+      - {id: xl, name: xl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `80rem` and wider.}
+      - {id: xxl, name: xxl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `96rem` and wider.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+
+slots:
+  - id: ccontainer-slots
+    component: CContainer
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CContainerDefaultSlotData]}, fallback: Renders an empty Container root.}
+  - id: cgrid-slots
+    component: CGrid
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CGridDefaultSlotData]}, fallback: Renders an empty Grid root.}
+  - id: cgriditem-slots
+    component: CGridItem
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CGridItemDefaultSlotData]}, fallback: Renders an empty Grid item root.}
+
+events: []
+methods: []
+
+css:
+  - id: ccontainer-css-variables
+    component: CContainer
+    entries:
+      - {id: cui-container-max-width, name: --cui-container-max-width, type: length, purpose: Overrides the selected centered maximum inline size., default: Selected size from `40rem` through `96rem`.}
+      - {id: cui-container-gutter, name: --cui-container-gutter, type: length, purpose: Overrides logical inline padding., default: Selected gutter-preset length.}
+  - id: cgrid-css-variables
+    component: CGrid
+    entries:
+      - {id: cui-grid-columns, name: --cui-grid-columns, type: integer, purpose: Overrides the effective equal column count at every breakpoint., default: Effective responsive `cols` value.}
+      - {id: cui-grid-gap, name: --cui-grid-gap, type: length, purpose: Overrides row and column gap., default: Selected gap-preset length.}
+      - {id: cui-grid-min-column, name: --cui-grid-min-column, type: length, purpose: Overrides the requested intrinsic minimum column size., default: '`min_col` value.'}
+  - id: cgriditem-css-variables
+    component: CGridItem
+    entries:
+      - {id: cui-grid-item-span, name: --cui-grid-item-span, type: integer, purpose: Overrides the effective span at every breakpoint., default: Effective responsive `span` value.}
+
+attributes:
+  - id: ccontainer-attributes
+    component: CContainer
+    entries:
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg" | "xl" | "xxl"', meaning: Reflects the selected maximum-width preset.}
+      - {id: data-fluid, name: data-fluid, element: Root, type: Boolean presence, meaning: Present while the maximum width is removed.}
+      - {id: data-gutter, name: data-gutter, element: Root, type: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', meaning: Reflects the selected inline-gutter preset.}
+  - id: cgrid-attributes
+    component: CGrid
+    entries:
+      - {id: data-cols, name: data-cols, element: Root, type: Integer 1–12, meaning: Reflects the base equal column count.}
+      - {id: data-cols-sm, name: data-cols-sm, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `sm` column override.}
+      - {id: data-cols-md, name: data-cols-md, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `md` column override.}
+      - {id: data-cols-lg, name: data-cols-lg, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `lg` column override.}
+      - {id: data-cols-xl, name: data-cols-xl, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `xl` column override.}
+      - {id: data-cols-xxl, name: data-cols-xxl, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `xxl` column override.}
+      - {id: data-intrinsic, name: data-intrinsic, element: Root, type: Boolean presence, meaning: Present in intrinsic auto-fit mode.}
+      - {id: data-gap, name: data-gap, element: Root, type: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', meaning: Reflects the selected gap preset.}
+  - id: cgriditem-attributes
+    component: CGridItem
+    entries:
+      - {id: data-span, name: data-span, element: Root, type: Integer 1–12, meaning: Reflects the base column span.}
+      - {id: data-span-sm, name: data-span-sm, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `sm` span override.}
+      - {id: data-span-md, name: data-span-md, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `md` span override.}
+      - {id: data-span-lg, name: data-span-lg, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `lg` span override.}
+      - {id: data-span-xl, name: data-span-xl, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `xl` span override.}
+      - {id: data-span-xxl, name: data-span-xxl, element: Root, type: Integer 1–12 when supplied, meaning: Reflects the authored `xxl` span override.}
+
+selectors:
+  - id: ccontainer-selectors
+    component: CContainer
+    entries:
+      - {id: data-citry-ui-part-container, selector: '[data-citry-ui-part="container"]', element: Native root, purpose: Stable Container root and `attrs` destination.}
+  - id: cgrid-selectors
+    component: CGrid
+    entries:
+      - {id: data-citry-ui-part-grid, selector: '[data-citry-ui-part="grid"]', element: Native root, purpose: Stable Grid root and `attrs` destination.}
+  - id: cgriditem-selectors
+    component: CGridItem
+    entries:
+      - {id: data-citry-ui-part-grid-item, selector: '[data-citry-ui-part="grid-item"]', element: Native root, purpose: Stable GridItem root and `attrs` destination.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-container-tag, name: CContainerTag, definition: 'Literal["div", "main", "section", "article", "nav", "aside"]'}
+      - {id: input-type-aliases-grid-tag, name: CGridTag, definition: 'Literal["div", "main", "section", "article", "ul", "ol"]'}
+      - {id: input-type-aliases-grid-item-tag, name: CGridItemTag, definition: 'Literal["div", "main", "section", "article", "aside", "li"]'}
+      - {id: input-type-aliases-container-size, name: CContainerSize, definition: 'Literal["sm", "md", "lg", "xl", "xxl"]'}
+      - {id: input-type-aliases-layout-gap, name: CLayoutGap, definition: 'Literal["0", "xs", "sm", "md", "lg", "xl"]'}
+  - {id: ccontainer-default-slot-data, kind: record, name: CContainerDefaultSlotData, entries: []}
+  - {id: cgrid-default-slot-data, kind: record, name: CGridDefaultSlotData, entries: []}
+  - {id: cgriditem-default-slot-data, kind: record, name: CGridItemDefaultSlotData, entries: []}
+
+translations: []
