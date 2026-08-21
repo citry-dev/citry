@@ -9,7 +9,7 @@ Citry uses the same parser in its command-line checker and editor tooling. A
 template that fails in the editor should therefore fail for the same reason in
 `citry check` and at runtime.
 
-The open-beta tooling is VS Code-first. The language server is editor-neutral,
+Citry's public-beta tooling is VS Code-first. The language server is editor-neutral,
 but each editor still needs a client that knows how to start it and which files
 to send.
 
@@ -19,8 +19,8 @@ to send.
 | --- | --- | --- |
 | `citry check` | Checks templates from a terminal or CI | Included in Citry |
 | `pygments-citry` | Highlights Citry source in Pygments-based tools | Published separately |
-| `citry-lsp` | Provides diagnostics, completion, hover, navigation, and symbols | Implemented; public release is part of the open beta |
-| VS Code extension | Highlights inline and standalone templates and starts `citry-lsp` | Implemented; public release is part of the open beta |
+| [`citry-lsp`](https://pypi.org/project/citry-lsp/) | Provides diagnostics, completion, hover, navigation, and symbols | Published on PyPI |
+| VS Code extension | Highlights inline and standalone templates and starts `citry-lsp` | Published on [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry) and [Open VSX](https://open-vsx.org/extension/citry-dev/citry) |
 | PyCharm + LSP4IJ | Connects PyCharm to Citry's standard language-server features | Tested setup available; no Citry-specific coloring or official plugin yet |
 
 Start with [VS Code](/ide/vscode/) for the complete editor integration. See
