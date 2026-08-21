@@ -205,6 +205,17 @@ def check() -> list[str]:
         errors.append("every native citry-core wheel action must select the reviewed ABI3 release feature")
     if "--find-interpreter" in publish:
         errors.append("citry-core release builders must select the closed interpreter families explicitly")
+    if "/opt/python/" in publish:
+        errors.append(
+            "containerized citry-core builders must select interpreters by "
+            "versioned command name, not architecture-specific /opt/python paths"
+        )
+    for interpreter_args in (
+        "--features abi3-py310 --interpreter python3.10",
+        "--features abi3-py310 --interpreter python3.14t pypy3.11",
+    ):
+        if publish.count(interpreter_args) != 2:
+            errors.append(f"Linux and musllinux citry-core builders must each select {interpreter_args!r}")
     profile_setting = "maturin.build-args=--profile release-wheel"
     for script_path in (_PYODIDE_BUILDER, _DISTRIBUTION_VERIFIER):
         if script_path.read_text(encoding="utf-8").count(profile_setting) != 1:

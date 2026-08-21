@@ -60,7 +60,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter /opt/python/cp310-cp310/bin/python
+            --features abi3-py310 --interpreter python3.10
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -72,8 +72,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter
-            /opt/python/cp314-cp314t/bin/python /opt/python/pp311-pypy311_pp73/bin/python
+            --features abi3-py310 --interpreter python3.14t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -164,7 +163,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter /opt/python/cp310-cp310/bin/python
+            --features abi3-py310 --interpreter python3.10
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -176,8 +175,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter
-            /opt/python/cp314-cp314t/bin/python /opt/python/pp311-pypy311_pp73/bin/python
+            --features abi3-py310 --interpreter python3.14t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
