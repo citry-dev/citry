@@ -922,7 +922,10 @@ render IDs are correlated according to the O9 policy before adoption. The
 proved baseline
 uses Citry-owned comments as load-bearing caps and fails pointedly if a host
 strips or changes them. A2 settled O11: `citry:g1` is the literal required
-comment prefix, the exact protocol is locked, and production minification,
+comment prefix. Its comments carry an eight-character page-local revision
+alias while manifests and registries retain the complete revision. A second
+live or provisional revision with the same alias is rejected before graph
+publication. The exact protocol is locked, and production minification,
 sanitization, and deployment must preserve the caps. The protocol has no fixed
 manifest byte ceiling; CI keeps scenario payload budgets. A6 validates exact marker
 text, ordering, parent topology, and recorded nesting throughout the lifetime.
@@ -989,7 +992,7 @@ instance, State, and token at every match. A8 normalizes this into the same
 logical/shared and physical/copy-local model without changing that public
 rule. The first copy preserves the canonical `citry:g1` caps from the unchanged
 `citry-client-graph/1` wire package. Additional copies receive client-owned
-`citry:p1` caps with a runtime placement ID. Every placement routes to one
+`citry:p1` caps with the same revision alias and a runtime placement ID. Every placement routes to one
 logical component, State object, props view, lifecycle, and fill source, while
 ordinary Alpine state and cleanup remain copy-local. Placement identity is
 not inferred from fresh render IDs or DOM position.

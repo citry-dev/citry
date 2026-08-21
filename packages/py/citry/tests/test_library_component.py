@@ -199,6 +199,29 @@ def test_definition_inheritance_zero_argument_super_and_schemas_survive():
     assert str(BrandedControl(label="Run")) == "Run!"
 
 
+def test_pure_library_definition_requires_an_explicit_per_class_promise():
+    app = Citry(autodiscover=False)
+
+    class PureBase(LibraryComponent):
+        pure = True
+
+    class CLeaf(PureBase):
+        template = "leaf"
+
+    assert PureBase.pure is True
+    assert CLeaf.pure is False
+    CLeaf.pure = True
+    assert CLeaf.pure is True
+
+    with pytest.raises(ValueError, match="pure must be an exact bool"):
+        CLeaf.pure = 1  # type: ignore[assignment]
+    with pytest.raises(AttributeError, match="set it to False"):
+        del CLeaf.pure
+
+    concrete = app.register_library(ComponentLibrary("pure-library", (CLeaf,)))[CLeaf]
+    assert concrete.pure is True
+
+
 def test_separately_installed_parent_and_child_keep_authored_not_concrete_inheritance():
     app = Citry(autodiscover=False)
 
@@ -758,6 +781,14 @@ def test_checker_only_authoring_base_declares_every_public_component_field():
         for node in authoring_base.body
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and not node.target.id.startswith("_")
     }
+    authoring_fields.update(
+        node.name
+        for node in authoring_base.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(isinstance(decorator, ast.Name) and decorator.id == "property" for decorator in node.decorator_list)
+        and not node.name.startswith("_")
+    )
     component_fields = {name for name in Component.__annotations__ if not name.startswith("_")}
+    component_fields.update(name for name, value in Component.__dict__.items() if isinstance(value, property))
 
     assert authoring_fields == component_fields

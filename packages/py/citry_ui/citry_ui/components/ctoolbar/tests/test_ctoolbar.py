@@ -9,6 +9,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CToolbar
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(template: str, *, include_css: bool = False, data: dict[str, object] | None = None) -> str:
@@ -126,7 +127,7 @@ def test_owned_runtime_and_visibility_attributes_are_rejected(attribute: str) ->
 
 
 def test_css_contract_uses_public_inputs_through_private_fallbacks() -> None:
-    html = _render(_toolbar(), include_css=True)
+    css = read_component_source_css("ctoolbar")
     for name in (
         "gap",
         "padding",
@@ -137,6 +138,6 @@ def test_css_contract_uses_public_inputs_through_private_fallbacks() -> None:
         "border-color",
         "focus-color",
     ):
-        assert re.search(rf"--_cui-toolbar-{name}: var\(\s*--cui-toolbar-{name},", html)
-    assert "@media (forced-colors: active)" in html
-    assert "@media (prefers-reduced-motion: reduce)" in html
+        assert re.search(rf"--_cui-toolbar-{name}: var\(\s*--cui-toolbar-{name},", css)
+    assert "@media (forced-colors: active)" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css

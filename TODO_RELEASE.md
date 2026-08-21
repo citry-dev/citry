@@ -669,6 +669,13 @@ compatible public-artifact tuple. It currently pins Citry 0.3.1 and
 `citry-core` 1.4.0 with immutable wheel URLs. A normal deployed build does not
 silently substitute workspace packages.
 
+- [x] Refresh the server, browser, and i18n benchmarks before promoting the
+  tuple. The 2026-08-20 runs record the beta feature set, fixed a quadratic
+  ownership scan exposed by the large server scenario, reduced its warm result
+  from 87.31 ms to 48.67 ms with byte-identical output, and corrected the
+  browser runner's obsolete destroy/recreate expectation for keyed morphs.
+  The published server chart and permanent performance notes use the new
+  baseline; all i18n gates and browser orientation targets pass.
 - [x] Wait until `citry-core` 1.5.0 and `citry` 0.4.0 are publicly
   downloadable. `citry-ui` 0.1.0 must also be public before enabling live UI
   examples.

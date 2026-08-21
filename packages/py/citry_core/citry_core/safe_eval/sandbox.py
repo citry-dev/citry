@@ -97,6 +97,31 @@ UNSAFE_FUNCTIONS: dict[Any, str | None] = {
     str.format_map: "Use f-strings instead.",
 }
 
+# Exact instances of these built-ins cannot be any of Python's frame/code/
+# callable/generator internals checked by ``_is_internal_attribute``. Attribute
+# names beginning with ``_`` are still rejected before this fast path. Keep the
+# check exact: subclasses may carry arbitrary behavior and must use the full
+# policy below.
+_SAFE_EXACT_ATTRIBUTE_TYPES = frozenset(
+    {
+        type(None),
+        bool,
+        int,
+        float,
+        complex,
+        str,
+        bytes,
+        bytearray,
+        list,
+        tuple,
+        dict,
+        set,
+        frozenset,
+        range,
+        slice,
+    }
+)
+
 
 def unsafe(f: F) -> F:
     """
@@ -159,7 +184,11 @@ def is_safe_attribute(obj: Any, attr: str) -> bool:
     # as list slices.
     if not isinstance(attr, str):
         return True
-    return not (attr.startswith("_") or _is_internal_attribute(obj, attr))
+    if attr.startswith("_"):
+        return False
+    if type(obj) in _SAFE_EXACT_ATTRIBUTE_TYPES:
+        return True
+    return not _is_internal_attribute(obj, attr)
 
 
 def is_safe_callable(obj: Any) -> tuple[bool, str | None]:

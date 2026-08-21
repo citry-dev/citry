@@ -48,11 +48,28 @@ def configured_app(*, template_globals=None, **overrides):
 
 class TestConfiguration:
     def test_builtin_is_dormant_by_default(self):
-        i18n = Citry().extensions.get_extension("i18n")
+        app = Citry()
+        i18n = app.extensions.get_extension("i18n")
         assert i18n.configured is False
         assert (i18n.render_cache_mode, i18n.render_cache_version) == ("stateless", 1)
         with pytest.raises(I18nNotConfiguredError, match="not configured"):
             _ = i18n.context
+
+        states = []
+
+        class Plain(Component):
+            citry = app
+            template = '<p c-bind="attrs">plain</p>'
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {"class": "plain"}}
+
+            def on_render(self):
+                yield
+                states.append((self.i18n._usage_state, self.i18n._bindings_state))
+
+        assert '<p class="plain"' in str(Plain())
+        assert states == [(None, None)]
 
     def test_canonicalizes_topology_and_derives_default_context(self):
         app = Citry(

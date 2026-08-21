@@ -1,0 +1,217 @@
+@layer citry-ui.theme {
+  :where(.cui-alert) {
+    --_cui-alert-intent-color: light-dark(#175cd3, #84adff);
+    --_cui-alert-solid-background: light-dark(#175cd3, #194185);
+    --_cui-alert-solid-foreground: #ffffff;
+    --_cui-alert-background: var(
+      --cui-alert-background,
+      color-mix(in srgb, var(--_cui-alert-intent-color) 11%, Canvas)
+    );
+    --_cui-alert-foreground: var(--cui-alert-foreground, CanvasText);
+    --_cui-alert-border-color: var(
+      --cui-alert-border-color,
+      color-mix(in srgb, var(--_cui-alert-intent-color) 40%, Canvas)
+    );
+    --_cui-alert-icon-color: var(
+      --cui-alert-icon-color,
+      var(--_cui-alert-intent-color)
+    );
+    --_cui-alert-border-width: var(--cui-alert-border-width, 1px);
+    --_cui-alert-radius: var(--cui-alert-radius, 0.75rem);
+    --_cui-alert-padding: var(--cui-alert-padding, 0.875rem 1rem);
+    --_cui-alert-gap: var(--cui-alert-gap, 0.75rem);
+    --_cui-alert-content-gap: var(--cui-alert-content-gap, 0.25rem);
+    --_cui-alert-actions-gap: var(--cui-alert-actions-gap, 0.5rem);
+    --_cui-alert-title-font-weight: var(--cui-alert-title-font-weight, 650);
+    --_cui-alert-icon-size: 1.25rem;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: start;
+    gap: var(--_cui-alert-gap);
+    padding: var(--_cui-alert-padding);
+    border-color: var(--_cui-alert-border-color);
+    border-style: solid;
+    border-width: var(--_cui-alert-border-width);
+    border-radius: var(--_cui-alert-radius);
+    overflow: visible;
+    background: var(--_cui-alert-background);
+    color: var(--_cui-alert-foreground);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  :where(.cui-alert[data-intent="success"]) {
+    --_cui-alert-intent-color: light-dark(#067647, #6ce9a6);
+    --_cui-alert-solid-background: light-dark(#067647, #085d3a);
+  }
+
+  :where(.cui-alert[data-intent="warn"]) {
+    --_cui-alert-intent-color: light-dark(#b54708, #fec84b);
+    --_cui-alert-solid-background: light-dark(#b54708, #93370d);
+  }
+
+  :where(.cui-alert[data-intent="error"]) {
+    --_cui-alert-intent-color: light-dark(#b42318, #fda29b);
+    --_cui-alert-solid-background: light-dark(#b42318, #912018);
+  }
+
+  :where(.cui-alert[data-variant="solid"]) {
+    --_cui-alert-background: var(
+      --cui-alert-background,
+      var(--_cui-alert-solid-background)
+    );
+    --_cui-alert-foreground: var(
+      --cui-alert-foreground,
+      var(--_cui-alert-solid-foreground)
+    );
+    --_cui-alert-border-color: var(
+      --cui-alert-border-color,
+      var(--_cui-alert-solid-background)
+    );
+    --_cui-alert-icon-color: var(
+      --cui-alert-icon-color,
+      var(--_cui-alert-solid-foreground)
+    );
+    --_cui-alert-border-width: var(--cui-alert-border-width, 1px);
+  }
+
+  :where(.cui-alert[data-variant="outline"]) {
+    --_cui-alert-background: var(--cui-alert-background, transparent);
+    --_cui-alert-foreground: var(--cui-alert-foreground, CanvasText);
+    --_cui-alert-border-color: var(
+      --cui-alert-border-color,
+      var(--_cui-alert-intent-color)
+    );
+    --_cui-alert-icon-color: var(
+      --cui-alert-icon-color,
+      var(--_cui-alert-intent-color)
+    );
+    --_cui-alert-border-width: var(--cui-alert-border-width, 1px);
+  }
+
+  :where(.cui-alert[data-size="sm"]) {
+    --_cui-alert-padding: var(--cui-alert-padding, 0.625rem 0.75rem);
+    --_cui-alert-gap: var(--cui-alert-gap, 0.5rem);
+    --_cui-alert-content-gap: var(--cui-alert-content-gap, 0.125rem);
+    --_cui-alert-actions-gap: var(--cui-alert-actions-gap, 0.375rem);
+    --_cui-alert-icon-size: 1.125rem;
+    font-size: 0.8125rem;
+  }
+
+  :where(.cui-alert[data-size="lg"]) {
+    --_cui-alert-padding: var(--cui-alert-padding, 1rem 1.125rem);
+    --_cui-alert-gap: var(--cui-alert-gap, 0.875rem);
+    --_cui-alert-content-gap: var(--cui-alert-content-gap, 0.375rem);
+    --_cui-alert-actions-gap: var(--cui-alert-actions-gap, 0.625rem);
+    --_cui-alert-icon-size: 1.5rem;
+    font-size: 1rem;
+  }
+
+  :where(.cui-alert__indicator) {
+    display: grid;
+    place-items: center;
+    inline-size: var(--_cui-alert-icon-size);
+    block-size: var(--_cui-alert-icon-size);
+    color: var(--_cui-alert-icon-color);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  :where(.cui-alert__indicator[hidden]),
+  :where(.cui-alert__glyph[data-cui-alert-hidden]) {
+    display: none !important;
+  }
+
+  :where(.cui-alert__icon) {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    overflow: visible;
+    stroke-width: 2;
+  }
+
+  :where(.cui-alert__glyph--logical:dir(rtl)) {
+    transform: scaleX(-1);
+    transform-origin: center;
+  }
+
+  :where(.cui-alert__content) {
+    display: grid;
+    min-inline-size: 0;
+    gap: var(--_cui-alert-content-gap);
+    overflow: visible;
+  }
+
+  :where(.cui-alert__title),
+  :where(.cui-alert__message) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-alert__title) {
+    font-weight: var(--_cui-alert-title-font-weight);
+    line-height: 1.35;
+  }
+
+  :where(.cui-alert__title > :first-child),
+  :where(.cui-alert__message > :first-child) {
+    margin-block-start: 0;
+  }
+
+  :where(.cui-alert__title > :last-child),
+  :where(.cui-alert__message > :last-child) {
+    margin-block-end: 0;
+  }
+
+  :where(.cui-alert__actions) {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-inline-size: 0;
+    gap: var(--_cui-alert-actions-gap);
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-alert__actions > *) {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-alert__content :any-link),
+  :where(.cui-alert__actions :any-link) {
+    color: inherit;
+  }
+
+  :where(.cui-alert:not([data-icon]) .cui-alert__content),
+  :where(.cui-alert:not([data-icon]) .cui-alert__actions) {
+    grid-column: 1 / -1;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-alert) {
+      border-color: CanvasText;
+      background: Canvas;
+      color: CanvasText;
+    }
+
+    :where(.cui-alert__indicator) {
+      color: CanvasText;
+    }
+  }
+
+  @media print {
+    :where(.cui-alert) {
+      border-color: currentColor;
+      background: transparent;
+      color: #000000;
+      box-shadow: none;
+    }
+
+    :where(.cui-alert__indicator) {
+      color: currentColor;
+    }
+  }
+}

@@ -264,37 +264,7 @@ class CIcon(LibraryComponent):
       </svg>
     """
 
-    css = """
-      @layer citry-ui.theme {
-        :where(.cui-icon) {
-          --_cui-icon-size: var(--cui-icon-size, 1em);
-          --_cui-icon-stroke-width: var(--cui-icon-stroke-width, 2);
-          display: inline-block;
-          flex: none;
-          inline-size: var(--_cui-icon-size);
-          block-size: var(--_cui-icon-size);
-          overflow: visible;
-          color: inherit;
-          stroke-width: var(--_cui-icon-stroke-width);
-          vertical-align: -0.125em;
-          pointer-events: none;
-          user-select: none;
-        }
-
-        :where(.cui-icon[data-size="sm"]) {
-          --_cui-icon-size: var(--cui-icon-size, 0.875em);
-        }
-
-        :where(.cui-icon[data-size="lg"]) {
-          --_cui-icon-size: var(--cui-icon-size, 1.25em);
-        }
-
-        :where(.cui-icon--logical:dir(rtl) > .cui-icon__glyph) {
-          transform: scaleX(-1);
-          transform-origin: center;
-        }
-      }
-    """
+    css_file = "runtime.min.css"
 
 
 __all__ = ["CIcon", "CIconName", "CIconSize"]

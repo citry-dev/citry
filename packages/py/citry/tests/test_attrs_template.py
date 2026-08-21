@@ -15,6 +15,7 @@ import pytest
 from citry import Citry, Component, Const, Extension
 from citry.component_render import _compile_nested_template
 from citry.constness import precompute_const_parts
+from citry.ext.events import extension as events_extension_module
 from citry.nodes import ElementAttrsNode
 
 _CID_RE = re.compile(r' data-cid-\w+=""')
@@ -109,6 +110,10 @@ class TestCBindSpread:
     def test_spreads_mapping_onto_element(self):
         tpl = """<div c-bind="{'class': 'btn', 'disabled': True, 'data-id': item['id']}">y</div>"""
         assert _html(tpl, item={"id": 123}) == '<div class="btn" disabled data-id="123">y</div>'
+
+    def test_tag_name_uses_utf8_byte_offsets_after_non_ascii_text(self):
+        with pytest.raises(TypeError, match=r"c-bind on <button> must resolve to a mapping"):
+            _html('<p aria-hidden="true">↑ ↓</p><button c-bind="attrs">Save</button>', attrs=42)
 
     def test_python_dict_unpack_inside_bind(self):
         template = """<div c-bind="{**base, 'id': 'second'}">y</div>"""
@@ -298,6 +303,26 @@ class TestStaticAttrValuesAreNotInterpolated:
 
 
 class TestOnAttrsResolvedHook:
+    def test_builtin_events_hook_runs_only_for_compiler_candidates(self, monkeypatch):
+        calls = []
+        rewrite = events_extension_module.rewrite_resolved_attrs
+
+        def spy(*args, **kwargs):
+            calls.append(args[3])
+            return rewrite(*args, **kwargs)
+
+        monkeypatch.setattr(events_extension_module, "rewrite_resolved_attrs", spy)
+
+        assert _html('<div c-class="cls">x</div>', cls="card") == '<div class="card">x</div>'
+        assert calls == []
+
+        assert _html('<div c-bind="attrs">x</div>', attrs={"class": "card"}) == '<div class="card">x</div>'
+        assert calls == []
+
+        with pytest.raises(ValueError, match="not a declared handler"):
+            _html('<div c-bind="attrs">x</div>', attrs={"@c-click": "missing"})
+        assert calls == ["div"]
+
     def test_hook_rewrites_resolved_attrs(self):
         class Rewriter(Extension):
             name = "rewriter"

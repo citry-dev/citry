@@ -22,6 +22,7 @@ from citry_ui.components.cpin_input import (
     CPinInputValueChangeDetail,
     CPinInputVariant,
 )
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _app() -> Citry:
@@ -53,16 +54,45 @@ def _input(html: str) -> str:
 
 def test_public_schema_and_exports_are_exact() -> None:
     assert [field.name for field in fields(CPinInput.Kwargs)] == [
-        "value", "name", "form", "id", "length", "type", "required", "disabled", "readonly", "invalid",
-        "mask", "one_time_code", "placeholder", "attached", "separator_after", "label", "size", "variant",
-        "class_", "style", "attrs", "input_attrs",
+        "value",
+        "name",
+        "form",
+        "id",
+        "length",
+        "type",
+        "required",
+        "disabled",
+        "readonly",
+        "invalid",
+        "mask",
+        "one_time_code",
+        "placeholder",
+        "attached",
+        "separator_after",
+        "label",
+        "size",
+        "variant",
+        "class_",
+        "style",
+        "attrs",
+        "input_attrs",
     ]
     assert [field.name for field in fields(CPinInput.Slots)] == ["separator"]
-    assert all(item is not None for item in (
-        CPinInputType, CPinInputSize, CPinInputVariant, CPinInputChangeSource, CPinInputInvalidSource,
-        CPinInputValueChangeDetail, CPinInputCompleteDetail, CPinInputInvalidDetail,
-        CPinInputFocusChangeDetail, CPinInputSeparatorSlotData,
-    ))
+    assert all(
+        item is not None
+        for item in (
+            CPinInputType,
+            CPinInputSize,
+            CPinInputVariant,
+            CPinInputChangeSource,
+            CPinInputInvalidSource,
+            CPinInputValueChangeDetail,
+            CPinInputCompleteDetail,
+            CPinInputInvalidDetail,
+            CPinInputFocusChangeDetail,
+            CPinInputSeparatorSlotData,
+        )
+    )
 
 
 def test_numeric_code_renders_one_progressive_native_input_and_visual_cells() -> None:
@@ -186,10 +216,19 @@ def test_owned_attributes_are_rejected(destination, attribute) -> None:
 
 
 def test_css_exposes_public_variables_parts_and_environment_rules() -> None:
-    css = _render('<c-CPinInput label="Code" />', css=True)
+    css = read_component_source_css("cpin_input")
     for variable in (
-        "cell-size", "gap", "separator-gap", "border-color", "focus-color", "invalid-color",
-        "background", "color", "placeholder-color", "radius", "disabled-opacity",
+        "cell-size",
+        "gap",
+        "separator-gap",
+        "border-color",
+        "focus-color",
+        "invalid-color",
+        "background",
+        "color",
+        "placeholder-color",
+        "radius",
+        "disabled-opacity",
     ):
         assert f"--_cui-pin-input-{variable}: var(--cui-pin-input-{variable}" in css
     assert '[data-citry-ui-part="cell"]' in css

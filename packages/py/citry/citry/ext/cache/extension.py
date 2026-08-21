@@ -258,7 +258,7 @@ class CacheExtension(Extension):
         key_context = self._key_context()
         key = _build_component_cache_key(
             key_context,
-            type(component).class_id,
+            component._citry_class_id,
             vary=vary,
             version=config.version,
         )

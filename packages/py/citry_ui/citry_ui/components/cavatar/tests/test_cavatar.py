@@ -10,6 +10,7 @@ from markupsafe import Markup
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CAvatar
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(avatar: object, *, include_css: bool = False) -> str:
@@ -145,7 +146,7 @@ def test_direct_strings_are_detrusted_and_escaped():
 
 
 def test_css_and_js_expose_the_ratified_surface():
-    html = _render(CAvatar(), include_css=True)
+    css = read_component_source_css("cavatar")
     for variable in (
         "size",
         "background",
@@ -158,7 +159,7 @@ def test_css_and_js_expose_the_ratified_surface():
         "image-fit",
         "image-position",
     ):
-        assert f"--_cui-avatar-{variable}: var(--cui-avatar-{variable}," in html
+        assert f"--_cui-avatar-{variable}: var(--cui-avatar-{variable}," in css
     assert "onStatusChange" in CAvatar.js
     assert 'addEventListener("load"' in CAvatar.js
     assert 'addEventListener("error"' in CAvatar.js

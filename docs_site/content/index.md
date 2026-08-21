@@ -138,7 +138,7 @@ Install the [VS Code extension](/ide/vscode/).
 </section>
 
 <section class="landing-section" id="capabilities" markdown="1">
-## Build fast with 60+ ready-made components.
+## Build fast with 70+ ready-made components.
 
 <p class="landing-section__intro">
 <a href="/ui-library/">Citry UI</a>
@@ -165,7 +165,7 @@ Read about [caching](/advanced/caching/),
 [strict CSP](/security/#choose-a-csp-compatibility-mode),
 [HTML fragments](/advanced/html-fragments/),
 [component libraries](/advanced/component-libraries/), and
-[perf optimizations](/advanced/const-optimization/).
+[performance](/advanced/performance/).
 
 <c-landing-depth />
 

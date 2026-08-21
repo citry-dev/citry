@@ -8,6 +8,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CButtonGroup
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(template: str, *, include_css: bool = False, data: dict[str, object] | None = None) -> str:
@@ -89,10 +90,7 @@ def test_owned_and_runtime_attributes_are_rejected(attribute):
 
 
 def test_css_surface_and_zero_javascript():
-    html = _render(
-        '<c-CButtonGroup label="Map"><c-CButton>One</c-CButton><c-CButton>Two</c-CButton></c-CButtonGroup>',
-        include_css=True,
-    )
+    css = read_component_source_css("cbutton_group")
     for name in ("gap", "radius", "border-width"):
-        assert f"--_cui-button-group-{name}: var(--cui-button-group-{name}," in html
+        assert f"--_cui-button-group-{name}: var(--cui-button-group-{name}," in css
     assert getattr(CButtonGroup, "js", None) is None

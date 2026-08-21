@@ -13,6 +13,7 @@ from citry.citry_render import (
     PhysicalRegionRender,
     Placeholder,
     RenderFrame,
+    _PhysicalRegion,
 )
 from citry.client_directives import ComponentTagClientBindingSource, validate_client_props_target
 from citry.extension import OnRenderCacheExportContext, RenderCacheInstance, StagedRenderCacheContribution
@@ -239,7 +240,7 @@ def _collect_live_frames(
     def add_part(part: object, path: str) -> ArtifactPart:
         if isinstance(part, str):
             return ArtifactTextPart(str(part))
-        if isinstance(part, (PhysicalRegionPart, PhysicalRegionRender)):
+        if isinstance(part, _PhysicalRegion):
             wrapper_id = id(part)
             if wrapper_id in wrapper_objects:
                 raise CacheArtifactError(f"Physical region wrapper occurs more than once at {path}.")
@@ -1458,8 +1459,8 @@ def _decode_ownership_snapshot(
         local_location_id = SourceLocationId(len(locations) + 1)
         location_ids_by_index.append(local_location_id)
         locations.append(
-            SourceLocationRecord(
-                id=local_location_id,
+            SourceLocationRecord._from_values(
+                location_id=local_location_id,
                 order=_positive_int(record["order"], f"{path}.order"),
                 kind=kind,
                 owner_render_id=owner,

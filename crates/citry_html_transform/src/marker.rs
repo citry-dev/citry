@@ -40,6 +40,61 @@ pub struct MarkedHtml {
     pub placeholders: Vec<MarkedPlaceholder>,
 }
 
+/// Return whether each HTML fragment contains an actual Alpine attribute.
+///
+/// The scan recognizes ``x-*``, ``@*``, and ``:*`` attribute names on start
+/// tags while ignoring comments, plain text, and the contents of HTML raw-text
+/// elements. Keeping the batch boundary here lets Python hand a complete set
+/// of settled component fragments to Rust without paying one extension call
+/// per fragment.
+pub fn scan_alpine_html<'a, I>(html_fragments: I) -> Vec<bool>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    html_fragments
+        .into_iter()
+        .map(has_alpine_attribute)
+        .collect()
+}
+
+fn has_alpine_attribute(html: &str) -> bool {
+    let bytes = html.as_bytes();
+    let len = bytes.len();
+    let mut pos = 0;
+
+    while pos < len {
+        let Some(lt) = find_byte(bytes, pos, b'<') else {
+            break;
+        };
+        pos = lt;
+
+        if starts_with_at(bytes, pos, b"<!--") {
+            pos = find_seq(bytes, pos + 4, b"-->").map_or(len, |i| i + 3);
+        } else if starts_with_at(bytes, pos, b"<![CDATA[") {
+            pos = find_seq(bytes, pos + 9, b"]]>").map_or(len, |i| i + 3);
+        } else if starts_with_at(bytes, pos, b"<!") || starts_with_at(bytes, pos, b"<?") {
+            pos = find_byte(bytes, pos, b'>').map_or(len, |i| i + 1);
+        } else if starts_with_at(bytes, pos, b"</") {
+            pos = find_byte(bytes, pos, b'>').map_or(len, |i| i + 1);
+        } else if pos + 1 < len && bytes[pos + 1].is_ascii_alphabetic() {
+            let tag = lex_start_tag(bytes, pos, "");
+            if tag.has_alpine_attribute {
+                return true;
+            }
+            let name = &bytes[tag.name_start..tag.name_end];
+            pos = tag.end;
+            if !tag.self_closing && !is_void_element(name) {
+                if let Some(content_end) = raw_text_content_end(bytes, pos, name) {
+                    pos = content_end;
+                }
+            }
+        } else {
+            pos += 1;
+        }
+    }
+    false
+}
+
 /// Splice `root_attributes` (as `attr=""`) onto every root-level (depth 0)
 /// tag of `html`, and split the output around placeholder elements.
 ///
@@ -180,6 +235,7 @@ struct StartTag {
     self_closing: bool,
     /// Span of the placeholder attribute's value, when the tag carries it.
     placeholder_value: Option<(usize, usize)>,
+    has_alpine_attribute: bool,
 }
 
 /// Lex one start tag beginning at `start` (which holds `<`). Quoted attribute
@@ -194,6 +250,7 @@ fn lex_start_tag(bytes: &[u8], start: usize, placeholder_attr: &str) -> StartTag
     let name_end = i;
     let mut insert_pos = i;
     let mut placeholder_value: Option<(usize, usize)> = None;
+    let mut has_alpine_attribute = false;
 
     macro_rules! tag {
         ($end:expr, $self_closing:expr) => {
@@ -204,6 +261,7 @@ fn lex_start_tag(bytes: &[u8], start: usize, placeholder_attr: &str) -> StartTag
                 end: $end,
                 self_closing: $self_closing,
                 placeholder_value,
+                has_alpine_attribute,
             }
         };
     }
@@ -231,6 +289,12 @@ fn lex_start_tag(bytes: &[u8], start: usize, placeholder_attr: &str) -> StartTag
                     i += 1;
                 }
                 let attr_end = i;
+                let attr_name = &bytes[attr_start..attr_end];
+                has_alpine_attribute |= attr_name.starts_with(b"@")
+                    || attr_name.starts_with(b":")
+                    || (attr_name.len() >= 2
+                        && attr_name[0].eq_ignore_ascii_case(&b'x')
+                        && attr_name[1] == b'-');
                 let mut j = i;
                 while j < len && is_ws(bytes[j]) {
                     j += 1;

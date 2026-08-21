@@ -2,7 +2,34 @@
 //! serializer. Expected values were captured by running the scanner on each
 //! input and locking the observed output.
 
-use citry_html_transform::{mark_html, MarkedHtml};
+use citry_html_transform::{mark_html, scan_alpine_html, MarkedHtml};
+
+#[test]
+fn alpine_scan_finds_only_actual_attributes() {
+    assert_eq!(
+        scan_alpine_html(
+            [
+                r#"<div x-data="open"></div>"#,
+                r#"<button @click="open = true"></button>"#,
+                r#"<input :value="name">"#,
+                r#"<!-- <div x-data="ignored"></div> -->"#,
+                r#"<script>const sample = '<div x-data="ignored">'</script>"#,
+                r#"<p>text x-data="ignored"</p>"#,
+            ]
+            .iter()
+            .copied(),
+        ),
+        [true, true, true, false, false, false],
+    );
+}
+
+#[test]
+fn alpine_scan_is_ascii_case_insensitive_for_x_prefix() {
+    assert_eq!(
+        scan_alpine_html([r#"<DIV X-DATA="open"></DIV>"#].iter().copied()),
+        [true],
+    );
+}
 
 fn mark(html: &str, roots: &[&str]) -> MarkedHtml {
     let roots: Vec<String> = roots.iter().map(|s| s.to_string()).collect();

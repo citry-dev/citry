@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -12,11 +13,18 @@ from .records import assemble_graph, build_graph, validate_graph
 from .relationships import validate_relationships
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
 _REVISION = re.compile(r"^[0-9a-f]{64}$")
 _MANIFEST_FIELDS = ("protocol", "revision", "mode", "graphs", "delimiters")
 _DELIMITER_FIELDS = ("format",)
+
+
+class _AssembledManifest(dict[str, Any]):
+    """Signed manifest carrying its already-produced canonical wire bytes."""
+
+    serialized_json: str
+    mutation_guard: str
 
 
 def validate_revision(value: Any, path: str = "") -> ValidationIssue | None:
@@ -120,6 +128,7 @@ def assemble_manifest(
     graphs: Sequence[dict[str, Any]],
     *,
     audit: bool,
+    _canonicalize: Callable[[dict[str, Any]], tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Sign package-built graphs and optionally run their complete self-audit."""
     unsigned: dict[str, Any] = {
@@ -128,14 +137,38 @@ def assemble_manifest(
         "graphs": list(graphs),
         "delimiters": {"format": COMMENT_PREFIX},
     }
-    manifest = {**unsigned, "revision": "0" * 64}
+    manifest = _AssembledManifest({**unsigned, "revision": "0" * 64})
     if audit:
         issue = _validate_manifest_shape(manifest, "")
         if issue is None:
             issue = validate_relationships(manifest)
         if issue is not None:
             raise ProtocolValueError(issue)
-    manifest["revision"] = revision_for(unsigned)
+    if _canonicalize is None:
+        unsigned_json = canonical_json(unsigned)
+        revision = hashlib.sha256(unsigned_json.encode("utf8")).hexdigest()
+    else:
+        unsigned_json, revision = _canonicalize(unsigned)
+        if (
+            not isinstance(unsigned_json, str)
+            or not isinstance(revision, str)
+            or _REVISION.fullmatch(revision) is None
+        ):
+            msg = "The client-graph canonicalizer returned an invalid result."
+            raise TypeError(msg)
+    manifest["revision"] = revision
+    manifest.serialized_json = f'{unsigned_json[:-1]},"revision":{canonical_json(revision)}}}'.replace("<", "\\u003c")
+    # The product artifact exposes ``manifest`` for protocol tooling, so it
+    # remains mutable. A C-backed JSON guard lets the normal unchanged path
+    # reuse the canonical bytes above; changed/invalid data falls back to the
+    # full validator in ``serialize_manifest`` for its precise diagnostic.
+    manifest.mutation_guard = json.dumps(
+        manifest,
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
     return manifest
 
 

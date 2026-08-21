@@ -23,6 +23,13 @@ crates/citry_template_formatter/tests/fixtures/** text eol=lf
 packages/py/citry/citry/ext/dependencies/client/*.js text eol=lf
 packages/py/citry/citry/ext/events/client/*.js text eol=lf
 
+# Citry UI generates byte-frozen production payloads from readable source
+# files, so both inputs and outputs keep the same line endings on every host.
+packages/py/citry_ui/citry_ui/components/**/*.source.css text eol=lf
+packages/py/citry_ui/citry_ui/components/**/*.source.js text eol=lf
+packages/py/citry_ui/citry_ui/components/**/*.min.css text eol=lf
+packages/py/citry_ui/citry_ui/components/**/*.min.js text eol=lf
+
 # citry-core's release verifier compares the pure-Python wheel payload with
 # the tagged checkout byte for byte. Windows runners otherwise translate these
 # package sources to CRLF before Maturin copies them into each wheel.

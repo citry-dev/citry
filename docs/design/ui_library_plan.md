@@ -1,16 +1,18 @@
 # Plan: the Citry UI component library
 
-**Status (2026-08-19): `citry-ui` 0.1.0 is publicly available as an early-access
-release. The source-development catalog contains 60 documented component
-families and 107 registered definitions, including compound-family
+**Status (2026-08-21): `citry-ui` 0.1.0 is publicly available as an early-access
+release. The source-development catalog contains 71 documented component
+families and 137 registered definitions, including compound-family
 declarations and private renderers; its contracts remain alpha rather than
 stable.**
 
 Phases 0 through 6 are complete. Citry's generic publishing contracts, slot
 contracts, client ambient context, and docs live-component host are
 implemented. Phase 7 began on the released `citry 0.3.1` and `citry_core
-1.4.0` floor. Current source development and the released 0.1.0 line use the
-published `citry 0.4.0` and `citry_core 1.5.0` floor. The
+1.4.0` floor. The released 0.1.0 line uses the published `citry 0.4.0` and
+`citry_core 1.5.0` floor. Current source development requires `citry 0.4.2`
+for component-owned source messages and checked browser translation bindings.
+The
 [active component inventory](ui_component_inventory.md) owns current family
 status. Counts and family lists inside the chronological phase records below
 describe those dated slices rather than the current catalog.
@@ -290,7 +292,7 @@ The packaging and registration spike covers:
 
 **Gate:** the publishing architecture is proven. Local-artifact installation,
 registration, assets, and atomic rollback have passed. Current source
-development targets `citry>=0.4.0,<0.5.0` with the published `citry_core
+development targets `citry>=0.4.2,<0.5.0` with the published `citry_core
 1.5.0` floor. The 0.1.0 release gate verified that pair in clean installs.
 Multi-release upgrade, downgrade,
 uninstall, and wheel fixtures remain publication work. Phase 7 uses one public architecture:
@@ -314,8 +316,9 @@ The framework and quality foundations needed to begin Phase 7 now exist:
   registration are implemented;
 - server and client `provide`, `inject`, and `unprovide` contracts are
   implemented and browser-tested; and
-- the published `citry 0.4.0` and `citry_core 1.5.0` line is the current
-  development and published 0.1.0 line.
+- the published `citry 0.4.0` and `citry_core 1.5.0` line remains the
+  `citry-ui 0.1.0` release baseline; current source uses `citry 0.4.2` for
+  component-owned source messages and browser translation bindings.
 
 Storybook is now independent optional extension work, tracked in
 [`extensions_storybook.md`](extensions_storybook.md) and its supporting
@@ -1170,11 +1173,13 @@ review: the eight-class runtime/export family, structured API, thirteen public
 previews, focused three-engine evidence, correlated-rerender coverage,
 quality/scaling wiring, docs projection, and exact wheel qualification are
 checked in. Modal Drawer/Sheet and Toast subsequently completed their
-source-development passes, as recorded in the active inventory. Number, date,
-time, and advanced range controls may now enter family research against the
-implemented core i18n contracts. Each family still ratifies its own browser
-editing, stepping, calendar/time-zone, direction, and server/browser agreement;
-a generic browser temporal parser is not an entry gate.
+source-development passes, as recorded in the active inventory. NumberInput,
+Slider/RangeSlider, Rating, PinInput, DateInput, Calendar, DatePicker,
+DateRange, TimeInput, and TimePicker have now completed family research,
+implementation, documentation, and focused browser evidence against the core
+i18n contracts. Each family ratified its own browser editing, stepping,
+calendar, direction, and server/browser agreement; generic browser temporal
+parsing was not used as an entry gate.
 
 ## 5. Evaluation rubric
 

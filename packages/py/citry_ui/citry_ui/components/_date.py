@@ -29,8 +29,7 @@ def canonical_date(
     if type(value) is not str:
         suffix = " or None" if optional else ""
         raise TypeError(
-            f"{component_name} {input_name} must be an exact date, canonical YYYY-MM-DD string{suffix}, "
-            f"got {value!r}."
+            f"{component_name} {input_name} must be an exact date, canonical YYYY-MM-DD string{suffix}, got {value!r}."
         )
     raw = cast("str", value)
     if not _CANONICAL_DATE.fullmatch(raw):

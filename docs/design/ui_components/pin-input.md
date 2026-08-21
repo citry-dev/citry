@@ -1,6 +1,9 @@
 # PinInput component specification
 
-**Status:** ratified for Phase 8 implementation. Reviewed 2026-08-19.
+**Status (2026-08-21): implementation, public docs, structured reference,
+quality scenario, focused server tests, and three-browser behavior/axe evidence
+complete; human visual, password-manager, mobile, and assistive-technology
+review remains.**
 
 ## 1. Purpose and product bar
 

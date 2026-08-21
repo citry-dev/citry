@@ -1,6 +1,9 @@
 # Slider and RangeSlider component specification
 
-**Status:** ratified for Phase 8 implementation. Reviewed 2026-08-19.
+**Status (2026-08-21): `CSlider` and `CRangeSlider` implementation, public
+docs, structured reference, quality scenario, focused server tests, and
+three-browser behavior/axe evidence complete; human visual and
+assistive-technology review remains.**
 
 ## 1. Purpose and product bar
 
@@ -293,8 +296,8 @@ for Slider and lower-to-upper for RangeSlider.
 | `--cui-slider-thumb-border-color` | color | thumb edge | AccentColor |
 | `--cui-slider-focus-color` | color | focus ring | Highlight |
 | `--cui-slider-mark-color` | color | mark dot | CanvasText |
-| `--cui-slider-value-background` | color | value bubble | CanvasText |
-| `--cui-slider-value-foreground` | color | value text | Canvas |
+| `--cui-slider-value-background` | color | value bubble | `#111827` |
+| `--cui-slider-value-foreground` | color | value text | `#fff` |
 | `--cui-slider-track-size` | length | rail thickness | `.375rem` |
 | `--cui-slider-thumb-size` | length | visual thumb | `1.25rem` |
 | `--cui-slider-control-size` | length | interaction cross-size | `2.75rem` |
@@ -319,8 +322,13 @@ Reflected root attributes are `data-orientation`, `data-variant`, `data-size`,
 
 ## 11. Environmental behavior
 
-Light/dark use `light-dark`; forced colors preserves a distinct track, fill,
-thumb, focus ring, and marks. Reduced motion removes bubble/thumb transitions.
+Light/dark inherit system colors for the rail, fill, and thumb. The value
+bubble keeps one explicit high-contrast ink/surface pair so older engines that
+do not support `light-dark()` do not silently make the bubble transparent.
+Forced colors preserves a distinct track, fill, thumb, focus ring, and marks.
+Value bubbles switch visibility atomically so their text never passes through a
+transient low-contrast fade. Reduced motion preserves that transition-free
+presentation.
 Horizontal pointer geometry mirrors under RTL while fixed numeric keyboard
 semantics do not. Vertical minimum is physically at the bottom. At 200/400%
 zoom the horizontal track remains usable without page-level horizontal scroll;

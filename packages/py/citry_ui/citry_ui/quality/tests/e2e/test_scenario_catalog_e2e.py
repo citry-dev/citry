@@ -206,6 +206,21 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
     if scenario_id == "date-input.states":
         page.get_by_label("Required arrival date").fill("2026-08-21")
         return
+    if scenario_id == "date-picker.states":
+        page.get_by_role("button", name="Change date").first.click()
+        page.wait_for_function("document.querySelector('.cui-date-picker__popover').matches(':popover-open')")
+        page.wait_for_timeout(200)
+        return
+    if scenario_id == "date-range.states":
+        page.get_by_role("button", name="Change date range").first.click()
+        page.wait_for_function("document.querySelector('.cui-date-range__popover').matches(':popover-open')")
+        page.wait_for_timeout(200)
+        return
+    if scenario_id == "time.states":
+        page.get_by_role("button", name="Change time").first.click()
+        page.wait_for_function("document.querySelector('.cui-time-picker__popover').matches(':popover-open')")
+        page.wait_for_timeout(200)
+        return
     if scenario_id == "workflow.repeatable-contacts":
         page.get_by_role("button", name="Add contact").click()
         return

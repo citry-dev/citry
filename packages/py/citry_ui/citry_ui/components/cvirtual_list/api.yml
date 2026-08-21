@@ -1,0 +1,156 @@
+schema_version: 1
+family: virtual-list
+
+components:
+  - CVirtualList
+  - CVirtualWindow
+  - CVirtualListItem
+
+inputs:
+  - id: cvirtual-list-server-inputs
+    component: CVirtualList
+    channel: server
+    entries:
+      - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Optionally names the complete-DOM list.}
+      - {id: estimated-item-size, name: estimated_item_size, type: int, default: {kind: literal, value: 48}, effect: Sets the positive pixel intrinsic-size estimate used while off-screen Item rendering is skipped.}
+      - {id: viewport-size, name: viewport_size, type: int, default: {kind: literal, value: 400}, effect: Sets the positive initial viewport block size in CSS pixels.}
+      - {id: focusable, name: focusable, type: bool, default: {kind: literal, value: true}, effect: Adds or removes the root tabindex=0 keyboard-scroll stop.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the list viewport.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles before owned viewport geometry variables.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed viewport attributes without replacing owned roles geometry state or runtime markers.}
+  - id: cvirtual-window-server-inputs
+    component: CVirtualWindow
+    channel: server
+    entries:
+      - {id: total-count, name: total_count, type: int, default: {kind: required}, effect: Sets the exact nonnegative logical collection size.}
+      - {id: start-index, name: start_index, type: int, default: {kind: literal, value: 0}, effect: Sets the nonnegative logical index of the first supplied Item.}
+      - {id: item-size, name: item_size, type: int, default: {kind: literal, value: 48}, effect: Sets the positive fixed Item stride in CSS pixels; total extent cannot exceed 16000000 pixels.}
+      - {id: viewport-size, name: viewport_size, type: int, default: {kind: literal, value: 400}, effect: Sets the positive initial viewport block size in CSS pixels.}
+      - {id: overscan, name: overscan, type: int, default: {kind: literal, value: 3}, effect: Requests zero through one hundred Items before and after the visible range.}
+      - {id: initial-index, name: initial_index, type: int, default: {kind: literal, value: 0}, effect: Sets the one-shot nonnegative initial scroll index and clamps it to the collection.}
+      - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Optionally names the windowed list.}
+      - {id: focusable, name: focusable, type: bool, default: {kind: literal, value: true}, effect: Adds or removes the root tabindex=0 keyboard-scroll stop.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the Window viewport.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles before owned viewport geometry variables.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed viewport attributes without replacing owned roles geometry state or runtime markers.}
+  - id: cvirtual-window-client-inputs
+    component: CVirtualWindow
+    channel: client
+    entries:
+      - {id: overscan, name: overscan, type: int, omitted: Uses the server value; null is invalid and retains the last valid value., effect: Reactively changes the requested buffer from zero through one hundred Items.}
+      - {id: item-size, name: itemSize, type: number, omitted: Uses the server value; null is invalid and retains the last valid value., effect: Reactively changes fixed pixel geometry while the resulting total extent stays within the family limit.}
+      - {id: on-range-change, name: onRangeChange, type: function, omitted: Omission or null selects no component callback., effect: Receives newest distinct range requests without committing server state.}
+  - id: cvirtual-list-item-server-inputs
+    component: CVirtualListItem
+    channel: server
+    entries:
+      - {id: item-key, name: item_key, type: str, default: {kind: required}, effect: Supplies nonempty stable identity unique within the owning logical collection or supplied range.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the rendered list Item.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the Item; Window fixed block size remains owned.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed Item attributes without replacing owned roles positions identity or runtime markers.}
+
+slots:
+  - id: cvirtual-list-slots
+    component: CVirtualList
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CVirtualListDefaultSlotData]}, fallback: Empty list; accepts only CVirtualListItem declarations.}
+  - id: cvirtual-window-slots
+    component: CVirtualWindow
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CVirtualListDefaultSlotData]}, fallback: Empty supplied range; accepts only CVirtualListItem declarations.}
+  - id: cvirtual-list-item-slots
+    component: CVirtualListItem
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{index, item_key, set_size, strategy}', interfaces: [CVirtualListItemDefaultSlotData]}, fallback: None.}
+
+events:
+  - id: cvirtual-window-events
+    component: CVirtualWindow
+    entries:
+      - id: range-change
+        name: onRangeChange
+        signature: {display: '(detail: CVirtualListRangeChangeDetail) => void', interfaces: [CVirtualListRangeChangeDetail]}
+        trigger: The visible overscanned range is not covered by the committed server range.
+        detail: {display: '{startIndex, endIndex, visibleStartIndex, visibleEndIndex, requestId, reason, sourceEvent}', interfaces: [CVirtualListRangeChangeDetail]}
+        behavior: Animation-frame-coalesced request only. The application supplies a new server range and owns cancellation supersession loading error and retry.
+
+methods: []
+
+css:
+  - id: cvirtual-list-css-variables
+    component: CVirtualList
+    entries:
+      - {id: viewport-size, name: --cui-virtual-list-viewport-size, type: length, purpose: Viewport block size read by both root owners., default: Server viewport_size; 400px}
+      - {id: item-size, name: --cui-virtual-list-item-size, type: length, purpose: Complete-DOM intrinsic estimate or owned Window Item stride., default: Server estimate or item_size; 48px}
+      - {id: border, name: --cui-virtual-list-border, type: complete border value, purpose: Viewport border., default: Adaptive 1px solid neutral}
+      - {id: radius, name: --cui-virtual-list-radius, type: length, purpose: Viewport corner radius., default: 0.625rem}
+      - {id: background, name: --cui-virtual-list-background, type: color, purpose: Viewport background., default: Canvas}
+      - {id: item-background, name: --cui-virtual-list-item-background, type: color, purpose: Item background., default: transparent}
+
+attributes:
+  - id: cvirtual-list-root-attributes
+    component: CVirtualList
+    entries:
+      - {id: role, name: role, element: Root viewport div, type: list, meaning: Exposes noninteractive list semantics.}
+      - {id: aria-label, name: aria-label, element: Root viewport div, type: string | absent, meaning: Optional application-localized list name.}
+      - {id: tabindex, name: tabindex, element: Root viewport div, type: '0 | absent', meaning: Adds keyboard-scroll focus when focusable is true.}
+      - {id: data-strategy, name: data-strategy, element: Root viewport div, type: content-visibility, meaning: Identifies complete-DOM containment behavior.}
+  - id: cvirtual-window-root-attributes
+    component: CVirtualWindow
+    entries:
+      - {id: role, name: role, element: Root viewport div, type: list, meaning: Exposes noninteractive list semantics.}
+      - {id: aria-label, name: aria-label, element: Root viewport div, type: string | absent, meaning: Optional application-localized list name.}
+      - {id: aria-busy, name: aria-busy, element: Root viewport div, type: 'true | absent', meaning: Present while the current desired range is not covered.}
+      - {id: tabindex, name: tabindex, element: Root viewport div, type: '0 | absent', meaning: Adds keyboard-scroll focus when focusable is true.}
+      - {id: data-strategy, name: data-strategy, element: Root viewport div, type: window, meaning: Identifies true controlled window behavior.}
+      - {id: data-pending, name: data-pending, element: Root viewport div, type: present | absent, meaning: Mirrors an uncovered desired range.}
+      - {id: data-start-index, name: data-start-index, element: Root viewport div, type: nonnegative-integer-string, meaning: Mirrors the committed server range start.}
+      - {id: data-total-count, name: data-total-count, element: Root viewport div, type: nonnegative-integer-string, meaning: Mirrors logical collection size.}
+  - id: cvirtual-list-item-attributes
+    component: CVirtualListItem
+    entries:
+      - {id: role, name: role, element: Item div, type: listitem, meaning: Exposes one noninteractive list item.}
+      - {id: data-index, name: data-index, element: Item div, type: nonnegative-integer-string, meaning: Exposes settled logical zero-based position.}
+      - {id: data-item-key, name: data-item-key, element: Item div, type: string, meaning: Exposes stable server identity.}
+      - {id: aria-posinset, name: aria-posinset, element: Window Item div, type: positive-integer-string | absent, meaning: Exposes one-based logical position only in CVirtualWindow.}
+      - {id: aria-setsize, name: aria-setsize, element: Window Item div, type: nonnegative-integer-string | absent, meaning: Exposes total logical size only in CVirtualWindow.}
+
+selectors:
+  - id: cvirtual-list-selectors
+    component: CVirtualList
+    entries:
+      - {id: virtual-list, selector: '[data-citry-ui-part="virtual-list"]', element: Root viewport div, purpose: Root attrs and viewport customization destination for both owners.}
+      - {id: track, selector: '[data-citry-ui-part="track"]', element: Direct track div, purpose: Contains spacers and supplied Items.}
+      - {id: item, selector: '[data-citry-ui-part="item"]', element: Item div, purpose: Stable Item attrs content and customization destination.}
+      - {id: spacer, selector: '[data-citry-ui-part="spacer"]', element: Window-only aria-hidden div, purpose: Reserves omitted range space; geometry is owned.}
+
+interfaces:
+  - id: cvirtual-list-aliases
+    kind: aliases
+    entries:
+      - {id: strategy, name: CVirtualListStrategy, definition: 'Literal["content-visibility", "window"]'}
+      - {id: range-reason, name: CVirtualListRangeReason, definition: 'Literal["initial", "scroll", "resize", "configuration"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: cvirtual-list-default-slot-data, kind: record, name: CVirtualListDefaultSlotData, entries: []}
+  - id: cvirtual-list-item-default-slot-data
+    kind: record
+    name: CVirtualListItemDefaultSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Settled logical zero-based Item position.}
+      - {id: item-key, name: item_key, type: str, meaning: Stable authored Item identity.}
+      - {id: set-size, name: set_size, type: int, meaning: Complete declaration count or Window total_count.}
+      - {id: strategy, name: strategy, type: {display: CVirtualListStrategy, interfaces: [CVirtualListStrategy]}, meaning: Identifies the owning complete-DOM or Window behavior.}
+  - id: cvirtual-list-range-change-detail
+    kind: record
+    name: CVirtualListRangeChangeDetail
+    entries:
+      - {id: start-index, name: startIndex, type: int, meaning: Inclusive requested overscanned range start.}
+      - {id: end-index, name: endIndex, type: int, meaning: Exclusive requested overscanned range end.}
+      - {id: visible-start-index, name: visibleStartIndex, type: int, meaning: Inclusive geometrically visible range start.}
+      - {id: visible-end-index, name: visibleEndIndex, type: int, meaning: Exclusive geometrically visible range end.}
+      - {id: request-id, name: requestId, type: int, meaning: Monotonically increasing instance-local request identifier.}
+      - {id: reason, name: reason, type: {display: CVirtualListRangeReason, interfaces: [CVirtualListRangeReason]}, meaning: Geometry trigger that scheduled the latest request frame.}
+      - {id: source-event, name: sourceEvent, type: 'Event | null', meaning: Latest native scroll event when reason is scroll; otherwise null.}
+
+translations: []

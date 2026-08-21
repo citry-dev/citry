@@ -1,6 +1,7 @@
 # Design: const-ness and render-body caching
 
-**Status (2026-06-11): phases 1 and 2 built; taint parked.** In plain terms,
+**Status (2026-08-21): Const phases 1 and 2 built; taint parked; explicit
+pure-body memoization built.** In plain terms,
 the feature is: mark a component input as "this never changes between
 renders" (`Const(value)`), and the engine computes the parts of the template
 that depend only on such inputs once, caches the result, and reuses it on
@@ -46,8 +47,8 @@ stays parked (low value for now, the child takes its own cache hit since
 the marker flows down); phase-2 taint (section 4.1) stays parked.
 
 This document captures the design for the `Const()` optimization and the
-render-body caching it enables. It records the reasoning and the (many) edge
-cases.
+render-body caching it enables, plus the stronger class-level `pure = True`
+promise in section 16. It records the reasoning and the (many) edge cases.
 
 For the broader migration context see
 [`migration_djc.md`](migration_djc.md). For operating rules see
@@ -864,3 +865,79 @@ microbenchmark (a nav whose body is a literal item list and whose classes derive
 from a `Const(theme)` outside any loop). Build `Computed` only if those numbers
 justify the much larger machinery; deep const can wait for a concrete two-level
 forwarding case, since it adds nothing to the cache key it was assumed to help.
+
+## 16. Explicit pure-component body caching (2026-08-21)
+
+`Const(value)` is a promise about one value and lets Citry specialize only the
+nodes that depend on const inputs. `pure = True` is a stronger promise made by
+one exact component class: its template body is a deterministic,
+side-effect-free function of its template variables. Purity does not inherit;
+a subclass receives `pure = False` unless it states the promise again. The same
+rule applies to engine-neutral `LibraryComponent` definitions.
+
+The implementation deliberately memoizes less than a complete component:
+
+1. Every occurrence still creates a component instance and fresh render ID,
+   runs input normalization, `template_data`, JS/CSS data, provides, lifecycle
+   hooks, extension data hooks, finalization, and dependency merging.
+2. A render-local `ContextVar` owns the memo. Nested components share it, but
+   the complete dictionary is discarded when the root render ends. There is no
+   cross-request state or invalidation problem.
+3. The key contains the exact component class, compiled body identity, the
+   complete visible-name set, and only parser-reported variables the template
+   uses. Exact primitives and ordinary containers/dataclasses freeze by value;
+   an unknown application object is reusable only when the exact same live
+   object occurs again in that root render.
+4. A miss walks the normal body one top-level item at a time and captures a
+   small immutable plan. Safe items store their strings plus the shape of
+   exact, same-context, transparent `CitryRender` wrappers created by control
+   flow. A hit rebuilds those wrappers against the current context, so current
+   IDs and frames remain current.
+5. An item becomes a live hole when it changes ownership, captures i18n, or
+   returns a child/deferred component, slot region, placeholder, foreign
+   context, or component-root render. A hit executes that item normally while
+   reusing safe siblings around it. Citry stores nothing when the body contains
+   no reusable node result. This keeps the optimization fail-closed without
+   rejecting a complete body merely because one item must remain live.
+
+The explicit promise covers expression and element-hook behavior. A component
+that mutates state, consumes a stream, reads ambient data absent from its
+template variables, or depends on an element-level extension hook firing per
+occurrence is not pure. Component-level data and lifecycle hooks remain live,
+but putting the side effect there merely makes the declaration surprising and
+is discouraged.
+
+### 16.1 Why not reuse the output-cache artifact
+
+The persistent Cache extension already has a detached replay format capable of
+fresh IDs, ownership, dependencies, i18n, security validation, and backend
+transport. It is the correct trust boundary for cross-request subtree caching,
+but too expensive for a tiny render-local leaf memo. On the large benchmark,
+replaying typed artifacts for the candidate leaves moved a roughly 41.8 ms
+warm render to 58.6 ms. JSON was not the cause; validation and complete graph
+replay were. The pure-body plan is intentionally not a second persistent cache.
+
+### 16.2 Measured scope and outcome
+
+The benchmark's 36 authored component classes were all force-enabled in the
+original complete-body falsifier. Only two produced qualified repeated bodies:
+`HeroIcon` stored 11 input shapes and hit 30 times; the no-child branch of
+`ProjectOutputBadge` stored once and hit 10 times. Every other complete
+occurrence was unique or carried children or ownership.
+
+An interleaved 17-process A/B, with those two real declarations enabled only
+on the candidate side, moved the warm median from 42.49 ms to 39.44 ms (means
+42.96 to 39.12 ms). Deterministic fresh IDs produced byte-identical
+980,643-byte output. This is a useful opt-in for repeated leaves, not the
+architectural route back to the June 14 ms result; the much larger remaining
+cost is live component, node, slot, and ownership work that purity correctly
+refuses to erase.
+
+The follow-up item plan keeps that live work as holes and reuses safe sibling
+items. Focused tests prove that a stable expression runs once around two live
+child executions, and likewise around two independently rendered slot fills.
+Force-enabling additional benchmark classes still produced no clear end-to-end
+win because freezing each input key cost about as much as the small sibling
+expressions saved. The feature therefore expands where an application can gain
+from an explicitly expensive pure expression; it is not a blanket reason to
+mark container components pure.

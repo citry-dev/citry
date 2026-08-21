@@ -9,7 +9,9 @@ the whole shape. All of it is implemented: `render_impl` returns a
 
 For the broader migration context see
 [`migration_djc.md`](migration_djc.md). For the const-folding feature that
-sits on top of this flow see [`component_constness.md`](component_constness.md). For operating rules
+sits on top of this flow—including value-level `Const` specialization and the
+stronger render-local `pure = True` body memo—see
+[`component_constness.md`](component_constness.md). For operating rules
 see [`/CLAUDE.md`](../../CLAUDE.md).
 
 Upstream references: django-components

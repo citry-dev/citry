@@ -8,6 +8,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CSkeleton
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(skeleton: object, *, include_css: bool = False) -> str:
@@ -99,8 +100,8 @@ def test_owned_and_runtime_attributes_are_rejected(attribute):
 
 
 def test_css_surface_and_zero_javascript():
-    html = _render(CSkeleton(), include_css=True)
+    css = read_component_source_css("cskeleton")
     for name in ("width", "height", "radius", "background", "highlight", "gap", "duration", "last-line-width"):
-        assert f"--_cui-skeleton-{name}: var(--cui-skeleton-{name}," in html
-    assert "prefers-reduced-motion" in html
+        assert f"--_cui-skeleton-{name}: var(--cui-skeleton-{name}," in css
+    assert "prefers-reduced-motion" in css
     assert getattr(CSkeleton, "js", None) is None

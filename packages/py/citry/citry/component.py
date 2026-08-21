@@ -249,6 +249,11 @@ class ComponentMeta(LibraryComponentMeta):
                 return
             msg = f"Cannot change {class_name}'s component definition identity."
             raise AttributeError(msg)
+        if name == "pure" and "pure" in namespace:
+            if namespace["pure"] is value:
+                return
+            msg = f"Cannot change {class_name}'s pure-component declaration."
+            raise AttributeError(msg)
         if name in {"citry", "_citry_owner"} and "_citry_owner" in namespace:
             owner = namespace["_citry_owner"]
             if value is owner:
@@ -281,6 +286,9 @@ class ComponentMeta(LibraryComponentMeta):
             raise AttributeError(msg)
         if name in {"definition_id", "_definition_id"} and "_definition_id" in namespace:
             msg = f"Cannot delete {class_name}'s component definition identity."
+            raise AttributeError(msg)
+        if name == "pure" and "pure" in namespace:
+            msg = f"Cannot delete {class_name}'s pure-component declaration."
             raise AttributeError(msg)
         if name in {"citry", "_citry_owner"} and "_citry_owner" in namespace:
             msg = f"Cannot delete {class_name}.citry after the component class is defined."
@@ -390,6 +398,10 @@ class ComponentMeta(LibraryComponentMeta):
         # `template_file`) on the same class is an error; fail at class
         # definition. See docs/design/asset_loading.md section 3.2.
         validate_asset_pairs(name, attrs)
+        pure = attrs.get("pure", False)
+        if type(pure) is not bool:
+            msg = f"Component {name}.pure must be an exact bool; got {pure!r}."
+            raise ValueError(msg)
 
         # Extensions replace nested declarations with effective runtime
         # classes later in this method. Keep the authored objects so every
@@ -398,6 +410,9 @@ class ComponentMeta(LibraryComponentMeta):
 
         cls = cast("type[Component]", super().__new__(mcs, name, bases, attrs))
         type.__setattr__(cls, "_definition_id", _new_definition_id())
+        # Purity never inherits implicitly: a subclass may add ambient reads
+        # or side effects, so it must make its own promise.
+        type.__setattr__(cls, "pure", pure)
 
         if _citry_builtin is not None:
             type.__setattr__(cls, "_citry_builtin_token", _citry_builtin)
@@ -573,6 +588,17 @@ class Component(metaclass=ComponentMeta):
     component at serialize time. Used by built-ins like ``<c-provide>`` that
     only wrap content. Hooks, the render id, and dependency merging behave
     the same as for any component.
+    """
+
+    pure: ClassVar[bool] = False
+    """Whether repeated equal template data may reuse settled body strings.
+
+    Set ``pure = True`` only when rendering the template is a deterministic,
+    side-effect-free function of its template variables. The memo lives for
+    one root render. It can reuse safe strings around a child or Slot, but the
+    child, Slot, component instances, IDs, ownership, and i18n work still run
+    for every occurrence. A subclass must declare purity again rather than
+    inheriting the promise.
     """
 
     name: ClassVar[str | None] = None
@@ -835,12 +861,19 @@ class Component(metaclass=ComponentMeta):
     render path and crosses slot boundaries.
     """
 
-    root: Component
-    """The component at the top of the ``parent`` chain (the same
-    authorship rule as ``parent``).
+    _root: Component | None
+    """Stored non-root target; ``None`` lets a root avoid retaining itself."""
 
-    For root components, ``self.root is self``. Never None.
-    """
+    @property
+    def root(self) -> Component:
+        """
+        Return the component at the top of the authorship ``parent`` chain.
+
+        For root components, ``self.root is self``. The root case is computed
+        instead of stored, so preserving that public identity does not create
+        a root-to-itself reference cycle.
+        """
+        return self if self._root is None else self._root
 
     _provides_inherited: dict[str, Any]
     """Internal: the provide/inject entries this instance inherited from the
@@ -865,6 +898,9 @@ class Component(metaclass=ComponentMeta):
     _ownership_graph: OwnershipGraph
     """Internal graph that owns this rendered instance's typed records."""
 
+    _citry_class_id: str
+    """Stable class identity cached once for this render instance's hot path."""
+
     def __init__(
         self,
         # The public field is `component.id`, so the parameter shadows the builtin on purpose.
@@ -875,6 +911,7 @@ class Component(metaclass=ComponentMeta):
         provides: dict[str, Any] | None = None,
     ) -> None:
         cls = type(self)
+        self._citry_class_id = cls.class_id
 
         # Render id precedence: an explicit id wins; then this instance's
         # id_generator override (CitrySettings.id_generator); then the built-in
@@ -918,7 +955,7 @@ class Component(metaclass=ComponentMeta):
             self._finalize_inputs()
 
         self.parent = parent
-        self.root = parent.root if parent is not None else self
+        self._root = parent.root if parent is not None else None
 
         # The inherited mapping is shared, not copied: a component that
         # provides builds a new mapping instead of changing an existing one,

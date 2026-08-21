@@ -1,0 +1,66 @@
+@layer citry-ui.theme {
+  :where(.cui-date-input) {
+    --_cui-date-input-background: var(--cui-date-input-background, Canvas);
+    --_cui-date-input-foreground: var(--cui-date-input-foreground, CanvasText);
+    --_cui-date-input-border-color: var(--cui-date-input-border-color, color-mix(in srgb, CanvasText 38%, transparent));
+    --_cui-date-input-hover-border-color: var(--cui-date-input-hover-border-color, color-mix(in srgb, CanvasText 68%, transparent));
+    --_cui-date-input-focus-color: var(--cui-date-input-focus-color, Highlight);
+    --_cui-date-input-invalid-border-color: var(--cui-date-input-invalid-border-color, light-dark(#d92d20, #f97066));
+    --_cui-date-input-disabled-background: var(--cui-date-input-disabled-background, color-mix(in srgb, CanvasText 7%, Canvas));
+    --_cui-date-input-radius: var(--cui-date-input-radius, .5rem);
+    --_cui-date-input-height: var(--cui-date-input-height, 2.5rem);
+    --_cui-date-input-inline-padding: var(--cui-date-input-inline-padding, .75rem);
+    --_cui-date-input-block-padding: var(--cui-date-input-block-padding, .5rem);
+    --_cui-date-input-font-size: var(--cui-date-input-font-size, 1rem);
+    --_cui-date-input-min-inline-size: var(--cui-date-input-min-inline-size, 10rem);
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-inline-size: min(100%, var(--_cui-date-input-min-inline-size));
+    min-block-size: var(--_cui-date-input-height);
+    padding-block: var(--_cui-date-input-block-padding);
+    padding-inline: var(--_cui-date-input-inline-padding);
+    border: 1px solid var(--_cui-date-input-border-color);
+    border-radius: var(--_cui-date-input-radius);
+    background: var(--_cui-date-input-background);
+    color: var(--_cui-date-input-foreground);
+    font: inherit;
+    font-size: var(--_cui-date-input-font-size);
+    line-height: 1.25;
+  }
+  :where(.cui-date-input[data-variant="filled"]) {
+    --_cui-date-input-background: var(--cui-date-input-background, color-mix(in srgb, CanvasText 7%, Canvas));
+    --_cui-date-input-border-color: var(--cui-date-input-border-color, transparent);
+  }
+  :where(.cui-date-input[data-variant="plain"]) {
+    --_cui-date-input-background: var(--cui-date-input-background, transparent);
+    --_cui-date-input-border-color: var(--cui-date-input-border-color, transparent);
+    --_cui-date-input-radius: var(--cui-date-input-radius, 0);
+  }
+  :where(.cui-date-input[data-size="sm"]) {
+    --_cui-date-input-height: var(--cui-date-input-height, 2.25rem);
+    --_cui-date-input-inline-padding: var(--cui-date-input-inline-padding, .625rem);
+    --_cui-date-input-block-padding: var(--cui-date-input-block-padding, .375rem);
+    --_cui-date-input-font-size: var(--cui-date-input-font-size, .875rem);
+  }
+  :where(.cui-date-input[data-size="lg"]) {
+    --_cui-date-input-height: var(--cui-date-input-height, 2.75rem);
+    --_cui-date-input-inline-padding: var(--cui-date-input-inline-padding, .875rem);
+    --_cui-date-input-block-padding: var(--cui-date-input-block-padding, .625rem);
+    --_cui-date-input-font-size: var(--cui-date-input-font-size, 1.0625rem);
+  }
+  @media (hover: hover) {
+    :where(.cui-date-input:not(:disabled):not([data-readonly]):hover) { border-color: var(--_cui-date-input-hover-border-color); }
+  }
+  :where(.cui-date-input:focus-visible) {
+    border-color: var(--_cui-date-input-focus-color);
+    outline: .1875rem solid color-mix(in srgb, var(--_cui-date-input-focus-color) 38%, transparent);
+    outline-offset: .125rem;
+  }
+  :where(.cui-date-input[data-invalid]) { border-color: var(--_cui-date-input-invalid-border-color); }
+  :where(.cui-date-input:disabled) { background: var(--_cui-date-input-disabled-background); cursor: not-allowed; }
+  :where(.cui-date-input[readonly]) { cursor: default; }
+  @media (forced-colors: active) {
+    :where(.cui-date-input) { border-color: ButtonText; forced-color-adjust: auto; }
+    :where(.cui-date-input[data-invalid]) { border-color: Mark; }
+  }
+}

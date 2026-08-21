@@ -1,0 +1,147 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="tour"]) {
+    --_cui-tour-width: var(--cui-tour-width, 24rem);
+    --_cui-tour-background: var(--cui-tour-background, light-dark(#fff, #1c1917));
+    --_cui-tour-foreground: var(--cui-tour-foreground, CanvasText);
+    --_cui-tour-border-color: var(--cui-tour-border-color, light-dark(#d6d3d1, #57534e));
+    --_cui-tour-shadow: var(--cui-tour-shadow, 0 1rem 3rem rgb(0 0 0 / 28%));
+    --_cui-tour-radius: var(--cui-tour-radius, 0.875rem);
+    --_cui-tour-padding: var(--cui-tour-padding, 1.25rem);
+    --_cui-tour-gap: var(--cui-tour-gap, 1rem);
+    --_cui-tour-offset: var(--cui-tour-offset, 0.75rem);
+    --_cui-tour-spotlight-padding: var(--cui-tour-spotlight-padding, 0.5rem);
+    --_cui-tour-spotlight-radius: var(--cui-tour-spotlight-radius, 0.625rem);
+    --_cui-tour-backdrop-color: var(--cui-tour-backdrop-color, rgb(0 0 0 / 58%));
+    --_cui-tour-focus-color: var(--cui-tour-focus-color, Highlight);
+  }
+  :where([data-citry-ui-part="tour"] > [data-citry-ui-part="dialog"]) {
+    box-sizing: border-box;
+    inline-size: 100dvi;
+    block-size: 100dvb;
+    max-inline-size: none;
+    max-block-size: none;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    color: var(--_cui-tour-foreground);
+  }
+  :where([data-citry-ui-part="tour"] > [data-citry-ui-part="dialog"]::backdrop) {
+    background: var(--_cui-tour-backdrop-color);
+  }
+  :where([data-citry-ui-part="tour"][data-targeted] > [data-citry-ui-part="dialog"]::backdrop) {
+    background: transparent;
+  }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="spotlight"]) {
+    position: fixed;
+    z-index: 0;
+    border-radius: var(--_cui-tour-spotlight-radius);
+    box-shadow: 0 0 0 100vmax var(--_cui-tour-backdrop-color);
+    pointer-events: none;
+  }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="surface"]) {
+    position: fixed;
+    z-index: 1;
+    box-sizing: border-box;
+    inline-size: min(var(--_cui-tour-width), calc(100dvi - 1rem));
+    max-block-size: calc(100dvb - 1rem);
+    inset: 50% auto auto 50%;
+    translate: -50% -50%;
+    overflow: auto;
+    border: 1px solid var(--_cui-tour-border-color);
+    border-radius: var(--_cui-tour-radius);
+    background: var(--_cui-tour-background);
+    box-shadow: var(--_cui-tour-shadow);
+  }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="close"]) {
+    position: absolute;
+    z-index: 2;
+    inset-block-start: 0.5rem;
+    inset-inline-end: 0.5rem;
+  }
+  :where([data-citry-ui-part="tour"][data-targeted] [data-citry-ui-part="surface"]) {
+    inset: auto;
+    translate: none;
+  }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="panel"]) {
+    display: grid;
+    gap: var(--_cui-tour-gap);
+    padding: var(--_cui-tour-padding);
+  }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="panel"][hidden]) { display: none; }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="header"],
+    [data-citry-ui-part="tour"] [data-citry-ui-part="footer"],
+    [data-citry-ui-part="tour"] [data-citry-ui-part="actions"]) {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="header"]) { justify-content: space-between; }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="footer"]) { justify-content: space-between; }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="title"]) { margin: 0; font-size: 1.125rem; }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="description"]) { overflow-wrap: anywhere; }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="progress"]) { color: GrayText; font-size: 0.875rem; }
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="arrow"]) {
+    position: absolute;
+    inline-size: 0.75rem;
+    block-size: 0.75rem;
+    border: solid var(--_cui-tour-border-color);
+    border-width: 1px 0 0 1px;
+    background: var(--_cui-tour-background);
+    rotate: 45deg;
+  }
+  :where([data-citry-ui-part="tour"] [data-placement^="bottom"] [data-citry-ui-part="arrow"]) {
+    inset-block-start: -0.4375rem;
+    inset-inline-start: calc(50% - 0.375rem);
+  }
+  :where([data-citry-ui-part="tour"] [data-placement^="top"] [data-citry-ui-part="arrow"]) {
+    inset-block-end: -0.4375rem;
+    inset-inline-start: calc(50% - 0.375rem);
+    rotate: 225deg;
+  }
+  :where([data-citry-ui-part="tour"] [data-placement="left"] [data-citry-ui-part="arrow"]) {
+    inset-block-start: calc(50% - 0.375rem);
+    inset-inline-end: -0.4375rem;
+    rotate: 135deg;
+  }
+  :where([data-citry-ui-part="tour"] [data-placement="right"] [data-citry-ui-part="arrow"]) {
+    inset-block-start: calc(50% - 0.375rem);
+    inset-inline-start: -0.4375rem;
+    rotate: -45deg;
+  }
+  :where([data-citry-ui-part="tour"] button) {
+    min-block-size: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--_cui-tour-border-color);
+    border-radius: 0.5rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="tour"] [data-citry-tour-action="next"],
+    [data-citry-ui-part="tour"] [data-citry-tour-action="finish"]) {
+    border-color: transparent;
+    background: light-dark(#175cd3, #84adff);
+    color: light-dark(#fff, #172b4d);
+  }
+  :where([data-citry-ui-part="tour"] button:focus-visible),
+  :where([data-citry-ui-part="tour"] [data-citry-ui-part="title"]:focus-visible) {
+    outline: 0.1875rem solid var(--_cui-tour-focus-color);
+    outline-offset: 0.125rem;
+  }
+  :where([data-citry-ui-part="tour"][data-size="sm"]) { --_cui-tour-width: var(--cui-tour-width, 20rem); }
+  :where([data-citry-ui-part="tour"][data-size="lg"]) { --_cui-tour-width: var(--cui-tour-width, 30rem); }
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="tour"] *) {
+      scroll-behavior: auto !important;
+      transition-duration: 0ms !important;
+    }
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="tour"] [data-citry-ui-part="surface"]),
+    :where([data-citry-ui-part="tour"] button) { border-color: CanvasText; }
+  }
+  @media print { :where([data-citry-ui-part="tour"]) { display: none !important; } }
+}

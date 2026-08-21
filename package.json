@@ -4,6 +4,8 @@
   "private": true,
   "description": "Node dev tooling for the citry monorepo. Holds the pinned pyright used by the check gate (scripts/check.py) to enforce the typed Events base contract. Not published.",
   "scripts": {
+    "citry-ui:build-assets": "node packages/py/citry_ui/tools/build_assets.mjs",
+    "citry-ui:check-assets": "node packages/py/citry_ui/tools/build_assets.mjs --check",
     "citry-ui:quality-css": "tailwindcss -i packages/py/citry_ui/citry_ui/quality/css/tailwind.input.css -o packages/py/citry_ui/citry_ui/quality/css/.generated/tailwind.css --minify"
   },
   "packageManager": "pnpm@10.32.1",
@@ -12,8 +14,10 @@
     "@tailwindcss/cli": "4.3.3",
     "axe-core": "4.13.0",
     "bootstrap": "5.3.8",
+    "lightningcss": "1.33.0",
     "pyright": "1.1.413",
     "tailwindcss": "4.3.3",
+    "terser": "5.49.0",
     "vnu-jar": "26.8.15"
   }
 }

@@ -11,10 +11,12 @@ from .issues import ProtocolValueError, ValidationIssue, pointer, utf16_key
 
 PROTOCOL = "citry-client-graph/1"
 COMMENT_PREFIX = "citry:g1"
+REVISION_ALIAS_LENGTH = 8
 MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _REVISION_RE = re.compile(r"^[0-9a-f]{64}$")
-_COMMENT_RE = re.compile(r"^citry:g1:([0-9a-f]{64}):([0-9]+):([ir]):([0-9]+):([se])$")
+_REVISION_ALIAS_RE = re.compile(rf"^[0-9a-f]{{{REVISION_ALIAS_LENGTH}}}$")
+_COMMENT_RE = re.compile(rf"^citry:g1:([0-9a-f]{{{REVISION_ALIAS_LENGTH}}}):([0-9]+):([ir]):([0-9]+):([se])$")
 
 
 def _quote(value: str) -> str:
@@ -91,6 +93,14 @@ def inert_script_json(value: Any) -> str:
     return canonical_json(value).replace("<", "\\u003c")
 
 
+def revision_alias(revision: str) -> str:
+    """Return the short comment alias for one complete graph revision."""
+    if not isinstance(revision, str) or _REVISION_RE.fullmatch(revision) is None:
+        issue = ValidationIssue("/revision", "pattern", "The client-graph revision is invalid.")
+        raise ProtocolValueError(issue)
+    return revision[:REVISION_ALIAS_LENGTH]
+
+
 def format_ownership_comment(
     revision: str,
     graph_id: int,
@@ -99,8 +109,8 @@ def format_ownership_comment(
     side: str,
 ) -> str:
     """Build one complete HTML comment that brackets a physical graph range."""
+    alias = revision_alias(revision)
     values = (
-        (revision, "revision", isinstance(revision, str) and _REVISION_RE.fullmatch(revision) is not None),
         (graph_id, "graphId", type(graph_id) is int and 0 <= graph_id <= MAX_SAFE_INTEGER),
         (kind, "kind", isinstance(kind, str) and kind in {"i", "r"}),
         (record_id, "recordId", type(record_id) is int and 1 <= record_id <= MAX_SAFE_INTEGER),
@@ -110,7 +120,7 @@ def format_ownership_comment(
         if not valid:
             issue = ValidationIssue(pointer("", name), "pattern", f"The ownership-comment {name} is invalid.")
             raise ProtocolValueError(issue)
-    return f"<!--{COMMENT_PREFIX}:{revision}:{graph_id}:{kind}:{record_id}:{side}-->"
+    return f"<!--{COMMENT_PREFIX}:{alias}:{graph_id}:{kind}:{record_id}:{side}-->"
 
 
 def parse_ownership_comment(value: str) -> dict[str, str] | None:
@@ -118,14 +128,16 @@ def parse_ownership_comment(value: str) -> dict[str, str] | None:
     match = _COMMENT_RE.fullmatch(value.strip())
     if match is None:
         return None
-    revision, graph_id, kind, record_id, side = match.groups()
+    revision_alias_value, graph_id, kind, record_id, side = match.groups()
+    if _REVISION_ALIAS_RE.fullmatch(revision_alias_value) is None:
+        return None
     return {
-        "revision": revision,
+        "revisionAlias": revision_alias_value,
         "graphId": graph_id,
         "kind": kind,
         "recordId": record_id,
         "side": side,
-        "key": f"{COMMENT_PREFIX}:{revision}:{graph_id}:{kind}:{record_id}",
+        "key": f"{COMMENT_PREFIX}:{revision_alias_value}:{graph_id}:{kind}:{record_id}",
     }
 
 
@@ -133,9 +145,11 @@ __all__ = [
     "COMMENT_PREFIX",
     "MAX_SAFE_INTEGER",
     "PROTOCOL",
+    "REVISION_ALIAS_LENGTH",
     "canonical_json",
     "format_ownership_comment",
     "inert_script_json",
     "parse_ownership_comment",
+    "revision_alias",
     "revision_for",
 ]

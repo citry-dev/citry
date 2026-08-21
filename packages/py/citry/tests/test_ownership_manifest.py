@@ -7,7 +7,8 @@ import re
 
 import pytest
 
-from citry import Citry, Component
+import citry.serialize as serialize_module
+from citry import Citry, Component, ownership_manifest
 from citry._protocol import client_graph
 from citry.ownership_manifest import COMMENT_PREFIX, PROTOCOL, OwnershipManifestArtifact
 
@@ -23,6 +24,20 @@ _DEPS_RE = re.compile(
     r'<script type="application/json" data-citry>(.*?)</script>',
     re.DOTALL,
 )
+
+
+def test_ignore_strategy_skips_unused_ownership_analysis(monkeypatch):
+    c = Citry()
+
+    class Page(Component):
+        citry = c
+        template = "<main>plain</main>"
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("deps_strategy='ignore' must not analyze a manifest it cannot emit")
+
+    monkeypatch.setattr(serialize_module, "ownership_manifest_required", fail_if_called)
+    assert re.fullmatch(r'<main data-cid-c\d+="">plain</main>', Page().render().serialize(deps_strategy="ignore"))
 
 
 def _manifest(html: str) -> dict:
@@ -104,9 +119,9 @@ def test_single_multi_rootless_adjacent_and_nested_ranges_have_balanced_caps():
 
     html = Page().render().serialize()
     manifest = _manifest(html)
-    revision = manifest["revision"]
+    revision_alias = manifest["revision"][:8]
     prefix = manifest["delimiters"]["format"]
-    caps = re.findall(rf"<!--{re.escape(prefix)}:{revision}:(\d+):([ir]):(\d+):([se])-->", html)
+    caps = re.findall(rf"<!--{re.escape(prefix)}:{revision_alias}:(\d+):([ir]):(\d+):([se])-->", html)
 
     expected = {
         (str(graph["graphId"]), kind, str(record[id_key]))
@@ -164,6 +179,47 @@ def test_plain_server_only_template_fill_does_not_load_the_client_runtime():
     assert "plain" in html
     assert "data-citry-graph" not in html
     assert "Citry events client runtime. GENERATED FILE" not in html
+
+
+def test_required_and_prepare_reuse_direct_alpine_analysis(monkeypatch):
+    scans = 0
+    original = ownership_manifest._scan_alpine_html
+
+    def counting_scan(fragments):
+        nonlocal scans
+        scans += 1
+        return original(fragments)
+
+    monkeypatch.setattr(ownership_manifest, "_scan_alpine_html", counting_scan)
+    c = Citry()
+
+    class Page(Component):
+        citry = c
+        template = '<button x-data="{ open: false }">Open</button>'
+
+    assert "data-citry-graph" in Page().render().serialize()
+    assert scans == 1
+
+
+def test_direct_alpine_fragments_cross_the_rust_boundary_as_one_batch(monkeypatch):
+    batches: list[list[str]] = []
+    original = ownership_manifest._scan_alpine_html
+
+    def counting_scan(fragments):
+        batches.append(fragments)
+        return original(fragments)
+
+    monkeypatch.setattr(ownership_manifest, "_scan_alpine_html", counting_scan)
+
+    assert ownership_manifest._render_parts_use_alpine(
+        [
+            ('<button x-data="{}"></button>', None),
+            ('<button @click="open = true"></button>', None),
+            ('<p>x-data="{}" is documentation text</p>', None),
+        ]
+    ) == [True, True, False]
+    assert len(batches) == 1
+    assert len(batches[0]) == 2
 
 
 @pytest.mark.parametrize(
@@ -390,11 +446,11 @@ def test_cache_includes_transparent_slot_boundary_and_parent_region_caps():
     assert len(graph["componentInstances"]) == 3
     assert len(region_ids) == 1
     assert nested_invocation["parentRegionId"] in region_ids
-    revision = manifest["revision"]
+    revision_alias = manifest["revision"][:8]
     prefix = manifest["delimiters"]["format"]
     instance_id = transparent_instance["instanceId"]
-    assert html.count(f"<!--{prefix}:{revision}:0:i:{instance_id}:s-->") == 1
-    assert html.count(f"<!--{prefix}:{revision}:0:i:{instance_id}:e-->") == 1
+    assert html.count(f"<!--{prefix}:{revision_alias}:0:i:{instance_id}:s-->") == 1
+    assert html.count(f"<!--{prefix}:{revision_alias}:0:i:{instance_id}:e-->") == 1
 
 
 def test_nested_caches_retain_region_ancestry_matching_physical_caps():
@@ -410,12 +466,12 @@ def test_nested_caches_retain_region_ancestry_matching_physical_caps():
     manifest = _manifest(html)
     graph = manifest["graphs"][0]
     outer_region, inner_region = graph["slotRegions"]
-    revision = manifest["revision"]
+    revision_alias = manifest["revision"][:8]
     prefix = manifest["delimiters"]["format"]
-    outer_start = f"<!--{prefix}:{revision}:0:r:{outer_region['regionId']}:s-->"
-    outer_end = f"<!--{prefix}:{revision}:0:r:{outer_region['regionId']}:e-->"
-    inner_start = f"<!--{prefix}:{revision}:0:r:{inner_region['regionId']}:s-->"
-    inner_end = f"<!--{prefix}:{revision}:0:r:{inner_region['regionId']}:e-->"
+    outer_start = f"<!--{prefix}:{revision_alias}:0:r:{outer_region['regionId']}:s-->"
+    outer_end = f"<!--{prefix}:{revision_alias}:0:r:{outer_region['regionId']}:e-->"
+    inner_start = f"<!--{prefix}:{revision_alias}:0:r:{inner_region['regionId']}:s-->"
+    inner_end = f"<!--{prefix}:{revision_alias}:0:r:{inner_region['regionId']}:e-->"
 
     assert outer_region["parentRegionId"] is None
     assert inner_region["parentRegionId"] == outer_region["regionId"]

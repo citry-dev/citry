@@ -4162,15 +4162,15 @@ declare global {
     lastNode: Node | null;
   }
 
-  var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+):s$");
-  var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+:[se]$");
+  var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{8}:[0-9]+:i:[0-9]+):s$");
+  var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{8}:[0-9]+:i:[0-9]+:[se]$");
 
   var rewritePlacementComment = function (comment: Comment, placementId: string) {
     var ownership = parseOwnershipComment(comment.data);
     if (!ownership) return;
     comment.data =
       "citry:p1:" +
-      ownership.revision +
+      ownership.revisionAlias +
       ":" +
       placementId +
       ":" +

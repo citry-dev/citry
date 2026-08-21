@@ -12,9 +12,10 @@ process for each workspace folder. Formatter commands edit definite template,
 JavaScript, and CSS sections while leaving Fluent and the selected Python
 formatter unchanged.
 
-`citry-lsp` 0.1.1 is public on PyPI, and the extension's 0.1.0 release is
-available from Visual Studio Marketplace, Open VSX, and the matching GitHub
-Release.
+`citry-lsp` 0.1.1 is public on PyPI. Install the extension's 0.1.0 release from
+the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry),
+[Open VSX](https://open-vsx.org/extension/citry-dev/citry), or the matching
+[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.0).
 
 ## See it in action
 

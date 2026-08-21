@@ -36,6 +36,7 @@ from citry_ui import (
     CToastMessage,
     CToastRegion,
 )
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _page_html(app: Citry, value: object, *, include_css: bool = False) -> str:
@@ -1257,9 +1258,10 @@ def test_styled_tabs_expose_production_configuration_parts_and_tokens():
     assert html.count('data-citry-ui-part="tab-list"') == 1
     assert html.count('data-citry-ui-part="tab"') == 2
     assert html.count('data-citry-ui-part="tab-panel"') == 2
-    assert "--_cui-tabs-accent: var(--cui-tabs-accent, LinkText);" in html
-    assert "background: var(--_cui-tabs-active-background);" in html
-    assert "@media (forced-colors: active)" in html
+    css = read_component_source_css("ctabs")
+    assert "--_cui-tabs-accent: var(--cui-tabs-accent, LinkText);" in css
+    assert "background: var(--_cui-tabs-active-background);" in css
+    assert "@media (forced-colors: active)" in css
 
 
 @pytest.mark.parametrize(

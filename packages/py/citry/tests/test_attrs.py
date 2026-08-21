@@ -12,9 +12,19 @@ with a comment saying what changed and why.
 import pytest
 
 from citry import Const, Markup, format_attrs, merge_attrs, normalize_class, normalize_style, parse_string_style
+from citry.attrs import validate_html_attr_name
 
 
 class TestFormatAttrs:
+    def test_attribute_name_cache_does_not_retain_or_hash_string_subclasses(self):
+        class AttributeName(str):
+            __slots__ = ()
+
+            def __hash__(self):
+                raise AssertionError("a user-defined string must not enter the shared validation cache")
+
+        assert validate_html_attr_name(AttributeName("data-item")) == "data-item"
+
     def test_simple_attribute(self):
         assert format_attrs({"foo": "bar"}) == 'foo="bar"'
 

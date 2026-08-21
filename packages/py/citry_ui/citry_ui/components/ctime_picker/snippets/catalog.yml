@@ -1,0 +1,8 @@
+schema_version: 1
+previews:
+  - basic
+  - options
+  - form
+  - controlled
+  - locales
+  - states

@@ -63,10 +63,52 @@ groups:
         slug: multi-select
         source: packages/py/citry_ui/citry_ui/components/cmulti_select/api.md
         nav_title: MultiSelect
+      - family: transfer-list
+        slug: transfer-list
+        source: packages/py/citry_ui/citry_ui/components/ctransfer_list/api.md
+        nav_title: Transfer List
       - family: tags-input
         slug: tags-input
         source: packages/py/citry_ui/citry_ui/components/ctags_input/api.md
         nav_title: TagsInput
+      - family: number-input
+        slug: number-input
+        source: packages/py/citry_ui/citry_ui/components/cnumber_input/api.md
+        nav_title: NumberInput
+      - family: slider
+        slug: slider
+        source: packages/py/citry_ui/citry_ui/components/cslider/api.md
+        nav_title: Slider and RangeSlider
+      - family: rating
+        slug: rating
+        source: packages/py/citry_ui/citry_ui/components/crating/api.md
+      - family: pin-input
+        slug: pin-input
+        source: packages/py/citry_ui/citry_ui/components/cpin_input/api.md
+        nav_title: PinInput
+      - family: date-input
+        slug: date-input
+        source: packages/py/citry_ui/citry_ui/components/cdate_input/api.md
+        nav_title: DateInput
+      - family: calendar
+        slug: calendar
+        source: packages/py/citry_ui/citry_ui/components/ccalendar/api.md
+      - family: date-picker
+        slug: date-picker
+        source: packages/py/citry_ui/citry_ui/components/cdate_picker/api.md
+        nav_title: DatePicker
+      - family: date-range
+        slug: date-range
+        source: packages/py/citry_ui/citry_ui/components/cdate_range/api.md
+        nav_title: DateRange
+      - family: time-input
+        slug: time-input
+        source: packages/py/citry_ui/citry_ui/components/ctime_input/api.md
+        nav_title: TimeInput
+      - family: time-picker
+        slug: time-picker
+        source: packages/py/citry_ui/citry_ui/components/ctime_picker/api.md
+        nav_title: TimePicker
       - family: editable
         slug: editable
         source: packages/py/citry_ui/citry_ui/components/ceditable/api.md
@@ -124,6 +166,17 @@ groups:
       - family: list
         slug: list
         source: packages/py/citry_ui/citry_ui/components/clist/api.md
+      - family: timeline
+        slug: timeline
+        source: packages/py/citry_ui/citry_ui/components/ctimeline/api.md
+      - family: virtual-list
+        slug: virtual-list
+        source: packages/py/citry_ui/citry_ui/components/cvirtual_list/api.md
+        nav_title: Virtual List
+      - family: data-grid
+        slug: data-grid
+        source: packages/py/citry_ui/citry_ui/components/cdata_grid/api.md
+        nav_title: Data Grid
       - family: table
         slug: table
         source: packages/py/citry_ui/citry_ui/components/ctable/api.md
@@ -147,6 +200,9 @@ groups:
       - family: stepper
         slug: stepper
         source: packages/py/citry_ui/citry_ui/components/cstepper/api.md
+      - family: sidebar
+        slug: sidebar
+        source: packages/py/citry_ui/citry_ui/components/csidebar/api.md
       - family: tabs
         slug: tabs
         source: packages/py/citry_ui/citry_ui/components/ctabs/api.md
@@ -193,6 +249,9 @@ groups:
       - family: drawer
         slug: drawer
         source: packages/py/citry_ui/citry_ui/components/cdrawer/api.md
+      - family: tour
+        slug: tour
+        source: packages/py/citry_ui/citry_ui/components/ctour/api.md
       - family: menu
         slug: menu
         source: packages/py/citry_ui/citry_ui/components/cmenu/api.md

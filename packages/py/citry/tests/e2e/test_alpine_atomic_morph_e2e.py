@@ -48,9 +48,13 @@ def _mutate_graph(html: str, mutate: Any) -> str:
     canonical = canonical_json(unsigned).encode()
     manifest["revision"] = hashlib.sha256(canonical).hexdigest()
     replacement = f"{match.group(1)}{json.dumps(manifest)}{match.group(3)}"
-    return f"{html[: match.start()]}{replacement}{html[match.end() :]}".replace(
+    updated = f"{html[: match.start()]}{replacement}{html[match.end() :]}".replace(
         old_revision,
         manifest["revision"],
+    )
+    return updated.replace(
+        f"citry:g1:{old_revision[:8]}:",
+        f"citry:g1:{manifest['revision'][:8]}:",
     )
 
 
@@ -195,7 +199,8 @@ def test_same_class_self_render_adopts_graph_and_transfers_caps_atomically(page:
             logicalKept: newRoute.logicalInstance === oldLogical,
             capsTransferred: newPhysical.start === oldStart && newPhysical.end === oldEnd,
             capRevisionChanged:
-              newPhysical.start.data.includes(newRevision) && !newPhysical.start.data.includes(oldRevision),
+              newPhysical.start.data.includes(newRevision.slice(0, 8)) &&
+              !newPhysical.start.data.includes(oldRevision.slice(0, 8)),
             rootKept: rootAfter === rootBefore,
             elsKept: window.__a8.arrays[1] === els && els[0] === rootAfter,
             local: rootAfter.querySelector(".local").textContent,

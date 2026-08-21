@@ -212,11 +212,19 @@ class I18nBindingElementAttrsNode(Node):
         self.ordinal = ordinal
         self.text_eligible = text_eligible
         self.used_vars = original.used_vars
+        self.has_static_binding = any(
+            looks_like_i18n_binding(attr.key)
+            or (attr.key.startswith("c-") and looks_like_i18n_binding(attr.key.removeprefix("c-")))
+            for attr in original.attrs
+        )
 
     def render(self, context: CitryContext) -> Any:
         component = context.component
         if component is None:
             raise RuntimeError("$c-tr requires a component-owned HTML element.")
+        component_i18n = cast("Any", component).i18n
+        if not self.has_static_binding and component_i18n._extension._compiled_catalog is None:
+            return self.original.render(context)
         collector = cast("Any", component).i18n._bindings
         declarations: OrderedDict[tuple[str, str | None], _Declaration] = OrderedDict()
         contributions: list[Mapping[str, Any]] = []
@@ -289,18 +297,25 @@ class I18nBindingElementAttrsNode(Node):
                 component_boundary=False,
             )
         resolved = {key: value for key, value in resolved.items() if value is not None and value is not False}
-        resolved = component.citry.extensions.on_attrs_resolved(
-            component=component,
-            tag_name=self.original.tag_name,
-            attrs=resolved,
+        extensions = component.citry.extensions
+        runtime_candidate = self.original._runtime_extension_candidate(resolved)
+        validate_extension_output = extensions.has_attrs_resolved_hook(
+            runtime_candidate=runtime_candidate,
         )
-        if has_client_props_key(resolved, tag_name=self.original.tag_name):
-            apply_client_props_contribution(
-                resolved,
-                resolved[CLIENT_PROPS_ATTR],
+        if validate_extension_output:
+            resolved = extensions.on_attrs_resolved(
+                component=component,
                 tag_name=self.original.tag_name,
-                component_boundary=False,
+                attrs=resolved,
+                runtime_candidate=runtime_candidate,
             )
+            if has_client_props_key(resolved, tag_name=self.original.tag_name):
+                apply_client_props_contribution(
+                    resolved,
+                    resolved[CLIENT_PROPS_ATTR],
+                    tag_name=self.original.tag_name,
+                    component_boundary=False,
+                )
 
         owner = context.provides.get(CLIENT_CONTEXT_KEY)
         if owner is not None and (type(owner) is not str or not owner):
@@ -340,7 +355,7 @@ class I18nBindingElementAttrsNode(Node):
                 raise RuntimeError(f"{MARKER_ATTRIBUTE!r} is compiler-owned and cannot be authored.")
             resolved[MARKER_ATTRIBUTE] = " ".join(marker_ids)
             collector.add_marker(marker_ids)
-        return self.original._format(resolved, context)
+        return self.original._format(resolved, context, validate_keys=validate_extension_output)
 
 
 class I18nBoundExprNode(Node):

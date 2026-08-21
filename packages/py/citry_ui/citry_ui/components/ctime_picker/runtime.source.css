@@ -1,0 +1,37 @@
+@layer citry-ui.theme {
+  :where(.cui-time-picker) {
+    --_cui-time-picker-background: var(--cui-time-picker-background, Canvas);
+    --_cui-time-picker-foreground: var(--cui-time-picker-foreground, CanvasText);
+    --_cui-time-picker-border-color: var(--cui-time-picker-border-color, color-mix(in srgb, CanvasText 38%, transparent));
+    --_cui-time-picker-invalid-border-color: var(--cui-time-picker-invalid-border-color, light-dark(#d92d20, #f97066));
+    --_cui-time-picker-focus-color: var(--cui-time-picker-focus-color, Highlight);
+    --_cui-time-picker-radius: var(--cui-time-picker-radius, .625rem);
+    --_cui-time-picker-min-block-size: var(--cui-time-picker-min-block-size, 2.5rem);
+    --_cui-time-picker-padding-inline: var(--cui-time-picker-padding-inline, .75rem);
+    --_cui-time-picker-gap: var(--cui-time-picker-gap, .5rem);
+    box-sizing: border-box; display: grid; inline-size: 100%; min-inline-size: 0; color: var(--_cui-time-picker-foreground); font: inherit;
+  }
+  :where(.cui-time-picker__fallback) { box-sizing: border-box; inline-size: 100%; min-block-size: var(--_cui-time-picker-min-block-size); font: inherit; }
+  :where(.cui-time-picker__enhanced) { display: none; min-inline-size: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: .25rem; }
+  :where(.cui-time-picker[data-enhanced] > .cui-time-picker__enhanced) { display: grid; }
+  :where(.cui-time-picker__control, .cui-time-picker__clear) { box-sizing: border-box; min-block-size: var(--_cui-time-picker-min-block-size); border: 1px solid var(--_cui-time-picker-border-color); border-radius: var(--_cui-time-picker-radius); background: var(--_cui-time-picker-background); color: inherit; font: inherit; cursor: pointer; }
+  :where(.cui-time-picker__control) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--_cui-time-picker-gap); inline-size: 100%; padding-inline: var(--_cui-time-picker-padding-inline); text-align: start; }
+  :where(.cui-time-picker__value) { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :where(.cui-time-picker__icon) { font-size: 1.1em; }
+  :where(.cui-time-picker__clear) { aspect-ratio: 1; padding: 0 .625rem; font-size: 1.25em; }
+  :where(.cui-time-picker[data-variant="filled"] .cui-time-picker__control, .cui-time-picker[data-variant="filled"] .cui-time-picker__clear) { border-color: transparent; background: color-mix(in srgb, CanvasText 7%, Canvas); }
+  :where(.cui-time-picker[data-variant="plain"] .cui-time-picker__control, .cui-time-picker[data-variant="plain"] .cui-time-picker__clear) { border-color: transparent; border-radius: 0; background: transparent; }
+  :where(.cui-time-picker[data-size="sm"]) { --_cui-time-picker-min-block-size: var(--cui-time-picker-min-block-size, 2.25rem); font-size: .875rem; }
+  :where(.cui-time-picker[data-size="lg"]) { --_cui-time-picker-min-block-size: var(--cui-time-picker-min-block-size, 2.75rem); font-size: 1.0625rem; }
+  :where(.cui-time-picker[data-invalid] .cui-time-picker__control) { border-color: var(--_cui-time-picker-invalid-border-color); }
+  :where(.cui-time-picker__control:focus-visible, .cui-time-picker__clear:focus-visible) { outline: .1875rem solid color-mix(in srgb, var(--_cui-time-picker-focus-color) 42%, transparent); outline-offset: .0625rem; }
+  :where(.cui-time-picker__control:disabled, .cui-time-picker__clear:disabled) { color: GrayText; cursor: not-allowed; }
+  :where(.cui-time-picker[data-readonly] .cui-time-picker__control) { cursor: default; }
+  :where(.cui-time-picker__popover) { --cui-popover-inline-size: auto; --cui-popover-padding: .5rem; }
+  :where(.cui-time-picker__popover [data-citry-ui-part="title"], .cui-time-picker__listbox > [data-citry-ui-part="listbox-label"]) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :where(.cui-time-picker__listbox [data-citry-ui-part="listbox"]) { max-block-size: var(--cui-time-picker-list-max-block-size, 18rem); overflow: auto; }
+  @media (hover: hover) { :where(.cui-time-picker__control:not(:disabled):hover, .cui-time-picker__clear:not(:disabled):hover) { border-color: color-mix(in srgb, CanvasText 68%, transparent); } }
+  @media (pointer: coarse) { :where(.cui-time-picker) { --_cui-time-picker-min-block-size: max(var(--cui-time-picker-min-block-size, 2.5rem), 2.75rem); } }
+  @media (forced-colors: active) { :where(.cui-time-picker__control, .cui-time-picker__clear) { border-color: ButtonText; forced-color-adjust: auto; } :where(.cui-time-picker[data-invalid] .cui-time-picker__control) { outline: 2px solid Mark; } }
+  @media print { :where(.cui-time-picker__icon, .cui-time-picker__clear) { display: none; } :where(.cui-time-picker__control) { border-color: transparent; padding-inline: 0; } }
+}

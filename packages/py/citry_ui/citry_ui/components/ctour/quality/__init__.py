@@ -1,0 +1,1 @@
+"""Tour quality scenario."""

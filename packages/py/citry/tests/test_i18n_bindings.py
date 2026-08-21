@@ -92,6 +92,20 @@ def test_ordinary_spread_before_one_expression_does_not_create_a_text_binding() 
     assert "data-citry-i18n-binding" not in html
 
 
+def test_dormant_dynamic_binding_is_rejected_instead_of_rendered_as_html() -> None:
+    app = Citry()
+
+    class Page(Component):
+        citry = app
+        template = '<button c-bind="attrs">Save</button>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"aria-label": "Save", "$c-tr:save[aria-label]": True}}
+
+    with pytest.raises(RuntimeError, match="no active i18n catalog"):
+        Page().render()
+
+
 def test_server_dynamic_and_spread_forms_preserve_values_expression() -> None:
     app = _app()
 

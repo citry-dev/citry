@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 from typing import get_type_hints
 
 import pytest
@@ -10,6 +11,8 @@ from markupsafe import Markup
 import citry_ui
 from citry import Citry, Component, Const
 from citry_ui import CAlert, CIcon, CIconName
+
+_CSS_SOURCE = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
 
 
 class _SelfReturningSafeString(str):
@@ -147,7 +150,7 @@ def test_alert_icon_false_keeps_a_hidden_zero_behavior_destination():
 
     assert " data-icon" not in root
     assert " hidden" in indicator
-    assert "display: none !important" in CAlert.css
+    assert "display: none !important" in _CSS_SOURCE
 
 
 @pytest.mark.parametrize(
@@ -270,8 +273,8 @@ def test_alert_assets_keep_the_frozen_client_and_environment_contracts():
     assert "MutationObserver" not in CAlert.js
     assert 'announce === "polite"' in CAlert.js
     assert 'announce === "assertive"' in CAlert.js
-    assert "@layer citry-ui.theme" in CAlert.css
-    assert "@media (forced-colors: active)" in CAlert.css
-    assert "@media print" in CAlert.css
-    assert "overflow: hidden" not in CAlert.css
-    assert "z-index" not in CAlert.css
+    assert "@layer citry-ui.theme" in _CSS_SOURCE
+    assert "@media (forced-colors: active)" in _CSS_SOURCE
+    assert "@media print" in _CSS_SOURCE
+    assert "overflow: hidden" not in _CSS_SOURCE
+    assert "z-index" not in _CSS_SOURCE

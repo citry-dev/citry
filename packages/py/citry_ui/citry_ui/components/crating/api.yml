@@ -77,7 +77,7 @@ css:
       - {id: gap, name: --cui-rating-gap, type: length, purpose: Space between stars., default: 0.25rem}
       - {id: symbol-size, name: --cui-rating-symbol-size, type: length, purpose: Star size., default: 1.5rem}
       - {id: control-size, name: --cui-rating-control-size, type: length, purpose: Minimum pointer-target block size., default: 2.75rem}
-      - {id: disabled-opacity, name: --cui-rating-disabled-opacity, type: number, purpose: Disabled treatment opacity., default: 0.52}
+      - {id: disabled-opacity, name: --cui-rating-disabled-opacity, type: number, purpose: Disabled treatment opacity., default: '0.52'}
 
 attributes:
   - id: crating-root-attributes

@@ -51,6 +51,7 @@ from citry_ui import (
     CCommandPalette,
     CContainer,
     CContextMenu,
+    CDataGrid,
     CDialog,
     CDisclosure,
     CDrawer,
@@ -90,6 +91,7 @@ from citry_ui import (
     CRadioGroup,
     CScrollArea,
     CSelect,
+    CSidebar,
     CSpinner,
     CSplitButton,
     CSplitter,
@@ -101,11 +103,20 @@ from citry_ui import (
     CTable,
     CTagsInput,
     CTextarea,
+    CTimeline,
+    CTimelineItem,
     CToastRegion,
     CToolbar,
     CTooltip,
+    CTour,
+    CTourStep,
+    CTransferList,
+    CTransferListItem,
     CTree,
     CTreeItem,
+    CVirtualList,
+    CVirtualListItem,
+    CVirtualWindow,
 )
 from citry_ui.components import COMPONENTS
 
@@ -131,7 +142,7 @@ def test_package_exposes_one_explicit_ordered_component_library():
     assert manifest.name == "citry-ui"
     assert manifest.components == COMPONENTS
     assert manifest.required_extensions == ()
-    assert len(COMPONENTS) == 107
+    assert len(COMPONENTS) == 137
     assert all(issubclass(definition, LibraryComponent) for definition in COMPONENTS)
     assert all(not issubclass(definition, Component) for definition in COMPONENTS)
     assert tuple(definition.__name__ for definition in COMPONENTS) == (
@@ -197,6 +208,7 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CInternalMenuContent",
         "CInternalMenuSurface",
         "CContextMenu",
+        "CDataGrid",
         "CMultiSelect",
         "CTagsInput",
         "CNumberInput",
@@ -205,6 +217,11 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CRating",
         "CPinInput",
         "CDateInput",
+        "CDatePicker",
+        "CDateRange",
+        "CTimeInput",
+        "CTimePicker",
+        "CCalendar",
         "CProgress",
         "CPagination",
         "CPopover",
@@ -213,10 +230,20 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CRadioGroup",
         "CRadio",
         "CSpinner",
+        "CSidebar",
         "CSplitter",
         "CSplitterPanel",
         "CStepper",
         "CStep",
+        "CTimeline",
+        "CTimelineItem",
+        "CTour",
+        "CTourStep",
+        "CTransferList",
+        "CTransferListItem",
+        "CVirtualList",
+        "CVirtualListItem",
+        "CVirtualWindow",
         "CSkeleton",
         "CSwitch",
         "CCard",
@@ -238,6 +265,20 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CInternalStepperDeclarations",
         "CInternalStepper",
         "CInternalStep",
+        "CInternalTimelineDeclarations",
+        "CInternalTimeline",
+        "CInternalTimelineItem",
+        "CInternalTourDeclarations",
+        "CInternalTour",
+        "CInternalTourStep",
+        "CInternalTransferListDeclarations",
+        "CInternalTransferList",
+        "CInternalTransferListItem",
+        "CInternalVirtualListDeclarations",
+        "CInternalVirtualList",
+        "CInternalVirtualListStatic",
+        "CInternalVirtualListWindow",
+        "CInternalVirtualListItem",
         "CInternalSplitterDeclarations",
         "CInternalSplitter",
         "CInternalSplitterPanel",
@@ -322,11 +363,17 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.cbreadcrumbs.cbreadcrumbs",
         "citry_ui.components.cbutton.cbutton",
         "citry_ui.components.cbutton_group.cbutton_group",
+        "citry_ui.components.ccalendar.ccalendar",
+        "citry_ui.components.cdate_picker.cdate_picker",
+        "citry_ui.components.cdate_range.cdate_range",
+        "citry_ui.components.ctime_input.ctime_input",
+        "citry_ui.components.ctime_picker.ctime_picker",
         "citry_ui.components.csplitbutton.csplitbutton",
         "citry_ui.components.ccarousel.ccarousel",
         "citry_ui.components.ccombobox.ccombobox",
         "citry_ui.components.ccommand_palette.ccommand_palette",
         "citry_ui.components.ccontext_menu.ccontext_menu",
+        "citry_ui.components.cdata_grid.cdata_grid",
         "citry_ui.components.cdialog.cdialog",
         "citry_ui.components.cdrawer.cdrawer",
         "citry_ui.components.cdivider.cdivider",
@@ -348,9 +395,9 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.cnumber_input.cnumber_input",
         "citry_ui.components.cslider.cslider",
         "citry_ui.components.crating.crating",
-            "citry_ui.components.cpin_input.cpin_input",
-            "citry_ui.components.cdate_input.cdate_input",
-            "citry_ui.components.cmenu.cmenu",
+        "citry_ui.components.cpin_input.cpin_input",
+        "citry_ui.components.cdate_input.cdate_input",
+        "citry_ui.components.cmenu.cmenu",
         "citry_ui.components.ccard.ccard",
         "citry_ui.components.ctable.ctable",
         "citry_ui.components.ctabs.ctabs",
@@ -364,8 +411,13 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.ctoast.ctoast",
         "citry_ui.components.cradio.cradio",
         "citry_ui.components.cspinner.cspinner",
+        "citry_ui.components.csidebar.csidebar",
         "citry_ui.components.csplitter.csplitter",
         "citry_ui.components.cstepper.cstepper",
+        "citry_ui.components.ctimeline.ctimeline",
+        "citry_ui.components.ctour.ctour",
+        "citry_ui.components.ctransfer_list.ctransfer_list",
+        "citry_ui.components.cvirtual_list.cvirtual_list",
         "citry_ui.components.cskeleton.cskeleton",
         "citry_ui.components.cswitch.cswitch",
         "citry_ui.components.ctoggle.ctoggle",
@@ -630,7 +682,7 @@ def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
 
     assert requirements is not None
     citry_requirement = next(requirement for requirement in requirements if requirement.startswith("citry"))
-    assert ">=0.4.0" in citry_requirement
+    assert ">=0.4.2" in citry_requirement
     assert "<0.5.0" in citry_requirement
     assert all(not requirement.startswith("typing-extensions") for requirement in requirements)
     assert resources.joinpath("py.typed").is_file()
@@ -673,8 +725,12 @@ def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
     assert resources.joinpath("components/cprogress/cprogress.py").is_file()
     assert resources.joinpath("components/cradio/cradio.py").is_file()
     assert resources.joinpath("components/cspinner/cspinner.py").is_file()
+    assert resources.joinpath("components/csidebar/csidebar.py").is_file()
     assert resources.joinpath("components/csplitter/csplitter.py").is_file()
     assert resources.joinpath("components/cstepper/cstepper.py").is_file()
+    assert resources.joinpath("components/ctimeline/ctimeline.py").is_file()
+    assert resources.joinpath("components/ctour/ctour.py").is_file()
+    assert resources.joinpath("components/ctransfer_list/ctransfer_list.py").is_file()
     assert resources.joinpath("components/cswitch/cswitch.py").is_file()
     assert resources.joinpath("components/ccheckbox/ccheckbox.py").is_file()
     assert resources.joinpath("components/calert/calert.py").is_file()
@@ -719,6 +775,7 @@ def test_representative_component_definitions_remain_directly_importable():
     assert CCombobox.__module__ == "citry_ui.components.ccombobox.ccombobox"
     assert CCommandPalette.__module__ == "citry_ui.components.ccommand_palette.ccommand_palette"
     assert CContextMenu.__module__ == "citry_ui.components.ccontext_menu.ccontext_menu"
+    assert CDataGrid.__module__ == "citry_ui.components.cdata_grid.cdata_grid"
     assert CDialog.__module__ == "citry_ui.components.cdialog.cdialog"
     assert CDrawer.__module__ == "citry_ui.components.cdrawer.cdrawer"
     assert CEditable.__module__ == "citry_ui.components.ceditable.ceditable"
@@ -761,11 +818,21 @@ def test_representative_component_definitions_remain_directly_importable():
     assert CRadioGroup.__module__ == "citry_ui.components.cradio.cradio"
     assert CRadio.__module__ == "citry_ui.components.cradio.cradio"
     assert CSpinner.__module__ == "citry_ui.components.cspinner.cspinner"
+    assert CSidebar.__module__ == "citry_ui.components.csidebar.csidebar"
     assert CSplitButton.__module__ == "citry_ui.components.csplitbutton.csplitbutton"
     assert CSplitter.__module__ == "citry_ui.components.csplitter.csplitter"
     assert CSplitterPanel.__module__ == "citry_ui.components.csplitter.csplitter"
     assert CStepper.__module__ == "citry_ui.components.cstepper.cstepper"
     assert CStep.__module__ == "citry_ui.components.cstepper.cstepper"
+    assert CTimeline.__module__ == "citry_ui.components.ctimeline.ctimeline"
+    assert CTimelineItem.__module__ == "citry_ui.components.ctimeline.ctimeline"
+    assert CTour.__module__ == "citry_ui.components.ctour.ctour"
+    assert CTourStep.__module__ == "citry_ui.components.ctour.ctour"
+    assert CTransferList.__module__ == "citry_ui.components.ctransfer_list.ctransfer_list"
+    assert CTransferListItem.__module__ == "citry_ui.components.ctransfer_list.ctransfer_list"
+    assert CVirtualList.__module__ == "citry_ui.components.cvirtual_list.cvirtual_list"
+    assert CVirtualListItem.__module__ == "citry_ui.components.cvirtual_list.cvirtual_list"
+    assert CVirtualWindow.__module__ == "citry_ui.components.cvirtual_list.cvirtual_list"
     assert CSwitch.__module__ == "citry_ui.components.cswitch.cswitch"
     assert CCheckbox.__module__ == "citry_ui.components.ccheckbox.ccheckbox"
 

@@ -1,0 +1,175 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="carousel"]) {
+    --_cui-carousel-background: var(--cui-carousel-background, transparent);
+    --_cui-carousel-foreground: var(--cui-carousel-foreground, CanvasText);
+    --_cui-carousel-border-color: var(--cui-carousel-border-color, light-dark(#e7e5e4, #44403c));
+    --_cui-carousel-radius: var(--cui-carousel-radius, 0.9rem);
+    --_cui-carousel-gap: var(--cui-carousel-gap, 1rem);
+    --_cui-carousel-padding: var(--cui-carousel-padding, 0.75rem);
+    --_cui-carousel-block-size: var(--cui-carousel-block-size, 20rem);
+    --_cui-carousel-control-background: var(--cui-carousel-control-background, light-dark(#f5f5f4, #292524));
+    --_cui-carousel-control-foreground: var(--cui-carousel-control-foreground, CanvasText);
+    --_cui-carousel-control-size: var(--cui-carousel-control-size, 2.5rem);
+    --_cui-carousel-focus-color: var(--cui-carousel-focus-color, Highlight);
+    --_cui-carousel-indicator-size: var(--cui-carousel-indicator-size, 0.65rem);
+    --_cui-carousel-indicator-color: var(--cui-carousel-indicator-color, light-dark(#a8a29e, #78716c));
+    --_cui-carousel-indicator-active-color: var(--cui-carousel-indicator-active-color, Highlight);
+    --_cui-carousel-duration: var(--cui-carousel-duration, 260ms);
+    --_cui-carousel-easing: var(--cui-carousel-easing, ease-out);
+    display: grid;
+    gap: var(--_cui-carousel-gap);
+    min-inline-size: 0;
+    padding: var(--_cui-carousel-padding);
+    color: var(--_cui-carousel-foreground);
+    background: var(--_cui-carousel-background);
+  }
+  :where([data-citry-ui-part="carousel"][data-variant="surface"]) {
+    border: 1px solid var(--_cui-carousel-border-color);
+    border-radius: var(--_cui-carousel-radius);
+    background: light-dark(#fafaf9, #1c1917);
+  }
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="controls"]) {
+    display: flex;
+    justify-content: end;
+    gap: 0.45rem;
+  }
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="controls"][hidden]),
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="indicators"][hidden]) {
+    display: none !important;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="previous"]),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="next"]) {
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--_cui-carousel-control-size);
+    block-size: var(--_cui-carousel-control-size);
+    padding: 0;
+    border: 1px solid var(--_cui-carousel-border-color);
+    border-radius: 999px;
+    color: var(--_cui-carousel-control-foreground);
+    background: var(--_cui-carousel-control-background);
+    font: inherit;
+    font-size: 1.25rem;
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="previous"]:disabled),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="next"]:disabled) {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]) {
+    min-inline-size: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+    scroll-snap-type: inline mandatory;
+    border-radius: var(--_cui-carousel-radius);
+    cursor: grab;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]::-webkit-scrollbar) {
+    display: none;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"][data-dragging]) {
+    cursor: grabbing;
+    user-select: none;
+    scroll-snap-type: none;
+  }
+  :where([data-citry-ui-part="carousel"][data-orientation="vertical"] [data-citry-ui-part="viewport"]) {
+    block-size: var(--_cui-carousel-block-size);
+    scroll-snap-type: block mandatory;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="track"]) {
+    display: flex;
+    gap: var(--_cui-carousel-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :where([data-citry-ui-part="carousel"][data-orientation="vertical"] [data-citry-ui-part="track"]) {
+    flex-direction: column;
+    min-block-size: 100%;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="slide"]) {
+    box-sizing: border-box;
+    flex: 0 0 100%;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    scroll-snap-align: start;
+  }
+  :where([data-citry-ui-part="carousel"][data-orientation="vertical"] [data-citry-ui-part="slide"]) {
+    min-block-size: var(--_cui-carousel-block-size);
+  }
+  :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="indicators"]) {
+    display: flex;
+    justify-content: center;
+    gap: 0.55rem;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="indicator"]) {
+    inline-size: var(--_cui-carousel-indicator-size);
+    block-size: var(--_cui-carousel-indicator-size);
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--_cui-carousel-indicator-color);
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="indicator"][aria-current]) {
+    background: var(--_cui-carousel-indicator-active-color);
+    outline: 1px solid Canvas;
+    outline-offset: -2px;
+  }
+  :where([data-citry-ui-part="carousel"] button:focus-visible),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]:focus-visible),
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="slide"] :focus-visible) {
+    outline: 3px solid var(--_cui-carousel-focus-color);
+    outline-offset: 2px;
+  }
+  :where([data-citry-ui-part="carousel"][data-size="sm"]) {
+    --_cui-carousel-gap: 0.7rem;
+    --_cui-carousel-padding: 0.55rem;
+    --_cui-carousel-control-size: 2.15rem;
+    font-size: 0.875rem;
+  }
+  :where([data-citry-ui-part="carousel"][data-size="lg"]) {
+    --_cui-carousel-gap: 1.25rem;
+    --_cui-carousel-padding: 1rem;
+    --_cui-carousel-control-size: 2.85rem;
+    font-size: 1.0625rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]) {
+      scroll-behavior: auto;
+    }
+    :where([data-citry-ui-part="carousel"]) {
+      --_cui-carousel-duration: 0ms;
+    }
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="carousel"][data-variant="surface"]),
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="previous"]),
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="next"]) {
+      border-color: CanvasText;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="indicator"][aria-current]) {
+      background: Highlight;
+    }
+  }
+  @media print {
+    :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="controls"]),
+    :where([data-citry-ui-part="carousel"] > [data-citry-ui-part="indicators"]) {
+      display: none !important;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]) {
+      block-size: auto;
+      overflow: visible;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="track"]) {
+      display: grid;
+    }
+    :where([data-citry-ui-part="carousel"] [data-citry-ui-part="slide"]) {
+      min-block-size: 0;
+      break-inside: avoid;
+    }
+  }
+}

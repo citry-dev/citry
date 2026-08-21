@@ -1,5 +1,6 @@
 from .ccalendar import (
     CCalendar,
+    CCalendarChangeSource,
     CCalendarDate,
     CCalendarSize,
     CCalendarValueChangeDetail,
@@ -9,6 +10,7 @@ from .ccalendar import (
 
 __all__ = [
     "CCalendar",
+    "CCalendarChangeSource",
     "CCalendarDate",
     "CCalendarSize",
     "CCalendarValueChangeDetail",

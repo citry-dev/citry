@@ -267,6 +267,9 @@ jobs:
       - name: Compile the pinned Tailwind coexistence fixture
         run: pnpm run citry-ui:quality-css
 
+      - name: Verify checked-in Citry UI production assets
+        run: pnpm run citry-ui:check-assets
+
       - name: Validate every shared Citry UI route with Nu
         shell: bash
         run: |

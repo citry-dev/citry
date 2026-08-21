@@ -263,6 +263,9 @@ guessing from flattened HTML.
 **Locked choices:**
 
 - client-active output requires preserved `citry:g1` caps;
+- cap comments carry an eight-character page-local revision alias while the
+  manifest and graph registries retain the complete revision; active alias
+  collisions reject the incoming graph before publication;
 - v1 writes strings inline (no shared table), carries a top-level `mode` that
   drops source provenance in production, has no fixed protocol byte ceiling,
   and does not split one manifest;
@@ -693,6 +696,7 @@ remain on compatible self-renders.
 The server wire remains canonical `citry-client-graph/1`. For an Events render
 targeting several selector matches, the canonical copy keeps its `citry:g1`
 caps and each additional copy receives client-owned `citry:p1` placement caps.
+Both marker kinds carry the same eight-character revision alias.
 All copies share logical scope, State, props, lifecycle, and fill source while
 ordinary Alpine physical state remains copy-local. Cross-revision supplied
 fills stage the new graph-owned source route and retarget a preserved Alpine

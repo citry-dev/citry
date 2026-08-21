@@ -1,0 +1,153 @@
+@layer citry-ui.theme {
+  :where(.cui-native-select) {
+    --_cui-native-select-background: var(--cui-native-select-background, Canvas);
+    --_cui-native-select-foreground: var(--cui-native-select-foreground, CanvasText);
+    --_cui-native-select-border-color: var(
+      --cui-native-select-border-color,
+      color-mix(in srgb, CanvasText 38%, transparent)
+    );
+    --_cui-native-select-hover-border-color: var(
+      --cui-native-select-hover-border-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-native-select-focus-color: var(--cui-native-select-focus-color, Highlight);
+    --_cui-native-select-invalid-border-color: var(
+      --cui-native-select-invalid-border-color,
+      light-dark(#d92d20, #f97066)
+    );
+    --_cui-native-select-disabled-background: var(
+      --cui-native-select-disabled-background,
+      color-mix(in srgb, CanvasText 7%, Canvas)
+    );
+    --_cui-native-select-placeholder-color: var(
+      --cui-native-select-placeholder-color,
+      color-mix(in srgb, CanvasText 55%, transparent)
+    );
+    --_cui-native-select-radius: var(--cui-native-select-radius, 0.5rem);
+    --_cui-native-select-inline-padding: var(--cui-native-select-inline-padding, 0.75rem);
+    --_cui-native-select-block-padding: var(--cui-native-select-block-padding, 0.625rem);
+    --_cui-native-select-font-size: var(--cui-native-select-font-size, 1rem);
+    --_cui-native-select-indicator-size: var(--cui-native-select-indicator-size, 0.4rem);
+    --_cui-native-select-indicator-gap: var(--cui-native-select-indicator-gap, 0.75rem);
+
+    box-sizing: border-box;
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-block: var(--_cui-native-select-block-padding);
+    padding-inline-start: var(--_cui-native-select-inline-padding);
+    padding-inline-end: calc(
+      var(--_cui-native-select-inline-padding)
+      + var(--_cui-native-select-indicator-size)
+      + var(--_cui-native-select-indicator-size)
+      + var(--_cui-native-select-indicator-gap)
+    );
+    appearance: none;
+    border: 1px solid var(--_cui-native-select-border-color);
+    border-radius: var(--_cui-native-select-radius);
+    background-color: var(--_cui-native-select-background);
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-repeat: no-repeat;
+    background-position:
+      right calc(
+        var(--_cui-native-select-indicator-gap)
+        + var(--_cui-native-select-indicator-size)
+      ) center,
+      right var(--_cui-native-select-indicator-gap) center;
+    background-size:
+      var(--_cui-native-select-indicator-size)
+      var(--_cui-native-select-indicator-size);
+    color: var(--_cui-native-select-foreground);
+    font: inherit;
+    font-size: var(--_cui-native-select-font-size);
+    line-height: 1.5;
+  }
+
+  :where([dir="rtl"] .cui-native-select, .cui-native-select:dir(rtl)) {
+    background-position:
+      left calc(
+        var(--_cui-native-select-indicator-gap)
+        + var(--_cui-native-select-indicator-size)
+      ) center,
+      left var(--_cui-native-select-indicator-gap) center;
+  }
+
+  :where(.cui-native-select[data-empty]) {
+    color: var(--_cui-native-select-placeholder-color);
+  }
+
+  :where(.cui-native-select[data-variant="filled"]) {
+    --_cui-native-select-background: var(
+      --cui-native-select-background,
+      color-mix(in srgb, CanvasText 7%, Canvas)
+    );
+    --_cui-native-select-border-color: var(--cui-native-select-border-color, transparent);
+  }
+
+  :where(.cui-native-select[data-variant="plain"]) {
+    --_cui-native-select-background: var(--cui-native-select-background, transparent);
+    --_cui-native-select-border-color: var(--cui-native-select-border-color, transparent);
+    --_cui-native-select-radius: var(--cui-native-select-radius, 0);
+  }
+
+  :where(.cui-native-select[data-size="sm"]) {
+    --_cui-native-select-inline-padding: var(--cui-native-select-inline-padding, 0.625rem);
+    --_cui-native-select-block-padding: var(--cui-native-select-block-padding, 0.5rem);
+    --_cui-native-select-font-size: var(--cui-native-select-font-size, 0.875rem);
+  }
+
+  :where(.cui-native-select[data-size="lg"]) {
+    --_cui-native-select-inline-padding: var(--cui-native-select-inline-padding, 0.875rem);
+    --_cui-native-select-block-padding: var(--cui-native-select-block-padding, 0.75rem);
+    --_cui-native-select-font-size: var(--cui-native-select-font-size, 1.0625rem);
+  }
+
+  @media (hover: hover) {
+    :where(.cui-native-select:not(:disabled):hover) {
+      border-color: var(--_cui-native-select-hover-border-color);
+    }
+  }
+
+  :where(.cui-native-select:focus-visible) {
+    border-color: var(--_cui-native-select-focus-color);
+    outline: 0.1875rem solid color-mix(
+      in srgb,
+      var(--_cui-native-select-focus-color) 28%,
+      transparent
+    );
+    outline-offset: 0.125rem;
+  }
+
+  :where(.cui-native-select[data-invalid]) {
+    border-color: var(--_cui-native-select-invalid-border-color);
+  }
+
+  :where(.cui-native-select:disabled) {
+    cursor: not-allowed;
+    background-color: var(--_cui-native-select-disabled-background);
+    opacity: 0.72;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-native-select) {
+      appearance: auto;
+      padding-inline-end: var(--_cui-native-select-inline-padding);
+      border-color: ButtonText;
+      background-image: none;
+      forced-color-adjust: auto;
+    }
+
+    :where(.cui-native-select[data-invalid]) {
+      border-color: Mark;
+    }
+  }
+
+  @media print {
+    :where(.cui-native-select) {
+      padding-inline-end: var(--_cui-native-select-inline-padding);
+      background-image: none;
+    }
+  }
+}

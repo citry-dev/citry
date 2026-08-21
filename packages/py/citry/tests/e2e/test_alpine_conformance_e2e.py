@@ -17,7 +17,7 @@ pytestmark = pytest.mark.e2e
 SIGNING_KEY = "a10-conformance-secret"
 READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
 _GRAPH_TAG = re.compile(r'<script type="application/json" data-citry-graph>(.*?)</script>', re.DOTALL)
-_CAP = re.compile(r"<!--citry:g1:[0-9a-f]{64}:\d+:[ir]:\d+:[se]-->")
+_CAP = re.compile(r"<!--citry:g1:[0-9a-f]{8}:\d+:[ir]:\d+:[se]-->")
 
 
 def _fragment(component: Component) -> str:
@@ -162,7 +162,9 @@ def test_protocol_caps_and_runtime_versions_survive_real_document_delivery(page:
               (range) => range.start.nodeType === Node.COMMENT_NODE && range.end.nodeType === Node.COMMENT_NODE,
             ),
             capsCarryRevision: physicals.every(
-              (range) => range.start.data.includes(revision) && range.end.data.includes(revision),
+              (range) =>
+                range.start.data.includes(revision.slice(0, 8)) &&
+                range.end.data.includes(revision.slice(0, 8)),
             ),
             hooks: Citry.alpine._debug().hooks,
           };

@@ -40,15 +40,15 @@ from citry.citry_render import (
     CitryRender,
     DepsPosition,
     DepsStrategy,
-    PhysicalRegionPart,
-    PhysicalRegionRender,
     Placeholder,
     SerializedRender,
     SerializedSecurity,
+    _PhysicalRegion,
 )
 from citry.ownership_manifest import EXTRA_KEY as OWNERSHIP_MANIFEST_KEY
 from citry.ownership_manifest import (
     OwnershipManifestArtifact,
+    _index_settled_tree,
     ownership_manifest_required,
     prepare_ownership_manifest,
 )
@@ -212,13 +212,22 @@ def serialize_render_result(
         security_script_integrity=security_script_integrity,
     )
     session.require_implemented_modes()
+    ownership_analysis_cache: dict[tuple[str, int, str | None], bool] = {}
+    needs_ownership_analysis = deps_strategy in ("document", "fragment") or session.security_javascript != "allow"
+    settled_tree_index = (
+        _index_settled_tree(root) if root.context.component is not None and needs_ownership_analysis else None
+    )
     analysis_artifact: OwnershipManifestArtifact | None
-    if (
-        root.context.component is not None
-        and ownership_manifest_required(root)
-        and (deps_strategy in ("document", "fragment") or session.security_javascript != "allow")
+    if settled_tree_index is not None and ownership_manifest_required(
+        root,
+        _analysis_cache=ownership_analysis_cache,
+        _tree_index=settled_tree_index,
     ):
-        analysis_artifact = prepare_ownership_manifest(root)
+        analysis_artifact = prepare_ownership_manifest(
+            root,
+            _analysis_cache=ownership_analysis_cache,
+            _tree_index=settled_tree_index,
+        )
     else:
         analysis_artifact = None
     artifact = (
@@ -505,6 +514,94 @@ def _apply_valued_markers(
     return new_segments, new_placeholders
 
 
+def _append_frame_parts(
+    parts: list[RenderPart],
+    *,
+    render: CitryRender,
+    children: list[tuple[CitryRender, str]],
+    placeholder_map: dict[str, str],
+    placeholder_nonce: str,
+    artifact: OwnershipManifestArtifact | None,
+    out: list[str],
+) -> None:
+    """Append one frame's nested parts without a per-frame recursive closure."""
+    for part in parts:
+        if isinstance(part, str):
+            out.append(part)
+        elif isinstance(part, _PhysicalRegion):
+            region_artifact = (
+                artifact if artifact is not None and artifact.has_region(part.graph, part.region_id) else None
+            )
+            if region_artifact is not None:
+                out.append(region_artifact.region_cap(part.graph, part.region_id, "s"))
+            _append_frame_parts(
+                [part.part],
+                render=render,
+                children=children,
+                placeholder_map=placeholder_map,
+                placeholder_nonce=placeholder_nonce,
+                artifact=artifact,
+                out=out,
+            )
+            if region_artifact is not None:
+                out.append(region_artifact.region_cap(part.graph, part.region_id, "e"))
+        elif isinstance(part, CitryRender):
+            part_frame = part.frame
+            if (
+                part_frame.is_component_root
+                and part_frame.render_id is not None
+                and part_frame.render_id != render.frame.render_id
+            ):
+                # Another component's whole output: leave a placeholder for pass 2.
+                out.append(f'<template c-render-id="{part_frame.render_id}"></template>')
+                children.append((part, part_frame.render_id))
+            else:
+                # Interior content (control flow, nested template, slot-fill
+                # content) or a component-less render: join in directly.
+                graph = part.context.ownership
+                render_id = part_frame.render_id
+                if (
+                    artifact is not None
+                    and graph is not None
+                    and render_id is not None
+                    and artifact.is_transparent_instance(graph, render_id)
+                ):
+                    out.append(artifact.instance_cap(graph, render_id, "s"))
+                    _append_frame_parts(
+                        part.parts,
+                        render=render,
+                        children=children,
+                        placeholder_map=placeholder_map,
+                        placeholder_nonce=placeholder_nonce,
+                        artifact=artifact,
+                        out=out,
+                    )
+                    out.append(artifact.instance_cap(graph, render_id, "e"))
+                else:
+                    _append_frame_parts(
+                        part.parts,
+                        render=render,
+                        children=children,
+                        placeholder_map=placeholder_map,
+                        placeholder_nonce=placeholder_nonce,
+                        artifact=artifact,
+                        out=out,
+                    )
+        elif isinstance(part, Placeholder):
+            # The counter makes each occurrence's id (and so its text)
+            # unique, so the hook can address occurrences individually.
+            placeholder_id = f"{part.key}:{len(placeholder_map) + 1}:{placeholder_nonce}"
+            text = f'<template c-render-id="{placeholder_id}"></template>'
+            placeholder_map[placeholder_id] = text
+            out.append(text)
+        else:
+            # A DeferredComponent here means render() never resolved it.
+            # RuntimeError (not TypeError): the render is unfinished, nothing
+            # was given the wrong type.
+            msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
+            raise RuntimeError(msg)  # noqa: TRY004
+
+
 def _build_frame(
     render: CitryRender,
     children: list[tuple[CitryRender, str]],
@@ -530,59 +627,13 @@ def _build_frame(
     recurse deeply.
     """
     out: list[str] = []
-
-    def walk(parts: list[RenderPart]) -> None:
-        for part in parts:
-            if isinstance(part, str):
-                out.append(part)
-            elif isinstance(part, (PhysicalRegionPart, PhysicalRegionRender)):
-                region_artifact = (
-                    artifact if artifact is not None and artifact.has_region(part.graph, part.region_id) else None
-                )
-                if region_artifact is not None:
-                    out.append(region_artifact.region_cap(part.graph, part.region_id, "s"))
-                walk([part.part])
-                if region_artifact is not None:
-                    out.append(region_artifact.region_cap(part.graph, part.region_id, "e"))
-            elif isinstance(part, CitryRender):
-                part_frame = part.frame
-                if (
-                    part_frame.is_component_root
-                    and part_frame.render_id is not None
-                    and part_frame.render_id != render.frame.render_id
-                ):
-                    # Another component's whole output: leave a placeholder for pass 2.
-                    out.append(f'<template c-render-id="{part_frame.render_id}"></template>')
-                    children.append((part, part_frame.render_id))
-                else:
-                    # Interior content (control flow, nested template, slot-fill
-                    # content) or a component-less render: join in directly.
-                    graph = part.context.ownership
-                    render_id = part_frame.render_id
-                    if (
-                        artifact is not None
-                        and graph is not None
-                        and render_id is not None
-                        and artifact.is_transparent_instance(graph, render_id)
-                    ):
-                        out.append(artifact.instance_cap(graph, render_id, "s"))
-                        walk(part.parts)
-                        out.append(artifact.instance_cap(graph, render_id, "e"))
-                    else:
-                        walk(part.parts)
-            elif isinstance(part, Placeholder):
-                # The counter makes each occurrence's id (and so its text)
-                # unique, so the hook can address occurrences individually.
-                placeholder_id = f"{part.key}:{len(placeholder_map) + 1}:{placeholder_nonce}"
-                text = f'<template c-render-id="{placeholder_id}"></template>'
-                placeholder_map[placeholder_id] = text
-                out.append(text)
-            else:
-                # A DeferredComponent here means render() never resolved it.
-                # RuntimeError (not TypeError): the render is unfinished, nothing
-                # was given the wrong type.
-                msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
-                raise RuntimeError(msg)  # noqa: TRY004
-
-    walk(render.parts)
+    _append_frame_parts(
+        render.parts,
+        render=render,
+        children=children,
+        placeholder_map=placeholder_map,
+        placeholder_nonce=placeholder_nonce,
+        artifact=artifact,
+        out=out,
+    )
     return "".join(out)

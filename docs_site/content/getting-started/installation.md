@@ -37,6 +37,15 @@ Or, inside an existing `uv` project:
 uv add citry
 ```
 
+## Add editor support
+
+If you use VS Code, we recommend installing the
+[Citry extension from the Visual Studio
+Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry).
+It adds highlighting, completion, navigation, diagnostics, and formatting for
+Citry code inside Python files. Follow the [VS Code setup guide](/ide/vscode/)
+to connect it to the Citry environment and component registry for your project.
+
 ## Check the installation
 
 Save this complete example as `hello.py`. It uses Citry's

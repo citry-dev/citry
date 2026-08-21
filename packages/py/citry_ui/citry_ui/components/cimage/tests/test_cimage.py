@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator, Sequence
 from dataclasses import FrozenInstanceError, fields
+from pathlib import Path
 from typing import get_type_hints
 
 import pytest
@@ -468,6 +469,7 @@ def test_owned_attributes_and_runtime_paths_are_rejected(destination, attribute)
 
 
 def test_assets_expose_only_the_ratified_image_surface() -> None:
+    css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
     assert "IntersectionObserver" not in CImage.js
     assert "ResizeObserver" not in CImage.js
     assert 'addEventListener("load"' in CImage.js
@@ -482,4 +484,4 @@ def test_assets_expose_only_the_ratified_image_surface() -> None:
         "fallback-color",
         "fallback-background",
     ):
-        assert f"--_cui-image-{variable}: var(--cui-image-{variable}," in CImage.css
+        assert f"--_cui-image-{variable}: var(--cui-image-{variable}," in css

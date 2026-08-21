@@ -299,6 +299,6 @@ not make the stored artifact safe to expose.
 
 - [Cache backends](/advanced/cache-backends/) for in-process and shared
   storage.
-- [Const optimization](/advanced/const-optimization/) for reusing stable
-  pieces inside an ordinary render.
+- [Performance](/advanced/performance/) for reusing stable values and pure
+  component bodies inside an ordinary render.
 - [Security](/security/) for template and Events trust boundaries.

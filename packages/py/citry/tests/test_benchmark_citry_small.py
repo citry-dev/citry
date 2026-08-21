@@ -262,6 +262,11 @@ class Button(Component):
     """
 
 
+# Production applications complete registration before serving requests, so
+# charge that lifecycle work to startup rather than the first timed render.
+app.initialize()
+
+
 #####################################
 #
 # IMPLEMENTATION END

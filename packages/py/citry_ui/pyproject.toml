@@ -30,7 +30,7 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_LICENSES.md"]
-dependencies = ["citry>=0.4.0,<0.5.0"]
+dependencies = ["citry>=0.4.2,<0.5.0"]
 
 [dependency-groups]
 dev = [
@@ -75,6 +75,7 @@ namespaces = true
 
 [tool.setuptools.package-data]
 citry_ui = ["py.typed"]
+"*" = ["*.min.css", "*.min.js"]
 citry_ui_i18n = [
     "citry-i18n.toml",
     "formats.json",

@@ -9,6 +9,7 @@ from markupsafe import Markup
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CProgress
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(progress: object, *, include_css: bool = False) -> str:
@@ -161,7 +162,7 @@ def test_choices_and_labels_are_detrusted_before_rendering():
 
 
 def test_css_exposes_native_track_range_and_environment_contract():
-    css = _render(CProgress(label="Task"), include_css=True)
+    css = read_component_source_css("cprogress")
 
     for variable in ("track-color", "range-color", "height", "radius"):
         assert f"--_cui-progress-{variable}: var(" in css

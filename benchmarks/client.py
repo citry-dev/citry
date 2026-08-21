@@ -265,11 +265,10 @@ def _morph_round(browser: Any, server: _ScenarioServer, count: int) -> tuple[dic
                 { anchor, instance: id, event: 'choose' },
               );
               const transaction = performance.now() - started;
-              const deadline = performance.now() + 10000;
-              while ((window.__citryBenchInits || 0) < count * 2) {
-                if (performance.now() > deadline) throw new Error('morph callbacks did not settle');
-                await new Promise((resolve) => setTimeout(resolve, 0));
-              }
+              // The keyed children keep their physical nodes and lifecycle
+              // resources. ``applyResult`` has already awaited graph adoption;
+              // the assertions below prove that morph neither recreated nor
+              // leaked any component initializer or cleanup.
               await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
               return { transaction, paint: performance.now() - started };
             }
@@ -277,7 +276,7 @@ def _morph_round(browser: Any, server: _ScenarioServer, count: int) -> tuple[dic
             [server.morph, count],
         )
         snapshot = _snapshot(page)
-        _assert_sample(snapshot, count, errors, expected_inits=count * 2, expected_cleanups=count)
+        _assert_sample(snapshot, count, errors, expected_inits=count, expected_cleanups=0)
         return {"transaction_ms": float(timing["transaction"]), "paint_ms": float(timing["paint"])}, snapshot
     finally:
         page.close()

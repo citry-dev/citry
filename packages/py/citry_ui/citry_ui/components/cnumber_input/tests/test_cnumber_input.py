@@ -21,6 +21,7 @@ from citry_ui.components.cnumber_input import (
     CNumberInputValueChangeDetail,
     CNumberInputVariant,
 )
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _app() -> Citry:
@@ -231,7 +232,7 @@ def test_explicit_translation_overrides_render_without_catalog_bindings() -> Non
 
 
 def test_css_covers_public_variables_parts_and_environment_modes() -> None:
-    css = _render("<c-CNumberInput />", css=True)
+    css = read_component_source_css("cnumber_input")
     for variable in (
         "background",
         "foreground",
@@ -253,7 +254,7 @@ def test_css_covers_public_variables_parts_and_environment_modes() -> None:
 
 def test_messages_are_the_final_component_member() -> None:
     names = list(CNumberInput.__dict__)
-    assert names.index("messages") > names.index("css")
+    assert names.index("messages") > names.index("css_file")
     assert all(
         message in CNumberInput.messages
         for message in (

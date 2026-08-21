@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from citry_ui.quality.asset_sources import read_component_source_css
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 COMPONENT_ROOT = REPO_ROOT / "packages/py/citry_ui/citry_ui/components"
 SPEC_ROOT = REPO_ROOT / "docs/design/ui_components"
@@ -707,6 +709,135 @@ FAMILIES = (
         ),
     ),
     FamilyContract(
+        "ctimeline",
+        "ctimeline.py",
+        "timeline.md",
+        frozenset(
+            {
+                "aria-current",
+                "aria-label",
+                "data-density",
+                "data-has-opposite",
+                "data-index",
+                "data-line-style",
+                "data-orientation",
+                "data-side",
+                "data-size",
+                "data-state",
+            }
+        ),
+    ),
+    FamilyContract(
+        "ctour",
+        "ctour.py",
+        "tour.md",
+        frozenset(
+            {
+                "aria-describedby",
+                "aria-labelledby",
+                "data-active",
+                "data-current",
+                "data-describe",
+                "data-index",
+                "data-open",
+                "data-placement",
+                "data-size",
+                "data-target-id",
+                "data-targeted",
+                "data-value",
+            }
+        ),
+    ),
+    FamilyContract(
+        "ctransfer_list",
+        "ctransfer_list.py",
+        "transfer-list.md",
+        frozenset(
+            {
+                "aria-activedescendant",
+                "aria-disabled",
+                "aria-invalid",
+                "aria-multiselectable",
+                "aria-selected",
+                "data-available-empty",
+                "data-chosen-empty",
+                "data-disabled",
+                "data-invalid",
+                "data-required",
+                "data-selected",
+                "data-size",
+                "data-value",
+                "role",
+            }
+        ),
+    ),
+    FamilyContract(
+        "cvirtual_list",
+        "cvirtual_list.py",
+        "virtual_list.md",
+        frozenset(
+            {
+                "aria-busy",
+                "aria-label",
+                "aria-posinset",
+                "aria-setsize",
+                "data-index",
+                "data-item-key",
+                "data-pending",
+                "data-start-index",
+                "data-strategy",
+                "data-total-count",
+                "role",
+                "tabindex",
+            }
+        ),
+    ),
+    FamilyContract(
+        "cdata_grid",
+        "cdata_grid.py",
+        "data-grid.md",
+        frozenset(
+            {
+                "aria-colcount",
+                "aria-colindex",
+                "aria-rowcount",
+                "aria-rowindex",
+                "aria-selected",
+                "aria-sort",
+                "data-column-index",
+                "data-column-key",
+                "data-pending",
+                "data-row-index",
+                "data-row-key",
+                "data-selected",
+                "data-state",
+                "role",
+                "tabindex",
+            }
+        ),
+    ),
+    FamilyContract(
+        "csidebar",
+        "csidebar.py",
+        "sidebar.md",
+        frozenset(
+            {
+                "aria-controls",
+                "aria-expanded",
+                "aria-label",
+                "data-citry-sidebar-expanded-only",
+                "data-citry-sidebar-rail-only",
+                "data-collapsed",
+                "data-collapsible",
+                "data-side",
+                "data-size",
+                "data-sticky",
+                "data-variant",
+            }
+        ),
+        frozenset({"body", "description", "end", "list", "list-item", "surface"}),
+    ),
+    FamilyContract(
         "cpagination",
         "cpagination.py",
         "pagination.md",
@@ -991,8 +1122,10 @@ FAMILIES = (
 
 def _family_sources(family: FamilyContract) -> tuple[str, str, str]:
     package = COMPONENT_ROOT / family.package
+    implementation = (package / family.module).read_text(encoding="utf-8")
+    readable_css = read_component_source_css(family.package)
     return (
-        (package / family.module).read_text(encoding="utf-8"),
+        f"{implementation}\n{readable_css}",
         (package / "api.md").read_text(encoding="utf-8"),
         (SPEC_ROOT / family.spec).read_text(encoding="utf-8"),
     )

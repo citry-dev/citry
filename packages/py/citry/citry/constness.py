@@ -342,6 +342,11 @@ class ConstBodyCache:
         # template's list of static strings and nodes after the parts that
         # depend only on constant inputs have been computed (see precompute_const_parts).
         self._entries: OrderedDict[_CacheKey, list[BodyItem]] = OrderedDict()
+        self._has_collected_components = False
+
+    def _component_collected(self, _component_ref: object) -> None:
+        """Flag dead class keys without releasing cached bodies from a GC callback."""
+        self._has_collected_components = True
 
     def get_or_build(
         self,
@@ -358,8 +363,7 @@ class ConstBodyCache:
         runs under the lock and the result is stored; if it raises, nothing is
         cached and the error propagates (so the next render retries).
         """
-        component_ref = ref(comp_cls)
-        key = (component_ref, signature, frozenset(visible_names))
+        key = (ref(comp_cls), signature, frozenset(visible_names))
         with self._lock:
             self._prune_collected_components()
             body = self._entries.get(key)
@@ -367,7 +371,8 @@ class ConstBodyCache:
                 self._entries.move_to_end(key)
                 return body
             body = build()
-            self._entries[key] = body
+            stored_key = (ref(comp_cls, self._component_collected), signature, key[2])
+            self._entries[stored_key] = body
             while len(self._entries) > self._max_entries:
                 self._entries.popitem(last=False)
             return body
@@ -382,6 +387,11 @@ class ConstBodyCache:
 
     def _prune_collected_components(self) -> None:
         """Drop dead weak-reference entries during an ordinary cache operation."""
+        if not self._has_collected_components:
+            return
+        # Clear before scanning. A class collected during the scan sets the
+        # flag again so the next ordinary operation handles that later key.
+        self._has_collected_components = False
         stale = [key for key in self._entries if key[0]() is None]
         for key in stale:
             self._entries.pop(key, None)
@@ -390,6 +400,7 @@ class ConstBodyCache:
         """Drop all entries."""
         with self._lock:
             self._entries.clear()
+            self._has_collected_components = False
 
     def values(self) -> list[list[BodyItem]]:
         """A snapshot of the cached bodies (mainly for tests and debugging)."""

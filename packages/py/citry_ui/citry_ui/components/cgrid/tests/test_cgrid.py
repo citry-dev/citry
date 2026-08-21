@@ -8,6 +8,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CContainer, CGrid, CGridItem
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(layout: object, *, include_css: bool = False) -> str:
@@ -280,7 +281,7 @@ def test_roots_allow_unrelated_targeted_bindings_and_listeners():
 
 
 def test_css_exposes_breakpoints_variables_and_direct_child_safety_without_javascript():
-    css = _render(CContainer(slots={"default": CGrid(slots={"default": CGridItem()})}), include_css=True)
+    css = read_component_source_css("cgrid")
 
     for width in ("40rem", "48rem", "64rem", "80rem", "96rem"):
         assert f"@media (min-width: {width})" in css

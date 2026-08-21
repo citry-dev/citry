@@ -5,7 +5,12 @@ import pytest
 from citry import Citry, Component, Extension, InMemoryCache, Markup
 from citry._inline_assets import normalize_inline_asset
 from citry.ext.dependencies import Script, Style
-from citry.ext.dependencies.scripts import gen_cache_key, get_component_script
+from citry.ext.dependencies.scripts import (
+    component_script_hash,
+    gen_cache_key,
+    gen_component_cache_key,
+    get_component_script,
+)
 
 PAGE_TEMPLATE = "<html><head><title>t</title></head><body><p>hi</p></body></html>"
 
@@ -604,6 +609,55 @@ class TestComponentAssetEndTagGuard:
 
 
 class TestScriptCacheLifecycle:
+    def test_class_assets_are_derived_once_per_exact_class(self, monkeypatch):
+        from citry.ext.dependencies import scripts
+
+        calls = {"js": 0, "css": 0}
+        original = scripts._component_content
+
+        def counting_content(script_type, comp_cls):
+            calls[script_type] += 1
+            return original(script_type, comp_cls)
+
+        monkeypatch.setattr(scripts, "_component_content", counting_content)
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<p>card</p>"
+            js = "$component(() => {});"
+            css = ".card { color: red; }"
+
+        for _ in range(10):
+            str(Card())
+
+        assert calls == {"js": 1, "css": 1}
+
+    @pytest.mark.parametrize("script_type", ["js", "css"])
+    def test_class_capture_repairs_evicted_shared_cache(self, script_type):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            js = "console.log('card');"
+            css = ".card { color: red; }"
+
+        expected = get_component_script(script_type, Card)
+        content_hash = component_script_hash(script_type, Card)
+        assert expected is not None
+        assert content_hash is not None
+
+        stable_key = gen_cache_key(Card.class_id, script_type)
+        versioned_key = gen_component_cache_key(Card.class_id, script_type, content_hash)
+        c.cache.delete(stable_key)
+        c.cache.delete(versioned_key)
+
+        repaired = get_component_script(script_type, Card)
+
+        assert repaired == expected
+        assert c.cache.has(stable_key)
+        assert c.cache.has(versioned_key)
+
     def test_reset_files_evicts_and_repopulates(self, tmp_path):
         (tmp_path / "card.js").write_text("console.log('one');")
         c = Citry(dirs=[tmp_path])

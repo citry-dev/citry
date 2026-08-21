@@ -12,6 +12,7 @@ from citry import Citry, Component, ComponentLibrary
 from citry_ui.components.cdate_input import CDateInput, CDateInputSize, CDateInputValue, CDateInputVariant
 from citry_ui.components.cfield import CField
 from citry_ui.components.cform import CForm
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _app() -> Citry:
@@ -43,8 +44,23 @@ def _input(html: str) -> str:
 
 def test_public_schema_and_exports_are_exact() -> None:
     assert [field.name for field in fields(CDateInput.Kwargs)] == [
-        "value", "name", "form", "id", "min", "max", "step", "required", "disabled", "readonly",
-        "invalid", "autocomplete", "variant", "size", "class_", "style", "attrs",
+        "value",
+        "name",
+        "form",
+        "id",
+        "min",
+        "max",
+        "step",
+        "required",
+        "disabled",
+        "readonly",
+        "invalid",
+        "autocomplete",
+        "variant",
+        "size",
+        "class_",
+        "style",
+        "attrs",
     ]
     assert fields(CDateInput.Slots) == ()
     assert all(item is not None for item in (CDateInputValue, CDateInputSize, CDateInputVariant))
@@ -149,11 +165,21 @@ def test_field_owned_state_and_cross_form_owner_conflicts_fail() -> None:
 
 
 def test_css_covers_public_variables_states_and_native_affordance() -> None:
-    css = _render("<c-CDateInput />", css=True)
+    css = read_component_source_css("cdate_input")
     for suffix in (
-        "background", "foreground", "border-color", "hover-border-color", "focus-color",
-        "invalid-border-color", "disabled-background", "radius", "height", "inline-padding",
-        "block-padding", "font-size", "min-inline-size",
+        "background",
+        "foreground",
+        "border-color",
+        "hover-border-color",
+        "focus-color",
+        "invalid-border-color",
+        "disabled-background",
+        "radius",
+        "height",
+        "inline-padding",
+        "block-padding",
+        "font-size",
+        "min-inline-size",
     ):
         assert f"--cui-date-input-{suffix}" in css
     for contract in ('data-variant="filled"', 'data-variant="plain"', 'data-size="sm"', 'data-size="lg"'):

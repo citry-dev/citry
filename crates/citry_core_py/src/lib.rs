@@ -5,6 +5,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
+pub mod client_graph;
 pub mod html_transform;
 pub mod i18n;
 pub mod safe_eval;
@@ -23,7 +24,8 @@ use citry_template_parser::{
     Text, Token,
 };
 
-use crate::html_transform::{mark_html, transform_html};
+use crate::client_graph::canonical_json_and_revision;
+use crate::html_transform::{mark_html, scan_alpine_html, transform_html};
 use crate::i18n::{
     I18nCompileError, PyCatalogCompiler, PyCompiledCatalog, PyTextCatalog, canonicalize_locale,
     locale_direction,
@@ -49,6 +51,15 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_submodule(&html_transform_mod)?;
     html_transform_mod.add_function(wrap_pyfunction!(transform_html, &html_transform_mod)?)?;
     html_transform_mod.add_function(wrap_pyfunction!(mark_html, &html_transform_mod)?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(scan_alpine_html, &html_transform_mod)?)?;
+
+    // Client graph canonicalization
+    let client_graph_mod = PyModule::new(m.py(), "client_graph")?;
+    m.add_submodule(&client_graph_mod)?;
+    client_graph_mod.add_function(wrap_pyfunction!(
+        canonical_json_and_revision,
+        &client_graph_mod
+    )?)?;
 
     // Internationalization primitives
     let i18n_mod = PyModule::new(m.py(), "i18n")?;

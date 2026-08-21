@@ -4,8 +4,15 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
 
 use citry_html_transform::{
-    HtmlTransformerConfig, mark_html as mark_html_rust, transform_html as transform_html_rust,
+    HtmlTransformerConfig, mark_html as mark_html_rust, scan_alpine_html as scan_alpine_html_rust,
+    transform_html as transform_html_rust,
 };
+
+/// Find actual Alpine attributes in a batch of HTML fragments.
+#[pyfunction]
+pub fn scan_alpine_html(html_fragments: Vec<String>) -> Vec<bool> {
+    scan_alpine_html_rust(html_fragments.iter().map(String::as_str))
+}
 
 /// Splice attributes onto root-level tags and split the HTML around child
 /// placeholder elements, in a single scan.

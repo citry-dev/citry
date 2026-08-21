@@ -559,7 +559,7 @@ The top-level object has exactly these members, no more and no fewer:
   algorithm below, hashes those bytes with SHA-256, and writes the lowercase
   hexadecimal digest here. **Any change to the decoded manifest changes this
   value.**
-  
+
   **IMPORTANT:** The revision is a
   plain content hash, not a signature: there is no secret. Revision only confirms that
   manifest is **internally consistent**, but **it does NOT
@@ -704,13 +704,13 @@ end comment immediately after it. It constructs both comments from the same
 six parts:
 
 ```html
-<!--{prefix}:{revision}:{graph_id}:{kind}:{record_id}:{side}-->
+<!--{prefix}:{revision_alias}:{graph_id}:{kind}:{record_id}:{side}-->
 ```
 
 | Part | Meaning |
 |---|---|
 | `prefix` | The exact value of `delimiters.format` (`citry:g1`). It identifies a Citry client-graph v1 ownership comment. |
-| `revision` | The 64-character lowercase SHA-256 revision from this manifest. |
+| `revision-alias` | The first eight lowercase hexadecimal characters of this manifest's 64-character revision. |
 | `graph-id` | The `graphId` of the graph that owns the record. |
 | `kind` | `i` for a record in `componentInstances`; `r` for a record in `slotRegions`. |
 | `record-id` | The component's `instanceId` when `kind` is `i`; the slot region's `regionId` when `kind` is `r`. |
@@ -720,9 +720,9 @@ A component instance pair brackets exactly the HTML that component produced,
 whether that is one element, several elements, text, or nothing:
 
 ```html
-<!--citry:g1:<revision>:0:i:3:s-->
+<!--citry:g1:<revision-alias>:0:i:3:s-->
 <button>Save</button><span>Ready</span>
-<!--citry:g1:<revision>:0:i:3:e-->
+<!--citry:g1:<revision-alias>:0:i:3:e-->
 ```
 
 A slot region pair brackets one place where a fill was rendered. Rendering the
@@ -730,19 +730,27 @@ same fill through two outlets creates two slot-region records and therefore two
 separate pairs:
 
 ```html
-<!--citry:g1:<revision>:0:r:4:s-->
+<!--citry:g1:<revision-alias>:0:r:4:s-->
 <strong>Filled by the parent</strong>
-<!--citry:g1:<revision>:0:r:4:e-->
+<!--citry:g1:<revision-alias>:0:r:4:e-->
 ```
 
 An empty range has adjacent comments:
 
 ```html
-<!--citry:g1:<revision>:0:i:5:s--><!--citry:g1:<revision>:0:i:5:e-->
+<!--citry:g1:<revision-alias>:0:i:5:s--><!--citry:g1:<revision-alias>:0:i:5:e-->
 ```
 
+The alias is only a compact reference within the current page. The manifest,
+public browser API, Events links, dependency links, replay ledger, and internal
+graph maps all keep the complete revision as identity. While a graph is live
+or provisionally staged, the browser reserves its alias for that complete
+revision. A different revision with the same alias is rejected before it can
+publish state. Retiring or aborting the graph releases the alias, while the
+complete revision remains in the replay ledger.
+
 Every `componentInstances` and `slotRegions` record has exactly one matching
-pair. A pair uses the same prefix, revision, graph, kind, and record id on both
+pair. A pair uses the same prefix, revision alias, graph, kind, and record id on both
 sides; only `side` changes. Pairs are balanced, nest without crossing, and
 their start and end normally share one DOM parent. The physical nesting must
 also agree with each record's `parentRegionId`: a component or slot region
@@ -777,6 +785,11 @@ to the rest of the page until all of that passes. These correctness checks run
 in both development and production; only source-provenance checks are
 development-only. The protocol has no fixed manifest byte limit, so a reader
 does not reject an otherwise valid graph solely because it is large.
+
+The browser derives the expected eight-character alias from the validated
+complete revision, then checks every physical comment against that alias. It
+never treats an alias alone as graph identity. An alias already reserved by a
+different live or provisional revision rejects the incoming graph atomically.
 
 A malformed or partial fragment commits nothing and leaves already-committed
 revisions untouched. The browser processes each script node once, keyed on the

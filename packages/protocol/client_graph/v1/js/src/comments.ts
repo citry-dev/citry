@@ -1,6 +1,6 @@
 /** The data carried by one canonical client-graph ownership comment. */
 export interface OwnershipComment {
-	revision: string;
+	revisionAlias: string;
 	graphId: string;
 	kind: "i" | "r";
 	recordId: string;
@@ -15,9 +15,19 @@ export interface OwnershipRangeComment {
 }
 
 export const OWNERSHIP_COMMENT_PREFIX = "citry:g1";
+export const REVISION_ALIAS_LENGTH = 8;
 
+const REVISION_RE = /^[0-9a-f]{64}$/;
 const OWNERSHIP_COMMENT_RE =
-	/^citry:g1:([0-9a-f]{64}):([0-9]+):([ir]):([0-9]+):([se])$/;
+	/^citry:g1:([0-9a-f]{8}):([0-9]+):([ir]):([0-9]+):([se])$/;
+
+/** Derive the readable comment alias from one validated graph revision. */
+export const ownershipRevisionAlias = (revision: string): string => {
+	if (!REVISION_RE.test(revision)) {
+		throw new TypeError("The client-graph revision must be lowercase SHA-256.");
+	}
+	return revision.slice(0, REVISION_ALIAS_LENGTH);
+};
 
 /** Match the five variable fields without converting their decimal text. */
 export const matchOwnershipComment = (value: string): RegExpExecArray | null =>
@@ -41,13 +51,13 @@ export const parseOwnershipComment = (
 ): OwnershipComment | null => {
 	const match = matchOwnershipComment(value);
 	if (match === null) return null;
-	const [, revision, graphId, kind, recordId, side] = match;
+	const [, revisionAlias, graphId, kind, recordId, side] = match;
 	return {
-		revision,
+		revisionAlias,
 		graphId,
 		kind: kind as "i" | "r",
 		recordId,
 		side: side as "s" | "e",
-		key: `${OWNERSHIP_COMMENT_PREFIX}:${revision}:${graphId}:${kind}:${recordId}`,
+		key: `${OWNERSHIP_COMMENT_PREFIX}:${revisionAlias}:${graphId}:${kind}:${recordId}`,
 	};
 };

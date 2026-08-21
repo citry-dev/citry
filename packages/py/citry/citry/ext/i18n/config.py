@@ -16,9 +16,11 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import Literal
 
+    from .bindings import I18nBindingCollector
     from .context import LocaleContext, LocalizedText
     from .extension import I18nExtension, I18nFormatter, I18nParser
     from .formats import FormatRegistry
+    from .usage import I18nUsageCollector
 
 _ENGINE_FIELDS = frozenset({"source_locale", "default_locale", "locales", "fallbacks", "catalogs", "formats"})
 _COMPONENT_FIELDS = frozenset({"client_messages", "messages_locale"})
@@ -40,13 +42,32 @@ class I18n(ExtensionConfig):
     client_messages: tuple[str, ...] = ()
 
     def __init__(self, component: Any) -> None:
-        from .bindings import I18nBindingCollector  # noqa: PLC0415
-        from .usage import I18nUsageCollector  # noqa: PLC0415
-
         super().__init__(component)
-        self._usage = I18nUsageCollector()
-        self._bindings = I18nBindingCollector(component)
+        self._usage_state: I18nUsageCollector | None = None
+        self._bindings_state: I18nBindingCollector | None = None
         self._translation_capture: Any = None
+
+    @property
+    def _usage(self) -> I18nUsageCollector:
+        """Allocate render-usage tracking only when i18n is actually active."""
+        collector = self._usage_state
+        if collector is None:
+            from .usage import I18nUsageCollector  # noqa: PLC0415
+
+            collector = I18nUsageCollector()
+            self._usage_state = collector
+        return collector
+
+    @property
+    def _bindings(self) -> I18nBindingCollector:
+        """Allocate checked binding state only for translated templates."""
+        collector = self._bindings_state
+        if collector is None:
+            from .bindings import I18nBindingCollector  # noqa: PLC0415
+
+            collector = I18nBindingCollector(self.component)
+            self._bindings_state = collector
+        return collector
 
     @property
     def configured(self) -> bool:

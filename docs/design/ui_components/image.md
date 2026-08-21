@@ -895,10 +895,11 @@ ceilings, so minification cannot justify them and receives no budget credit.
 
 The readable Image CSS is 3,063 raw / 680 gzip / 553 Brotli bytes, SHA-256
 `113c53abe2c901f3858e9bb6faad27d003da53c857adc2f984e38b9fbd0359e6`;
-the registered frame is 2,639 / 665 / 540 bytes, SHA-256
-`f7e03915e4a116346f90f6f1cc130079daf15b15a0b784658a9225f08bd8c158`.
-The original CSS ceiling remains adequate with 3,505 raw / 615 gzip / 484
-Brotli bytes of production headroom and no positive shared CSS delta.
+the checked-in production frame is 2,191 / 602 / 487 bytes, SHA-256
+`4a077c2974fa9ee662a99adaa5a2e7bedf779bbeb397144598673e72848f7976`.
+The original CSS ceiling remains adequate with 3,953 raw / 678 gzip / 537
+Brotli bytes of production headroom and no positive shared CSS delta. The
+readable source retains 3,081 / 600 / 471 bytes under the same limits.
 
 The asset report records readable source and actual registered/emitted frames,
 full SHA-256 identities, deterministic gzip, and Brotli. A minifier-only lower

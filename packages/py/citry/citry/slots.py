@@ -205,7 +205,15 @@ class Slot(Generic[TSlotData]):
 
     """
 
-    __slots__ = ("component_name", "content_func", "contents", "extra", "slot_name", "source_position")
+    __slots__ = (
+        "__weakref__",
+        "component_name",
+        "content_func",
+        "contents",
+        "extra",
+        "slot_name",
+        "source_position",
+    )
 
     def __init__(
         self,
@@ -293,8 +301,7 @@ class Slot(Generic[TSlotData]):
         """
         from citry.citry_render import (  # noqa: PLC0415
             CitryRender,
-            PhysicalRegionPart,
-            PhysicalRegionRender,
+            _PhysicalRegion,
             unwrap_physical_region,
         )
 
@@ -312,7 +319,7 @@ class Slot(Generic[TSlotData]):
 
             with resume_ownership_graph(unwrapped.context.ownership):
                 settled = _settle_render(unwrapped, finalize_root=False)
-                if isinstance(part, (PhysicalRegionPart, PhysicalRegionRender)):
+                if isinstance(part, _PhysicalRegion):
                     part.part = settled
                     return CitryRender(parts=[part], context=settled.context).serialize()
                 return settled.serialize()

@@ -302,6 +302,7 @@ dependencies = [
  "pyo3",
  "python_safe_eval",
  "quick-xml 0.38.3",
+ "sha2",
 ]
 
 [[package]]

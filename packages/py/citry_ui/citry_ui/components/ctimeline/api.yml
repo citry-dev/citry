@@ -1,0 +1,122 @@
+schema_version: 1
+family: timeline
+
+components:
+  - CTimeline
+  - CTimelineItem
+
+inputs:
+  - id: ctimeline-server-inputs
+    component: CTimeline
+    channel: server
+    entries:
+      - {id: orientation, name: orientation, type: {display: CTimelineOrientation, interfaces: [CTimelineOrientation]}, default: {kind: literal, value: vertical}, effect: Selects a vertical or horizontal track axis.}
+      - {id: side, name: side, type: {display: CTimelineSide, interfaces: [CTimelineSide]}, default: {kind: literal, value: end}, effect: Places Item content at the logical end start or alternating sides of the track.}
+      - {id: line-style, name: line_style, type: {display: CTimelineLineStyle, interfaces: [CTimelineLineStyle]}, default: {kind: literal, value: solid}, effect: Selects solid or dashed connectors.}
+      - {id: density, name: density, type: {display: CTimelineDensity, interfaces: [CTimelineDensity]}, default: {kind: literal, value: comfortable}, effect: Selects comfortable or compact spacing.}
+      - {id: size, name: size, type: {display: CTimelineSize, interfaces: [CTimelineSize]}, default: {kind: literal, value: md}, effect: Selects coordinated indicator and track geometry.}
+      - {id: label, name: label, type: 'str | None', default: {kind: literal, value: null}, effect: Optionally supplies the ordered list accessible name.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root ordered list.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root ordered list.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes without replacing owned semantics or state.}
+  - id: ctimeline-item-server-inputs
+    component: CTimelineItem
+    channel: server
+    entries:
+      - {id: state, name: state, type: {display: CTimelineState, interfaces: [CTimelineState]}, default: {kind: literal, value: neutral}, effect: Styles authored neutral complete current pending or error status; current adds aria-current.}
+      - {id: side, name: side, type: {display: CTimelineItemSide, interfaces: [CTimelineItemSide]}, default: {kind: literal, value: auto}, effect: Uses the root-resolved side or overrides one Item to logical start or end.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the rendered list item.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the rendered list item.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed list-item attributes without replacing owned semantics or state.}
+
+slots:
+  - id: ctimeline-slots
+    component: CTimeline
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CTimelineDefaultSlotData]}, fallback: None; one or more CTimelineItem declarations are required.}
+  - id: ctimeline-item-slots
+    component: CTimelineItem
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{index, state, side, is_first, is_last}', interfaces: [CTimelineItemDefaultSlotData]}, fallback: None.}
+      - {id: opposite, name: opposite, required: false, data: {display: '{index, state, side, is_first, is_last}', interfaces: [CTimelineItemOppositeSlotData]}, fallback: Omitted.}
+      - {id: indicator, name: indicator, required: false, data: {display: '{index, state, side, is_first, is_last}', interfaces: [CTimelineItemIndicatorSlotData]}, fallback: Decorative dot.}
+
+events: []
+methods: []
+
+css:
+  - id: ctimeline-css-variables
+    component: CTimeline
+    entries:
+      - {id: gap, name: --cui-timeline-gap, type: length, purpose: Minimum space along the sequence axis., default: 1.5rem; compact 0.75rem}
+      - {id: item-gap, name: --cui-timeline-item-gap, type: length, purpose: Space between the track and authored content., default: 0.75rem; compact 0.5rem}
+      - {id: track-size, name: --cui-timeline-track-size, type: length, purpose: Cross-axis track lane size., default: 'sm 1.5rem; md 2rem; lg 2.5rem'}
+      - {id: indicator-size, name: --cui-timeline-indicator-size, type: length, purpose: Indicator inline and block size., default: 'sm 0.5rem; md 0.75rem; lg 1rem'}
+      - {id: line-width, name: --cui-timeline-line-width, type: length, purpose: Connector and indicator border thickness., default: 0.125rem}
+      - {id: line-color, name: --cui-timeline-line-color, type: color, purpose: Connector color., default: Adaptive neutral}
+      - {id: indicator-color, name: --cui-timeline-indicator-color, type: color, purpose: Neutral indicator color., default: Adaptive neutral}
+      - {id: current-color, name: --cui-timeline-current-color, type: color, purpose: Current indicator color., default: Adaptive blue}
+      - {id: complete-color, name: --cui-timeline-complete-color, type: color, purpose: Complete indicator color., default: Adaptive green}
+      - {id: pending-color, name: --cui-timeline-pending-color, type: color, purpose: Pending indicator color., default: Adaptive muted neutral}
+      - {id: error-color, name: --cui-timeline-error-color, type: color, purpose: Error indicator color., default: Adaptive red}
+      - {id: muted-color, name: --cui-timeline-muted-color, type: color, purpose: Opposite metadata color., default: Adaptive neutral}
+
+attributes:
+  - id: ctimeline-root-attributes
+    component: CTimeline
+    entries:
+      - {id: aria-label, name: aria-label, element: Root ol, type: string, meaning: Optional accessible name.}
+      - {id: data-orientation, name: data-orientation, element: Root ol, type: {display: CTimelineOrientation, interfaces: [CTimelineOrientation]}, meaning: Mirrors the track axis.}
+      - {id: data-side, name: data-side, element: Root ol, type: {display: CTimelineSide, interfaces: [CTimelineSide]}, meaning: Mirrors root placement policy.}
+      - {id: data-line-style, name: data-line-style, element: Root ol, type: {display: CTimelineLineStyle, interfaces: [CTimelineLineStyle]}, meaning: Mirrors connector treatment.}
+      - {id: data-density, name: data-density, element: Root ol, type: {display: CTimelineDensity, interfaces: [CTimelineDensity]}, meaning: Mirrors spacing density.}
+      - {id: data-size, name: data-size, element: Root ol, type: {display: CTimelineSize, interfaces: [CTimelineSize]}, meaning: Mirrors geometry size.}
+  - id: ctimeline-item-attributes
+    component: CTimelineItem
+    entries:
+      - {id: data-index, name: data-index, element: Item li, type: nonnegative-integer-string, meaning: Exposes settled zero-based order.}
+      - {id: data-state, name: data-state, element: Item li, type: {display: CTimelineState, interfaces: [CTimelineState]}, meaning: Mirrors authored visual status.}
+      - {id: data-side, name: data-side, element: Item li, type: start | end, meaning: Mirrors resolved logical placement.}
+      - {id: data-has-opposite, name: data-has-opposite, element: Item li, type: present | absent, meaning: Marks an authored opposite slot.}
+      - {id: aria-current, name: aria-current, element: Current Item li, type: 'true', meaning: Identifies the one current event.}
+
+selectors:
+  - id: ctimeline-selectors
+    component: CTimeline
+    entries:
+      - {id: timeline, selector: '[data-citry-ui-part="timeline"]', element: Root ol, purpose: State reflections and root customization destination.}
+      - {id: item, selector: '[data-citry-ui-part="item"]', element: Item li, purpose: Item attrs state and customization destination.}
+      - {id: opposite, selector: '[data-citry-ui-part="opposite"]', element: Optional metadata div, purpose: Dates and other opposite content.}
+      - {id: track, selector: '[data-citry-ui-part="track"]', element: Decorative div, purpose: Owns connector segments and indicator.}
+      - {id: before, selector: '[data-citry-ui-part="before"]', element: Decorative span, purpose: Connector segment before the indicator.}
+      - {id: indicator, selector: '[data-citry-ui-part="indicator"]', element: Decorative span, purpose: Default dot or custom indicator destination.}
+      - {id: after, selector: '[data-citry-ui-part="after"]', element: Decorative span, purpose: Connector segment after the indicator.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: Content div, purpose: Authored event content destination.}
+
+interfaces:
+  - id: ctimeline-aliases
+    kind: aliases
+    entries:
+      - {id: orientation, name: CTimelineOrientation, definition: 'Literal["vertical", "horizontal"]'}
+      - {id: side, name: CTimelineSide, definition: 'Literal["start", "end", "alternate"]'}
+      - {id: item-side, name: CTimelineItemSide, definition: 'Literal["auto", "start", "end"]'}
+      - {id: line-style, name: CTimelineLineStyle, definition: 'Literal["solid", "dashed"]'}
+      - {id: density, name: CTimelineDensity, definition: 'Literal["comfortable", "compact"]'}
+      - {id: size, name: CTimelineSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: state, name: CTimelineState, definition: 'Literal["neutral", "complete", "current", "pending", "error"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: ctimeline-default-slot-data, kind: record, name: CTimelineDefaultSlotData, entries: []}
+  - id: ctimeline-item-default-slot-data
+    kind: record
+    name: CTimelineItemDefaultSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Settled zero-based Item index.}
+      - {id: state, name: state, type: {display: CTimelineState, interfaces: [CTimelineState]}, meaning: Authored Item state.}
+      - {id: side, name: side, type: start | end, meaning: Resolved logical content side.}
+      - {id: is-first, name: is_first, type: bool, meaning: Whether this is the first Item.}
+      - {id: is-last, name: is_last, type: bool, meaning: Whether this is the last Item.}
+  - {id: ctimeline-item-opposite-slot-data, kind: aliases, entries: [{id: opposite-slot-data, name: CTimelineItemOppositeSlotData, definition: CTimelineItemDefaultSlotData}]}
+  - {id: ctimeline-item-indicator-slot-data, kind: aliases, entries: [{id: indicator-slot-data, name: CTimelineItemIndicatorSlotData, definition: CTimelineItemDefaultSlotData}]}
+
+translations: []

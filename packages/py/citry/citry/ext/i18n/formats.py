@@ -146,7 +146,7 @@ class DateFormat:
     input: DateInput | None = None
 
     def __post_init__(self) -> None:
-        if self.fields not in _DATE_FORMAT_FIELDS:
+        if not isinstance(self.fields, str) or self.fields not in _DATE_FORMAT_FIELDS:
             raise ValueError(f"DateFormat fields has an unsupported value {self.fields!r}.")
         if self.length not in {"short", "medium", "long"}:
             raise ValueError(f"DateFormat length must be 'short', 'medium', or 'long'; got {self.length!r}.")

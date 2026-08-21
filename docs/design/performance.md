@@ -1,20 +1,22 @@
 # Design: render performance and optimization
 
-**Status (2026-06-22): two optimization passes done (repeat render 19.63 -> ~13.7
-ms, 1.85x -> 1.29x a bare Django template); render-walk-in-Rust prototyped and
-scoped (section 6).** The first pass fixed render-path hot spots (section 4); a
-second trimmed per-component fixed overhead (section 4.7). A Rust prototype
-(section 6.7) then sized the architectural lever and tempered two earlier,
-over-optimistic conclusions in this doc: the Rust-movable part of the render is
-~20-30% (string assembly and traversal), not ~85% (the rest is the
-irreducibly-Python component model), and the per-expression sandbox check is
-value-dependent, not compile-time-resolvable. Net: there is no cheap path to
-parity. The Rust render walk reaches *roughly* Django parity (not a beat) and is
-the only route to parallelism, but it is a large project moving the
-compiler-output contract; the smaller levers (a security-sensitive runtime
-sandbox fast path ~2-3%, remaining Python micro-opts) do not add up to parity.
-The decision is binary: commit to the Rust-walk project, or accept ~1.3x. This
-document records what changed and why, the cost model, and that analysis.
+**Status (2026-08-21): the optimized beta feature-set baseline is 38.65 ms for
+a warm large-page render: 3.53x a bare Django template and 0.76x
+django-components.** The June optimization passes and Rust-walk prototype
+below remain useful historical analysis, but their ~13.7 ms / 1.29x baseline
+predates the current ownership graph, client lifecycle, extension hooks,
+security-aware serialization, and much larger emitted browser runtime. The
+refresh also caught a new quadratic ownership scan: no-op render hooks walked
+every ownership region accumulated so far, making the first current-tree run
+take about 912 ms warm. The first guard reduced it to 87.31 ms; the indexed
+ownership, exact-class asset, dormant i18n, and manifest work in section 10
+first reduced the authoritative rerun to 62.60 ms; the Rust boundaries and
+allocation work in section 10.5 then reached 48.67 ms; bounded traversal in
+section 10.6 reached 45.78 ms; allocation, specialization, and pure-body work
+in section 10.8 produced the latest table. See the 2026-08-21 entry in
+[`benchmarking.md`](benchmarking.md) for the complete measurements and
+methodology. This document records what changed, why, and which architectural
+levers remain.
 
 This doc is about **consciously making the render faster**. It is the
 companion to two neighbours, and the split matters:
@@ -131,9 +133,13 @@ some of it into Rust (section 6).
 
 ## 3. The ceiling, and what actually sets it
 
-After the passes in section 4, citry's repeat render is about 1.29x a bare
-Django template and about 3.4x faster than django-components (the fair
-comparison, since both pay the component cost).
+On the 2026-06-22 feature set, after the passes in section 4, Citry's repeat
+render was about 1.29x a bare Django template and about 3.4x faster than
+django-components. Those numbers are historical: the current beta-feature
+baseline is 7.83x bare Django and 1.76x django-components on a materially
+richer and larger render. The cost-model work below explains the June profile;
+future optimization decisions must be re-profiled against the current baseline
+recorded in [`benchmarking.md`](benchmarking.md).
 
 It is tempting to call the rest "the structural cost of Python components," and
 an earlier version of this doc did. Measurement (section 6.5) shows that is
@@ -862,3 +868,595 @@ newer limited API must requalify the decision.
   exact-interpreter optimization. Re-run this four-way method when the binding
   surface, minimum Python version, PyO3 version, or a performance-sensitive
   boundary changes.
+
+## 10. Beta feature-set regression audit (2026-08-20)
+
+The refreshed cross-engine benchmark made the performance regression visible,
+then a bounded same-machine comparison separated new output from inefficient
+runtime work. The comparison used the unchanged large scenario at historical
+commit `86f162b1` and at the pre-optimization checkout, with both running under CPython
+3.14.3 and the same release-built Citry Core 1.5.0. The historical checkout
+produced 204,782 bytes and a 14.43 ms steady render, closely reproducing its
+published 14.52 ms result. The pre-optimization checkout produced 986,021 bytes
+and took 85.30 ms steady; its fresh-process table recorded 87.31 ms for the
+second render.
+
+| Phase | June runtime | Pre-optimization runtime | Added time |
+|---|---:|---:|---:|
+| Component-tree render, including nested hook serialization | 14.00 ms | 70.75 ms | 56.75 ms |
+| Root serialization | 0.43 ms | 14.26 ms | 13.83 ms |
+| Total | 14.43 ms | 85.30 ms | 70.87 ms |
+
+The same five-render cProfile comparison counted 0.99 million calls in the
+June runtime and 8.30 million now. cProfile inflates absolute times, so the
+wall-clock probes below instrumented the current runtime without using its
+timings as the cross-engine result.
+
+### 10.1 What the added time is doing
+
+**Ownership capture and replacement are the largest target.** Distinct
+instrumented operations accounted for roughly 29 ms per render: slot-region
+capture (9.0 ms), seven `selected_region_ids()` calls (7.9 ms), one
+`retire_component_output()` pass (5.3 ms), and source-location, instance, and
+invocation recording (6.9 ms combined). This is a lower bound because it omits
+several smaller ownership operations. The remaining selection calls still
+walk the complete accumulated physical-region result set, and replacement
+retirement repeatedly scans graph collections to find a closure. Those are
+data-structure/algorithm costs, not the unavoidable price of retaining keyed
+identity.
+
+**Static dependency work is repeated per instance.** The page made 103 static
+component-JavaScript scans and 164 class-script preparation/cache checks per
+render. The source is class-level and unchanged between instances. A controlled
+in-process cache of the derived class asset reduced the median by about 5-7 ms
+without changing the output size. The durable fix needs exact-class caching,
+file-reset/unregistration invalidation, and one shared-cache repair check per
+class/render rather than per instance.
+
+**The client manifest has a real cost, with avoidable work inside it.**
+`prepare_ownership_manifest()` took about 8.4 ms, including about 2.7 ms in
+canonical JSON/revision serialization. A diagnostic run that suppressed the
+client manifest reduced the total by about 12 ms, but also removed required
+client output and is not a valid product optimization. The useful targets are
+fewer graph walks and avoiding serializing the same canonical structure once
+for its revision and again for emission.
+
+**Dormant extensions are not free enough.** Every component eagerly receives
+Cache, Dependencies, Events, and I18n config objects. Even though this scenario
+uses no translations, the i18n data hook still checks component/project
+messages on all 342 instances, and generic `c-bind` destinations retain the
+dynamic `$c-tr` capture path. Timed in isolation, the dormant i18n hook cost
+about 1.6 ms, i18n config construction about 0.9 ms, and the conservative
+attribute-binding wrapper about 3 ms. Other config construction, Events
+touchpoints, and cache lookups add smaller amounts. These paths need a true
+unconfigured fast path while preserving zero-configuration component-owned
+messages and dynamic binding correctness.
+
+### 10.2 What does not explain it
+
+The larger response is not the main server-time cause. Setting a mounted prefix
+changed the current response from 986,021 bytes of inline output to 232,638
+bytes of URL-based output, but the median remained about 85.3 ms and the
+render/serialize split remained about 71.7 / 14.5 ms. The same scenario also
+renders the same 342 component instances on the historical and current
+checkouts. The regression is therefore in runtime work per node/component and
+in graph-wide passes, not a sixfold increase in scenario size.
+
+### 10.3 Implemented optimization order
+
+1. Ownership selection memoizes overlapping region subtrees, no-op generator
+   checkpoints skip selection, ancestor closure uses queues, and replacement
+   retirement builds region/fill/receiver indexes once per pass.
+2. Exact component classes cache their derived JS/CSS object, serialized bytes,
+   hash, and `$component` fact. File reset invalidates that state; serialization
+   still repairs missing or stale shared-cache entries, but ordinary instances
+   no longer repeat the work.
+3. Dormant i18n configs allocate usage and binding collectors lazily, a current
+   empty catalog exits before component source checks, and ordinary `c-bind`
+   nodes use the normal attribute renderer while still rejecting an unconsumed
+   dynamic `$c-tr` key.
+4. Manifest assembly hashes and retains one canonical unsigned traversal,
+   while a C-backed mutation guard preserves precise fail-closed revalidation
+   for externally changed artifact dictionaries. Required/preparation analysis
+   also shares serialization-scoped Alpine scan results.
+5. The remaining node walk was re-profiled only after these changes, then the
+   complete fresh-process comparison was rerun.
+
+### 10.4 Outcome
+
+The bounded five-process checkpoints moved the large repeat median as follows:
+
+| Kept change | Repeat median |
+|---|---:|
+| Refreshed beta baseline | 87.31 ms |
+| Memoized ownership selection and no-op generator guard | 77.88 ms |
+| Exact-class asset derivation | 70.83 ms |
+| Dormant i18n lifecycle | 69.23 ms |
+| Single-pass manifest signing/serialization | 67.31 ms |
+| Dormant ordinary-spread renderer | 64.93 ms |
+| Indexed replacement retirement | 61.84 ms |
+
+A separate 11-process check put serialization-scoped Alpine reuse at 61.12 ms.
+The final authoritative cross-engine rerun, measured independently across all
+cells, recorded 62.60 ms. That is 28% below 87.31 ms, with byte-identical
+986,021-byte output. First render improved from 122.27 ms to 98.20 ms. Against
+django-components, the large repeat ratio moved from 1.76x to 1.21x; the small
+repeat result moved from 258.8 us to 216.8 us, effectively even with
+django-components' 211.6 us in that run.
+
+The final five-render cProfile counted 4.13 million calls instead of the
+pre-optimization 8.30 million. Its remaining inclusive hotspots are the
+ordinary attribute resolve/format walk, source and slot ownership capture,
+direct-Alpine detection for client-active frames, and the one unavoidable
+canonical traversal used to sign the ownership manifest. Those are the next
+places to investigate; this pass does not weaken their validation or remove
+client output to improve a number.
+
+### 10.5 Rust boundaries and allocation pass
+
+The next pass kept the mutable render/ownership graph in Python but moved two
+closed, value-oriented operations across the existing native boundary:
+
+1. `scan_alpine_html()` lexes multiple fragments in Rust and recognizes real
+   `x-*`, `@*`, and `:*` attributes rather than matching attribute-shaped text.
+   Region candidates cross the boundary as one batch and share the existing
+   serialization-scoped cache.
+2. The strict client-graph encoder and SHA-256 revision run in Rust. It retains
+   the wire contract's UTF-16 key order, decoded-integer rules, lone-surrogate
+   behavior, safe-integer bounds, and rejection of non-JSON Python containers.
+3. Ownership source spans cache their UTF-8-to-Python offsets, immutable record
+   transitions use record-specific constructors instead of generic
+   `dataclasses.replace()`, and each component instance snapshots its stable
+   class ID once.
+4. Compiler-validated element attributes use a flat item merge. Static regions
+   skip dynamic key validation and unused extension dispatch, while `c-bind`
+   retains runtime name, Events, i18n, class/style, and duplicate-key checks
+   without allocating one temporary mapping per contribution.
+
+The ownership graph itself did **not** move to Rust. Its hot operations mutate
+Python render objects, extension contexts, slots, and component instances; a
+native owner would require frequent object crossings or a second graph that
+must remain synchronized. The closed canonicalization and HTML-scanning
+boundaries avoid that synchronization cost. A future compiler-owned Alpine
+semantic bit could eliminate even the fallback scan, but after batching the
+measured scan was about 0.55 ms per large render, so it is no longer a leading
+target.
+
+Correctness was checked three ways: the Rust and reference Python canonical
+encoders produced identical JSON and revisions for the protocol corpus and
+Unicode edge cases; one settled tree serialized through both paths produced
+exactly the same bytes; and the large scenario remained exactly 986,021 bytes.
+The final `benchmarks/compare.py --size lg --rounds 5` run used fresh processes
+for every cell and measured 82.76 ms first render and 48.67 ms warm, down from
+98.20 / 62.60 ms. In that run Citry's warm result was about 4% faster than
+django-components (48.67 vs 50.64 ms).
+
+The final five-render cProfile counted 2.81 million calls. Its inclusive
+groups are shown below only as a priority map: parent and child rows overlap,
+and profiling inflates the absolute values, so the times must not be added or
+compared with the wall-clock benchmark.
+
+| Inclusive group (five profiled renders) | Calls | cProfile time |
+|---|---:|---:|
+| settle complete render tree | 10/5 | 640 ms |
+| render one component | 1,710/1,700 | 500 ms |
+| render component bodies | 5,110/1,690 | 382 ms |
+| ordinary element-attribute node | 2,825 | 177 ms |
+| dormant i18n attribute wrapper (includes ordinary node) | 2,160 | 140 ms |
+| slot node and call/capture chain | 1,370/1,245 | 114 / 83 / 76 ms |
+| invocation-region settlement | 1,715 | 106 ms |
+| component-node render/input resolution | 1,695 | 82 / 38 ms |
+| attribute resolve/format | 2,825 | 78 / 73 ms |
+| dynamic-spread resolution | 2,160 | 56 ms |
+| root serialization | 30 internal calls | 55 ms |
+| ownership selected-region traversal | 10 | 35 ms |
+
+The next meaningful server-side work is therefore structural: reduce the
+number of Python node/hook/slot calls or precompile larger static regions. More
+micro-optimizing manifest scans is unlikely to move the total materially.
+
+### 10.6 Repeated-object and traversal follow-up (2026-08-21)
+
+The next profile tested whether the remaining high `isinstance()` count meant
+the runtime kept classifying the same objects. In the final five-render rerun,
+59.7% of instrumented calls repeated the same call-site/object pair, but only
+3.0% of object/type pairs crossed render boundaries. A general cache was the
+wrong shape: direct `isinstance()` measured about 30.7 ns, a type-keyed LRU about
+37.4 ns, and an object/type dictionary about 83.5 ns. The retained changes
+therefore cache or skip only operations with stronger, domain-specific reuse:
+
+1. Exact built-in `str` HTML attribute names use a bounded 512-entry validity
+   cache. String subclasses stay on the uncached path, so user-defined hashing
+   and equality never enter shared state and contextual errors remain fresh.
+2. Render replacement computes selected render IDs, object identities, and
+   physical-region IDs once, then reuses them for both retirement decisions.
+3. `ElementAttrsNode` records whether a spread, raw Events binding, or compiled
+   State binding can require the built-in Events runtime hook. Proven-inert
+   elements skip only that built-in subscriber; third-party
+   `on_attrs_resolved` hooks still receive every dynamic element.
+4. Manifest detection and preparation share a lazy, serialization-epoch tree
+   index. Detection retains its early exit and preparation resumes the same
+   traversal. Serializations that cannot emit or inspect ownership metadata do
+   not build the index. An eager prototype was rejected: completing the full
+   index before the query moved the warm median to 52.22 ms.
+5. Safe-eval attribute policy bypasses internal-frame/callable classification
+   for exact ordinary built-in values after the underscore check. Subclasses
+   and Python's function, method, type, code, traceback, frame, generator,
+   coroutine, and async-generator objects retain the full policy.
+6. The two transparent physical-region wrapper classes share one internal
+   marker base. Unwrapping, serialization, ownership, slot, node, and cache
+   traversals now perform one marker check instead of dispatching over a tuple
+   of the two concrete classes. The wrappers, mutable `.part` contract, and
+   emitted ownership-boundary comments remain unchanged.
+
+The five-render profile fell from about 2.80 million calls before this batch to
+2.41 million. Root serialization fell from 52 ms to 46 ms of overlapping
+cProfile time, while ordinary attribute-node work fell from 171 ms to 145 ms.
+The marker-base change did not reduce calls, but moved `isinstance()` self time
+from 26 to 24 ms and physical unwrapping cumulative time from 9 to 7 ms across
+five profiled renders. An 11-process Citry-only check measured 77.93 / 45.82 ms
+versus the preceding nine-process 78.93 / 46.11 ms, a modest 0.6% warm change.
+The complete cross-engine rerun landed at 77.88 ms first render and 45.78 ms
+warm. Its larger difference from the preceding 81.66 / 48.07 ms table includes
+fresh-process run variance and is not attributed to the marker change alone.
+Output size stayed 986,021 bytes, and the complete non-E2E suite passed: 7,680
+passed, 5 skipped, 1 expected failure, and 1,171 deselected.
+
+### 10.7 Readable ownership-comment aliases (2026-08-21)
+
+Ownership comments now carry the first eight hexadecimal characters of the
+manifest revision. The complete 64-character SHA remains in the manifest,
+Events and dependency links, public browser API, replay ledger, and internal
+graph maps. The browser maps the short alias to one complete live or
+provisional revision. A second complete revision with the same active alias is
+rejected before publication; abort, discard, and inactive-revision pruning
+release the reservation.
+
+This is a readability decision, not a performance optimization. The exact
+large benchmark response is now 980,643 raw bytes, 172,980 gzip bytes, and
+138,052 Brotli bytes. Expanding its 148 `citry:g1` markers back to full
+revisions while keeping the same runtime produces 988,931 raw, 173,240 gzip,
+and 138,152 Brotli bytes. The aliases therefore remove 8,288 raw bytes, 260
+gzip bytes, and 100 Brotli bytes from that otherwise identical response. The
+alias lookup and collision guard add browser-runtime code, which is why this
+controlled marker comparison is more useful than attributing the difference
+from the earlier 986,021-byte response entirely to shorter comments.
+
+The producer/parser unit tests lock the exact eight-character grammar, the
+browser corpus uses two valid revisions with the same `5ddad84c` prefix to
+prove atomic collision rejection and release after abort, and the range plus
+Events suites prove canonical and mirrored placement markers continue to
+preserve nested-island identity. The raw response used for inspection was
+generated with the large Citry benchmark scenario's
+`render(gen_render_data())` entrypoint.
+
+### 10.8 Render allocation, specialization, and pure-body pass (2026-08-21)
+
+The next pass attacked work below the graph-wide algorithms rather than
+weakening ownership output:
+
+1. Recursive local walker closures in deferred scanning and serialization
+   became module-level stack helpers. Template slot content now weakly refers
+   to its `Slot`, physical-region results are weak values, and slot-object fill
+   lookup uses weak keys. This removed the retained closure/slot/render cycles
+   from the ordinary path. Physical-region selection roots stay strong until
+   the outer render settles, then clear; a root component computes
+   `root is self` without storing a self-reference. A representative render
+   fell from 20,766 to 277 cyclic objects collected, with no render,
+   component, ownership, slot, or region objects among the remainder.
+2. `ConstBodyCache` lets weakref callbacks set one cheap dirty bit and prunes
+   dead component classes on the next ordinary cache operation. It does not
+   release arbitrary objects from a garbage-collector callback.
+3. Compiler-created `ComponentNode` instances record whether their inputs are
+   only fixed ordinary kwargs. In this scenario 324 of 339 nodes take the
+   direct resolver rather than constructing pending spread/binding maps and
+   closures. Dynamic, client-bound, spread, and `<c-element>` calls retain the
+   generic path.
+4. Ordinary attribute spreads no longer invoke the built-in Events resolver
+   merely because a spread exists; the resolved runtime keys decide whether it
+   is an Events candidate. `$c-props` is not rescanned and applied twice when
+   no extension transformed the attributes. Third-party hooks still receive
+   every element they subscribe to.
+5. The built-in i18n completion hook now exits before allocating a hook context
+   when that component never activated i18n bindings. Recursive body walkers,
+   weak ownership maps, direct component inputs, and these attr/hook gates
+   brought the five-render cProfile from 2.41 million calls to 2.15 million.
+6. Explicit `pure = True` adds the bounded render-local body plan described in
+   [`component_constness.md`](component_constness.md#16-explicit-pure-component-body-caching-2026-08-21).
+   The benchmark marks its repeated `HeroIcon` and `ProjectOutputBadge`
+   classes pure; their qualified occurrences save roughly 0.4-0.8 ms while
+   preserving byte-identical output and fresh IDs.
+
+The final 11-process Citry-only check measured 76.53 ms first render and
+39.38 ms warm, compared with the preceding 77.88 / 45.78 ms table. The warm
+result is about 14% lower. A complete five-process cross-engine rerun measured
+Citry at 76.59 / 38.65 ms versus django-components at 68.39 / 50.65 ms. Output
+remained exactly 980,643 bytes. The new 39 ms level is substantial progress but
+still far above June's 14 ms: the profile is now dominated by live body-node,
+element-attribute, slot-region, and component transaction work, not one hidden
+graph-wide scan.
+
+### 10.9 Remaining transaction cost and native-boundary probes (2026-08-21)
+
+A fresh five-render cProfile after section 10.8 counted 2,150,202 calls
+(2,079,667 primitive). Its absolute 531 ms is profiler-inflated, but the call
+shape is useful: each real render executes 342 components, 339 component nodes,
+274 slot nodes, 505 element-attribute nodes, about 942 body walks over 3,863
+items, and about 2,441 expression evaluations. Of those body items, 2,264 are
+strings and 1,599 are live node objects. The remaining cost is therefore spread
+across thousands of small Python transactions rather than one new dominant
+function.
+
+An unprofiled 300-render phase probe on the same checkout measured a 40.84 ms
+median total in that process: 37.43 ms settling the tree (including the nested
+serializations selected by component hooks) and 3.42 ms for the final root
+serialization. This is a diagnostic split, not a replacement for the
+fresh-process 38.65 ms result above. It says that another serializer rewrite
+cannot recover the missing ~25 ms by itself.
+
+#### Ownership is large, but moving the current object graph verbatim is not the answer
+
+One settled benchmark render captured 3,182 records:
+
+| Record family | Captured | Survives selected output |
+|---|---:|---:|
+| Source locations | 1,081 | not state-bearing |
+| Component invocations | 339 | 43 |
+| Logical instances | 342 | 46 |
+| Logical fills | 468 | 57 |
+| Physical regions | 274 | 30 |
+| Init ancestry | 339 | 43 |
+| Render queue | 339 | 43 settled |
+
+Those 1,081 source records refer to only 115 distinct compiled sites, a 9.4x
+occurrence-to-site ratio. `tracemalloc`, while retaining the settled render,
+attributed about 840 KiB and 11,828 live allocation blocks to `ownership.py`
+out of 1.49 MiB traced in total. Most state-bearing records are later retired
+because hooks select or flatten another result. The first design target should
+therefore be less materialization, not a line-for-line Rust translation of
+frozen Python dataclasses.
+
+A useful ownership transaction design has three layers:
+
+1. The compiled component body interns immutable source-site metadata once.
+   Runtime events carry a small site integer instead of rebuilding a source
+   record and its strings for every occurrence.
+2. Each component output owns an append-only journal segment. Committing the
+   ordinary result keeps the segment; selecting an unrelated replacement can
+   discard a whole segment or mark one range dead. Only the uncommon
+   replacement that preserves selected descendants needs the current closure
+   analysis.
+3. After that contract is proven in Python, a native arena can store compact
+   record structs, indexes, state bits, and adjacency lists. Python wrappers
+   retain only numeric render/region handles. One native query receives the
+   selected handles and performs ancestor closure or retirement; one final
+   export produces the manifest data. The native owner must never retain a
+   parallel mirror of mutable `CitryRender`, `Slot`, component, or extension
+   objects.
+
+A throwaway C-extension probe tested whether per-event calls make that boundary
+impractical. Appending 3,182 five-integer events into a native vector took
+0.137 ms; a Python tuple journal took 0.174 ms, Python structure-of-arrays took
+0.199 ms, and constructing a slotted frozen dataclass plus an index took
+0.886 ms. This synthetic result does not predict the graph's total saving: it
+shows that a compact integer boundary is affordable and that replacing record
+construction alone is worth less than a millisecond. Site interning,
+transactional discard, and native relation processing are what can make the
+larger difference.
+
+#### A native attribute fast path is real but deliberately small
+
+The same render sent 535 resolved attribute maps to the final formatter. Of
+1,490 values, 1,485 were exact `str`, `bool`, `int`, `float`, or `None`; only
+five used the general proxy/object path. A temporary 50 KiB C extension walked
+the real maps, retained current escaping and boolean rules, and fell back on
+unsupported values. It verified exact formatted strings for 530 qualifying
+maps.
+
+| Formatter probe | Median per render's qualifying maps |
+|---|---:|
+| Current Python loop with MarkupSafe's C escaper | 0.609 ms |
+| Native loop, plain string result | 0.200 ms |
+| Native loop plus `Markup` result | 0.278 ms |
+
+Interleaving the formatter in the complete render moved the median from 38.47
+to 37.83 ms and the mean from 38.64 to 38.09 ms. This supports a production
+exact-builtins fast path with a Python fallback, but caps its expected gain at
+roughly 0.5-0.7 ms on this page. The production implementation should live in
+the existing Rust/PyO3 `citry-core` extension and be measured in its release
+`abi3` build; a separate C module would duplicate native build, PyPy, and
+PyEmscripten work for no architectural benefit.
+
+For this particular closed loop, the Stable ABI was not a material penalty in
+the probe. Recompiling the same module with `Py_LIMITED_API=0x030A0000` and
+using only the available call API moved a 500-map batch from 0.210 to 0.212 ms
+(about 0.9%). That result applies only to this dictionary/Unicode loop; it does
+not overturn the separate release-wheel ABI benchmarks or remove the need to
+test the eventual PyO3 implementation.
+
+#### The larger route is a compiled render plan
+
+The benchmark has 342 instances across 37 classes, but only 121 distinct
+class/template-data shapes in one render. There are 221 repeated shapes:
+`Button` alone has 114 occurrences over 16 shapes, while several form, tag,
+attachment, and icon classes repeat heavily. The initial pure-body memo can use
+only 40 safe hits because it deliberately refuses child, slot, and ownership
+effects.
+
+The next architectural prototype should compile the post-extension node tree
+into a render plan with larger operations:
+
+- merge adjacent static output and prebind node functions, resolved attribute
+  identities, extension subscribers, component targets, and ownership site IDs;
+- evaluate a run of ordinary expressions in generated Python code instead of
+  entering one node method and error wrapper per expression;
+- represent child components, slots, and ownership effects as explicit holes
+  or transactions that still create fresh instances, IDs, hooks, and records;
+- for an explicitly pure class, memoize the immutable plan result around those
+  live holes, rather than rejecting the complete occurrence merely because it
+  contains a child;
+- send only closed scalar batches (attributes, escaping, static text assembly,
+  compact ownership relations) to Rust. Arbitrary Python expressions and
+  lifecycle hooks remain in Python.
+
+An opcode interpreter written in Python is unlikely to help: it replaces node
+method dispatch with another Python dispatch loop. Generated Python for dynamic
+expressions plus native execution of closed batches is the boundary to test.
+The acceptance sequence is: byte/graph equivalence corpus, a count of removed
+node and ownership transactions, in-process A/B, fresh-process first/warm
+medians, then an `abi3` versus version-specific native profile. Do not infer a
+win from fewer source lines or from a microbenchmark alone.
+
+Compiling the current modules wholesale with Cython or mypyc is a weaker first
+experiment. Their hot paths are dominated by dynamic component subclasses,
+metaclasses, arbitrary mappings, generators, extension callbacks, and calls
+between modules—the exact places where ahead-of-time Python compilers retain
+boxed operations or require semantic restrictions. A small typed transaction
+kernel could be a useful mypyc comparison, but Rust already owns Citry's native
+distribution and supports the browser wheel. Keep the Python implementation as
+the reference/fallback and move only a closed, measured contract.
+
+### 10.10 Highest-value follow-up results (2026-08-21)
+
+The section 10.9 proposals were tested as bounded prototypes before choosing
+production code. Three changes survived that test.
+
+First, each `OwnershipGraph` now shares immutable source-site metadata across
+executions of the same compiled span. The 1,081 occurrence records still have
+fresh IDs, owners, order, and mapping positions, but point at 115 site objects
+for origin, source, spans, line, and column. An alternating 30-pair in-process
+A/B measured a 0.539 ms median saving from avoiding repeated UTF-8 span
+conversion. A shallow object-size model measured about 95,864 fewer retained
+bytes from the smaller occurrence records and shared character-span tuples.
+That is not a complete heap measurement, but it establishes both the direction
+and the approximate scale.
+
+Second, ownership retirement uses capture-order ranges for records created by
+one hook attempt. Replacing component output also builds relation indexes
+lazily, only when replacement asks for ancestor or descendant closure. Removing
+those indexes was the falsifier: `retire_component_output` rose from about 1 ms
+to about 6 ms per render under cProfile, and an 11-process warm median rose to
+45.65 ms. Restoring them returned the warm median to 38.75 ms. Building all
+indexes costs about 0.6 profiler-ms per render and avoids repeated whole-journal
+fixed-point scans.
+
+Third, a pure-body plan now keeps child, slot, ownership, and i18n work as live
+holes. Safe expression or element results around those holes can still be
+reused. Focused tests execute the stable sibling expression once while proving
+that two child components or two slot fills execute independently. Force-marking
+additional classes in the large page did not produce a clear aggregate win:
+key freezing offset the small sibling expressions available there. The feature
+is retained for components with measurably expensive safe work, not enabled on
+container classes by default.
+
+The following prototypes did not survive:
+
+- Generating one unrolled Python function per current body saved about 0.21 ms
+  in an interleaved run, within noise and far below its added compiler surface.
+- A production-shaped PyO3 attribute formatter reduced the 500 eligible maps
+  from about 0.345 ms to 0.247 ms. Its roughly 0.10 ms ceiling is much smaller
+  than the earlier raw C probe, and complete renders were neutral or slower.
+- Eagerly indexing every physical render object made the render slower because
+  recording roughly 1,289 objects cost more than the one late scan it removed.
+- A preflight for render trees owned by a different ownership graph did not
+  fire in the benchmark: hook replacement selects from the active graph.
+
+The final five-render profile counted 2,176,007 calls (2,105,437 primitive) in
+0.502 profiler-seconds:
+
+| Operation | Calls in five renders | Self / cumulative profiler time |
+|---|---:|---:|
+| `isinstance` | 421,665 | 22 / 32 ms |
+| render one component | 1,710 | 15 / 386 ms |
+| walk a body | 4,635 | 10 / 267 ms |
+| physical-region containment | 23,005 | 9 / 17 ms |
+| capture a source occurrence | 5,405 | 8 / 15 ms |
+| retire replaced component output | 5 | 5 / 15 ms |
+| build replacement relation indexes | 5 | 2 / 3 ms |
+| freeze pure-body keys | 5,550 | 3 / 6 ms |
+
+An 11-process Citry-only check measured 76.97 ms first and 38.75 ms warm,
+with the same 980,643-byte output. This is effectively the section 10.8
+76.59 / 38.65 level, while using less source-location memory and allowing
+safe pure work around live children and slots. The simple compiled-plan and
+native-scalar routes do not explain the remaining gap to June. Future native
+ownership work is justified only as one compact journal plus closure/export
+queries, not as a translation of the current Python object graph.
+
+### 10.11 Ideas to take upstream to Python (2026-08-21)
+
+This list concerns CPython and Python's standard APIs. It is separate from
+adding more native code to Citry. The profile is useful as a large framework
+workload, but one project is not enough evidence for a language change.
+
+#### `isinstance` needs a workload contribution, not a new general proposal
+
+The raw count first suggested specializing repeated type checks. Current
+CPython already emits a dedicated `CALL_ISINSTANCE` specialization, visible in
+the generated [opcode metadata](https://github.com/python/cpython/blob/main/Lib/_opcode_metadata.py).
+The useful upstream step is to run Citry on a specialization-stats build and
+classify misses: exact type, tuple of types, abstract base class, or custom
+metaclass. If one common stable case repeatedly deoptimizes, a focused
+interpreter PR plus a `pyperformance`-style benchmark is appropriate. A new
+PEP or a Python-level type-test memo is not.
+
+#### Make the Unicode writer usable from stable extension ABIs
+
+Python 3.14 added the public [`PyUnicodeWriter`](https://docs.python.org/3.14/c-api/unicode.html#pyunicodewriter)
+API, but its entries are not marked as part of the Stable ABI. Extension
+authors targeting `abi3` therefore still fall back to lists, joins, or repeated
+public calls for incremental string assembly. A concrete C API proposal would
+make an opaque writer available through a future Limited/Stable ABI, with a
+fallback for older runtimes. The draft [PEP 809 interface mechanism](https://peps.python.org/pep-0809/)
+is one possible delivery path. This starts as a C API working-group issue and
+benchmarked reference patch, not necessarily a language PEP.
+
+Citry's actual attribute loop is evidence about ergonomics rather than a large
+speed claim: its production-shaped native ceiling was only about 0.10 ms per
+render. A useful upstream case should add serializers, template engines, and
+protocol builders that assemble much larger strings.
+
+#### Add a scoped bulk update for context variables
+
+Python 3.14 lets one [`ContextVar` token act as a context manager](https://docs.python.org/3/library/contextvars.html#contextvars.Token),
+but setting several framework variables still creates and unwinds one token
+per variable or uses nested generator-based context managers. Five profiled
+renders made 8,815 `ContextVar.set`/`reset` pairs and entered 10,560 generated
+context managers. A possible standard API is a scoped bulk update that accepts
+`ContextVar`/value pairs, restores them in reverse order, and rolls back a
+partial enter if allocation fails.
+
+A pure Python convenience helper would not remove token and frame overhead.
+The performance case needs a C implementation, async/task-switching tests, and
+evidence from tracing, logging, web, and dependency-injection frameworks. This
+is likely a `contextvars` API discussion followed by a CPython PR; it becomes a
+PEP only if atomicity or cross-implementation semantics require a new language
+contract.
+
+#### Expose a safe mutation guard to stable-ABI extensions
+
+[PEP 509](https://peps.python.org/pep-0509/) deliberately kept dictionary
+versions private, and Python 3.14's
+[`PyDict_AddWatcher`](https://docs.python.org/3.14/c-api/dict.html#c.PyDict_AddWatcher)
+family is public but not marked as Stable ABI. Version-based caches in an
+`abi3` extension must either repeat lookups, use callbacks tied to CPython's
+full API, or make an unsafe assumption about a live mapping. A narrow opaque
+mutation-token or watcher interface for exact dictionaries could let an
+extension validate a cached lookup without exposing object layout or a Python
+`dict.__version__` property. Free-threaded callback lifetime and synchronization
+are the hard part, so this belongs with the C API and free-threading groups.
+
+#### Follow immutable-container work instead of proposing deep freeze again
+
+Python 3.15 already accepted [`frozendict`](https://peps.python.org/pep-0814/),
+and draft [PEP 841](https://peps.python.org/pep-0841/) proposes syntax that can
+constant-fold frozen mappings and sets in Python 3.16. These can reduce setup
+for shallow immutable configuration and cache inputs. They do not solve
+Citry's recursive cache key, whose values may contain lists, dataclasses,
+application objects, or cycles.
+
+A general deep-freeze or universal cache-key protocol is not a good fresh PEP
+from this evidence. [PEP 351](https://peps.python.org/pep-0351/) already shows
+the semantic difficulty and was rejected. Citry should first collect repeated
+implementations and compatible semantics across libraries; until then, a
+project-local fail-closed freezer is more honest than standardizing one answer.

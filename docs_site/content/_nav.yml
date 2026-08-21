@@ -105,7 +105,7 @@ areas:
           - { title: Asset placement, path: /advanced/asset-placement/, needs_review: true }
           - { title: Alpine runtime, path: /advanced/alpine-runtime/, needs_review: true }
           - { title: HTML fragments, path: /advanced/html-fragments/, needs_review: true }
-          - { title: Const optimization, path: /advanced/const-optimization/, needs_review: true }
+          - { title: Performance, path: /advanced/performance/, needs_review: true }
           - { title: Extensions, path: /advanced/extensions/, needs_review: true }
           - { title: Component hooks, path: /advanced/hooks/, needs_review: true }
           - { title: Component libraries, path: /advanced/component-libraries/, needs_review: true }

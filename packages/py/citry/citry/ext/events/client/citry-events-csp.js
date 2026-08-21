@@ -4671,19 +4671,19 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
 
   // ../../protocol/client_graph/v1/js/src/comments.ts
   var OWNERSHIP_COMMENT_PREFIX = "citry:g1";
-  var OWNERSHIP_COMMENT_RE = /^citry:g1:([0-9a-f]{64}):([0-9]+):([ir]):([0-9]+):([se])$/;
+  var OWNERSHIP_COMMENT_RE = /^citry:g1:([0-9a-f]{8}):([0-9]+):([ir]):([0-9]+):([se])$/;
   var matchOwnershipComment = (value) => OWNERSHIP_COMMENT_RE.exec(value.trim());
   var parseOwnershipComment = (value) => {
     const match = matchOwnershipComment(value);
     if (match === null) return null;
-    const [, revision, graphId, kind, recordId, side] = match;
+    const [, revisionAlias, graphId, kind, recordId, side] = match;
     return {
-      revision,
+      revisionAlias,
       graphId,
       kind,
       recordId,
       side,
-      key: `${OWNERSHIP_COMMENT_PREFIX}:${revision}:${graphId}:${kind}:${recordId}`
+      key: `${OWNERSHIP_COMMENT_PREFIX}:${revisionAlias}:${graphId}:${kind}:${recordId}`
     };
   };
 
@@ -8388,12 +8388,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         el.querySelectorAll("[data-cid]").forEach(record);
       });
     };
-    var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+):s$");
-    var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+:[se]$");
+    var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{8}:[0-9]+:i:[0-9]+):s$");
+    var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{8}:[0-9]+:i:[0-9]+:[se]$");
     var rewritePlacementComment = function(comment, placementId) {
       var ownership = parseOwnershipComment(comment.data);
       if (!ownership) return;
-      comment.data = "citry:p1:" + ownership.revision + ":" + placementId + ":" + ownership.graphId + ":" + ownership.kind + ":" + ownership.recordId + ":" + ownership.side;
+      comment.data = "citry:p1:" + ownership.revisionAlias + ":" + placementId + ":" + ownership.graphId + ":" + ownership.kind + ":" + ownership.recordId + ":" + ownership.side;
     };
     var cloneForPlacement = function(node, placementId) {
       var clone2 = node.cloneNode(true);

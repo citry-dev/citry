@@ -157,7 +157,9 @@ def _dynamic_target(key: str) -> str | None:
     return None
 
 
-def _attrs(component: str, destination: str, value: Mapping[str, object] | None, owned: frozenset[str]) -> dict[str, object]:
+def _attrs(
+    component: str, destination: str, value: Mapping[str, object] | None, owned: frozenset[str]
+) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"{component} {destination} must be a mapping or None, got {value!r}.")
     copied = dict(value or {})
@@ -175,7 +177,9 @@ def _attrs(component: str, destination: str, value: Mapping[str, object] | None,
     return copied
 
 
-def _normalize_marks(component: str, raw_marks: object, minimum: Decimal, maximum: Decimal, step: Decimal) -> list[dict[str, object]]:
+def _normalize_marks(
+    component: str, raw_marks: object, minimum: Decimal, maximum: Decimal, step: Decimal
+) -> list[dict[str, object]]:
     raw_marks = const_value(raw_marks)
     if raw_marks is None:
         return []
@@ -268,6 +272,7 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
     if large_decimal <= 0 or large_decimal % step_decimal:
         raise ValueError(f"{component_name} large_step must be a positive whole multiple of step.")
 
+    values: tuple[str, ...]
     if is_range:
         gap = const_value(kwargs.min_steps_between_thumbs)
         if type(gap) is not int or gap < 0 or gap > int(step_count):
@@ -275,7 +280,11 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         raw_value = const_value(kwargs.value)
         if raw_value is None:
             values = (minimum, maximum)
-        elif not isinstance(raw_value, Sequence) or isinstance(raw_value, (str, bytes, bytearray)) or len(raw_value) != 2:
+        elif (
+            not isinstance(raw_value, Sequence)
+            or isinstance(raw_value, (str, bytes, bytearray))
+            or len(raw_value) != 2
+        ):
             raise TypeError("CRangeSlider value must be an exact-decimal pair or None.")
         else:
             values = (
@@ -305,12 +314,16 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
     form = component.inject(FORM_CONTEXT_KEY, None)
     field_control_id = str(field.control_id) if field is not None else None
     if field is not None:
-        supplied = [input_name for input_name in ("disabled", "readonly", "invalid") if getattr(kwargs, input_name) is not None]
+        supplied = [
+            input_name for input_name in ("disabled", "readonly", "invalid") if getattr(kwargs, input_name) is not None
+        ]
         if supplied:
             raise ValueError(f"{component_name} inside CField cannot set Field-owned state: {', '.join(supplied)}.")
         field.register_control(component_name, supports_required=False, supports_readonly=True)
     if field_control_id is not None and supplied_id is not None and supplied_id != field_control_id:
-        raise ValueError(f"{component_name} id {supplied_id!r} conflicts with its CField control_id {field_control_id!r}.")
+        raise ValueError(
+            f"{component_name} id {supplied_id!r} conflicts with its CField control_id {field_control_id!r}."
+        )
     public_id = supplied_id or field_control_id or f"cui-{'range-' if is_range else ''}slider-{component.id}"
     root_attrs = _attrs(component_name, "attrs", kwargs.attrs, _ROOT_OWNED)
     input_owned = _RANGE_INPUT_OWNED if is_range else _INPUT_OWNED
@@ -328,7 +341,9 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
     )
     if form is not None and form_owner != form.form_id:
         raise ValueError(f"{component_name} inside CForm cannot target another form owner.")
-    disabled = bool(field.disabled) if field is not None else bool(form.disabled if form else False) or bool(kwargs.disabled)
+    disabled = (
+        bool(field.disabled) if field is not None else bool(form.disabled if form else False) or bool(kwargs.disabled)
+    )
     readonly = (
         bool(field.readonly)
         if field is not None
@@ -386,7 +401,11 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         )
     single_aria_label = None if is_range else cast("str | None", input_attrs.get("aria-label"))
     single_aria_labelledby = (
-        field.label_id if field is not None else cast("str | None", input_attrs.get("aria-labelledby")) if not is_range else None
+        field.label_id
+        if field is not None
+        else cast("str | None", input_attrs.get("aria-labelledby"))
+        if not is_range
+        else None
     )
     if not is_range:
         input_attrs.pop("aria-label", None)
@@ -397,12 +416,14 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
     lower_label_id = f"{public_id}-lower-label"
     upper_label_id = f"{public_id}-upper-label"
     lower_labelledby = (
-        merge_idrefs(field.label_id if field is not None else None, lower_label_id) if is_range else single_aria_labelledby
+        merge_idrefs(field.label_id if field is not None else None, lower_label_id)
+        if is_range
+        else single_aria_labelledby
     )
-    upper_labelledby = merge_idrefs(field.label_id if field is not None else None, upper_label_id) if is_range else None
-    effective_names = (
-        ((lower_name or name), (upper_name or name)) if is_range else (name,)
+    upper_labelledby = (
+        merge_idrefs(field.label_id if field is not None else None, upper_label_id) if is_range else None
     )
+    effective_names: tuple[str | None, ...] = ((lower_name or name), (upper_name or name)) if is_range else (name,)
     snapshot: dict[str, Any] = {
         "is_range": is_range,
         "part": "range-slider" if is_range else "slider",
@@ -447,36 +468,36 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         "lower_input_attrs": lower_input_attrs,
         "upper_input_attrs": upper_input_attrs,
     }
-    component._cui_slider_data = {
-            "kind": "range" if is_range else "single",
-            "id": public_id,
-            "rootId": root_id,
-            "ids": [lower_id, upper_id] if is_range else [lower_id],
-            "transportIds": [f"{lower_id}-readonly", f"{upper_id}-readonly"] if is_range else [f"{lower_id}-readonly"],
-            "names": list(effective_names),
-            "form": form_owner,
-            "value": list(values) if is_range else values[0],
-            "min": minimum,
-            "max": maximum,
-            "step": step,
-            "largeStep": large_step,
-            "minStepsBetweenThumbs": gap,
-            "disabled": disabled,
-            "readonly": readonly,
-            "inheritsReadonly": field is None and kwargs.readonly is None,
-            "invalid": invalid,
-            "orientation": kwargs.orientation,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
-            "showValue": kwargs.show_value,
-            "format": profile,
-            "describedby": [described_by, upper_described_by] if is_range else [described_by],
-            "errormessage": [error_message, upper_error_message] if is_range else [error_message],
-            "ariaLabel": single_aria_label,
-            "ariaLabelledby": single_aria_labelledby,
-            "rangeLabelledby": [lower_labelledby, upper_labelledby] if is_range else [],
-            "fieldLabelId": field.label_id if field is not None else None,
-        }
+    cast("Any", component)._cui_slider_data = {
+        "kind": "range" if is_range else "single",
+        "id": public_id,
+        "rootId": root_id,
+        "ids": [lower_id, upper_id] if is_range else [lower_id],
+        "transportIds": [f"{lower_id}-readonly", f"{upper_id}-readonly"] if is_range else [f"{lower_id}-readonly"],
+        "names": list(effective_names),
+        "form": form_owner,
+        "value": list(values) if is_range else values[0],
+        "min": minimum,
+        "max": maximum,
+        "step": step,
+        "largeStep": large_step,
+        "minStepsBetweenThumbs": gap,
+        "disabled": disabled,
+        "readonly": readonly,
+        "inheritsReadonly": field is None and kwargs.readonly is None,
+        "invalid": invalid,
+        "orientation": kwargs.orientation,
+        "variant": kwargs.variant,
+        "size": kwargs.size,
+        "showValue": kwargs.show_value,
+        "format": profile,
+        "describedby": [described_by, upper_described_by] if is_range else [described_by],
+        "errormessage": [error_message, upper_error_message] if is_range else [error_message],
+        "ariaLabel": single_aria_label,
+        "ariaLabelledby": single_aria_labelledby,
+        "rangeLabelledby": [lower_labelledby, upper_labelledby] if is_range else [],
+        "fieldLabelId": field.label_id if field is not None else None,
+    }
     setattr(component, cache_name, snapshot)
     return snapshot
 
@@ -1005,8 +1026,8 @@ _SLIDER_CSS = """
       --_cui-slider-thumb-border-color: var(--cui-slider-thumb-border-color, AccentColor);
       --_cui-slider-focus-color: var(--cui-slider-focus-color, Highlight);
       --_cui-slider-mark-color: var(--cui-slider-mark-color, CanvasText);
-      --_cui-slider-value-background: var(--cui-slider-value-background, CanvasText);
-      --_cui-slider-value-foreground: var(--cui-slider-value-foreground, Canvas);
+      --_cui-slider-value-background: var(--cui-slider-value-background, #111827);
+      --_cui-slider-value-foreground: var(--cui-slider-value-foreground, #fff);
       --_cui-slider-track-size: var(--cui-slider-track-size, .375rem);
       --_cui-slider-thumb-size: var(--cui-slider-thumb-size, 1.25rem);
       --_cui-slider-control-size: var(--cui-slider-control-size, 2.75rem);
@@ -1089,13 +1110,13 @@ _SLIDER_CSS = """
       color: var(--_cui-slider-value-foreground);
       font: 500 .75rem/1.2 system-ui, sans-serif;
       pointer-events: none;
+      visibility: hidden;
       opacity: 0;
-      transition: opacity 120ms ease;
     }
     :where([dir="rtl"] .cui-slider [data-citry-ui-part="value"]) { translate: 50% 0; }
     :where(.cui-slider[data-orientation="vertical"] [data-citry-ui-part="value"]) { inset-block-end: auto; inset-inline-start: calc(100% + .5rem); translate: 0 -50%; }
-    :where(.cui-slider [data-citry-ui-part="thumb"]:focus [data-citry-ui-part="value"], .cui-slider[data-dragging] [data-citry-ui-part="thumb"][data-active] [data-citry-ui-part="value"], .cui-slider [data-citry-ui-part="thumb"]:hover [data-citry-ui-part="value"]) { opacity: 1; }
-    :where(.cui-slider[data-show-value="always"] [data-citry-ui-part="value"]) { opacity: 1; }
+    :where(.cui-slider [data-citry-ui-part="thumb"]:focus [data-citry-ui-part="value"], .cui-slider[data-dragging] [data-citry-ui-part="thumb"][data-active] [data-citry-ui-part="value"], .cui-slider [data-citry-ui-part="thumb"]:hover [data-citry-ui-part="value"]) { visibility: visible; opacity: 1; }
+    :where(.cui-slider[data-show-value="always"] [data-citry-ui-part="value"]) { visibility: visible; opacity: 1; }
     :where(.cui-slider [data-citry-ui-part="mark"]) {
       position: absolute;
       inset-inline-start: var(--_cui-slider-mark-position);
@@ -1167,11 +1188,11 @@ class CSlider(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         _snapshot(self, kwargs, is_range=False)
-        return self._cui_slider_data
+        return cast("dict[str, object]", cast("Any", self)._cui_slider_data)
 
     template = _SLIDER_TEMPLATE
     js = _SLIDER_JS
-    css = _SLIDER_CSS
+    css_file = "runtime.min.css"
 
 
 class CRangeSlider(LibraryComponent):
@@ -1222,11 +1243,11 @@ class CRangeSlider(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         _snapshot(self, kwargs, is_range=True)
-        return self._cui_slider_data
+        return cast("dict[str, object]", cast("Any", self)._cui_slider_data)
 
     template = _SLIDER_TEMPLATE
     js = _SLIDER_JS
-    css = _SLIDER_CSS
+    css_file = "runtime.min.css"
 
     messages = """
       citry-ui-range-slider-lower = Lower value

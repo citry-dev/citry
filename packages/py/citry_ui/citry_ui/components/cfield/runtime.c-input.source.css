@@ -1,0 +1,117 @@
+@layer citry-ui.theme {
+  :where(.cui-input) {
+    --_cui-input-background: var(--cui-input-background, Canvas);
+    --_cui-input-foreground: var(--cui-input-foreground, CanvasText);
+    --_cui-input-border-color: var(
+      --cui-input-border-color,
+      color-mix(in srgb, CanvasText 38%, transparent)
+    );
+    --_cui-input-hover-border-color: var(
+      --cui-input-hover-border-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-input-focus-color: var(--cui-input-focus-color, Highlight);
+    --_cui-input-invalid-border-color: var(
+      --cui-input-invalid-border-color,
+      light-dark(#d92d20, #f97066)
+    );
+    --_cui-input-disabled-background: var(
+      --cui-input-disabled-background,
+      color-mix(in srgb, CanvasText 7%, Canvas)
+    );
+    --_cui-input-placeholder-color: var(
+      --cui-input-placeholder-color,
+      color-mix(in srgb, CanvasText 55%, transparent)
+    );
+    --_cui-input-radius: var(--cui-input-radius, 0.5rem);
+    --_cui-input-height: var(--cui-input-height, 2.5rem);
+    --_cui-input-inline-padding: var(--cui-input-inline-padding, 0.75rem);
+    --_cui-input-block-padding: var(--cui-input-block-padding, 0.5rem);
+    --_cui-input-font-size: var(--cui-input-font-size, 1rem);
+
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-block-size: var(--_cui-input-height);
+    padding-block: var(--_cui-input-block-padding);
+    padding-inline: var(--_cui-input-inline-padding);
+    border: 1px solid var(--_cui-input-border-color);
+    border-radius: var(--_cui-input-radius);
+    background: var(--_cui-input-background);
+    color: var(--_cui-input-foreground);
+    font: inherit;
+    font-size: var(--_cui-input-font-size);
+    line-height: 1.25;
+  }
+
+  :where(.cui-input[data-variant="filled"]) {
+    --_cui-input-background: var(
+      --cui-input-background,
+      color-mix(in srgb, CanvasText 7%, Canvas)
+    );
+    --_cui-input-border-color: var(--cui-input-border-color, transparent);
+  }
+
+  :where(.cui-input[data-variant="plain"]) {
+    --_cui-input-background: var(--cui-input-background, transparent);
+    --_cui-input-border-color: var(--cui-input-border-color, transparent);
+    --_cui-input-radius: var(--cui-input-radius, 0);
+  }
+
+  :where(.cui-input[data-size="sm"]) {
+    --_cui-input-height: var(--cui-input-height, 2.25rem);
+    --_cui-input-inline-padding: var(--cui-input-inline-padding, 0.625rem);
+    --_cui-input-block-padding: var(--cui-input-block-padding, 0.375rem);
+    --_cui-input-font-size: var(--cui-input-font-size, 0.875rem);
+  }
+
+  :where(.cui-input[data-size="lg"]) {
+    --_cui-input-height: var(--cui-input-height, 2.75rem);
+    --_cui-input-inline-padding: var(--cui-input-inline-padding, 0.875rem);
+    --_cui-input-block-padding: var(--cui-input-block-padding, 0.625rem);
+    --_cui-input-font-size: var(--cui-input-font-size, 1.0625rem);
+  }
+
+  @media (hover: hover) {
+    :where(.cui-input:not(:disabled):not([data-readonly]):hover) {
+      border-color: var(--_cui-input-hover-border-color);
+    }
+  }
+
+  :where(.cui-input:focus-visible) {
+    border-color: var(--_cui-input-focus-color);
+    outline: 0.1875rem solid color-mix(
+      in srgb,
+      var(--_cui-input-focus-color) 38%,
+      transparent
+    );
+    outline-offset: 0.125rem;
+  }
+
+  :where(.cui-input[data-invalid]) {
+    border-color: var(--_cui-input-invalid-border-color);
+  }
+
+  :where(.cui-input:disabled) {
+    background: var(--_cui-input-disabled-background);
+    cursor: not-allowed;
+  }
+
+  :where(.cui-input[readonly]) {
+    cursor: text;
+  }
+
+  :where(.cui-input)::placeholder {
+    color: var(--_cui-input-placeholder-color);
+    opacity: 1;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-input) {
+      border-color: ButtonText;
+    }
+
+    :where(.cui-input[data-invalid]) {
+      border-color: Mark;
+    }
+  }
+}

@@ -4,4 +4,6 @@
 # dot segment.
 # Sources must be unique and vacant, destinations must be published, and chains
 # and cycles are rejected. See docs_site/_internal/redirects.py for validation.
-redirects: []
+redirects:
+  - from: /advanced/const-optimization/
+    to: /advanced/performance/

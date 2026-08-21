@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import re
+from weakref import ref
 
 import pytest
 
@@ -23,6 +24,32 @@ def _snapshot(render):
     graph = render.context.ownership
     assert graph is not None
     return graph.snapshot()
+
+
+def test_root_settlement_releases_transient_region_roots_without_gc():
+    c = Citry()
+
+    class Child(Component):
+        citry = c
+        template = "<c-slot />"
+
+    class Page(Component):
+        citry = c
+        template = "<c-child>body</c-child>"
+
+    render = Page().render()
+    component = render.context.component
+    graph = render.context.ownership
+    assert component is not None
+    assert graph is not None
+    assert component.root is component
+    assert graph._region_results == {}
+
+    component_ref = ref(component)
+    graph_ref = ref(graph)
+    del component, graph, render
+    assert component_ref() is None
+    assert graph_ref() is None
 
 
 class TestComponentTagClientBindingOwnership:
@@ -310,6 +337,7 @@ class TestComponentTagClientBindingOwnership:
         assert calls[0].id != calls[1].id
         assert calls[0].source_location_id != calls[1].source_location_id
         assert locations[calls[0].source_location_id].span == locations[calls[1].source_location_id].span
+        assert locations[calls[0].source_location_id]._site is locations[calls[1].source_location_id]._site
         assert calls[0].client_bindings[0].payload.expression == "{ n: 1 }"
         assert calls[1].client_bindings[0].payload.expression == "{ n: 2 }"
 

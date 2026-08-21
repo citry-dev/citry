@@ -83,6 +83,18 @@ grammar can change the AST, which can change the compiler output, which the
 runtime node classes consume. Depth lives in the template parser's own INDEX:
 [`crates/citry_template_parser/docs/agent/INDEX.md`](../../crates/citry_template_parser/docs/agent/INDEX.md).
 
+### `Const` values and pure component classes are different promises
+
+`Const(value)` marks one stable template value and lets the per-engine bounded
+cache specialize only nodes that depend on const inputs. `pure = True` is the
+stronger promise made by one exact component class: its complete template body
+is deterministic and side-effect-free for its template variables. Pure-body
+memoization lasts only for one root render and rebuilds fresh frames and IDs.
+It reuses safe strings and transparent control-flow structure while child,
+slot, ownership, and i18n work remains live on every occurrence. The promise
+never inherits to a subclass. The contracts, keying, falsifiers, and measurements are in
+[`component_constness.md`](../design/component_constness.md) section 16.
+
 ### PyO3 binding contract
 
 AST types marked `#[pyclass]` in

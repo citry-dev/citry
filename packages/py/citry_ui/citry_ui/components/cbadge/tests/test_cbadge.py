@@ -10,6 +10,7 @@ from markupsafe import Markup
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CBadge
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(badge: object, *, include_css: bool = False) -> str:
@@ -166,7 +167,7 @@ def test_direct_choices_are_detrusted_before_rendering():
 
 
 def test_css_exposes_every_public_variable_and_no_component_javascript():
-    css = _render(CBadge(slots={"default": "Ready"}), include_css=True)
+    css = read_component_source_css("cbadge")
 
     for variable in (
         "background",

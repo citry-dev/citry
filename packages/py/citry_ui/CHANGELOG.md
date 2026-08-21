@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added Timeline, Sidebar, Tour, Data Grid, Virtual List, Virtual Window, and
+  Transfer List component families with public guides, structured API
+  references, examples, localization keys, and browser coverage.
+
+### Changed
+
+- Citry UI now requires `citry>=0.4.2` for component-owned source messages and
+  checked browser translation bindings.
+- Production component styles and the largest new interaction runtimes ship as
+  deterministic checked-in minified assets while readable sources remain next
+  to each component.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

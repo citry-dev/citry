@@ -1,7 +1,7 @@
 # A10 client performance and payload budgets
 
-**Status (2026-07-24): implemented.** Deterministic byte limits are enforced
-in CI. Browser timing and heap measurements are recorded for orientation and
+**Status (2026-08-20): implemented and remeasured.** Deterministic byte limits
+are enforced in CI. Browser timing and heap measurements are recorded for orientation and
 regression investigation because shared runners cannot provide stable timing
 or memory ceilings.
 
@@ -35,23 +35,23 @@ enforces:
 
 | Payload | Budget |
 |---|---:|
-| Combined owned Alpine and Events runtime, raw | 731,000 bytes |
-| Combined owned Alpine and Events runtime, gzip | 153,000 bytes |
+| Combined owned Alpine and Events runtime, raw | 755,500 bytes |
+| Combined owned Alpine and Events runtime, gzip | 158,500 bytes |
 | 325-instance ownership graph, raw | 660,000 bytes |
 | 325-instance ownership graph, gzip | 38,000 bytes |
-| 325-instance document, raw | 1,425,000 bytes |
-| 325-instance document, gzip | 183,000 bytes |
+| 325-instance document, raw | 1,442,500 bytes |
+| 325-instance document, gzip | 188,000 bytes |
 | 450-instance ownership graph, raw | 900,000 bytes |
 
-The current deterministic measurement on 2026-08-05 is:
+The current deterministic measurement on 2026-08-20 is:
 
 | Payload | Raw | Gzip |
 |---|---:|---:|
-| Combined runtime | 728,847 | 151,867 |
+| Combined runtime | 754,238 | 157,151 |
 | 10-instance graph | 15,783 | 1,263 |
 | 100-instance graph | 153,747 | 6,077 |
 | 325-instance graph | 500,697 | 18,205 |
-| 325-instance document | 1,413,161 | 182,460 |
+| 325-instance document | 1,441,181 | 187,232 |
 | 450-instance graph | 693,447 | 24,880 |
 
 Gzip uses Python's `gzip.compress(..., mtime=0)` so CI results are
@@ -118,20 +118,31 @@ profile, and runner contention must accompany published measurements.
 Compare timing numbers only within one captured run. Payload budgets are the
 portable release gate.
 
-The closeout run on an Apple M4, Chromium 149.0.7827.55, Python 3.13.12,
-macOS 26.3.1, and three measured rounds after one discarded cold round gave:
+The 2026-08-20 refresh on an Apple M4, Chromium 151.0.7922.34, Python
+3.14.3, macOS 26.6.2, and nine measured rounds after one discarded cold round
+gave:
 
 | Instances | Startup median/p95 | Adoption median/p95 | Morph median/p95 | Forced-GC used heap |
 |---:|---:|---:|---:|---:|
-| 10 | 16.3 / 16.5 ms | 23.5 / 24.4 ms | 6.9 / 7.0 ms | 2,154,960 bytes |
-| 100 | 52.8 / 52.9 ms | 79.8 / 79.8 ms | 73.7 / 73.7 ms | 3,345,276 bytes |
-| 325 | 289.8 / 291.4 ms | 506.1 / 511.3 ms | 681.9 / 687.7 ms | 6,119,752 bytes |
+| 10 | 19.3 / 19.6 ms | 27.1 / 27.6 ms | 0.8 / 0.9 ms | 2,418,164 bytes |
+| 100 | 58.1 / 59.8 ms | 87.8 / 93.7 ms | 0.8 / 0.9 ms | 3,488,400 bytes |
+| 325 | 358.5 / 361.3 ms | 568.2 / 574.3 ms | 0.9 / 0.9 ms | 6,175,524 bytes |
 
-This run also found and closed a correctness failure: mixed-case base-62
-render IDs could differ only by case while their `data-cid-*` attribute names
-collapsed under HTML case folding. Production IDs now use a `c` prefix plus
-eight lowercase base-36 characters, custom generators reject unsafe values, and graph plus
-Events consumers validate the wire value before using it in a selector.
+The refresh first found an obsolete runner oracle: it expected a keyed morph
+to destroy and recreate every child, so it waited for doubled initializer and
+cleanup counts even though the current runtime correctly retained every keyed
+physical node and lifecycle resource. The runner now requires the initializer
+and cleanup counts to remain unchanged and still rejects browser errors,
+resource drift, or wrong component counts. The much smaller morph transaction
+time therefore reflects retained keyed identity, not a disabled correctness
+check. Paint settlement remains measured separately in the JSON result.
+
+The earlier closeout run also found and closed a correctness failure:
+mixed-case base-62 render IDs could differ only by case while their
+`data-cid-*` attribute names collapsed under HTML case folding. Production IDs
+now use a `c` prefix plus eight lowercase base-36 characters, custom generators
+reject unsafe values, and graph plus Events consumers validate the wire value
+before using it in a selector.
 
 ## Interpreting resource counts
 

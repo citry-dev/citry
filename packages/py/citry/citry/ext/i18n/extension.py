@@ -1144,9 +1144,15 @@ class I18nExtension(Extension):
         return False
 
     def on_component_data(self, ctx: OnComponentDataContext) -> None:
-        type(ctx.component).get_messages()
-        self._load_project_sources()
-        if self._compiled_catalog is None:
+        with self._catalog_lock:
+            catalog_is_current = self._loaded_registry_generation == self._registry_generation
+            catalog_available = self._compiled_catalog is not None
+        if not catalog_is_current:
+            type(ctx.component).get_messages()
+            self._load_project_sources()
+            with self._catalog_lock:
+                catalog_available = self._compiled_catalog is not None
+        if not catalog_available:
             return
         component_i18n = cast("Any", ctx.component).i18n
         if type(ctx.component).get_template() is not None:
@@ -1168,7 +1174,7 @@ class I18nExtension(Extension):
         records: dict[str, I18nRenderRecord] = ctx.context.extra.setdefault(EXTRA_KEY, {})
         records[ctx.component.id] = I18nRenderRecord(
             render_id=ctx.component.id,
-            class_id=type(ctx.component).class_id,
+            class_id=ctx.component._citry_class_id,
             server_usage=component_i18n._usage,
             client_outputs=self._client_outputs(type(ctx.component)),
             client_messages=tuple(component_i18n.client_messages),
@@ -1187,7 +1193,9 @@ class I18nExtension(Extension):
     def on_component_rendered(self, ctx: OnComponentRenderedContext) -> None:
         """Seal checked binding metadata after the complete component body rendered."""
         if ctx.error is None:
-            cast("Any", ctx.component).i18n._bindings.seal()
+            bindings = cast("Any", ctx.component).i18n._bindings_state
+            if bindings is not None:
+                bindings.seal()
 
     def _client_outputs(self, component_class: type[Component]) -> tuple[MessageOutputUse, ...]:
         """Return literal browser message roots proven for one component class."""

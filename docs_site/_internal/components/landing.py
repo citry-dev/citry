@@ -1124,7 +1124,7 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
             "</div>",
         ),
         "file": "dashboard.py",
-        "doc": "advanced/const-optimization.md",
+        "doc": "advanced/performance.md",
         "code": (
             "from citry import Const\n\n# The parts that never vary are rendered once and reused\nCard(cols=Const(3))"
         ),

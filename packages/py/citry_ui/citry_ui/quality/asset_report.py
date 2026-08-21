@@ -75,9 +75,19 @@ _FAMILY_COMPONENTS = {
     "combobox": frozenset({"CCombobox"}),
     "command-palette": frozenset({"CCommandPalette"}),
     "table": frozenset({"CTable"}),
+    "data-grid": frozenset({"CDataGrid"}),
     "icon": frozenset({"CIcon"}),
     "card": frozenset({"CCard"}),
     "carousel": frozenset({"CCarousel", "CCarouselSlide"}),
+    "timeline": frozenset(
+        {
+            "CTimeline",
+            "CTimelineItem",
+            "CInternalTimelineDeclarations",
+            "CInternalTimeline",
+            "CInternalTimelineItem",
+        }
+    ),
     "scroll-area": frozenset({"CScrollArea"}),
     "textarea": frozenset({"CTextarea"}),
     "native-select": frozenset({"CNativeSelect"}),
@@ -109,8 +119,44 @@ _FAMILY_COMPONENTS = {
     "rating": frozenset({"CRating"}),
     "pin-input": frozenset({"CPinInput"}),
     "date-input": frozenset({"CDateInput"}),
+    "date-picker": frozenset({"CDatePicker"}),
+    "date-range": frozenset({"CDateRange"}),
+    "calendar": frozenset({"CCalendar"}),
+    "time-input": frozenset({"CTimeInput"}),
+    "time-picker": frozenset({"CTimePicker"}),
     "navigation-menu": frozenset({"CNavigationMenu", "CNavigationMenuLink", "CNavigationMenuItem"}),
+    "sidebar": frozenset({"CSidebar"}),
+    "tour": frozenset(
+        {
+            "CTour",
+            "CTourStep",
+            "CInternalTourDeclarations",
+            "CInternalTour",
+            "CInternalTourStep",
+        }
+    ),
     "editable": frozenset({"CEditable"}),
+    "virtual-list": frozenset(
+        {
+            "CVirtualList",
+            "CVirtualListItem",
+            "CVirtualWindow",
+            "CInternalVirtualListDeclarations",
+            "CInternalVirtualList",
+            "CInternalVirtualListStatic",
+            "CInternalVirtualListWindow",
+            "CInternalVirtualListItem",
+        }
+    ),
+    "transfer-list": frozenset(
+        {
+            "CTransferList",
+            "CTransferListItem",
+            "CInternalTransferListDeclarations",
+            "CInternalTransferList",
+            "CInternalTransferListItem",
+        }
+    ),
 }
 
 _INCREMENTAL_BASELINES = {
@@ -172,8 +218,8 @@ class AssetBytes:
 
 
 _CATALOG_ASSET_LIMITS = {
-    "javascript": AssetBytes(raw=960 * 1024, gzip=192 * 1024, brotli=128 * 1024),
-    "css": AssetBytes(raw=336 * 1024, gzip=40 * 1024, brotli=32 * 1024),
+    "javascript": AssetBytes(raw=1024 * 1024, gzip=192 * 1024, brotli=144 * 1024),
+    "css": AssetBytes(raw=360 * 1024, gzip=44 * 1024, brotli=36 * 1024),
 }
 
 

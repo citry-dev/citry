@@ -8,6 +8,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CCard
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(card: object, *, include_css: bool = False) -> str:
@@ -253,10 +254,11 @@ def test_card_has_static_css_and_no_javascript_asset():
     app = Citry(autodiscover=False)
     installed = app.register_library(citry_ui)
     card = installed[CCard]
-    css = card.get_css()
+    runtime_css = card.get_css()
+    css = read_component_source_css("ccard")
 
     assert card.get_js() is None
-    assert css is not None
+    assert runtime_css is not None
     assert "--cui-card-background" in css
     assert "--cui-card-actions-justify" in css
     assert "overflow: clip" in css

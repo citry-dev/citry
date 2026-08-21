@@ -46,7 +46,7 @@ def test_minify_leaves_ld_json_valid(tmp_path: Path) -> None:
 
 
 def test_minify_preserves_citry_ownership_caps(tmp_path: Path) -> None:
-    digest = "a" * 64
+    digest = "a" * 8
     start = f"<!--citry:g1:{digest}:0:i:1:s-->"
     end = f"<!--citry:g1:{digest}:0:i:1:e-->"
     page = tmp_path / "index.html"

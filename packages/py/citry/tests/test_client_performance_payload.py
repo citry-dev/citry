@@ -84,9 +84,13 @@ def test_client_runtime_bundle_budget():
     # I18n phase 5 adds the shared async framework-manifest transaction around
     # fragment adoption, including rollback after failed current-locale staging.
     # The measured baseline is 754,238 raw / 157,891 gzip bytes.
+    # Readable eight-character ownership aliases add the active alias-to-full-
+    # revision registry and collision lifecycle while shortening both canonical
+    # and mirrored marker parsers. The measured baseline is 757,148 raw /
+    # 157,712 gzip bytes.
     # These are deliberate validation and identity features, not incidental
     # bundle drift.
-    assert len(payload) <= 755_500
+    assert len(payload) <= 758_500
     assert len(gzip.compress(payload, mtime=0)) <= 158_500
 
 
@@ -111,10 +115,10 @@ def test_i18n_runtime_bundle_budget():
     # The production bundle contains the Fluent runtime, locale switching,
     # every current formatter, strict number and percent parsing, and wire
     # validation. Checked declarative/imperative bindings, transactional
-    # switching, and current-locale fragment preparation move the phase-5
-    # baseline to 109,446 raw / 23,730 gzip bytes.
+    # switching, and current-locale fragment preparation move the 2026-08-20
+    # baseline to 110,533 raw / 23,844 gzip bytes.
     # Keep only narrow headroom so new browser work has to account for its cost.
-    assert len(payload) <= 110_500
+    assert len(payload) <= 111_000
     assert len(gzip.compress(payload, mtime=0)) <= 24_000
 
 

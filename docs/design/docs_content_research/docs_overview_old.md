@@ -264,7 +264,7 @@ from citry import Const
 Card(cols=Const(3))
 ```
 
-More in [Const optimization](/advanced/const-optimization/).
+More in [Performance](/advanced/performance/).
 
 ## Where to go next
 

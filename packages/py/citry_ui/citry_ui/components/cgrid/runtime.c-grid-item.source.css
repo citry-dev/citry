@@ -1,0 +1,69 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="grid-item"]) {
+    --_cui-grid-item-span-sm: initial;
+    --_cui-grid-item-span-md: initial;
+    --_cui-grid-item-span-lg: initial;
+    --_cui-grid-item-span-xl: initial;
+    --_cui-grid-item-span-xxl: initial;
+    --_cui-grid-item-span-through-sm: var(
+      --_cui-grid-item-span-sm,
+      var(--_cui-grid-item-span-base)
+    );
+    --_cui-grid-item-span-through-md: var(
+      --_cui-grid-item-span-md,
+      var(--_cui-grid-item-span-through-sm)
+    );
+    --_cui-grid-item-span-through-lg: var(
+      --_cui-grid-item-span-lg,
+      var(--_cui-grid-item-span-through-md)
+    );
+    --_cui-grid-item-span-through-xl: var(
+      --_cui-grid-item-span-xl,
+      var(--_cui-grid-item-span-through-lg)
+    );
+    --_cui-grid-item-span-through-xxl: var(
+      --_cui-grid-item-span-xxl,
+      var(--_cui-grid-item-span-through-xl)
+    );
+    --_cui-grid-item-effective-span: var(--_cui-grid-item-span-base);
+    --_cui-grid-item-span: var(
+      --cui-grid-item-span,
+      var(--_cui-grid-item-effective-span)
+    );
+    min-inline-size: 0;
+    min-block-size: 0;
+    grid-column:
+      span var(--_cui-grid-item-span) /
+      span var(--_cui-grid-item-span);
+  }
+
+  @media (min-width: 40rem) {
+    :where([data-citry-ui-part="grid-item"]) {
+      --_cui-grid-item-effective-span: var(--_cui-grid-item-span-through-sm);
+    }
+  }
+
+  @media (min-width: 48rem) {
+    :where([data-citry-ui-part="grid-item"]) {
+      --_cui-grid-item-effective-span: var(--_cui-grid-item-span-through-md);
+    }
+  }
+
+  @media (min-width: 64rem) {
+    :where([data-citry-ui-part="grid-item"]) {
+      --_cui-grid-item-effective-span: var(--_cui-grid-item-span-through-lg);
+    }
+  }
+
+  @media (min-width: 80rem) {
+    :where([data-citry-ui-part="grid-item"]) {
+      --_cui-grid-item-effective-span: var(--_cui-grid-item-span-through-xl);
+    }
+  }
+
+  @media (min-width: 96rem) {
+    :where([data-citry-ui-part="grid-item"]) {
+      --_cui-grid-item-effective-span: var(--_cui-grid-item-span-through-xxl);
+    }
+  }
+}

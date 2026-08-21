@@ -183,7 +183,7 @@ class TestComponentKey:
         invocation = manifest["graphs"][0]["nestedComponents"][0]
         assert invocation["morphKey"] == "k1"
         child = next(item for item in manifest["graphs"][0]["componentInstances"] if item["instanceId"] == 2)
-        prefix = f"citry:g1:{manifest['revision']}:0:i:{child['instanceId']}"
+        prefix = f"citry:g1:{manifest['revision'][:8]}:0:i:{child['instanceId']}"
         assert html.count(f"<!--{prefix}:s-->") == 1
         assert html.count(f"<!--{prefix}:e-->") == 1
 

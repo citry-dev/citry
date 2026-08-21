@@ -7,10 +7,12 @@ from .canonical import (
     COMMENT_PREFIX,
     MAX_SAFE_INTEGER,
     PROTOCOL,
+    REVISION_ALIAS_LENGTH,
     canonical_json,
     format_ownership_comment,
     inert_script_json,
     parse_ownership_comment,
+    revision_alias,
     revision_for,
 )
 from .issues import ProtocolValueError, ValidationIssue, copy_json, validate_strict_json
@@ -53,6 +55,7 @@ __all__ = [
     "COMMENT_PREFIX",
     "MAX_SAFE_INTEGER",
     "PROTOCOL",
+    "REVISION_ALIAS_LENGTH",
     "ProtocolValueError",
     "ValidationIssue",
     "assemble_graph",
@@ -76,6 +79,7 @@ __all__ = [
     "format_ownership_comment",
     "inert_script_json",
     "parse_ownership_comment",
+    "revision_alias",
     "revision_for",
     "serialize_manifest",
     "validate_client_binding",

@@ -1,5 +1,5 @@
 """
-Regenerate the README performance chart (``docs/assets/benchmark.png``).
+Regenerate the README and docs-site performance charts.
 
 The numbers below are the published large-scenario results from
 ``benchmarks/README.md`` (its "Results (large scenario)" table). They are not
@@ -18,27 +18,31 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Source: benchmarks/README.md "Results (large scenario)", measured 2026-06-26
-# (Apple M4, Python 3.13.12, median of 5 fresh-process runs). Times in
+# Source: benchmarks/README.md "Results (large scenario)", measured 2026-08-21
+# (Apple M4, Python 3.14.3, median of 5 fresh-process runs). Times in
 # milliseconds, lower is better. Keep SERIES and CAPTION in step with the table.
 CAPTION = (
-    "Apple M4, Python 3.13.12, median of 5 fresh-process runs.  "
-    "django 6.0.6, django-components 0.151.0, jinja2 3.1.6, citry 0.1.0."
+    "Apple M4, Python 3.14.3, median of 5 fresh-process runs.  "
+    "django 6.0.6, django-components 0.151.1, jinja2 3.1.6, citry source 0.4.1."
 )
 METRICS = ["Startup", "Import", "First render", "Repeat render"]
 # Each row: engine label, [startup, import, first render, repeat render], bar color.
 SERIES = [
-    ("Django", [82.31, 76.87, 17.72, 10.95], "#64748b"),
-    ("django-components", [82.08, 77.33, 65.08, 45.92], "#f97316"),
-    ("jinja2", [18.38, 14.79, 58.14, 6.27], "#3b82f6"),
-    ("Citry", [37.72, 28.63, 37.65, 14.17], "#10b981"),
+    ("Django", [88.51, 78.98, 18.96, 10.95], "#64748b"),
+    ("django-components", [82.95, 76.14, 68.39, 50.65], "#f97316"),
+    ("jinja2", [16.59, 13.59, 62.26, 6.91], "#3b82f6"),
+    ("Citry", [116.03, 99.04, 76.59, 38.65], "#10b981"),
 ]
-OUT_PATH = Path(__file__).resolve().parent.parent / "docs" / "assets" / "benchmark.png"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+OUT_PATHS = (
+    REPO_ROOT / "docs" / "assets" / "benchmark.png",
+    REPO_ROOT / "docs_site" / "static" / "img" / "benchmark.png",
+)
 BAR_WIDTH = 0.20
 
 
 def main() -> None:
-    """Draw the grouped bar chart and write it to ``OUT_PATH``."""
+    """Draw the grouped bar chart and write every configured output copy."""
     x = np.arange(len(METRICS))
     fig, ax = plt.subplots(figsize=(10.5, 5.5), dpi=200)
 
@@ -52,7 +56,7 @@ def main() -> None:
     ax.set_xticks(x)
     ax.set_xticklabels(METRICS, fontsize=10.5)
     ax.set_ylabel("Time in milliseconds (lower is better)", fontsize=10)
-    ax.set_title("Rendering a large page (~325 components)", fontsize=13, pad=10, fontweight="bold")
+    ax.set_title("Rendering a large page (~350 Citry component markers)", fontsize=13, pad=10, fontweight="bold")
     ax.legend(frameon=False, fontsize=9, loc="upper right")
     ax.spines["top"].set(visible=False)
     ax.spines["right"].set(visible=False)
@@ -64,9 +68,10 @@ def main() -> None:
     fig.text(0.5, 0.015, CAPTION, ha="center", fontsize=7.5, color="#94a3b8")
     fig.tight_layout(rect=(0, 0.04, 1, 1))
 
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT_PATH, dpi=200, bbox_inches="tight", facecolor="white")
-    print(f"saved {OUT_PATH}")
+    for out_path in OUT_PATHS:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_path, dpi=200, bbox_inches="tight", facecolor="white")
+        print(f"saved {out_path}")
 
 
 if __name__ == "__main__":

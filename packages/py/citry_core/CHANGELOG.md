@@ -1,5 +1,24 @@
 # Release notes
 
+## v1.5.1
+
+_21 Aug 2026_
+
+### Added
+
+- Detect Alpine attributes across multiple HTML fragments with
+  `scan_alpine_html()`.
+
+### Performance
+
+- Large Citry pages canonicalize client graphs and scan Alpine-bearing HTML in
+  Rust, while sandboxed built-in attribute access skips redundant checks.
+
+### Fixed
+
+- Source-free Fluent link units retain the punctuation needed to validate and
+  run formatter calls.
+
 ## v1.5.0
 
 _18 Aug 2026_

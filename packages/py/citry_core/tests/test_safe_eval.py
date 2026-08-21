@@ -1866,6 +1866,33 @@ class TestSecurity:
         ):
             compiled(context)
 
+    @pytest.mark.parametrize(
+        ("value", "expression", "expected"),
+        [
+            ({"answer": 42}, "value.items", dict.items),
+            ([1, 2], "value.count", list.count),
+            ("citry", "value.upper", str.upper),
+            ((1, 2), "value.index", tuple.index),
+        ],
+    )
+    def test_exact_builtin_public_attributes_remain_available(self, value, expression, expected):
+        compiled = safe_eval(expression)
+        result = compiled({"value": value})
+        assert result.__name__ == expected.__name__
+
+    def test_exact_builtin_fast_path_still_blocks_private_attributes(self):
+        compiled = safe_eval("value.__class__")
+        with pytest.raises(SecurityError, match=r"attribute '__class__'.*is unsafe"):
+            compiled({"value": {"answer": 42}})
+
+    def test_builtin_subclasses_keep_the_full_attribute_policy(self):
+        class Text(str):
+            __slots__ = ()
+
+        compiled = safe_eval("value._private")
+        with pytest.raises(SecurityError, match=r"attribute '_private'.*is unsafe"):
+            compiled({"value": Text("citry")})
+
     def test_block_internal_mro_attribute(self):
         compiled = safe_eval("str.mro")
         context = {"str": str}

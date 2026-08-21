@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 from typing import get_args, get_type_hints
 
 import pytest
@@ -145,7 +146,7 @@ def test_owned_slide_attrs_fail() -> None:
 
 
 def test_css_contract_covers_native_scroll_and_environments() -> None:
-    css = CCarousel.css
+    css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
     assert "scroll-snap-type" in css
     assert "--cui-carousel-block-size" in css
     assert '[data-citry-ui-part="indicator"]' in css

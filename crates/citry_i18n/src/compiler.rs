@@ -232,6 +232,7 @@ fn diagnostic_layout(source: &str) -> String {
         .chars()
         .map(|character| match character {
             '\r' | '\n' => character,
+            '(' | ')' | '"' | '\\' => character,
             _ => match character.len_utf8() {
                 1 => ' ',
                 2 => 'é',
@@ -5073,6 +5074,77 @@ mod tests {
         assert_eq!(
             runtime.format("cs-CZ", "title", "{}", None).unwrap(),
             "Titulek"
+        );
+    }
+
+    #[test]
+    fn source_free_link_unit_preserves_formatter_call_spans() {
+        let compiler = CatalogCompiler::new();
+        let mut package_request = request(
+            &["en-US"],
+            vec![json!({
+                "path": "demo:locales/en-US/common.ftl",
+                "package": "app",
+                "layer": "package:0:app",
+                "precedence": 0,
+                "locale": "en-US",
+                "source": concat!(
+                    "# @param {int} $count - Number of ready items.\n",
+                    "ready = { NUMBER($count, profile: \"app-integer\") } items ready\n",
+                ),
+            })],
+            &["ready"],
+        );
+        package_request["formats"] = json!({
+            "number": {
+                "app-integer": {"input": {"notation": "decimal"}},
+            },
+        });
+        let link_unit = compiler
+            .compile_link_unit(&package_request.to_string())
+            .unwrap();
+        assert!(!link_unit.contains("ready ="));
+
+        let project_request = json!({
+            "schema_version": SCHEMA_VERSION,
+            "active_locales": ["en-US"],
+            "fallbacks": {},
+            "packages": [],
+            "catalogs": [],
+            "link_units": [{
+                "artifact_json": link_unit,
+                "layer": "package:0:app",
+                "precedence": 0,
+            }],
+            "formats": package_request["formats"].clone(),
+        });
+        let artifact = compiler.compile(&project_request.to_string()).unwrap();
+        let runtime = I18nRuntime::new(&artifact).unwrap();
+        assert_eq!(
+            runtime
+                .format(
+                    "en-US",
+                    "ready",
+                    r#"{"count":{"type":"int","value":"1200"}}"#,
+                    None,
+                )
+                .unwrap(),
+            "\u{2068}1,200\u{2069} items ready"
+        );
+    }
+
+    #[test]
+    fn diagnostic_layout_masks_text_but_retains_nested_call_punctuation() {
+        let source = r#"message = { NUMBER($value, profile: "app-(\"integer\")") } Secret\n"#;
+        let layout = super::diagnostic_layout(source);
+        let callee_end = source.find("NUMBER").unwrap() + "NUMBER".len();
+
+        assert_eq!(layout.len(), source.len());
+        assert!(!layout.contains("NUMBER"));
+        assert!(!layout.contains("Secret"));
+        assert_eq!(
+            super::call_end(&layout, callee_end).unwrap(),
+            source.rfind(')').unwrap() + 1
         );
     }
 

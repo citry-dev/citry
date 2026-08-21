@@ -280,14 +280,13 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     assert page.locator("#breadcrumbs-override").get_attribute("aria-label") == "Custom breadcrumbs"
     assert _plain(page.locator("#progress").text_content()) == "Reviewed: 50 z 100"
     assert page.locator("#number-input").input_value().replace("\u00a0", " ") == "1 234,5"
-    assert _label(page, '.cui-number-input:has(#number-input) [data-citry-ui-part="increment"]') == (
-        "Zvýšit hodnotu"
-    )
+    assert _label(page, '.cui-number-input:has(#number-input) [data-citry-ui-part="increment"]') == ("Zvýšit hodnotu")
     assert page.locator("#range-lower-label").text_content() == "Dolní hodnota"
     assert page.locator("#range-upper-label").text_content() == "Horní hodnota"
-    assert page.locator('#range-root [role="slider"]').nth(0).get_attribute("aria-valuetext").replace(
-        "\u00a0", " "
-    ) == "1 234,5"
+    assert (
+        page.locator('#range-root [role="slider"]').nth(0).get_attribute("aria-valuetext").replace("\u00a0", " ")
+        == "1 234,5"
+    )
     assert _plain(page.locator(rating_label).text_content()) == "3,5 z 5"
     assert _label(page, '#pagination [data-kind="page"][data-page="3"]') == "Strana 3"
     assert page.locator("#combobox-root [data-citry-combobox-trigger]").get_attribute("aria-label") == "Skrýt možnosti"

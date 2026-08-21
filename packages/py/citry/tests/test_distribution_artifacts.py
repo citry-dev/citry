@@ -72,9 +72,9 @@ def test_wheel_size_gate_reports_and_rejects_the_exact_compressed_size(tmp_path:
 
 
 def _write_wheel(path: Path, *, extra: str | None = None) -> None:
-    dist_info = "citry-0.4.1.dist-info"
+    dist_info = "citry-0.4.2.dist-info"
     metadata = (
-        "Metadata-Version: 2.4\nName: citry\nVersion: 0.4.1\nRequires-Python: <4.0,>=3.10\n"
+        "Metadata-Version: 2.4\nName: citry\nVersion: 0.4.2\nRequires-Python: <4.0,>=3.10\n"
         + "".join(
             f"Requires-Dist: {requirement}\n" for requirement in sorted(distribution_verifier.EXPECTED_REQUIRES_DIST)
         )
@@ -111,22 +111,22 @@ def test_wheel_verifier_rejects_payload_outside_the_closed_package(monkeypatch, 
         "source_inventory",
         lambda: {"__init__.py": distribution_verifier.sha256_bytes(b"value = 1\n")},
     )
-    valid = tmp_path / "citry-0.4.1-py3-none-any.whl"
+    valid = tmp_path / "citry-0.4.2-py3-none-any.whl"
     _write_wheel(valid)
-    assert verify_wheel(valid, version="0.4.1")["name"] == valid.name
+    assert verify_wheel(valid, version="0.4.2")["name"] == valid.name
 
     invalid = tmp_path / "invalid" / valid.name
     invalid.parent.mkdir()
     _write_wheel(invalid, extra="installer_hook.py")
     with pytest.raises(DistributionVerificationError, match=r"unexpected=.*installer_hook\.py"):
-        verify_wheel(invalid, version="0.4.1")
+        verify_wheel(invalid, version="0.4.2")
 
 
 def test_staged_bundle_requires_the_recorded_bytes(monkeypatch, tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    wheel = bundle / "citry-0.4.1-py3-none-any.whl"
-    sdist = bundle / "citry-0.4.1.tar.gz"
+    wheel = bundle / "citry-0.4.2-py3-none-any.whl"
+    sdist = bundle / "citry-0.4.2.tar.gz"
     wheel.write_bytes(b"wheel")
     sdist.write_bytes(b"sdist")
     report = distribution_verifier._release_report(wheel, sdist)
@@ -145,7 +145,7 @@ def test_promotion_checks_github_digest_before_safe_extraction(monkeypatch, tmp_
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr("release-inventory.json", "{}\n")
     digest = f"sha256:{hashlib.sha256(archive.read_bytes()).hexdigest()}"
-    expected = {"version": "0.4.1", "artifacts": []}
+    expected = {"version": "0.4.2", "artifacts": []}
     monkeypatch.setattr(distribution_verifier, "verify_staged_bundle", lambda _directory: expected)
 
     assert (

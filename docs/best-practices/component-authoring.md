@@ -131,6 +131,27 @@ syntax highlighter recognize the embedded language. Use a file asset when
 leading indentation itself is significant or the source should be kept
 byte-for-byte.
 
+## Promise purity only for repeated, side-effect-free bodies
+
+`Const(value)` describes one stable value. `pure = True` makes the stronger
+class-level promise that a component's template body is deterministic and
+side-effect-free for its complete template-variable input. Use it only for a
+small component whose equal inputs recur within the same root render:
+
+```python
+class StatusIcon(Component):
+    pure = True
+    template = '<span c-class="state">{{ state }}</span>'
+```
+
+Citry still creates every instance and runs its data and lifecycle hooks. It
+memoizes only a qualified body occurrence, and refuses occurrences that create
+child components, slot or ownership effects, or i18n capture. Do not opt in a
+component whose expressions change state, read ambient values absent from
+template data, consume iterators, or need an element-level extension hook to
+run once per occurrence. A subclass must repeat `pure = True`; never assume a
+base class's promise still holds after adding behavior.
+
 ## Compose extensions through public values
 
 Citry's component rules also apply when two extensions meet:

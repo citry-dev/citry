@@ -9,6 +9,7 @@ from markupsafe import Markup
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CSpinner
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(spinner: object, *, include_css: bool = False) -> str:
@@ -136,7 +137,7 @@ def test_choices_and_label_are_detrusted_before_rendering():
 
 
 def test_css_exposes_spinner_and_environment_contract():
-    css = _render(CSpinner(label="Task"), include_css=True)
+    css = read_component_source_css("cspinner")
 
     for variable in ("color", "track-color", "size", "thickness", "duration"):
         assert f"--_cui-spinner-{variable}: var(" in css

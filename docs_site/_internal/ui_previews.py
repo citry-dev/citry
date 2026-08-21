@@ -628,6 +628,8 @@ class UiPreviewDocument(Component):
 
       :where(body) {
         padding: 1.25rem;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        line-height: 1.5;
       }
 
       :where(main) {

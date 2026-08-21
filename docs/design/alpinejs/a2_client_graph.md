@@ -50,7 +50,8 @@ and its references, while production keeps that required collection empty and
 nulls every reference (see [`../dev_prod_mode.md`](../dev_prod_mode.md)). The
 literal prefix of the physical comment markers is declared by the top-level
 `delimiters` member, `{ "format": "citry:g1" }`. Every marker starts with
-that value followed by the manifest revision.
+that value followed by the first eight characters of the manifest revision.
+The manifest and every logical graph index retain the complete revision.
 
 In development each location's `sourceOffset` holds half-open UTF-8 byte offsets
 into the executed source after `on_template_loaded` hooks (not author-file
@@ -93,11 +94,17 @@ Every serialized logical instance and selected fill occurrence has one exact
 start and end comment pair:
 
 ```text
-<!--citry:g1:<revision>:<graph>:i:<instance-id>:s-->
-<!--citry:g1:<revision>:<graph>:i:<instance-id>:e-->
-<!--citry:g1:<revision>:<graph>:r:<region-id>:s-->
-<!--citry:g1:<revision>:<graph>:r:<region-id>:e-->
+<!--citry:g1:<revision-alias>:<graph>:i:<instance-id>:s-->
+<!--citry:g1:<revision-alias>:<graph>:i:<instance-id>:e-->
+<!--citry:g1:<revision-alias>:<graph>:r:<region-id>:s-->
+<!--citry:g1:<revision-alias>:<graph>:r:<region-id>:e-->
 ```
+
+The eight-character alias keeps server-rendered HTML readable; it is not the
+graph identity. The browser maps it to one complete live or provisional
+revision. If another complete revision has the same alias while that mapping
+is active, staging rejects the incoming graph before publication. Abort,
+discard, and inactive-revision pruning release the mapping.
 
 The wrapper that carries a selected slot occurrence survives until final
 serialization, including text-only and empty results. This avoids equality or

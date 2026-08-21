@@ -1208,7 +1208,7 @@ can ship on its own cadence. The ordering rule applies when `citry` and
 new must likewise wait for that Citry release to reach PyPI. `pygments-citry`
 has no cross-package release ordering requirement.
 
-**`citry` pins one exact `citry-core` version** (`citry-core==1.5.0`, not a
+**`citry` pins one exact `citry-core` version** (`citry-core==1.5.1`, not a
 range). The runtime node classes in `citry.nodes` read the source that
 citry-core's compiler emits, so a citry-core release that changes that output
 would otherwise reach an already-published `citry` that cannot read it. Raise
@@ -1619,7 +1619,7 @@ metadata, license, console-entry-point, and `RECORD` inventories. It rebuilds
 the source distribution outside the checkout and installs the wheel with only
 public binary dependencies on CPython 3.10 through 3.14.
 
-The installed-wheel smoke imports every shipped module, verifies Citry 0.4.1+,
+The installed-wheel smoke imports every shipped module, verifies Citry 0.4.2+,
 `pygls` 2.1.1, and `ty` 0.0.71, checks `citry-lsp --help`, and starts the stdio
 server with closed input. This proves that a clean install resolves the public
 `citry[analysis-ty]` dependency without reading another workspace package.
@@ -1640,6 +1640,13 @@ environment to permit `citry-lsp@*` tags as well as any existing package tag
 rules.
 
 ### citry-ui distribution qualification
+
+Citry UI commits production CSS and selected large JavaScript frames beside
+their readable `*.source.css` and `*.source.js` inputs. After editing one of
+those inputs, run `pnpm citry-ui:build-assets`; use
+`pnpm citry-ui:check-assets` to verify that every generated frame is current.
+The locked Node workspace pins the build tools, while the published wheel
+contains only the generated frames and performs no runtime compilation.
 
 Run `py--citry-ui--publish.yml` manually on the exact `main` commit that will
 receive `citry-ui@<version>`. The workflow builds one universal wheel and one

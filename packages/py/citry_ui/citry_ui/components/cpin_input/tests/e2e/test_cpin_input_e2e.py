@@ -123,10 +123,14 @@ def test_invalid_paste_is_filtered_and_cell_pointer_moves_selection(pin_page) ->
     )
     assert input_.input_value() == "987"
     assert page.evaluate("window.__pinEvents.filter(item => item[0] === 'invalid').at(-1)") == [
-        "invalid", "x", "paste",
+        "invalid",
+        "x",
+        "paste",
     ]
     page.locator('#code-root [data-citry-ui-part="cell"][data-index="1"]').click()
-    assert page.evaluate("[document.querySelector('#code').selectionStart, document.querySelector('#code').selectionEnd]") == [1, 2]
+    assert page.evaluate(
+        "[document.querySelector('#code').selectionStart, document.querySelector('#code').selectionEnd]"
+    ) == [1, 2]
     assert page.locator('#code-root [data-citry-ui-part="cell"][data-index="1"]').get_attribute("data-active") == ""
     assert errors == []
 

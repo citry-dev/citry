@@ -18,7 +18,7 @@ inputs:
       - {id: min, name: min, type: {display: CSliderExact, interfaces: [CSliderExact]}, default: {kind: literal, value: 0}, effect: Sets the inclusive exact minimum and step-grid origin.}
       - {id: max, name: max, type: {display: CSliderExact, interfaces: [CSliderExact]}, default: {kind: literal, value: 100}, effect: Sets the inclusive exact maximum.}
       - {id: step, name: step, type: {display: CSliderExact, interfaces: [CSliderExact]}, default: {kind: literal, value: 1}, effect: Sets the positive exact grid interval.}
-      - {id: large-step, name: large_step, type: {display: 'CSliderExact | None', interfaces: [CSliderExact]}, default: {kind: derived, value: Ten steps.}, effect: Sets the positive whole-step Page Up and Page Down interval.}
+      - {id: large-step, name: large_step, type: {display: 'CSliderExact | None', interfaces: [CSliderExact]}, default: {kind: derived, display: Ten steps.}, effect: Sets the positive whole-step Page Up and Page Down interval.}
       - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks focus mutation and Form participation outside Field.}
       - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Preserves focus and submission while blocking mutation outside Field.}
       - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Reflects application invalid state outside Field.}
@@ -26,7 +26,7 @@ inputs:
       - {id: variant, name: variant, type: {display: '"solid" | "subtle"', interfaces: [CSliderVariant]}, default: {kind: literal, value: solid}, effect: Selects visual treatment.}
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CSliderSize]}, default: {kind: literal, value: md}, effect: Selects track and thumb sizing.}
       - {id: show-value, name: show_value, type: {display: '"never" | "interaction" | "always"', interfaces: [CSliderShowValue]}, default: {kind: literal, value: interaction}, effect: Controls localized value bubbles.}
-      - {id: show-marks, name: show_marks, type: 'bool | None', default: {kind: derived, value: True when marks exist.}, effect: Shows or hides mark dots and labels.}
+      - {id: show-marks, name: show_marks, type: 'bool | None', default: {kind: derived, display: True when marks exist.}, effect: Shows or hides mark dots and labels.}
       - {id: marks, name: marks, type: 'Mapping[CSliderExact, str] | Sequence[CSliderExact] | None', default: {kind: literal, value: null}, effect: Adds up to 101 bounded step-grid marks.}
       - {id: format, name: format, type: str, default: {kind: literal, value: citry-ui-slider}, effect: Selects the named i18n number format profile for visible and accessible values.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the documented root and merges with attrs.}
@@ -39,7 +39,7 @@ inputs:
     channel: server
     column_widths: [fit, 17rem, 13rem, auto]
     entries:
-      - {id: value, name: value, type: {display: 'tuple[CSliderExact, CSliderExact] | None', interfaces: [CSliderExact]}, default: {kind: derived, value: '(min, max)'}, effect: Sets the initial ordered lower and upper exact values.}
+      - {id: value, name: value, type: {display: 'tuple[CSliderExact, CSliderExact] | None', interfaces: [CSliderExact]}, default: {kind: derived, display: '(min, max)'}, effect: Sets the initial ordered lower and upper exact values.}
       - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Names both ordered Form entries when separate names are omitted.}
       - {id: lower-name, name: lower_name, type: 'str | None', default: {kind: literal, value: null}, effect: Names the lower Form entry when supplied together with upper_name.}
       - {id: upper-name, name: upper_name, type: 'str | None', default: {kind: literal, value: null}, effect: Names the upper Form entry when supplied together with lower_name.}
@@ -48,7 +48,7 @@ inputs:
       - {id: min, name: min, type: {display: CSliderExact, interfaces: [CSliderExact]}, default: {kind: literal, value: 0}, effect: Sets the inclusive exact minimum and step-grid origin.}
       - {id: max, name: max, type: {display: CSliderExact, interfaces: [CSliderExact]}, default: {kind: literal, value: 100}, effect: Sets the inclusive exact maximum.}
       - {id: step, name: step, type: {display: CSliderExact, interfaces: [CSliderExact]}, default: {kind: literal, value: 1}, effect: Sets the positive exact grid interval.}
-      - {id: large-step, name: large_step, type: {display: 'CSliderExact | None', interfaces: [CSliderExact]}, default: {kind: derived, value: Ten steps.}, effect: Sets the positive whole-step Page Up and Page Down interval.}
+      - {id: large-step, name: large_step, type: {display: 'CSliderExact | None', interfaces: [CSliderExact]}, default: {kind: derived, display: Ten steps.}, effect: Sets the positive whole-step Page Up and Page Down interval.}
       - {id: min-steps-between-thumbs, name: min_steps_between_thumbs, type: int, default: {kind: literal, value: 0}, effect: Keeps this many grid intervals between fixed lower and upper thumbs.}
       - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks focus mutation and Form participation outside Field.}
       - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Preserves focus and ordered submission while blocking mutation outside Field.}
@@ -57,7 +57,7 @@ inputs:
       - {id: variant, name: variant, type: {display: '"solid" | "subtle"', interfaces: [CSliderVariant]}, default: {kind: literal, value: solid}, effect: Selects visual treatment.}
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CSliderSize]}, default: {kind: literal, value: md}, effect: Selects track and thumb sizing.}
       - {id: show-value, name: show_value, type: {display: '"never" | "interaction" | "always"', interfaces: [CSliderShowValue]}, default: {kind: literal, value: interaction}, effect: Controls both localized value bubbles.}
-      - {id: show-marks, name: show_marks, type: 'bool | None', default: {kind: derived, value: True when marks exist.}, effect: Shows or hides mark dots and labels.}
+      - {id: show-marks, name: show_marks, type: 'bool | None', default: {kind: derived, display: True when marks exist.}, effect: Shows or hides mark dots and labels.}
       - {id: marks, name: marks, type: 'Mapping[CSliderExact, str] | Sequence[CSliderExact] | None', default: {kind: literal, value: null}, effect: Adds up to 101 bounded step-grid marks.}
       - {id: format, name: format, type: str, default: {kind: literal, value: citry-ui-slider}, effect: Selects the named i18n number format profile for both values.}
       - {id: lower-label, name: lower_label, type: str, default: {kind: literal, value: Lower value}, effect: Overrides the catalog-backed lower-thumb accessible name.}
@@ -155,8 +155,8 @@ css:
       - {id: thumb-border-color, name: --cui-slider-thumb-border-color, type: color, purpose: Thumb outline., default: AccentColor}
       - {id: focus-color, name: --cui-slider-focus-color, type: color, purpose: Keyboard focus ring., default: Highlight}
       - {id: mark-color, name: --cui-slider-mark-color, type: color, purpose: Mark dots., default: CanvasText}
-      - {id: value-background, name: --cui-slider-value-background, type: color, purpose: Value-bubble background., default: CanvasText}
-      - {id: value-foreground, name: --cui-slider-value-foreground, type: color, purpose: Value-bubble text., default: Canvas}
+      - {id: value-background, name: --cui-slider-value-background, type: color, purpose: Value-bubble background., default: High-contrast ink.}
+      - {id: value-foreground, name: --cui-slider-value-foreground, type: color, purpose: Value-bubble text., default: High-contrast surface.}
       - {id: track-size, name: --cui-slider-track-size, type: length, purpose: Rail thickness., default: 0.375rem}
       - {id: thumb-size, name: --cui-slider-thumb-size, type: length, purpose: Thumb diameter., default: 1.25rem}
       - {id: control-size, name: --cui-slider-control-size, type: length, purpose: Minimum interaction block size., default: 2.75rem}

@@ -183,6 +183,8 @@ class i18n:
 
 class html_transform:
     @staticmethod
+    def scan_alpine_html(html_fragments: list[str]) -> list[bool]: ...
+    @staticmethod
     def mark_html(
         html: str,
         root_attributes: list[str],
@@ -294,6 +296,14 @@ class html_transform:
 
         ValueError: If the HTML is malformed or cannot be parsed.
         """
+
+########################################################
+# Client graph
+########################################################
+
+class client_graph:
+    @staticmethod
+    def canonical_json_and_revision(value: object) -> tuple[str, str]: ...
 
 ########################################################
 # Safe eval

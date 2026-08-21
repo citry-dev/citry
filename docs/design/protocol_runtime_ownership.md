@@ -92,6 +92,12 @@ source. It does not read the generated `CitryClientGraphProtocol` global, so
 this migration adds no new dependency on that global. The existing runtime
 order remains unchanged: the core hook broker loads before Events.
 
+That shared parser treats the first eight revision characters in `citry:g1`
+comments as a page-local alias. The manifest and core registry keep the
+complete revision, and the core owns the active alias-to-revision mapping and
+its collision rejection. Events only preserves or rewrites the alias already
+present in a validated ownership comment.
+
 ## What the protocol helpers own
 
 ### Events

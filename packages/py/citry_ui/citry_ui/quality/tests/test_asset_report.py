@@ -733,9 +733,11 @@ def test_asset_report_is_deterministic_and_covers_every_family():
         "combobox",
         "command-palette",
         "table",
+        "data-grid",
         "icon",
         "card",
         "carousel",
+        "timeline",
         "scroll-area",
         "textarea",
         "native-select",
@@ -758,29 +760,38 @@ def test_asset_report_is_deterministic_and_covers_every_family():
         "rating",
         "pin-input",
         "date-input",
+        "date-picker",
+        "date-range",
+        "calendar",
+        "time-input",
+        "time-picker",
         "navigation-menu",
+        "sidebar",
+        "tour",
         "editable",
+        "virtual-list",
+        "transfer-list",
     ]
     assert first["catalog"] == {
         "javascript": {
-                "sha256": "f52d5b8e0910b380bfeb15413a008160ddb51893586619e7f42fe2b0d5b5f148",
-                "raw": 931_875,
-                "gzip": 174_653,
-                "brotli": 126_213,
+            "sha256": "8dfdc632fa6f09590c4fdf359e3c51ce18c5a8adda7553a1462077f4c430b4cc",
+            "raw": 1_007_551,
+            "gzip": 194_598,
+            "brotli": 142_756,
         },
         "css": {
-                "sha256": "88dab541edf4f08b6712d4b531c96004e97b59dbece326485df253ddd12410f5",
-                "raw": 323_806,
-                "gzip": 39_177,
-                "brotli": 30_765,
+            "sha256": "c0d55aeb6b074a64ccc4083d7637658d5fa87d72164de9407e4120f00c510536",
+            "raw": 335_766,
+            "gzip": 43_751,
+            "brotli": 34_937,
         },
         "limits": {
-            "javascript": {"raw": 983_040, "gzip": 196_608, "brotli": 131_072},
-            "css": {"raw": 344_064, "gzip": 40_960, "brotli": 32_768},
+            "javascript": {"raw": 1_048_576, "gzip": 196_608, "brotli": 147_456},
+            "css": {"raw": 368_640, "gzip": 45_056, "brotli": 36_864},
         },
         "headroom": {
-                "javascript": {"raw": 51_165, "gzip": 21_955, "brotli": 4_859},
-                "css": {"raw": 20_258, "gzip": 1_783, "brotli": 2_003},
+            "javascript": {"raw": 41_025, "gzip": 2_010, "brotli": 4_700},
+            "css": {"raw": 32_874, "gzip": 1_305, "brotli": 1_927},
         },
     }
     assert first["families"]["table"]["javascript"] == {"raw": 0, "gzip": 0, "brotli": 0}
@@ -796,6 +807,11 @@ def test_asset_report_is_deterministic_and_covers_every_family():
     assert first["families"]["slider"]["javascript"]["raw"] > 0
     assert first["families"]["pin-input"]["javascript"]["raw"] > 0
     assert first["families"]["date-input"]["javascript"]["raw"] > 0
+    assert first["families"]["date-picker"]["javascript"]["raw"] > 0
+    assert first["families"]["date-range"]["javascript"]["raw"] > 0
+    assert first["families"]["calendar"]["javascript"]["raw"] > 0
+    assert first["families"]["time-input"]["javascript"]["raw"] > 0
+    assert first["families"]["time-picker"]["javascript"]["raw"] > 0
     assert first["families"]["popover"]["javascript"]["raw"] > 0
     assert first["families"]["drawer"]["javascript"]["raw"] > 0
     assert first["families"]["tooltip"]["javascript"]["raw"] > 0
@@ -852,10 +868,10 @@ def test_image_exact_frames_and_zero_shared_delta_stay_within_the_frozen_budget(
             ),
             "css": (
                 {
-                    "sha256": "f7e03915e4a116346f90f6f1cc130079daf15b15a0b784658a9225f08bd8c158",
-                    "raw": 2_639,
-                    "gzip": 665,
-                    "brotli": 540,
+                    "sha256": "4a077c2974fa9ee662a99adaa5a2e7bedf779bbeb397144598673e72848f7976",
+                    "raw": 2_191,
+                    "gzip": 602,
+                    "brotli": 487,
                 },
             ),
         },
@@ -865,7 +881,7 @@ def test_image_exact_frames_and_zero_shared_delta_stay_within_the_frozen_budget(
         },
         "charged": {
             "javascript": {"raw": 27_667, "gzip": 6_405, "brotli": 5_613},
-            "css": {"raw": 2_639, "gzip": 665, "brotli": 540},
+            "css": {"raw": 2_191, "gzip": 602, "brotli": 487},
         },
     }
     assert incremental["javascript"]["raw"] < 32 * 1024
@@ -1189,7 +1205,7 @@ def test_image_instance_scaling_emits_each_component_asset_once(count: int):
     html = _render_image_instances(count)
 
     assert html.count("CImage requires one native image and root") == 1
-    assert html.count(':where([data-citry-ui-part="image-root"]) {') == 1
+    assert html.count(":where([data-citry-ui-part=image-root]){") == 1
 
 
 def test_image_and_avatar_coexist_without_duplicate_image_assets():
@@ -1200,7 +1216,7 @@ def test_image_and_avatar_coexist_without_duplicate_image_assets():
     combined_css = b"\n".join(combined["css"])
 
     assert combined_javascript.count(b"CImage requires one native image and root") == 1
-    assert combined_css.count(b':where([data-citry-ui-part="image-root"]) {') == 1
+    assert combined_css.count(b":where([data-citry-ui-part=image-root]){") == 1
     for kind in ("js", "css"):
         assert set(image[kind]) <= set(combined[kind])
         assert set(avatar[kind]) <= set(combined[kind])

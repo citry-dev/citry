@@ -1,0 +1,210 @@
+@layer citry-ui.theme {
+  :where(.cui-popover-host) {
+    display: contents;
+  }
+
+  :where(.cui-popover) {
+    --_cui-popover-background: var(--cui-popover-background, Canvas);
+    --_cui-popover-foreground: var(--cui-popover-foreground, CanvasText);
+    --_cui-popover-border-color: var(
+      --cui-popover-border-color,
+      color-mix(in srgb, CanvasText 16%, transparent)
+    );
+    --_cui-popover-border-width: var(--cui-popover-border-width, 1px);
+    --_cui-popover-radius: var(--cui-popover-radius, 0.75rem);
+    --_cui-popover-shadow: var(
+      --cui-popover-shadow,
+      0 1rem 3rem rgb(15 23 42 / 22%)
+    );
+    --_cui-popover-inline-size: var(--cui-popover-inline-size, 20rem);
+    --_cui-popover-max-inline-size: var(
+      --cui-popover-max-inline-size,
+      calc(100dvi - 1rem)
+    );
+    --_cui-popover-max-block-size: var(
+      --cui-popover-max-block-size,
+      calc(100dvb - 1rem)
+    );
+    --_cui-popover-padding: var(--cui-popover-padding, 1rem);
+    --_cui-popover-gap: var(--cui-popover-gap, 0.75rem);
+    --_cui-popover-offset: var(--cui-popover-offset, 0.5rem);
+    --_cui-popover-duration: var(--cui-popover-duration, 140ms);
+    --_cui-popover-easing: var(
+      --cui-popover-easing,
+      cubic-bezier(0.2, 0.8, 0.2, 1)
+    );
+    --_cui-popover-focus-color: var(--cui-popover-focus-color, Highlight);
+
+    box-sizing: border-box;
+    position: fixed;
+    position-anchor: var(--_cui-popover-anchor);
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    position-visibility: anchors-visible;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    inline-size: min(
+      var(--_cui-popover-inline-size),
+      var(--_cui-popover-max-inline-size)
+    );
+    max-inline-size: var(--_cui-popover-max-inline-size);
+    max-block-size: var(--_cui-popover-max-block-size);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: var(--_cui-popover-border-width) solid var(--_cui-popover-border-color);
+    border-radius: var(--_cui-popover-radius);
+    background: var(--_cui-popover-background);
+    color: var(--_cui-popover-foreground);
+    box-shadow: var(--_cui-popover-shadow);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.5;
+    overscroll-behavior: contain;
+  }
+
+  :where(
+    .cui-popover:not(:popover-open):not([data-open]):not(
+      [data-citry-popover-exiting]
+    )
+  ) {
+    display: none;
+  }
+
+  :where(.cui-popover[data-open]:not(:popover-open)) {
+    position: static;
+    display: grid;
+    inline-size: min(100%, var(--_cui-popover-max-inline-size));
+    margin-block: 0.5rem;
+  }
+
+  :where(.cui-popover[data-citry-popover-exiting]) {
+    pointer-events: none;
+    user-select: none;
+  }
+
+  :where(.cui-popover[data-placement="bottom-start"]) {
+    position-area: block-end span-inline-end;
+    margin-block-start: var(--_cui-popover-offset);
+  }
+
+  :where(.cui-popover[data-placement="bottom"]) {
+    position-area: block-end;
+    margin-block-start: var(--_cui-popover-offset);
+  }
+
+  :where(.cui-popover[data-placement="bottom-end"]) {
+    position-area: block-end span-inline-start;
+    margin-block-start: var(--_cui-popover-offset);
+  }
+
+  :where(.cui-popover[data-placement="top-start"]) {
+    position-area: block-start span-inline-end;
+    margin-block-end: var(--_cui-popover-offset);
+  }
+
+  :where(.cui-popover[data-placement="top"]) {
+    position-area: block-start;
+    margin-block-end: var(--_cui-popover-offset);
+  }
+
+  :where(.cui-popover[data-placement="top-end"]) {
+    position-area: block-start span-inline-start;
+    margin-block-end: var(--_cui-popover-offset);
+  }
+
+  :where(.cui-popover[data-match-width]) {
+    min-inline-size: anchor-size(width);
+  }
+
+  :where(.cui-popover__header),
+  :where(.cui-popover__body),
+  :where(.cui-popover__actions) {
+    box-sizing: border-box;
+    min-inline-size: 0;
+    padding-inline: var(--_cui-popover-padding);
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-popover__header) {
+    display: grid;
+    gap: 0.25rem;
+    padding-block-start: var(--_cui-popover-padding);
+  }
+
+  :where(.cui-popover__title) {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  :where(.cui-popover__description) {
+    color: color-mix(in srgb, currentColor 72%, transparent);
+    font-size: 0.875rem;
+  }
+
+  :where(.cui-popover__body) {
+    min-block-size: 0;
+    padding-block: var(--_cui-popover-gap);
+    overflow: auto;
+  }
+
+  :where(.cui-popover__body > :first-child) {
+    margin-block-start: 0;
+  }
+
+  :where(.cui-popover__body > :last-child) {
+    margin-block-end: 0;
+  }
+
+  :where(.cui-popover__actions) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: end;
+    gap: 0.5rem;
+    padding-block-end: var(--_cui-popover-padding);
+  }
+
+  :where(.cui-popover__actions > *) {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  :where(.cui-popover:focus-visible) {
+    outline: 0.1875rem solid var(--_cui-popover-focus-color);
+    outline-offset: 0.125rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-popover) {
+      --_cui-popover-duration: 0ms;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-popover) {
+      border-color: CanvasText;
+      background: Canvas;
+      color: CanvasText;
+      box-shadow: none;
+    }
+  }
+
+  @media print {
+    :where(.cui-popover) {
+      position: static;
+      display: none;
+      inline-size: auto;
+      max-inline-size: none;
+      max-block-size: none;
+      margin-block: 1rem;
+      border-color: currentColor;
+      background: transparent;
+      color: #000000;
+      box-shadow: none;
+    }
+
+    :where(.cui-popover[data-open]) {
+      display: grid;
+    }
+  }
+}

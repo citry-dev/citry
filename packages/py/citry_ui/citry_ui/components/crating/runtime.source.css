@@ -1,0 +1,87 @@
+@layer citry-ui.theme {
+  :where(.cui-rating) {
+    --_cui-rating-empty-color: var(--cui-rating-empty-color, color-mix(in srgb, CanvasText 24%, transparent));
+    --_cui-rating-fill-color: var(--cui-rating-fill-color, light-dark(#b45309, #fbbf24));
+    --_cui-rating-hover-color: var(--cui-rating-hover-color, light-dark(#d97706, #fcd34d));
+    --_cui-rating-focus-color: var(--cui-rating-focus-color, Highlight);
+    --_cui-rating-gap: var(--cui-rating-gap, .25rem);
+    --_cui-rating-symbol-size: var(--cui-rating-symbol-size, 1.5rem);
+    --_cui-rating-control-size: var(--cui-rating-control-size, 2.75rem);
+    --_cui-rating-disabled-opacity: var(--cui-rating-disabled-opacity, .52);
+    position: relative;
+    display: inline-grid;
+    color: CanvasText;
+    isolation: isolate;
+  }
+  :where(.cui-rating[data-size="sm"]) { --_cui-rating-symbol-size: var(--cui-rating-symbol-size, 1.125rem); }
+  :where(.cui-rating[data-size="lg"]) { --_cui-rating-symbol-size: var(--cui-rating-symbol-size, 2rem); }
+  :where(.cui-rating [data-citry-ui-part="visual"]) {
+    position: relative;
+    display: inline-grid;
+    min-block-size: var(--_cui-rating-control-size);
+    align-items: center;
+    pointer-events: none;
+    user-select: none;
+  }
+  :where(.cui-rating [data-citry-ui-part="empty"], .cui-rating [data-citry-ui-part="fill-symbols"]) {
+    display: flex;
+    gap: var(--_cui-rating-gap);
+    inline-size: max-content;
+  }
+  :where(.cui-rating [data-citry-ui-part="empty"]) { color: var(--_cui-rating-empty-color); }
+  :where(.cui-rating [data-citry-ui-part="fill"]) {
+    position: absolute;
+    inset-inline-start: 0;
+    overflow: hidden;
+    inline-size: var(--_cui-rating-ratio);
+    color: var(--_cui-rating-fill-color);
+    white-space: nowrap;
+  }
+  :where(.cui-rating[data-hovering] [data-citry-ui-part="fill"]) { color: var(--_cui-rating-hover-color); }
+  :where(.cui-rating[data-variant="subtle"] [data-citry-ui-part="fill"]) { opacity: .72; }
+  :where(.cui-rating [data-citry-ui-part="symbol"]) {
+    display: inline-grid;
+    place-items: center;
+    inline-size: var(--_cui-rating-symbol-size);
+    block-size: var(--_cui-rating-symbol-size);
+    font-size: var(--_cui-rating-symbol-size);
+    line-height: 1;
+  }
+  :where(.cui-rating [data-citry-ui-part="choices"]) { position: absolute; inset: 0; }
+  :where(.cui-rating [data-citry-ui-part="choice"]) {
+    position: absolute;
+    inset-block: 0;
+    min-inline-size: 1px;
+    cursor: pointer;
+  }
+  :where(.cui-rating [data-citry-ui-part="input"]) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  :where(.cui-rating:has([data-citry-ui-part="input"]:focus-visible), .cui-rating[tabindex="0"]:focus-visible) {
+    outline: 2px solid var(--_cui-rating-focus-color);
+    outline-offset: 3px;
+    border-radius: .25rem;
+  }
+  :where(.cui-rating[data-disabled]) { opacity: var(--_cui-rating-disabled-opacity); }
+  :where(.cui-rating[data-disabled] [data-citry-ui-part="choice"], .cui-rating[data-readonly] [data-citry-ui-part="choice"]) { cursor: default; }
+  :where(.cui-rating__visually-hidden) {
+    position: absolute !important;
+    inline-size: 1px !important;
+    block-size: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip-path: inset(50%) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+  @media (pointer: coarse) { :where(.cui-rating) { --_cui-rating-control-size: max(2.75rem, var(--cui-rating-control-size, 2.75rem)); } }
+  @media (forced-colors: active) { :where(.cui-rating) { --_cui-rating-empty-color: GrayText; --_cui-rating-fill-color: Highlight; --_cui-rating-hover-color: Highlight; } }
+}

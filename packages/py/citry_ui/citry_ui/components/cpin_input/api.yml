@@ -54,7 +54,7 @@ slots:
   - id: cpin-input-slots
     component: CPinInput
     entries:
-      - {id: separator, name: separator, required: false, cardinality: Once per separator_after boundary., data: {display: '{index: int}', interfaces: [CPinInputSeparatorSlotData]}, fallback: Empty visual separator., purpose: Renders caller-authored presentation between selected cells.}
+      - {id: separator, name: separator, required: false, data: {display: '{index: int}', interfaces: [CPinInputSeparatorSlotData]}, fallback: No visual content at each separator_after boundary.}
 
 events:
   - id: cpin-input-events
@@ -81,7 +81,7 @@ css:
       - {id: color, name: --cui-pin-input-color, type: color, purpose: Entered character color., default: CanvasText}
       - {id: placeholder-color, name: --cui-pin-input-placeholder-color, type: color, purpose: Empty-cell marker color., default: Muted CanvasText.}
       - {id: radius, name: --cui-pin-input-radius, type: length, purpose: Cell corner radius., default: 0.5rem}
-      - {id: disabled-opacity, name: --cui-pin-input-disabled-opacity, type: number, purpose: Disabled treatment opacity., default: 0.58}
+      - {id: disabled-opacity, name: --cui-pin-input-disabled-opacity, type: number, purpose: Disabled treatment opacity., default: '0.58'}
 
 attributes:
   - id: cpin-input-root-attributes

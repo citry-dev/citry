@@ -35,7 +35,8 @@ python scripts/check.py --reporter agent
 | Contract | Primary executable evidence |
 |---|---|
 | Server ownership capture, exact manifest production, protocol schema, canonical revision, and case-safe render IDs | `test_ownership.py`, `test_ownership_manifest.py`, `test_component_id.py`, `test_id_generator.py`, `test_client_graph_protocol_package.py` |
-| Exact `citry-client-graph/1`, UTF-8 offsets, and the literal `citry:g1` prefix across producer, schema, fixture, and browser | `test_wire_constants_are_locked_across_producer_schema_fixture_and_browser_consumer` |
+| Exact `citry-client-graph/1`, UTF-8 offsets, the literal `citry:g1` prefix, and eight-character comment aliases across producer, schema, and browser | `test_wire_constants_are_locked_across_producer_schema_fixture_and_browser_consumer`, `test_ownership_comment_builder_and_parser_share_the_literal_prefix`, and the protocol JavaScript comment tests |
+| Alias collisions reject before publication and aborted transactions release their reservation | `test_active_revision_alias_collision_is_rejected_and_released_after_abort` |
 | Valid manifests larger than one megabyte remain accepted by the server artifact, reference reader, and browser reader | `test_manifest_artifact_does_not_impose_a_protocol_size_limit`, `test_reference_reader_accepts_a_valid_manifest_larger_than_one_megabyte`, and `test_browser_accepts_a_valid_manifest_larger_than_one_megabyte` |
 | Initial-document delivery, parser-time fragment adoption, contextual HTML parsing, and one atomic graph commit | `test_ownership_manifest_e2e.py` and `test_protocol_caps_and_runtime_versions_survive_real_document_delivery` |
 | Missing or stripped physical caps reject before anchors, lifecycles, or callbacks become visible | `test_stripped_comment_caps_fail_before_graph_activation` |

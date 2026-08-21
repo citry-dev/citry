@@ -76,7 +76,8 @@ def test_native_edit_form_submission_and_reset(date_page) -> None:
     assert arrival.input_value() == "2026-08-19"
     arrival.fill("2026-08-21")
     assert page.evaluate("window.__dateEvents.slice(-2)") == [
-        ["input", "2026-08-21"], ["change", "2026-08-21"],
+        ["input", "2026-08-21"],
+        ["change", "2026-08-21"],
     ]
     page.locator("#submit").click()
     assert page.evaluate("window.__dateSubmits.at(-1)") == [["arrival", "2026-08-21"]]
@@ -92,7 +93,8 @@ def test_controlled_request_refusal_acceptance_and_reactive_configuration(date_p
     controlled.fill("2026-08-22")
     page.wait_for_function("document.querySelector('#controlled').value === '2026-08-19'")
     assert page.evaluate("window.__dateEvents.filter(item => item[0] === 'controlled').at(-1)") == [
-        "controlled", "2026-08-22",
+        "controlled",
+        "2026-08-22",
     ]
     page.locator("#accept").click()
     controlled.fill("2026-08-22")
@@ -115,7 +117,12 @@ def test_native_states_formdata_field_relationships_and_brand_style(date_page) -
     assert page.locator("#readonly").is_editable() is False
     assert page.locator("#readonly").is_enabled()
     assert page.locator("#disabled").is_disabled()
-    assert arrival.evaluate("element => getComputedStyle(element).getPropertyValue('--_cui-date-input-focus-color').trim()") == "rgb(124 58 237)"
+    assert (
+        arrival.evaluate(
+            "element => getComputedStyle(element).getPropertyValue('--_cui-date-input-focus-color').trim()"
+        )
+        == "rgb(124 58 237)"
+    )
     assert errors == []
 
 

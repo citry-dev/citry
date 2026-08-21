@@ -32,7 +32,7 @@
       "required": ["format"],
       "properties": {
         "format": {
-          "description": "Always the exact string 'citry:g1'. Every ownership comment starts with this value followed by ':' and the manifest revision; a reader rejects anything else.",
+          "description": "Always the exact string 'citry:g1'. Every ownership comment starts with this value followed by ':' and the first eight characters of the manifest revision; a reader rejects anything else.",
           "const": "citry:g1"
         }
       }

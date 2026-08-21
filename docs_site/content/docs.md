@@ -71,13 +71,16 @@ uv add citry-ui
 Then [register Citry UI](/ui-library/installation/) and choose a component
 from its catalog.
 
-## VSCode
+## VS Code
 
-Citry's [VS Code extension](/ide/) brings:
+[Install Citry from the Visual Studio
+Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry)
+to add:
 
-- Syntax highlight for Citry templates
-- Linting & diagnostics
-- Completion & hover information
+- Syntax highlighting for Citry templates
+- Linting and diagnostics
+- Completion, hover information, and navigation
+- Safe formatting for inline templates, JavaScript, and CSS
 
 Install the Citry extension, then add the language server to the same Python
 environment as the project:
@@ -86,7 +89,7 @@ environment as the project:
 python -m pip install citry-lsp
 ```
 
-Follow the [VS Code setup guide](/ide/vscode/) to connect the editor to your
+Follow the [VS Code setup guide](/ide/vscode/) to connect the extension to your
 application. You can also run `citry check` from a terminal or CI, whether or
 not your editor has a dedicated Citry integration.
 

@@ -84,6 +84,36 @@ The registry accepts new names under the supported categories. It is not a
 plugin registry for arbitrary formatter implementations. The profile types
 are closed so the Rust server and browser can apply the same semantic rule.
 
+## Choose the date fields a profile displays
+
+`DateFormat.fields` defaults to `"year_month_day"`. Use a narrower closed field
+set when an interface needs a calendar heading, weekday, day number, or another
+partial display without copying browser-specific formatter options:
+
+```python
+calendar_formats = FormatRegistry(
+    date={
+        "calendar-heading": DateFormat(fields="year_month", length="long"),
+        "calendar-weekday": DateFormat(fields="weekday", length="medium"),
+        "calendar-day": DateFormat(fields="day", length="short"),
+        "calendar-date-label": DateFormat(
+            fields="year_month_day_weekday",
+            length="long",
+        ),
+    },
+)
+```
+
+The supported values are `year`, `month`, `day`, `weekday`, `year_month`,
+`month_day`, `day_weekday`, `month_day_weekday`, `year_month_day`, and
+`year_month_day_weekday`. They describe calendar fields, not a fixed word order;
+ICU4X and the browser still choose locale-appropriate order, names, digits, and
+punctuation.
+
+Parsing remains a complete date job. A profile with `input=DateInput(...)` must
+keep `fields="year_month_day"`; display-only partial profiles do not claim that
+Citry can parse a partial date.
+
 ## Use profiles from a component
 
 Use `self.i18n.format` in Python:

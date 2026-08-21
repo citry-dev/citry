@@ -1,0 +1,8 @@
+schema_version: 1
+previews:
+  - basic
+  - form
+  - constraints
+  - controlled
+  - locales
+  - states

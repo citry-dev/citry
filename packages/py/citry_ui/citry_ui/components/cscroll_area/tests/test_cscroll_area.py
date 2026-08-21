@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 from typing import get_args, get_type_hints
 
 import pytest
@@ -205,7 +206,7 @@ def test_assets_include_one_shared_geometry_copy_and_environment_rules() -> None
     assert helper is not None
     assert html.count(helper.strip()) == 1
     assert len(re.findall(r'<div[^>]+data-citry-ui-part="scroll-area"', html)) == 2
-    css = CScrollArea.css
+    css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
     assert "overflow-block" in css
     assert "scrollbar-width" in css
     assert "scrollbar-gutter" in css

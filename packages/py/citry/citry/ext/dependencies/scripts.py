@@ -451,6 +451,19 @@ class _VariablesScriptCapture:
     cache_value: str
 
 
+@dataclass(frozen=True, slots=True)
+class _ComponentScriptCapture:
+    """Derived class asset data reused by every instance of one exact class."""
+
+    script: Script | Style | None
+    serialized: str | None
+    content_hash: str | None
+    uses_component: bool
+
+
+_COMPONENT_SCRIPT_CAPTURE = "_citry_component_script_capture"
+
+
 def gen_cache_key(class_id: str, script_type: ScriptType, variables_hash: str | None = None) -> str:
     """The cache key for one component script (see the module docstring for the scheme)."""
     if variables_hash:
@@ -477,6 +490,15 @@ def transform_component(js_content: str, class_id: str) -> str:
     if not spans:
         return js_content
 
+    return _transform_component_spans(js_content, class_id, spans)
+
+
+def _transform_component_spans(
+    js_content: str,
+    class_id: str,
+    spans: list[tuple[int, int, int]],
+) -> str:
+    """Expand already-scanned ``$component`` calls without a second JS pass."""
     replacement = f'Citry.manager.registerComponent("{class_id}", '
     parts: list[str] = []
     previous_end = 0
@@ -496,25 +518,51 @@ def _component_content(script_type: ScriptType, comp_cls: type[Component]) -> st
 
 def has_component_asset(script_type: ScriptType, comp_cls: type[Component]) -> bool:
     """Whether the component carries non-whitespace JS or CSS content."""
-    return _component_content(script_type, comp_cls) is not None
+    return _component_script_capture(script_type, comp_cls).script is not None
 
 
 def uses_component(comp_cls: type[Component]) -> bool:
     """Whether the class's JS registers a per-instance callback via ``$component``."""
-    content = _component_content("js", comp_cls)
-    return content is not None and bool(_component_call_spans(content))
+    return _component_script_capture("js", comp_cls).uses_component
+
+
+def _component_script_capture(
+    script_type: ScriptType,
+    comp_cls: type[Component],
+) -> _ComponentScriptCapture:
+    """Derive one exact class's asset once, without trusting inherited state."""
+    captures = vars(comp_cls).get(_COMPONENT_SCRIPT_CAPTURE)
+    if captures is not None and script_type in captures:
+        return captures[script_type]
+
+    content = _component_content(script_type, comp_cls)
+    uses_component_call = False
+    script: Script | Style | None = None
+    if content is not None:
+        if script_type == "js":
+            spans = _component_call_spans(content)
+            uses_component_call = bool(spans)
+            if spans:
+                content = _transform_component_spans(content, comp_cls.class_id, spans)
+            script = Script(kind="component", content=content, origin_class_id=comp_cls.class_id)
+        else:
+            script = Style(kind="component", content=content, origin_class_id=comp_cls.class_id)
+
+    serialized = None if script is None else json.dumps(script.to_json())
+    content_hash = None if serialized is None else md5(serialized.encode(), usedforsecurity=False).hexdigest()[:12]
+    capture = _ComponentScriptCapture(
+        script=script,
+        serialized=serialized,
+        content_hash=content_hash,
+        uses_component=uses_component_call,
+    )
+    setattr(comp_cls, _COMPONENT_SCRIPT_CAPTURE, {**(captures or {}), script_type: capture})
+    return capture
 
 
 def _component_script(script_type: ScriptType, comp_cls: type[Component]) -> Script | Style | None:
     """Build the class-level cached object for the component's current content."""
-    content = _component_content(script_type, comp_cls)
-    if content is None:
-        return None
-    if script_type == "js":
-        transformed = transform_component(content, comp_cls.class_id)
-        return Script(kind="component", content=transformed, origin_class_id=comp_cls.class_id)
-
-    return Style(kind="component", content=content, origin_class_id=comp_cls.class_id)
+    return _component_script_capture(script_type, comp_cls).script
 
 
 def _cache_component_script(
@@ -524,27 +572,27 @@ def _cache_component_script(
     force: bool = False,
 ) -> tuple[Script | Style, str] | None:
     """Return this class version's object and make the shared cache agree with it."""
-    script = _component_script(script_type, comp_cls)
-    if script is None:
+    capture = _component_script_capture(script_type, comp_cls)
+    if capture.script is None:
         return None
+    if capture.serialized is None or capture.content_hash is None:
+        raise RuntimeError("A present component asset has no serialized capture.")
 
     cache = comp_cls.citry.cache
-    serialized = json.dumps(script.to_json())
-    content_hash = md5(serialized.encode(), usedforsecurity=False).hexdigest()[:12]
-    versioned_key = gen_component_cache_key(comp_cls.class_id, script_type, content_hash)
-    if force or cache.get(versioned_key) != serialized:
-        cache.set(versioned_key, serialized)
+    versioned_key = gen_component_cache_key(comp_cls.class_id, script_type, capture.content_hash)
+    if force or cache.get(versioned_key) != capture.serialized:
+        cache.set(versioned_key, capture.serialized)
 
     # Keep the original stable key for old URLs and integrations. It is a
     # mutable compatibility entry, so every reader validates it against its
     # current class before returning. Generated URLs use the immutable key.
     stable_key = gen_cache_key(comp_cls.class_id, script_type)
-    if force or cache.get(stable_key) != serialized:
-        cache.set(stable_key, serialized)
+    if force or cache.get(stable_key) != capture.serialized:
+        cache.set(stable_key, capture.serialized)
     # Return the object built from this class, rather than reading the shared
     # key again. An old and new worker can legitimately alternate writes
     # during a rolling deployment; neither may serve the other's version.
-    return script, content_hash
+    return capture.script, capture.content_hash
 
 
 def cache_component_js(comp_cls: type[Component], *, force: bool = False) -> None:
@@ -811,6 +859,8 @@ def evict_component_scripts(comp_cls: type[Component]) -> None:
     Drop the class's cached JS and CSS, so the next use re-caches from fresh
     content. Called on ``Component.reset_files()``.
     """
+    if _COMPONENT_SCRIPT_CAPTURE in vars(comp_cls):
+        delattr(comp_cls, _COMPONENT_SCRIPT_CAPTURE)
     evict_component_script_keys(comp_cls.citry, comp_cls.class_id)
 
 

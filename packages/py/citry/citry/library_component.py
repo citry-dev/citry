@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         definition_id: ClassVar[str]
         citry: ClassVar[Citry]
         transparent: ClassVar[bool]
+        pure: ClassVar[bool]
         name: ClassVar[str | None]
         template: ClassVar[str | None]
         template_file: ClassVar[str | None]
@@ -169,6 +170,7 @@ class LibraryComponentMeta(type):
         has_component_base = any(getattr(base, _COMPONENT_ROOT_FLAG, False) for base in bases)
         is_root = attrs.get(_DEFINITION_ROOT_FLAG, False) is True
         is_definition = has_definition_base and not has_component_base and not is_root
+        pure = False
 
         if is_definition:
             reserved = {
@@ -184,14 +186,26 @@ class LibraryComponentMeta(type):
                 msg = f"Library component {name} cannot declare engine-specific field(s): {rendered}."
                 raise ValueError(msg)
             validate_asset_pairs(name, attrs)
+            pure = attrs.get("pure", False)
+            if type(pure) is not bool:
+                msg = f"Library component {name}.pure must be an exact bool; got {pure!r}."
+                raise ValueError(msg)
 
         cls = super().__new__(mcs, name, bases, attrs, **kwargs)
         type.__setattr__(cls, _DEFINITION_FLAG, is_definition)
+        if is_definition:
+            # Like a concrete Component, each definition makes its own promise;
+            # purity never arrives implicitly from a base class.
+            type.__setattr__(cls, "pure", pure)
         return cls
 
     def __setattr__(cls, name: str, value: Any) -> None:
         """Keep published definition behavior stable across installed classes."""
-        is_sealed_definition = cls.__dict__.get(_DEFINITION_FLAG, False) and cls.__dict__.get(_SEALED_FLAG, False)
+        is_definition = cls.__dict__.get(_DEFINITION_FLAG, False)
+        if is_definition and name == "pure" and type(value) is not bool:
+            msg = f"Library component {cls.__name__}.pure must be an exact bool; got {value!r}."
+            raise ValueError(msg)
+        is_sealed_definition = is_definition and cls.__dict__.get(_SEALED_FLAG, False)
         if is_sealed_definition:
             msg = (
                 f"Cannot change published library component {cls.__name__}.{name}. "
@@ -202,7 +216,11 @@ class LibraryComponentMeta(type):
 
     def __delattr__(cls, name: str) -> None:
         """Keep fields present on a published definition."""
-        is_sealed_definition = cls.__dict__.get(_DEFINITION_FLAG, False) and cls.__dict__.get(_SEALED_FLAG, False)
+        is_definition = cls.__dict__.get(_DEFINITION_FLAG, False)
+        if is_definition and name == "pure":
+            msg = f"Cannot delete {cls.__name__}'s pure-component declaration; set it to False instead."
+            raise AttributeError(msg)
+        is_sealed_definition = is_definition and cls.__dict__.get(_SEALED_FLAG, False)
         if is_sealed_definition:
             msg = (
                 f"Cannot delete published library component {cls.__name__}.{name}. "
@@ -244,6 +262,7 @@ class LibraryComponent(_LibraryComponentAuthoringBase, metaclass=LibraryComponen
     """
 
     _citry_library_component_root: ClassVar[bool] = True
+    pure: ClassVar[bool] = False
     name: ClassVar[str | None] = None
     """Optional explicit registry name, with the same behavior as ``Component.name``."""
 
@@ -558,6 +577,7 @@ def _materialize_library_component(
         "__module__": definition.__module__,
         "__qualname__": definition.__qualname__,
         "citry": citry,
+        "pure": definition.__dict__.get("pure", False),
     }
     concrete = ComponentMeta(
         definition.__name__,

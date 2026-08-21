@@ -16,6 +16,11 @@ Citry is a **fast**, **simple**, and **smart** **frontend framework** for Python
 
 Compatible with FastAPI, Django, and [other web servers](#use-with-web-framework).
 
+Using VS Code? Install the
+[Citry extension](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry)
+for template highlighting, completion, navigation, diagnostics, and safe
+formatting inside Python components.
+
 ```python
 from citry import Component
 
@@ -487,6 +492,12 @@ rows = [
 ]
 ```
 
+If an entire component body is deterministic and side-effect-free, declare
+`pure = True` on that component class. Equal instances within one root render
+can then reuse the body work while still receiving fresh component IDs. This
+is most useful for a small component rendered many times; subclasses must make
+their own explicit purity declaration.
+
 ### And more
 
 - Templates support infinite depth;
@@ -602,19 +613,21 @@ Extensions can ship their own commands; run one with `citry --app ... ext run
 
 ## Performance
 
-Rendering a large page (~325 component instances, ~205 KB of HTML):
+Rendering a large page (about 350 Citry component markers and 986 KB of Citry
+output, including its browser runtimes and ownership graph):
 
 ![Citry vs Django vs django-components rendering a large page. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
 
 - **Versus django-components** (the fair component-to-component comparison),
-  Citry is about **1.7x faster** on first render and **3.4x faster** on repeat
-  renders, and about **2x faster** to start up and import.
-- **Versus bare template engines** (Django and Jinja2 render no components), Citry pays for the component lifecycle they skip, yet its repeat render
-  is only about **1.3x** a Django template.
-- **Jinja2** is the fast no-component baseline: fastest to start up and fastest
-  once warm, because each component is just a precompiled macro. It has no
-  component model, and it pays on first render, recompiling its whole macro
-  library at once.
+  Citry is currently about **12% slower** on the first render but **24% faster**
+  once warm, with startup about **1.4x slower** and import about **1.3x
+  slower**.
+- **Versus bare template engines**, Citry's repeat render is about **3.5x** a
+  Django template. Django and Jinja2 skip Citry's component ownership,
+  lifecycle, extension, dependency, and security work.
+- **Jinja2** is the fast no-component baseline: fastest to start and once warm,
+  because each component is represented by a precompiled macro. Its first
+  render compiles the whole macro library and lands near django-components.
 
 These are relative numbers from a single machine. See
 [`benchmarks/`](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md) for the methodology and how to reproduce

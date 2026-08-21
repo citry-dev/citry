@@ -1,0 +1,1 @@
+"""CCalendar browser tests."""

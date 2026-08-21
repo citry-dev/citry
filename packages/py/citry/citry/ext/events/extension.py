@@ -205,6 +205,7 @@ class EventsExtension(Extension):
     """
 
     name = "events"
+    _attrs_resolved_requires_runtime_candidate = True
 
     introspection_version = 1
     render_cache_mode = "payload"
@@ -403,15 +404,13 @@ class EventsExtension(Extension):
             binding.
 
         """
-        # Defining this hook makes the core treat every app as having an
-        # attrs-resolved subscriber, so it stops pre-computing constant element
-        # attributes at compile time (component_render.py `precompute_attrs`)
-        # even for apps that use no bindings. The two-stage rewrite needs this
-        # render-time hook, so v1 accepts the cost; a later change could gate the
-        # deopt on a component that actually carries bindings.
+        # ElementAttrsNode's compiler metadata keeps this hook off the ordinary
+        # dynamic-attribute path. It still runs for spreads (which can introduce
+        # bindings) and for compiled State bindings that need final control/type
+        # validation after dynamic attributes resolve.
         comp_cls = type(ctx.component)
         return rewrite_resolved_attrs(
-            self.resolve(comp_cls), comp_cls.class_id, comp_cls.__name__, ctx.tag_name, ctx.attrs
+            self.resolve(comp_cls), ctx.component._citry_class_id, comp_cls.__name__, ctx.tag_name, ctx.attrs
         )
 
     def on_component_data(self, ctx: OnComponentDataContext) -> None:

@@ -210,19 +210,24 @@ def test_canonical_json_normalizes_decoded_integer_forms() -> None:
 
 def test_ownership_comment_builder_and_parser_share_the_literal_prefix() -> None:
     revision = "a" * 64
+    revision_alias = revision[:8]
     comment = client_graph.format_ownership_comment(revision, 0, "i", 3, "s")
-    assert comment == f"<!--citry:g1:{revision}:0:i:3:s-->"
+    assert comment == f"<!--citry:g1:{revision_alias}:0:i:3:s-->"
     assert client_graph.parse_ownership_comment(comment[4:-3]) == {
-        "revision": revision,
+        "revisionAlias": revision_alias,
         "graphId": "0",
         "kind": "i",
         "recordId": "3",
         "side": "s",
-        "key": f"citry:g1:{revision}:0:i:3",
+        "key": f"citry:g1:{revision_alias}:0:i:3",
     }
+    assert client_graph.revision_alias(revision) == revision_alias
+    with pytest.raises(client_graph.ProtocolValueError):
+        client_graph.revision_alias("a" * 63)
     with pytest.raises(client_graph.ProtocolValueError):
         client_graph.format_ownership_comment(revision, 0, cast("Any", []), 3, "s")
-    assert client_graph.parse_ownership_comment(f"citry:g1:{revision}:\u0660:i:\u0663:s") is None
+    assert client_graph.parse_ownership_comment(f"citry:g1:{revision}:0:i:3:s") is None
+    assert client_graph.parse_ownership_comment(f"citry:g1:{revision_alias}:\u0660:i:\u0663:s") is None
 
 
 def test_product_preparation_calls_the_protocol_manifest_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -240,10 +245,10 @@ def test_product_preparation_calls_the_protocol_manifest_boundary(monkeypatch: p
     calls = 0
     original = ownership_manifest.assemble_manifest
 
-    def recording_build(mode: str, graphs: Any, *, audit: bool) -> dict[str, Any]:
+    def recording_build(mode: str, graphs: Any, *, audit: bool, _canonicalize: Any = None) -> dict[str, Any]:
         nonlocal calls
         calls += 1
-        return original(mode, graphs, audit=audit)
+        return original(mode, graphs, audit=audit, _canonicalize=_canonicalize)
 
     monkeypatch.setattr(ownership_manifest, "assemble_manifest", recording_build)
     artifact = ownership_manifest.prepare_ownership_manifest(cast("Any", Page()).render())
@@ -271,6 +276,23 @@ def test_artifact_json_revalidates_a_mutated_manifest() -> None:
     assert raised.value.issue.category == "unknown_field"
 
 
+def test_artifact_json_reuses_the_prepared_canonical_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = Citry(mode="production")
+
+    class Page(Component):
+        citry = engine
+        js = "$component(() => {});"
+        template = "<p>page</p>"
+
+    artifact = ownership_manifest.prepare_ownership_manifest(cast("Any", Page()).render())
+
+    def unexpected_reserialize(*_args: Any, **_kwargs: Any) -> str:
+        raise AssertionError("an unchanged product manifest must not be canonicalized twice")
+
+    monkeypatch.setattr(ownership_manifest, "serialize_manifest", unexpected_reserialize)
+    assert json.loads(artifact.json()) == artifact.manifest
+
+
 def test_artifact_json_rejects_schema_drift_even_when_resigned() -> None:
     engine = Citry(mode="production")
 
@@ -292,6 +314,23 @@ def test_artifact_json_rejects_schema_drift_even_when_resigned() -> None:
         artifact.json()
     assert raised.value.issue.path == "/graphs/0/componentClasses/0/className"
     assert raised.value.issue.category == "type"
+
+
+def test_artifact_json_does_not_treat_a_tuple_as_an_unchanged_json_array() -> None:
+    engine = Citry(mode="production")
+
+    class Page(Component):
+        citry = engine
+        js = "$component(() => {});"
+        template = "<p>page</p>"
+
+    artifact = ownership_manifest.prepare_ownership_manifest(cast("Any", Page()).render())
+    artifact.manifest["graphs"] = tuple(artifact.manifest["graphs"])
+
+    with pytest.raises(client_graph.ProtocolValueError) as raised:
+        artifact.json()
+    assert raised.value.issue.path == "/graphs"
+    assert raised.value.issue.category == "strict_json"
 
 
 def test_canonical_and_embedded_packages_are_byte_identical() -> None:

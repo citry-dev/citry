@@ -38,14 +38,21 @@ from dataclasses import replace
 from difflib import get_close_matches
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from citry._pure import (
+    PureBodyPlan,
+    PureInteriorBody,
+    PureLiveBodyItem,
+    pure_body_cache_scope,
+    pure_body_lookup,
+    store_pure_body,
+)
 from citry.assets import load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import (
     CitryRender,
     DeferredComponent,
-    PhysicalRegionPart,
-    PhysicalRegionRender,
+    _PhysicalRegion,
     unwrap_physical_region,
 )
 from citry.citry_template import CitryTemplate, DeclaredSlot
@@ -86,8 +93,8 @@ if TYPE_CHECKING:
 
     from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
     from citry.component import Component
-    from citry.nodes import BodyItem
-    from citry.ownership import PhysicalRegionId
+    from citry.nodes import BodyItem, Node
+    from citry.ownership import OwnershipGraph, PhysicalRegionId
     from citry_core.template_parser import TagRules
 
 
@@ -122,14 +129,23 @@ def render_impl(
     leaves any enclosing render's globals in place, so a nested ``render_impl``
     call does not disturb the render it runs inside.
     """
-    with ownership_render_scope(), _component_like_render_scope(element.comp_cls.citry):
-        if render_globals is None:
-            return _render_tree(element, parent, provides)
-        token = _render_globals.set(render_globals)
+    owns_ownership_graph = current_ownership_graph() is None
+    with (
+        ownership_render_scope() as ownership,
+        _component_like_render_scope(element.comp_cls.citry),
+        pure_body_cache_scope(),
+    ):
         try:
-            return _render_tree(element, parent, provides)
+            if render_globals is None:
+                return _render_tree(element, parent, provides)
+            token = _render_globals.set(render_globals)
+            try:
+                return _render_tree(element, parent, provides)
+            finally:
+                _render_globals.reset(token)
         finally:
-            _render_globals.reset(token)
+            if owns_ownership_graph:
+                ownership.release_transient_region_results()
 
 
 def _render_tree(
@@ -266,25 +282,21 @@ def _settle_render(
             is_component_root=old.is_component_root,
         )
         if ownership is not None:
-            selected_render_ids = _render_ids(new_render)
-            selected_region_ids = ownership.selected_region_ids(
-                render_object_ids=_render_object_ids(new_render),
-            )
+            selected_render_ids, selected_object_ids = _render_selection(new_render)
+            selected_region_ids = ownership.selected_region_ids(render_object_ids=selected_object_ids)
             ownership.retire_unselected_after(
                 hook_checkpoint,
                 through_order=hook_through_order,
                 preserved_render_ids=selected_render_ids,
                 preserved_region_ids=selected_region_ids,
             )
-        if ownership is not None and ownership_checkpoint is not None and not _contains_render(new_render, old):
+        if ownership is not None and ownership_checkpoint is not None and id(old) not in selected_object_ids:
             ownership.retire_component_output(
                 component.id,
                 through_order=ownership_checkpoint,
                 descendant_render_ids=_render_ids(old, exclude_render_id=component.id),
-                preserved_render_ids=_render_ids(new_render, exclude_render_id=component.id),
-                preserved_region_ids=ownership.selected_region_ids(
-                    render_object_ids=_render_object_ids(new_render),
-                ),
+                preserved_render_ids=selected_render_ids - {component.id},
+                preserved_region_ids=selected_region_ids,
             )
         if task.position is not None:
             _replace_in_parts(task.position.parts, task.position.idx, old, new_render)
@@ -344,19 +356,20 @@ def _settle_render(
                     return None
                 # Plain `return`: keep the current result (and error).
                 if ownership is not None and generator_checkpoint is not None:
-                    preserved_render_ids = _render_ids(render) if render is not None else set()
-                    ownership.retire_unselected_after(
-                        generator_checkpoint,
-                        through_order=ownership.checkpoint(),
-                        preserved_render_ids=preserved_render_ids,
-                        preserved_region_ids=(
-                            ownership.selected_region_ids(
-                                render_object_ids=_render_object_ids(render),
-                            )
-                            if render is not None
-                            else set()
-                        ),
-                    )
+                    generator_through_order = ownership.checkpoint()
+                    if generator_checkpoint < generator_through_order:
+                        preserved_render_ids = _render_ids(render) if render is not None else set()
+                        selected_objects = _render_objects(render) if render is not None else None
+                        ownership.retire_unselected_after(
+                            generator_checkpoint,
+                            through_order=generator_through_order,
+                            preserved_render_ids=preserved_render_ids,
+                            preserved_region_ids=(
+                                _selected_region_ids(ownership, selected_objects)
+                                if selected_objects is not None
+                                else set()
+                            ),
+                        )
                 break
             except Exception as gen_error:  # noqa: BLE001
                 # The generator raised: that becomes the component's error.
@@ -559,6 +572,27 @@ class _InitialRender(NamedTuple):
     cache_hit: _CacheHit | None
 
 
+def _scan_deferred_parts(
+    parts: list[RenderPart],
+    parent_context: CitryContext,
+    tasks: list[_RenderTask | _ContextMergeTask],
+) -> bool:
+    """Append deferred work without creating one recursive closure per scan."""
+    has_deferred = False
+    for i, part in enumerate(parts):
+        if isinstance(part, DeferredComponent):
+            tasks.append(_RenderTask(part, _DeferredComponentPosition(parts, i, parent_context)))
+            has_deferred = True
+        else:
+            unwrapped = unwrap_physical_region(part)
+            if isinstance(unwrapped, CitryRender):
+                nested_has_deferred = _scan_deferred_parts(unwrapped.parts, unwrapped.context, tasks)
+                has_deferred = has_deferred or nested_has_deferred
+                if nested_has_deferred and unwrapped.context is not parent_context:
+                    tasks.append(_ContextMergeTask(parent_context, unwrapped.context))
+    return has_deferred
+
+
 def _scan_deferred(render: CitryRender) -> list[_RenderTask | _ContextMergeTask]:
     """
     Find the child components inside ``render`` that still need rendering.
@@ -578,23 +612,7 @@ def _scan_deferred(render: CitryRender) -> list[_RenderTask | _ContextMergeTask]
     dependencies belong (see docs/design/component_slots.md section 8).
     """
     tasks: list[_RenderTask | _ContextMergeTask] = []
-
-    def walk(parts: list[RenderPart], parent_context: CitryContext) -> bool:
-        has_deferred = False
-        for i, part in enumerate(parts):
-            if isinstance(part, DeferredComponent):
-                tasks.append(_RenderTask(part, _DeferredComponentPosition(parts, i, parent_context)))
-                has_deferred = True
-            else:
-                unwrapped = unwrap_physical_region(part)
-                if isinstance(unwrapped, CitryRender):
-                    nested_has_deferred = walk(unwrapped.parts, unwrapped.context)
-                    has_deferred = has_deferred or nested_has_deferred
-                    if nested_has_deferred and unwrapped.context is not parent_context:
-                        tasks.append(_ContextMergeTask(parent_context, unwrapped.context))
-        return has_deferred
-
-    walk(render.parts, render.context)
+    _scan_deferred_parts(render.parts, render.context, tasks)
     return tasks
 
 
@@ -638,6 +656,32 @@ def _render_ids(render: CitryRender, *, exclude_render_id: str | None = None) ->
     return render_ids
 
 
+def _selected_region_ids(ownership: OwnershipGraph, selected: set[int]) -> set[PhysicalRegionId]:
+    """Resolve selected render objects to their physical regions."""
+    return ownership.selected_region_ids(render_object_ids=selected)
+
+
+def _render_selection(render: CitryRender) -> tuple[set[str], set[int]]:
+    """Collect selected render IDs and object identities in one tree walk."""
+    render_ids: set[str] = set()
+    object_ids: set[int] = set()
+    pending: list[RenderPart] = [render]
+    while pending:
+        current = pending.pop()
+        object_id = id(current)
+        if object_id in object_ids:
+            continue
+        object_ids.add(object_id)
+        if isinstance(current, _PhysicalRegion):
+            pending.append(current.part)
+        elif isinstance(current, CitryRender):
+            render_id = current.frame.render_id
+            if render_id is not None:
+                render_ids.add(render_id)
+            pending.extend(current.parts)
+    return render_ids, object_ids
+
+
 def _render_ids_from_parts(parts: list[RenderPart]) -> set[str]:
     """Collect component render IDs reachable from a selected parts list."""
     render_ids: set[str] = set()
@@ -648,7 +692,7 @@ def _render_ids_from_parts(parts: list[RenderPart]) -> set[str]:
     return render_ids
 
 
-def _render_object_ids(render: RenderPart) -> set[int]:
+def _render_objects(render: RenderPart) -> set[int]:
     """Collect transient part identities reachable through a render tree."""
     object_ids: set[int] = set()
     pending: list[RenderPart] = [render]
@@ -658,19 +702,19 @@ def _render_object_ids(render: RenderPart) -> set[int]:
         if object_id in object_ids:
             continue
         object_ids.add(object_id)
-        if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
+        if isinstance(current, _PhysicalRegion):
             pending.append(current.part)
         elif isinstance(current, CitryRender):
             pending.extend(current.parts)
     return object_ids
 
 
-def _render_object_ids_from_parts(parts: list[RenderPart]) -> set[int]:
+def _render_objects_from_parts(parts: list[RenderPart]) -> set[int]:
     """Collect transient part identities reachable from selected parts."""
     object_ids: set[int] = set()
     for part in parts:
-        if isinstance(part, (CitryRender, PhysicalRegionPart, PhysicalRegionRender)):
-            object_ids.update(_render_object_ids(part))
+        if isinstance(part, (CitryRender, _PhysicalRegion)):
+            object_ids.update(_render_objects(part))
         else:
             object_ids.add(id(part))
     return object_ids
@@ -798,20 +842,25 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
         raise
     if had_error:
         render.context._error_tainted = True
-    if ownership is not None and ownership_checkpoint is not None:
+    ownership_through_order = ownership.checkpoint() if ownership is not None else None
+    if (
+        ownership is not None
+        and ownership_checkpoint is not None
+        and ownership_through_order is not None
+        and ownership_checkpoint < ownership_through_order
+    ):
+        # A no-op hook creates no ownership records, so there is nothing to
+        # retire and no reason to rescan every physical region captured so far.
         selected_render_ids = (
             _render_ids(new_render, exclude_render_id=None) if isinstance(new_render, CitryRender) else set()
         )
+        selected_objects = _render_objects(new_render) if isinstance(new_render, CitryRender) else None
         ownership.retire_unselected_after(
             ownership_checkpoint,
-            through_order=ownership.checkpoint(),
+            through_order=ownership_through_order,
             preserved_render_ids=selected_render_ids,
             preserved_region_ids=(
-                ownership.selected_region_ids(
-                    render_object_ids=_render_object_ids(new_render),
-                )
-                if isinstance(new_render, CitryRender)
-                else set()
+                _selected_region_ids(ownership, selected_objects) if selected_objects is not None else set()
             ),
         )
     if out_error is not None:
@@ -829,6 +878,7 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
     if replacement_selected and ownership is not None and ownership_checkpoint is not None:
         replacement_contains_old = isinstance(new_render, CitryRender) and _contains_render(new_render, render)
         if not replacement_contains_old:
+            selected_objects = _render_objects(new_render) if isinstance(new_render, CitryRender) else None
             preserved_render_ids = (
                 _render_ids(new_render, exclude_render_id=component.id)
                 if isinstance(new_render, CitryRender)
@@ -840,11 +890,7 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
                 descendant_render_ids=_render_ids(render, exclude_render_id=component.id),
                 preserved_render_ids=preserved_render_ids,
                 preserved_region_ids=(
-                    ownership.selected_region_ids(
-                        render_object_ids=_render_object_ids(new_render),
-                    )
-                    if isinstance(new_render, CitryRender)
-                    else set()
+                    _selected_region_ids(ownership, selected_objects) if selected_objects is not None else set()
                 ),
             )
     if isinstance(new_render, str):
@@ -1120,15 +1166,15 @@ def _render_one(
     hook_through_order = ownership.checkpoint()
 
     if parts is not None:
-        selected_render_ids = _render_ids_from_parts(parts)
-        ownership.retire_unselected_after(
-            hook_checkpoint,
-            through_order=hook_through_order,
-            preserved_render_ids=selected_render_ids,
-            preserved_region_ids=ownership.selected_region_ids(
-                render_object_ids=_render_object_ids_from_parts(parts),
-            ),
-        )
+        if hook_checkpoint < hook_through_order:
+            selected_render_ids = _render_ids_from_parts(parts)
+            selected_objects = _render_objects_from_parts(parts)
+            ownership.retire_unselected_after(
+                hook_checkpoint,
+                through_order=hook_through_order,
+                preserved_render_ids=selected_render_ids,
+                preserved_region_ids=_selected_region_ids(ownership, selected_objects),
+            )
         return _InitialRender(
             render=CitryRender(parts=parts, context=context, is_component_root=not comp_cls.transparent),
             generator=generator,
@@ -1199,7 +1245,23 @@ def _render_one(
         #    relies on the flag to find component frame boundaries). A transparent
         #    component opts out: its output joins the surrounding frame and gets no
         #    data-cid marker (e.g. the <c-provide> built-in).
-        parts = _render_body(body, context)
+        if comp_cls.pure:
+            pure_lookup = pure_body_lookup(
+                comp_cls,
+                body,
+                context.variables,
+                compiled.used_vars if compiled is not None else (),
+            )
+        else:
+            pure_lookup = None
+        if pure_lookup is not None and pure_lookup[1] is not None:
+            parts = _replay_pure_body(pure_lookup[1], context)
+        elif pure_lookup is not None:
+            parts, pure_plan, cached_node_count = _render_and_capture_pure_body(body, context, component)
+            if cached_node_count:
+                store_pure_body(pure_lookup[0], pure_plan)
+        else:
+            parts = _render_body(body, context)
     except Exception as render_error:
         context._error_tainted = True
         failed_output_through_order = ownership.checkpoint()
@@ -1222,34 +1284,122 @@ def _render_one(
         recovery_through_order = ownership.checkpoint()
         if parts is None:
             raise
+        selected_objects = _render_objects_from_parts(parts)
         ownership.retire_unselected_after(
             recovery_checkpoint,
             through_order=recovery_through_order,
             preserved_render_ids=_render_ids_from_parts(parts),
-            preserved_region_ids=ownership.selected_region_ids(
-                render_object_ids=_render_object_ids_from_parts(parts),
-            ),
+            preserved_region_ids=_selected_region_ids(ownership, selected_objects),
         )
         ownership.retire_range(
             template_output_checkpoint,
             through_order=failed_output_through_order,
         )
 
-    selected_render_ids = _render_ids_from_parts(parts)
-    ownership.retire_unselected_after(
-        hook_checkpoint,
-        through_order=hook_through_order,
-        preserved_render_ids=selected_render_ids,
-        preserved_region_ids=ownership.selected_region_ids(
-            render_object_ids=_render_object_ids_from_parts(parts),
-        ),
-    )
+    if hook_checkpoint < hook_through_order:
+        # Most components use the default hook. Keep that render path linear
+        # in component count by doing selection work only for captured effects.
+        selected_render_ids = _render_ids_from_parts(parts)
+        selected_objects = _render_objects_from_parts(parts)
+        ownership.retire_unselected_after(
+            hook_checkpoint,
+            through_order=hook_through_order,
+            preserved_render_ids=selected_render_ids,
+            preserved_region_ids=_selected_region_ids(ownership, selected_objects),
+        )
     return _InitialRender(
         render=CitryRender(parts=parts, context=context, is_component_root=not comp_cls.transparent),
         generator=generator,
         cache_plan=cache_plan,
         cache_hit=None,
     )
+
+
+def _i18n_body_capture_is_empty(component: Component) -> bool:
+    """Whether skipping this component's body would omit no i18n metadata."""
+    usage = component.i18n._usage_state
+    if usage is not None and not usage.empty:
+        return False
+    bindings = component.i18n._bindings_state
+    return bindings is None or not (bindings.records or bindings.markers or bindings._pending_text)
+
+
+def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInteriorBody | None:
+    """Detach one ownership-free output part for a render-local pure plan."""
+    if isinstance(part, str):
+        return part
+    # Exact type matters: PhysicalRegionRender is a CitryRender subclass whose
+    # wrapper identity and graph record must be recreated by the slot runtime.
+    if type(part) is not CitryRender or part.context is not context or part.is_component_root:
+        return None
+    plan: list[str | PureInteriorBody] = []
+    for nested_part in part.parts:
+        captured = _capture_pure_part(nested_part, context)
+        if captured is None:
+            return None
+        plan.append(captured)
+    return PureInteriorBody(tuple(plan))
+
+
+def _render_and_capture_pure_body(
+    body: list[BodyItem],
+    context: CitryContext,
+    component: Component,
+) -> tuple[list[RenderPart], PureBodyPlan, int]:
+    """Render once while compiling safe values around live transaction holes."""
+    ownership = context.ownership
+    if ownership is None:
+        msg = "Pure component rendering requires an active ownership graph."
+        raise RuntimeError(msg)
+    parts: list[RenderPart] = []
+    plan: list[str | PureInteriorBody | PureLiveBodyItem] = []
+    cached_node_count = 0
+    tracing = is_tracing()
+    for item in body:
+        if isinstance(item, str):
+            parts.append(item)
+            plan.append(item)
+            continue
+        checkpoint = ownership.checkpoint()
+        i18n_empty_before = _i18n_body_capture_is_empty(component)
+        part = _render_pure_live_item(item, context, tracing=tracing)
+        parts.append(part)
+        if ownership.checkpoint() == checkpoint and i18n_empty_before and _i18n_body_capture_is_empty(component):
+            captured = _capture_pure_part(part, context)
+            if captured is not None:
+                plan.append(captured)
+                cached_node_count += 1
+                continue
+        plan.append(PureLiveBodyItem(item))
+    return parts, tuple(plan), cached_node_count
+
+
+def _render_pure_live_item(item: Node, context: CitryContext, *, tracing: bool) -> RenderPart:
+    """Execute one live plan hole with the ordinary body-walker contract."""
+    if tracing:
+        trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
+    try:
+        part = item.render(context)
+    except Exception as err:
+        _attach_template_position(err, item, context)
+        raise
+    unwrapped = unwrap_physical_region(part)
+    if isinstance(unwrapped, CitryRender) and unwrapped.context is not context and not _contains_deferred(unwrapped):
+        _merge_dependencies(context, unwrapped.context)
+    return part
+
+
+def _replay_pure_body(plan: PureBodyPlan, context: CitryContext) -> list[RenderPart]:
+    """Recreate transparent render wrappers against the current component context."""
+    parts: list[RenderPart] = []
+    for item in plan:
+        if isinstance(item, str):
+            parts.append(item)
+        elif isinstance(item, PureInteriorBody):
+            parts.append(CitryRender(parts=_replay_pure_body(item.parts, context), context=context))
+        else:
+            parts.append(_render_pure_live_item(item.item, context, tracing=is_tracing()))
+    return parts
 
 
 def _send_into_generator(

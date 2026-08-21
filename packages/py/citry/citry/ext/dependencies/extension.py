@@ -26,8 +26,6 @@ from citry.ext.dependencies.scripts import (
     _css_vars_capture,
     _js_vars_capture,
     _VariablesScriptCapture,
-    cache_component_css,
-    cache_component_js,
     evict_component_script_keys,
     evict_component_scripts,
     gen_cache_key,
@@ -215,10 +213,6 @@ class DependenciesExtension(Extension):
             and not ctx.js_data
         ):
             return
-        # Keep the class's processed scripts cached, in case they were evicted
-        # (also what the script-serving endpoint in routes.py reads).
-        cache_component_js(comp_cls)
-        cache_component_css(comp_cls)
         # Per-render variables: hash each data method's result and cache the
         # generated script/stylesheet under the hash, so identical data is
         # delivered to the browser once (docs/design/dependencies.md

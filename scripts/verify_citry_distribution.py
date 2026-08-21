@@ -38,7 +38,7 @@ PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
 MAX_WHEEL_BYTES: Final = 1_100 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
-    "citry-core==1.5.0",
+    "citry-core==1.5.1",
     "wrapt>=1.16",
     "markupsafe>=2.1",
     "typing-extensions>=4.10",

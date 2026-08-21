@@ -1,0 +1,80 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="pagination"]) {
+    --_cui-pagination-gap: var(--cui-pagination-gap, 0.35rem);
+    --_cui-pagination-control-size: var(--cui-pagination-control-size, 2.35rem);
+    --_cui-pagination-radius: var(--cui-pagination-radius, 0.55rem);
+    --_cui-pagination-foreground: var(--cui-pagination-foreground, CanvasText);
+    --_cui-pagination-background: var(--cui-pagination-background, transparent);
+    --_cui-pagination-border-color: var(--cui-pagination-border-color, light-dark(#d6d3d1, #57534e));
+    --_cui-pagination-current-background: var(--cui-pagination-current-background, light-dark(#175cd3, #93c5fd));
+    --_cui-pagination-current-foreground: var(--cui-pagination-current-foreground, light-dark(white, #172554));
+    --_cui-pagination-disabled-opacity: var(--cui-pagination-disabled-opacity, 0.5);
+    --_cui-pagination-focus-ring: var(--cui-pagination-focus-ring, Highlight);
+    max-inline-size: 100%;
+  }
+  :where([data-citry-ui-part="pagination"] > [data-citry-ui-part="list"]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--_cui-pagination-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :where([data-citry-ui-part="pagination"] [data-citry-ui-part="control"]),
+  :where([data-citry-ui-part="pagination"] [data-citry-ui-part="ellipsis"]) {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--_cui-pagination-control-size);
+    min-block-size: var(--_cui-pagination-control-size);
+    padding: 0.35rem;
+    border: 1px solid transparent;
+    border-radius: var(--_cui-pagination-radius);
+    color: var(--_cui-pagination-foreground);
+    background: var(--_cui-pagination-background);
+    font: inherit;
+    line-height: 1;
+    text-decoration: none;
+  }
+  :where([data-citry-ui-part="pagination"] [data-citry-ui-part="control"]) {
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="pagination"][data-variant="outline"] [data-citry-ui-part="control"]) {
+    border-color: var(--_cui-pagination-border-color);
+  }
+  :where([data-citry-ui-part="pagination"] [data-citry-ui-part="control"][data-current]) {
+    color: var(--_cui-pagination-current-foreground);
+    background: var(--_cui-pagination-current-background);
+    border-color: var(--_cui-pagination-current-background);
+    font-weight: 700;
+  }
+  :where([data-citry-ui-part="pagination"] [data-citry-ui-part="control"]:disabled) {
+    opacity: var(--_cui-pagination-disabled-opacity);
+    cursor: not-allowed;
+  }
+  :where([data-citry-ui-part="pagination"] [data-citry-ui-part="control"]:focus-visible) {
+    outline: 3px solid var(--_cui-pagination-focus-ring);
+    outline-offset: 2px;
+  }
+  :where([data-citry-ui-part="pagination"]:dir(rtl)
+    [data-citry-ui-part="control"]:not([data-kind="page"])) {
+    transform: rotate(180deg);
+  }
+  :where([data-citry-ui-part="pagination"][data-size="sm"]) {
+    --_cui-pagination-control-size: 2rem;
+    font-size: 0.875rem;
+  }
+  :where([data-citry-ui-part="pagination"][data-size="lg"]) {
+    --_cui-pagination-control-size: 2.75rem;
+    font-size: 1.0625rem;
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="pagination"] [data-citry-ui-part="control"][data-current]) {
+      color: HighlightText;
+      background: Highlight;
+      border-color: Highlight;
+    }
+  }
+}

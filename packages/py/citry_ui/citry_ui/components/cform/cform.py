@@ -284,25 +284,7 @@ class CForm(LibraryComponent):
       });
     """
 
-    css = """
-      @layer citry-ui.theme {
-        :where(.cui-form) {
-          --_cui-form-gap: var(--cui-form-gap, 1rem);
-
-          display: block;
-          min-inline-size: 0;
-        }
-
-        :where(.cui-form__fieldset) {
-          display: grid;
-          min-inline-size: 0;
-          margin: 0;
-          padding: 0;
-          border: 0;
-          gap: var(--_cui-form-gap);
-        }
-      }
-    """
+    css_file = "runtime.min.css"
 
 
 __all__ = [

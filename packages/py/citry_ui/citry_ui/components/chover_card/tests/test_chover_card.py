@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 from typing import get_args, get_type_hints
 
 import pytest
@@ -140,7 +141,7 @@ def test_hover_card_requires_both_owned_slots() -> None:
 
 
 def test_hover_card_css_exposes_card_tokens_and_environment_rules() -> None:
-    css = CHoverCard.css
+    css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
 
     assert "--cui-hover-card-inline-size" in css
     assert "--cui-hover-card-padding" in css

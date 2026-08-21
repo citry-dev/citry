@@ -1,19 +1,14 @@
 # Design: rendering benchmarks (citry vs django-components vs Django)
 
-**Status (2026-06-25): phases 1-3 built; first optimization pass done; phase 5
-in progress (Jinja2 small + large scenarios landed).** Phase
-3 (the large scenario) is complete: all 35 components ported to citry, the full
-`ProjectPage` renders, and `benchmarks/compare.py --size lg` publishes numbers
-(citry ~2x faster startup/import, ~1.7x faster first render and ~3.1x faster
-repeat render than django-components; see the results log in section 11).
-Getting there fixed several real citry bugs the large, deeply-nested template
-surfaced: feature A's Const-marker class/style regex, `c-bind="None"` tolerance
-on plain elements and component/dynamic tags, and a `c-for`+`c-bind` parser
-bug. A follow-up optimization pass then cut citry's repeat render from 1.85x a
-bare Django template to 1.37x; what changed and what is left lives in
-[`performance.md`](performance.md). Phase 4 (asv) is not started; phase 5
-(engines beyond the Django family) has started with the Jinja2 small and large
-scenarios.
+**Status (2026-08-21): phases 1-3 are built, Jinja2 covers both scenarios, and
+the comparison has been rerun against the beta feature set.** Citry is
+currently about 12% slower than django-components on the first render and 24%
+faster once warm on the large page. The refresh also found and fixed an
+empty-hook ownership scan that had made the first current-tree run more than
+10x slower still, then removed further redundant graph, asset, i18n, and
+manifest work; see
+the 2026-08-20 results entry in section 11. Phase 4 (asv) is not started, and
+the remaining phase 5 engines are still ahead.
 This document
 specifies how citry measures its template-rendering performance against
 django-components (DJC) and vanilla Django templates: where the benchmark code
@@ -922,3 +917,94 @@ Large scenario:
 | citry | 37.72 ms (0.46x) | 28.63 ms (0.37x) | 37.65 ms (2.12x) | 14.17 ms (1.29x) |
 | citry-const | 37.95 ms (0.46x) | 29.17 ms (0.38x) | 40.14 ms (2.26x) | 14.52 ms (1.33x) |
 | jinja2 | 18.38 ms (0.22x) | 14.79 ms (0.19x) | 58.14 ms (3.28x) | 6.27 ms (0.57x) |
+
+### 2026-08-20 - beta feature-set rerun and ownership-scan regression
+
+Apple M4, macOS 26.6.2, Python 3.14.3, median of 5 fresh-process
+rounds per cell. django 6.0.6, django-components 0.151.1, Jinja2 3.1.6,
+current Citry source declared as 0.4.2, and citry-core 1.5.0 built in release
+mode. Ratios are vs the `django` row.
+
+The Citry scenarios now call `app.initialize()` after defining every component,
+matching the documented production lifecycle. This charges registry and tag
+rule finalization to `startup` rather than letting the first timed render do
+lazy initialization.
+
+Small scenario:
+
+| engine | startup | import | first | subsequent |
+|---|---|---|---|---|
+| django | 81.80 ms (1.00x) | 90.06 ms (1.00x) | 1.10 ms (1.00x) | 42.5 us (1.00x) |
+| django-components | 76.54 ms (0.94x) | 76.02 ms (0.84x) | 1.43 ms (1.29x) | 211.6 us (4.98x) |
+| citry | 102.69 ms (1.26x) | 100.32 ms (1.11x) | 7.42 ms (6.73x) | 216.8 us (5.11x) |
+| jinja2 | 13.09 ms (0.16x) | 12.83 ms (0.14x) | 1.15 ms (1.05x) | 25.3 us (0.60x) |
+
+Large scenario:
+
+| engine | startup | import | first | subsequent |
+|---|---|---|---|---|
+| django | 82.86 ms (1.00x) | 76.35 ms (1.00x) | 18.70 ms (1.00x) | 10.78 ms (1.00x) |
+| django-components | 82.77 ms (1.00x) | 76.17 ms (1.00x) | 66.79 ms (3.57x) | 48.81 ms (4.53x) |
+| citry | 115.73 ms (1.40x) | 95.79 ms (1.25x) | 77.88 ms (4.16x) | 45.78 ms (4.25x) |
+| citry-const | 113.71 ms (1.37x) | 96.82 ms (1.27x) | 81.68 ms (4.37x) | 45.89 ms (4.26x) |
+| jinja2 | 16.74 ms (0.20x) | 13.64 ms (0.18x) | 60.96 ms (3.26x) | 6.76 ms (0.63x) |
+
+The first current-tree run exposed a quadratic ownership path: every ordinary
+component called `selected_region_ids()` before and after its no-op render
+hooks, and that function walked every physical-region result captured so far.
+The large page therefore repeated the growing scan hundreds of times and took
+about 912 ms once warm. Skipping retirement and selection when a hook's before
+and after checkpoints are equal reduced the same warm render to 87.31 ms. The
+guard keeps the full selection path for a hook that actually captures ownership
+records, and the focused ownership/hook suite covers both paths.
+
+The remaining difference is not *only* feature cost. The current Citry render
+is 986,021 bytes and keeps its ownership graph, client lifecycle, extension
+hooks, and security-aware serialization enabled, but a same-machine checkout
+of the June runtime rendered the unchanged scenario in 14.43 ms while the
+current tree took 85.30 ms steady-state. Splitting the current run showed
+70.75 ms in tree rendering and 14.26 ms in root serialization, versus 14.00
+ms and 0.43 ms in June. Mounting the current app reduced output from 986,021
+to 232,638 bytes without reducing render time, so larger emitted bytes do not
+explain the regression.
+
+The bounded profile found further inefficient work: whole-graph ownership
+selection and replacement retirement, repeated static JavaScript scanning and
+class-asset rebuilding per instance, speculative i18n/config work, and
+manifest canonicalization. Implementing those fixes and the bounded traversal
+follow-ups reduced the authoritative fresh-process repeat result from 87.31 ms
+to 45.78 ms without changing the 986,021-byte response. Section 10 of
+[`performance.md`](performance.md)
+records the evidence, implementation, and remaining profile.
+
+After that timed run, ownership comments moved from complete revisions to
+eight-character page-local aliases for readable HTML. The same large scenario
+now emits 980,643 bytes. This wire-only observation does not revise the timing
+table above; [`performance.md`](performance.md) section 10.7 records the
+controlled raw/gzip/Brotli comparison and collision-safety checks.
+
+### 2026-08-21 - allocation, specialization, and pure-body follow-up
+
+Apple M4, macOS 26.6.2, Python 3.14.3, median of 5 fresh-process rounds per
+cell; package versions and harness are unchanged from the preceding beta
+feature-set table. The Citry scenarios now explicitly declare the repeated
+`HeroIcon` and `ProjectOutputBadge` leaves pure. Their output remains the same;
+deterministic fresh IDs produced byte-identical 980,643-byte HTML with the
+declarations enabled and disabled.
+
+| engine | startup | import | first | subsequent |
+|---|---|---|---|---|
+| django | 88.51 ms (1.00x) | 78.98 ms (1.00x) | 18.96 ms (1.00x) | 10.95 ms (1.00x) |
+| django-components | 82.95 ms (0.94x) | 76.14 ms (0.96x) | 68.39 ms (3.61x) | 50.65 ms (4.63x) |
+| citry | 116.03 ms (1.31x) | 99.04 ms (1.25x) | 76.59 ms (4.04x) | 38.65 ms (3.53x) |
+| citry-const | 118.64 ms (1.34x) | 96.78 ms (1.23x) | 80.52 ms (4.25x) | 43.74 ms (3.99x) |
+| jinja2 | 16.59 ms (0.19x) | 13.59 ms (0.17x) | 62.26 ms (3.28x) | 6.91 ms (0.63x) |
+
+The ordinary Citry row is now about 24% faster warm than django-components.
+An independent 11-process Citry-only check measured 76.53 ms first and 39.38
+ms warm. The complete staged allocation, node/input specialization, dormant
+hook, GC, and purity evidence is in [`performance.md`](performance.md) section
+10.8. The pure-only interleaved A/B is smaller than the full 45.78 to 38.65 ms
+movement: only two repeated leaf shapes qualify on this data-heavy page, and
+their median contribution is roughly 3 ms. The rest comes from
+ordinary-path work that benefits every component.

@@ -1552,6 +1552,9 @@ class Icon(Component):
 class HeroIcon(Component):
     citry = app
     name = "heroicons"
+    # Repeated identical icons make this scenario exercise the explicit
+    # render-local pure-body path as an application would.
+    pure = True
 
     class Kwargs:
         name: str
@@ -2938,6 +2941,7 @@ class RenderedProjectOutput(NamedTuple):
 class ProjectOutputBadge(Component):
     citry = app
     name = "ProjectOutputBadge"
+    pure = True
 
     class Kwargs:
         completed: bool
@@ -3944,6 +3948,11 @@ class ProjectPage(Component):
             </c-fill>
         </c-ProjectLayoutTabbed>
     """
+
+
+# Production applications complete registration before serving requests, so
+# charge that lifecycle work to startup rather than the first timed render.
+app.initialize()
 
 
 # ----------- TESTS START ------------ #

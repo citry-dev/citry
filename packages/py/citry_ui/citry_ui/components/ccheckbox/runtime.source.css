@@ -1,0 +1,202 @@
+@layer citry-ui.theme {
+  :where(.cui-checkbox) {
+    --_cui-checkbox-background: var(--cui-checkbox-background, Canvas);
+    --_cui-checkbox-foreground: var(--cui-checkbox-foreground, CanvasText);
+    --_cui-checkbox-border-color: var(
+      --cui-checkbox-border-color,
+      color-mix(in srgb, CanvasText 42%, transparent)
+    );
+    --_cui-checkbox-hover-border-color: var(
+      --cui-checkbox-hover-border-color,
+      color-mix(in srgb, CanvasText 72%, transparent)
+    );
+    --_cui-checkbox-active-color: var(
+      --cui-checkbox-active-color,
+      light-dark(#2563eb, #60a5fa)
+    );
+    --_cui-checkbox-indicator-color: var(
+      --cui-checkbox-indicator-color,
+      light-dark(white, #0b1220)
+    );
+    --_cui-checkbox-focus-color: var(--cui-checkbox-focus-color, Highlight);
+    --_cui-checkbox-invalid-color: var(
+      --cui-checkbox-invalid-color,
+      light-dark(#b42318, #f97066)
+    );
+    --_cui-checkbox-disabled-opacity: var(--cui-checkbox-disabled-opacity, 0.55);
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1.125rem);
+    --_cui-checkbox-radius: var(--cui-checkbox-radius, 0.3rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.625rem);
+    --_cui-checkbox-description-color: var(
+      --cui-checkbox-description-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-checkbox-description-gap: var(--cui-checkbox-description-gap, 0.2rem);
+
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--_cui-checkbox-gap);
+    min-inline-size: 0;
+    color: var(--_cui-checkbox-foreground);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.4;
+    vertical-align: middle;
+  }
+
+  :where(.cui-checkbox[data-label-pos="start"]) {
+    flex-direction: row-reverse;
+  }
+
+  :where(.cui-checkbox[data-size="sm"]) {
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.5rem);
+
+    font-size: 0.875rem;
+  }
+
+  :where(.cui-checkbox[data-size="lg"]) {
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1.25rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.75rem);
+
+    font-size: 1.0625rem;
+  }
+
+  :where(.cui-checkbox__input) {
+    appearance: none;
+    display: grid;
+    flex: 0 0 auto;
+    place-content: center;
+    box-sizing: border-box;
+    inline-size: var(--_cui-checkbox-control-size);
+    block-size: var(--_cui-checkbox-control-size);
+    margin: 0.15em 0 0;
+    border: 1px solid var(--_cui-checkbox-border-color);
+    border-radius: var(--_cui-checkbox-radius);
+    background: var(--_cui-checkbox-background);
+    color: var(--_cui-checkbox-indicator-color);
+    cursor: pointer;
+    font: inherit;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  :where(.cui-checkbox__input)::after {
+    content: "";
+    display: block;
+    box-sizing: border-box;
+    opacity: 0;
+  }
+
+  :where(.cui-checkbox__input:checked) {
+    border-color: var(--_cui-checkbox-active-color);
+    background: var(--_cui-checkbox-active-color);
+  }
+
+  :where(.cui-checkbox__input:checked)::after {
+    inline-size: 0.32em;
+    block-size: 0.62em;
+    border: solid currentcolor;
+    border-width: 0 0.13em 0.13em 0;
+    opacity: 1;
+    transform: translateY(-0.04em) rotate(45deg);
+  }
+
+  :where(.cui-checkbox__input:indeterminate) {
+    border-color: var(--_cui-checkbox-active-color);
+    background: var(--_cui-checkbox-active-color);
+  }
+
+  :where(.cui-checkbox__input:indeterminate)::after {
+    inline-size: 0.58em;
+    block-size: 0.13em;
+    border-radius: 999px;
+    background: currentcolor;
+    opacity: 1;
+  }
+
+  :where(.cui-checkbox[data-variant="outline"] .cui-checkbox__input:checked),
+  :where(.cui-checkbox[data-variant="outline"] .cui-checkbox__input:indeterminate) {
+    --_cui-checkbox-indicator-color: var(
+      --cui-checkbox-indicator-color,
+      var(--_cui-checkbox-active-color)
+    );
+
+    background: var(--_cui-checkbox-background);
+    color: var(--_cui-checkbox-indicator-color);
+  }
+
+  :where(.cui-checkbox__input:focus-visible) {
+    border-color: var(--_cui-checkbox-focus-color);
+    outline: 0.1875rem solid color-mix(
+      in srgb,
+      var(--_cui-checkbox-focus-color) 38%,
+      transparent
+    );
+    outline-offset: 0.125rem;
+  }
+
+  @media (hover: hover) {
+    :where(.cui-checkbox:not([data-disabled]) .cui-checkbox__input:hover) {
+      border-color: var(--_cui-checkbox-hover-border-color);
+    }
+  }
+
+  :where(.cui-checkbox[data-invalid] .cui-checkbox__input) {
+    border-color: var(--_cui-checkbox-invalid-color);
+  }
+
+  :where(.cui-checkbox__body) {
+    display: grid;
+    min-inline-size: 0;
+    gap: var(--_cui-checkbox-description-gap);
+  }
+
+  :where(.cui-checkbox [data-citry-ui-part="label"]) {
+    min-inline-size: 0;
+    color: inherit;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-checkbox[data-disabled]),
+  :where(.cui-checkbox:has(> .cui-checkbox__input:disabled)) {
+    opacity: var(--_cui-checkbox-disabled-opacity);
+  }
+
+  :where(.cui-checkbox[data-disabled] .cui-checkbox__input),
+  :where(.cui-checkbox[data-disabled] [data-citry-ui-part="label"]),
+  :where(.cui-checkbox > .cui-checkbox__input:disabled),
+  :where(.cui-checkbox:has(> .cui-checkbox__input:disabled) [data-citry-ui-part="label"]) {
+    cursor: not-allowed;
+  }
+
+  :where(.cui-checkbox [data-citry-ui-part="description"]) {
+    min-inline-size: 0;
+    color: var(--_cui-checkbox-description-color);
+    font-size: 0.875em;
+    overflow-wrap: anywhere;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-checkbox__input) {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-checkbox__input) {
+      border-color: ButtonText;
+      forced-color-adjust: auto;
+    }
+
+    :where(.cui-checkbox[data-invalid] .cui-checkbox__input) {
+      border-color: Mark;
+    }
+  }
+
+  @media print {
+    :where(.cui-checkbox__input) {
+      print-color-adjust: exact;
+    }
+  }
+}

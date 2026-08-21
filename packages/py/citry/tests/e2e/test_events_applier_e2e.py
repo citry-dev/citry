@@ -1257,9 +1257,9 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
     assert inserted["tagsInS2"] == 0  # the mirror copy is stripped of them
     assert inserted["depsTagsInS2"] == 0
     assert inserted["placements"][0]["id"] is None
-    assert inserted["placements"][0]["marker"].startswith("citry:g1:")
+    assert re.match(r"^citry:g1:[0-9a-f]{8}:", inserted["placements"][0]["marker"])
     assert isinstance(inserted["placements"][1]["id"], str)
-    assert inserted["placements"][1]["marker"].startswith("citry:p1:")
+    assert re.match(r"^citry:p1:[0-9a-f]{8}:", inserted["placements"][1]["marker"])
     assert all(placement["connected"] for placement in inserted["placements"])
 
     # One shared anchor: a $state write in one copy reflects in both.
@@ -1387,8 +1387,8 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
     assert mirrored["region"]["oldRevisionKept"] is True
     assert mirrored["region"]["placements"][0] is None
     assert isinstance(mirrored["region"]["placements"][1], str)
-    assert mirrored["region"]["markers"][0].startswith("citry:g1:")
-    assert mirrored["region"]["markers"][1].startswith("citry:p1:")
+    assert re.match(r"^citry:g1:[0-9a-f]{8}:", mirrored["region"]["markers"][0])
+    assert re.match(r"^citry:p1:[0-9a-f]{8}:", mirrored["region"]["markers"][1])
     page.wait_for_function(
         "Array.from(document.querySelectorAll('.badge .c')).map((el) => el.innerText).join(',') === '9,9'"
     )

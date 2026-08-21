@@ -1,0 +1,1 @@
+@layer citry-ui.theme{:where(.cui-form){--_cui-form-gap:var(--cui-form-gap,1rem);min-inline-size:0;display:block}:where(.cui-form__fieldset){gap:var(--_cui-form-gap);border:0;min-inline-size:0;margin:0;padding:0;display:grid}}

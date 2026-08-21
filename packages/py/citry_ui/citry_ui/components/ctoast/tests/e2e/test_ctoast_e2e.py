@@ -140,6 +140,14 @@ def _toasts(page: Any):
     return page.locator('#notices > [data-citry-toast-list] > [data-citry-ui-part="toast"]')
 
 
+def _dismiss_button(toast: Any, title: str):
+    button = toast.locator("[data-citry-toast-dismiss]")
+    label = button.get_attribute("aria-label")
+    assert label is not None
+    assert label.replace("\u2068", "").replace("\u2069", "") == f"Dismiss {title}"
+    return button
+
+
 def test_queue_limit_semantics_announcers_and_form_safety(toast_page) -> None:
     page, console_errors, page_errors = toast_page
     region = page.locator("#notices")
@@ -155,7 +163,7 @@ def test_queue_limit_semantics_announcers_and_form_safety(toast_page) -> None:
     assert toasts.nth(0).get_attribute("aria-labelledby")
     assert toasts.nth(0).get_attribute("aria-describedby")
 
-    toasts.nth(0).get_by_role("button", name="Dismiss Saved").click()
+    _dismiss_button(toasts.nth(0), "Saved").click()
     page.wait_for_function("document.querySelectorAll('#notices [data-citry-ui-part=toast]').length === 2")
     assert _toasts(page).nth(1).get_attribute("data-citry-toast-id") == "queued"
     assert page.locator("#toast-form").get_attribute("data-submitted") is None
@@ -182,7 +190,7 @@ def test_action_order_close_policy_and_suppression_until_producer_removal(toast_
         }"""
     )
     sticky = page.locator('[data-citry-toast-id="sticky"]')
-    sticky.get_by_role("button", name="Dismiss Sticky").click()
+    _dismiss_button(sticky, "Sticky").click()
     page.wait_for_function("!document.querySelector('[data-citry-toast-id=sticky]')")
     page.evaluate("Alpine.$data(document.body).placement = 'block-start-start'")
     page.wait_for_timeout(0)
@@ -241,7 +249,7 @@ def test_f6_focus_route_and_focused_removal_handoff(toast_page) -> None:
 
     first = page.locator('[data-citry-toast-id="saved"]')
     first.focus()
-    first.get_by_role("button", name="Dismiss Saved").click()
+    _dismiss_button(first, "Saved").click()
     page.wait_for_function("document.activeElement?.getAttribute('data-citry-toast-id') === 'retry'")
     assert console_errors == []
     assert page_errors == []

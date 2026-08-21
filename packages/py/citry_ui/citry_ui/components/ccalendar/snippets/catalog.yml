@@ -1,0 +1,10 @@
+schema_version: 1
+previews:
+  - basic
+  - form
+  - constraints
+  - controlled
+  - locales
+  - natural_weeks
+  - states
+  - styling

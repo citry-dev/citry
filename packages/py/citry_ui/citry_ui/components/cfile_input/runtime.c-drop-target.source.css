@@ -1,0 +1,61 @@
+@layer citry-ui.theme {
+  :where(.cui-drop-target) {
+    position: relative;
+    display: grid;
+    place-items: center;
+    gap: 0.25rem;
+    inline-size: 100%;
+    min-block-size: max(var(--_cui-file-input-min-height), 6.5rem);
+    padding: var(--_cui-file-input-padding);
+    overflow: hidden;
+    border: 1px dashed var(--_cui-file-input-border-color);
+    border-radius: var(--_cui-file-input-radius);
+    background: var(--_cui-file-input-background);
+    text-align: center;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  :where(.cui-drop-target[data-dragging]) {
+    border-color: var(--_cui-file-input-active-color);
+    background: color-mix(in srgb, var(--_cui-file-input-active-color) 10%, Canvas);
+  }
+
+  :where(.cui-drop-target__input) {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
+  }
+
+  :where(.cui-drop-target__label) {
+    font-weight: 650;
+  }
+
+  :where(.cui-drop-target__content) {
+    color: color-mix(in srgb, CanvasText 70%, transparent);
+    font-size: 0.9em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-drop-target) {
+      transition: none;
+    }
+  }
+
+  @media print {
+    :where(.cui-drop-target) {
+      min-block-size: auto;
+      border-style: solid;
+      background: transparent;
+    }
+
+    :where(.cui-drop-target__input) {
+      display: none;
+    }
+  }
+}

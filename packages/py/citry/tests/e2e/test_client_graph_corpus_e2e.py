@@ -221,7 +221,7 @@ def test_adoption_rejects_invalid_fixture(page: Any, serve_document: Any, entry:
           manifest.graphs.forEach((graph, graphIndex) => {
             graph.componentInstances.forEach((instance) => {
               const key =
-                manifest.delimiters.format + ":" + manifest.revision +
+                manifest.delimiters.format + ":" + manifest.revision.slice(0, 8) +
                 ":" + graphIndex + ":i:" + instance.instanceId;
               caps += "<!--" + key + ":s--><!--" + key + ":e-->";
             });
@@ -261,7 +261,7 @@ def test_browser_accepts_a_valid_manifest_larger_than_one_megabyte(page: Any, se
         (manifest) => {
           const root = document.createElement("div");
           const instance = manifest.graphs[0].componentInstances[0];
-          const key = manifest.delimiters.format + ":" + manifest.revision + ":0:i:" + instance.instanceId;
+          const key = manifest.delimiters.format + ":" + manifest.revision.slice(0, 8) + ":0:i:" + instance.instanceId;
           root.append(document.createComment(key + ":s"), document.createComment(key + ":e"));
           const staged = Citry.manager._stageOwnershipManifest(manifest, root);
           return { revision: staged.revision, bytes: new TextEncoder().encode(JSON.stringify(manifest)).byteLength };
@@ -287,11 +287,11 @@ def test_physical_cap_reader_ignores_other_revisions_and_rejects_malformed_curre
         (manifest) => {
           const instance = manifest.graphs[0].componentInstances[0];
           const key =
-            manifest.delimiters.format + ":" + manifest.revision +
+            manifest.delimiters.format + ":" + manifest.revision.slice(0, 8) +
             ":0:i:" + instance.instanceId;
           const validRoot = document.createElement("div");
           validRoot.append(
-            document.createComment("citry:g1:" + "f".repeat(64) + ":0:i:1:s"),
+            document.createComment("citry:g1:" + "f".repeat(8) + ":0:i:1:s"),
             document.createComment(key + ":s"),
             document.createComment(key + ":e"),
           );
@@ -299,7 +299,9 @@ def test_physical_cap_reader_ignores_other_revisions_and_rejects_malformed_curre
 
           const malformedRoot = document.createElement("div");
           malformedRoot.append(
-            document.createComment(manifest.delimiters.format + ":" + manifest.revision + ":not-a-cap"),
+            document.createComment(
+              manifest.delimiters.format + ":" + manifest.revision.slice(0, 8) + ":not-a-cap"
+            ),
             document.createComment(key + ":s"),
             document.createComment(key + ":e"),
           );
@@ -320,6 +322,59 @@ def test_physical_cap_reader_ignores_other_revisions_and_rejects_malformed_curre
     assert result == {
         "otherRevisionAccepted": True,
         "malformedMessage": "[Citry] graph: malformed physical cap.",
+    }
+
+
+def test_active_revision_alias_collision_is_rejected_and_released_after_abort(
+    page: Any,
+    serve_document: Any,
+) -> None:
+    first = _fixture("minimal.manifest.json")
+    second = _fixture("minimal.manifest.json")
+    for manifest, nonce in ((first, 30_719), (second, 76_824)):
+        manifest["graphs"][0]["componentInstances"][0]["renderId"] = "alias-collision"
+        manifest["graphs"][0]["componentClasses"][0]["className"] = f"AliasCollision{nonce}"
+        _resign(manifest)
+
+    assert first["revision"] != second["revision"]
+    assert first["revision"][:8] == second["revision"][:8] == "5ddad84c"
+
+    page.goto(serve_document(_host_html()) + "/")
+    page.wait_for_function("window.Citry && Citry.manager && !!Citry.manager.ownership._prepareAdoption")
+    result = page.evaluate(
+        """
+        ([first, second]) => {
+          const caps = (manifest) => {
+            const root = document.createElement("div");
+            const instance = manifest.graphs[0].componentInstances[0];
+            const key =
+              manifest.delimiters.format + ":" + manifest.revision.slice(0, 8) +
+              ":0:i:" + instance.instanceId;
+            root.append(document.createComment(key + ":s"), document.createComment(key + ":e"));
+            return root;
+          };
+
+          const firstTransaction = Citry.manager.ownership._prepareAdoption(first, caps(first));
+          let collisionMessage = null;
+          try {
+            Citry.manager.ownership._prepareAdoption(second, caps(second));
+          } catch (error) {
+            collisionMessage = String((error && error.message) || error);
+          }
+
+          Citry.manager.ownership._abortAdoption(firstTransaction, new Error("test abort"));
+          const secondTransaction = Citry.manager.ownership._prepareAdoption(second, caps(second));
+          const preparedRevision = secondTransaction.revision;
+          Citry.manager.ownership._discardAdoption(secondTransaction);
+          return { collisionMessage, preparedRevision };
+        }
+        """,
+        [first, second],
+    )
+
+    assert result == {
+        "collisionMessage": "[Citry] graph: revision alias 5ddad84c is already in use by a different graph revision.",
+        "preparedRevision": second["revision"],
     }
 
 

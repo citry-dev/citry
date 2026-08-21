@@ -1,0 +1,52 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="container"]) {
+    --_cui-container-max-width: var(--cui-container-max-width, 80rem);
+    --_cui-container-gutter: var(--cui-container-gutter, 1rem);
+    box-sizing: border-box;
+    inline-size: 100%;
+    max-inline-size: var(--_cui-container-max-width);
+    min-inline-size: 0;
+    margin-inline: auto;
+    padding-inline: var(--_cui-container-gutter);
+  }
+
+  :where([data-citry-ui-part="container"][data-size="sm"]) {
+    --_cui-container-max-width: var(--cui-container-max-width, 40rem);
+  }
+
+  :where([data-citry-ui-part="container"][data-size="md"]) {
+    --_cui-container-max-width: var(--cui-container-max-width, 48rem);
+  }
+
+  :where([data-citry-ui-part="container"][data-size="lg"]) {
+    --_cui-container-max-width: var(--cui-container-max-width, 64rem);
+  }
+
+  :where([data-citry-ui-part="container"][data-size="xxl"]) {
+    --_cui-container-max-width: var(--cui-container-max-width, 96rem);
+  }
+
+  :where([data-citry-ui-part="container"][data-fluid]) {
+    max-inline-size: none;
+  }
+
+  :where([data-citry-ui-part="container"][data-gutter="0"]) {
+    --_cui-container-gutter: var(--cui-container-gutter, 0);
+  }
+
+  :where([data-citry-ui-part="container"][data-gutter="xs"]) {
+    --_cui-container-gutter: var(--cui-container-gutter, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="container"][data-gutter="sm"]) {
+    --_cui-container-gutter: var(--cui-container-gutter, 0.5rem);
+  }
+
+  :where([data-citry-ui-part="container"][data-gutter="md"]) {
+    --_cui-container-gutter: var(--cui-container-gutter, 0.75rem);
+  }
+
+  :where([data-citry-ui-part="container"][data-gutter="xl"]) {
+    --_cui-container-gutter: var(--cui-container-gutter, 1.5rem);
+  }
+}

@@ -36,7 +36,8 @@ rule; component keyword arguments remain case-sensitive elsewhere.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from functools import lru_cache
 from typing import Any, TypeAlias
 
 import wrapt
@@ -53,6 +54,7 @@ StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 """A ``style`` attribute value: inline CSS string, ``StyleDict``, or a list of those."""
 
 _ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+_INVALID_HTML_ATTR_NAME_CHARS = frozenset(" \t\n\r=/><")
 
 
 def _html_attr_identity(name: str) -> str:
@@ -63,6 +65,12 @@ def _html_attr_identity(name: str) -> str:
         # survive intact for the directive validator to reject bad casing.
         return name
     return folded
+
+
+@lru_cache(maxsize=512)
+def _is_valid_exact_html_attr_name(name: str) -> bool:
+    """Cache validation for ordinary strings without retaining arbitrary objects."""
+    return bool(name) and not any(char in _INVALID_HTML_ATTR_NAME_CHARS for char in name) and "{#" not in name
 
 
 def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str:
@@ -77,7 +85,15 @@ def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str
     if not isinstance(name, str):
         msg = f"{where} must use string attribute names, got {type(name).__name__} key {name!r}."
         raise TypeError(msg)
-    if not name or any(char in " \t\n\r=/><" for char in name) or "{#" in name:
+    # Only exact strings enter the shared cache. A ``str`` subclass can define
+    # custom hashing/equality, so caching it would both execute user code and
+    # retain an arbitrary object on this render-time validation path.
+    is_valid = (
+        _is_valid_exact_html_attr_name(name)
+        if type(name) is str
+        else bool(name) and not any(char in _INVALID_HTML_ATTR_NAME_CHARS for char in name) and "{#" not in name
+    )
+    if not is_valid:
         msg = (
             f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "
             "cannot contain whitespace, '=', '/', '>', '<', or the template-comment opener '{#'."
@@ -264,6 +280,28 @@ def merge_attrs(*attrs_dicts: Mapping[str, Any]) -> dict[str, Any]:
     return _coalesce_html_attrs(attrs_dicts, normalize_accumulators=True)
 
 
+def _merge_resolved_attrs(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
+    """Merge compiler-validated attribute items without singleton mappings."""
+    result: dict[str, Any] = {}
+    identity_to_key: dict[str, str] = {}
+    accumulated: dict[str, list[Any]] = {"class": [], "style": []}
+    for key, value in items:
+        identity = _html_attr_identity(key)
+        output_key = identity_to_key.setdefault(identity, key)
+        if identity in accumulated:
+            if value is not None:
+                accumulated[identity].append(value)
+            result[output_key] = None
+        else:
+            result[output_key] = value
+    for identity, values in accumulated.items():
+        if values:
+            output_key = identity_to_key[identity]
+            normalizer = normalize_class if identity == "class" else normalize_style
+            result[output_key] = normalizer(values)
+    return result
+
+
 def _coalesce_html_attrs(
     attrs_dicts: Sequence[Mapping[str, Any]],
     *,
@@ -328,8 +366,13 @@ def format_attrs(attrs: Mapping[str, Any]) -> Markup:
         })
         # -> 'class="btn active" disabled data-id="3"'
     """
-    parts: list[str] = []
     coalesced = _coalesce_html_attrs((attrs,), normalize_accumulators=False)
+    return _format_resolved_attrs(coalesced)
+
+
+def _format_resolved_attrs(coalesced: Mapping[str, Any]) -> Markup:
+    """Format an already validated, identity-coalesced attribute mapping."""
+    parts: list[str] = []
     for key, value in coalesced.items():
         # The boolean tests below compare identity, and a transparent proxy is
         # never identical to `True`, `False`, or `None` however faithfully it

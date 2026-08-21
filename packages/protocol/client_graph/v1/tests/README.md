@@ -37,6 +37,11 @@ pnpm --dir packages/protocol/client_graph/v1/js run check
 The existing `error_*.manifest.json` corpus continues to own relationship
 rules and browser staging or adoption behavior.
 
+The manifest fixtures keep complete revisions and therefore do not duplicate
+the physical comment syntax. Comment tests in both protocol implementations
+lock the eight-character alias grammar, while the browser corpus locks active
+alias collision rejection and release after an aborted transaction.
+
 [`constraint-ownership.json`](constraint-ownership.json) groups all 219
 structural schema constraints under their Python and JavaScript validator
 functions and supporting test files. Each group stores its expected count and

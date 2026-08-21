@@ -1,0 +1,68 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="virtual-list"]) {
+    --_cui-virtual-list-viewport-size: var(--cui-virtual-list-viewport-size, 25rem);
+    --_cui-virtual-list-item-size: var(--cui-virtual-list-item-size, 3rem);
+    --_cui-virtual-list-border: var(--cui-virtual-list-border, 1px solid light-dark(#d6d3d1, #57534e));
+    --_cui-virtual-list-radius: var(--cui-virtual-list-radius, 0.625rem);
+    --_cui-virtual-list-background: var(--cui-virtual-list-background, Canvas);
+    --_cui-virtual-list-item-background: var(--cui-virtual-list-item-background, transparent);
+    box-sizing: border-box;
+    display: block;
+    block-size: var(--_cui-virtual-list-viewport-size);
+    max-inline-size: 100%;
+    overflow: auto;
+    overscroll-behavior-block: contain;
+    scrollbar-gutter: stable;
+    border: var(--_cui-virtual-list-border);
+    border-radius: var(--_cui-virtual-list-radius);
+    background: var(--_cui-virtual-list-background);
+    color: CanvasText;
+  }
+  :where([data-citry-ui-part="virtual-list"]:focus-visible) {
+    outline: 0.1875rem solid Highlight;
+    outline-offset: 0.125rem;
+  }
+  :where([data-citry-ui-part="virtual-list"] > [data-citry-ui-part="track"]) {
+    box-sizing: border-box;
+    display: block;
+    min-inline-size: 0;
+  }
+  :where([data-citry-ui-part="virtual-list"] > [data-citry-ui-part="track"]
+    > [data-citry-ui-part="item"]) {
+    box-sizing: border-box;
+    min-inline-size: 0;
+    background: var(--_cui-virtual-list-item-background);
+  }
+  :where([data-citry-ui-part="virtual-list"][data-strategy="content-visibility"]
+    > [data-citry-ui-part="track"] > [data-citry-ui-part="item"]) {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto var(--_cui-virtual-list-item-size);
+  }
+  :where([data-citry-ui-part="virtual-list"][data-strategy="window"]
+    > [data-citry-ui-part="track"] > [data-citry-ui-part="item"]) {
+    block-size: var(--_cui-virtual-list-item-size) !important;
+    min-block-size: var(--_cui-virtual-list-item-size) !important;
+    max-block-size: var(--_cui-virtual-list-item-size) !important;
+    overflow: hidden;
+  }
+  :where([data-citry-ui-part="virtual-list"] [data-citry-ui-part="spacer"]) {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-block-size: 0;
+    pointer-events: none;
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="virtual-list"]) { border-color: CanvasText; }
+  }
+  @media print {
+    :where([data-citry-ui-part="virtual-list"][data-strategy="content-visibility"]) {
+      block-size: auto;
+      overflow: visible;
+      border-color: currentcolor;
+    }
+    :where([data-citry-ui-part="virtual-list"][data-strategy="content-visibility"]
+      > [data-citry-ui-part="track"] > [data-citry-ui-part="item"]) {
+      content-visibility: visible;
+    }
+  }
+}

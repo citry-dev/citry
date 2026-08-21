@@ -55,6 +55,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from weakref import ReferenceType, ref
 
 from citry.citry_element import CitryElement
 from citry.component_like import ComponentLike, _resolve_component_like
@@ -175,7 +176,7 @@ class RenderFrame:
         component_class = type(component)
         return cls(
             render_id=component.id,
-            class_id=component_class.class_id,
+            class_id=component._citry_class_id,
             class_name=component_class.__name__,
             is_component_root=is_component_root,
             root_markers=tuple(context._get_root_markers()) if is_component_root else (),
@@ -202,7 +203,7 @@ class CitryRender:
 
     """
 
-    __slots__ = ("context", "frame", "parts")
+    __slots__ = ("__weakref__", "context", "frame", "parts")
 
     def __init__(
         self,
@@ -335,15 +336,36 @@ class CitryRender:
         return f"CitryRender(parts={len(self.parts)})"
 
 
-class PhysicalRegionPart:
+class _PhysicalRegion:
+    """Internal common identity for both transparent physical wrappers."""
+
+    __slots__ = ()
+
+    if TYPE_CHECKING:
+        region_id: PhysicalRegionId
+        part: RenderPart
+
+        @property
+        def graph(self) -> OwnershipGraph: ...
+
+
+class PhysicalRegionPart(_PhysicalRegion):
     """One exact physical occurrence of a logical slot or fill result."""
 
-    __slots__ = ("graph", "part", "region_id")
+    __slots__ = ("__weakref__", "_graph_ref", "part", "region_id")
 
     def __init__(self, graph: OwnershipGraph, region_id: PhysicalRegionId, part: RenderPart) -> None:
-        self.graph = graph
+        self._graph_ref: ReferenceType[OwnershipGraph] = ref(graph)
         self.region_id = region_id
         self.part = part
+
+    @property
+    def graph(self) -> OwnershipGraph:
+        """Return the live graph without making the graph/result pair cyclic."""
+        graph = self._graph_ref()
+        if graph is None:
+            raise RuntimeError("A physical region outlived its ownership graph.")
+        return graph
 
     def __repr__(self) -> str:
         return f"PhysicalRegionPart(region_id={int(self.region_id)}, part={self.part!r})"
@@ -351,21 +373,29 @@ class PhysicalRegionPart:
 
 def unwrap_physical_region(part: RenderPart) -> RenderPart:
     """Remove one or more transparent physical-occurrence wrappers."""
-    while isinstance(part, (PhysicalRegionPart, PhysicalRegionRender)):
+    while isinstance(part, _PhysicalRegion):
         part = part.part
     return part
 
 
-class PhysicalRegionRender(CitryRender):
+class PhysicalRegionRender(CitryRender, _PhysicalRegion):
     """A region wrapper that remains a transparent ``CitryRender`` to hooks."""
 
-    __slots__ = ("graph", "part", "region_id")
+    __slots__ = ("_graph_ref", "part", "region_id")
 
     def __init__(self, graph: OwnershipGraph, region_id: PhysicalRegionId, part: CitryRender) -> None:
         super().__init__(parts=part.parts, context=part.context, frame=part.frame)
-        self.graph = graph
+        self._graph_ref: ReferenceType[OwnershipGraph] = ref(graph)
         self.region_id = region_id
         self.part = part
+
+    @property
+    def graph(self) -> OwnershipGraph:
+        """Return the live graph without making the graph/result pair cyclic."""
+        graph = self._graph_ref()
+        if graph is None:
+            raise RuntimeError("A physical region outlived its ownership graph.")
+        return graph
 
     def __repr__(self) -> str:
         return f"PhysicalRegionRender(region_id={int(self.region_id)}, part={self.part!r})"

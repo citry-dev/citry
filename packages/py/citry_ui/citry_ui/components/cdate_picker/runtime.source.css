@@ -1,0 +1,50 @@
+@layer citry-ui.theme {
+  :where(.cui-date-picker) {
+    --_cui-date-picker-background: var(--cui-date-picker-background, Canvas);
+    --_cui-date-picker-foreground: var(--cui-date-picker-foreground, CanvasText);
+    --_cui-date-picker-border-color: var(--cui-date-picker-border-color, color-mix(in srgb, CanvasText 38%, transparent));
+    --_cui-date-picker-invalid-border-color: var(--cui-date-picker-invalid-border-color, light-dark(#d92d20, #f97066));
+    --_cui-date-picker-focus-color: var(--cui-date-picker-focus-color, Highlight);
+    --_cui-date-picker-radius: var(--cui-date-picker-radius, .625rem);
+    --_cui-date-picker-min-block-size: var(--cui-date-picker-min-block-size, 2.5rem);
+    --_cui-date-picker-padding-inline: var(--cui-date-picker-padding-inline, .75rem);
+    --_cui-date-picker-gap: var(--cui-date-picker-gap, .5rem);
+    box-sizing: border-box;
+    display: grid;
+    inline-size: 100%;
+    min-inline-size: 0;
+    color: var(--_cui-date-picker-foreground);
+    font: inherit;
+  }
+  :where(.cui-date-picker__fallback) { box-sizing: border-box; inline-size: 100%; min-block-size: var(--_cui-date-picker-min-block-size); font: inherit; }
+  :where(.cui-date-picker__enhanced) { display: none; min-inline-size: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: .25rem; }
+  :where(.cui-date-picker[data-enhanced] > .cui-date-picker__enhanced) { display: grid; }
+  :where(.cui-date-picker__control, .cui-date-picker__clear) {
+    box-sizing: border-box;
+    min-block-size: var(--_cui-date-picker-min-block-size);
+    border: 1px solid var(--_cui-date-picker-border-color);
+    border-radius: var(--_cui-date-picker-radius);
+    background: var(--_cui-date-picker-background);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  :where(.cui-date-picker__control) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--_cui-date-picker-gap); inline-size: 100%; padding-inline: var(--_cui-date-picker-padding-inline); text-align: start; }
+  :where(.cui-date-picker__value) { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :where(.cui-date-picker__icon) { font-size: 1.1em; }
+  :where(.cui-date-picker__clear) { aspect-ratio: 1; padding: 0 .625rem; font-size: 1.25em; }
+  :where(.cui-date-picker[data-variant="filled"] .cui-date-picker__control, .cui-date-picker[data-variant="filled"] .cui-date-picker__clear) { border-color: transparent; background: color-mix(in srgb, CanvasText 7%, Canvas); }
+  :where(.cui-date-picker[data-variant="plain"] .cui-date-picker__control, .cui-date-picker[data-variant="plain"] .cui-date-picker__clear) { border-color: transparent; border-radius: 0; background: transparent; }
+  :where(.cui-date-picker[data-size="sm"]) { --_cui-date-picker-min-block-size: var(--cui-date-picker-min-block-size, 2.25rem); font-size: .875rem; }
+  :where(.cui-date-picker[data-size="lg"]) { --_cui-date-picker-min-block-size: var(--cui-date-picker-min-block-size, 2.75rem); font-size: 1.0625rem; }
+  :where(.cui-date-picker[data-invalid] .cui-date-picker__control) { border-color: var(--_cui-date-picker-invalid-border-color); }
+  :where(.cui-date-picker__control:focus-visible, .cui-date-picker__clear:focus-visible) { outline: .1875rem solid color-mix(in srgb, var(--_cui-date-picker-focus-color) 42%, transparent); outline-offset: .0625rem; }
+  :where(.cui-date-picker__control:disabled, .cui-date-picker__clear:disabled) { color: GrayText; cursor: not-allowed; }
+  :where(.cui-date-picker[data-readonly] .cui-date-picker__control) { cursor: default; }
+  :where(.cui-date-picker__popover) { --cui-popover-inline-size: auto; --cui-popover-padding: .5rem; }
+  :where(.cui-date-picker__popover [data-citry-ui-part="title"]) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  @media (hover: hover) { :where(.cui-date-picker__control:not(:disabled):hover, .cui-date-picker__clear:not(:disabled):hover) { border-color: color-mix(in srgb, CanvasText 68%, transparent); } }
+  @media (pointer: coarse) { :where(.cui-date-picker) { --_cui-date-picker-min-block-size: max(var(--cui-date-picker-min-block-size, 2.5rem), 2.75rem); } }
+  @media (forced-colors: active) { :where(.cui-date-picker__control, .cui-date-picker__clear) { border-color: ButtonText; forced-color-adjust: auto; } :where(.cui-date-picker[data-invalid] .cui-date-picker__control) { outline: 2px solid Mark; } }
+  @media print { :where(.cui-date-picker__icon, .cui-date-picker__clear) { display: none; } :where(.cui-date-picker__control) { border-color: transparent; padding-inline: 0; } }
+}

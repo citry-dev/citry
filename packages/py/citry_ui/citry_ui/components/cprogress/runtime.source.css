@@ -1,0 +1,138 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="progress"]) {
+    --_cui-progress-track-color: var(
+      --cui-progress-track-color,
+      light-dark(#e7e5e4, #44403c)
+    );
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#1d4ed8, #60a5fa)
+    );
+    --_cui-progress-height: var(--cui-progress-height, 0.625rem);
+    --_cui-progress-radius: var(--cui-progress-radius, 0.25rem);
+    display: block;
+    box-sizing: border-box;
+    inline-size: 100%;
+    block-size: var(--_cui-progress-height);
+    border: 0;
+    border-radius: var(--_cui-progress-radius);
+    overflow: hidden;
+    appearance: none;
+    background: var(--_cui-progress-track-color);
+    color: var(--_cui-progress-range-color);
+    accent-color: var(--_cui-progress-range-color);
+    vertical-align: middle;
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="neutral"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#57534e, #d6d3d1)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="success"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#15803d, #4ade80)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="warn"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#b45309, #fbbf24)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="danger"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#b91c1c, #f87171)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-size="sm"]) {
+    --_cui-progress-height: var(--cui-progress-height, 0.375rem);
+  }
+
+  :where([data-citry-ui-part="progress"][data-size="lg"]) {
+    --_cui-progress-height: var(--cui-progress-height, 0.875rem);
+  }
+
+  :where([data-citry-ui-part="progress"][data-shape="square"]) {
+    --_cui-progress-radius: var(--cui-progress-radius, 0);
+  }
+
+  :where([data-citry-ui-part="progress"][data-shape="pill"]) {
+    --_cui-progress-radius: var(--cui-progress-radius, 999px);
+  }
+
+  :where([data-citry-ui-part="progress"])::-webkit-progress-bar {
+    border-radius: var(--_cui-progress-radius);
+    background: var(--_cui-progress-track-color);
+  }
+
+  :where([data-citry-ui-part="progress"])::-webkit-progress-value {
+    border-radius: var(--_cui-progress-radius);
+    background: var(--_cui-progress-range-color);
+  }
+
+  :where([data-citry-ui-part="progress"])::-moz-progress-bar {
+    border-radius: var(--_cui-progress-radius);
+    background: var(--_cui-progress-range-color);
+  }
+
+  :where([data-citry-ui-part="progress"]:indeterminate),
+  :where([data-citry-ui-part="progress"]:indeterminate)::-webkit-progress-bar {
+    background-color: var(--_cui-progress-track-color);
+    background-image: linear-gradient(
+      100deg,
+      transparent 20%,
+      var(--_cui-progress-range-color) 45%,
+      var(--_cui-progress-range-color) 55%,
+      transparent 80%
+    );
+    background-size: 200% 100%;
+    animation: cui-progress-indeterminate 1.4s linear infinite;
+  }
+
+  @keyframes cui-progress-indeterminate {
+    from {
+      background-position: 100% 0;
+    }
+
+    to {
+      background-position: -100% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="progress"]:indeterminate),
+    :where([data-citry-ui-part="progress"]:indeterminate)::-webkit-progress-bar {
+      background-image: repeating-linear-gradient(
+        135deg,
+        transparent 0 0.35rem,
+        var(--_cui-progress-range-color) 0.35rem 0.7rem
+      );
+      background-size: auto;
+      animation: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="progress"]) {
+      --_cui-progress-track-color: var(--cui-progress-track-color, Canvas);
+      --_cui-progress-range-color: var(--cui-progress-range-color, Highlight);
+      border: 1px solid CanvasText;
+      forced-color-adjust: auto;
+    }
+  }
+
+  @media print {
+    :where([data-citry-ui-part="progress"]:indeterminate),
+    :where([data-citry-ui-part="progress"]:indeterminate)::-webkit-progress-bar {
+      animation: none;
+    }
+  }
+}

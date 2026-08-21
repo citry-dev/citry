@@ -116,10 +116,13 @@ an element key and is never serialized into a range comment.
 The fixed cap syntax continues to identify a physical component placement:
 
 ```html
-<!--citry:g1:<revision>:<graph>:i:<instance>:s-->
+<!--citry:g1:<revision-alias>:<graph>:i:<instance>:s-->
 ...
-<!--citry:g1:<revision>:<graph>:i:<instance>:e-->
+<!--citry:g1:<revision-alias>:<graph>:i:<instance>:e-->
 ```
+
+The marker uses the first eight characters of the complete manifest revision;
+the manifest and ownership registry retain the complete revision as identity.
 
 The ownership graph supplies the invocation key. Ordinary elements continue
 to use `data-citry-key` inside one matched component range.

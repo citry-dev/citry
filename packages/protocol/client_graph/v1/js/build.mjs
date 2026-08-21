@@ -34,7 +34,7 @@ const moduleBody = bundle.outputFiles[0].text.replace(
 	"",
 );
 const transformed = await transform(
-	`${moduleBody}\nvar CitryClientGraphProtocol = { OWNERSHIP_COMMENT_PREFIX, parseOwnershipComment, ProtocolValueError, assertValidManifest };`,
+	`${moduleBody}\nvar CitryClientGraphProtocol = { OWNERSHIP_COMMENT_PREFIX, ownershipRevisionAlias, parseOwnershipComment, ProtocolValueError, assertValidManifest };`,
 	{ loader: "js", minify: true, target: "es2020" },
 );
 const generated = transformed.code.trim();

@@ -24,7 +24,7 @@ Components that already exist won't be removed (for example, `CButton` stays
 
 ## Installation
 
-Install it with Python 3.10 or newer. Needs `citry>=0.4`:
+Install it with Python 3.10 or newer. Needs `citry>=0.4.2`:
 
 ```console
 python -m pip install citry-ui

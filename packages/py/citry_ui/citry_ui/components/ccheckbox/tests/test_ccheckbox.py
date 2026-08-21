@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 from markupsafe import Markup
@@ -325,8 +326,9 @@ def test_checkbox_rejects_conflicting_cform_owner_case_insensitively():
 
 
 def test_checkbox_assets_are_component_owned_and_do_not_author_aria_checked():
+    css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
     assert "data-citry-checkbox-initialized" in CCheckbox.js
     assert "aria-checked" not in CCheckbox.js
-    assert ":checked" in CCheckbox.css
-    assert ":indeterminate" in CCheckbox.css
-    assert "@layer citry-ui.theme" in CCheckbox.css
+    assert ":checked" in css
+    assert ":indeterminate" in css
+    assert "@layer citry-ui.theme" in css

@@ -9,6 +9,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CListbox, CListboxGroup, CListboxOption
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(template: str, *, include_css: bool = False) -> str:
@@ -216,13 +217,13 @@ def test_owned_attrs_and_directives_are_rejected(template: str) -> None:
 
 
 def test_css_includes_public_states_environment_rules_and_logical_layout() -> None:
-    html = _render(_listbox(), include_css=True)
-    assert "--cui-listbox-selected-background" in html
-    assert 'grid-template-areas: "indicator start copy end"' in html
-    assert "overflow-wrap: anywhere" in html
-    assert "prefers-reduced-motion" in html
-    assert "forced-colors" in html
-    assert "@media print" in html
+    css = read_component_source_css("clistbox")
+    assert "--cui-listbox-selected-background" in css
+    assert 'grid-template-areas: "indicator start copy end"' in css
+    assert "overflow-wrap: anywhere" in css
+    assert "prefers-reduced-motion" in css
+    assert "forced-colors" in css
+    assert "@media print" in css
 
 
 def test_output_escapes_hostile_label_and_values() -> None:

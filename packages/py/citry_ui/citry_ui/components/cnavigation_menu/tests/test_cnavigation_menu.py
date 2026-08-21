@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 from typing import get_args, get_type_hints
 
 import pytest
@@ -141,7 +142,7 @@ def test_owned_destination_attributes_fail() -> None:
 
 
 def test_css_contract_covers_public_states_and_environments() -> None:
-    css = CNavigationMenu.css
+    css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
     assert "--cui-navigation-menu-panel-background" in css
     assert '[data-citry-ui-part="indicator"]' in css
     assert "prefers-reduced-motion: reduce" in css

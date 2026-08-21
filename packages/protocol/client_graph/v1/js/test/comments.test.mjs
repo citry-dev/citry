@@ -24,38 +24,53 @@ const comments = await import(
 
 test("parses one canonical ownership comment", () => {
 	const revision = "a".repeat(64);
+	const revisionAlias = comments.ownershipRevisionAlias(revision);
 	assert.deepEqual(
-		comments.parseOwnershipComment(` citry:g1:${revision}:0:i:3:s `),
+		comments.parseOwnershipComment(` citry:g1:${revisionAlias}:0:i:3:s `),
 		{
-			revision,
+			revisionAlias,
 			graphId: "0",
 			kind: "i",
 			recordId: "3",
 			side: "s",
-			key: `citry:g1:${revision}:0:i:3`,
+			key: `citry:g1:${revisionAlias}:0:i:3`,
 		},
 	);
 });
 
 test("preserves decimal spelling for later canonicality checks", () => {
-	const revision = "0".repeat(64);
+	const revisionAlias = "0".repeat(8);
 	const parsed = comments.parseOwnershipComment(
-		`citry:g1:${revision}:01:r:004:e`,
+		`citry:g1:${revisionAlias}:01:r:004:e`,
 	);
 	assert.equal(parsed.graphId, "01");
 	assert.equal(parsed.recordId, "004");
-	assert.equal(parsed.key, `citry:g1:${revision}:01:r:004`);
+	assert.equal(parsed.key, `citry:g1:${revisionAlias}:01:r:004`);
+});
+
+test("derives the comment alias from a complete validated revision", () => {
+	assert.equal(
+		comments.ownershipRevisionAlias(`01234567${"a".repeat(56)}`),
+		"01234567",
+	);
+	for (const revision of ["a".repeat(63), "A".repeat(64), "not-a-revision"]) {
+		assert.throws(
+			() => comments.ownershipRevisionAlias(revision),
+			/lowercase SHA-256/,
+		);
+	}
 });
 
 test("rejects text outside the client-graph comment format", () => {
-	const revision = "b".repeat(64);
+	const revisionAlias = "b".repeat(8);
 	for (const value of [
-		`citry:g1:${revision}:0:x:1:s`,
-		`citry:g1:${revision.toUpperCase()}:0:i:1:s`,
-		`citry:g1:${revision}:0:i:1:x`,
-		`citry:g1:${revision}:0:i:1`,
-		`citry:p1:${revision}:root:0:i:1:s`,
-		`before citry:g1:${revision}:0:i:1:s after`,
+		`citry:g1:${revisionAlias}:0:x:1:s`,
+		`citry:g1:${revisionAlias.toUpperCase()}:0:i:1:s`,
+		`citry:g1:${revisionAlias}:0:i:1:x`,
+		`citry:g1:${revisionAlias}:0:i:1`,
+		`citry:g1:${"b".repeat(64)}:0:i:1:s`,
+		`citry:p1:${revisionAlias}:root:0:i:1:s`,
+		`before citry:g1:${revisionAlias}:0:i:1:s after`,
 	]) {
 		assert.equal(comments.parseOwnershipComment(value), null, value);
 	}

@@ -107,7 +107,9 @@ def test_native_radio_keyboard_form_submission_and_reset(rating_page) -> None:
     selected.press("ArrowRight")
     assert _input(page, "rating-root", "2").is_checked()
     assert page.evaluate("window.__ratingEvents.filter(item => item[0] === 'value').at(-1)") == [
-        "value", "2", "keyboard",
+        "value",
+        "2",
+        "keyboard",
     ]
     page.locator("#submit").click()
     assert page.evaluate("window.__ratingSubmits.at(-1)") == [["rating", "2"]]
@@ -131,10 +133,14 @@ def test_clear_hover_and_controlled_request_behavior(rating_page) -> None:
     assert root.get_attribute("data-hovering") is None
 
     _choice(page, "rating-root", "1.5").click()
-    page.wait_for_function("![...document.querySelectorAll('#rating-root input[type=radio]')].some(input => input.checked)")
+    page.wait_for_function(
+        "![...document.querySelectorAll('#rating-root input[type=radio]')].some(input => input.checked)"
+    )
     assert page.evaluate("new FormData(document.querySelector('#review')).has('rating')") is False
     assert page.evaluate("window.__ratingEvents.filter(item => item[0] === 'value').at(-1)") == [
-        "value", None, "pointer",
+        "value",
+        None,
+        "pointer",
     ]
 
     _choice(page, "controlled-root", "4").click()

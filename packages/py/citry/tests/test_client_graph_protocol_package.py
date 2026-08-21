@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 from citry import Citry, Component
-from citry._protocol.client_graph import canonical_json
+from citry._protocol.client_graph import REVISION_ALIAS_LENGTH, canonical_json
 from citry.ownership_manifest import COMMENT_PREFIX, PROTOCOL
 
 _ROOT = Path(__file__).resolve().parents[4]
@@ -101,6 +101,7 @@ def test_wire_constants_are_locked_across_producer_schema_fixture_and_browser_co
 
     assert PROTOCOL == "citry-client-graph/1"
     assert COMMENT_PREFIX == "citry:g1"
+    assert REVISION_ALIAS_LENGTH == 8
     assert SCHEMA["properties"]["protocol"]["const"] == PROTOCOL
     assert SCHEMA["properties"]["mode"]["enum"] == ["production", "development"]
     assert SCHEMA["properties"]["delimiters"]["properties"]["format"]["const"] == COMMENT_PREFIX
@@ -111,6 +112,8 @@ def test_wire_constants_are_locked_across_producer_schema_fixture_and_browser_co
     # the one generated core region.
     assert f'PROTOCOL = "{PROTOCOL}"' in canonical_source
     assert f'OWNERSHIP_COMMENT_PREFIX = "{COMMENT_PREFIX}"' in comments_source
+    assert "REVISION_ALIAS_LENGTH = 8" in comments_source
+    assert "ownershipRevisionAlias" in core_embed_source
     assert "value.delimiters.format !== OWNERSHIP_COMMENT_PREFIX" in manifests_source
     assert 'value.mode !== "production" && value.mode !== "development"' in manifests_source
     assert "assertValidManifest" in core_embed_source

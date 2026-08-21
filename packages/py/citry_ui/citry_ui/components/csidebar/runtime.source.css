@@ -1,0 +1,195 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="sidebar"]) {
+    --_cui-sidebar-width: var(--cui-sidebar-width, 16rem);
+    --_cui-sidebar-rail-width: var(--cui-sidebar-rail-width, 4rem);
+    --_cui-sidebar-background: var(--cui-sidebar-background, light-dark(#fafaf9, #1c1917));
+    --_cui-sidebar-foreground: var(--cui-sidebar-foreground, CanvasText);
+    --_cui-sidebar-border-color: var(--cui-sidebar-border-color, light-dark(#e7e5e4, #44403c));
+    --_cui-sidebar-shadow: var(--cui-sidebar-shadow, 0 0.5rem 1.5rem rgb(15 23 42 / 14%));
+    --_cui-sidebar-radius: var(--cui-sidebar-radius, 0.85rem);
+    --_cui-sidebar-padding: var(--cui-sidebar-padding, 0.75rem);
+    --_cui-sidebar-gap: var(--cui-sidebar-gap, 0.75rem);
+    --_cui-sidebar-toggle-size: var(--cui-sidebar-toggle-size, 2.75rem);
+    --_cui-sidebar-focus-color: var(--cui-sidebar-focus-color, Highlight);
+    --_cui-sidebar-sticky-offset: var(--cui-sidebar-sticky-offset, 0px);
+    box-sizing: border-box;
+    position: relative;
+    display: block;
+    inline-size: min(100%, var(--_cui-sidebar-width));
+    min-inline-size: 0;
+    max-block-size: calc(100dvb - var(--_cui-sidebar-sticky-offset));
+    overflow: hidden;
+    border-inline-end: 1px solid var(--_cui-sidebar-border-color);
+    color: var(--_cui-sidebar-foreground);
+    background: var(--_cui-sidebar-background);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.45;
+    transition: inline-size 180ms ease;
+  }
+  :where([data-citry-ui-part="sidebar"][data-side="inline-end"]) {
+    border-inline-start: 1px solid var(--_cui-sidebar-border-color);
+    border-inline-end: 0;
+  }
+  :where([data-citry-ui-part="sidebar"][data-size="sm"]) { --_cui-sidebar-width: 14rem; }
+  :where([data-citry-ui-part="sidebar"][data-size="lg"]) { --_cui-sidebar-width: 20rem; }
+  :where([data-citry-ui-part="sidebar"][data-sticky]) {
+    position: sticky;
+    inset-block-start: var(--_cui-sidebar-sticky-offset);
+  }
+  :where([data-citry-ui-part="sidebar"][data-variant="floating"]) {
+    border: 1px solid var(--_cui-sidebar-border-color);
+    border-radius: var(--_cui-sidebar-radius);
+    box-shadow: var(--_cui-sidebar-shadow);
+  }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]) {
+    inline-size: var(--_cui-sidebar-rail-width);
+  }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="offcanvas"]) {
+    inline-size: calc(var(--_cui-sidebar-toggle-size) + var(--_cui-sidebar-gap));
+    border-color: transparent;
+    background: transparent;
+  }
+  :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="panel"]) {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: var(--_cui-sidebar-gap);
+    block-size: 100%;
+    inline-size: var(--_cui-sidebar-width);
+    min-block-size: 0;
+    padding: var(--_cui-sidebar-padding);
+    overflow: hidden;
+  }
+  :where([data-citry-ui-part="sidebar"]:not([data-has-header])
+    > [data-citry-ui-part="panel"]) {
+    padding-block-start: calc(var(--_cui-sidebar-padding) + var(--_cui-sidebar-toggle-size));
+  }
+  :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="panel"][hidden]) { display: none; }
+  :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="header"]),
+  :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="footer"]) {
+    flex: 0 0 auto;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+  :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="header"]) {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--_cui-sidebar-toggle-size);
+    padding-inline-end: calc(var(--_cui-sidebar-toggle-size) + var(--_cui-sidebar-gap));
+    overflow: hidden;
+  }
+  :where([data-citry-ui-part="sidebar"][data-side="inline-end"]
+    [data-citry-ui-part="header"]) {
+    padding-inline-start: calc(var(--_cui-sidebar-toggle-size) + var(--_cui-sidebar-gap));
+    padding-inline-end: 0;
+  }
+  :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="content"]) {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+  }
+  :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="toggle"]) {
+    position: absolute;
+    z-index: 1;
+    inset-block-start: var(--_cui-sidebar-padding);
+    inset-inline-end: var(--_cui-sidebar-padding);
+    display: grid;
+    inline-size: var(--_cui-sidebar-toggle-size);
+    block-size: var(--_cui-sidebar-toggle-size);
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--_cui-sidebar-border-color);
+    border-radius: calc(var(--_cui-sidebar-radius) * 0.65);
+    color: inherit;
+    background: var(--_cui-sidebar-background);
+    font: inherit;
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="sidebar"][data-side="inline-end"]
+    > [data-citry-ui-part="toggle"]) {
+    inset-inline: var(--_cui-sidebar-padding) auto;
+  }
+  :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="toggle"]:focus-visible) {
+    outline: 3px solid var(--_cui-sidebar-focus-color);
+    outline-offset: 2px;
+  }
+  :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="toggle-label"]) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="toggle-label"][hidden]) { display: none; }
+  :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="toggle-icon"]) {
+    font-size: 1.4rem;
+    line-height: 1;
+  }
+  :where([data-citry-ui-part="sidebar"] [data-citry-sidebar-rail-only]) { display: none; }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]
+    [data-citry-sidebar-expanded-only]) { display: none; }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]
+    [data-citry-sidebar-rail-only]) { display: revert; }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]
+    [data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"]) {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    padding-inline: 0.35rem;
+  }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]
+    [data-citry-ui-part="list"] [data-citry-ui-part="body"]) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]
+    [data-citry-ui-part="list"] :is([data-citry-ui-part="description"], [data-citry-ui-part="end"])) {
+    display: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="sidebar"]) { transition: none; }
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="sidebar"]),
+    :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="toggle"]) {
+      border-color: CanvasText;
+    }
+  }
+  @media print {
+    :where([data-citry-ui-part="sidebar"]) {
+      position: static;
+      inline-size: 100%;
+      max-block-size: none;
+      border: 1px solid currentcolor;
+      box-shadow: none;
+    }
+    :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="toggle"]) { display: none; }
+    :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="panel"]) {
+      display: flex !important;
+      padding-block-start: var(--_cui-sidebar-padding);
+    }
+    :where([data-citry-ui-part="sidebar"] [data-citry-ui-part="body"]) {
+      position: static !important;
+      inline-size: auto !important;
+      block-size: auto !important;
+      margin: 0 !important;
+      clip: auto !important;
+      white-space: normal !important;
+    }
+  }
+}

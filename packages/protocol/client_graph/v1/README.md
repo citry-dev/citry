@@ -6,6 +6,11 @@ JSON in a `<script type="application/json" data-citry-graph>` tag. This
 directory is the language-neutral contract for that JSON: protocol major 1. It
 is the source of truth every implementation follows, in any language.
 
+The manifest keeps its complete 64-character revision as the graph identity.
+The surrounding ownership comments carry the first eight characters as a
+page-local alias, which keeps rendered HTML readable while the browser still
+routes every range through the complete manifest revision.
+
 A **component-tag client binding** is browser behavior resolved from a nested
 component tag, such as `$c-props="{ theme }"`, `@click="select()"`, or
 `@c-poll.5s="refresh()"`. The parent owns the expression or handler, while the

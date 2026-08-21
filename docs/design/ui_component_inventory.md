@@ -1,8 +1,8 @@
 # Citry UI component inventory
 
-**Status (2026-08-19): provisional Phase 8 inventory for the current
-source-development catalog. The worktree contains 60 component-family
-directories and documentation entries and 107 registered definitions,
+**Status (2026-08-21): provisional Phase 8 inventory for the current
+source-development catalog. The worktree contains 71 component-family
+directories and documentation entries and 137 registered definitions,
 including compound-family declarations and private renderers.**
 This document orders component work while publication waits for compatible
 `citry` and `citry_core` releases. It does not freeze the v1 public contract,
@@ -108,7 +108,7 @@ previews, and structured API reference generation.
 
 ### 3.1 Subsequent source-development passes
 
-The following 26 families have since joined the source-development baseline.
+The following 37 families have since joined the source-development baseline.
 Each has live runtime source, a component specification, family-owned public
 documentation and structured reference, docs-catalog projection, and contract
 coverage. Family-specific human, assistive-technology, device, browser, and
@@ -121,7 +121,11 @@ in this table.
 | Carousel | `CCarousel`, `CCarouselSlide` |
 | CommandPalette | `CCommandPalette` and its command/group records |
 | ContextMenu | `CContextMenu` over the Menu declaration family |
+| DataGrid | `CDataGrid` with typed Column, Row, Cell, and Sort records |
+| Calendar | `CCalendar` |
 | DateInput | `CDateInput` |
+| DatePicker | `CDatePicker` |
+| DateRange | `CDateRange` |
 | Disclosure | `CDisclosure` |
 | Editable | `CEditable` |
 | FileInput | `CFileInput`, `CDropTarget` |
@@ -134,6 +138,7 @@ in this table.
 | Rating | `CRating` |
 | PinInput | `CPinInput` |
 | ScrollArea | `CScrollArea` |
+| Sidebar | `CSidebar` |
 | Select | `CSelect` and option/group records |
 | SplitButton | `CSplitButton` |
 | Splitter | `CSplitter`, `CSplitterPanel` |
@@ -141,8 +146,14 @@ in this table.
 | Stepper | `CStepper`, `CStep` |
 | Tag | `CTagGroup`, `CTag` |
 | TagsInput | `CTagsInput`, `CTagsInputMessages` |
+| TimeInput | `CTimeInput` |
+| TimePicker | `CTimePicker` |
+| Timeline | `CTimeline`, `CTimelineItem` |
 | Toolbar | `CToolbar` |
+| Tour | `CTour`, `CTourStep` |
+| Transfer List | `CTransferList`, `CTransferListItem` |
 | Tree | `CTree`, `CTreeItem` |
+| Virtual List | `CVirtualList`, `CVirtualListItem`, `CVirtualWindow` |
 
 ## 4. Completed source-development batch
 
@@ -382,8 +393,8 @@ and server/browser agreement decisions.
 ButtonGroup and semantic List both earned exports by adding durable named-group,
 joined-action, semantic-surface, and composable-item contracts beyond Flow or
 raw markup. `CVisuallyHidden` should advance only when research proves a public
-component job; otherwise `CDescriptionList` and `CStatistic` remain the first
-substitutes after the blocked-group review.
+component job; otherwise `CDescriptionList` and `CStatistic` remain
+lower-priority substitutes after the specialist batch.
 
 ### 6.3 Completed interaction batch
 
@@ -409,11 +420,23 @@ migration.
 that busy semantics, interaction blocking, and focus recovery add a durable
 contract beyond Spinner plus ordinary composition.
 
-The next specialist review group is DataGrid, virtualized collections, Tour,
-and Transfer/PickList. That is a research and boundary pass, not automatic
-approval to place all four specialist systems in the core package. Date, time,
-calendar, and date-range families proceed through their own research; generic
-browser temporal parsing is not a gate for that work.
+### 6.4 Completed specialist batch
+
+Timeline, Sidebar, Tour, DataGrid, Virtual List/Window, and Transfer List have
+completed their research, accepted specifications, source implementation,
+structured public references, preview sets, reusable quality scenarios,
+localization work, and focused three-browser evidence. The accepted DataGrid
+boundary owns composite navigation, request/accept sorting, supplied-Row
+selection, and fixed-height server windows without claiming editing, grouping,
+pivoting, browser data sources, or a spreadsheet engine. Virtual List keeps
+complete-DOM containment separate from fixed server windows; Transfer List
+owns a finite form-capable PickList rather than remote or virtualized
+selection. Human visual, assistive-technology, and released-artifact review
+remain release evidence rather than source implementation.
+
+The date, time, Calendar, and DateRange families have also completed their
+separate research, implementation, documentation, and focused browser passes
+without treating generic browser temporal parsing as an entry gate.
 
 ## 7. Remaining core candidates
 
@@ -421,27 +444,26 @@ These families remain likely parts of a broad first-party suite. Their order
 depends on lessons from the completed batch and final Phase 8 scope.
 
 | Area | Families or foundations | Evidence signal | Dependency or open decision |
-|---|---|---:|---|
 | Foundations | Reset and cascade layers; typography and native content styles; global semantic tokens, component defaults, density, motion, and responsive vocabulary | Theme/tokens 9/12; typography/native content 6/12 | Card and the existing families supply the current surface, elevation, shape, spacing, and responsive evidence. Global aliases and reset/layer policy remain foundation work unless an application/component earns a public job. |
 | Actions | Application command composition beyond the current Button, SplitButton, Menu, and CommandPalette boundaries | Group/toggle 10/12 | Advance only when an application job is not served by the implemented command families. |
-| Forms | Further specialized form controls beyond NumberInput, Slider/RangeSlider, Rating, PinInput, and DateInput | Rating 11/12; calendar/date/time 8/12 | The current advanced form families have completed their value, native-form, localization where applicable, keyboard, paste/autofill where applicable, structured-reference, preview, and focused browser passes. Calendar, picker, time, and range work proceeds through its separately ratified contracts. |
+| Forms | Further specialized form controls beyond NumberInput, Slider/RangeSlider, Rating, PinInput, DateInput, Calendar, DatePicker, DateRange, TimeInput, and TimePicker | Rating 11/12; calendar/date/time 8/12 | The current advanced form families have completed their value, native-form, localization where applicable, keyboard, paste/autofill where applicable, structured-reference, preview, and focused browser passes. A new specialized control must now prove a distinct job beyond these boundaries. |
 | Navigation | NavList/NavLink, Menu, application navigation | Menu 11/12; app navigation 7/12 | Pagination and Menu are implemented. Route awareness stays with applications or host integrations. |
 | Feedback | Further notification services beyond Tag, Toast, Alert, and Progress | Badge 9/12; Toast 10/12 | The visible and declarative feedback families are implemented. An imperative global service or richer queue must earn a separate lifecycle contract. |
 | Overlays | Additional overlay jobs beyond AlertDialog, Dialog, Drawer, Popover, Tooltip, Menu, ContextMenu, CommandPalette, and HoverCard | 10 to 11/12 for the main families | The platform-first private foundation and current overlay families are implemented. Persistent navigation remains a layout job. |
-| Layout and shell | AppShell, Header/AppBar, Main, Footer, Sidebar, responsive navigation | 7/12 plus strong local application demand | Build on the implemented layout vocabulary. Responsive navigation may compose with Drawer. |
+| Layout and shell | AppShell, Header/AppBar, Main, Footer, and responsive navigation beyond the implemented Sidebar | 7/12 plus strong local application demand | Build on Sidebar and the implemented layout vocabulary. Responsive navigation may compose with Drawer. |
 | Overflow and resizing | Additional overflow helpers beyond ScrollArea and Splitter | Grouped row 10/12 | Native overflow remains the baseline. Advance another component only for a concrete focus, scrollbar, resize, persistence, or responsive job that CSS does not solve clearly. |
-| Data display | DescriptionList/DataList, Timeline, Statistic | Avatar/List 9/12; Timeline/Statistic 6/12 | Avatar and semantic List are implemented. Advance DescriptionList/DataList, Timeline, or Statistic only when repeated application jobs prove a distinct data-display contract. |
-| Collections | Richer Combobox presentations, drag/reorder, virtualization, and async collection products beyond the current Select, MultiSelect, TagsInput, Tree, and Carousel families | MultiSelect inherits 9/12 Combobox evidence; Tree 8/12; Carousel 7/12 | Each additional product needs separate identity, focus, drag, virtualization, and async ownership proofs. |
+| Data display | DescriptionList/DataList and Statistic beyond the implemented Timeline | Avatar/List 9/12; Statistic 6/12 | Advance only when repeated application jobs prove a distinct data-display contract. |
+| Collections | Richer Combobox presentations, drag/reorder, and async products beyond Select, MultiSelect, TagsInput, Tree, Carousel, DataGrid, Virtual List, and Transfer List | MultiSelect inherits 9/12 Combobox evidence; Tree 8/12; Carousel 7/12 | Each additional product needs separate identity, focus, drag, async, and replacement proofs. |
 | Utilities | VisuallyHidden, focus-visible policy, focus scope/restoration, portal, presence, dismissal, responsive visibility | 7 to 8/12 | Prefer internal foundations until user-authored composition demonstrates a stable public job. |
 
 ## 8. Gated and companion work
 
 | Work | Stage | Gate or boundary |
 |---|---|---|
-| Calendar, custom date picker, time, date range, and locale-sensitive number controls | Active general-suite research and implementation after native DateInput | Use the implemented core server formatting/parsing, locale, calendar, direction, and time-zone contracts. Each family must ratify its browser editing and server/browser agreement, but generic browser temporal parsing is not an entry gate. |
+| Calendar, custom date picker, time, date range, and locale-sensitive number controls | Completed source-development families | The implemented families use core locale, calendar, direction, and formatting contracts, preserve canonical Form values, document every translation key, and carry focused three-browser evidence. Generic browser temporal parsing was not an entry gate. |
 | Upload transport and storage around FileInput and DropTarget | Companion work | Native file selection and drop are implemented. Upload transport, storage, previews, cancellation, retry, and server validation form a larger security and lifecycle product. |
-| Sortable and editable collections, virtual windows, and infinite loading | Later | Identity, focus, drag, async, and server replacement behavior need a dedicated collection contract. |
-| Stateful DataTable or DataGrid | Companion candidate | Spreadsheet navigation, column models, editing, grouping, aggregation, pinning, virtualization, export, and server query protocols exceed semantic Table. |
+| Drag-sortable and editable collections, infinite loading, and variable-height or two-axis virtualization | Later or companion work | The fixed server-window and request/accept foundations are implemented; drag, editing, async replacement, and richer geometry need their own contracts. |
+| Advanced DataGrid/spreadsheet features | Companion candidate | The core DataGrid owns navigation, sorting requests, supplied-Row selection, and fixed windows. Editing, grouping, aggregation, pivoting, pinning, export, clipboard mutation, and browser data engines remain separate specialist work. |
 | Charts, rich-text editing, maps, schedulers, diagramming, and media editors | Companion packages | Each adds a specialist engine, payload, security model, accessibility contract, or domain model. |
 | Headless component APIs | Follow-up research | Real applications and a broader styled catalog must first reveal the authoring jobs, API shape, and representative performance cases. |
 | Storybook | Optional extension | The docs live-component host remains the first-party preview surface. Storybook does not gate component work or publication. |

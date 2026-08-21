@@ -185,7 +185,7 @@ uv run maturin develop
 Both `maturin develop` and the `uv sync` build produce a debug (unoptimized)
 extension. That is fine for tests, but it makes the Rust-backed paths several
 times slower, so pass `--release` before running any
-[benchmark](/advanced/const-optimization/):
+[benchmark](/advanced/performance/):
 
 ```sh
 uv run maturin develop --release

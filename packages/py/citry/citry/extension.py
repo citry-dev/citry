@@ -563,6 +563,9 @@ class Extension:
     _component_config_enabled: ClassVar[bool] = True
     """Internal gate for extensions whose nested config surface is not ready."""
 
+    _attrs_resolved_requires_runtime_candidate: ClassVar[bool] = False
+    """Internal gate for hooks whose compiler can prove most element regions inert."""
+
     citry: Citry
     """The ``Citry`` instance this extension instance belongs to. Set by the
     manager when the extension is attached (extensions are per-instance, so
@@ -1736,12 +1739,18 @@ class ExtensionManager:
         Thread the rendered output through the extensions; a return replaces the
         render, a raise replaces the error.
         """
-        # Fires for every component; skip the context build when unsubscribed.
         had_error = error is not None
-        if not self.has_hook("on_component_rendered"):
+        extensions = self._extensions_with_hook("on_component_rendered")
+        i18n = self._extensions_by_name["i18n"]
+        if getattr(component.i18n, "_bindings_state", None) is None:
+            extensions = tuple(extension for extension in extensions if extension is not i18n)
+        # Dormant i18n subscribes only to seal a collector that does not
+        # exist yet. Avoid constructing one hook context per component when
+        # no other extension needs the completed-render phase.
+        if not extensions:
             return render, error, had_error
         ctx = OnComponentRenderedContext(citry=self.citry, component=component, render=render, error=error)
-        for extension in self._extensions_with_hook("on_component_rendered"):
+        for extension in extensions:
             try:
                 out = extension.on_component_rendered(ctx)
             except Exception as err:  # noqa: BLE001
@@ -1789,11 +1798,24 @@ class ExtensionManager:
         """Whether any installed extension implements the hook ``name``."""
         return bool(self._extensions_with_hook(name))
 
+    def _attrs_resolved_extensions(self, *, runtime_candidate: bool) -> tuple[Extension, ...]:
+        """Return attr hooks relevant to this compiler-classified element."""
+        extensions = self._extensions_with_hook("on_attrs_resolved")
+        if runtime_candidate:
+            return extensions
+        return tuple(extension for extension in extensions if not extension._attrs_resolved_requires_runtime_candidate)
+
+    def has_attrs_resolved_hook(self, *, runtime_candidate: bool = True) -> bool:
+        """Whether this element has an applicable resolved-attributes hook."""
+        return bool(self._attrs_resolved_extensions(runtime_candidate=runtime_candidate))
+
     def on_attrs_resolved(
         self,
         component: Component,
         tag_name: str,
         attrs: dict[str, Any],
+        *,
+        runtime_candidate: bool = True,
     ) -> dict[str, Any]:
         """
         Thread an element's resolved attribute dict through the extensions; a
@@ -1802,19 +1824,20 @@ class ExtensionManager:
         This sits on a per-element per-render hot path, so when no extension
         implements the hook the dict is returned without building a context.
         """
-        if not self._extensions_with_hook("on_attrs_resolved"):
+        extensions = self._attrs_resolved_extensions(runtime_candidate=runtime_candidate)
+        if not extensions:
             return attrs
-        return self.emit(
-            "on_attrs_resolved",
-            OnAttrsResolvedContext(
-                citry=self.citry,
-                component=component,
-                tag_name=tag_name,
-                attrs=attrs,
-            ),
-            result="map",
-            field="attrs",
+        ctx = OnAttrsResolvedContext(
+            citry=self.citry,
+            component=component,
+            tag_name=tag_name,
+            attrs=attrs,
         )
+        for extension in extensions:
+            out = extension.on_attrs_resolved(ctx)
+            if out is not None:
+                ctx = replace(ctx, attrs=out)
+        return ctx.attrs
 
     # ----- Template hooks -----
 

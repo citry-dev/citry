@@ -299,9 +299,15 @@ class CRating(LibraryComponent):
         if form is not None and form_owner != form.form_id:
             raise ValueError("CRating inside CForm cannot target a different native form owner.")
         required = bool(field.required) if field is not None else bool(kwargs.required)
-        disabled = bool(field.disabled) if field is not None else bool(form.disabled if form else False) or bool(kwargs.disabled)
-        readonly = bool(field.readonly) if field is not None else bool(
-            kwargs.readonly if kwargs.readonly is not None else form.readonly if form else False
+        disabled = (
+            bool(field.disabled)
+            if field is not None
+            else bool(form.disabled if form else False) or bool(kwargs.disabled)
+        )
+        readonly = (
+            bool(field.readonly)
+            if field is not None
+            else bool(kwargs.readonly if kwargs.readonly is not None else form.readonly if form else False)
         )
         invalid = bool(field.invalid) if field is not None else bool(kwargs.invalid)
         described_by = merge_idrefs(
@@ -329,9 +335,7 @@ class CRating(LibraryComponent):
                 else choice_value
             )
             formatted_max = (
-                self.i18n.format.number(maximum, format="citry-ui-rating")
-                if self.i18n.configured
-                else str(maximum)
+                self.i18n.format.number(maximum, format="citry-ui-rating") if self.i18n.configured else str(maximum)
             )
             choice_label = (
                 self.i18n.tr("citry-ui-rating-value", value=formatted_value, max=formatted_max)
@@ -344,12 +348,17 @@ class CRating(LibraryComponent):
                     "value": choice_value,
                     "checked": choice_value == value,
                     "label": choice_label,
-                    "position": {"inset-inline-start": f"{(index - 1) / count * 100}%", "inline-size": f"{100 / count}%"},
+                    "position": {
+                        "inset-inline-start": f"{(index - 1) / count * 100}%",
+                        "inline-size": f"{100 / count}%",
+                    },
                 }
             )
         ratio = (Decimal(value) / Decimal(maximum) * 100) if value is not None else Decimal(0)
         readonly_value_id = f"{public_id}-readonly-value"
-        readonly_value_label = next((cast("str", choice["label"]) for choice in choices if choice["value"] == value), "")
+        readonly_value_label = next(
+            (cast("str", choice["label"]) for choice in choices if choice["value"] == value), ""
+        )
         snapshot: dict[str, Any] = {
             "public_id": public_id,
             "root_id": root_id,
@@ -375,7 +384,9 @@ class CRating(LibraryComponent):
             "group_label": group_label,
             "group_labelledby": group_labelledby,
             "described_by": described_by,
-            "readonly_described_by": merge_idrefs(described_by, readonly_value_id if readonly and value is not None else None),
+            "readonly_described_by": merge_idrefs(
+                described_by, readonly_value_id if readonly and value is not None else None
+            ),
             "error_message": error_message,
             "field_control": field is not None,
             "readonly_value_label": readonly_value_label,
@@ -675,95 +686,7 @@ class CRating(LibraryComponent):
       });
     """
 
-    css = """
-      @layer citry-ui.theme {
-        :where(.cui-rating) {
-          --_cui-rating-empty-color: var(--cui-rating-empty-color, color-mix(in srgb, CanvasText 24%, transparent));
-          --_cui-rating-fill-color: var(--cui-rating-fill-color, light-dark(#b45309, #fbbf24));
-          --_cui-rating-hover-color: var(--cui-rating-hover-color, light-dark(#d97706, #fcd34d));
-          --_cui-rating-focus-color: var(--cui-rating-focus-color, Highlight);
-          --_cui-rating-gap: var(--cui-rating-gap, .25rem);
-          --_cui-rating-symbol-size: var(--cui-rating-symbol-size, 1.5rem);
-          --_cui-rating-control-size: var(--cui-rating-control-size, 2.75rem);
-          --_cui-rating-disabled-opacity: var(--cui-rating-disabled-opacity, .52);
-          position: relative;
-          display: inline-grid;
-          color: CanvasText;
-          isolation: isolate;
-        }
-        :where(.cui-rating[data-size="sm"]) { --_cui-rating-symbol-size: var(--cui-rating-symbol-size, 1.125rem); }
-        :where(.cui-rating[data-size="lg"]) { --_cui-rating-symbol-size: var(--cui-rating-symbol-size, 2rem); }
-        :where(.cui-rating [data-citry-ui-part="visual"]) {
-          position: relative;
-          display: inline-grid;
-          min-block-size: var(--_cui-rating-control-size);
-          align-items: center;
-          pointer-events: none;
-          user-select: none;
-        }
-        :where(.cui-rating [data-citry-ui-part="empty"], .cui-rating [data-citry-ui-part="fill-symbols"]) {
-          display: flex;
-          gap: var(--_cui-rating-gap);
-          inline-size: max-content;
-        }
-        :where(.cui-rating [data-citry-ui-part="empty"]) { color: var(--_cui-rating-empty-color); }
-        :where(.cui-rating [data-citry-ui-part="fill"]) {
-          position: absolute;
-          inset-inline-start: 0;
-          overflow: hidden;
-          inline-size: var(--_cui-rating-ratio);
-          color: var(--_cui-rating-fill-color);
-          white-space: nowrap;
-        }
-        :where(.cui-rating[data-hovering] [data-citry-ui-part="fill"]) { color: var(--_cui-rating-hover-color); }
-        :where(.cui-rating[data-variant="subtle"] [data-citry-ui-part="fill"]) { opacity: .72; }
-        :where(.cui-rating [data-citry-ui-part="symbol"]) {
-          display: inline-grid;
-          place-items: center;
-          inline-size: var(--_cui-rating-symbol-size);
-          block-size: var(--_cui-rating-symbol-size);
-          font-size: var(--_cui-rating-symbol-size);
-          line-height: 1;
-        }
-        :where(.cui-rating [data-citry-ui-part="choices"]) { position: absolute; inset: 0; }
-        :where(.cui-rating [data-citry-ui-part="choice"]) {
-          position: absolute;
-          inset-block: 0;
-          min-inline-size: 1px;
-          cursor: pointer;
-        }
-        :where(.cui-rating [data-citry-ui-part="input"]) {
-          position: absolute;
-          inline-size: 1px;
-          block-size: 1px;
-          margin: -1px;
-          overflow: hidden;
-          clip-path: inset(50%);
-          white-space: nowrap;
-          border: 0;
-        }
-        :where(.cui-rating:has([data-citry-ui-part="input"]:focus-visible), .cui-rating[tabindex="0"]:focus-visible) {
-          outline: 2px solid var(--_cui-rating-focus-color);
-          outline-offset: 3px;
-          border-radius: .25rem;
-        }
-        :where(.cui-rating[data-disabled]) { opacity: var(--_cui-rating-disabled-opacity); }
-        :where(.cui-rating[data-disabled] [data-citry-ui-part="choice"], .cui-rating[data-readonly] [data-citry-ui-part="choice"]) { cursor: default; }
-        :where(.cui-rating__visually-hidden) {
-          position: absolute !important;
-          inline-size: 1px !important;
-          block-size: 1px !important;
-          padding: 0 !important;
-          margin: -1px !important;
-          overflow: hidden !important;
-          clip-path: inset(50%) !important;
-          white-space: nowrap !important;
-          border: 0 !important;
-        }
-        @media (pointer: coarse) { :where(.cui-rating) { --_cui-rating-control-size: max(2.75rem, var(--cui-rating-control-size, 2.75rem)); } }
-        @media (forced-colors: active) { :where(.cui-rating) { --_cui-rating-empty-color: GrayText; --_cui-rating-fill-color: Highlight; --_cui-rating-hover-color: Highlight; } }
-      }
-    """
+    css_file = "runtime.min.css"
 
     messages = """
       # @param {str} $value - Locale-formatted exact rating choice.

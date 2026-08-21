@@ -104,6 +104,32 @@ each `LibraryComponent` class, after its methods and its `template`, `js`, and
 `css` assets. Do not put source messages at the top of the class beside its
 input schemas.
 
+## Edit readable assets and ship checked production files
+
+Citry UI keeps readable file-backed CSS next to each production family and
+points `css_file` at its checked-in `.min.css` output. Large interaction
+runtimes may use the same pair with `js_file`. Edit only a
+`*.source.css` or `*.source.js` file, then regenerate and verify the browser
+payloads from the repository root:
+
+```console
+pnpm citry-ui:build-assets
+pnpm citry-ui:check-assets
+```
+
+The build uses the pinned Lightning CSS and Terser versions in the root Node
+workspace. It discovers every source file, writes the adjacent `.min` file,
+and produces deterministic bytes. The wheel contains only the `.min` files,
+so a clean install never needs Node or performs a build. Tests that inspect
+authoring intent read the source file; delivery and browser tests exercise the
+file named by `css_file` or `js_file`.
+
+Keep an asset inline only when its readable framing is itself part of a frozen
+attribution contract. Command Palette and Context Menu use that rule because
+their exact markers divide shared runtime ownership. A component-owned
+`messages` declaration still comes after `js_file` and `css_file` as the final
+class member.
+
 ## Keep every production component compatible with Alpine CSP
 
 Every production `LibraryComponent`, including private renderers registered
@@ -279,8 +305,11 @@ Treat each production family as three views of one contract:
 
 The public guide puts whole-pattern keyboard, focus, form, and lifecycle
 guidance in `api.md`. The guide does not declare
-`## API reference`; the docs builder validates `api.yml` and appends the eight
-fixed categories. Omit empty per-component tables. Expand aliases and slot-data
+`## API reference`; the docs builder validates `api.yml` and appends the fixed
+categories. When a component owns catalog messages, **Translation keys** is
+the final projected category; an empty structured translation list still
+records that the family has no keys. Omit other empty per-component tables.
+Expand aliases and slot-data
 shapes inline, link their named Interfaces, and give every input, slot, event,
 attribute, selector, variable, record field, and interface entry a stable ID.
 CSS-variable entries include the accepted value kind, purpose, and current

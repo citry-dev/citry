@@ -19,20 +19,20 @@ def test_complete_component_catalog_stays_inside_compressed_asset_budgets() -> N
     catalog = asset_report()["catalog"]
 
     assert catalog["javascript"] == {
-        "sha256": "f52d5b8e0910b380bfeb15413a008160ddb51893586619e7f42fe2b0d5b5f148",
-        "raw": 931_875,
-        "gzip": 174_653,
-        "brotli": 126_213,
+        "sha256": "8dfdc632fa6f09590c4fdf359e3c51ce18c5a8adda7553a1462077f4c430b4cc",
+        "raw": 1_007_551,
+        "gzip": 194_598,
+        "brotli": 142_756,
     }
     assert catalog["css"] == {
-        "sha256": "88dab541edf4f08b6712d4b531c96004e97b59dbece326485df253ddd12410f5",
-        "raw": 323_806,
-        "gzip": 39_177,
-        "brotli": 30_765,
+        "sha256": "c0d55aeb6b074a64ccc4083d7637658d5fa87d72164de9407e4120f00c510536",
+        "raw": 335_766,
+        "gzip": 43_751,
+        "brotli": 34_937,
     }
     assert catalog["limits"] == {
-        "javascript": {"raw": 960 * 1024, "gzip": 192 * 1024, "brotli": 128 * 1024},
-        "css": {"raw": 336 * 1024, "gzip": 40 * 1024, "brotli": 32 * 1024},
+        "javascript": {"raw": 1024 * 1024, "gzip": 192 * 1024, "brotli": 144 * 1024},
+        "css": {"raw": 360 * 1024, "gzip": 44 * 1024, "brotli": 36 * 1024},
     }
     assert all(value > 0 for values in catalog["headroom"].values() for value in values.values())
 

@@ -27,7 +27,7 @@ def _wheel(tmp_path, *, extra=()):
         **dict.fromkeys(EXPECTED_RUNTIME_FILES, b""),
         **dict.fromkeys(EXPECTED_I18N_FILES, b""),
         f"{dist}/METADATA": (
-            b"Name: citry-ui\nVersion: 0.1.0\nRequires-Python: >=3.10, <4.0\nRequires-Dist: citry<0.5.0,>=0.4.0\n"
+            b"Name: citry-ui\nVersion: 0.1.0\nRequires-Python: >=3.10, <4.0\nRequires-Dist: citry<0.5.0,>=0.4.2\n"
         ),
         f"{dist}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
         f"{dist}/licenses/LICENSE": _LICENSE,
@@ -67,8 +67,13 @@ def test_runtime_boundary_matches_every_shipped_python_module():
         for path in _RUNTIME_PACKAGE.rglob("*.py")
         if excluded_parts.isdisjoint(path.relative_to(_RUNTIME_PACKAGE).parts)
     }
+    shipped_assets = {
+        path.relative_to(_RUNTIME_PACKAGE.parent).as_posix()
+        for suffix in ("*.min.css", "*.min.js")
+        for path in _RUNTIME_PACKAGE.rglob(suffix)
+    }
 
-    assert shipped_python | {"citry_ui/py.typed"} == EXPECTED_RUNTIME_FILES
+    assert shipped_python | shipped_assets | {"citry_ui/py.typed"} == EXPECTED_RUNTIME_FILES
 
 
 def test_runtime_boundary_includes_split_button_private_dependencies():

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
-from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any, cast
 
 from citry._class_introspection import _static_class_dict, _static_class_mro
@@ -27,7 +27,7 @@ from citry._protocol.client_graph import (
     format_ownership_comment,
     serialize_manifest,
 )
-from citry.citry_render import CitryRender, PhysicalRegionPart, PhysicalRegionRender
+from citry.citry_render import CitryRender, _PhysicalRegion
 from citry.ownership import (
     AlpineHandlerClientBindingPayload,
     CitryDomEventClientBindingPayload,
@@ -39,8 +39,12 @@ from citry.ownership import (
     RegionState,
     SourcePolicy,
 )
+from citry_core import _rust
+from citry_core.html_transform import scan_alpine_html as _scan_alpine_html
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from citry.citry import Citry
     from citry.component import Component
     from citry.ext.events.extension import EventsExtension
@@ -65,30 +69,25 @@ _AMBIENT_CONTEXT_MAGIC_RE = re.compile(
 )
 
 
-class _AlpineAttributeParser(HTMLParser):
-    """Find actual Alpine attributes without treating comments or text as markup."""
-
-    _RAW_TEXT_TAGS = frozenset({"script", "style", "textarea", "title"})
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=False)
-        self.found = False
-        self._raw_text_tag: str | None = None
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self._raw_text_tag is not None:
-            return
-        self.found = self.found or any(name.startswith(("x-", "@", ":")) for name, _value in attrs)
-        if tag in self._RAW_TEXT_TAGS:
-            self._raw_text_tag = tag
-
-    def handle_startendtag(self, _tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self._raw_text_tag is None:
-            self.found = self.found or any(name.startswith(("x-", "@", ":")) for name, _value in attrs)
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag == self._raw_text_tag:
-            self._raw_text_tag = None
+def _has_strict_json_containers(value: object) -> bool:
+    """Reject Python containers that stdlib JSON would silently normalize."""
+    pending = [value]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if current is None or isinstance(current, (str, bool, int, float)):
+            continue
+        if not isinstance(current, (dict, list)):
+            return False
+        object_id = id(current)
+        if object_id in seen:
+            continue
+        seen.add(object_id)
+        if isinstance(current, list):
+            pending.extend(current)
+        else:
+            pending.extend(current.values())
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +96,72 @@ class GraphCapture:
 
     graph: OwnershipGraph
     snapshot: OwnershipSnapshot
+
+
+@dataclass(slots=True)
+class _SettledTreeIndex:
+    """Lazy, serialization-scoped index over one settled render epoch."""
+
+    _iterator: Iterator[tuple[object, bool]]
+    _entries: list[tuple[object, bool]]
+    _complete: bool = False
+
+    def _remaining(self) -> Iterator[tuple[object, bool]]:
+        """Consume and retain not-yet-indexed entries."""
+        while not self._complete:
+            try:
+                entry = next(self._iterator)
+            except StopIteration:
+                self._complete = True
+                return
+            self._entries.append(entry)
+            yield entry
+
+    def iter_unique(self) -> Iterator[object]:
+        """Iterate the identity-guarded view used by manifest detection."""
+        for current, unique_reachable in self._entries:
+            if unique_reachable:
+                yield current
+        for current, unique_reachable in self._remaining():
+            if unique_reachable:
+                yield current
+
+    def iter_all(self) -> Iterator[object]:
+        """Iterate every physical occurrence, completing the index lazily."""
+        for current, _unique_reachable in self._entries:
+            yield current
+        for current, _unique_reachable in self._remaining():
+            yield current
+
+
+def _walk_settled_tree(root: CitryRender) -> Iterator[tuple[object, bool]]:
+    """Yield ``(occurrence, first-identity-reach)`` in physical DFS order."""
+    unique_renders: set[int] = set()
+    pending: list[tuple[object, bool]] = [(root, True)]
+    while pending:
+        current, unique_reachable = pending.pop()
+        if isinstance(current, _PhysicalRegion):
+            yield current, unique_reachable
+            pending.append((current.part, unique_reachable))
+            continue
+        if not isinstance(current, CitryRender):
+            continue
+        object_id = id(current)
+        first_unique_reach = unique_reachable and object_id not in unique_renders
+        if first_unique_reach:
+            unique_renders.add(object_id)
+        yield current, first_unique_reach
+        pending.extend((part, first_unique_reach) for part in reversed(current.parts))
+
+
+def _index_settled_tree(root: CitryRender) -> _SettledTreeIndex:
+    """
+    Share one lazy structural traversal between detection and preparation.
+
+    The index is call-local: render parts remain mutable API objects, so
+    retaining it beyond one serialization would be unsafe.
+    """
+    return _SettledTreeIndex(_iterator=_walk_settled_tree(root), _entries=[])
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +179,8 @@ class OwnershipManifestArtifact:
     scope_seed_instances: tuple[tuple[str, str], ...] = ()
     """Source-ordered ``(class_id, render_id)`` instances whose own Alpine expressions need JsData."""
     audit_manifest: bool = True
+    serialized_json: str | None = None
+    manifest_guard: str | None = None
 
     def assert_unchanged(self) -> None:
         """Fail closed if delayed work mutated a graph after serialization."""
@@ -160,6 +227,24 @@ class OwnershipManifestArtifact:
     def json(self) -> str:
         """Return deterministic compact JSON suitable for an inert script tag."""
         self.assert_unchanged()
+        if (
+            self.serialized_json is not None
+            and self.manifest_guard is not None
+            and _has_strict_json_containers(self.manifest)
+        ):
+            try:
+                current_guard = json.dumps(
+                    self.manifest,
+                    allow_nan=False,
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            except (OverflowError, RecursionError, TypeError, ValueError):
+                pass
+            else:
+                if current_guard == self.manifest_guard:
+                    return self.serialized_json
         return serialize_manifest(self.manifest, audit=self.audit_manifest)
 
 
@@ -240,7 +325,12 @@ def _require_local_render(serialized_renders: set[str], render_id: str | None, r
         raise RuntimeError(msg)
 
 
-def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
+def prepare_ownership_manifest(
+    root: CitryRender,
+    *,
+    _analysis_cache: dict[tuple[str, int, str | None], bool] | None = None,
+    _tree_index: _SettledTreeIndex | None = None,
+) -> OwnershipManifestArtifact:
     """Validate the settled render tree and build its deterministic v1 manifest."""
     root_component = root.context.component
     root_citry = root_component.citry if root_component is not None else None
@@ -256,14 +346,11 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
     client_active_seeds: set[tuple[int, str]] = set()
     scope_seed_seeds: set[tuple[int, str]] = set()
 
-    # Imported lazily so ownership serialization keeps its existing import
-    # boundary with the dependency extension.
     from citry.ext.dependencies.scripts import uses_component  # noqa: PLC0415
 
-    pending: list[object] = [root]
-    while pending:
-        current = pending.pop()
-        if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
+    tree_index = _tree_index if _tree_index is not None else _index_settled_tree(root)
+    for current in tree_index.iter_all():
+        if isinstance(current, _PhysicalRegion):
             object_id = id(current)
             if object_id in wrapper_occurrences:
                 msg = "The same physical slot occurrence was inserted more than once; render a fresh occurrence."
@@ -275,7 +362,6 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
                 graph_order.append(current.graph)
             reached_region_ids.setdefault(graph_id, set()).add(int(current.region_id))
             reached_region_parts.setdefault(graph_id, {})[int(current.region_id)] = current.part
-            pending.append(current.part)
             continue
         if not isinstance(current, CitryRender):
             continue
@@ -305,7 +391,11 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
                 component_classes_by_occurrence[(graph_id, frame.render_id)] = component_class
                 events = cast("EventsExtension", component_class.citry.extensions.get_extension("events"))
                 info = events.resolve(component_class)
-                direct_alpine = _render_part_uses_alpine(current, owner_render_id=frame.render_id)
+                direct_alpine = _render_part_uses_alpine(
+                    current,
+                    owner_render_id=frame.render_id,
+                    analysis_cache=_analysis_cache,
+                )
                 if direct_alpine:
                     scope_seed_seeds.add((graph_id, frame.render_id))
                 if (
@@ -314,13 +404,16 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
                     or info.events_cls is not None
                     or info.state_cls is not None
                     or direct_alpine
-                    or _render_part_uses_ambient_context(current, owner_render_id=frame.render_id)
+                    or _render_part_uses_ambient_context(
+                        current,
+                        owner_render_id=frame.render_id,
+                        analysis_cache=_analysis_cache,
+                    )
                 ):
                     client_active_seeds.add((graph_id, frame.render_id))
             elif component_class is not None and frame.render_id is not None and component_class.transparent:
                 transparent_frame_ids.setdefault(graph_id, set()).add(frame.render_id)
                 component_classes_by_occurrence[(graph_id, frame.render_id)] = component_class
-        pending.extend(reversed(current.parts))
 
     captures = tuple(GraphCapture(graph=graph, snapshot=graph.snapshot()) for graph in graph_order)
     # The build environment decides whether source provenance reaches the wire
@@ -445,13 +538,15 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
             msg = "Cannot serialize a client ownership graph while component render-queue work is unsettled."
             raise RuntimeError(msg)
 
+        region_alpine = _render_parts_use_alpine(
+            [
+                (reached_region_parts[graph_id][int(record.id)], record.lexical_owner_render_id)
+                for record in active_regions
+            ],
+            analysis_cache=_analysis_cache,
+        )
         direct_alpine_region_ids = {
-            int(record.id)
-            for record in active_regions
-            if _render_part_uses_alpine(
-                reached_region_parts[graph_id][int(record.id)],
-                owner_render_id=record.lexical_owner_render_id,
-            )
+            int(record.id) for record, uses_alpine in zip(active_regions, region_alpine, strict=True) if uses_alpine
         }
 
         # ``str(result)`` inside a render hook serializes a same-graph subtree
@@ -740,7 +835,12 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
         )
         region_ids.update((graph_id, int(record.id)) for record in active_regions)
 
-    manifest = assemble_manifest(mode, graph_wires, audit=include_provenance)
+    manifest = assemble_manifest(
+        mode,
+        graph_wires,
+        audit=include_provenance,
+        _canonicalize=_rust.client_graph.canonical_json_and_revision,
+    )
     revision = manifest["revision"]
     artifact = OwnershipManifestArtifact(
         revision=revision,
@@ -769,50 +869,93 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
             and _component_can_produce_js_data(component_class)
         ),
         audit_manifest=include_provenance,
+        serialized_json=getattr(manifest, "serialized_json", None),
+        manifest_guard=getattr(manifest, "mutation_guard", None),
     )
     return artifact
 
 
-def _render_part_uses_alpine(part: object, *, owner_render_id: str | None = None) -> bool:
+def _render_part_uses_alpine(
+    part: object,
+    *,
+    owner_render_id: str | None = None,
+    analysis_cache: dict[tuple[str, int, str | None], bool] | None = None,
+) -> bool:
     """Whether settled region output directly contains an Alpine attribute."""
-    chunks: list[str] = []
-    pending = [part]
-    while pending:
-        current = pending.pop()
-        if isinstance(current, str):
-            chunks.append(current)
+    return _render_parts_use_alpine(
+        [(part, owner_render_id)],
+        analysis_cache=analysis_cache,
+    )[0]
+
+
+def _render_parts_use_alpine(
+    parts: list[tuple[object, str | None]],
+    *,
+    analysis_cache: dict[tuple[str, int, str | None], bool] | None = None,
+) -> list[bool]:
+    """Analyze settled fragments together, crossing into Rust at most once."""
+    results = [False] * len(parts)
+    candidates: list[tuple[int, tuple[str, int, str | None], str]] = []
+    for index, (part, owner_render_id) in enumerate(parts):
+        cache_key = ("alpine", id(part), owner_render_id)
+        if analysis_cache is not None and cache_key in analysis_cache:
+            results[index] = analysis_cache[cache_key]
             continue
-        if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
-            pending.append(current.part)
-        elif isinstance(current, CitryRender):
-            render_id = current.frame.render_id
-            if (
-                owner_render_id is not None
-                and current.is_component_root
-                and render_id is not None
-                and render_id != owner_render_id
-            ):
+        chunks: list[str] = []
+        pending = [part]
+        while pending:
+            current = pending.pop()
+            if isinstance(current, str):
+                chunks.append(current)
                 continue
-            pending.extend(reversed(current.parts))
-    html = "".join(chunks)
-    if _ALPINE_ATTRIBUTE_CANDIDATE_RE.search(html) is None:
-        return False
-    parser = _AlpineAttributeParser()
-    parser.feed(html)
-    parser.close()
-    return parser.found
+            if isinstance(current, _PhysicalRegion):
+                pending.append(current.part)
+            elif isinstance(current, CitryRender):
+                render_id = current.frame.render_id
+                if (
+                    owner_render_id is not None
+                    and current.is_component_root
+                    and render_id is not None
+                    and render_id != owner_render_id
+                ):
+                    continue
+                pending.extend(reversed(current.parts))
+        html = "".join(chunks)
+        if _ALPINE_ATTRIBUTE_CANDIDATE_RE.search(html) is None:
+            if analysis_cache is not None:
+                analysis_cache[cache_key] = False
+            continue
+        candidates.append((index, cache_key, html))
+
+    if candidates:
+        found = _scan_alpine_html([html for _index, _cache_key, html in candidates])
+        for (index, cache_key, _html), uses_alpine in zip(candidates, found, strict=True):
+            results[index] = uses_alpine
+            if analysis_cache is not None:
+                analysis_cache[cache_key] = uses_alpine
+    return results
 
 
-def _render_part_uses_ambient_context(part: object, *, owner_render_id: str | None = None) -> bool:
+def _render_part_uses_ambient_context(
+    part: object,
+    *,
+    owner_render_id: str | None = None,
+    analysis_cache: dict[tuple[str, int, str | None], bool] | None = None,
+) -> bool:
     """Whether one component's settled HTML references a client context magic."""
+    cache_key = ("ambient", id(part), owner_render_id)
+    if analysis_cache is not None and cache_key in analysis_cache:
+        return analysis_cache[cache_key]
     pending = [part]
     while pending:
         current = pending.pop()
         if isinstance(current, str):
             if _AMBIENT_CONTEXT_MAGIC_RE.search(current):
+                if analysis_cache is not None:
+                    analysis_cache[cache_key] = True
                 return True
             continue
-        if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
+        if isinstance(current, _PhysicalRegion):
             pending.append(current.part)
         elif isinstance(current, CitryRender):
             render_id = current.frame.render_id
@@ -824,23 +967,28 @@ def _render_part_uses_ambient_context(part: object, *, owner_render_id: str | No
             ):
                 continue
             pending.extend(current.parts)
+    if analysis_cache is not None:
+        analysis_cache[cache_key] = False
     return False
 
 
-def ownership_manifest_required(root: CitryRender) -> bool:
+def ownership_manifest_required(
+    root: CitryRender,
+    *,
+    _analysis_cache: dict[tuple[str, int, str | None], bool] | None = None,
+    _tree_index: _SettledTreeIndex | None = None,
+) -> bool:
     """Whether this settled tree has any client-active ownership behavior."""
     from citry.ext.dependencies.scripts import uses_component  # noqa: PLC0415
 
     root_component = root.context.component
     root_citry = root_component.citry if root_component is not None else None
-    pending: list[object] = [root]
-    seen: set[int] = set()
+    tree_index = _tree_index if _tree_index is not None else _index_settled_tree(root)
     reached_regions_by_graph: dict[int, tuple[OwnershipGraph, set[int]]] = {}
     reached_region_parts: dict[int, dict[int, object]] = {}
     reached_render_ids_by_graph: dict[int, tuple[OwnershipGraph, set[str]]] = {}
-    while pending:
-        current = pending.pop()
-        if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
+    for current in tree_index.iter_unique():
+        if isinstance(current, _PhysicalRegion):
             graph_id = id(current.graph)
             reached = reached_regions_by_graph.get(graph_id)
             if reached is None:
@@ -848,14 +996,9 @@ def ownership_manifest_required(root: CitryRender) -> bool:
                 reached_regions_by_graph[graph_id] = reached
             reached[1].add(int(current.region_id))
             reached_region_parts.setdefault(graph_id, {})[int(current.region_id)] = current.part
-            pending.append(current.part)
             continue
         if not isinstance(current, CitryRender):
             continue
-        object_id = id(current)
-        if object_id in seen:
-            continue
-        seen.add(object_id)
         component = current.context.component
         component_class = _resolve_frame_class(current, root_citry)
         graph = current.context.ownership
@@ -867,23 +1010,27 @@ def ownership_manifest_required(root: CitryRender) -> bool:
                 reached_render_ids_by_graph[id(graph)] = reached_renders
             reached_renders[1].add(render_id)
         if component_class is not None:
-            direct_alpine = (
-                current.frame.is_component_root
-                and current.frame.render_id is not None
-                and _render_part_uses_alpine(current, owner_render_id=current.frame.render_id)
-            )
-            if (
-                (component is not None and component._component_tag_client_bindings)
-                or uses_component(component_class)
-                or direct_alpine
-                or _render_part_uses_ambient_context(current, owner_render_id=current.frame.render_id)
-            ):
+            if (component is not None and component._component_tag_client_bindings) or uses_component(component_class):
                 return True
             events = cast("EventsExtension", component_class.citry.extensions.get_extension("events"))
             info = events.resolve(component_class)
             if info.events_cls is not None or info.state_cls is not None:
                 return True
-        pending.extend(current.parts)
+            direct_alpine = (
+                current.frame.is_component_root
+                and current.frame.render_id is not None
+                and _render_part_uses_alpine(
+                    current,
+                    owner_render_id=current.frame.render_id,
+                    analysis_cache=_analysis_cache,
+                )
+            )
+            if direct_alpine or _render_part_uses_ambient_context(
+                current,
+                owner_render_id=current.frame.render_id,
+                analysis_cache=_analysis_cache,
+            ):
+                return True
 
     for graph, render_ids in reached_render_ids_by_graph.values():
         if any(
@@ -903,13 +1050,12 @@ def ownership_manifest_required(root: CitryRender) -> bool:
             if region.state == RegionState.CAPTURED and int(region.id) in region_ids
         ]
         fill_ids = {region.logical_fill_id for region in regions}
+        region_alpine = _render_parts_use_alpine(
+            [(reached_region_parts[id(graph)][int(region.id)], region.lexical_owner_render_id) for region in regions],
+            analysis_cache=_analysis_cache,
+        )
         alpine_fill_ids = {
-            region.logical_fill_id
-            for region in regions
-            if _render_part_uses_alpine(
-                reached_region_parts[id(graph)][int(region.id)],
-                owner_render_id=region.lexical_owner_render_id,
-            )
+            region.logical_fill_id for region, uses_alpine in zip(regions, region_alpine, strict=True) if uses_alpine
         }
         if any(
             fill.state == OwnershipState.ACTIVE

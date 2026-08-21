@@ -1,0 +1,128 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="skeleton"]) {
+    --_cui-skeleton-width: var(--cui-skeleton-width, 100%);
+    --_cui-skeleton-height: var(--cui-skeleton-height, 6rem);
+    --_cui-skeleton-radius: var(--cui-skeleton-radius, 0.5rem);
+    --_cui-skeleton-background: var(--cui-skeleton-background, light-dark(#e7e5e4, #44403c));
+    --_cui-skeleton-highlight: var(--cui-skeleton-highlight, rgb(255 255 255 / 45%));
+    --_cui-skeleton-gap: var(--cui-skeleton-gap, 0.5em);
+    --_cui-skeleton-duration: var(--cui-skeleton-duration, 1.5s);
+    --_cui-skeleton-last-line-width: var(--cui-skeleton-last-line-width, 70%);
+    position: relative;
+    display: inline-block;
+    box-sizing: border-box;
+    inline-size: min(100%, var(--_cui-skeleton-width));
+    block-size: var(--_cui-skeleton-height);
+    overflow: hidden;
+    border-radius: var(--_cui-skeleton-radius);
+    background: var(--_cui-skeleton-background);
+    color: transparent;
+    vertical-align: middle;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  :where([data-citry-ui-part="skeleton"][data-kind="circle"]) {
+    --_cui-skeleton-width: var(--cui-skeleton-width, 3rem);
+    --_cui-skeleton-height: var(--cui-skeleton-height, 3rem);
+    --_cui-skeleton-radius: var(--cui-skeleton-radius, 50%);
+    flex: 0 0 auto;
+  }
+
+  :where([data-citry-ui-part="skeleton"][data-kind="text"]) {
+    --_cui-skeleton-height: var(--cui-skeleton-height, 0.75em);
+    --_cui-skeleton-radius: var(--cui-skeleton-radius, 999px);
+    display: grid;
+    block-size: auto;
+    gap: var(--_cui-skeleton-gap);
+    overflow: visible;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  :where([data-citry-ui-part="line"]) {
+    position: relative;
+    display: block;
+    inline-size: 100%;
+    block-size: var(--_cui-skeleton-height);
+    overflow: hidden;
+    border-radius: var(--_cui-skeleton-radius);
+    background: var(--_cui-skeleton-background);
+  }
+
+  :where([data-citry-ui-part="line"][data-last]) {
+    inline-size: var(--_cui-skeleton-last-line-width);
+  }
+
+  :where(
+    [data-citry-ui-part="skeleton"][data-animation="pulse"]:not([data-kind="text"]),
+    [data-citry-ui-part="skeleton"][data-animation="pulse"] [data-citry-ui-part="line"]
+  ) {
+    animation: cui-skeleton-pulse var(--_cui-skeleton-duration) ease-in-out infinite;
+  }
+
+  :where(
+    [data-citry-ui-part="skeleton"][data-animation="wave"]:not([data-kind="text"]),
+    [data-citry-ui-part="skeleton"][data-animation="wave"] [data-citry-ui-part="line"]
+  )::after {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--_cui-skeleton-highlight), transparent);
+    content: "";
+    transform: translateX(-100%);
+    animation: cui-skeleton-wave var(--_cui-skeleton-duration) ease-in-out infinite;
+  }
+
+  @keyframes cui-skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  @keyframes cui-skeleton-wave {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(
+      [data-citry-ui-part="skeleton"],
+      [data-citry-ui-part="line"]
+    ) {
+      animation: none !important;
+    }
+
+    :where(
+      [data-citry-ui-part="skeleton"],
+      [data-citry-ui-part="line"]
+    )::after {
+      animation: none !important;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(
+      [data-citry-ui-part="skeleton"]:not([data-kind="text"]),
+      [data-citry-ui-part="line"]
+    ) {
+      border: 1px solid CanvasText;
+      background: Canvas;
+    }
+  }
+
+  @media print {
+    :where(
+      [data-citry-ui-part="skeleton"]:not([data-kind="text"]),
+      [data-citry-ui-part="line"]
+    ) {
+      border: 1px solid currentColor;
+      background: transparent;
+    }
+  }
+}

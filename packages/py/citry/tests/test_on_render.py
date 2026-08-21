@@ -12,6 +12,7 @@ import pytest
 
 from citry import Citry, CitryRender, Component, Extension
 from citry.citry_render import DeferredComponent
+from citry.ownership import OwnershipGraph
 
 
 def _has_deferred(render):
@@ -29,6 +30,29 @@ def _has_deferred(render):
 
 
 class TestOnRenderPlainForm:
+    def test_default_hooks_do_not_rescan_ownership_regions(self, monkeypatch):
+        selected_region_calls = 0
+        original = OwnershipGraph.selected_region_ids
+
+        def count_selected_regions(self, *, render_object_ids):
+            nonlocal selected_region_calls
+            selected_region_calls += 1
+            return original(self, render_object_ids=render_object_ids)
+
+        monkeypatch.setattr(OwnershipGraph, "selected_region_ids", count_selected_regions)
+        c = Citry()
+
+        class Leaf(Component):
+            citry = c
+            template = "<span>leaf</span>"
+
+        class Root(Component):
+            citry = c
+            template = "<main><c-leaf /></main>"
+
+        assert ">leaf</span>" in str(Root())
+        assert selected_region_calls == 0
+
     def test_default_renders_template(self):
         c = Citry()
 
@@ -311,6 +335,28 @@ class TestOnRenderGeneratorForm:
 
         Comp().render()
         assert order == ["before", "template"]
+
+    def test_noop_after_phase_does_not_rescan_ownership_regions(self, monkeypatch):
+        selected_region_calls = 0
+        original = OwnershipGraph.selected_region_ids
+
+        def count_selected_regions(self, *, render_object_ids):
+            nonlocal selected_region_calls
+            selected_region_calls += 1
+            return original(self, render_object_ids=render_object_ids)
+
+        monkeypatch.setattr(OwnershipGraph, "selected_region_ids", count_selected_regions)
+        c = Citry()
+
+        class Comp(Component):
+            citry = c
+            template = "<p>template</p>"
+
+            def on_render(self):
+                yield
+
+        assert ">template</p>" in str(Comp())
+        assert selected_region_calls == 0
 
     def test_bare_yield_receives_settled_render(self):
         received = []

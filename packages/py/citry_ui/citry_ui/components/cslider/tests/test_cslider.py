@@ -24,6 +24,7 @@ from citry_ui.components.cslider import (
     CSliderValueChangeDetail,
     CSliderVariant,
 )
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _app() -> Citry:
@@ -55,22 +56,76 @@ def _tag(html: str, pattern: str) -> str:
 
 def test_public_schemas_and_exports_are_exact() -> None:
     assert [field.name for field in fields(CSlider.Kwargs)] == [
-        "value", "name", "form", "id", "min", "max", "step", "large_step", "disabled", "readonly",
-        "invalid", "orientation", "variant", "size", "show_value", "show_marks", "marks", "format", "class_",
-        "style", "attrs", "input_attrs",
+        "value",
+        "name",
+        "form",
+        "id",
+        "min",
+        "max",
+        "step",
+        "large_step",
+        "disabled",
+        "readonly",
+        "invalid",
+        "orientation",
+        "variant",
+        "size",
+        "show_value",
+        "show_marks",
+        "marks",
+        "format",
+        "class_",
+        "style",
+        "attrs",
+        "input_attrs",
     ]
     assert [field.name for field in fields(CRangeSlider.Kwargs)] == [
-        "value", "name", "lower_name", "upper_name", "form", "id", "min", "max", "step", "large_step",
-        "min_steps_between_thumbs", "disabled", "readonly", "invalid", "orientation", "variant", "size",
-        "show_value", "show_marks", "marks", "format", "lower_label", "upper_label", "class_", "style", "attrs",
-        "lower_input_attrs", "upper_input_attrs",
+        "value",
+        "name",
+        "lower_name",
+        "upper_name",
+        "form",
+        "id",
+        "min",
+        "max",
+        "step",
+        "large_step",
+        "min_steps_between_thumbs",
+        "disabled",
+        "readonly",
+        "invalid",
+        "orientation",
+        "variant",
+        "size",
+        "show_value",
+        "show_marks",
+        "marks",
+        "format",
+        "lower_label",
+        "upper_label",
+        "class_",
+        "style",
+        "attrs",
+        "lower_input_attrs",
+        "upper_input_attrs",
     ]
     assert fields(CSlider.Slots) == ()
     assert fields(CRangeSlider.Slots) == ()
-    assert all(item is not None for item in (
-        CSliderExact, CSliderOrientation, CSliderVariant, CSliderSize, CSliderShowValue, CSliderChangeSource,
-        CSliderChangePhase, CRangeSliderThumb, CSliderValueChangeDetail, CRangeSliderValueChangeDetail,
-    ))
+    assert all(
+        item is not None
+        for item in (
+            CSliderExact,
+            CSliderOrientation,
+            CSliderVariant,
+            CSliderSize,
+            CSliderShowValue,
+            CSliderChangeSource,
+            CSliderChangePhase,
+            CRangeSliderThumb,
+            CSliderValueChangeDetail,
+            CRangeSliderValueChangeDetail,
+        )
+    )
 
 
 def test_slider_exact_decimal_progressive_anatomy_and_marks() -> None:
@@ -199,10 +254,20 @@ def test_explicit_range_label_overrides_remove_catalog_bindings() -> None:
 
 
 def test_css_covers_public_variables_parts_and_environment_modes() -> None:
-    css = _render("<c-CSlider />", css=True)
+    css = read_component_source_css("cslider")
     for variable in (
-        "track-color", "fill-color", "thumb-color", "thumb-border-color", "focus-color", "mark-color",
-        "value-background", "value-foreground", "track-size", "thumb-size", "control-size", "radius",
+        "track-color",
+        "fill-color",
+        "thumb-color",
+        "thumb-border-color",
+        "focus-color",
+        "mark-color",
+        "value-background",
+        "value-foreground",
+        "track-size",
+        "thumb-size",
+        "control-size",
+        "radius",
     ):
         assert f"--cui-slider-{variable}" in css
     for part in ("control", "track", "fill", "thumb", "value", "mark"):
@@ -215,6 +280,6 @@ def test_css_covers_public_variables_parts_and_environment_modes() -> None:
 
 def test_messages_are_the_final_range_slider_member() -> None:
     names = list(CRangeSlider.__dict__)
-    assert names.index("messages") > names.index("css")
+    assert names.index("messages") > names.index("css_file")
     assert "citry-ui-range-slider-lower" in CRangeSlider.messages
     assert "citry-ui-range-slider-upper" in CRangeSlider.messages

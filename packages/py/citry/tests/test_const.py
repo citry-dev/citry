@@ -1259,7 +1259,8 @@ class TestConstBodyCache:
         temporary_ref = ref(Temporary)
 
         # Collection can occur while this thread already holds the cache lock.
-        # No weakref callback runs and no cache entry is mutated from GC.
+        # The callback only sets a flag; it does not mutate entries or release
+        # a cached body from the interrupted GC call.
         with cache._lock:
             del Temporary
             gc.collect()

@@ -1,0 +1,66 @@
+@layer citry-ui.theme {
+  :where(.cui-time-input) {
+    --_cui-time-input-background: var(--cui-time-input-background, Canvas);
+    --_cui-time-input-foreground: var(--cui-time-input-foreground, CanvasText);
+    --_cui-time-input-border-color: var(--cui-time-input-border-color, color-mix(in srgb, CanvasText 38%, transparent));
+    --_cui-time-input-hover-border-color: var(--cui-time-input-hover-border-color, color-mix(in srgb, CanvasText 68%, transparent));
+    --_cui-time-input-focus-color: var(--cui-time-input-focus-color, Highlight);
+    --_cui-time-input-invalid-border-color: var(--cui-time-input-invalid-border-color, light-dark(#d92d20, #f97066));
+    --_cui-time-input-disabled-background: var(--cui-time-input-disabled-background, color-mix(in srgb, CanvasText 7%, Canvas));
+    --_cui-time-input-radius: var(--cui-time-input-radius, .5rem);
+    --_cui-time-input-height: var(--cui-time-input-height, 2.5rem);
+    --_cui-time-input-inline-padding: var(--cui-time-input-inline-padding, .75rem);
+    --_cui-time-input-block-padding: var(--cui-time-input-block-padding, .5rem);
+    --_cui-time-input-font-size: var(--cui-time-input-font-size, 1rem);
+    --_cui-time-input-min-inline-size: var(--cui-time-input-min-inline-size, 10rem);
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-inline-size: min(100%, var(--_cui-time-input-min-inline-size));
+    min-block-size: var(--_cui-time-input-height);
+    padding-block: var(--_cui-time-input-block-padding);
+    padding-inline: var(--_cui-time-input-inline-padding);
+    border: 1px solid var(--_cui-time-input-border-color);
+    border-radius: var(--_cui-time-input-radius);
+    background: var(--_cui-time-input-background);
+    color: var(--_cui-time-input-foreground);
+    font: inherit;
+    font-size: var(--_cui-time-input-font-size);
+    line-height: 1.25;
+  }
+  :where(.cui-time-input[data-variant="filled"]) {
+    --_cui-time-input-background: var(--cui-time-input-background, color-mix(in srgb, CanvasText 7%, Canvas));
+    --_cui-time-input-border-color: var(--cui-time-input-border-color, transparent);
+  }
+  :where(.cui-time-input[data-variant="plain"]) {
+    --_cui-time-input-background: var(--cui-time-input-background, transparent);
+    --_cui-time-input-border-color: var(--cui-time-input-border-color, transparent);
+    --_cui-time-input-radius: var(--cui-time-input-radius, 0);
+  }
+  :where(.cui-time-input[data-size="sm"]) {
+    --_cui-time-input-height: var(--cui-time-input-height, 2.25rem);
+    --_cui-time-input-inline-padding: var(--cui-time-input-inline-padding, .625rem);
+    --_cui-time-input-block-padding: var(--cui-time-input-block-padding, .375rem);
+    --_cui-time-input-font-size: var(--cui-time-input-font-size, .875rem);
+  }
+  :where(.cui-time-input[data-size="lg"]) {
+    --_cui-time-input-height: var(--cui-time-input-height, 2.75rem);
+    --_cui-time-input-inline-padding: var(--cui-time-input-inline-padding, .875rem);
+    --_cui-time-input-block-padding: var(--cui-time-input-block-padding, .625rem);
+    --_cui-time-input-font-size: var(--cui-time-input-font-size, 1.0625rem);
+  }
+  @media (hover: hover) {
+    :where(.cui-time-input:not(:disabled):not([data-readonly]):hover) { border-color: var(--_cui-time-input-hover-border-color); }
+  }
+  :where(.cui-time-input:focus-visible) {
+    border-color: var(--_cui-time-input-focus-color);
+    outline: .1875rem solid color-mix(in srgb, var(--_cui-time-input-focus-color) 38%, transparent);
+    outline-offset: .125rem;
+  }
+  :where(.cui-time-input[data-invalid]) { border-color: var(--_cui-time-input-invalid-border-color); }
+  :where(.cui-time-input:disabled) { background: var(--_cui-time-input-disabled-background); cursor: not-allowed; }
+  :where(.cui-time-input[readonly]) { cursor: default; }
+  @media (forced-colors: active) {
+    :where(.cui-time-input) { border-color: ButtonText; forced-color-adjust: auto; }
+    :where(.cui-time-input[data-invalid]) { border-color: Mark; }
+  }
+}

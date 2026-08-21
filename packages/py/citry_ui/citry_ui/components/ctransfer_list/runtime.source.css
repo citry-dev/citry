@@ -1,0 +1,185 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="transfer-list"]) {
+    --_cui-transfer-list-pane-size: var(--cui-transfer-list-pane-size, 15rem);
+    --_cui-transfer-list-list-size: var(--cui-transfer-list-list-size, 15rem);
+    --_cui-transfer-list-gap: var(--cui-transfer-list-gap, 0.75rem);
+    --_cui-transfer-list-border: var(--cui-transfer-list-border, 1px solid light-dark(#d6d3d1, #57534e));
+    --_cui-transfer-list-radius: var(--cui-transfer-list-radius, 0.625rem);
+    --_cui-transfer-list-surface: var(--cui-transfer-list-surface, Canvas);
+    --_cui-transfer-list-selected: var(--cui-transfer-list-selected, light-dark(#dbeafe, #1e3a5f));
+    --_cui-transfer-list-hover: var(--cui-transfer-list-hover, light-dark(#f5f5f4, #292524));
+    --_cui-transfer-list-focus: var(--cui-transfer-list-focus, Highlight);
+    --_cui-transfer-list-disabled-opacity: var(--cui-transfer-list-disabled-opacity, 0.55);
+    display: block;
+    container-type: inline-size;
+    color: CanvasText;
+  }
+  :where([data-citry-ui-part="transfer-list"] > [data-citry-transfer-native-fallback]) {
+    display: grid;
+    gap: 0.375rem;
+    max-inline-size: var(--_cui-transfer-list-pane-size);
+    font: inherit;
+  }
+  :where([data-citry-ui-part="transfer-list"] > [data-citry-transfer-native-fallback] > select) {
+    min-block-size: 10rem;
+    border: var(--_cui-transfer-list-border);
+    border-radius: var(--_cui-transfer-list-radius);
+    background: var(--_cui-transfer-list-surface);
+    color: inherit;
+    font: inherit;
+  }
+  :where([data-citry-ui-part="transfer-list"][data-enhanced] > [data-citry-transfer-native-fallback]) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  :where([data-citry-ui-part="transfer-list"] > [data-citry-ui-part="control"]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: var(--_cui-transfer-list-gap);
+    align-items: center;
+    min-inline-size: 0;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="pane"]) {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-inline-size: 0;
+    border: var(--_cui-transfer-list-border);
+    border-radius: var(--_cui-transfer-list-radius);
+    background: var(--_cui-transfer-list-surface);
+    overflow: hidden;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="pane-header"]) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.375rem 0.75rem;
+    padding: 0.75rem;
+    border-block-end: var(--_cui-transfer-list-border);
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="pane-title"]) {
+    margin: 0;
+    font: inherit;
+    font-weight: 650;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="count"]) {
+    color: color-mix(in srgb, CanvasText 70%, Canvas);
+    font-size: 0.875em;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="listbox"]) {
+    min-block-size: var(--_cui-transfer-list-list-size);
+    max-block-size: var(--_cui-transfer-list-list-size);
+    overflow: auto;
+    outline: none;
+    scrollbar-gutter: stable;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="listbox"]:focus-visible) {
+    outline: 0.1875rem solid var(--_cui-transfer-list-focus);
+    outline-offset: -0.1875rem;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="option"]) {
+    display: block;
+    min-block-size: 2.75rem;
+    padding: 0.625rem 0.75rem;
+    border-block-end: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    cursor: default;
+    overflow-wrap: anywhere;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="option"]:hover) {
+    background: var(--_cui-transfer-list-hover);
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="option"][data-selected]) {
+    background: var(--_cui-transfer-list-selected);
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="option"][data-disabled]) {
+    opacity: var(--_cui-transfer-list-disabled-opacity);
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="empty"]) {
+    align-self: center;
+    justify-self: center;
+    padding: 1rem;
+    color: color-mix(in srgb, CanvasText 70%, Canvas);
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="transfer-controls"],
+    [data-citry-ui-part="transfer-list"] [data-citry-ui-part="reorder-controls"]) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="reorder-controls"]) {
+    padding: 0.625rem;
+    border-block-start: var(--_cui-transfer-list-border);
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="button"]) {
+    min-block-size: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: var(--_cui-transfer-list-border);
+    border-radius: 0.5rem;
+    background: var(--_cui-transfer-list-surface);
+    color: inherit;
+    font: inherit;
+    font-size: 0.875rem;
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="button"]:focus-visible) {
+    outline: 0.1875rem solid var(--_cui-transfer-list-focus);
+    outline-offset: 0.125rem;
+  }
+  :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="button"]:disabled) {
+    opacity: var(--_cui-transfer-list-disabled-opacity);
+    cursor: not-allowed;
+  }
+  :where([data-citry-ui-part="transfer-list"][data-size="sm"]) {
+    --_cui-transfer-list-list-size: var(--cui-transfer-list-list-size, 11rem);
+  }
+  :where([data-citry-ui-part="transfer-list"][data-size="lg"]) {
+    --_cui-transfer-list-list-size: var(--cui-transfer-list-list-size, 20rem);
+  }
+  :where([data-citry-ui-part="transfer-list"][data-disabled]) {
+    opacity: var(--_cui-transfer-list-disabled-opacity);
+  }
+  :where([data-citry-ui-part="transfer-list"][data-invalid]) {
+    --_cui-transfer-list-border: 2px solid Mark;
+  }
+  :where([data-citry-ui-part="transfer-list"] > [data-citry-ui-part="status"]) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  @container (inline-size < 44rem) {
+    :where([data-citry-ui-part="transfer-list"] > [data-citry-ui-part="control"]) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="transfer-controls"]) {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="transfer-list"] *) {
+      scroll-behavior: auto !important;
+      transition: none !important;
+    }
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="option"][data-selected]) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+  @media print {
+    :where([data-citry-ui-part="transfer-list"] [data-citry-ui-part="transfer-controls"],
+      [data-citry-ui-part="transfer-list"] [data-citry-ui-part="reorder-controls"],
+      [data-citry-ui-part="transfer-list"] > [data-citry-ui-part="status"],
+      [data-citry-ui-part="transfer-list"] > [data-citry-transfer-native-fallback]) { display: none !important; }
+    :where([data-citry-ui-part="transfer-list"] > [data-citry-ui-part="control"]) {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+}

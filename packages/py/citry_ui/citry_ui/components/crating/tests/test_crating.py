@@ -19,6 +19,7 @@ from citry_ui.components.crating import (
     CRatingValueChangeDetail,
     CRatingVariant,
 )
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _app() -> Citry:
@@ -50,14 +51,38 @@ def _tag(html: str, pattern: str) -> str:
 
 def test_public_schema_and_exports_are_exact() -> None:
     assert [field.name for field in fields(CRating.Kwargs)] == [
-        "value", "name", "form", "id", "max", "precision", "required", "disabled", "readonly", "invalid",
-        "allow_clear", "label", "value_label", "variant", "size", "class_", "style", "attrs", "input_attrs",
+        "value",
+        "name",
+        "form",
+        "id",
+        "max",
+        "precision",
+        "required",
+        "disabled",
+        "readonly",
+        "invalid",
+        "allow_clear",
+        "label",
+        "value_label",
+        "variant",
+        "size",
+        "class_",
+        "style",
+        "attrs",
+        "input_attrs",
     ]
     assert fields(CRating.Slots) == ()
-    assert all(item is not None for item in (
-        CRatingExact, CRatingSize, CRatingVariant, CRatingChangeSource,
-        CRatingValueChangeDetail, CRatingHoverChangeDetail,
-    ))
+    assert all(
+        item is not None
+        for item in (
+            CRatingExact,
+            CRatingSize,
+            CRatingVariant,
+            CRatingChangeSource,
+            CRatingValueChangeDetail,
+            CRatingHoverChangeDetail,
+        )
+    )
 
 
 def test_fractional_rating_renders_exact_native_radio_fallback() -> None:
@@ -178,9 +203,15 @@ def test_explicit_value_pattern_removes_catalog_lookup() -> None:
 
 
 def test_css_exposes_public_variables_parts_and_environment_rules() -> None:
-    css = _render('<c-CRating label="Rating" />', css=True)
+    css = read_component_source_css("crating")
     for variable in (
-        "empty-color", "fill-color", "hover-color", "focus-color", "gap", "symbol-size", "control-size",
+        "empty-color",
+        "fill-color",
+        "hover-color",
+        "focus-color",
+        "gap",
+        "symbol-size",
+        "control-size",
         "disabled-opacity",
     ):
         assert f"--_cui-rating-{variable}: var(--cui-rating-{variable}" in css

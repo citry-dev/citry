@@ -39,6 +39,20 @@ citry-ui-editable-edit = Edit
 citry-ui-editable-save = Save
 citry-ui-editable-cancel = Cancel
 
+### citry_ui.components.cdata_grid.cdata_grid.CDataGrid
+citry-ui-data-grid-loading = Loading data...
+citry-ui-data-grid-empty = No data.
+citry-ui-data-grid-error = Unable to load data.
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-sort-ascending = { $column } sorted ascending
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-sort-descending = { $column } sorted descending
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-sort-cleared = Sort cleared for { $column }
+citry-ui-data-grid-selected-one = One row selected
+# @param {str} $count - Locale-formatted selected supplied-row count.
+citry-ui-data-grid-selected = { $count } rows selected
+
 ### citry_ui.components.ctags_input.ctags_input.CTagsInput
 # @param {str} $value - Visible tag label.
 citry-ui-tags-input-remove = Remove { $value }
@@ -77,6 +91,39 @@ citry-ui-range-slider-upper = Upper value
 # @param {str} $max - Locale-formatted maximum rating.
 citry-ui-rating-value = { $value } out of { $max }
 
+### citry_ui.components.cdate_picker.cdate_picker.CDatePicker
+citry-ui-date-picker-placeholder = Choose a date
+citry-ui-date-picker-label = Choose date
+# @param {str} $date - Locale-formatted selected date.
+citry-ui-date-picker-change = Change date, { $date }
+citry-ui-date-picker-clear = Clear date
+citry-ui-date-picker-unavailable = Choose an available date.
+
+### citry_ui.components.cdate_range.cdate_range.CDateRange
+citry-ui-date-range-placeholder = Choose dates
+citry-ui-date-range-label = Choose date range
+# @param {str} $start - Locale-formatted start date.
+# @param {str} $end - Locale-formatted end date.
+citry-ui-date-range-change = Change date range, { $start } to { $end }
+citry-ui-date-range-start-label = Start date
+citry-ui-date-range-end-label = End date
+citry-ui-date-range-clear = Clear date range
+citry-ui-date-range-unavailable = Choose an available date range.
+
+### citry_ui.components.ctime_picker.ctime_picker.CTimePicker
+citry-ui-time-picker-placeholder = Choose a time
+citry-ui-time-picker-label = Choose time
+# @param {str} $time - Locale-formatted selected wall-clock time.
+citry-ui-time-picker-change = Change time, { $time }
+citry-ui-time-picker-clear = Clear time
+citry-ui-time-picker-unavailable = Choose an available time.
+
+### citry_ui.components.ccalendar.ccalendar.CCalendar
+citry-ui-calendar-label = Calendar
+citry-ui-calendar-previous-month = Previous month
+citry-ui-calendar-next-month = Next month
+citry-ui-calendar-unavailable = Choose an available date.
+
 ### citry_ui.components.cprogress.cprogress.CProgress
 # @param {str} $label - Progress label.
 # @param {str} $value - Locale-formatted current value.
@@ -98,6 +145,50 @@ citry-ui-toast-region = Notifications
 citry-ui-toast-dismiss = Dismiss { $title }
 # @param {str} $action_label - Visible toast action label.
 citry-ui-toast-action-available = Action available: { $action_label }.
+
+### citry_ui.components.csidebar.csidebar.CSidebar
+citry-ui-sidebar-expand = Expand sidebar
+citry-ui-sidebar-collapse = Collapse sidebar
+
+### citry_ui.components.ctour.ctour.CTour
+citry-ui-tour-close = Close tour
+citry-ui-tour-previous = Previous
+citry-ui-tour-next = Next
+citry-ui-tour-finish = Finish
+citry-ui-tour-skip = Skip tour
+# @param {str} $current - One-based current step position.
+# @param {str} $total - Total number of steps in the Tour.
+citry-ui-tour-progress =
+    Step { $current } of { $total }
+
+### citry_ui.components.ctransfer_list.ctransfer_list.CTransferList
+citry-ui-transfer-list-available = Available items
+citry-ui-transfer-list-chosen = Chosen items
+citry-ui-transfer-list-available-empty = No available items
+citry-ui-transfer-list-chosen-empty = No chosen items
+# @param {str} $selected - Locale-formatted number of selected options in this pane.
+# @param {str} $total - Locale-formatted total number of options in this pane.
+citry-ui-transfer-list-count = { $selected } of { $total } selected
+citry-ui-transfer-list-transfer-controls = Transfer controls
+citry-ui-transfer-list-add = Add selected
+citry-ui-transfer-list-add-all = Add all
+citry-ui-transfer-list-remove = Remove selected
+citry-ui-transfer-list-remove-all = Remove all
+citry-ui-transfer-list-reorder-controls = Chosen item order
+citry-ui-transfer-list-move-top = Move to top
+citry-ui-transfer-list-move-up = Move up
+citry-ui-transfer-list-move-down = Move down
+citry-ui-transfer-list-move-bottom = Move to bottom
+citry-ui-transfer-list-added-one = One item added
+# @param {str} $count - Locale-formatted number of options added.
+citry-ui-transfer-list-added = { $count } items added
+citry-ui-transfer-list-removed-one = One item removed
+# @param {str} $count - Locale-formatted number of options removed.
+citry-ui-transfer-list-removed = { $count } items removed
+citry-ui-transfer-list-reordered-one = One item reordered
+# @param {str} $count - Locale-formatted number of options reordered.
+citry-ui-transfer-list-reordered = { $count } items reordered
+citry-ui-transfer-list-required = Choose at least one item
 
 ### citry_ui.components.ctable.ctable.CTable
 citry-ui-table-loading = Loading data...

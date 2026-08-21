@@ -8,6 +8,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CGroup, CStack
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(layout: object, *, include_css: bool = False) -> str:
@@ -178,7 +179,7 @@ def test_group_also_owns_wrap_but_allows_unrelated_bindings_and_listeners():
 
 
 def test_css_uses_public_gap_inputs_and_no_component_javascript():
-    css = _render(CStack(slots={"default": CGroup()}), include_css=True)
+    css = read_component_source_css("cflow")
 
     assert "--_cui-stack-gap: var(--cui-stack-gap, 0.75rem)" in css
     assert "--_cui-group-gap: var(--cui-group-gap, 0.5rem)" in css

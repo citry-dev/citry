@@ -35,9 +35,13 @@ def _mutate_graph(html: str, mutate: Callable[[dict[str, Any]], None]) -> str:
     canonical = canonical_json(unsigned).encode("utf8")
     manifest["revision"] = hashlib.sha256(canonical).hexdigest()
     replacement = f"{match.group(1)}{json.dumps(manifest)}{match.group(3)}"
-    return f"{html[: match.start()]}{replacement}{html[match.end() :]}".replace(
+    updated = f"{html[: match.start()]}{replacement}{html[match.end() :]}".replace(
         old_revision,
         manifest["revision"],
+    )
+    return updated.replace(
+        f"citry:g1:{old_revision[:8]}:",
+        f"citry:g1:{manifest['revision'][:8]}:",
     )
 
 

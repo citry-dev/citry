@@ -9,6 +9,7 @@ from markupsafe import Markup
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CRadio, CRadioGroup
+from citry_ui.quality.asset_sources import read_component_source_css
 
 
 def _render(template: str, data: dict[str, object] | None = None, *, include_css: bool = False) -> str:
@@ -235,15 +236,7 @@ def test_safe_string_values_are_detrusted_and_canonicalized():
 
 
 def test_css_exposes_group_item_and_environment_contract():
-    css = _render(
-        """
-          <c-CRadioGroup name="destination">
-            <c-fill name="label">Destination</c-fill>
-            <c-fill name="default"><c-CRadio value="moon">Moon</c-CRadio></c-fill>
-          </c-CRadioGroup>
-        """,
-        include_css=True,
-    )
+    css = read_component_source_css("cradio")
 
     for variable in (
         "group-gap",

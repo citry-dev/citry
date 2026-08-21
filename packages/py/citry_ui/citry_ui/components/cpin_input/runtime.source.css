@@ -1,0 +1,133 @@
+@layer citry-ui.theme {
+  :where(.cui-pin-input) {
+    --_cui-pin-input-cell-size: var(--cui-pin-input-cell-size, 2.75rem);
+    --_cui-pin-input-gap: var(--cui-pin-input-gap, .5rem);
+    --_cui-pin-input-separator-gap: var(--cui-pin-input-separator-gap, .4rem);
+    --_cui-pin-input-border-color: var(--cui-pin-input-border-color, color-mix(in srgb, CanvasText 38%, transparent));
+    --_cui-pin-input-focus-color: var(--cui-pin-input-focus-color, Highlight);
+    --_cui-pin-input-invalid-color: var(--cui-pin-input-invalid-color, light-dark(#d92d20, #f97066));
+    --_cui-pin-input-background: var(--cui-pin-input-background, Canvas);
+    --_cui-pin-input-color: var(--cui-pin-input-color, CanvasText);
+    --_cui-pin-input-placeholder-color: var(--cui-pin-input-placeholder-color, color-mix(in srgb, CanvasText 44%, transparent));
+    --_cui-pin-input-radius: var(--cui-pin-input-radius, .5rem);
+    --_cui-pin-input-disabled-opacity: var(--cui-pin-input-disabled-opacity, .58);
+    position: relative;
+    display: block;
+    max-inline-size: 100%;
+    color: var(--_cui-pin-input-color);
+  }
+  :where(.cui-pin-input > [data-citry-ui-part="input"]) {
+    box-sizing: border-box;
+    inline-size: min(100%, 22rem);
+    min-block-size: var(--_cui-pin-input-cell-size);
+    border: 1px solid var(--_cui-pin-input-border-color);
+    border-radius: var(--_cui-pin-input-radius);
+    background: var(--_cui-pin-input-background);
+    color: inherit;
+    padding-inline: .75rem;
+    font: inherit;
+  }
+  :where(.cui-pin-input > [data-citry-ui-part="cells"]) { display: none; }
+  :where(.cui-pin-input[data-citry-pin-input-initialized]) {
+    display: inline-block;
+    vertical-align: middle;
+  }
+  :where(.cui-pin-input[data-citry-pin-input-initialized] > [data-citry-ui-part="input"]) {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    min-block-size: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent;
+    caret-color: transparent;
+    padding: 0;
+    pointer-events: none;
+    forced-color-adjust: none;
+  }
+  :where(.cui-pin-input[data-citry-pin-input-initialized] > [data-citry-ui-part="input"]::selection) {
+    background: transparent;
+    color: transparent;
+  }
+  :where(.cui-pin-input[data-citry-pin-input-initialized] > [data-citry-ui-part="cells"]) {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    direction: ltr;
+    gap: var(--_cui-pin-input-gap);
+    inline-size: max-content;
+    max-inline-size: 100%;
+    overflow-x: auto;
+    overflow-y: clip;
+  }
+  :where(.cui-pin-input [data-citry-ui-part="cell"]) {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    box-sizing: border-box;
+    inline-size: var(--_cui-pin-input-cell-size);
+    block-size: var(--_cui-pin-input-cell-size);
+    flex: 0 0 var(--_cui-pin-input-cell-size);
+    border: 1px solid var(--_cui-pin-input-border-color);
+    border-radius: var(--_cui-pin-input-radius);
+    background: var(--_cui-pin-input-background);
+    color: var(--_cui-pin-input-color);
+    font: inherit;
+    font-size: 1.125em;
+    font-variant-numeric: tabular-nums;
+    cursor: text;
+    user-select: none;
+  }
+  :where(.cui-pin-input [data-citry-ui-part="cell"]:not([data-filled]) [data-citry-ui-part="character"]) {
+    color: var(--_cui-pin-input-placeholder-color);
+  }
+  :where(.cui-pin-input [data-citry-ui-part="caret"]) {
+    display: none;
+    inline-size: 1px;
+    block-size: 1.25em;
+    background: currentColor;
+  }
+  :where(.cui-pin-input[data-focused] [data-citry-ui-part="cell"][data-active]) {
+    border-color: var(--_cui-pin-input-focus-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--_cui-pin-input-focus-color) 28%, transparent);
+  }
+  :where(.cui-pin-input[data-focused] [data-citry-ui-part="cell"][data-active]:not([data-filled]) [data-citry-ui-part="character"]) { display: none; }
+  :where(.cui-pin-input[data-focused] [data-citry-ui-part="cell"][data-active]:not([data-filled]) [data-citry-ui-part="caret"]) { display: block; }
+  :where(.cui-pin-input [data-citry-ui-part="separator"]) {
+    position: absolute;
+    inset-inline-start: calc(100% + var(--_cui-pin-input-gap));
+    inline-size: var(--_cui-pin-input-separator-gap);
+    translate: 0 -50%;
+    inset-block-start: 50%;
+    display: grid;
+    place-items: center;
+    color: var(--_cui-pin-input-placeholder-color);
+    pointer-events: none;
+  }
+  :where(.cui-pin-input [data-citry-ui-part="cell"]:has(> [data-citry-ui-part="separator"])) { margin-inline-end: var(--_cui-pin-input-separator-gap); }
+  :where(.cui-pin-input[data-attached] > [data-citry-ui-part="cells"]) { gap: 0; }
+  :where(.cui-pin-input[data-attached] [data-citry-ui-part="cell"]) { border-radius: 0; margin-inline-start: -1px; }
+  :where(.cui-pin-input[data-attached] [data-citry-ui-part="cell"]:first-child) { border-start-start-radius: var(--_cui-pin-input-radius); border-end-start-radius: var(--_cui-pin-input-radius); margin-inline-start: 0; }
+  :where(.cui-pin-input[data-attached] [data-citry-ui-part="cell"]:last-child) { border-start-end-radius: var(--_cui-pin-input-radius); border-end-end-radius: var(--_cui-pin-input-radius); }
+  :where(.cui-pin-input[data-variant="subtle"] [data-citry-ui-part="cell"]) { background: color-mix(in srgb, CanvasText 7%, Canvas); border-color: transparent; }
+  :where(.cui-pin-input[data-size="sm"]) { --_cui-pin-input-cell-size: var(--cui-pin-input-cell-size, 2.25rem); }
+  :where(.cui-pin-input[data-size="lg"]) { --_cui-pin-input-cell-size: var(--cui-pin-input-cell-size, 3.25rem); }
+  :where(.cui-pin-input[data-invalid] [data-citry-ui-part="cell"]) { border-color: var(--_cui-pin-input-invalid-color); }
+  :where(.cui-pin-input[data-disabled]) { opacity: var(--_cui-pin-input-disabled-opacity); }
+  :where(.cui-pin-input[data-disabled] [data-citry-ui-part="cell"]) { cursor: default; }
+  @media (pointer: coarse) {
+    :where(.cui-pin-input) { --_cui-pin-input-cell-size: max(2.75rem, var(--cui-pin-input-cell-size, 2.75rem)); }
+  }
+  @media (forced-colors: active) {
+    :where(.cui-pin-input [data-citry-ui-part="cell"]) { border-color: CanvasText; forced-color-adjust: auto; }
+    :where(.cui-pin-input[data-focused] [data-citry-ui-part="cell"][data-active]) { outline: 2px solid Highlight; outline-offset: 2px; box-shadow: none; }
+    :where(.cui-pin-input[data-invalid] [data-citry-ui-part="cell"]) { border-color: Mark; }
+  }
+  @media print {
+    :where(.cui-pin-input[data-citry-pin-input-initialized] > [data-citry-ui-part="input"]) { display: none; }
+  }
+}

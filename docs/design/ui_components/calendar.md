@@ -1,9 +1,10 @@
 # Citry UI Calendar specification
 
-**Status (2026-08-19): approved design, implementation in progress.** This
-specification governs one styled `CCalendar` that selects a single calendar
-date inline. `CDateInput`, `CDatePicker`, and date-range selection remain
-separate families.
+**Status (2026-08-20): implementation, structured reference, examples, and
+focused automated evidence complete; human visual and assistive-technology
+review pending.** This specification governs one styled `CCalendar` that
+selects a single calendar date inline. `CDateInput`, `CDatePicker`, and
+date-range selection remain separate families.
 
 ## 1. Purpose and product bar
 
@@ -246,14 +247,11 @@ Uncontrolled selection dispatches bubbling native `input` followed by
 and Forms useful. Controlled requests do not claim that the transport value
 changed.
 
-Public methods:
-
-- `focus()` focuses the current roving day and returns `true`, or `false` when
-  disabled or no allowed day exists.
-- `focusDate(value)` accepts a canonical ISO string, reveals and focuses the
-  date when it is inside min/max, and otherwise returns `false` without change.
-- `previousPage()` and `nextPage()` request one calendar-month move and return
-  whether navigation was allowed.
+Calendar does not invent a component-specific imperative method surface. Code
+that needs imperative focus uses the rendered fallback input's public `id` or
+an ordinary ref; focus is redirected to the current roving day after browser
+enhancement. Navigation and selection stay explicit pointer/keyboard actions or
+controlled input updates.
 
 ## 8. Semantics, keyboard, focus, and assistive technology
 
@@ -330,6 +328,7 @@ Internationalization ownership:
 |---|---|---|---|
 | standalone Calendar name | `citry-ui-calendar-label` | server `aria-label` | `$c-tr` attribute binding |
 | previous/next names | two component keys | server button attributes | `$c-tr` attribute bindings |
+| unavailable validity | `citry-ui-calendar-unavailable` | native Date input custom validity | `i18n.bind()` callback |
 | month heading | named date profile | browser-created text | i18n subscription and `i18n.format.date()` |
 | short/full weekdays | named date profiles | browser-created text/attribute | i18n subscription |
 | day number and full date name | named date profiles | browser-created text/attribute | i18n subscription |
@@ -420,7 +419,7 @@ that code examples do not replace assistive-technology testing.
 ## 18. Compatibility classification
 
 Stable public API includes the component name, documented server/client inputs,
-callbacks, methods, canonical value and Form shape, translation keys, named
+callbacks, canonical value and Form shape, translation keys, named
 format profiles, public variables, part selectors, and reflected attributes.
 Behavioral contract includes native fallback, enhanced roles, one tab stop,
 keys, controlled semantics, locale switching, reset, and cleanup.
@@ -485,6 +484,7 @@ Source messages, declared as the final component class member:
 citry-ui-calendar-label = Calendar
 citry-ui-calendar-previous-month = Previous month
 citry-ui-calendar-next-month = Next month
+citry-ui-calendar-unavailable = Choose an available date.
 ```
 
 The component does not interpolate application text into these messages. It

@@ -29,3 +29,4 @@ citry_template_parser = { path = "../citry_template_parser" }
 icu_locale = { workspace = true }
 pyo3 = { workspace = true }
 quick-xml = { workspace = true }
+sha2 = { workspace = true }

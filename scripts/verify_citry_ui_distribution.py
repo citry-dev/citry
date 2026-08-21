@@ -32,7 +32,7 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry_ui"
 QUALIFIER: Final = PACKAGE_ROOT / "citry_ui" / "quality" / "qualify_wheel.py"
 MAX_SDIST_BYTES: Final = 700 * 1024
-EXPECTED_REQUIRES_DIST: Final = {"citry<0.5.0,>=0.4.0"}
+EXPECTED_REQUIRES_DIST: Final = {"citry<0.5.0,>=0.4.2"}
 
 
 class DistributionVerificationError(RuntimeError):
@@ -237,7 +237,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         raise DistributionVerificationError(f"{path.name} contains an unexpected generated setup.cfg")
     if relative["citry_ui.egg-info/dependency_links.txt"] != b"\n":
         raise DistributionVerificationError(f"{path.name} contains unexpected dependency links")
-    if relative["citry_ui.egg-info/requires.txt"] != b"citry<0.5.0,>=0.4.0\n":
+    if relative["citry_ui.egg-info/requires.txt"] != b"citry<0.5.0,>=0.4.2\n":
         raise DistributionVerificationError(f"{path.name} contains unexpected runtime dependencies")
     if relative["citry_ui.egg-info/top_level.txt"] != b"citry_ui\ncitry_ui_i18n\n":
         raise DistributionVerificationError(f"{path.name} contains unexpected top-level packages")
@@ -424,7 +424,7 @@ from citry.ext.i18n import make_context
 
 assert importlib.metadata.version("citry-ui") == "__VERSION__"
 assert citry_ui.__version__ == "__VERSION__"
-assert len(citry_ui.COMPONENTS) == 107
+assert len(citry_ui.COMPONENTS) == 137
 assert importlib.resources.files("citry_ui").joinpath("py.typed").is_file()
 assert importlib.util.find_spec("citry_ui.quality") is None
 assert importlib.util.find_spec("citry_ui.components.ctabs.tests") is None

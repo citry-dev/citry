@@ -250,6 +250,6 @@ Two related calls help when a single path is not enough:
   is all it takes.
 
 For how Citry reuses rendered work, see
-[Const optimization](/advanced/const-optimization/) and
+[Performance](/advanced/performance/) and
 [Cache rendered output](/advanced/caching/). For loading JavaScript and CSS
 from files, see [Dependency files](/advanced/dependency-files/).
