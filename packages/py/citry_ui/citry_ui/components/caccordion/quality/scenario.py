@@ -31,6 +31,7 @@ def accordion_states_component(app: Citry) -> type[Component]:
             <h1 id="accordion-states-title">Accordion states</h1>
             <c-CAccordion
               value="canopy"
+              heading_level="2"
               region
               c-attrs="{
                 'data-quality-states':
@@ -66,6 +67,7 @@ def accordion_states_component(app: Citry) -> type[Component]:
                 <c-CAccordion
                   c-variant="variant"
                   value="one"
+                  heading_level="2"
                   size="sm"
                   c-attrs="{'data-quality-states': variant}"
                 >
@@ -79,6 +81,7 @@ def accordion_states_component(app: Citry) -> type[Component]:
                 <c-CAccordion
                   c-size="size"
                   value="one"
+                  heading_level="2"
                   variant="soft"
                   c-attrs="{'data-quality-states': size}"
                 >
@@ -93,6 +96,7 @@ def accordion_states_component(app: Citry) -> type[Component]:
             <div dir="rtl" class="accordion-quality__narrow">
               <c-CAccordion
                 value="one"
+                heading_level="2"
                 indicator_pos="start"
                 c-attrs="{
                   'data-quality-states': 'indicator-start rtl long-content',
@@ -112,13 +116,14 @@ def accordion_states_component(app: Citry) -> type[Component]:
             <div class="accordion-quality__dark" style="color-scheme: dark">
               <c-CAccordion
                 value="outer"
+                heading_level="2"
                 variant="separated"
                 c-attrs="{'data-quality-states': 'nested nested-dark'}"
               >
                 <c-CAccordionItem value="outer">
                   <c-fill name="title">Nested group</c-fill>
                   <c-fill name="default">
-                    <c-CAccordion value="inner" variant="plain" size="sm">
+                    <c-CAccordion value="inner" heading_level="3" variant="plain" size="sm">
                       <c-CAccordionItem value="inner">
                         <c-fill name="title">Inner section</c-fill>
                         <c-fill name="default">Nested panel content.</c-fill>
@@ -134,6 +139,7 @@ def accordion_states_component(app: Citry) -> type[Component]:
                 <c-CAccordion
                   multiple
                   c-value="['wetland']"
+                  heading_level="2"
                   variant="soft"
                   c-attrs="{
                     'data-quality-states': 'multiple form-content brand-fern',
@@ -160,6 +166,7 @@ def accordion_states_component(app: Citry) -> type[Component]:
               <c-CAccordion
                 value="current"
                 c-collapsible="False"
+                heading_level="2"
                 size="lg"
                 c-attrs="{
                   'data-quality-states': 'noncollapsible brand-river',
