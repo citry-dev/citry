@@ -372,9 +372,12 @@ class Citry:
             contexts[provider] = context
             fingerprints.append((provider, fingerprint))
 
-        with self._registry._lifecycle.operation("standalone template root initialization"):
-            self._ensure_registry_ready()
-            root_class = self._template_root_class
+        with self._registry._lifecycle.read("read standalone template root"):
+            root_class = self._template_root_class if self._registry_ready() else None
+        if root_class is None:
+            with self._registry._lifecycle.operation("standalone template root initialization"):
+                self._ensure_registry_ready()
+                root_class = self._template_root_class
         if root_class is None:
             raise RuntimeError("Citry did not initialize its private standalone template root.")
 

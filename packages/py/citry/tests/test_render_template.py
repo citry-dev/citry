@@ -58,6 +58,7 @@ def test_render_template_caches_load_span_and_compile_work_once_across_threads()
             ctx.mark_resolved(*ctx.claims)
 
     app = Citry(extensions=[Host])
+    app.initialize()
 
     def render() -> str:
         return str(app.render_template("A{% value %}B", origin="threaded"))
