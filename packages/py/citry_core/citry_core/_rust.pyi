@@ -402,7 +402,11 @@ class template_formatter:
         ) -> list[tuple[str, str, str | None, str | None]]: ...
 
     @staticmethod
-    def format_template(source: str) -> str: ...
+    def format_template(
+        source: str,
+        *,
+        options: template_parser.ParseOptions | None = None,
+    ) -> str: ...
     @staticmethod
     def python_expression_provider() -> str: ...
     @staticmethod
@@ -455,6 +459,8 @@ class template_parser:
         input: str,
         lang: str | None = None,
         user_rules: dict[str, template_parser.TagRules] | None = None,
+        *,
+        options: template_parser.ParseOptions | None = None,
     ) -> template_parser.Template: ...
     @staticmethod
     def compile_template(
@@ -547,6 +553,7 @@ class template_parser:
             comments: list[template_parser.Comment],
             used_variables: list[template_parser.Token],
             fill_data_pattern: template_parser.FillDataPattern | None = None,
+            foreign_parts: list[template_parser.ForeignSourcePart] = ...,
         ) -> None: ...
         token: template_parser.Token
         key: template_parser.Token
@@ -557,15 +564,26 @@ class template_parser:
         used_variables: list[template_parser.Token]
         comments: list[template_parser.Comment]
         fill_data_pattern: template_parser.FillDataPattern | None
+        foreign_parts: list[template_parser.ForeignSourcePart]
 
     class HtmlStartTag:
         """An HTML opening tag with its attributes."""
 
+        def __init__(
+            self,
+            token: template_parser.Token,
+            name: template_parser.Token,
+            attrs: list[template_parser.HtmlAttr],
+            is_self_closing: bool,
+            comments: list[template_parser.Comment],
+            foreign_parts: list[template_parser.ForeignSourcePart] = ...,
+        ) -> None: ...
         token: template_parser.Token
         name: template_parser.Token
         attrs: list[template_parser.HtmlAttr]
         is_self_closing: bool
         comments: list[template_parser.Comment]
+        foreign_parts: list[template_parser.ForeignSourcePart]
 
     class HtmlEndTag:
         """An HTML closing tag."""
@@ -586,6 +604,21 @@ class template_parser:
         """Plain text content."""
 
         token: template_parser.Token
+
+    class ForeignSourcePart:
+        """Original source owned by an installed external template provider."""
+
+        def __init__(
+            self,
+            token: template_parser.Token,
+            provider: str,
+            ordinal: int = 0,
+            may_control_body: bool = False,
+        ) -> None: ...
+        token: template_parser.Token
+        provider: str
+        ordinal: int
+        may_control_body: bool
 
     class Node_SelfClosing:
         """A self-closing HTML/component tag."""
@@ -631,15 +664,22 @@ class template_parser:
 
         _0: template_parser.Node_SelfClosing | template_parser.Node_WithBody
 
+    class TemplateElement_Foreign:
+        """A TemplateElement variant wrapping ForeignSourcePart. Access via `._0`."""
+
+        _0: template_parser.ForeignSourcePart
+
     class TemplateElement:
         """
-        Enum: Text, Expr, or Node. The concrete variant type is one of
-        TemplateElement_Text, TemplateElement_Expr, TemplateElement_Node.
+        Enum: Text, Expr, Node, or Foreign. The concrete variant type is one of
+        TemplateElement_Text, TemplateElement_Expr, TemplateElement_Node,
+        TemplateElement_Foreign.
         """
 
         Text: type[template_parser.TemplateElement_Text]
         Expr: type[template_parser.TemplateElement_Expr]
         Node: type[template_parser.TemplateElement_Node]
+        Foreign: type[template_parser.TemplateElement_Foreign]
 
     class StaticNamedSlot:
         """A slot with a statically-known name."""
@@ -654,6 +694,7 @@ class template_parser:
             template_parser.TemplateElement_Text
             | template_parser.TemplateElement_Expr
             | template_parser.TemplateElement_Node
+            | template_parser.TemplateElement_Foreign
         ]
         comments: list[template_parser.Comment]
         used_variables: list[template_parser.Token]
@@ -677,6 +718,36 @@ class template_parser:
         allowed_slots: list[str] | None
         required_slots: list[str]
         slot_data_fields: dict[str, list[str]]
+
+    class ForeignSpan:
+        """A half-open UTF-8 byte range owned by an external provider."""
+
+        def __init__(
+            self,
+            start_byte: int,
+            end_byte: int,
+            provider: str,
+            ordinal: int = 0,
+            may_control_body: bool = False,
+        ) -> None: ...
+        start_byte: int
+        end_byte: int
+        provider: str
+        ordinal: int
+        may_control_body: bool
+
+    class ParseOptions:
+        """Optional low-level template parser inputs."""
+
+        def __init__(
+            self,
+            foreign_spans: list[template_parser.ForeignSpan] = ...,
+            source_offset: int = 0,
+            root_source: str | None = None,
+        ) -> None: ...
+        foreign_spans: list[template_parser.ForeignSpan]
+        source_offset: int
+        root_source: str | None
 
     # Constants
 

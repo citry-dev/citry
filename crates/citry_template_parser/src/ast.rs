@@ -386,12 +386,16 @@ pub struct HtmlAttr {
     /// Parsed binding for a direct `<c-fill data="...">` attribute.
     #[pyo3(get)]
     pub fill_data_pattern: Option<FillDataPattern>,
+    /// Foreign source ranges wholly contained in this attribute's value.
+    /// Empty attributes retain the legacy representation.
+    #[pyo3(get)]
+    pub foreign_parts: Vec<ForeignSourcePart>,
 }
 
 #[pymethods]
 impl HtmlAttr {
     #[new]
-    #[pyo3(signature = (token, key, value, inner_value, quote_char, kind, comments, used_variables, fill_data_pattern=None))]
+    #[pyo3(signature = (token, key, value, inner_value, quote_char, kind, comments, used_variables, fill_data_pattern=None, foreign_parts=Vec::new()))]
     fn new(
         token: Token,
         key: Token,
@@ -402,6 +406,7 @@ impl HtmlAttr {
         comments: Vec<Comment>,
         used_variables: Vec<Token>,
         fill_data_pattern: Option<FillDataPattern>,
+        foreign_parts: Vec<ForeignSourcePart>,
     ) -> Self {
         Self {
             token,
@@ -413,6 +418,7 @@ impl HtmlAttr {
             comments,
             used_variables,
             fill_data_pattern,
+            foreign_parts,
         }
     }
 
@@ -426,11 +432,12 @@ impl HtmlAttr {
             && self.comments == other.comments
             && self.used_variables == other.used_variables
             && self.fill_data_pattern == other.fill_data_pattern
+            && self.foreign_parts == other.foreign_parts
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "HtmlAttr(token={:?}, key={:?}, value={:?}, inner_value={:?}, quote_char={:?}, kind={:?}, comments={:?}, used_variables={:?}, fill_data_pattern={:?})",
+            "HtmlAttr(token={:?}, key={:?}, value={:?}, inner_value={:?}, quote_char={:?}, kind={:?}, comments={:?}, used_variables={:?}, fill_data_pattern={:?}, foreign_parts={:?})",
             self.token,
             self.key,
             self.value,
@@ -439,7 +446,8 @@ impl HtmlAttr {
             self.kind,
             self.comments,
             self.used_variables,
-            self.fill_data_pattern
+            self.fill_data_pattern,
+            self.foreign_parts,
         )
     }
 }
@@ -467,17 +475,23 @@ pub struct HtmlStartTag {
     /// All comments found in the tag
     #[pyo3(get)]
     pub comments: Vec<Comment>,
+    /// Foreign source ranges between attributes. Foreign ranges inside
+    /// attribute values live on the corresponding `HtmlAttr`.
+    #[pyo3(get)]
+    pub foreign_parts: Vec<ForeignSourcePart>,
 }
 
 #[pymethods]
 impl HtmlStartTag {
     #[new]
+    #[pyo3(signature = (token, name, attrs, is_self_closing, comments, foreign_parts=Vec::new()))]
     fn new(
         token: Token,
         name: Token,
         attrs: Vec<HtmlAttr>,
         is_self_closing: bool,
         comments: Vec<Comment>,
+        foreign_parts: Vec<ForeignSourcePart>,
     ) -> Self {
         Self {
             token,
@@ -485,6 +499,7 @@ impl HtmlStartTag {
             attrs,
             is_self_closing,
             comments,
+            foreign_parts,
         }
     }
 
@@ -494,12 +509,18 @@ impl HtmlStartTag {
             && self.attrs == other.attrs
             && self.is_self_closing == other.is_self_closing
             && self.comments == other.comments
+            && self.foreign_parts == other.foreign_parts
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "HtmlStartTag(token={:?}, name={:?}, attrs={:?}, is_self_closing={}, comments={:?})",
-            self.token, self.name, self.attrs, self.is_self_closing, self.comments
+            "HtmlStartTag(token={:?}, name={:?}, attrs={:?}, is_self_closing={}, comments={:?}, foreign_parts={:?})",
+            self.token,
+            self.name,
+            self.attrs,
+            self.is_self_closing,
+            self.comments,
+            self.foreign_parts,
         )
     }
 }
@@ -847,6 +868,45 @@ pub(crate) fn remove_introduced_variables(
 // TEMPLATE ELEMENT
 // #########################################################
 
+/// Original source owned by an installed external template provider.
+#[pyclass]
+#[derive(Debug, PartialEq, Clone)]
+pub struct ForeignSourcePart {
+    #[pyo3(get)]
+    pub token: Token,
+    #[pyo3(get)]
+    pub provider: String,
+    #[pyo3(get)]
+    pub ordinal: usize,
+    #[pyo3(get)]
+    pub may_control_body: bool,
+}
+
+#[pymethods]
+impl ForeignSourcePart {
+    #[new]
+    #[pyo3(signature = (token, provider, ordinal=0, may_control_body=false))]
+    fn new(token: Token, provider: String, ordinal: usize, may_control_body: bool) -> Self {
+        Self {
+            token,
+            provider,
+            ordinal,
+            may_control_body,
+        }
+    }
+
+    fn __eq__(&self, other: &ForeignSourcePart) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ForeignSourcePart(token={:?}, provider={:?}, ordinal={}, may_control_body={})",
+            self.token, self.provider, self.ordinal, self.may_control_body,
+        )
+    }
+}
+
 /// Represents a single element in a template
 #[pyclass]
 #[derive(Debug, PartialEq, Clone)]
@@ -854,6 +914,7 @@ pub enum TemplateElement {
     Node(Node),
     Expr(Expr),
     Text(Text),
+    Foreign(ForeignSourcePart),
 }
 
 #[pymethods]
@@ -863,6 +924,9 @@ impl TemplateElement {
             TemplateElement::Node(node) => format!("TemplateElement::Node({:?})", node),
             TemplateElement::Expr(expr) => format!("TemplateElement::Expr({:?})", expr),
             TemplateElement::Text(text) => format!("TemplateElement::Text({:?})", text),
+            TemplateElement::Foreign(part) => {
+                format!("TemplateElement::Foreign({:?})", part)
+            }
         }
     }
 }

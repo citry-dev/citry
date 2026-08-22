@@ -96,6 +96,7 @@ fn build_attr(
         comments: vec![],
         used_variables: vec![],
         fill_data_pattern: None,
+        foreign_parts: vec![],
     }
 }
 
@@ -173,6 +174,7 @@ pub fn start_tag(
         attrs,
         is_self_closing,
         comments: vec![],
+        foreign_parts: vec![],
     }
 }
 
@@ -190,6 +192,7 @@ pub fn start_tag_with_comments(
         attrs,
         is_self_closing,
         comments,
+        foreign_parts: vec![],
     }
 }
 

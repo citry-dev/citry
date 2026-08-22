@@ -97,6 +97,9 @@ categories:
       - citry.SerializedScriptSecurity
       - citry.CitryContext
       - citry.CitryTemplate
+      - citry.CompiledBody
+      - citry.render_compiled_body
+      - citry.collect_compiled_body_fills
       - citry.Placeholder
       - citry.RenderReplacement
       - citry.RenderFrame
@@ -204,7 +207,13 @@ categories:
       - citry.OnRenderContextMergeContext
       - citry.OnSerializeContext
       - citry.OnSlotRenderedContext
+      - citry.ForeignSpan
+      - citry.ForeignSpanSet
+      - citry.ForeignCompileContext
+      - citry.OnTemplateForeignSpansContext
       - citry.OnTemplateCompiledContext
+      - citry.ForeignClaim
+      - citry.OnTemplateForeignCompiledContext
       - citry.OnTemplateLoadedContext
       - citry.OnTemplateResetContext
       - citry.TemplateNamespaceContext

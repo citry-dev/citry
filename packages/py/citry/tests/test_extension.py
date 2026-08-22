@@ -2,6 +2,8 @@
 
 # ruff: noqa: ANN, D101, D102, D106, ARG002, PLC0415
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import field
 
 import pytest
@@ -14,6 +16,8 @@ from citry import (
     Events,
     Extension,
     ExtensionCommand,
+    ForeignSpan,
+    ForeignSpanSet,
     I18n,
     LintSettings,
     Slot,
@@ -738,6 +742,279 @@ class TestTemplateHooks:
         str(Card())
         assert isinstance(captured["nodes"], list)
         assert captured["cls"] == "Card"
+
+    def test_foreign_span_owner_resolves_before_general_compiled_hooks(self):
+        from citry.nodes import ForeignNode
+
+        calls = []
+
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                start = ctx.content.encode().find(b"{% value %}")
+                return ForeignSpanSet((ForeignSpan(start, start + len(b"{% value %}")),))
+
+            def on_template_foreign_compiled(self, ctx):
+                calls.append("foreign")
+                assert all(claim.provider == self.name for claim in ctx.claims)
+                ctx.nodes[:] = ["HOST" if isinstance(item, ForeignNode) else item for item in ctx.nodes]
+                ctx.mark_resolved(*ctx.claims)
+
+            def on_template_compiled(self, ctx):
+                calls.append("general")
+                assert not any(isinstance(item, ForeignNode) for item in ctx.nodes)
+
+        app = _Citry(extensions=[Host])
+
+        class Card(Component):
+            citry = app
+            template = "A{% value %}B"
+
+        assert str(Card()) == "AHOSTB"
+        assert calls == ["foreign", "general"]
+
+    def test_foreign_claim_without_explicit_outcome_fails_closed(self):
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                return ForeignSpanSet((ForeignSpan(0, len(ctx.content.encode())),))
+
+            def on_template_foreign_compiled(self, ctx):
+                ctx.nodes.clear()
+
+        app = _Citry(extensions=[Host])
+
+        class Card(Component):
+            citry = app
+            template = "{% value %}"
+
+        with pytest.raises(RuntimeError, match="did not resolve foreign claims"):
+            str(Card())
+
+    def test_foreign_claims_survive_lazy_nested_template_reparse(self):
+        from citry.nodes import ForeignNode
+
+        seen_positions = []
+        seen_sources = []
+
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                encoded = ctx.content.encode()
+                start = encoded.find(b"{% value %}")
+                if start < 0:
+                    return None
+                return ForeignSpanSet((ForeignSpan(start, start + len(b"{% value %}")),))
+
+            def on_template_foreign_compiled(self, ctx):
+                seen_positions.extend(claim.position for claim in ctx.claims)
+                seen_sources.extend((ctx.origin, item.source) for item in ctx.nodes if isinstance(item, ForeignNode))
+                ctx.nodes[:] = ["HOST" if isinstance(item, ForeignNode) else item for item in ctx.nodes]
+                ctx.mark_resolved(*ctx.claims)
+
+        app = _Citry(extensions=[Host])
+
+        class Box(Component):
+            citry = app
+
+            class Kwargs:
+                content: object
+
+            def template_data(self, kwargs, slots):
+                return {"content": kwargs.content}
+
+            template = "{{ content }}"
+
+        class Card(Component):
+            citry = app
+            template = '<c-box c-content="<span>{% value %}</span>"/>'
+
+        assert str(Card()) == '<span data-cid-c2="" data-cid-c1="">HOST</span>'
+        source = Card.template
+        start = source.encode().find(b"{% value %}")
+        assert seen_positions == [(start, start + len(b"{% value %}"))]
+        assert seen_sources == [(Card.get_template().origin, source)]
+
+    def test_provider_cannot_remove_another_providers_claim(self):
+        from citry.nodes import ForeignNode
+
+        class First(Extension):
+            name = "first"
+
+            def on_template_foreign_spans(self, ctx):
+                return ForeignSpanSet((ForeignSpan(0, 3),))
+
+            def on_template_foreign_compiled(self, ctx):
+                ctx.nodes[:] = [
+                    "FIRST" if isinstance(item, ForeignNode) and item.provider == self.name else item
+                    for item in ctx.nodes
+                    if not (isinstance(item, ForeignNode) and item.provider == "second")
+                ]
+                ctx.mark_resolved(*ctx.claims)
+
+        class Second(Extension):
+            name = "second"
+
+            def on_template_foreign_spans(self, ctx):
+                return ForeignSpanSet((ForeignSpan(3, 6),))
+
+            def on_template_foreign_compiled(self, ctx):
+                ctx.nodes[:] = [
+                    "SECOND" if isinstance(item, ForeignNode) and item.provider == self.name else item
+                    for item in ctx.nodes
+                ]
+                ctx.mark_resolved(*ctx.claims)
+
+        app = _Citry(extensions=[First, Second])
+
+        class Card(Component):
+            citry = app
+            template = "AAABBB"
+
+        with pytest.raises(RuntimeError, match="modified foreign claims owned by another provider"):
+            str(Card())
+
+    def test_disjoint_non_controlling_providers_resolve_in_order(self):
+        from citry.nodes import ForeignNode
+
+        class Provider(Extension):
+            name = "provider_base"
+            token: bytes
+            replacement: str
+
+            def on_template_foreign_spans(self, ctx):
+                start = ctx.content.encode().find(self.token)
+                return ForeignSpanSet((ForeignSpan(start, start + len(self.token)),))
+
+            def on_template_foreign_compiled(self, ctx):
+                ctx.nodes[:] = [
+                    self.replacement if isinstance(item, ForeignNode) and item.provider == self.name else item
+                    for item in ctx.nodes
+                ]
+                ctx.mark_resolved(*ctx.claims)
+
+        class First(Provider):
+            name = "first"
+            class_name = "FirstProvider"
+            token = b"AAA"
+            replacement = "FIRST"
+
+        class Second(Provider):
+            name = "second"
+            class_name = "SecondProvider"
+            token = b"BBB"
+            replacement = "SECOND"
+
+        app = _Citry(extensions=[First, Second])
+
+        class Card(Component):
+            citry = app
+            template = "AAABBB"
+
+        assert str(Card()) == "FIRSTSECOND"
+
+    def test_compiled_body_runs_general_compiled_hooks_before_capture(self):
+        from citry.nodes import ForeignNode
+
+        captured = []
+
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                encoded = ctx.content.encode()
+                spans = []
+                for token in (b"{% open %}", b"{% close %}"):
+                    start = encoded.find(token)
+                    spans.append(ForeignSpan(start, start + len(token)))
+                return ForeignSpanSet(tuple(spans))
+
+            def on_template_foreign_compiled(self, ctx):
+                run = [item for item in ctx.nodes if not isinstance(item, ForeignNode)]
+                captured.append(ctx.compiled_body(run))
+                ctx.nodes.clear()
+                ctx.mark_resolved(*ctx.claims)
+
+        class General(Extension):
+            name = "general"
+
+            def on_template_compiled(self, ctx):
+                ctx.nodes[:] = ["HOOKED" if item == "SEGMENT" else item for item in ctx.nodes]
+
+        app = _Citry(extensions=[Host, General])
+
+        class Card(Component):
+            citry = app
+            template = "{% open %}SEGMENT{% close %}"
+
+        assert str(Card()) == ""
+        assert captured[0]._items == ("HOOKED",)
+
+    def test_general_compiled_context_identifies_standalone_sources(self):
+        seen = []
+
+        class General(Extension):
+            name = "general"
+
+            def on_template_compiled(self, ctx):
+                seen.append((ctx.template_id, ctx.origin, ctx.template_kind))
+
+        app = _Citry(extensions=[General])
+
+        app.render_template("one", origin="first")
+        app.render_template("two", origin="second")
+
+        assert seen[0][0] != seen[1][0]
+        assert seen == [
+            (seen[0][0], "first", "standalone"),
+            (seen[1][0], "second", "standalone"),
+        ]
+
+    def test_lazy_nested_foreign_template_compiles_once_across_threads(self):
+        from citry.nodes import ForeignNode
+
+        compiled_calls = 0
+
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                encoded = ctx.content.encode()
+                start = encoded.find(b"{% value %}")
+                if start < 0:
+                    return None
+                return ForeignSpanSet((ForeignSpan(start, start + len(b"{% value %}")),))
+
+            def on_template_foreign_compiled(self, ctx):
+                nonlocal compiled_calls
+                compiled_calls += 1
+                time.sleep(0.01)
+                ctx.nodes[:] = ["HOST" if isinstance(item, ForeignNode) else item for item in ctx.nodes]
+                ctx.mark_resolved(*ctx.claims)
+
+        app = _Citry(extensions=[Host])
+
+        class Box(Component):
+            citry = app
+
+            class Kwargs:
+                content: object
+
+            template = "{{ content }}"
+
+        class Card(Component):
+            citry = app
+            template = '<c-box c-content="<span>{% value %}</span>"/>'
+
+        app.initialize()
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            rendered = list(executor.map(lambda _index: str(Card()), range(8)))
+
+        assert all("HOST" in item for item in rendered)
+        assert compiled_calls == 1
 
 
 class TestSmartDispatch:

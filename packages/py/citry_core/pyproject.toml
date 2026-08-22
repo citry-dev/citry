@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "citry_core"
-version = "1.5.1"
+version = "1.6.0"
 requires-python = ">=3.10, <4.0"
 description = "Rust-powered core for Citry, a fast, simple, and smart frontend framework for Python"
 keywords = [

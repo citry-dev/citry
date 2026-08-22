@@ -33,9 +33,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from importlib import import_module
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 from weakref import ReferenceType, WeakSet, ref
 
 from citry._nested_declarations import (
@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from citry.citry_render import CitryRender, RenderPart
     from citry.command import CommandArg, CommandArgGroup, CommandHandler, CommandSubcommand
     from citry.component import Component
+    from citry.host_templates import CompiledBody
     from citry.nodes import BodyItem, SlotNode
     from citry.ownership_manifest import OwnershipManifestArtifact
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
@@ -332,6 +333,53 @@ class OnTemplateLoadedContext:
     """The Component class whose template was loaded."""
     content: str
     """The template string (before parsing)."""
+    template_id: str = ""
+    """Immutable identity of this loaded template record."""
+    origin: str = ""
+    """Source origin used for diagnostics."""
+    template_kind: Literal["primary", "standalone", "nested"] = "primary"
+
+
+@dataclass(frozen=True, slots=True)
+class ForeignSpan:
+    """One half-open UTF-8 byte range declared by a host provider."""
+
+    start_byte: int
+    end_byte: int
+    may_control_body: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ForeignSpanSet:
+    """The spans and private compile metadata returned by one provider."""
+
+    spans: tuple[ForeignSpan, ...]
+    provider_metadata: object | None = None
+
+
+class ForeignCompileContext(Protocol):
+    """Typed adapter state participating in standalone-template cache identity."""
+
+    @property
+    def provider(self) -> str:
+        """Name of the extension allowed to receive this context."""
+        ...
+
+    @property
+    def cache_fingerprint(self) -> str | bytes:
+        """Deterministic identity for compile-time host state."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class OnTemplateForeignSpansContext:
+    citry: Citry
+    component_class: type[Component]
+    content: str
+    template_id: str
+    origin: str
+    template_kind: Literal["primary", "standalone", "nested"]
+    compile_context: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,6 +410,71 @@ class OnTemplateCompiledContext:
     """The Component class whose template was compiled."""
     nodes: list[BodyItem]
     """The generated body node list."""
+    template_id: str = ""
+    """Immutable identity of the exact template record being compiled."""
+    origin: str = ""
+    """Authored source origin used for diagnostics."""
+    template_kind: Literal["primary", "standalone", "nested"] = "primary"
+
+
+@dataclass(frozen=True, slots=True)
+class ForeignClaim:
+    """One provider-owned runtime claim in an independently compiled body."""
+
+    provider: str
+    ordinal: int
+    source: str
+    position: tuple[int, int]
+    may_control_body: bool
+    locus: Literal["body", "component_input"]
+
+    @property
+    def claim_id(self) -> tuple[str, int]:
+        return self.provider, self.ordinal
+
+
+@dataclass(frozen=True, slots=True)
+class OnTemplateForeignCompiledContext:
+    """Owner-dispatched compilation context for one independent body list."""
+
+    citry: Citry
+    component_class: type[Component]
+    nodes: list[BodyItem]
+    claims: tuple[ForeignClaim, ...]
+    provider_metadata: object | None
+    template_id: str
+    origin: str
+    template_kind: Literal["primary", "standalone", "nested"]
+    _resolved_claim_ids: set[tuple[str, int]] = field(default_factory=set, repr=False)
+
+    def mark_resolved(self, *claims: ForeignClaim) -> None:
+        """Record explicit outcomes for claims replaced by the provider."""
+        owned_ids = {claim.claim_id for claim in self.claims}
+        for claim in claims:
+            if claim.claim_id not in owned_ids:
+                msg = f"Foreign claim {claim.claim_id!r} is not owned by this compile context."
+                raise ValueError(msg)
+            if claim.claim_id in self._resolved_claim_ids:
+                msg = f"Foreign claim {claim.claim_id!r} was resolved more than once."
+                raise ValueError(msg)
+            self._resolved_claim_ids.add(claim.claim_id)
+
+    def compiled_body(self, nodes: list[BodyItem]) -> CompiledBody:
+        """Compile and protect one Citry run for later host-selected rendering."""
+        from citry.host_templates import CompiledBody  # noqa: PLC0415
+
+        compiled = self.citry.extensions.on_template_compiled(
+            self.component_class,
+            nodes,
+            template_id=self.template_id,
+            origin=self.origin,
+            template_kind=self.template_kind,
+        )
+        return CompiledBody._from_items(
+            compiled,
+            engine_id=self.citry.engine_id,
+            template_id=self.template_id,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -801,7 +914,9 @@ class Extension:
             "on_render_context_merge",
             "on_serialize",
             "on_template_loaded",
+            "on_template_foreign_spans",
             "on_messages_loaded",
+            "on_template_foreign_compiled",
             "on_template_compiled",
             "on_js_loaded",
             "on_css_loaded",
@@ -843,6 +958,12 @@ class Extension:
         Return a new string to modify it.
         """
 
+    def on_template_foreign_spans(
+        self,
+        ctx: OnTemplateForeignSpansContext,
+    ) -> ForeignSpanSet | None:
+        """Declare UTF-8 source ranges owned by this extension's host engine."""
+
     def on_messages_loaded(self, ctx: OnMessagesLoadedContext) -> str | None:
         """
         Called once per source declaration with source-locale Fluent text
@@ -859,6 +980,18 @@ class Extension:
         """
         Called once per compiled body, with the generated node list. Mutate it
         in place or return a new list.
+        """
+
+    def on_template_foreign_compiled(
+        self,
+        ctx: OnTemplateForeignCompiledContext,
+    ) -> list[BodyItem] | None:
+        """
+        Replace this provider's claims in one independent body list.
+
+        The provider must call ``ctx.mark_resolved`` exactly once for every
+        claim it handles. Core verifies the ledger before general compiled
+        hooks run.
         """
 
     def on_template_reset(self, ctx: OnTemplateResetContext) -> None:
@@ -1841,13 +1974,198 @@ class ExtensionManager:
 
     # ----- Template hooks -----
 
-    def on_template_loaded(self, component_class: type[Component], content: str) -> str:
+    def on_template_loaded(
+        self,
+        component_class: type[Component],
+        content: str,
+        *,
+        template_id: str = "",
+        origin: str = "",
+        template_kind: Literal["primary", "standalone", "nested"] = "primary",
+    ) -> str:
         return self.emit(
             "on_template_loaded",
-            OnTemplateLoadedContext(citry=self.citry, component_class=component_class, content=content),
+            OnTemplateLoadedContext(
+                citry=self.citry,
+                component_class=component_class,
+                content=content,
+                template_id=template_id,
+                origin=origin,
+                template_kind=template_kind,
+            ),
             result="map",
             field="content",
         )
+
+    def on_template_foreign_spans(
+        self,
+        component_class: type[Component],
+        content: str,
+        *,
+        template_id: str,
+        origin: str,
+        template_kind: Literal["primary", "standalone", "nested"],
+        foreign_compile_contexts: Mapping[str, object] | None = None,
+    ) -> tuple[tuple[object, ...], dict[str, object | None]]:
+        """Collect provider spans against one final post-load source string."""
+        from citry_core.template_parser import ForeignSpan as CoreForeignSpan  # noqa: PLC0415
+
+        spans: list[object] = []
+        metadata: dict[str, object | None] = {}
+        for extension in self._extensions_with_hook("on_template_foreign_spans"):
+            if type(extension).on_template_foreign_compiled is Extension.on_template_foreign_compiled:
+                msg = (
+                    f"Extension {extension.name!r} declares foreign spans but does not implement "
+                    "on_template_foreign_compiled()."
+                )
+                raise TypeError(msg)
+            result = extension.on_template_foreign_spans(
+                OnTemplateForeignSpansContext(
+                    citry=self.citry,
+                    component_class=component_class,
+                    content=content,
+                    template_id=template_id,
+                    origin=origin,
+                    template_kind=template_kind,
+                    compile_context=(foreign_compile_contexts or {}).get(extension.name),
+                )
+            )
+            if result is None:
+                continue
+            if not isinstance(result, ForeignSpanSet):
+                msg = f"Extension {extension.name!r} returned a non-ForeignSpanSet value."
+                raise TypeError(msg)
+            metadata[extension.name] = result.provider_metadata
+            for ordinal, span in enumerate(result.spans):
+                if not isinstance(span, ForeignSpan):
+                    msg = f"Extension {extension.name!r} returned a non-ForeignSpan entry."
+                    raise TypeError(msg)
+                spans.append(
+                    CoreForeignSpan(
+                        span.start_byte,
+                        span.end_byte,
+                        extension.name,
+                        ordinal,
+                        span.may_control_body,
+                    )
+                )
+        return tuple(spans), metadata
+
+    def on_template_foreign_compiled(
+        self,
+        component_class: type[Component],
+        nodes: list[BodyItem],
+        *,
+        provider_metadata: Mapping[str, object | None],
+        template_id: str,
+        origin: str,
+        template_kind: Literal["primary", "standalone", "nested"],
+    ) -> list[BodyItem]:
+        """Resolve every provider claim, one independently compiled body at a time."""
+        return self._resolve_foreign_body(
+            component_class,
+            nodes,
+            provider_metadata=provider_metadata,
+            template_id=template_id,
+            origin=origin,
+            template_kind=template_kind,
+        )
+
+    def _resolve_foreign_body(
+        self,
+        component_class: type[Component],
+        nodes: list[BodyItem],
+        *,
+        provider_metadata: Mapping[str, object | None],
+        template_id: str,
+        origin: str,
+        template_kind: Literal["primary", "standalone", "nested"],
+    ) -> list[BodyItem]:
+        from citry.nodes import (  # noqa: PLC0415
+            ComponentNode,
+            FillNode,
+            ForeignHtmlAttr,
+            ForeignNode,
+            ForNode,
+            IfNode,
+            SlotNode,
+        )
+
+        # Resolve independently compiled child bodies before handing this body
+        # to its owner. An owner may replace an entire run with a host node
+        # whose callbacks retain the Citry nodes in that run. If child claims
+        # were resolved afterwards, those retained nodes would stay fail-closed
+        # and surface only when the host re-entered Citry at render time.
+        for item in nodes:
+            child_bodies: list[list[BodyItem]] = []
+            if isinstance(item, (ComponentNode, SlotNode, FillNode)):
+                child_bodies.append(item.body)
+            elif isinstance(item, (IfNode, ForNode)):
+                child_bodies.extend(branch[2] for branch in item.branches)
+            for child in child_bodies:
+                resolved = self._resolve_foreign_body(
+                    component_class,
+                    child,
+                    provider_metadata=provider_metadata,
+                    template_id=template_id,
+                    origin=origin,
+                    template_kind=template_kind,
+                )
+                if resolved is not child:
+                    child[:] = resolved
+
+        def claims_in(items: list[BodyItem]) -> list[ForeignClaim]:
+            claims: list[ForeignClaim] = []
+            for item in items:
+                if isinstance(item, ForeignNode):
+                    claims.append(item.claim("body"))
+                attrs = getattr(item, "attrs", ())
+                for attr in attrs:
+                    if isinstance(attr, ForeignHtmlAttr):
+                        claims.extend(part.claim("component_input") for part in attr.foreign_nodes())
+            return claims
+
+        claims = claims_in(nodes)
+        controlling = {claim.provider for claim in claims if claim.may_control_body}
+        if len(controlling) > 1:
+            msg = f"Multiple providers control one compiled body: {sorted(controlling)!r}."
+            raise RuntimeError(msg)
+
+        for extension in self._extensions_with_hook("on_template_foreign_compiled"):
+            owned = tuple(claim for claim in claims if claim.provider == extension.name)
+            if not owned:
+                continue
+            other_before = tuple(claim for claim in claims_in(nodes) if claim.provider != extension.name)
+            ctx = OnTemplateForeignCompiledContext(
+                citry=self.citry,
+                component_class=component_class,
+                nodes=nodes,
+                claims=owned,
+                provider_metadata=provider_metadata.get(extension.name),
+                template_id=template_id,
+                origin=origin,
+                template_kind=template_kind,
+            )
+            result = extension.on_template_foreign_compiled(ctx)
+            if result is not None:
+                nodes = result
+            other_after = tuple(claim for claim in claims_in(nodes) if claim.provider != extension.name)
+            if other_after != other_before:
+                changed = sorted({claim.claim_id for claim in (*other_before, *other_after)})
+                msg = f"Extension {extension.name!r} modified foreign claims owned by another provider: {changed!r}."
+                raise RuntimeError(msg)
+            missing = {claim.claim_id for claim in owned} - ctx._resolved_claim_ids
+            if missing:
+                msg = f"Extension {extension.name!r} did not resolve foreign claims {sorted(missing)!r}."
+                raise RuntimeError(msg)
+
+        unresolved = claims_in(nodes)
+        if unresolved:
+            ids = sorted(claim.claim_id for claim in unresolved)
+            msg = f"Foreign claims remain unresolved after owner compilation: {ids!r}."
+            raise RuntimeError(msg)
+
+        return nodes
 
     def on_messages_loaded(
         self,
@@ -1878,10 +2196,25 @@ class ExtensionManager:
                 ctx = replace(ctx, content=result)
         return ctx.content
 
-    def on_template_compiled(self, component_class: type[Component], nodes: list[BodyItem]) -> list[BodyItem]:
+    def on_template_compiled(
+        self,
+        component_class: type[Component],
+        nodes: list[BodyItem],
+        *,
+        template_id: str = "",
+        origin: str = "",
+        template_kind: Literal["primary", "standalone", "nested"] = "primary",
+    ) -> list[BodyItem]:
         return self.emit(
             "on_template_compiled",
-            OnTemplateCompiledContext(citry=self.citry, component_class=component_class, nodes=nodes),
+            OnTemplateCompiledContext(
+                citry=self.citry,
+                component_class=component_class,
+                nodes=nodes,
+                template_id=template_id,
+                origin=origin,
+                template_kind=template_kind,
+            ),
             result="map",
             field="nodes",
         )

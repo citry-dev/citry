@@ -5,9 +5,9 @@ use pest::Parser;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
-    remove_introduced_variables, Comment, Expr, FillDataField, FillDataPattern, HtmlAttr,
-    HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text,
-    Token,
+    remove_introduced_variables, Comment, Expr, FillDataField, FillDataPattern, ForeignSourcePart,
+    HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot, Template,
+    TemplateElement, Text, Token,
 };
 use crate::constants::{
     citry_component_tag_eq, has_citry_component_prefix, is_dynamic_target_expr_attr,
@@ -18,6 +18,7 @@ use crate::constants::{
     META_ATTR_KEY, RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
 };
 use crate::error::{assert_rule, assert_rules, ParseError};
+use crate::foreign::ParseOptions;
 use crate::grammar::{GrammarParser, Rule};
 use crate::lang::lang::{ForLoopVars, Lang, LangImpl};
 use crate::lang::python::PYTHON_LANG;
@@ -99,6 +100,17 @@ pub fn parse_template(
     parse_template_with_custom_lang(input, Some(&lang_impl), user_rules)
 }
 
+/// Parse with explicit parser options while preserving the legacy entry point.
+pub fn parse_template_with_options(
+    input: &str,
+    lang: Option<Lang>,
+    user_rules: Option<&Rc<HashMap<String, TagRules>>>,
+    options: &ParseOptions,
+) -> Result<Template, ParseError> {
+    let lang_impl = lang.unwrap_or(Lang::Python).to_lang_impl();
+    parse_template_with_custom_lang_and_options(input, Some(&lang_impl), user_rules, options)
+}
+
 /// Parse a complete template into a Template AST with a custom language implementation.
 ///
 /// This is same as `parse_template()`, but allows you to specify a custom language implementation,
@@ -122,6 +134,29 @@ pub fn parse_template_with_custom_lang(
     lang: Option<&Rc<dyn LangImpl>>,
     user_rules: Option<&Rc<HashMap<String, TagRules>>>,
 ) -> Result<Template, ParseError> {
+    let lang = lang
+        .map(Rc::clone)
+        .unwrap_or_else(|| Lang::Python.to_lang_impl());
+    let rules = user_rules
+        .map(Rc::clone)
+        .unwrap_or_else(|| Rc::new(HashMap::new()));
+    let context = ParserContext::for_source(input, &lang, &rules);
+    parse_template_inner(input, &context)
+}
+
+/// Custom-language counterpart of `parse_template_with_options`.
+pub fn parse_template_with_custom_lang_and_options(
+    input: &str,
+    lang: Option<&Rc<dyn LangImpl>>,
+    user_rules: Option<&Rc<HashMap<String, TagRules>>>,
+    options: &ParseOptions,
+) -> Result<Template, ParseError> {
+    if options.foreign_spans.is_empty()
+        && options.source_offset == 0
+        && options.root_source.is_none()
+    {
+        return parse_template_with_custom_lang(input, lang, user_rules);
+    }
     // NOTE: This function accepts references of Rc's to avoid consuming the Rc instances.
     // But if we receive None, we have to create a new Rc instance.
     // Thus we also clone the Rc internally, so that in both Some/None cases we end up
@@ -133,8 +168,17 @@ pub fn parse_template_with_custom_lang(
         .map(Rc::clone)
         .unwrap_or_else(|| Rc::new(HashMap::new()));
 
-    let context = ParserContext::for_source(input, &lang, &rules);
-    parse_template_inner(input, &context)
+    let (root_source, foreign_spans) = options.validate(input)?;
+    let context = ParserContext::for_source_with_foreign(
+        &root_source,
+        options.source_offset,
+        &lang,
+        &rules,
+        foreign_spans,
+    )?;
+    let template = parse_template_inner(input, &context)?;
+    context.ensure_all_foreign_claimed()?;
+    Ok(template)
 }
 
 /// Internal method to parse a template with a context that may have offsets
@@ -151,7 +195,8 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
         });
     }
 
-    let mut pairs = GrammarParser::parse(Rule::template, input)
+    let masked_source = context.masked_local_source(input)?;
+    let mut pairs = GrammarParser::parse(Rule::template, &masked_source)
         .map_err(|error| context.error_from_pest(error, "Failed to parse template: "))?;
 
     // Stack for tracking open HTML tags with bodies
@@ -238,7 +283,7 @@ fn process_template_element(
         Rule::html_comment => {
             let template = get_current_template(tag_stack, root_template);
             let (text, comment) = process_html_comment(inner, context)?;
-            template.elements.push(TemplateElement::Text(text));
+            push_text_with_foreign(template, text, context)?;
             template.comments.push(comment);
         }
         // Template comments: NOT added as Text, only captured as comments
@@ -251,7 +296,7 @@ fn process_template_element(
         Rule::html_directive | Rule::html_processing_instruction | Rule::text => {
             let template = get_current_template(tag_stack, root_template);
             let text = process_text(inner, context)?;
-            template.elements.push(TemplateElement::Text(text));
+            push_text_with_foreign(template, text, context)?;
         }
         Rule::html_raw => {
             let template = get_current_template(tag_stack, root_template);
@@ -263,6 +308,16 @@ fn process_template_element(
             finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
         }
         Rule::template_expression => {
+            let expression_span = inner.as_span();
+            let expression_start = context.index_offset + expression_span.start();
+            let expression_end = context.index_offset + expression_span.end();
+            if context.has_foreign_intersection(expression_start, expression_end) {
+                return Err(context.error_from_local_span(
+                    expression_span,
+                    "FOREIGN_SPAN_UNSUPPORTED_POSITION: foreign source must own the complete template expression"
+                        .to_string(),
+                ));
+            }
             let template = get_current_template(tag_stack, root_template);
             let expr = process_template_expression(inner, context)?;
             // Propagate upwards
@@ -397,7 +452,7 @@ fn finalize_node(
 ) -> Result<(), ParseError> {
     // Extract fill nodes and determine contains_fills
     let fill_nodes = match &node {
-        Node::WithBody { body, .. } => extract_fill_nodes(body, false, false),
+        Node::WithBody { body, .. } => extract_fill_nodes(body, false, false, false),
         Node::SelfClosing { .. } => vec![],
     };
     let contains_fills = !fill_nodes.is_empty();
@@ -637,6 +692,38 @@ fn process_html_tag(
     }
 }
 
+/// Split one grammar text token into original literal and provider-owned
+/// source parts. Pest sees only the mask; the AST sees only original bytes.
+fn push_text_with_foreign(
+    template: &mut Template,
+    text: Text,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let parts = context.claim_foreign_parts(text.token.start_index, text.token.end_index)?;
+    if parts.is_empty() {
+        template.elements.push(TemplateElement::Text(text));
+        return Ok(());
+    }
+
+    let mut cursor = text.token.start_index;
+    for part in parts {
+        context.validate_foreign_body_locus(&part)?;
+        if cursor < part.token.start_index {
+            template.elements.push(TemplateElement::Text(Text {
+                token: context.token_from_absolute_range(cursor, part.token.start_index)?,
+            }));
+        }
+        cursor = part.token.end_index;
+        template.elements.push(TemplateElement::Foreign(part));
+    }
+    if cursor < text.token.end_index {
+        template.elements.push(TemplateElement::Text(Text {
+            token: context.token_from_absolute_range(cursor, text.token.end_index)?,
+        }));
+    }
+    Ok(())
+}
+
 /// Process html_start_tag pair into HtmlStartTag
 fn process_html_start_tag(
     start_tag_pair: pest::iterators::Pair<Rule>,
@@ -696,6 +783,7 @@ fn process_html_start_tag(
     // introduces, in one pass (see process_control_flow_metadata).
     let introduced_variables =
         process_control_flow_metadata(&name.content, &start_tag_token, &mut attrs, context)?;
+    let foreign_parts = collect_start_tag_foreign(&start_tag_token, &name, &attrs, false, context)?;
 
     let start_tag = HtmlStartTag {
         token: start_tag_token,
@@ -703,6 +791,7 @@ fn process_html_start_tag(
         attrs,
         is_self_closing: false,
         comments,
+        foreign_parts,
     };
 
     Ok(ProcessedStartTag {
@@ -827,6 +916,8 @@ fn process_html_self_closing_tag(
     // pass (see process_control_flow_metadata).
     let introduced_variables =
         process_control_flow_metadata(&name.content, &self_closing_token, &mut attrs, context)?;
+    let foreign_parts =
+        collect_start_tag_foreign(&self_closing_token, &name, &attrs, true, context)?;
 
     // A same-element introduced variable (a shorthand `c-for` loop target) is
     // bound for this node's own attributes, so it is removed from used_variables
@@ -850,6 +941,7 @@ fn process_html_self_closing_tag(
         attrs,
         is_self_closing: true,
         comments: comments_from_tag,
+        foreign_parts,
     };
 
     Ok((
@@ -862,6 +954,105 @@ fn process_html_self_closing_tag(
         },
         attribute_slots,
     ))
+}
+
+/// Attach foreign claims that occupy gaps in a start tag. Claims inside
+/// ordinary values have already been attached to their `HtmlAttr`; claims
+/// intersecting names or keys are unsupported structural ownership.
+fn collect_start_tag_foreign(
+    token: &Token,
+    name: &Token,
+    attrs: &[HtmlAttr],
+    is_self_closing: bool,
+    context: &ParserContext,
+) -> Result<Vec<ForeignSourcePart>, ParseError> {
+    let parts = context.claim_foreign_parts(token.start_index, token.end_index)?;
+    let attrs_have_foreign = attrs
+        .iter()
+        .any(|attr| attr.kind == HtmlAttrKind::Static && !attr.foreign_parts.is_empty());
+    if parts.is_empty() && !attrs_have_foreign {
+        return Ok(parts);
+    }
+
+    for part in &parts {
+        let intersects_name =
+            part.token.start_index < name.end_index && part.token.end_index > name.start_index;
+        let intersects_attr = attrs.iter().any(|attr| {
+            part.token.start_index < attr.token.end_index
+                && part.token.end_index > attr.token.start_index
+        });
+        if intersects_name || intersects_attr {
+            return Err(context.error_from_token(
+                &part.token,
+                "FOREIGN_SPAN_UNSUPPORTED_POSITION: foreign source cannot own a tag name, attribute name, or partial attribute"
+                    .to_string(),
+            ));
+        }
+    }
+
+    let is_component =
+        has_citry_component_prefix(&name.content) || is_reserved_citry_tag_identity(&name.content);
+    if is_component && !parts.is_empty() {
+        return Err(context.error_from_token(
+            &parts[0].token,
+            "FOREIGN_SPAN_UNSUPPORTED_POSITION: foreign source cannot create or remove component inputs between attributes"
+                .to_string(),
+        ));
+    }
+
+    if !is_component {
+        let has_citry_dynamic_attr = attrs.iter().any(|attr| {
+            attr.kind != HtmlAttrKind::Static
+                || attr.key.content.starts_with("@c-")
+                || attr.key.content.starts_with(":c-")
+                || attr.key.content.starts_with("$c-")
+                || attr
+                    .key
+                    .content
+                    .get(..9)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("data-cev-"))
+        });
+        if has_citry_dynamic_attr {
+            let error_token = parts
+                .first()
+                .map(|part| &part.token)
+                .or_else(|| {
+                    attrs
+                        .iter()
+                        .filter(|attr| attr.kind == HtmlAttrKind::Static)
+                        .flat_map(|attr| attr.foreign_parts.iter())
+                        .next()
+                        .map(|part| &part.token)
+                })
+                .expect("a foreign start-tag contribution was established above");
+            return Err(context.error_from_token(
+                error_token,
+                "FOREIGN_SPAN_UNSUPPORTED_POSITION: a foreign raw start tag cannot also use Citry dynamic or extension-owned attributes"
+                    .to_string(),
+            ));
+        }
+        if is_self_closing && !is_html_void_element(&name.content) {
+            let error_token = parts
+                .first()
+                .map(|part| &part.token)
+                .or_else(|| {
+                    attrs
+                        .iter()
+                        .filter(|attr| attr.kind == HtmlAttrKind::Static)
+                        .flat_map(|attr| attr.foreign_parts.iter())
+                        .next()
+                        .map(|part| &part.token)
+                })
+                .expect("a foreign start-tag contribution was established above");
+            return Err(context.error_from_token(
+                error_token,
+                "FOREIGN_SPAN_UNSUPPORTED_POSITION: foreign source on a non-void self-closing tag would bypass Citry's expansion semantics"
+                    .to_string(),
+            ));
+        }
+    }
+
+    Ok(parts)
 }
 
 /// Parse HTML attributes from Pest pairs
@@ -968,6 +1159,9 @@ fn parse_html_attribute(
             ));
         }
     };
+    let value_has_foreign = inner_value
+        .as_ref()
+        .is_some_and(|value| context.has_foreign_intersection(value.start_index, value.end_index));
 
     // `c-else` and `c-empty` are presence-only branch markers. Accepting a
     // value here would silently discard it during control-flow lowering.
@@ -985,6 +1179,13 @@ fn parse_html_attribute(
     // Clone inner_value since we need it later for HtmlAttr, but also need to use it for processing
     let inner_value_for_attr = inner_value.clone();
     let (kind, used_variables, comments, slots) = if is_meta {
+        if value_has_foreign {
+            return Err(context.error_from_token(
+                inner_value.as_ref().unwrap(),
+                "FOREIGN_SPAN_UNSUPPORTED_POSITION: framework metadata attributes remain Citry-owned expressions"
+                    .to_string(),
+            ));
+        }
         // Framework-metadata channel (`#c-*`). Exactly two members exist, and
         // an unknown name is an authoring mistake, so the error lists both.
         match key.content.as_str() {
@@ -1039,13 +1240,18 @@ fn parse_html_attribute(
         // the whole value. Otherwise the grammar, rather than a duplicate tag
         // name character whitelist, decides whether the final item is a real
         // closing, self-closing, raw, or HTML void tag.
+        let masked_inner_value = inner_value
+            .as_ref()
+            .map(|value| masked_token_content(value, context))
+            .transpose()?;
         let (is_fragment, is_template) = inner_value
             .as_ref()
-            .map(|inner_value| {
-                let is_fragment = template_fragment(&inner_value.content).is_some();
+            .zip(masked_inner_value.as_ref())
+            .map(|(_inner_value, masked_content)| {
+                let is_fragment = template_fragment(masked_content).is_some();
                 (
                     is_fragment,
-                    is_fragment || is_tag_bounded_nested_template(&inner_value.content),
+                    is_fragment || is_tag_bounded_nested_template(masked_content),
                 )
             })
             .unwrap_or((false, false));
@@ -1092,6 +1298,13 @@ fn parse_html_attribute(
         } else {
             // c-... attribute WITH expression value
             if let Some(ref inner_value_ref) = inner_value {
+                if value_has_foreign {
+                    return Err(context.error_from_token(
+                        inner_value_ref,
+                        "FOREIGN_SPAN_UNSUPPORTED_POSITION: a Citry expression attribute cannot contain foreign source"
+                            .to_string(),
+                    ));
+                }
                 let (used_variables, comments) =
                     process_expression(inner_value_ref, None, context)?;
                 (
@@ -1110,6 +1323,19 @@ fn parse_html_attribute(
         (HtmlAttrKind::Static, Vec::new(), Vec::new(), Vec::new())
     };
 
+    let foreign_parts = match (&kind, &inner_value_for_attr) {
+        (HtmlAttrKind::Static, Some(value)) => {
+            context.claim_foreign_parts(value.start_index, value.end_index)?
+        }
+        // The nested child AST owns these claims. The outer attribute retains
+        // a non-consuming copy so the generated lazy Python reparse can carry
+        // the exact same provider IDs and root ranges.
+        (HtmlAttrKind::Template, Some(value)) => {
+            context.foreign_parts_in_range(value.start_index, value.end_index)?
+        }
+        _ => Vec::new(),
+    };
+
     Ok(ParsedHtmlAttribute {
         attr: HtmlAttr {
             token: attr_token,
@@ -1121,9 +1347,22 @@ fn parse_html_attribute(
             comments,
             used_variables,
             fill_data_pattern: None,
+            foreign_parts,
         },
         slots,
     })
+}
+
+fn masked_token_content(token: &Token, context: &ParserContext) -> Result<String, ParseError> {
+    let (line, col) = token.line_col;
+    context
+        .create_child_context(
+            line.saturating_sub(1),
+            col.saturating_sub(1),
+            token.start_index,
+        )
+        .masked_local_source(&token.content)
+        .map(|source| source.into_owned())
 }
 
 /// Whether a dynamic attribute value is bounded by real HTML tags.
@@ -1214,12 +1453,16 @@ fn process_html_raw(
     let content_text = Text {
         token: context.create_token(&content_pair),
     };
-    let body = Template {
-        elements: vec![TemplateElement::Text(content_text)],
+    let mut body = Template {
+        elements: vec![],
         comments: vec![],
         used_variables: vec![],
         slots: vec![],
     };
+    // Installed providers retain ownership even inside `<c-raw>`. This keeps
+    // claims fail-closed and, importantly, never drops claimed authored bytes.
+    // With no foreign claims the established c-raw behavior is unchanged.
+    push_text_with_foreign(&mut body, content_text, context)?;
 
     // Get end tag
     let end_tag_pair = inner.next().ok_or_else(|| {
@@ -1328,10 +1571,20 @@ fn process_html_text_container(
     for body_pair in content_pair.into_inner() {
         match body_pair.as_rule() {
             rule if rule == text_rule => {
-                body.elements
-                    .push(TemplateElement::Text(process_text(body_pair, context)?));
+                let text = process_text(body_pair, context)?;
+                push_text_with_foreign(&mut body, text, context)?;
             }
             Rule::template_expression => {
+                let expression_span = body_pair.as_span();
+                let expression_start = context.index_offset + expression_span.start();
+                let expression_end = context.index_offset + expression_span.end();
+                if context.has_foreign_intersection(expression_start, expression_end) {
+                    return Err(context.error_from_local_span(
+                        expression_span,
+                        "FOREIGN_SPAN_UNSUPPORTED_POSITION: foreign source must own the complete template expression"
+                            .to_string(),
+                    ));
+                }
                 let expr = process_template_expression(body_pair, context)?;
                 body.used_variables.extend(expr.used_variables.clone());
                 body.comments.extend(expr.comments.clone());
@@ -2015,6 +2268,7 @@ fn _contains_only_fills_and_control_flow(template: &Template) -> bool {
                 // Expressions are not allowed in fill-only context
                 return false;
             }
+            TemplateElement::Foreign(_) => return false,
             TemplateElement::Node(node) => {
                 let tag_name = node.tag_name();
                 if tag_name == C_FILL_TAG {
@@ -2078,6 +2332,15 @@ fn validate_fill_group_content(
                         .to_string(),
                 ));
             }
+            TemplateElement::Foreign(part) => {
+                if !part.may_control_body {
+                    return Err(context.error_from_token(
+                        &part.token,
+                        "Non-controlling foreign content cannot appear next to '<c-fill>' tags. The provider must mark host control-flow claims and implement fill collection."
+                            .to_string(),
+                    ));
+                }
+            }
             TemplateElement::Node(node) => {
                 let tag_name = node.tag_name();
                 if tag_name == C_FILL_TAG {
@@ -2123,6 +2386,7 @@ fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
                 used_variables.extend(recompute_node_used_variables(node));
             }
             TemplateElement::Text(_) => {}
+            TemplateElement::Foreign(_) => {}
         }
     }
     template.used_variables = used_variables.clone();
@@ -3241,6 +3505,7 @@ fn validate_fill_names(
     //   `<c-empty><c-fill c-name="slot_var">` => counts as 1 (c-empty renders at most once)
     let mut max_possible_fills: usize = 0;
     let mut has_unbounded_dynamic_fill = false;
+    let has_foreign_controlled_fills = fill_nodes.iter().any(|fill| fill.inside_foreign_control);
     // Whether any fill has a dynamic name (c-name or c-bind). When true,
     // the per-name required slot check is skipped since we can't know which
     // names the dynamic fills will resolve to at runtime.
@@ -3423,7 +3688,7 @@ fn validate_fill_names(
     }
 
     // Validate required slots
-    if !required_slots.is_empty() && !has_unbounded_dynamic_fill {
+    if !required_slots.is_empty() && !has_unbounded_dynamic_fill && !has_foreign_controlled_fills {
         // Count check: even with dynamic fills, if the total number of possible
         // unique fills is fewer than required slots, we know it can't work.
         //
@@ -3471,7 +3736,7 @@ fn validate_fill_names(
 fn _has_fill_meaningful_content(body: &Template) -> bool {
     body.elements.iter().any(|element| match element {
         TemplateElement::Text(text) => !text.token.content.trim().is_empty(),
-        TemplateElement::Expr(_) | TemplateElement::Node(_) => true,
+        TemplateElement::Expr(_) | TemplateElement::Node(_) | TemplateElement::Foreign(_) => true,
     })
 }
 
@@ -3504,6 +3769,11 @@ struct FillNodeInfo<'a> {
     /// - `<c-for each="s in slots"><c-fill c-name="s"></c-fill></c-for>` => true
     /// - `<c-fill c-name="s"></c-fill>` => false
     inside_control_flow: bool,
+    /// Whether a foreign provider declared that it may control this body.
+    /// Citry cannot pair the provider's opening and closing tokens, so static
+    /// cardinality and required-slot checks defer to runtime for every fill in
+    /// that independently compiled body.
+    inside_foreign_control: bool,
 }
 
 /// Recursively collect all `<c-fill>` nodes from a template body.
@@ -3533,8 +3803,13 @@ fn extract_fill_nodes(
     template: &Template,
     inside_for_loop: bool,
     inside_control_flow: bool,
+    inside_foreign_control: bool,
 ) -> Vec<FillNodeInfo<'_>> {
     let mut fill_nodes = Vec::new();
+    let body_has_foreign_control = inside_foreign_control
+        || template.elements.iter().any(
+            |element| matches!(element, TemplateElement::Foreign(part) if part.may_control_body),
+        );
 
     for element in &template.elements {
         match element {
@@ -3544,7 +3819,8 @@ fn extract_fill_nodes(
                     fill_nodes.push(FillNodeInfo {
                         node,
                         inside_for_loop,
-                        inside_control_flow,
+                        inside_control_flow: inside_control_flow || body_has_foreign_control,
+                        inside_foreign_control: body_has_foreign_control,
                     });
                 } else if CONTROL_FLOW_TAGS.contains(&tag_name) {
                     // Recursively search inside control flow nodes.
@@ -3553,7 +3829,12 @@ fn extract_fill_nodes(
                     // ALL control flow tags set inside_control_flow to true.
                     if let Node::WithBody { body, .. } = node {
                         let nested_inside_for = inside_for_loop || tag_name == C_FOR_TAG;
-                        fill_nodes.extend(extract_fill_nodes(body, nested_inside_for, true));
+                        fill_nodes.extend(extract_fill_nodes(
+                            body,
+                            nested_inside_for,
+                            true,
+                            body_has_foreign_control,
+                        ));
                     }
                 } else {
                     // NOTE: When we come across nested components or regular HTML tags,
@@ -3839,7 +4120,7 @@ fn validate_tag_grouping(
                 break;
             }
             TemplateElement::Text(text) if text.token.content.trim().is_empty() => continue,
-            TemplateElement::Text(_) | TemplateElement::Expr(_) => {
+            TemplateElement::Text(_) | TemplateElement::Expr(_) | TemplateElement::Foreign(_) => {
                 return Err(context.error_from_token(
                     start_tag_token,
                     format!(

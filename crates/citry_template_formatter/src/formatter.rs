@@ -7,17 +7,33 @@
 //! judgment in `html.rs` about where whitespace matters, because both sides
 //! would then be wrong the same way.
 
-use citry_template_parser::parse_template;
+use citry_template_parser::{ParseOptions, Template, parse_template, parse_template_with_options};
 
 use crate::error::FormatError;
 use crate::printer::EditPlan;
-use crate::projection::{ProjectionCapability, verify_contract_projection};
+use crate::projection::{ProjectionCapability, verify_contract_projection_with_options};
 use crate::source::SourceModel;
 
 /// Format `source`, then refuse to return the result unless it verifies.
 pub(crate) fn format(source: &str) -> Result<String, FormatError> {
-    let (candidate, before_model) = format_once(source)?;
-    verify_candidate(source, &candidate, &before_model)?;
+    format_with_options(source, &ParseOptions::default())
+}
+
+pub(crate) fn format_with_options(
+    source: &str,
+    options: &ParseOptions,
+) -> Result<String, FormatError> {
+    let options = options
+        .localized_for_source(source)
+        .map_err(|error| FormatError::from_parse(&error))?;
+    let (candidate, before_model, candidate_options) = format_once_with_options(source, &options)?;
+    verify_candidate_with_options(
+        source,
+        &options,
+        &candidate,
+        &candidate_options,
+        &before_model,
+    )?;
     Ok(candidate)
 }
 
@@ -26,20 +42,38 @@ pub(crate) fn format(source: &str) -> Result<String, FormatError> {
 /// Every failure here is an `Invariant` error rather than a formatting result:
 /// the formatter got something wrong, and returning the text anyway would hand
 /// the caller a corrupted template.
+#[cfg(test)]
 fn verify_candidate(
     source: &str,
     candidate: &str,
     before_model: &SourceModel,
 ) -> Result<(), FormatError> {
+    verify_candidate_with_options(
+        source,
+        &ParseOptions::default(),
+        candidate,
+        &ParseOptions::default(),
+        before_model,
+    )
+}
+
+fn verify_candidate_with_options(
+    source: &str,
+    source_options: &ParseOptions,
+    candidate: &str,
+    candidate_options: &ParseOptions,
+    before_model: &SourceModel,
+) -> Result<(), FormatError> {
     // 1. The edit plan is a pure function of the input. Re-deriving it from the
     // original source must land on the same bytes, which is what rules out a
     // printer that depends on iteration order or leftover state.
-    let (planned_candidate, _) = format_once(source).map_err(|error| {
-        FormatError::invariant(format!(
-            "formatter could not reproduce its edit plan during verification: {error}"
-        ))
-    })?;
-    if planned_candidate != candidate {
+    let (planned_candidate, _, planned_options) = format_once_with_options(source, source_options)
+        .map_err(|error| {
+            FormatError::invariant(format!(
+                "formatter could not reproduce its edit plan during verification: {error}"
+            ))
+        })?;
+    if planned_candidate != candidate || planned_options != *candidate_options {
         return Err(FormatError::invariant(
             "formatted template does not match the deterministic structural edit plan",
         ));
@@ -49,19 +83,26 @@ fn verify_candidate(
     // projection keeps only the parts a reader's browser reacts to, so two
     // templates with the same projection render the same however differently
     // they are indented.
-    verify_contract_projection(source, candidate, ProjectionCapability::PythonExpressions)
-        .map_err(|error| {
-            FormatError::invariant(format!(
-                "formatted template changed the structural layout contract: {error}"
-            ))
-        })?;
+    verify_contract_projection_with_options(
+        source,
+        source_options,
+        candidate,
+        candidate_options,
+        ProjectionCapability::PythonExpressions,
+    )
+    .map_err(|error| {
+        FormatError::invariant(format!(
+            "formatted template changed the structural layout contract: {error}"
+        ))
+    })?;
 
     // 3. Output that no longer parses is always a bug, never a result. The
     // model rebuilt here is also what the remaining fingerprint checks read.
-    let parsed_candidate = parse_template(candidate, None, None).map_err(|error| {
+    let parsed_candidate = parse_with_options(candidate, candidate_options).map_err(|error| {
         FormatError::invariant(format!("formatted template did not reparse: {error}"))
     })?;
-    let after_model = SourceModel::build(candidate, &parsed_candidate)?;
+    let after_model =
+        SourceModel::build_with_options(candidate, &parsed_candidate, candidate_options)?;
     // 4. Comments carry author intent and several of them are directives, so
     // losing, duplicating, or reordering one is never an acceptable trade for
     // nicer layout.
@@ -90,12 +131,13 @@ fn verify_candidate(
     // 6. Formatting an already formatted template must be a no-op. Without
     // this, formatting on every save could walk a file a little further each
     // time and show up as endless diff noise.
-    let (second_pass, _) = format_once(candidate).map_err(|error| {
-        FormatError::invariant(format!(
-            "formatted template failed its second pass: {error}"
-        ))
-    })?;
-    if second_pass != candidate {
+    let (second_pass, _, second_pass_options) =
+        format_once_with_options(candidate, candidate_options).map_err(|error| {
+            FormatError::invariant(format!(
+                "formatted template failed its second pass: {error}"
+            ))
+        })?;
+    if second_pass != candidate || second_pass_options != *candidate_options {
         return Err(FormatError::invariant(
             "formatted template was not byte-idempotent",
         ));
@@ -107,13 +149,22 @@ fn verify_candidate(
 ///
 /// Returns the formatted text together with the model built from the *original*
 /// source, which is what the fingerprint checks above compare against.
+#[cfg(test)]
 fn format_once(source: &str) -> Result<(String, SourceModel), FormatError> {
+    let (candidate, model, _) = format_once_with_options(source, &ParseOptions::default())?;
+    Ok((candidate, model))
+}
+
+fn format_once_with_options(
+    source: &str,
+    options: &ParseOptions,
+) -> Result<(String, SourceModel, ParseOptions), FormatError> {
     // Parsing first is what makes the rest safe: only spans the parse
     // identified are ever edited, so a `{# fmt: on #}` sitting inside an
     // attribute value or a `<c-raw>` body stays ordinary text.
     let template =
-        parse_template(source, None, None).map_err(|error| FormatError::from_parse(&error))?;
-    let mut model = SourceModel::build(source, &template)?;
+        parse_with_options(source, options).map_err(|error| FormatError::from_parse(&error))?;
+    let mut model = SourceModel::build_with_options(source, &template, options)?;
     let before_model = model.clone();
     // Layout columns and one-line fit can change after an earlier structural,
     // tag, or expression edit. Those dependencies point forward in source
@@ -125,6 +176,7 @@ fn format_once(source: &str) -> Result<(String, SourceModel), FormatError> {
         .saturating_add(model.expressions.len())
         .saturating_add(2);
     let mut current = source.to_string();
+    let mut current_options = options.clone();
 
     for _ in 0..max_passes {
         let plan = EditPlan::build(&current, &model)?;
@@ -132,26 +184,30 @@ fn format_once(source: &str) -> Result<(String, SourceModel), FormatError> {
         // so an edit that would reach into suppressed bytes never runs.
         plan.validate_for_source(&current, &model.protected)?;
         let candidate = plan.apply(&current)?;
+        let candidate_options = plan.rebase_options(&current_options)?;
         // A pass that changes nothing is the fixed point: everything that could
         // move has moved, and the columns it depended on have settled.
         if candidate == current {
-            return Ok((candidate, before_model));
+            return Ok((candidate, before_model, candidate_options));
         }
 
         // Edits shift every offset after them, so the model is rebuilt from the
         // new text rather than patched. A failure here means the formatter
         // produced something it cannot read back, which is a bug in the plan.
         current = candidate;
-        let template = parse_template(&current, None, None).map_err(|error| {
+        current_options = candidate_options;
+        let template = parse_with_options(&current, &current_options).map_err(|error| {
             FormatError::invariant(format!(
                 "an intermediate formatter pass did not reparse: {error}"
             ))
         })?;
-        model = SourceModel::build(&current, &template).map_err(|error| {
-            FormatError::invariant(format!(
-                "an intermediate formatter pass failed source validation: {error}"
-            ))
-        })?;
+        model = SourceModel::build_with_options(&current, &template, &current_options).map_err(
+            |error| {
+                FormatError::invariant(format!(
+                    "an intermediate formatter pass failed source validation: {error}"
+                ))
+            },
+        )?;
     }
 
     // Reaching here means two passes kept undoing each other. That is a
@@ -160,6 +216,18 @@ fn format_once(source: &str) -> Result<(String, SourceModel), FormatError> {
     Err(FormatError::invariant(format!(
         "formatter did not converge after {max_passes} passes"
     )))
+}
+
+fn parse_with_options(
+    source: &str,
+    options: &ParseOptions,
+) -> Result<Template, Box<citry_template_parser::ParseError>> {
+    if options == &ParseOptions::default() {
+        parse_template(source, None, None)
+    } else {
+        parse_template_with_options(source, None, None, options)
+    }
+    .map_err(Box::new)
 }
 
 #[cfg(test)]

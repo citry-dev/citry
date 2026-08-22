@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
 from citry._checker import TRANSFORM_NOTE, check_project
@@ -246,6 +246,38 @@ class TestStaticMode:
 
 
 class TestRegistryMode:
+    def test_app_check_treats_foreign_spans_as_unknown_syntax(self, tmp_path):
+        class HostSyntax(Extension):
+            name = "host_syntax"
+
+            def on_template_foreign_spans(self, ctx):
+                source = ctx.content.encode()
+                spans = []
+                cursor = 0
+                while (start := source.find(b"{%", cursor)) >= 0:
+                    end = source.find(b"%}", start + 2)
+                    if end < 0:
+                        break
+                    end += 2
+                    spans.append(ForeignSpan(start, end, may_control_body=True))
+                    cursor = end
+                return ForeignSpanSet(tuple(spans))
+
+            def on_template_foreign_compiled(self, ctx):
+                ctx.mark_resolved(*ctx.claims)
+                return ctx.nodes
+
+        engine = Citry(extensions=[HostSyntax], autodiscover=False)
+
+        class Host(Component):
+            citry = engine
+            template = "é{% for item in items %}<span>{{ item }}</span>{% endfor %}"
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert report.exit_code == 0
+        assert report.findings == ()
+
     def test_valid_app_checks_inline_syntax_and_reports_the_transform_limit_once(self, tmp_path):
         engine = Citry(autodiscover=False)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import tokenize
 from dataclasses import dataclass
@@ -73,10 +74,19 @@ from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
 from citry.ext.events.extension import _component_events_info
 from citry.tag_rules import build_tag_rules
-from citry_core.template_parser import RESERVED_TAG_NAMES, TemplateElement, parse_diagnostic, parse_template
+from citry_core.template_parser import (
+    RESERVED_TAG_NAMES,
+    ParseOptions,
+    TemplateElement,
+    parse_diagnostic,
+    parse_template,
+)
+from citry_core.template_parser import (
+    ForeignSpan as CoreForeignSpan,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from citry.citry import Citry
     from citry.component import Component
@@ -349,6 +359,12 @@ def _check_registry(
                 )
                 for component in source.consumers
             )
+            foreign_options = _checker_foreign_options(
+                engine,
+                source,
+                content=source.content,
+                template_kind="primary",
+            )
         except (Exception, SystemExit) as exc:  # noqa: BLE001 - one namespace must not stop the batch
             findings.append(
                 CheckFinding(
@@ -357,8 +373,19 @@ def _check_registry(
                     CHECK_TEMPLATE_NAMESPACE_UNAVAILABLE,
                 )
             )
-            lint_consumers = ()
-            alpine_lint_consumers = ()
+            continue
+
+        def nested_foreign_options(
+            value: str,
+            checked_source: _TemplateSource = source,
+        ) -> ParseOptions | None:
+            return _checker_foreign_options(
+                engine,
+                checked_source,
+                content=value,
+                template_kind="nested",
+            )
+
         findings.extend(
             _check_template(
                 source,
@@ -370,11 +397,67 @@ def _check_registry(
                 alpine_lint_consumers=alpine_lint_consumers,
                 i18n_manifest=i18n_manifest,
                 i18n_profiles=i18n_profiles,
+                foreign_options=foreign_options,
+                nested_foreign_options=nested_foreign_options,
             )
         )
     for browser_source in browser_sources.values():
         findings.extend(_check_browser_source(engine, browser_source, i18n_profiles or {}))
     return findings
+
+
+def _checker_foreign_options(
+    engine: Citry,
+    source: _TemplateSource,
+    *,
+    content: str,
+    template_kind: Literal["primary", "nested"],
+) -> ParseOptions | None:
+    """Collect one consumer-independent foreign-span view for checking."""
+    if not source.consumers:
+        return None
+    digest = hashlib.sha256()
+    digest.update(source.origin.encode())
+    digest.update(b"\0")
+    digest.update(template_kind.encode())
+    digest.update(b"\0")
+    digest.update(content.encode())
+    template_id = f"check:{digest.hexdigest()}"
+
+    agreed_spans: tuple[CoreForeignSpan, ...] | None = None
+    agreed_descriptor: tuple[tuple[object, ...], ...] | None = None
+    for component in source.consumers:
+        spans, _metadata = engine.extensions.on_template_foreign_spans(
+            component,
+            content,
+            template_id=template_id,
+            origin=source.origin,
+            template_kind=template_kind,
+        )
+        typed_spans = cast("tuple[CoreForeignSpan, ...]", spans)
+        descriptor = tuple(
+            (
+                span.start_byte,
+                span.end_byte,
+                span.provider,
+                span.ordinal,
+                span.may_control_body,
+            )
+            for span in typed_spans
+        )
+        if agreed_descriptor is None:
+            agreed_spans = typed_spans
+            agreed_descriptor = descriptor
+        elif descriptor != agreed_descriptor:
+            msg = (
+                "components sharing this template disagree about its foreign source spans; "
+                "Citry cannot check it as one source"
+            )
+            raise RuntimeError(msg)
+
+    if not agreed_spans:
+        return None
+    return ParseOptions(list(agreed_spans))
 
 
 def _check_static(cwd: Path) -> list[CheckFinding]:
@@ -421,10 +504,16 @@ def _check_template(
     alpine_lint_consumers: tuple[AlpineLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
+    foreign_options: ParseOptions | None = None,
+    nested_foreign_options: Callable[[str], ParseOptions | None] | None = None,
 ) -> list[CheckFinding]:
     """Parse one source and, in registry mode, inspect component tag names."""
     try:
-        template = parse_template(source.content, user_rules=dict(rules) if rules is not None else None)
+        template = parse_template(
+            source.content,
+            user_rules=dict(rules) if rules is not None else None,
+            options=foreign_options,
+        )
     except (SyntaxError, ValueError) as exc:
         diagnostic = parse_diagnostic(exc)
         if diagnostic is None:
@@ -446,6 +535,7 @@ def _check_template(
     nested_parser = lambda value: parse_template(  # noqa: E731 - parser hook is passed as a value
         value,
         user_rules=dict(rules) if rules is not None else None,
+        options=nested_foreign_options(value) if nested_foreign_options is not None else None,
     )
     findings.extend(
         _i18n_binding_findings(
@@ -467,21 +557,22 @@ def _check_template(
                 profiles=i18n_profiles or {},
             )
         )
-    findings.extend(
-        CheckFinding(
-            origin=source.origin,
-            message=finding.message,
-            code=finding.code,
-            severity=finding.severity,
-            start_index=finding.start_index,
-            end_index=finding.end_index,
-            line=finding.line,
-            column=finding.column,
-            end_line=finding.line,
-            end_column=finding.column + len(finding.name),
+    if not (foreign_options is not None and any(span.may_control_body for span in foreign_options.foreign_spans)):
+        findings.extend(
+            CheckFinding(
+                origin=source.origin,
+                message=finding.message,
+                code=finding.code,
+                severity=finding.severity,
+                start_index=finding.start_index,
+                end_index=finding.end_index,
+                line=finding.line,
+                column=finding.column,
+                end_line=finding.line,
+                end_column=finding.column + len(finding.name),
+            )
+            for finding in lint_unknown_template_variables(template, lint_consumers)
         )
-        for finding in lint_unknown_template_variables(template, lint_consumers)
-    )
     browser_hosts = browser_expressions(template, parse_nested=nested_parser)
     for expression in browser_hosts:
         findings.extend(_browser_i18n_profile_findings(source.origin, source.content, expression, i18n_profiles or {}))

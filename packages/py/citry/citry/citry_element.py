@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from citry.citry_render import CitryRender
+    from citry.citry_template import CitryTemplate
     from citry.component import Component
     from citry.ownership import ComponentInvocationId, ComponentTagClientBindingRecord, OwnershipGraph
 
@@ -180,3 +181,19 @@ class CitryElement:
         cls_name = self.comp_cls.__name__
         kwargs_str = ", ".join(f"{k}={v!r}" for k, v in self.kwargs.items())
         return f"{cls_name}({kwargs_str})"
+
+
+class _TemplateElement(CitryElement):
+    """Private element carrying a standalone template record into rendering."""
+
+    __slots__ = ("_template_override",)
+
+    def __init__(
+        self,
+        comp_cls: type[Component],
+        kwargs: dict[str, Any],
+        slots: dict[str, Any] | None,
+        template: CitryTemplate,
+    ) -> None:
+        super().__init__(comp_cls, kwargs, slots)
+        self._template_override = template

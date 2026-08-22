@@ -280,21 +280,28 @@ def load_template(comp_cls: type[Component]) -> CitryTemplate | None:
 
     Users reach this through ``Card.get_template()``.
     """
-    if _TEMPLATE_CACHE in comp_cls.__dict__:
-        return comp_cls.__dict__[_TEMPLATE_CACHE]  # type: ignore[no-any-return]
+    with comp_cls.citry._template_source_lock:
+        if _TEMPLATE_CACHE in comp_cls.__dict__:
+            return comp_cls.__dict__[_TEMPLATE_CACHE]  # type: ignore[no-any-return]
 
-    content, path = _load_pair(comp_cls, "template", "template_file")
+        content, path = _load_pair(comp_cls, "template", "template_file")
 
-    result: CitryTemplate | None
-    if content is None:
-        result = None
-    else:
-        content = comp_cls.citry.extensions.on_template_loaded(comp_cls, content)
-        origin = str(path) if path is not None else _inline_origin(comp_cls)
-        result = CitryTemplate(source=content, origin=origin, filepath=path)
+        result: CitryTemplate | None
+        if content is None:
+            result = None
+        else:
+            origin = str(path) if path is not None else _inline_origin(comp_cls)
+            result = CitryTemplate(source=content, origin=origin, filepath=path)
+            result.source = comp_cls.citry.extensions.on_template_loaded(
+                comp_cls,
+                content,
+                template_id=result.template_id,
+                origin=origin,
+                template_kind=result.kind,
+            )
 
-    setattr(comp_cls, _TEMPLATE_CACHE, result)
-    return result
+        setattr(comp_cls, _TEMPLATE_CACHE, result)
+        return result
 
 
 def load_js(comp_cls: type[Component]) -> str | None:
@@ -446,10 +453,11 @@ def reset_template(comp_cls: type[Component]) -> None:
     ``Citry.get_components_for_file`` reaches all of them).
     """
     with comp_cls.citry.extensions._render_cache_invalidation():
-        if _TEMPLATE_CACHE in comp_cls.__dict__:
-            delattr(comp_cls, _TEMPLATE_CACHE)
-        comp_cls.citry._evict_component_cache(comp_cls)
-        comp_cls.citry.extensions.on_template_reset(comp_cls)
+        with comp_cls.citry._template_source_lock:
+            if _TEMPLATE_CACHE in comp_cls.__dict__:
+                delattr(comp_cls, _TEMPLATE_CACHE)
+            comp_cls.citry._evict_component_cache(comp_cls)
+            comp_cls.citry.extensions.on_template_reset(comp_cls)
 
 
 def reset_files(comp_cls: type[Component]) -> None:

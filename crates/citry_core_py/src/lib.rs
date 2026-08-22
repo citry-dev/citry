@@ -19,9 +19,9 @@ use citry_template_parser::constants::{
     CITRY_DIRECTIVE_NAMES, HTML_VOID_ELEMENTS, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES,
 };
 use citry_template_parser::{
-    Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
-    HtmlStartTag, Node, ParseDiagnostic, StaticNamedSlot, TagRules, Template, TemplateElement,
-    Text, Token,
+    Comment, Expr, FillDataField, FillDataPattern, ForeignSourcePart, ForeignSpan, HtmlAttr,
+    HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, ParseDiagnostic, ParseOptions, StaticNamedSlot,
+    TagRules, Template, TemplateElement, Text, Token,
 };
 
 use crate::client_graph::canonical_json_and_revision;
@@ -132,12 +132,15 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     template_parser_mod.add_class::<HtmlEndTag>()?;
     template_parser_mod.add_class::<Expr>()?;
     template_parser_mod.add_class::<Text>()?;
+    template_parser_mod.add_class::<ForeignSourcePart>()?;
     template_parser_mod.add_class::<Node>()?;
     template_parser_mod.add_class::<TemplateElement>()?;
     template_parser_mod.add_class::<StaticNamedSlot>()?;
     template_parser_mod.add_class::<Template>()?;
     // Config
     template_parser_mod.add_class::<TagRules>()?;
+    template_parser_mod.add_class::<ForeignSpan>()?;
+    template_parser_mod.add_class::<ParseOptions>()?;
     // Constants
     // HTML void elements (elements that cannot have children, e.g. <br/>),
     // single-sourced from the Rust parser so Python never drifts from it.

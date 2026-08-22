@@ -898,6 +898,51 @@ class TestConcurrentLoading:
         assert template is not None
         assert template.generate is not None
 
+    def test_concurrent_first_load_publishes_one_template_record(self):
+        class CountLoads(Extension):
+            name = "count_loads"
+
+            def __init__(self):
+                self.template_ids: list[str] = []
+
+            def on_template_loaded(self, ctx):
+                self.template_ids.append(ctx.template_id)
+                return ctx.content
+
+        extension = CountLoads()
+        c = Citry(extensions=[extension])
+
+        class Racer(Component):
+            citry = c
+            template = "<p>Concurrent</p>"
+
+        c.initialize()
+        thread_count = 8
+        barrier = threading.Barrier(thread_count)
+        template_ids: list[str] = []
+        errors: list[Exception] = []
+
+        def load_once():
+            try:
+                barrier.wait(timeout=5)
+                template = Racer.get_template()
+                assert template is not None
+                template_ids.append(template.template_id)
+            except Exception as err:  # noqa: BLE001
+                errors.append(err)
+
+        threads = [threading.Thread(target=load_once) for _ in range(thread_count)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+        assert not any(thread.is_alive() for thread in threads)
+        assert errors == []
+        assert len(template_ids) == thread_count
+        assert len(set(template_ids)) == 1
+        assert extension.template_ids == [template_ids[0]]
+
 
 class TestDirsValidation:
     def test_relative_dir_raises(self):

@@ -4,8 +4,10 @@ use citry_template_formatter::{
     EmbeddedFormatNotice as RustEmbeddedFormatNotice, EmbeddedFormatPlan as RustEmbeddedFormatPlan,
     EmbeddedFormatResult as RustEmbeddedFormatResult, FormatError, PYTHON_EXPRESSION_PROVIDER,
     finish_embedded_format as finish_embedded_format_rust, format_template as format_template_rust,
+    format_template_with_options as format_template_with_options_rust,
     prepare_embedded_format as prepare_embedded_format_rust,
 };
+use citry_template_parser::ParseOptions;
 use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -143,8 +145,17 @@ fn notice_tuples(notices: &[RustEmbeddedFormatNotice]) -> Vec<EmbeddedNoticeTupl
 /// `range`, and optional parser `diagnostic` when the formatter refuses the
 /// input.
 #[pyfunction]
-pub fn format_template(py: Python<'_>, source: &str) -> PyResult<String> {
-    format_template_rust(source).map_err(|error| format_error_to_py(py, error))
+#[pyo3(signature = (source, *, options=None))]
+pub fn format_template(
+    py: Python<'_>,
+    source: &str,
+    options: Option<ParseOptions>,
+) -> PyResult<String> {
+    let result = match options {
+        Some(options) => format_template_with_options_rust(source, &options),
+        None => format_template_rust(source),
+    };
+    result.map_err(|error| format_error_to_py(py, error))
 }
 
 /// Return the pinned identity of the built-in Python expression formatter.

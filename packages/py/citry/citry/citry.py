@@ -39,6 +39,8 @@ from __future__ import annotations
 
 import sys
 import threading
+from collections import OrderedDict
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import import_module
@@ -74,12 +76,14 @@ from citry.settings import (
 from citry.tag_rules import build_tag_rules
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Iterator
     from types import FrameType
     from weakref import ReferenceType
 
+    from citry.citry_render import CitryRender
+    from citry.citry_template import CitryTemplate
     from citry.component import Component
-    from citry.extension import Extension, ExtensionCommand
+    from citry.extension import Extension, ExtensionCommand, ForeignCompileContext
     from citry.introspection import ComponentCatalog, ComponentInfo
     from citry.library_component import (
         ComponentLibrary,
@@ -236,6 +240,15 @@ class Citry:
         # Const values; old entries are dropped when the cache is full.
         # See citry/constness.py.
         self._const_body_cache = ConstBodyCache()
+        # Primary component templates are published lazily on the component
+        # class. Keep the cache check, source hooks, and publication atomic so
+        # concurrent first renders cannot compile different CitryTemplate
+        # records for the same class.
+        self._template_source_lock = threading.RLock()
+        self._template_root_class: type[Component] | None = None
+        self._standalone_template_cache: OrderedDict[tuple[object, ...], CitryTemplate] = OrderedDict()
+        self._standalone_template_lock = threading.RLock()
+        self._standalone_template_cache_capacity = 128
 
         # Final, extension-processed message source keyed by the class that
         # authored the messages/messages_file pair. Inherited components share
@@ -310,6 +323,89 @@ class Citry:
 
     def __repr__(self) -> str:
         return f"Citry(components={len(self._registry)})"
+
+    def render_template(
+        self,
+        source: str,
+        variables: Mapping[str, Any] | None = None,
+        *,
+        slots: Mapping[str, Any] | None = None,
+        template_globals: Mapping[str, Any] | None = None,
+        provides: Mapping[str, Any] | None = None,
+        foreign_compile_contexts: Sequence[ForeignCompileContext] = (),
+        origin: str = "<render_template>",
+    ) -> CitryRender:
+        """Render trusted standalone Citry template source through the normal pipeline."""
+        from citry.citry_element import _TemplateElement  # noqa: PLC0415
+        from citry.citry_template import CitryTemplate  # noqa: PLC0415
+
+        if not isinstance(source, str):
+            raise TypeError("Citry.render_template() source must be a str.")
+        if not isinstance(origin, str) or not origin:
+            raise TypeError("Citry.render_template() origin must be a non-empty str.")
+        for name, value in (
+            ("variables", variables),
+            ("slots", slots),
+            ("template_globals", template_globals),
+            ("provides", provides),
+        ):
+            if value is not None and not isinstance(value, Mapping):
+                raise TypeError(f"Citry.render_template() {name} must be a mapping.")
+
+        contexts: dict[str, object] = {}
+        fingerprints: list[tuple[str, str | bytes]] = []
+        for context in foreign_compile_contexts:
+            provider = getattr(context, "provider", None)
+            fingerprint = getattr(context, "cache_fingerprint", None)
+            if not isinstance(provider, str) or not provider:
+                raise TypeError("Foreign compile context provider must be a non-empty str.")
+            if provider in contexts:
+                raise ValueError(f"Duplicate foreign compile context for provider {provider!r}.")
+            if not isinstance(fingerprint, (str, bytes)):
+                raise TypeError(
+                    f"Foreign compile context for provider {provider!r} must expose a str or bytes cache_fingerprint."
+                )
+            extension = self.extensions._extensions_by_name.get(provider)
+            span_providers = self.extensions._extensions_with_hook("on_template_foreign_spans")
+            if extension is None or extension not in span_providers:
+                raise ValueError(f"Unknown foreign template provider {provider!r}.")
+            contexts[provider] = context
+            fingerprints.append((provider, fingerprint))
+
+        with self._registry._lifecycle.operation("standalone template root initialization"):
+            self._ensure_registry_ready()
+            root_class = self._template_root_class
+        if root_class is None:
+            raise RuntimeError("Citry did not initialize its private standalone template root.")
+
+        cache_key: tuple[object, ...] = (source, origin, tuple(fingerprints))
+        with self._standalone_template_lock:
+            cached = self._standalone_template_cache.get(cache_key)
+            if cached is None:
+                template = CitryTemplate(source=source, origin=origin, kind="standalone")
+                template.source = self.extensions.on_template_loaded(
+                    root_class,
+                    source,
+                    template_id=template.template_id,
+                    origin=origin,
+                    template_kind=template.kind,
+                )
+                template.foreign_compile_contexts = contexts
+                self._standalone_template_cache[cache_key] = template
+                self._standalone_template_cache.move_to_end(cache_key)
+                while len(self._standalone_template_cache) > self._standalone_template_cache_capacity:
+                    self._standalone_template_cache.popitem(last=False)
+            else:
+                template = cached
+                self._standalone_template_cache.move_to_end(cache_key)
+
+        element = _TemplateElement(
+            root_class,
+            dict(variables or {}),
+            dict(slots or {}),
+            template,
+        )
+        return element.render(template_globals=template_globals, provides=provides)
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Keep this engine's process-lifetime identity stable."""
@@ -395,6 +491,10 @@ class Citry:
         self._library_definitions_by_class.clear()
         self._library_definitions_by_class.update(state.library_definitions_by_class)
         self._restore_component_file_index(state.file_index, preserve_classes=preserve_file_classes)
+        # A lifecycle hook may have rendered and cached a standalone template
+        # against the transient registry state before a later hook rejected the
+        # operation. Never let that compiled body escape the rollback.
+        self._clear_standalone_template_cache()
 
     def _restore_component_file_index(
         self,
@@ -880,6 +980,7 @@ class Citry:
             self._tag_rules_cache = None
             registered_name = name or getattr(comp_cls, "name", None) or comp_cls.__name__
             self.extensions.on_component_registered(registered_name, comp_cls)
+            self._clear_standalone_template_cache()
         except BaseException:
             if self._registration_journal is not None and journal_start is not None:
                 del self._registration_journal[journal_start:]
@@ -978,6 +1079,7 @@ class Citry:
                 if not self._registry._has_class(comp_cls):
                     self._evict_component_cache(comp_cls)
                     self.extensions._advance_render_cache_revision()
+                self._clear_standalone_template_cache()
             except BaseException:
                 if self._registration_journal is not None and journal_start is not None:
                     del self._registration_journal[journal_start:]
@@ -1612,6 +1714,8 @@ class Citry:
             with self.extensions._render_cache_invalidation():
                 self._registry._clear()
                 self._const_body_cache.clear()
+                self._clear_standalone_template_cache()
+                self._template_root_class = None
                 with self._index_lock:
                     self._file_index.clear()
                 self._classes_by_id.clear()
@@ -1631,6 +1735,11 @@ class Citry:
                 cache_clear = getattr(self.cache, "clear", None)
                 if callable(cache_clear):
                     cache_clear()
+
+    def _clear_standalone_template_cache(self) -> None:
+        """Discard sources compiled against an obsolete component registry."""
+        with self._standalone_template_lock:
+            self._standalone_template_cache.clear()
 
 
 # Complete the ComponentLike protocol annotation now that Citry exists.

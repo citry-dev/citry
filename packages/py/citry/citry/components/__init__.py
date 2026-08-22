@@ -25,6 +25,21 @@ from citry.ext.i18n.components import make_i18n_component, make_trans_component
 
 if TYPE_CHECKING:
     from citry.citry import Citry
+    from citry.component import Component
+
+
+def make_template_root_component(citry_instance: Citry) -> type[Component]:
+    """Create the private transparent root used by ``Citry.render_template``."""
+    from citry.component import Component  # noqa: PLC0415
+
+    class TemplateRoot(
+        Component,
+        _citry_internal=citry_instance._registry._builtin_registration_token,
+    ):
+        citry = citry_instance
+        transparent = True
+
+    return TemplateRoot
 
 
 def make_builtin_components(citry_instance: Citry) -> None:
@@ -38,3 +53,4 @@ def make_builtin_components(citry_instance: Citry) -> None:
     make_css_component(citry_instance)
     make_i18n_component(citry_instance)
     make_trans_component(citry_instance)
+    citry_instance._template_root_class = make_template_root_component(citry_instance)

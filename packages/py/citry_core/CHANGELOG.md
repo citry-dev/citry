@@ -1,5 +1,18 @@
 # Release notes
 
+## v1.6.0
+
+_22 Aug 2026_
+
+### Added
+
+- Template hosts can declare validated, provider-owned UTF-8 byte spans through
+  `ParseOptions`; the parser preserves those claims as ordered foreign body,
+  attribute-value, and start-tag source parts.
+- The low-level template formatter accepts the same parser options, preserves
+  claimed bytes as unknown syntax, and safely rebases their positions while it
+  formats Citry-owned source around them.
+
 ## v1.5.1
 
 _21 Aug 2026_

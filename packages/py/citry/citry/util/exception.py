@@ -126,7 +126,7 @@ def set_template_position_error_message(
     Append an underlined template snippet for ``position`` to the error message.
 
     ``source`` is the whole template string and ``position`` the failing
-    node's start/end indices in it. The snippet shows the failing lines with
+    node's UTF-8 byte start/end indices in it. The snippet shows the failing lines with
     real line numbers and a ``^^^`` underline, headed by a line naming the
     template's owner and, when known, where the template came from
     ("In template of 'Page' (/path/card.html):").
@@ -153,7 +153,20 @@ def set_template_position_error_message(
         msg = str(err)
     err.args = (f"{msg}\n\n{header}" if msg else header,)
 
-    format_error_with_context(err, source, position[0], position[1], "template", add_prefix=False)
+    start, end = _byte_span_to_character_span(source, position)
+    format_error_with_context(err, source, start, end, "template", add_prefix=False)
+
+
+def _byte_span_to_character_span(source: str, position: tuple[int, int]) -> tuple[int, int]:
+    """Convert parser byte offsets for Python's character-indexed formatter."""
+    source_bytes = source.encode()
+    start, end = position
+    if start < 0 or end < start or end > len(source_bytes):
+        raise ValueError(f"Template byte position {position!r} is outside source length {len(source_bytes)}.")
+    try:
+        return len(source_bytes[:start].decode()), len(source_bytes[:end].decode())
+    except UnicodeDecodeError as error:
+        raise ValueError(f"Template byte position {position!r} is not on UTF-8 boundaries.") from error
 
 
 @contextmanager

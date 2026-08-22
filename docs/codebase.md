@@ -1208,7 +1208,7 @@ can ship on its own cadence. The ordering rule applies when `citry` and
 new must likewise wait for that Citry release to reach PyPI. `pygments-citry`
 has no cross-package release ordering requirement.
 
-**`citry` pins one exact `citry-core` version** (`citry-core==1.5.1`, not a
+**`citry` pins one exact `citry-core` version** (`citry-core==1.6.0`, not a
 range). The runtime node classes in `citry.nodes` read the source that
 citry-core's compiler emits, so a citry-core release that changes that output
 would otherwise reach an already-published `citry` that cannot read it. Raise

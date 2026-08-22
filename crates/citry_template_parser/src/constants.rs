@@ -126,6 +126,7 @@ pub const COMPONENT_METADATA_ENTRY_MORPH: &str = "morph";
 // These are the class/struct names that need to be defined in each language implementation.
 // They represent the different types of nodes in the compiled template tree.
 pub const EXPR_NODE: &str = "ExprNode";
+pub const FOREIGN_NODE: &str = "ForeignNode";
 pub const TEMPLATE_NODE: &str = "TemplateNode";
 pub const COMPONENT_NODE: &str = "ComponentNode";
 pub const IF_NODE: &str = "IfNode";
@@ -148,6 +149,7 @@ pub const ELEMENT_KEY_NODE: &str = "ElementKeyNode";
 pub const EXPR_ATTR_NODE: &str = "ExprHtmlAttr";
 pub const TEMPLATE_ATTR_NODE: &str = "TemplateHtmlAttr";
 pub const STATIC_ATTR_NODE: &str = "StaticHtmlAttr";
+pub const FOREIGN_ATTR_NODE: &str = "ForeignHtmlAttr";
 
 /// Reserved special tags
 pub const RESERVED_TAG_NAMES: &[&str] = &[

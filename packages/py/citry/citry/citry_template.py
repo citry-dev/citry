@@ -18,8 +18,11 @@ docs/design/asset_loading.md section 4.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, NamedTuple
+from threading import RLock
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -69,11 +72,21 @@ class CitryTemplate:
     source: str
     origin: str
     filepath: Path | None = None
+    template_id: str = field(default_factory=lambda: uuid4().hex)
+    kind: Literal["primary", "standalone", "nested"] = "primary"
 
     # The compiled form, populated by component_render on first render.
     generate: Callable[[], list[BodyItem]] | None = None
     used_vars: frozenset[str] = field(default_factory=frozenset)
     declared_slots: tuple[DeclaredSlot, ...] = ()
+    foreign_spans: tuple[Any, ...] = ()
+    foreign_provider_metadata: dict[str, Any] = field(default_factory=dict)
+    foreign_compile_contexts: dict[str, Any] = field(default_factory=dict)
+    foreign_prepared: bool = False
+    source_offset: int = 0
+    root_source: str | None = None
+    compile_lock: RLock = field(default_factory=RLock, repr=False, compare=False)
+    standalone_bodies: OrderedDict[object, list[Any]] = field(default_factory=OrderedDict, repr=False)
 
     def __repr__(self) -> str:
         compiled = "compiled" if self.generate is not None else "not compiled"

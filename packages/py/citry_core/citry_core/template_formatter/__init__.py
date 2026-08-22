@@ -148,12 +148,19 @@ class EmbeddedFormatOutcome:
     providers: tuple[str, ...]
 
 
-def format_template(source: str) -> str:
+def format_template(
+    source: str,
+    *,
+    options: _rust.template_parser.ParseOptions | None = None,
+) -> str:
     """
     Format authored Citry template text without loading an application.
 
     Args:
         source: Complete Citry template text.
+        options: Low-level parser options. Host-template adapters use this to
+            identify foreign source spans. The formatter preserves those bytes
+            as unknown syntax and does not format inside them.
 
     Returns:
         The formatted template.
@@ -163,7 +170,7 @@ def format_template(source: str) -> str:
             while preserving the formatter invariants.
 
     """
-    return _rust.template_formatter.format_template(source)
+    return _rust.template_formatter.format_template(source, options=options)
 
 
 def python_expression_provider() -> str:

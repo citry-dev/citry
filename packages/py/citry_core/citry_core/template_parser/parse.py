@@ -29,6 +29,8 @@ def parse_template(
     input: str,
     lang: str | None = None,
     user_rules: dict[str, _rust.template_parser.TagRules] | None = None,
+    *,
+    options: _rust.template_parser.ParseOptions | None = None,
 ) -> _rust.template_parser.Template:
     """
     Parse a Citry template string into a Template AST.
@@ -41,6 +43,8 @@ def parse_template(
             attribute/slot validation. Keys must be lowercase tag names
             (e.g. ``"c-my-card"``); tags in the template match the rules
             case-insensitively.
+        options: Low-level parser options. Installed host-template adapters use
+            this to pass validated UTF-8 foreign source spans.
 
     Returns:
         The parsed Template AST.
@@ -72,4 +76,4 @@ def parse_template(
             t = parse_template('<c-card title="Hello"></c-card>', user_rules=rules)
 
     """
-    return _rust.template_parser.parse_template(input, lang, user_rules)
+    return _rust.template_parser.parse_template(input, lang, user_rules, options=options)

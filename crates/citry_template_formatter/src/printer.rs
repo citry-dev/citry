@@ -6,6 +6,8 @@
 //! untouched, so text, verbatim bodies, and quote characters survive by
 //! construction rather than by remembering to reproduce them.
 
+use citry_template_parser::{ForeignSpan, ParseOptions};
+
 use crate::PREFERRED_WIDTH;
 use crate::error::FormatError;
 use crate::newline::detect_newline;
@@ -117,6 +119,45 @@ impl EditPlan {
         protected: &[ProtectedRange],
     ) -> Result<(), FormatError> {
         validate_edits(source, &self.edits, protected)
+    }
+
+    /// Move foreign claims by the same byte deltas as this edit plan.
+    ///
+    /// Validation has already proved that no edit intersects a claim, so only
+    /// edits ending before a claim can affect its coordinates.
+    pub(crate) fn rebase_options(
+        &self,
+        options: &ParseOptions,
+    ) -> Result<ParseOptions, FormatError> {
+        let foreign_spans = options
+            .foreign_spans
+            .iter()
+            .map(|span| {
+                let delta = self
+                    .edits
+                    .iter()
+                    .take_while(|edit| edit.span.end <= span.start_byte)
+                    .map(|edit| {
+                        edit.replacement.len() as i128 - (edit.span.end - edit.span.start) as i128
+                    })
+                    .sum::<i128>();
+                let start_byte =
+                    usize::try_from(span.start_byte as i128 + delta).map_err(|_| {
+                        FormatError::invariant("formatter edit moved a foreign span out of bounds")
+                    })?;
+                let end_byte = usize::try_from(span.end_byte as i128 + delta).map_err(|_| {
+                    FormatError::invariant("formatter edit moved a foreign span out of bounds")
+                })?;
+                Ok(ForeignSpan::from_parts(
+                    start_byte,
+                    end_byte,
+                    span.provider.clone(),
+                    span.ordinal,
+                    span.may_control_body,
+                ))
+            })
+            .collect::<Result<Vec<_>, FormatError>>()?;
+        Ok(ParseOptions::with_foreign_spans(foreign_spans))
     }
 }
 

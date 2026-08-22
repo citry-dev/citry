@@ -18,8 +18,8 @@
 use std::collections::HashSet;
 
 use citry_template_parser::{
-    Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template,
-    TemplateElement, Token, parse_template,
+    Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, ParseOptions, Template,
+    TemplateElement, Token, parse_template, parse_template_with_options,
 };
 use ruff_python_ast::{
     comparable::ComparableExpr,
@@ -108,6 +108,7 @@ struct StartTagProjection {
     attrs: Vec<AttrProjection>,
     item_order: Vec<TagItemProjection>,
     is_self_closing: bool,
+    foreign_source: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -200,13 +201,30 @@ struct ProjectedBody {
 /// formatter's own model of what it did. On a mismatch the two projections are
 /// rendered into the error, because the useful question when this fires is which
 /// field differs.
+#[cfg(test)]
 pub(crate) fn verify_contract_projection(
     before: &str,
     after: &str,
     mode: ProjectionCapability,
 ) -> Result<(), ContractError> {
-    let before = project_document(before, mode)?;
-    let after = project_document(after, mode)?;
+    verify_contract_projection_with_options(
+        before,
+        &ParseOptions::default(),
+        after,
+        &ParseOptions::default(),
+        mode,
+    )
+}
+
+pub(crate) fn verify_contract_projection_with_options(
+    before: &str,
+    before_options: &ParseOptions,
+    after: &str,
+    after_options: &ParseOptions,
+    mode: ProjectionCapability,
+) -> Result<(), ContractError> {
+    let before = project_document_with_options(before, before_options, mode)?;
+    let after = project_document_with_options(after, after_options, mode)?;
     if before == after {
         Ok(())
     } else {
@@ -221,8 +239,20 @@ fn project_document(
     source: &str,
     mode: ProjectionCapability,
 ) -> Result<DocumentProjection, ContractError> {
-    let template = parse_template(source, None, None)
-        .map_err(|error| ContractError::Parse(error.to_string()))?;
+    project_document_with_options(source, &ParseOptions::default(), mode)
+}
+
+fn project_document_with_options(
+    source: &str,
+    options: &ParseOptions,
+    mode: ProjectionCapability,
+) -> Result<DocumentProjection, ContractError> {
+    let template = if options == &ParseOptions::default() {
+        parse_template(source, None, None)
+    } else {
+        parse_template_with_options(source, None, None, options)
+    }
+    .map_err(|error| ContractError::Parse(error.to_string()))?;
     project_parsed_document(source, &template, mode)
 }
 
@@ -301,6 +331,14 @@ fn project_body(
                 items.push(SourceItem {
                     span: span(&text.token),
                     projection: BodyItemProjection::Text(text.token.content.clone()),
+                    edges: layout.edges,
+                });
+            }
+            TemplateElement::Foreign(part) => {
+                validate_token(source, &part.token, "foreign source")?;
+                items.push(SourceItem {
+                    span: span(&part.token),
+                    projection: BodyItemProjection::Text(part.token.content.clone()),
                     edges: layout.edges,
                 });
             }
@@ -436,6 +474,7 @@ fn project_start_tag(
         attrs,
         item_order: ordered.into_iter().map(|(_, item)| item).collect(),
         is_self_closing: tag.is_self_closing,
+        foreign_source: (!tag.foreign_parts.is_empty()).then(|| tag.token.content.clone()),
     })
 }
 
@@ -482,6 +521,9 @@ fn project_attr(
     let tag_name = tag_name.to_ascii_lowercase();
     let value = match (&attr.kind, &attr.inner_value) {
         (_, None) => AttrValueProjection::None,
+        (_, Some(inner_value)) if !attr.foreign_parts.is_empty() => {
+            AttrValueProjection::Exact(inner_value.content.clone())
+        }
         (_, Some(inner_value))
             if mode == ProjectionCapability::PythonExpressions
                 && (key == "c-for" || (tag_name == "c-for" && key == "each")) =>
@@ -806,6 +848,7 @@ fn element_span(element: &TemplateElement) -> Span {
         },
         TemplateElement::Expr(expr) => span(&expr.token),
         TemplateElement::Text(text) => span(&text.token),
+        TemplateElement::Foreign(part) => span(&part.token),
     }
 }
 

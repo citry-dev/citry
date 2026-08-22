@@ -86,7 +86,8 @@ use std::vec::IntoIter;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
-    HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template, TemplateElement, Text, Token,
+    ForeignSourcePart, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template,
+    TemplateElement, Text, Token,
 };
 use crate::constants::{
     citry_component_tag_eq, has_citry_component_prefix, is_dynamic_target_expr_attr,
@@ -95,9 +96,9 @@ use crate::constants::{
     COMPONENT_METADATA_LOCUS_RANGE, COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS,
     C_BIND_ATTR, C_COMPONENT_TAG, C_ELEMENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG,
     C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG, ELEMENT_ATTRS_NODE, ELEMENT_KEY_NODE,
-    EXPR_ATTR_NODE, EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOR_NODE, IF_NODE, META_ATTR_IGNORE,
-    META_ATTR_KEY, MORPH_OUTPUT_ATTR, MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE,
-    TAG_ATTR_RULES, TEMPLATE_ATTR_NODE,
+    EXPR_ATTR_NODE, EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOREIGN_ATTR_NODE, FOREIGN_NODE,
+    FOR_NODE, IF_NODE, META_ATTR_IGNORE, META_ATTR_KEY, MORPH_OUTPUT_ATTR,
+    MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES, TEMPLATE_ATTR_NODE,
 };
 use crate::error::CompileError;
 use crate::lang::lang::{Lang, LangImpl, LangSpecArgument, LangSpecStruct};
@@ -190,6 +191,10 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
             // so it's safe even if it spans multiple lines.
             TemplateElement::Text(text) => {
                 body_items.push(LangSpecArgument::UnsafeString(text.token.content));
+            }
+
+            TemplateElement::Foreign(part) => {
+                body_items.push(compile_foreign_node(&part));
             }
 
             // {{ ... }} expression
@@ -290,9 +295,18 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     C_RAW_TAG => {
                         if let Node::WithBody { body, .. } = node {
                             for element in body.elements {
-                                if let TemplateElement::Text(text) = element {
-                                    body_items
-                                        .push(LangSpecArgument::UnsafeString(text.token.content));
+                                match element {
+                                    TemplateElement::Text(text) => body_items
+                                        .push(LangSpecArgument::UnsafeString(text.token.content)),
+                                    TemplateElement::Foreign(part) => {
+                                        body_items.push(compile_foreign_node(&part));
+                                    }
+                                    TemplateElement::Node(_) | TemplateElement::Expr(_) => {
+                                        return Err(CompileError::Generic(
+                                            "Internal error: parsed Citry syntax reached a <c-raw> body"
+                                                .to_string(),
+                                        ));
+                                    }
                                 }
                             }
                         }
@@ -469,6 +483,46 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
 fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> {
     let mut items = Vec::new();
 
+    // A plain HTML start tag containing foreign source is kept as one ordered
+    // source program. Replaying only its literal pieces, with typed foreign
+    // holes between them, is the only representation that preserves authored
+    // order for both attribute values and between-attribute constructs. The
+    // parser rejects combinations whose Citry-side attribute rewrites would
+    // make this raw representation ambiguous.
+    // Claims between attributes have no HTML-attribute key for Citry to own,
+    // so they remain ordered start-tag contributions. Claims inside a quoted
+    // attribute value are different: keep those attributes structured below
+    // so Citry still applies its normal class/style merging, escaping, and
+    // empty-value normalization after the provider resolves the value.
+    let mut foreign_start_tag_parts = node.start_tag().foreign_parts.clone();
+    if !foreign_start_tag_parts.is_empty() {
+        // Once a between-attribute claim makes the start tag a raw ordered
+        // source program, quoted-value claims must join the same program.
+        // Omitting them would replay their host syntax as literal text and
+        // bypass the ownership ledger.
+        foreign_start_tag_parts.extend(
+            node.attrs()
+                .iter()
+                .flat_map(|attr| attr.foreign_parts.iter().cloned()),
+        );
+    }
+    foreign_start_tag_parts.sort_by_key(|part| part.token.start_index);
+    if !foreign_start_tag_parts.is_empty()
+        && !has_citry_component_prefix(node.tag_name())
+        && !citry_component_tag_eq(node.tag_name(), C_COMPONENT_TAG)
+        && !citry_component_tag_eq(node.tag_name(), C_ELEMENT_TAG)
+    {
+        items.extend(compile_source_with_foreign(
+            &node.start_tag().token,
+            &foreign_start_tag_parts,
+        )?);
+        if let Node::WithBody { body, end_tag, .. } = node {
+            items.extend(compile_template_body(body)?);
+            items.push(LangSpecArgument::UnsafeString(end_tag.token.content));
+        }
+        return Ok(items);
+    }
+
     // Get tag info and other properties
     let tag_name = node.tag_name();
     let end_tag_html = &format!("</{}>", tag_name);
@@ -501,6 +555,7 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
     // collapse an otherwise-static region back to text after transforming it.
     let has_structured_attr = ordinary_attrs.iter().any(|attr| {
         matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
+            || !attr.foreign_parts.is_empty()
             || attr.key.content.starts_with("@c-")
             || attr.key.content.starts_with(":c-")
             || attr.key.content.starts_with("$c-")
@@ -1388,6 +1443,37 @@ fn compile_control_flow_node(
 /// with its result as text. Thus, on subsequent renders, we won't have to re-evaluate the expression
 /// or template.
 fn compile_html_attr(attr: &HtmlAttr) -> Result<LangSpecArgument, CompileError> {
+    if attr.kind == HtmlAttrKind::Static && !attr.foreign_parts.is_empty() {
+        let inner_value = attr.inner_value.as_ref().ok_or_else(|| {
+            CompileError::Generic(format!(
+                "Internal error: foreign attribute '{}' has no value",
+                attr.key.content
+            ))
+        })?;
+        if attr.kind != HtmlAttrKind::Static {
+            return Err(CompileError::Generic(format!(
+                "Internal error: non-static attribute '{}' reached foreign attribute compilation",
+                attr.key.content
+            )));
+        }
+        return Ok(LangSpecArgument::Struct(LangSpecStruct {
+            name: FOREIGN_ATTR_NODE.to_string(),
+            arguments: vec![
+                LangSpecArgument::Variable("source".to_string()),
+                LangSpecArgument::Tuple(vec![
+                    LangSpecArgument::Int(attr.token.start_index),
+                    LangSpecArgument::Int(attr.token.end_index),
+                ]),
+                LangSpecArgument::UnsafeString(attr.key.content.clone()),
+                LangSpecArgument::Tuple(compile_source_with_foreign(
+                    inner_value,
+                    &attr.foreign_parts,
+                )?),
+                LangSpecArgument::Tuple(Vec::new()),
+            ],
+        }));
+    }
+
     // Use different class based on kind
     let class_name = match attr.kind {
         HtmlAttrKind::Expression => EXPR_ATTR_NODE,
@@ -1404,6 +1490,68 @@ fn compile_html_attr(attr: &HtmlAttr) -> Result<LangSpecArgument, CompileError> 
         }
     };
     Ok(build_attr_struct(class_name, attr))
+}
+
+/// Lower one provider-owned source claim to a fail-closed runtime node.
+fn compile_foreign_node(part: &ForeignSourcePart) -> LangSpecArgument {
+    LangSpecArgument::Struct(LangSpecStruct {
+        name: FOREIGN_NODE.to_string(),
+        arguments: vec![
+            LangSpecArgument::Variable("source".to_string()),
+            LangSpecArgument::Tuple(vec![
+                LangSpecArgument::Int(part.token.start_index),
+                LangSpecArgument::Int(part.token.end_index),
+            ]),
+            LangSpecArgument::SafeString(part.provider.clone()),
+            LangSpecArgument::Int(part.ordinal),
+            LangSpecArgument::UnsafeString(part.token.content.clone()),
+            LangSpecArgument::Bool(part.may_control_body),
+        ],
+    })
+}
+
+/// Split one original token into literal source and typed foreign holes.
+fn compile_source_with_foreign(
+    token: &Token,
+    parts: &[ForeignSourcePart],
+) -> Result<Vec<LangSpecArgument>, CompileError> {
+    let mut result = Vec::new();
+    let mut cursor = token.start_index;
+
+    for part in parts {
+        if part.token.start_index < cursor || part.token.end_index > token.end_index {
+            return Err(CompileError::Generic(format!(
+                "Internal error: foreign source {}..{} does not fit token {}..{}",
+                part.token.start_index, part.token.end_index, token.start_index, token.end_index,
+            )));
+        }
+        if cursor < part.token.start_index {
+            let local_start = cursor - token.start_index;
+            let local_end = part.token.start_index - token.start_index;
+            let literal = token.content.get(local_start..local_end).ok_or_else(|| {
+                CompileError::Generic(format!(
+                    "Internal error: literal source range {cursor}..{} is not valid UTF-8",
+                    part.token.start_index
+                ))
+            })?;
+            result.push(LangSpecArgument::UnsafeString(literal.to_string()));
+        }
+        result.push(compile_foreign_node(part));
+        cursor = part.token.end_index;
+    }
+
+    if cursor < token.end_index {
+        let local_start = cursor - token.start_index;
+        let literal = token.content.get(local_start..).ok_or_else(|| {
+            CompileError::Generic(format!(
+                "Internal error: literal source range {cursor}..{} is not valid UTF-8",
+                token.end_index
+            ))
+        })?;
+        result.push(LangSpecArgument::UnsafeString(literal.to_string()));
+    }
+
+    Ok(result)
 }
 
 /// Build the `<Class>(source, (start, end), key, value, (vars,))` call for one
@@ -1451,28 +1599,64 @@ fn build_attr_struct(class_name: &str, attr: &HtmlAttr) -> LangSpecArgument {
     // E.g. `ExprHtmlAttr(source, (14, 19), """key""", """value""", ("a", "b"))`
     //      `TemplateHtmlAttr(source, (14, 19), """key""", """value""", ("a", "b"))`
     //      `StaticHtmlAttr(source, (14, 19), """key""", """value""", ())`
+    let mut arguments = vec![
+        // Argument 1: `source` - original template source string as variable used for error reporting
+        LangSpecArgument::Variable("source".to_string()),
+        // Argument 2: `(start, end)` - positional metadata for error reporting
+        LangSpecArgument::Tuple(vec![
+            LangSpecArgument::Int(start_pos),
+            LangSpecArgument::Int(end_pos),
+        ]),
+        // Argument 3: `"""key"""` - attr key, unsafe string (may contain quotes)
+        LangSpecArgument::UnsafeString(attr.key.content.clone()),
+        // Argument 4: `"""value"""` or `True` - attr value, unsafe string or boolean
+        attr_value,
+        // Argument 5: `("var1", "var2")` or `()` - tuple of used variables (safe strings)
+        LangSpecArgument::Tuple(
+            var_names
+                .iter()
+                .map(|name| LangSpecArgument::SafeString(name.clone()))
+                .collect(),
+        ),
+    ];
+
+    if attr.kind == HtmlAttrKind::Template && !attr.foreign_parts.is_empty() {
+        let inner_value = attr
+            .inner_value
+            .as_ref()
+            .expect("a template attribute always has an inner value");
+        let (nested_start, nested_end) = template_fragment(&inner_value.content).map_or(
+            (inner_value.start_index, inner_value.end_index),
+            |fragment| {
+                (
+                    inner_value.start_index + fragment.inner_start,
+                    inner_value.start_index + fragment.inner_end,
+                )
+            },
+        );
+        let projected_parts = attr
+            .foreign_parts
+            .iter()
+            .filter(|part| {
+                nested_start <= part.token.start_index && part.token.end_index <= nested_end
+            })
+            .map(|part| {
+                LangSpecArgument::Tuple(vec![
+                    LangSpecArgument::Int(part.token.start_index),
+                    LangSpecArgument::Int(part.token.end_index),
+                    LangSpecArgument::SafeString(part.provider.clone()),
+                    LangSpecArgument::Int(part.ordinal),
+                    LangSpecArgument::Bool(part.may_control_body),
+                ])
+            })
+            .collect();
+        arguments.push(LangSpecArgument::Tuple(projected_parts));
+        arguments.push(LangSpecArgument::Int(nested_start));
+    }
+
     LangSpecArgument::Struct(LangSpecStruct {
         name: class_name.to_string(),
-        arguments: vec![
-            // Argument 1: `source` - original template source string as variable used for error reporting
-            LangSpecArgument::Variable("source".to_string()),
-            // Argument 2: `(start, end)` - positional metadata for error reporting
-            LangSpecArgument::Tuple(vec![
-                LangSpecArgument::Int(start_pos),
-                LangSpecArgument::Int(end_pos),
-            ]),
-            // Argument 3: `"""key"""` - attr key, unsafe string (may contain quotes)
-            LangSpecArgument::UnsafeString(attr.key.content.clone()),
-            // Argument 4: `"""value"""` or `True` - attr value, unsafe string or boolean
-            attr_value,
-            // Argument 5: `("var1", "var2")` or `()` - tuple of used variables (safe strings)
-            LangSpecArgument::Tuple(
-                var_names
-                    .iter()
-                    .map(|name| LangSpecArgument::SafeString(name.clone()))
-                    .collect(),
-            ),
-        ],
+        arguments,
     })
 }
 
@@ -1707,7 +1891,9 @@ fn wrap_nodes_with_control_flow_attrs(
     for element in elements {
         match element {
             // Text or Expr - keep as is
-            TemplateElement::Text(_) | TemplateElement::Expr(_) => processed.push(element),
+            TemplateElement::Text(_) | TemplateElement::Expr(_) | TemplateElement::Foreign(_) => {
+                processed.push(element)
+            }
 
             // Node - check if it's a control flow tag or has control flow attributes
             TemplateElement::Node(node) => {
@@ -1966,6 +2152,7 @@ fn _wrap_node_in_control_flow(
         is_self_closing: false,
         // Copy comments from the HtmlAttr if present
         comments: cf_comments,
+        foreign_parts: vec![],
     };
 
     // Create the end tag for the control flow node

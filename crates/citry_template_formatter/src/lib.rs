@@ -20,6 +20,7 @@ mod suppression;
 
 pub(crate) const PREFERRED_WIDTH: usize = 100;
 
+pub use citry_template_parser::ParseOptions;
 pub use embedded::{
     EmbeddedFormatNotice, EmbeddedFormatOutcome, EmbeddedFormatPlan, EmbeddedFormatRequest,
     EmbeddedFormatResult, EmbeddedLanguage, EmbeddedRegionKind, finish_embedded_format,
@@ -46,6 +47,23 @@ pub const PYTHON_EXPRESSION_PROVIDER: &str = python::PYTHON_PROVIDER_IDENTITY;
 /// failed formatter invariant.
 pub fn format_template(source: &str) -> Result<String, FormatError> {
     formatter::format(source)
+}
+
+/// Format a Citry template while preserving host-owned source ranges.
+///
+/// Foreign spans are treated as unknown syntax. Their bytes are copied
+/// unchanged, no formatting is attempted inside them, and their coordinates
+/// are rebased as formatting edits move later source.
+///
+/// # Errors
+///
+/// Returns [`FormatError`] under the same conditions as [`format_template`],
+/// and when the supplied parser options do not describe this source.
+pub fn format_template_with_options(
+    source: &str,
+    options: &ParseOptions,
+) -> Result<String, FormatError> {
+    formatter::format_with_options(source, options)
 }
 
 #[cfg(test)]

@@ -53,6 +53,7 @@ HtmlStartTag: TypeAlias = _rust.template_parser.HtmlStartTag
 HtmlEndTag: TypeAlias = _rust.template_parser.HtmlEndTag
 Expr: TypeAlias = _rust.template_parser.Expr
 Text: TypeAlias = _rust.template_parser.Text
+ForeignSourcePart: TypeAlias = _rust.template_parser.ForeignSourcePart
 Node: TypeAlias = _rust.template_parser.Node
 TemplateElement: TypeAlias = _rust.template_parser.TemplateElement
 StaticNamedSlot: TypeAlias = _rust.template_parser.StaticNamedSlot
@@ -60,6 +61,8 @@ Template: TypeAlias = _rust.template_parser.Template
 
 # Config types
 TagRules: TypeAlias = _rust.template_parser.TagRules
+ForeignSpan: TypeAlias = _rust.template_parser.ForeignSpan
+ParseOptions: TypeAlias = _rust.template_parser.ParseOptions
 
 # Constants
 # HTML void elements (elements that cannot have children, e.g. <br/>),
@@ -91,12 +94,15 @@ __all__ = [
     "HtmlEndTag",
     "Expr",
     "Text",
+    "ForeignSourcePart",
     "Node",
     "TemplateElement",
     "StaticNamedSlot",
     "Template",
     # Config types
     "TagRules",
+    "ForeignSpan",
+    "ParseOptions",
     # Constants
     "HTML_VOID_ELEMENTS",
     "RESERVED_TAG_NAMES",

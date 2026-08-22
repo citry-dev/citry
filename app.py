@@ -15,6 +15,7 @@ from citry import (
     NumberFormat,
     PercentFormat,
     PercentInput,
+    SlotInput,
 )
 from citry.ext.i18n import make_context
 from citry_ui import __citry_library__
@@ -362,11 +363,6 @@ if __name__ == "__main__":
     sys.stdout.write("\n")
 
 
-
-
-
-from citry import Component, SlotInput
-
 class ProductCard(Component):
     citry = app
 
@@ -383,22 +379,22 @@ class ProductCard(Component):
         pass
 
     class Events:
-        def like(self, state: "ProductCard.State"):
+        def like(self, state: "ProductCard.State") -> "ProductCard":
             return ProductCard(
                 tags=state.tags,
                 likes=state.likes + 1,
             )
 
-    def template_data(self, kwargs: Kwargs, slots: Slots):
+    def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
         return {
             "likes": kwargs.likes,
             "tags": kwargs.tags,
         }
 
-    def js_data(self, kwargs: Kwargs, slots: Slots):
+    def js_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
         return {"likes": kwargs.likes}
 
-    def css_data(self, kwargs: Kwargs, slots: Slots):
+    def css_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
         return {"accent": kwargs.accent}
 
     template = """

@@ -17,9 +17,12 @@ use citry_template_parser::browser::{
 use citry_template_parser::compiler::compile_template as compile_template_rust;
 use citry_template_parser::error::CompileError;
 use citry_template_parser::lang::lang::Lang;
-use citry_template_parser::parser::parse_template as parse_template_rust;
+use citry_template_parser::parser::{
+    parse_template as parse_template_rust,
+    parse_template_with_options as parse_template_with_options_rust,
+};
 use citry_template_parser::parser_context::TagRules;
-use citry_template_parser::{ParseError, Template};
+use citry_template_parser::{ParseError, ParseOptions, Template};
 
 fn lang_from_str(s: Option<&str>) -> PyResult<Option<Lang>> {
     match s {
@@ -75,17 +78,23 @@ fn compile_error_to_py(e: CompileError) -> PyErr {
 /// - SyntaxError: If the template has invalid syntax.
 /// - ValueError: If an unknown language is specified or a semantic error occurs.
 #[pyfunction]
-#[pyo3(signature = (input, lang=None, user_rules=None))]
+#[pyo3(signature = (input, lang=None, user_rules=None, *, options=None))]
 pub fn parse_template(
     py: Python<'_>,
     input: &str,
     lang: Option<&str>,
     user_rules: Option<HashMap<String, TagRules>>,
+    options: Option<ParseOptions>,
 ) -> PyResult<Template> {
     let lang_enum = lang_from_str(lang)?;
     let rules_rc = user_rules.map(Rc::new);
-    parse_template_rust(input, lang_enum, rules_rc.as_ref())
-        .map_err(|error| parse_error_to_py(py, error))
+    let result = match options {
+        Some(options) => {
+            parse_template_with_options_rust(input, lang_enum, rules_rc.as_ref(), &options)
+        }
+        None => parse_template_rust(input, lang_enum, rules_rc.as_ref()),
+    };
+    result.map_err(|error| parse_error_to_py(py, error))
 }
 
 /// Compile a parsed Template AST into host-language source code.

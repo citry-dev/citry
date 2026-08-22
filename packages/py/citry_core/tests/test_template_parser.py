@@ -16,9 +16,12 @@ from citry_core.template_parser import (
     STRUCTURAL_TAG_ATTRIBUTE_NAMES,
     FillDataField,
     FillDataPattern,
+    ForeignSourcePart,
+    ForeignSpan,
     HtmlAttr,
     HtmlAttrKind,
     ParseDiagnostic,
+    ParseOptions,
     TagRules,
     Template,
     Token,
@@ -29,6 +32,27 @@ from citry_core.template_parser import (
     parse_diagnostic,
     parse_template,
 )
+
+
+def test_foreign_spans_are_keyword_only_and_keep_utf8_byte_positions() -> None:
+    source = "žlutý {% value %}"
+    start = source.encode().find(b"{% value %}")
+    options = ParseOptions([ForeignSpan(start, len(source.encode()), "host", 3)])
+
+    template = parse_template(source, options=options)
+    foreign = template.elements[1]._0
+    assert isinstance(foreign, ForeignSourcePart)
+
+    assert foreign.provider == "host"
+    assert foreign.ordinal == 3
+    assert foreign.token.content == "{% value %}"
+    assert foreign.token.start_index == start
+    assert foreign.token.line_col == (1, 7)
+
+
+def test_foreign_span_offsets_reject_python_bool() -> None:
+    with pytest.raises(TypeError, match="start_byte must be an integer, not bool"):
+        ForeignSpan(start_byte=True, end_byte=2, provider="host")
 
 
 def test_reserved_tag_names_are_exposed_from_the_parser() -> None:

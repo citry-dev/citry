@@ -108,6 +108,22 @@ class TestComponentNodeBasic:
         assert '     1 | <main><c-totally-unknown-tag foo="1" /></main>' in msg
         assert msg.endswith("\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
+    def test_template_trace_converts_parser_bytes_after_unicode(self):
+        c = Citry()
+        source = 'é🙂 <c-totally-unknown-tag foo="1" />'
+
+        class Page(Component):
+            citry = c
+            template = source
+
+        with pytest.raises(NotRegistered) as exc_info:
+            Page().render()
+
+        lines = exc_info.value.args[0].splitlines()
+        source_line = next(index for index, line in enumerate(lines) if line.endswith(source))
+        caret_line = lines[source_line + 1]
+        assert caret_line.index("^") - len("     1 | ") == source.index("<c-")
+
 
 class TestComponentNodeAttrs:
     def _card_echo(self, c, var):

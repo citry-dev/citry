@@ -1,12 +1,14 @@
+use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use pest::error::InputLocation;
 use pyo3::prelude::*;
 
-use crate::ast::{Comment, Token};
+use crate::ast::{Comment, ForeignSourcePart, Token};
 use crate::error::ParseError;
+use crate::foreign::ForeignSpan;
 use crate::grammar::Rule;
 use crate::lang::lang::LangImpl;
 
@@ -129,6 +131,10 @@ pub struct ParserContext {
     /// nested template's free variables. This parser-private side table lets
     /// the outer scope validator still see declarations inside that value.
     nested_template_bindings: Rc<RefCell<HashMap<(usize, usize), Vec<Token>>>>,
+    /// Validated, non-overlapping foreign claims in root-source byte units.
+    foreign_spans: Rc<Vec<ForeignSpan>>,
+    /// Claims already attached to exactly one supported semantic locus.
+    claimed_foreign: Rc<RefCell<HashSet<(String, usize)>>>,
 }
 
 impl ParserContext {
@@ -142,6 +148,8 @@ impl ParserContext {
             user_rules: Rc::clone(user_rules),
             root_source: Rc::new(String::new()),
             nested_template_bindings: Rc::new(RefCell::new(HashMap::new())),
+            foreign_spans: Rc::new(Vec::new()),
+            claimed_foreign: Rc::new(RefCell::new(HashSet::new())),
         }
     }
 
@@ -154,6 +162,28 @@ impl ParserContext {
         let mut context = Self::new(lang, user_rules);
         context.root_source = Rc::new(source.to_string());
         context
+    }
+
+    /// Create a root context carrying validated foreign claims.
+    pub(crate) fn for_source_with_foreign(
+        root_source: &str,
+        source_offset: usize,
+        lang: &Rc<dyn LangImpl>,
+        user_rules: &Rc<HashMap<String, TagRules>>,
+        foreign_spans: Vec<ForeignSpan>,
+    ) -> Result<Self, ParseError> {
+        let mut context = Self::for_source(root_source, lang, user_rules);
+        let position = pest::Position::new(root_source, source_offset).ok_or_else(|| {
+            ParseError::Value(format!(
+                "Projected template offset {source_offset} is not a UTF-8 boundary"
+            ))
+        })?;
+        let (line, col) = position.line_col();
+        context.index_offset = source_offset;
+        context.line_offset = line.saturating_sub(1);
+        context.col_offset = col.saturating_sub(1);
+        context.foreign_spans = Rc::new(foreign_spans);
+        Ok(context)
     }
 
     /// Create a child context with specified offsets
@@ -175,7 +205,223 @@ impl ParserContext {
             lang: Rc::clone(&self.lang),
             root_source: Rc::clone(&self.root_source),
             nested_template_bindings: Rc::clone(&self.nested_template_bindings),
+            foreign_spans: Rc::clone(&self.foreign_spans),
+            claimed_foreign: Rc::clone(&self.claimed_foreign),
         }
+    }
+
+    /// Return a byte-length-preserving parse copy whose foreign bytes are
+    /// grammar-inert whitespace. Newline bytes remain in place. Public tokens
+    /// are rebuilt from `root_source`, so mask bytes never escape the parser.
+    pub(crate) fn masked_local_source<'source>(
+        &self,
+        source: &'source str,
+    ) -> Result<Cow<'source, str>, ParseError> {
+        if self.foreign_spans.is_empty() {
+            return Ok(Cow::Borrowed(source));
+        }
+        let local_start = self.index_offset;
+        let local_end = local_start.saturating_add(source.len());
+        let mut bytes = source.as_bytes().to_vec();
+
+        let first = self
+            .foreign_spans
+            .partition_point(|span| span.end_byte <= local_start);
+        for span in self.foreign_spans[first..]
+            .iter()
+            .take_while(|span| span.start_byte < local_end)
+        {
+            if span.start_byte < local_start || span.end_byte > local_end {
+                return Err(ParseError::Value(format!(
+                    "Foreign span for provider {:?} crosses a nested template boundary: {}..{} versus {}..{}",
+                    span.provider, span.start_byte, span.end_byte, local_start, local_end,
+                )));
+            }
+            let start = span.start_byte - local_start;
+            let end = span.end_byte - local_start;
+            for byte in &mut bytes[start..end] {
+                if !matches!(*byte, b'\n' | b'\r') {
+                    *byte = b' ';
+                }
+            }
+        }
+
+        String::from_utf8(bytes).map(Cow::Owned).map_err(|error| {
+            ParseError::Value(format!(
+                "Internal error while masking foreign spans as UTF-8: {error}"
+            ))
+        })
+    }
+
+    pub(crate) fn has_foreign_intersection(&self, start: usize, end: usize) -> bool {
+        let first = self
+            .foreign_spans
+            .partition_point(|span| span.end_byte <= start);
+        self.foreign_spans
+            .get(first)
+            .is_some_and(|span| span.start_byte < end)
+    }
+
+    /// Attach all still-unclaimed foreign ranges wholly contained in a token.
+    pub(crate) fn claim_foreign_parts(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Result<Vec<ForeignSourcePart>, ParseError> {
+        let mut parts = Vec::new();
+        let mut claimed = self.claimed_foreign.borrow_mut();
+        let first = self
+            .foreign_spans
+            .partition_point(|span| span.end_byte <= start);
+        for span in self.foreign_spans[first..]
+            .iter()
+            .take_while(|span| span.start_byte < end)
+        {
+            if span.start_byte < start || span.end_byte > end {
+                return Err(self.error_from_absolute_range(
+                    span.start_byte.max(start),
+                    span.end_byte.min(end),
+                    format!(
+                        "FOREIGN_SPAN_UNSUPPORTED_POSITION: provider {:?} span {}..{} crosses a Citry source boundary",
+                        span.provider, span.start_byte, span.end_byte,
+                    ),
+                ));
+            }
+            let claim_id = (span.provider.clone(), span.ordinal);
+            if claimed.insert(claim_id) {
+                parts.push(ForeignSourcePart {
+                    token: self.token_from_absolute_range(span.start_byte, span.end_byte)?,
+                    provider: span.provider.clone(),
+                    ordinal: span.ordinal,
+                    may_control_body: span.may_control_body,
+                });
+            }
+        }
+        Ok(parts)
+    }
+
+    /// Return foreign ranges in a source token without changing their claim
+    /// ledger. Nested-template attributes keep this projection metadata on the
+    /// outer attribute while the child AST remains the semantic owner.
+    pub(crate) fn foreign_parts_in_range(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Result<Vec<ForeignSourcePart>, ParseError> {
+        let mut parts = Vec::new();
+        let first = self
+            .foreign_spans
+            .partition_point(|span| span.end_byte <= start);
+        for span in self.foreign_spans[first..]
+            .iter()
+            .take_while(|span| span.start_byte < end)
+        {
+            if span.start_byte < start || span.end_byte > end {
+                return Err(self.error_from_absolute_range(
+                    span.start_byte.max(start),
+                    span.end_byte.min(end),
+                    format!(
+                        "FOREIGN_SPAN_UNSUPPORTED_POSITION: provider {:?} span {}..{} crosses a Citry source boundary",
+                        span.provider, span.start_byte, span.end_byte,
+                    ),
+                ));
+            }
+            parts.push(ForeignSourcePart {
+                token: self.token_from_absolute_range(span.start_byte, span.end_byte)?,
+                provider: span.provider.clone(),
+                ordinal: span.ordinal,
+                may_control_body: span.may_control_body,
+            });
+        }
+        Ok(parts)
+    }
+
+    pub(crate) fn ensure_all_foreign_claimed(&self) -> Result<(), ParseError> {
+        let claimed = self.claimed_foreign.borrow();
+        if let Some(span) = self
+            .foreign_spans
+            .iter()
+            .find(|span| !claimed.contains(&(span.provider.clone(), span.ordinal)))
+        {
+            return Err(self.error_from_absolute_range(
+                span.start_byte,
+                span.end_byte,
+                format!(
+                    "FOREIGN_SPAN_UNSUPPORTED_POSITION: provider {:?} span {}..{} has no supported Citry source owner",
+                    span.provider, span.start_byte, span.end_byte,
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn token_from_absolute_range(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Result<Token, ParseError> {
+        let source = self.root_source.as_str();
+        let content = source.get(start..end).ok_or_else(|| {
+            ParseError::Value(format!(
+                "Invalid UTF-8 token range in root template: {start}..{end}"
+            ))
+        })?;
+        let position = pest::Position::new(source, start).ok_or_else(|| {
+            ParseError::Value(format!("Invalid token start in root template: {start}"))
+        })?;
+        Ok(Token {
+            content: content.to_string(),
+            start_index: start,
+            end_index: end,
+            line_col: position.line_col(),
+        })
+    }
+
+    /// Reject a claim that masking displaced from an authored tag name into a
+    /// grammar text token. Structural validation normally sees tag names in
+    /// `collect_start_tag_foreign`; this guard covers the case where blanking
+    /// the complete name made the whole tag disappear from the masked AST.
+    pub(crate) fn validate_foreign_body_locus(
+        &self,
+        part: &ForeignSourcePart,
+    ) -> Result<(), ParseError> {
+        let bytes = self.root_source.as_bytes();
+        let start = part.token.start_index;
+        let Some(open) = bytes[..start].iter().rposition(|byte| *byte == b'<') else {
+            return Ok(());
+        };
+        if bytes[..start]
+            .iter()
+            .rposition(|byte| *byte == b'>')
+            .is_some_and(|close| close > open)
+        {
+            return Ok(());
+        }
+
+        let mut name_start = open + 1;
+        if bytes.get(name_start) == Some(&b'/') {
+            name_start += 1;
+        }
+        let Some(first) = bytes.get(name_start) else {
+            return Ok(());
+        };
+        if !first.is_ascii_alphabetic() {
+            return Ok(());
+        }
+        let name_end = bytes[name_start..]
+            .iter()
+            .position(|byte| byte.is_ascii_whitespace() || matches!(*byte, b'/' | b'>'))
+            .map_or(bytes.len(), |offset| name_start + offset);
+        if start < name_end && part.token.end_index > name_start {
+            return Err(self.error_from_token(
+                &part.token,
+                format!(
+                    "FOREIGN_SPAN_UNSUPPORTED_POSITION: provider {:?} span {}..{} cannot own a tag name",
+                    part.provider, part.token.start_index, part.token.end_index,
+                ),
+            ));
+        }
+        Ok(())
     }
 
     /// Record the declarations found inside one nested-template attribute.
@@ -274,8 +520,7 @@ impl ParserContext {
 
         // Create value token with offsets to skip {# at start and #} at end
         // The content will be automatically sliced and trimmed
-        let value_token = Token::from_pair(pair).crop_cols(2, -2);
-        let value_token = self.offset_token(value_token);
+        let value_token = token.clone().crop_cols(2, -2);
 
         Ok(Comment {
             token,
@@ -391,7 +636,14 @@ impl ParserContext {
 
     /// Create a Token from a pest Pair, applying line, column, and index offsets
     pub fn create_token(&self, pair: &pest::iterators::Pair<Rule>) -> Token {
-        let token = Token::from_pair(pair);
-        self.offset_token(token)
+        let span = pair.as_span();
+        let start = self.index_offset.saturating_add(span.start());
+        let end = self.index_offset.saturating_add(span.end());
+        if !self.root_source.is_empty() {
+            return self
+                .token_from_absolute_range(start, end)
+                .expect("Pest pair ranges must remain valid in the original root source");
+        }
+        self.offset_token(Token::from_pair(pair))
     }
 }

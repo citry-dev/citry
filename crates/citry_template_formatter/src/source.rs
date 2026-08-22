@@ -12,8 +12,8 @@
 //! against, which is why it is built for the source and again for the result.
 
 use citry_template_parser::{
-    Comment, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlStartTag, Node, Template,
-    TemplateElement, Token, parse_template,
+    Comment, FillDataPattern, ForeignSpan, HtmlAttr, HtmlAttrKind, HtmlStartTag, Node,
+    ParseOptions, Template, TemplateElement, Token, parse_template, parse_template_with_options,
 };
 
 use crate::PREFERRED_WIDTH;
@@ -152,6 +152,14 @@ pub(crate) struct SourceModel {
 
 impl SourceModel {
     pub(crate) fn build(source: &str, template: &Template) -> Result<Self, FormatError> {
+        Self::build_with_options(source, template, &ParseOptions::default())
+    }
+
+    pub(crate) fn build_with_options(
+        source: &str,
+        template: &Template,
+        options: &ParseOptions,
+    ) -> Result<Self, FormatError> {
         let mut model = Self {
             tags: Vec::new(),
             body_gaps: Vec::new(),
@@ -166,6 +174,7 @@ impl SourceModel {
                 root_source: source,
                 local_source: source,
                 document_comments: &template.comments,
+                foreign_spans: &options.foreign_spans,
                 base: 0,
                 editable: true,
                 provider_editable: true,
@@ -244,6 +253,7 @@ struct VisitContext<'a> {
     root_source: &'a str,
     local_source: &'a str,
     document_comments: &'a [Comment],
+    foreign_spans: &'a [ForeignSpan],
     base: usize,
     editable: bool,
     provider_editable: bool,
@@ -371,6 +381,19 @@ fn visit_template(
                 context.base,
                 "text",
             )?,
+            TemplateElement::Foreign(part) => {
+                validate_token(
+                    context.root_source,
+                    context.local_source,
+                    &part.token,
+                    context.base,
+                    "foreign source",
+                )?;
+                model.protected.push(ProtectedRange {
+                    span: Span::from_token(&part.token).offset(context.base),
+                    allow_insertion_at_end: false,
+                });
+            }
         }
     }
     Ok(suppression.terminal_enabled)
@@ -384,21 +407,45 @@ fn visit_node(
     model: &mut SourceModel,
 ) -> Result<(), FormatError> {
     let start_tag = node.start_tag();
-    let mut start_tag_model = build_start_tag(
-        context.root_source,
-        context.local_source,
-        start_tag,
-        context.base,
-    )?;
-    if let Node::WithBody {
-        start_tag, end_tag, ..
-    } = node
-        && start_tag.token.end_index == end_tag.token.start_index
-    {
-        start_tag_model.adjacent_end_tag =
-            Some(Span::from_token(&end_tag.token).offset(context.base));
+    protect_start_tag_foreign_parts(context, start_tag, &mut model.protected)?;
+    // A raw contribution between attributes may emit spacing or several
+    // attributes. Preserve the complete authored start tag because Citry
+    // cannot safely normalize layout around output it does not understand.
+    let mut start_tag_model = if start_tag.foreign_parts.is_empty() {
+        Some(build_start_tag(
+            context.root_source,
+            context.local_source,
+            start_tag,
+            context.base,
+        )?)
+    } else {
+        validate_token(
+            context.root_source,
+            context.local_source,
+            &start_tag.token,
+            context.base,
+            "start tag",
+        )?;
+        validate_token(
+            context.root_source,
+            context.local_source,
+            &start_tag.name,
+            context.base,
+            "start tag name",
+        )?;
+        None
+    };
+    if let Some(start_tag_model) = &mut start_tag_model {
+        if let Node::WithBody {
+            start_tag, end_tag, ..
+        } = node
+            && start_tag.token.end_index == end_tag.token.start_index
+        {
+            start_tag_model.adjacent_end_tag =
+                Some(Span::from_token(&end_tag.token).offset(context.base));
+        }
+        start_tag_model.layout_column = layout.column;
     }
-    start_tag_model.layout_column = layout.column;
     let start_tag_suppression = scan_start_tag(
         start_tag,
         context.base,
@@ -408,7 +455,9 @@ fn visit_node(
     model
         .comments
         .associate_start_tag(context.root_source, start_tag, context.base)?;
-    if context.editable {
+    if context.editable
+        && let Some(start_tag_model) = start_tag_model
+    {
         model.tags.push(start_tag_model);
     }
 
@@ -429,9 +478,14 @@ fn visit_node(
         let Some(inner_value) = &attr.inner_value else {
             continue;
         };
+        if !attr.foreign_parts.is_empty() {
+            continue;
+        }
         let (prefix_len, nested_source, is_fragment) = nested_template_source(&inner_value.content);
         let nested_base = context.base + inner_value.start_index + prefix_len;
-        let nested = parse_template(nested_source, None, None).map_err(|error| {
+        let nested_options =
+            options_for_nested_source(context.foreign_spans, nested_base, nested_source.len())?;
+        let nested = parse_with_options(nested_source, &nested_options).map_err(|error| {
             FormatError::invariant(format!(
                 "nested template parsed in the outer document but not in the formatter: {error}"
             ))
@@ -441,6 +495,7 @@ fn visit_node(
                 root_source: context.root_source,
                 local_source: nested_source,
                 document_comments: &nested.comments,
+                foreign_spans: context.foreign_spans,
                 base: nested_base,
                 editable: context.editable,
                 provider_editable: context.provider_editable,
@@ -519,6 +574,7 @@ fn visit_node(
                 root_source: context.root_source,
                 local_source: context.local_source,
                 document_comments: context.document_comments,
+                foreign_spans: context.foreign_spans,
                 base: context.base,
                 editable: body_editable,
                 provider_editable: context.provider_editable
@@ -546,6 +602,75 @@ fn visit_node(
         )?;
     }
     Ok(())
+}
+
+fn protect_start_tag_foreign_parts(
+    context: &VisitContext<'_>,
+    start_tag: &HtmlStartTag,
+    protected: &mut Vec<ProtectedRange>,
+) -> Result<(), FormatError> {
+    for part in start_tag.foreign_parts.iter().chain(
+        start_tag
+            .attrs
+            .iter()
+            .flat_map(|attr| attr.foreign_parts.iter()),
+    ) {
+        validate_token(
+            context.root_source,
+            context.local_source,
+            &part.token,
+            context.base,
+            "foreign start-tag source",
+        )?;
+        protected.push(ProtectedRange {
+            span: Span::from_token(&part.token).offset(context.base),
+            allow_insertion_at_end: false,
+        });
+    }
+    Ok(())
+}
+
+fn parse_with_options(
+    source: &str,
+    options: &ParseOptions,
+) -> Result<Template, Box<citry_template_parser::ParseError>> {
+    if options == &ParseOptions::default() {
+        parse_template(source, None, None)
+    } else {
+        parse_template_with_options(source, None, None, options)
+    }
+    .map_err(Box::new)
+}
+
+fn options_for_nested_source(
+    foreign_spans: &[ForeignSpan],
+    nested_base: usize,
+    nested_len: usize,
+) -> Result<ParseOptions, FormatError> {
+    let nested_end = nested_base
+        .checked_add(nested_len)
+        .ok_or_else(|| FormatError::invariant("nested template range overflows source offsets"))?;
+    let mut projected = Vec::new();
+    for span in foreign_spans {
+        let intersects = span.start_byte < nested_end && nested_base < span.end_byte;
+        if !intersects {
+            continue;
+        }
+        if span.start_byte < nested_base || span.end_byte > nested_end {
+            return Err(FormatError::invalid_span(
+                "foreign span crosses a nested template boundary",
+                span.start_byte..span.end_byte,
+            ));
+        }
+        projected.push(ForeignSpan::from_parts(
+            span.start_byte - nested_base,
+            span.end_byte - nested_base,
+            span.provider.clone(),
+            span.ordinal,
+            span.may_control_body,
+        ));
+    }
+    Ok(ParseOptions::with_foreign_spans(projected))
 }
 
 fn embedded_body_kind(
@@ -1254,6 +1379,7 @@ pub(crate) fn element_span(element: &TemplateElement) -> Span {
         },
         TemplateElement::Expr(expr) => Span::from_token(&expr.token),
         TemplateElement::Text(text) => Span::from_token(&text.token),
+        TemplateElement::Foreign(part) => Span::from_token(&part.token),
     }
 }
 

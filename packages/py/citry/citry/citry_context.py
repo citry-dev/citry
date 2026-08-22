@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Final
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from citry.citry_template import CitryTemplate
     from citry.component import Component
     from citry.ownership import OwnershipGraph
 
@@ -88,6 +89,7 @@ class CitryContext:
         "ownership",
         "provides",
         "sandboxed",
+        "template_record",
         "variables",
     )
 
@@ -99,11 +101,13 @@ class CitryContext:
         provides: dict[str, Any] | None = None,
         sandboxed: bool = True,
         ownership: OwnershipGraph | None = None,
+        template_record: CitryTemplate | None = None,
     ) -> None:
         self.variables = variables if variables is not None else {}
         self.extra = extra if extra is not None else {}
         self.component = component
         self.ownership = ownership
+        self.template_record = template_record
         self.provides = provides if provides is not None else {}
         # A recovered render error still makes this subtree unsafe to publish
         # as reusable output. The bit bubbles upward with render metadata.

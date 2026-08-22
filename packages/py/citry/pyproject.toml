@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry"
-version = "0.4.2"
+version = "0.4.3"
 requires-python = ">=3.10, <4.0"
 description = "Fast, simple, and smart frontend framework for Python that brings the best of Vue, React, Django, Jinja, and LiveWire"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
@@ -40,7 +40,7 @@ dependencies = [
     # Pinned to one exact version, not a range. The runtime node classes in
     # `citry.nodes` read the source citry-core's compiler emits, so the two
     # move together: raise this in the same change that releases citry-core.
-    "citry-core==1.5.1",
+    "citry-core==1.6.0",
     # Deliberately wide. Citry uses only `ObjectProxy` and `__wrapped__`, and
     # wrapt keeps `ObjectProxy` working across its 2.0 rewrite, so both major
     # lines serve. Raising the floor would force wrapt 2 on every installation

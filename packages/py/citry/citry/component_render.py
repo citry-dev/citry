@@ -70,6 +70,8 @@ from citry.nodes import (
     ExprNode,
     FillDataBinding,
     FillNode,
+    ForeignHtmlAttr,
+    ForeignNode,
     ForNode,
     IfNode,
     SlotNode,
@@ -86,10 +88,10 @@ from citry.util.exception import (
 )
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
-from citry_core.template_parser import compile_template, parse_template
+from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping, Sequence
 
     from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
     from citry.component import Component
@@ -1211,7 +1213,9 @@ def _render_one(
     #    set; that value stays un-optimized and re-evaluates each render.
     template_output_checkpoint = ownership.checkpoint()
     try:
-        compiled = _get_compiled_template(comp_cls)
+        template_override = getattr(element, "_template_override", None)
+        compiled = _get_compiled_template(comp_cls, template_override=template_override)
+        context.template_record = compiled
         generate = compiled.generate if compiled is not None else None
         if compiled is None or generate is None:
             body: list[BodyItem] = []
@@ -1220,8 +1224,22 @@ def _render_one(
             visible_names = frozenset(tpl_data)
 
             def build() -> list[BodyItem]:
+                foreign_resolved = extensions.on_template_foreign_compiled(
+                    comp_cls,
+                    generate(),
+                    provider_metadata=compiled.foreign_provider_metadata,
+                    template_id=compiled.template_id,
+                    origin=compiled.origin,
+                    template_kind=compiled.kind,
+                )
                 return precompute_const_parts(
-                    extensions.on_template_compiled(comp_cls, generate()),
+                    extensions.on_template_compiled(
+                        comp_cls,
+                        foreign_resolved,
+                        template_id=compiled.template_id,
+                        origin=compiled.origin,
+                        template_kind=compiled.kind,
+                    ),
                     const_vars,
                     # Precomputing an attribute region bakes its dict before extensions
                     # see it, so keep the regions live when anyone subscribes.
@@ -1230,12 +1248,27 @@ def _render_one(
                     visible_names=visible_names,
                 )
 
-            body = citry_instance._const_body_cache.get_or_build(
-                comp_cls,
-                signature,
-                build,
-                visible_names=visible_names,
-            )
+            if template_override is not None:
+                # One transparent class serves every standalone source. Its
+                # body cache must therefore include the immutable template
+                # record rather than using the class-keyed shared cache.
+                standalone_key = (signature, visible_names)
+                with compiled.compile_lock:
+                    cached_body = compiled.standalone_bodies.get(standalone_key)
+                    if cached_body is None:
+                        cached_body = build()
+                        compiled.standalone_bodies[standalone_key] = cached_body
+                        compiled.standalone_bodies.move_to_end(standalone_key)
+                        while len(compiled.standalone_bodies) > 64:
+                            compiled.standalone_bodies.popitem(last=False)
+                    body = cached_body
+            else:
+                body = citry_instance._const_body_cache.get_or_build(
+                    comp_cls,
+                    signature,
+                    build,
+                    visible_names=visible_names,
+                )
 
         # 7. Walk the body into a parts list and wrap it in a CitryRender. Any nested
         #    components are left as unrendered DeferredComponent parts; render_impl
@@ -1507,7 +1540,11 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
     raise TypeError(msg)
 
 
-def _get_compiled_template(comp_cls: type[Component]) -> CitryTemplate | None:
+def _get_compiled_template(
+    comp_cls: type[Component],
+    *,
+    template_override: CitryTemplate | None = None,
+) -> CitryTemplate | None:
     """
     Return the component's template with its compiled form filled in.
 
@@ -1524,17 +1561,32 @@ def _get_compiled_template(comp_cls: type[Component]) -> CitryTemplate | None:
     path, or ``module::Class`` for inline) prefixed to its message, so a
     syntax error names where the template came from.
     """
-    template = load_template(comp_cls)
+    template = template_override if template_override is not None else load_template(comp_cls)
     if template is None:
         return None
     if template.generate is None:
-        try:
-            generate = _compile_template(template, comp_cls.citry._tag_rules())
-            _check_declared_slots(comp_cls, template)
-            template.generate = generate
-        except Exception as err:
-            set_template_origin_error_message(err, template.origin)
-            raise
+        with template.compile_lock:
+            if template.generate is not None:
+                return template
+            try:
+                if not template.foreign_prepared:
+                    spans, metadata = comp_cls.citry.extensions.on_template_foreign_spans(
+                        comp_cls,
+                        template.source,
+                        template_id=template.template_id,
+                        origin=template.origin,
+                        template_kind=template.kind,
+                        foreign_compile_contexts=template.foreign_compile_contexts,
+                    )
+                    template.foreign_spans = spans
+                    template.foreign_provider_metadata = metadata
+                    template.foreign_prepared = True
+                generate = _compile_template(template, comp_cls.citry._tag_rules())
+                _check_declared_slots(comp_cls, template)
+                template.generate = generate
+            except Exception as err:
+                set_template_origin_error_message(err, template.origin)
+                raise
     return template
 
 
@@ -1592,7 +1644,16 @@ def _compile_template(
     name. Those names are supplied through the ``ns`` namespace below, so the
     generated code can find them.
     """
-    ast = parse_template(template.source, user_rules=user_rules)
+    options = (
+        ParseOptions(
+            list(template.foreign_spans),
+            source_offset=template.source_offset,
+            root_source=template.root_source,
+        )
+        if template.foreign_spans or template.source_offset or template.root_source is not None
+        else None
+    )
+    ast = parse_template(template.source, user_rules=user_rules, options=options)
     template.used_vars = frozenset(token.content for token in ast.used_variables)
     # The static <c-slot> declarations, kept for `_check_declared_slots` (the
     # caller runs it, since it has the component class and thus its Slots).
@@ -1606,8 +1667,11 @@ def _compile_template(
     # becomes the returned function's globals, so the node classes and source
     # stay bound to it.
     ns: dict[str, Any] = {
-        "source": template.source,
+        # Projected nested parses keep root-absolute node positions, so their
+        # runtime nodes must carry the matching root source as well.
+        "source": template.root_source or template.source,
         "ExprNode": ExprNode,
+        "ForeignNode": ForeignNode,
         "TemplateNode": TemplateNode,
         "ComponentNode": ComponentNode,
         "ElementAttrsNode": ElementAttrsNode,
@@ -1620,6 +1684,7 @@ def _compile_template(
         "StaticHtmlAttr": StaticHtmlAttr,
         "ExprHtmlAttr": ExprHtmlAttr,
         "TemplateHtmlAttr": TemplateHtmlAttr,
+        "ForeignHtmlAttr": ForeignHtmlAttr,
     }
     exec(code, ns)  # noqa: S102
     generate: Callable[[], list[BodyItem]] = ns["generate_template"]
@@ -1630,6 +1695,13 @@ def _compile_nested_template(
     template_str: str,
     user_rules: dict[str, TagRules] | None = None,
     component_class: type[Component] | None = None,
+    *,
+    root_source: str | None = None,
+    source_offset: int = 0,
+    foreign_spans: tuple[tuple[int, int, str, int, bool], ...] = (),
+    provider_metadata: Mapping[str, object | None] | None = None,
+    template_id: str | None = None,
+    origin: str | None = None,
 ) -> Callable[[], list[BodyItem]]:
     """
     Compile a nested template fragment into its body-generating function.
@@ -1644,15 +1716,45 @@ def _compile_nested_template(
     class's primary body. Nested-template bindings therefore remain in the
     owner's handler/State scope without rewriting the authored source string.
     """
-    template = CitryTemplate(source=template_str, origin="<nested template>")
+    core_spans = tuple(ForeignSpan(*span) for span in foreign_spans)
+    template_kwargs: dict[str, Any] = {}
+    if template_id is not None:
+        template_kwargs["template_id"] = template_id
+    template = CitryTemplate(
+        source=template_str,
+        origin=origin or "<nested template>",
+        kind="nested",
+        foreign_spans=core_spans,
+        foreign_prepared=True,
+        source_offset=source_offset,
+        root_source=root_source,
+        **template_kwargs,
+    )
     generate = _compile_template(template, user_rules)
     if component_class is None:
         return generate
-    compiled = component_class.citry.extensions.on_template_compiled(component_class, generate())
+    if provider_metadata is None:
+        primary = load_template(component_class)
+        provider_metadata = primary.foreign_provider_metadata if primary is not None else {}
+    foreign_resolved = component_class.citry.extensions.on_template_foreign_compiled(
+        component_class,
+        generate(),
+        provider_metadata=provider_metadata,
+        template_id=template.template_id,
+        origin=template.origin,
+        template_kind=template.kind,
+    )
+    compiled = component_class.citry.extensions.on_template_compiled(
+        component_class,
+        foreign_resolved,
+        template_id=template.template_id,
+        origin=template.origin,
+        template_kind=template.kind,
+    )
     return lambda: compiled
 
 
-def _render_body(body: list[BodyItem], context: CitryContext) -> list[RenderPart]:
+def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[RenderPart]:
     """
     Render a body (a list of static strings and nodes) into a list of parts.
 
@@ -1717,11 +1819,12 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
         return
     component = context.component
     component_name = type(component).__name__ if component is not None else None
-    # Best-effort: name where the template came from in the snippet header.
-    # The template is already loaded and cached by the time a node renders, so
-    # this is a cache read; any failure just drops the origin from the header.
-    origin: str | None = None
-    if component is not None:
+    # Prefer the exact template record that produced this body. This matters
+    # for render_template() and nested templates: loading the component's
+    # primary template would report the wrong origin and provider metadata.
+    active_template = context.template_record
+    origin = active_template.origin if active_template is not None else None
+    if origin is None and component is not None:
         try:
             template = load_template(type(component))
         except Exception:  # noqa: BLE001 - error reporting must not raise

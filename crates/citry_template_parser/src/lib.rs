@@ -17,6 +17,7 @@ pub mod compiler;
 pub mod constants;
 mod diagnostic_catalog;
 pub mod error;
+pub mod foreign;
 pub mod grammar;
 pub mod lang {
     pub mod go;
@@ -35,8 +36,8 @@ pub mod utils {
 
 // Re-export the types that users need
 pub use crate::ast::{
-    Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
-    HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
+    Comment, Expr, FillDataField, FillDataPattern, ForeignSourcePart, HtmlAttr, HtmlAttrKind,
+    HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
 };
 pub use crate::browser::{
     analyze_browser_source, analyze_component_scope_writes, analyze_component_source,
@@ -44,6 +45,10 @@ pub use crate::browser::{
     BrowserReference, BrowserScopeWrite,
 };
 pub use crate::error::{ParseDiagnostic, ParseError};
+pub use crate::foreign::{ForeignSpan, ParseOptions};
 pub use crate::lang::lang::{Lang, LangImpl, ParseExprResult};
-pub use crate::parser::{parse_template, parse_template_with_custom_lang};
+pub use crate::parser::{
+    parse_template, parse_template_with_custom_lang, parse_template_with_custom_lang_and_options,
+    parse_template_with_options,
+};
 pub use crate::parser_context::{ParserContext, TagRules};

@@ -62,10 +62,11 @@ Example:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from difflib import get_close_matches
 from keyword import iskeyword
+from threading import RLock
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 from unicodedata import normalize
 from weakref import ReferenceType, ref
@@ -123,6 +124,7 @@ if TYPE_CHECKING:
 
     from citry.citry_render import RenderPart
     from citry.ext.events.extension import EventsExtension
+    from citry.extension import ForeignClaim
 
 
 _EVENTS_COMPILER_ATTR_PREFIX = "data-cev-"
@@ -194,6 +196,49 @@ class Node:
 BodyItem: TypeAlias = "Node | str"
 
 
+@final
+class ForeignNode(Node):
+    """Fail-closed source contribution owned by an installed host provider."""
+
+    def __init__(
+        self,
+        source: str,
+        position: tuple[int, int],
+        provider: str,
+        ordinal: int,
+        text: str,
+        may_control_body: bool = False,
+    ) -> None:
+        self.source = source
+        self.position = position
+        self.provider = provider
+        self.ordinal = ordinal
+        self.text = text
+        self.may_control_body = may_control_body
+
+    def claim(self, locus: Literal["body", "component_input"]) -> ForeignClaim:
+        from citry.extension import ForeignClaim  # noqa: PLC0415
+
+        return ForeignClaim(
+            provider=self.provider,
+            ordinal=self.ordinal,
+            source=self.text,
+            position=self.position,
+            may_control_body=self.may_control_body,
+            locus=locus,
+        )
+
+    @override
+    def render(self, context: CitryContext) -> RenderPart:
+        msg = f"Unresolved foreign source claim {(self.provider, self.ordinal)!r} reached rendering."
+        raise RuntimeError(msg)
+
+    @override
+    def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
+        msg = f"Unresolved foreign source claim {(self.provider, self.ordinal)!r} reached fill collection."
+        raise RuntimeError(msg)
+
+
 class HtmlAttr:
     """
     Base class for HTML attribute nodes (a component's or slot's inputs).
@@ -210,6 +255,33 @@ class HtmlAttr:
 
     def resolve(self, context: CitryContext) -> Any:
         raise NotImplementedError(f"{type(self).__name__}.resolve is not implemented")
+
+
+@final
+class ForeignHtmlAttr(HtmlAttr):
+    """Fail-closed component input assembled from literal and foreign parts."""
+
+    def __init__(
+        self,
+        source: str,
+        position: tuple[int, int],
+        key: str,
+        parts: tuple[str | ForeignNode, ...],
+        used_vars: tuple[str, ...],
+    ) -> None:
+        self.source = source
+        self.position = position
+        self.key = key
+        self.parts = parts
+        self.used_vars = used_vars
+
+    def foreign_nodes(self) -> tuple[ForeignNode, ...]:
+        return tuple(part for part in self.parts if isinstance(part, ForeignNode))
+
+    @override
+    def resolve(self, context: CitryContext) -> Any:
+        claims = [(part.provider, part.ordinal) for part in self.foreign_nodes()]
+        raise RuntimeError(f"Unresolved foreign component input claims reached rendering: {claims!r}.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,7 +360,7 @@ class FillSink:
         self.fills[name] = slot
 
 
-def collect_fills_from_body(body: list[BodyItem], context: CitryContext, sink: FillSink) -> None:
+def collect_fills_from_body(body: Sequence[BodyItem], context: CitryContext, sink: FillSink) -> None:
     """
     Walk one level of a fill-group body, collecting fills into ``sink``.
 
@@ -393,6 +465,7 @@ class _TemplateSlotContent:
                 provides=provides,
                 sandboxed=context.sandboxed,
                 ownership=context.ownership,
+                template_record=context.template_record,
             )
         else:
             render_context = context
@@ -622,6 +695,7 @@ class TemplateNode(Node):
         # The body-generating function for the nested template, compiled lazily
         # on first render and reused afterwards (compile once per node).
         self._generator: Callable[[], list[Any]] | None = None
+        self._compile_lock = RLock()
 
     @override
     def render(self, context: CitryContext) -> CitryRender:
@@ -634,15 +708,17 @@ class TemplateNode(Node):
         from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
 
         if self._generator is None:
-            # The nested template is validated like any other: the parse gets
-            # the rules derived from the registered components' declarations.
-            component = context.component
-            user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_nested_template(
-                self.expr,
-                user_rules,
-                type(component) if component is not None else None,
-            )
+            with self._compile_lock:
+                if self._generator is None:
+                    # The nested template is validated like any other: the parse gets
+                    # the rules derived from the registered components' declarations.
+                    component = context.component
+                    user_rules = component.citry._tag_rules() if component is not None else None
+                    self._generator = _compile_nested_template(
+                        self.expr,
+                        user_rules,
+                        type(component) if component is not None else None,
+                    )
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -760,16 +836,26 @@ class TemplateHtmlAttr(HtmlAttr):
     """
 
     def __init__(
-        self, source: Any, position: tuple[int, int], key: str, template: str, used_vars: tuple[str, ...]
+        self,
+        source: Any,
+        position: tuple[int, int],
+        key: str,
+        template: str,
+        used_vars: tuple[str, ...],
+        foreign_spans: tuple[tuple[int, int, str, int, bool], ...] = (),
+        source_offset: int = 0,
     ) -> None:
         self.source = source
         self.position = position
         self.key = key
         self.template = template
         self.used_vars = used_vars
+        self.foreign_spans = foreign_spans
+        self.source_offset = source_offset
         # The body-generating function for the nested template, compiled lazily
         # on first resolve and reused afterwards (compile once per node).
         self._generator: Callable[[], list[Any]] | None = None
+        self._compile_lock = RLock()
 
     @override
     def resolve(self, context: CitryContext) -> CitryRender:
@@ -782,15 +868,26 @@ class TemplateHtmlAttr(HtmlAttr):
         from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
 
         if self._generator is None:
-            # The nested template is validated like any other: the parse gets
-            # the rules derived from the registered components' declarations.
-            component = context.component
-            user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_nested_template(
-                self.template,
-                user_rules,
-                type(component) if component is not None else None,
-            )
+            with self._compile_lock:
+                if self._generator is None:
+                    # The nested template is validated like any other: the parse gets
+                    # the rules derived from the registered components' declarations.
+                    component = context.component
+                    user_rules = component.citry._tag_rules() if component is not None else None
+                    active_template = context.template_record
+                    self._generator = _compile_nested_template(
+                        self.template,
+                        user_rules,
+                        type(component) if component is not None else None,
+                        root_source=self.source if self.foreign_spans else None,
+                        source_offset=self.source_offset,
+                        foreign_spans=self.foreign_spans,
+                        provider_metadata=(
+                            active_template.foreign_provider_metadata if active_template is not None else None
+                        ),
+                        template_id=(active_template.template_id if active_template is not None else None),
+                        origin=(active_template.origin if active_template is not None else None),
+                    )
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -1759,6 +1856,7 @@ class ForNode(Node):
                 provides=context.provides,
                 sandboxed=context.sandboxed,
                 ownership=context.ownership,
+                template_record=context.template_record,
             )
             yield body, child
 

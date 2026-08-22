@@ -35,6 +35,32 @@ def test_formats_authored_template_text() -> None:
     assert format_template(expected) == expected
 
 
+def test_preserves_foreign_spans_as_unknown_syntax() -> None:
+    source = 'é<div class="{% if active %}on{% endif %}"  title = "x"></div>'
+    first = source.encode().index(b"{% if active %}")
+    second = source.encode().index(b"{% endif %}")
+    options = _rust.template_parser.ParseOptions(
+        [
+            _rust.template_parser.ForeignSpan(
+                first,
+                first + len(b"{% if active %}"),
+                "test-host",
+                ordinal=0,
+                may_control_body=True,
+            ),
+            _rust.template_parser.ForeignSpan(
+                second,
+                second + len(b"{% endif %}"),
+                "test-host",
+                ordinal=1,
+                may_control_body=True,
+            ),
+        ]
+    )
+
+    assert format_template(source, options=options) == ('é<div class="{% if active %}on{% endif %}" title="x"></div>')
+
+
 def test_python_binding_consumes_the_shared_structural_corpus() -> None:
     index = json.loads((CORPUS_ROOT / "index.json").read_text(encoding="utf-8"))
     for case in index["cases"]:

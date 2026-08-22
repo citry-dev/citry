@@ -84,6 +84,9 @@ fn analyze_element(element: &TemplateElement, parent_tag_name: Option<&str>) -> 
         // text right against its neighbours. Treating it as sensitive keeps the
         // spacing around `{{ x }}` exactly as written.
         TemplateElement::Expr(_) => sensitive_layout(),
+        // Provider-owned source can render arbitrary text and therefore has
+        // the same whitespace sensitivity as an expression.
+        TemplateElement::Foreign(_) => sensitive_layout(),
         TemplateElement::Text(text) if is_html_space_text(&text.token.content) => ElementLayout {
             edges: None,
             control: None,
