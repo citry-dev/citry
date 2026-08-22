@@ -1,0 +1,1239 @@
+<!--citry:g1:bcb534ec:0:i:1:s--><!doctype html><html data-cid-ctl3bzpb8 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Use Editable in a form</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CEditable_620b5b>@layer citry-ui.theme{:where(.cui-editable){--_cui-editable-background:var(--cui-editable-background,Canvas);--_cui-editable-foreground:var(--cui-editable-foreground,CanvasText);--_cui-editable-border-color:var(--cui-editable-border-color,light-dark(#d0d5dd,#535862));--_cui-editable-hover-border-color:var(--cui-editable-hover-border-color,light-dark(#667085,#a4a7ae));--_cui-editable-focus-color:var(--cui-editable-focus-color,Highlight);--_cui-editable-invalid-border-color:var(--cui-editable-invalid-border-color,light-dark(#d92d20,#f97066));--_cui-editable-muted-color:var(--cui-editable-muted-color,light-dark(#667085,#a4a7ae));--_cui-editable-action-background:var(--cui-editable-action-background,color-mix(in srgb, CanvasText 7%, Canvas));--_cui-editable-action-foreground:var(--cui-editable-action-foreground,CanvasText);--_cui-editable-radius:var(--cui-editable-radius,.5rem);--_cui-editable-height:var(--cui-editable-height,2.5rem);--_cui-editable-padding:var(--cui-editable-padding,.5rem .75rem);--_cui-editable-action-size:var(--cui-editable-action-size,1.75rem);--_cui-editable-gap:var(--cui-editable-gap,.375rem);box-sizing:border-box;min-inline-size:0;color:var(--_cui-editable-foreground);font-family:ui-sans-serif,system-ui,sans-serif;display:grid}:where(.cui-editable[data-size=sm]){--_cui-editable-height:2.25rem;--_cui-editable-padding:.375rem .625rem;--_cui-editable-action-size:1.5rem;font-size:.875rem}:where(.cui-editable[data-size=lg]){--_cui-editable-height:2.75rem;--_cui-editable-padding:.625rem .875rem;--_cui-editable-action-size:2rem;font-size:1.0625rem}:where(.cui-editable__preview),:where(.cui-editable__edit-surface){box-sizing:border-box;min-inline-size:0;min-block-size:var(--_cui-editable-height)}:where(.cui-editable__preview){align-items:center;gap:var(--_cui-editable-gap);padding:var(--_cui-editable-padding);border:1px solid var(--_cui-editable-border-color);border-radius:var(--_cui-editable-radius);background:var(--_cui-editable-background);grid-template-columns:minmax(0,1fr) auto;display:grid}:where(.cui-editable [data-citry-ui-part=preview-value]){overflow-wrap:anywhere;min-inline-size:0}:where(.cui-editable[data-empty] [data-citry-ui-part=preview-value]){color:var(--_cui-editable-muted-color)}:where(.cui-editable__edit-surface){min-inline-size:0;display:grid;position:relative}:where(.cui-editable__input){box-sizing:border-box;inline-size:100%;min-inline-size:0;min-block-size:var(--_cui-editable-height);padding:var(--_cui-editable-padding);border:1px solid var(--_cui-editable-border-color);border-radius:var(--_cui-editable-radius);background:var(--_cui-editable-background);color:var(--_cui-editable-foreground);font:inherit}:where(.cui-editable[data-action-position=inside] .cui-editable__input){padding-inline-end:calc(var(--_cui-editable-action-size) * 2 + var(--_cui-editable-gap) * 3)}:where(.cui-editable__actions){gap:var(--_cui-editable-gap);display:inline-flex}:where(.cui-editable[data-action-position=inside] .cui-editable__actions){position:absolute;inset-block-start:50%;inset-inline-end:var(--_cui-editable-gap);transform:translateY(-50%)}:where(.cui-editable[data-action-position=outside] .cui-editable__edit-surface){align-items:center;gap:var(--_cui-editable-gap);grid-template-columns:minmax(0,1fr) auto}:where(.cui-editable__action){box-sizing:border-box;inline-size:var(--_cui-editable-action-size);block-size:var(--_cui-editable-action-size);min-inline-size:var(--_cui-editable-action-size);border-radius:calc(var(--_cui-editable-radius) - .125rem);background:var(--_cui-editable-action-background);color:var(--_cui-editable-action-foreground);font:inherit;cursor:pointer;border:1px solid #0000;place-items:center;margin:0;padding:0;line-height:1;display:inline-grid}:where(.cui-editable__action:focus-visible),:where(.cui-editable__input:focus-visible){outline:2px solid var(--_cui-editable-focus-color);outline-offset:2px}:where(.cui-editable__action:disabled){cursor:not-allowed;opacity:.55}:where(.cui-editable[data-variant=filled] .cui-editable__preview),:where(.cui-editable[data-variant=filled] .cui-editable__input){background:color-mix(in srgb, CanvasText 6%, Canvas);border-color:#0000}:where(.cui-editable[data-variant=plain] .cui-editable__preview),:where(.cui-editable[data-variant=plain] .cui-editable__input){background:0 0;border-color:#0000;border-radius:0}:where(.cui-editable[data-invalid] .cui-editable__preview),:where(.cui-editable[data-invalid] .cui-editable__input){border-color:var(--_cui-editable-invalid-border-color)}:where(.cui-editable[data-disabled]),:where(.cui-editable[data-readonly]){opacity:.72}:where(.cui-editable:not([data-citry-editable-initialized]) .cui-editable__preview),:where(.cui-editable:not([data-citry-editable-initialized]) .cui-editable__actions),:where(.cui-editable[data-citry-editable-initialized]:not([data-editing]) .cui-editable__edit-surface),:where(.cui-editable[data-citry-editable-initialized][data-editing] .cui-editable__preview){display:none}@media (hover:hover){:where(.cui-editable:not([data-disabled]):not([data-readonly]) .cui-editable__preview:hover),:where(.cui-editable__input:not(:disabled):not([readonly]):hover){border-color:var(--_cui-editable-hover-border-color)}}@media (forced-colors:active){:where(.cui-editable__preview),:where(.cui-editable__input),:where(.cui-editable__action){border-color:buttontext}:where(.cui-editable[data-invalid] .cui-editable__preview),:where(.cui-editable[data-invalid] .cui-editable__input){border-color:mark}}@media print{:where(.cui-editable__edit-surface),:where(.cui-editable__action){display:none!important}:where(.cui-editable__preview){color:canvastext;background:0 0;border:0;min-block-size:auto;padding:0;display:block!important}}@media (width<=24rem){:where(.cui-editable[data-action-position=outside] .cui-editable__edit-surface){grid-template-columns:minmax(0,1fr)}}}</style><style data-citry-css-class=CField_81c723>@layer citry-ui.theme{:where(.cui-field){--_cui-field-gap:var(--cui-field-gap,.5rem);--_cui-field-label-color:var(--cui-field-label-color,CanvasText);--_cui-field-label-weight:var(--cui-field-label-weight,600);--_cui-field-description-color:var(--cui-field-description-color,color-mix(in srgb, CanvasText 68%, transparent));--_cui-field-error-color:var(--cui-field-error-color,light-dark(#b42318,#fda29b));--_cui-field-required-color:var(--cui-field-required-color,var(--_cui-field-error-color));gap:var(--_cui-field-gap);color:canvastext;min-inline-size:0;font-family:ui-sans-serif,system-ui,sans-serif;display:grid}:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(8rem,.35fr) minmax(0,1fr);align-items:start}:where(.cui-field[data-density=comfortable]){--_cui-field-gap:var(--cui-field-gap,.375rem)}:where(.cui-field[data-density=compact]){--_cui-field-gap:var(--cui-field-gap,.25rem)}:where(.cui-field>[data-citry-ui-part=label]){color:var(--_cui-field-label-color);font-weight:var(--_cui-field-label-weight)}:where(.cui-field__required){color:var(--_cui-field-required-color)}:where(.cui-field>[data-citry-ui-part=description]){color:var(--_cui-field-description-color);font-size:.875em}:where(.cui-field>[data-citry-ui-part=error]){color:var(--_cui-field-error-color);font-size:.875em}@media (width<=32rem){:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(0,1fr)}}@media (forced-colors:active){:where(.cui-field[data-invalid]>[data-citry-ui-part=error]){color:mark}}}</style></head><body><main><!--citry:g1:bcb534ec:0:i:2:s--><form @submit.prevent="result = Object.fromEntries(new FormData($event.target))" data-cid=ctl3bzpb9 data-cid-ctl3bzpb9 data-citry-root x-data><!--citry:g1:bcb534ec:0:i:3:s--><div class=cui-field data-cid=ctl3bzpba data-cid-ctl3bzpba data-citry-field-root data-citry-root data-citry-ui-part=field data-density=default data-orientation=vertical data-required id=cui-field-ctl3bzpba-control-field><label data-citry-ui-part=label for=cui-field-ctl3bzpba-control id=cui-field-ctl3bzpba-control-label><!--citry:g1:bcb534ec:0:r:1:s-->Workspace title<!--citry:g1:bcb534ec:0:r:1:e--> <span aria-hidden=true class=cui-field__required data-citry-ui-part=required-indicator> * </span></label><div data-citry-ui-part=control><!--citry:g1:bcb534ec:0:r:2:s--><!--citry:g1:bcb534ec:0:i:4:s--><div class=cui-editable data-action-position=inside data-cid=ctl3bzpbb data-cid-ctl3bzpbb data-citry-root data-citry-ui-part=root data-required data-size=md data-submit-mode=both data-variant=outline><div class=cui-editable__preview data-citry-ui-part=preview><span data-citry-ui-part=preview-value>Field notes</span><button class="cui-editable__action cui-editable__edit" aria-label=Edit data-citry-ui-part=edit-action type=button><span aria-hidden=true>✎</span></button></div><div class=cui-editable__edit-surface data-citry-ui-part=edit-surface><input placeholder="Click to edit" value="Field notes" class=cui-editable__input data-citry-field-control data-citry-ui-part=input id=cui-field-ctl3bzpba-control name=title required><span class=cui-editable__actions data-citry-ui-part=actions> <button class="cui-editable__action cui-editable__submit" aria-label=Save data-citry-ui-part=submit-action type=button><span aria-hidden=true>✓</span></button> <button class="cui-editable__action cui-editable__cancel" aria-label=Cancel data-citry-ui-part=cancel-action type=button><span aria-hidden=true>✕</span></button> </span></div></div><!--citry:g1:bcb534ec:0:i:4:e--><!--citry:g1:bcb534ec:0:r:2:e--></div><div aria-live=polite data-citry-ui-part=error hidden id=cui-field-ctl3bzpba-control-error></div></div><!--citry:g1:bcb534ec:0:i:3:e--><!--citry:g1:bcb534ec:0:i:5:s--><!--citry:g1:bcb534ec:0:i:6:s--><button class=cui-button data-cid=ctl3bzpbc data-cid-ctl3bzpbc data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid><!--citry:g1:bcb534ec:0:r:3:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:bcb534ec:0:r:4:s--> <span class=cui-button__spinner></span> <!--citry:g1:bcb534ec:0:r:4:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:bcb534ec:0:r:5:s-->Save form<!--citry:g1:bcb534ec:0:r:5:e--> </span><!--citry:g1:bcb534ec:0:r:3:e--></button><!--citry:g1:bcb534ec:0:i:6:e--><!--citry:g1:bcb534ec:0:i:5:e--><!--citry:g1:bcb534ec:0:i:7:s--><!--citry:g1:bcb534ec:0:i:8:s--><button class=cui-button data-cid=ctl3bzpbe data-cid-ctl3bzpbe data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=ghost type=reset><!--citry:g1:bcb534ec:0:r:6:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:bcb534ec:0:r:7:s--> <span class=cui-button__spinner></span> <!--citry:g1:bcb534ec:0:r:7:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:bcb534ec:0:r:8:s-->Reset<!--citry:g1:bcb534ec:0:r:8:e--> </span><!--citry:g1:bcb534ec:0:r:6:e--></button><!--citry:g1:bcb534ec:0:i:8:e--><!--citry:g1:bcb534ec:0:i:7:e--><output x-text=JSON.stringify(result)></output></form><!--citry:g1:bcb534ec:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"EditableForm_78d1ef","className":"EditableForm"},{"classId":"CField_81c723","className":"CField"},{"classId":"CEditable_620b5b","className":"CEditable"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"ctl3bzpba","invocationId":2,"parentRenderId":"ctl3bzpb9"},{"childRenderId":"ctl3bzpbb","invocationId":5,"parentRenderId":"ctl3bzpb9"},{"childRenderId":"ctl3bzpbc","invocationId":3,"parentRenderId":"ctl3bzpb9"},{"childRenderId":"ctl3bzpbe","invocationId":4,"parentRenderId":"ctl3bzpb9"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzpb8","transparent":false},{"classId":"EditableForm_78d1ef","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzpb9","transparent":false},{"classId":"CField_81c723","instanceId":3,"invocationId":2,"parentRenderId":"ctl3bzpb9","renderId":"ctl3bzpba","transparent":false},{"classId":"CEditable_620b5b","instanceId":4,"invocationId":5,"parentRenderId":"ctl3bzpb9","renderId":"ctl3bzpbb","transparent":false},{"classId":"CButton_353146","instanceId":5,"invocationId":3,"parentRenderId":"ctl3bzpb9","renderId":"ctl3bzpbc","transparent":false},{"classId":"DynamicElement_29900a","instanceId":6,"invocationId":6,"parentRenderId":"ctl3bzpbc","renderId":"ctl3bzpbd","transparent":true},{"classId":"CButton_353146","instanceId":7,"invocationId":4,"parentRenderId":"ctl3bzpb9","renderId":"ctl3bzpbe","transparent":false},{"classId":"DynamicElement_29900a","instanceId":8,"invocationId":7,"parentRenderId":"ctl3bzpbe","renderId":"ctl3bzpbf","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"EditableForm_78d1ef","ownerRenderId":"ctl3bzpb9","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpba","slotName":"label","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"EditableForm_78d1ef","ownerRenderId":"ctl3bzpb9","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpba","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"EditableForm_78d1ef","ownerRenderId":"ctl3bzpb9","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzpbc","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"EditableForm_78d1ef","ownerRenderId":"ctl3bzpb9","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzpbe","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzpbc","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzpbd","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":9,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzpbc","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzpbc","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":11,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzpbe","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzpbf","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":13,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzpbe","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzpbe","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"EditableForm_78d1ef","sourceRenderId":"ctl3bzpb9","tagName":"cfield","targetClassId":"CField_81c723","targetRenderId":"ctl3bzpba"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"EditableForm_78d1ef","sourceRenderId":"ctl3bzpb9","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzpbc"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"EditableForm_78d1ef","sourceRenderId":"ctl3bzpb9","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzpbe"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"EditableForm_78d1ef","sourceRenderId":"ctl3bzpb9","tagName":"ceditable","targetClassId":"CEditable_620b5b","targetRenderId":"ctl3bzpbb"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzpbc","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzpbd"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzpbe","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzpbf"}],"slotRegions":[{"fillId":1,"ownerRenderId":"ctl3bzpb9","parentRegionId":null,"receiverRenderId":"ctl3bzpba","regionId":1,"resultOwnerRenderId":"ctl3bzpb9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpba"},{"fillId":2,"ownerRenderId":"ctl3bzpb9","parentRegionId":null,"receiverRenderId":"ctl3bzpba","regionId":2,"resultOwnerRenderId":"ctl3bzpb9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpba"},{"fillId":7,"ownerRenderId":"ctl3bzpbc","parentRegionId":null,"receiverRenderId":"ctl3bzpbd","regionId":3,"resultOwnerRenderId":"ctl3bzpbc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpbd"},{"fillId":9,"ownerRenderId":"ctl3bzpbc","parentRegionId":3,"receiverRenderId":"ctl3bzpbc","regionId":4,"resultOwnerRenderId":"ctl3bzpbc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpbc"},{"fillId":3,"ownerRenderId":"ctl3bzpb9","parentRegionId":3,"receiverRenderId":"ctl3bzpbc","regionId":5,"resultOwnerRenderId":"ctl3bzpb9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpbc"},{"fillId":11,"ownerRenderId":"ctl3bzpbe","parentRegionId":null,"receiverRenderId":"ctl3bzpbf","regionId":6,"resultOwnerRenderId":"ctl3bzpbe","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpbf"},{"fillId":13,"ownerRenderId":"ctl3bzpbe","parentRegionId":6,"receiverRenderId":"ctl3bzpbe","regionId":7,"resultOwnerRenderId":"ctl3bzpbe","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpbe"},{"fillId":4,"ownerRenderId":"ctl3bzpb9","parentRegionId":6,"receiverRenderId":"ctl3bzpbe","regionId":8,"resultOwnerRenderId":"ctl3bzpb9","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpbe"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"bcb534ecd8b60ed9b9fc16fe8d7f53f18cb62cde77c2148fef7aee064b9379ed"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuNjU3NDBlOTUzY2RmLmpz", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuYmQ0YzBjOGNmYjAyYjI0MGIzMmRjMGU5M2VjZWRhY2YuanM=", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuZDNhODE3Yjg5YjI5Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuNjY2ZGViNDViZDBmZjI5NGM1ODcyN2M2OTMwMjRjMDQuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2Ljk4N2Y0OTE0NGE1ODMwNjM1MzRmMDg1ODRhZTIwYzYwLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NFZGl0YWJsZV82MjBiNWIuOGRhMTM2NDk2NWNmLmNzcw==", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuODczNDgyMmEzNjFmLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0VkaXRhYmxlXzYyMGI1Yg==", "Y3RsM2J6cGJi", "YmQ0YzBjOGNmYjAyYjI0MGIzMmRjMGU5M2VjZWRhY2Y=", "init"], ["Q0ZpZWxkXzgxYzcyMw==", "Y3RsM2J6cGJh", "NjY2ZGViNDViZDBmZjI5NGM1ODcyN2M2OTMwMjRjMDQ=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6cGJj", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6cGJl", "OTg3ZjQ5MTQ0YTU4MzA2MzUzNGYwODU4NGFlMjBjNjA=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6cGI4"]], "graph": "bcb534ecd8b60ed9b9fc16fe8d7f53f18cb62cde77c2148fef7aee064b9379ed", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const editableHandoffKey = Symbol.for("citry-ui:editable-handoff");
+Citry.manager.registerComponent("CEditable_620b5b", {
+  props: {
+    value: {}, editing: {}, required: {}, disabled: {}, readonly: {}, invalid: {},
+    submitMode: {}, selectOnFocus: {}, actionPosition: {}, variant: {}, size: {},
+    onValueChange: {}, onEditChange: {},
+  },
+  init: ({ els, data, props, effect, inject, i18n }) => {
+    const root = els[0];
+    const preview = root.querySelector(':scope > [data-citry-ui-part="preview"]');
+    const previewValue = preview?.querySelector('[data-citry-ui-part="preview-value"]');
+    const editAction = preview?.querySelector('[data-citry-ui-part="edit-action"]');
+    const editSurface = root.querySelector(':scope > [data-citry-ui-part="edit-surface"]');
+    const input = editSurface?.querySelector(':scope > [data-citry-ui-part="input"]');
+    const actions = editSurface?.querySelector(':scope > [data-citry-ui-part="actions"]');
+    const submitAction = actions?.querySelector('[data-citry-ui-part="submit-action"]');
+    const cancelAction = actions?.querySelector('[data-citry-ui-part="cancel-action"]');
+    if (!(preview instanceof HTMLElement) || !(previewValue instanceof HTMLElement)
+      || !(editAction instanceof HTMLButtonElement) || !(editSurface instanceof HTMLElement)
+      || !(input instanceof HTMLInputElement) || !(actions instanceof HTMLElement)
+      || !(submitAction instanceof HTMLButtonElement) || !(cancelAction instanceof HTMLButtonElement)) {
+      throw new Error("[citry-ui] CEditable settled anatomy is invalid.");
+    }
+
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const invalidEpisodes = new Set();
+    const prior = root[editableHandoffKey];
+    delete root[editableHandoffKey];
+    const serverFingerprint = data.value;
+    let committed = prior?.serverFingerprint === serverFingerprint ? prior.committed : data.value;
+    let draft = prior?.serverFingerprint === serverFingerprint ? prior.draft : committed;
+    let dirty = prior?.serverFingerprint === serverFingerprint ? Boolean(prior.dirty) : false;
+    let internalEditing = prior?.serverFingerprint === serverFingerprint
+      ? Boolean(prior.internalEditing)
+      : data.editing;
+    let editing = false;
+    let controlledValue = false;
+    let controlledEditing = false;
+    let clientValue;
+    let clientEditing;
+    let onValueChange = null;
+    let onEditChange = null;
+    let nativeInvalid = false;
+    let composing = false;
+    let actionPressPending = false;
+    let active = true;
+    let generation = 0;
+    let pendingFocus = false;
+    let configuration = {
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      submitMode: data.submitMode,
+      selectOnFocus: data.selectOnFocus,
+      actionPosition: data.actionPosition,
+      variant: data.variant,
+      size: data.size,
+    };
+
+    const report = (name, value, suffix = "") => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CEditable ${name} received invalid client value${suffix}`, value);
+    };
+    const boolean = (name, fallback) => {
+      const value = props[name];
+      if (value === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof value === "boolean") { invalidEpisodes.delete(name); return value; }
+      report(name, value, "; using the server fallback");
+      return fallback;
+    };
+    const choice = (name, fallback, allowed) => {
+      const value = props[name];
+      if (value === undefined) { invalidEpisodes.delete(name); return fallback; }
+      if (typeof value === "string" && allowed.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value, "; using the server fallback");
+      return fallback;
+    };
+    const idrefs = (...values) => {
+      const result = [];
+      values.forEach((value) => {
+        if (typeof value !== "string") return;
+        value.split(/\s+/).filter(Boolean).forEach((token) => {
+          if (!result.includes(token)) result.push(token);
+        });
+      });
+      return result.join(" ") || null;
+    };
+    const effectiveDisabled = () => configuration.disabled || input.matches(":disabled");
+    const syncRelationships = (invalid) => {
+      const described = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const error = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (described) input.setAttribute("aria-describedby", described);
+      else input.removeAttribute("aria-describedby");
+      if (error) input.setAttribute("aria-errormessage", error);
+      else input.removeAttribute("aria-errormessage");
+    };
+    const focusInput = () => {
+      const scheduled = ++generation;
+      queueMicrotask(() => {
+        if (!active || scheduled !== generation || !editing || !input.isConnected) return;
+        input.focus({ preventScroll: true });
+        if (configuration.selectOnFocus) input.select();
+      });
+    };
+    const sync = () => {
+      const disabled = effectiveDisabled();
+      const invalid = configuration.invalid || nativeInvalid;
+      root.toggleAttribute("data-editing", editing);
+      root.toggleAttribute("data-empty", !committed);
+      root.toggleAttribute("data-required", configuration.required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", configuration.readonly);
+      root.toggleAttribute("data-invalid", invalid);
+      root.dataset.submitMode = configuration.submitMode;
+      root.dataset.actionPosition = configuration.actionPosition;
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      previewValue.textContent = committed || data.placeholder;
+      editAction.disabled = disabled || configuration.readonly;
+      submitAction.disabled = disabled || configuration.readonly;
+      cancelAction.disabled = disabled || configuration.readonly;
+      input.required = configuration.required;
+      input.disabled = configuration.disabled;
+      input.readOnly = configuration.readonly;
+      if (invalid) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+      syncRelationships(invalid);
+      field?.setNativeInvalid(nativeInvalid);
+    };
+    const notifyEdit = (next, reason, source, forced = false) => {
+      onEditChange?.(next, { editing: next, reason, controlled: controlledEditing, forced, source });
+    };
+    const applyEditing = (next, { focus = false } = {}) => {
+      if (next && (effectiveDisabled() || configuration.readonly)) next = false;
+      if (next === editing) {
+        if (next && focus) focusInput();
+        return;
+      }
+      editing = next;
+      if (next) {
+        if (!dirty) {
+          draft = committed;
+          input.value = draft;
+        }
+        sync();
+        if (focus) focusInput();
+      } else {
+        pendingFocus = false;
+        sync();
+      }
+    };
+    const requestEditing = (next, reason, source, { focus = false, forced = false } = {}) => {
+      if (forced) {
+        internalEditing = next;
+        applyEditing(next, { focus });
+        notifyEdit(next, reason, source, true);
+        return;
+      }
+      if (controlledEditing) {
+        notifyEdit(next, reason, source);
+        return;
+      }
+      internalEditing = next;
+      applyEditing(next, { focus });
+      notifyEdit(next, reason, source);
+    };
+    const startEdit = (source) => {
+      if (effectiveDisabled() || configuration.readonly || editing) return;
+      dirty = false;
+      draft = committed;
+      input.value = draft;
+      requestEditing(true, "edit", source, { focus: true });
+    };
+    const clearNativeInvalid = () => {
+      if (!nativeInvalid || !input.validity.valid) return;
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+    };
+    const requestValue = (next, source, sourceEvent) => {
+      if (next === committed) return false;
+      const previous = committed;
+      const detail = {
+        value: next,
+        previousValue: previous,
+        controlled: controlledValue,
+        source,
+        sourceEvent,
+      };
+      if (!controlledValue) committed = next;
+      onValueChange?.(next, detail);
+      return true;
+    };
+    const submit = (reason, sourceEvent) => {
+      if (!editing || effectiveDisabled() || configuration.readonly) return;
+      if (!input.checkValidity()) {
+        nativeInvalid = true;
+        sync();
+        input.focus({ preventScroll: true });
+        return;
+      }
+      draft = input.value.replace(/\r\n?/g, "\n");
+      dirty = false;
+      requestValue(draft, reason === "blur" ? "blur" : "submit", sourceEvent);
+      clearNativeInvalid();
+      requestEditing(false, reason, sourceEvent);
+      sync();
+      if (!controlledEditing && !effectiveDisabled() && !configuration.readonly) {
+        queueMicrotask(() => editAction.focus({ preventScroll: true }));
+      }
+    };
+    const cancel = (sourceEvent, reason = "cancel") => {
+      if (!editing) return;
+      draft = committed;
+      dirty = false;
+      input.value = committed;
+      nativeInvalid = false;
+      requestEditing(false, reason, sourceEvent);
+      sync();
+      if (!controlledEditing && !effectiveDisabled() && !configuration.readonly) {
+        queueMicrotask(() => editAction.focus({ preventScroll: true }));
+      }
+    };
+    const forceClosed = (reason, source) => {
+      if (!editing) return;
+      draft = committed;
+      dirty = false;
+      input.value = committed;
+      internalEditing = false;
+      applyEditing(false);
+      notifyEdit(false, reason, source, true);
+    };
+
+    const onClick = (event) => {
+      const path = event.composedPath();
+      if (path.includes(editAction)) startEdit(editAction);
+      else if (path.includes(submitAction)) submit("submit", event);
+      else if (path.includes(cancelAction)) cancel(event);
+    };
+    const onPointerDown = (event) => {
+      const path = event.composedPath();
+      if (!path.includes(submitAction) && !path.includes(cancelAction)) return;
+      actionPressPending = true;
+      setTimeout(() => { actionPressPending = false; }, 0);
+    };
+    const onInput = () => {
+      draft = input.value;
+      dirty = draft !== committed;
+      clearNativeInvalid();
+      sync();
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancel(event);
+      } else if (
+        event.key === "Enter"
+        && !event.isComposing
+        && !composing
+        && ["enter", "both"].includes(configuration.submitMode)
+      ) {
+        event.preventDefault();
+        submit("submit", event);
+      }
+    };
+    const onFocusOut = (event) => {
+      if (!editing || !["blur", "both"].includes(configuration.submitMode)) return;
+      const scheduled = generation;
+      queueMicrotask(() => {
+        if (!active || scheduled !== generation || !editing || actionPressPending) return;
+        const activeElement = root.ownerDocument.activeElement;
+        if (root.contains(activeElement) || event.relatedTarget && root.contains(event.relatedTarget)) return;
+        submit("blur", event);
+      });
+    };
+    const onInvalid = (event) => {
+      nativeInvalid = true;
+      if (!editing) requestEditing(true, "invalid", input, { focus: true, forced: true });
+      sync();
+      void event;
+    };
+    const onReset = (event) => {
+      const scheduled = generation;
+      setTimeout(() => {
+        if (!active || event.defaultPrevented || scheduled !== generation) return;
+        const previous = committed;
+        const next = data.value;
+        nativeInvalid = false;
+        dirty = false;
+        draft = next;
+        if (controlledValue) {
+          input.value = committed;
+          if (next !== committed) {
+            onValueChange?.(next, {
+              value: next,
+              previousValue: previous,
+              controlled: true,
+              source: "reset",
+              sourceEvent: event,
+            });
+          }
+        } else {
+          committed = next;
+          input.value = next;
+          if (next !== previous) {
+            onValueChange?.(next, {
+              value: next,
+              previousValue: previous,
+              controlled: false,
+              source: "reset",
+              sourceEvent: event,
+            });
+          }
+        }
+        if (editing) requestEditing(false, "reset", event);
+        sync();
+      }, 0);
+    };
+    const onCompositionStart = () => { composing = true; };
+    const onCompositionEnd = () => { composing = false; };
+
+    root.addEventListener("click", onClick, true);
+    root.addEventListener("pointerdown", onPointerDown, true);
+    root.addEventListener("focusout", onFocusOut);
+    input.addEventListener("input", onInput);
+    input.addEventListener("keydown", onKeyDown);
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("compositionstart", onCompositionStart);
+    input.addEventListener("compositionend", onCompositionEnd);
+    input.form?.addEventListener("reset", onReset);
+    const fieldsetObservers = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (!(ancestor instanceof HTMLFieldSetElement)) continue;
+      const observer = new MutationObserver(() => {
+        if (effectiveDisabled()) forceClosed("disabled", ancestor);
+        sync();
+      });
+      observer.observe(ancestor, { attributes: true, childList: true, attributeFilter: ["disabled"] });
+      fieldsetObservers.push(observer);
+    }
+
+    const stop = effect(() => {
+      clientValue = props.value;
+      clientEditing = props.editing;
+      onValueChange = typeof props.onValueChange === "function" ? props.onValueChange : null;
+      onEditChange = typeof props.onEditChange === "function" ? props.onEditChange : null;
+      if (props.onValueChange != null && onValueChange === null) report("onValueChange", props.onValueChange);
+      else invalidEpisodes.delete("onValueChange");
+      if (props.onEditChange != null && onEditChange === null) report("onEditChange", props.onEditChange);
+      else invalidEpisodes.delete("onEditChange");
+
+      configuration = {
+        required: field ? field.required : boolean("required", data.required),
+        disabled: field ? field.disabled : Boolean(form?.disabled) || boolean("disabled", data.disabled),
+        readonly: field ? field.readonly : Boolean(form?.readonly) || boolean("readonly", data.readonly),
+        invalid: field ? field.invalid : boolean("invalid", data.invalid),
+        submitMode: choice("submitMode", data.submitMode, ["enter", "blur", "both", "explicit"]),
+        selectOnFocus: boolean("selectOnFocus", data.selectOnFocus),
+        actionPosition: choice("actionPosition", data.actionPosition, ["inside", "outside"]),
+        variant: choice("variant", data.variant, ["outline", "filled", "plain"]),
+        size: choice("size", data.size, ["sm", "md", "lg"]),
+      };
+
+      if (clientValue === undefined || clientValue === null) {
+        invalidEpisodes.delete("value");
+        controlledValue = false;
+      } else if (typeof clientValue === "string" && !clientValue.includes("\0")) {
+        invalidEpisodes.delete("value");
+        controlledValue = true;
+        committed = clientValue.replace(/\r\n?/g, "\n");
+        if (!editing || !dirty) {
+          draft = committed;
+          input.value = committed;
+        }
+      } else {
+        report("value", clientValue, "; releasing control to the committed value");
+        controlledValue = false;
+      }
+
+      if (clientEditing === undefined || clientEditing === null) {
+        invalidEpisodes.delete("editing");
+        controlledEditing = false;
+        applyEditing(internalEditing, { focus: internalEditing && pendingFocus });
+      } else if (typeof clientEditing === "boolean") {
+        invalidEpisodes.delete("editing");
+        controlledEditing = true;
+        internalEditing = clientEditing;
+        applyEditing(clientEditing, { focus: clientEditing && !editing });
+      } else {
+        report("editing", clientEditing, "; releasing control to committed mode");
+        controlledEditing = false;
+        applyEditing(internalEditing);
+      }
+      pendingFocus = false;
+      if (effectiveDisabled()) forceClosed("disabled", input);
+      else if (configuration.readonly) forceClosed("readonly", input);
+      sync();
+    });
+
+    const placeholderBinding = i18n && data.catalogPlaceholder
+      ? i18n.bind({
+          message: "citry-ui-editable-click-to-edit",
+          onChange: (text) => {
+            data.placeholder = text;
+            input.placeholder = text;
+            sync();
+          },
+        })
+      : null;
+
+    root.setAttribute("data-citry-editable-initialized", "");
+    input.value = draft;
+    applyEditing(internalEditing, { focus: internalEditing });
+    sync();
+
+    return () => {
+      active = false;
+      generation += 1;
+      root[editableHandoffKey] = {
+        serverFingerprint,
+        committed,
+        draft,
+        dirty,
+        internalEditing,
+      };
+      stop?.();
+      placeholderBinding?.dispose();
+      fieldsetObservers.forEach((observer) => observer.disconnect());
+      root.removeEventListener("click", onClick, true);
+      root.removeEventListener("pointerdown", onPointerDown, true);
+      root.removeEventListener("focusout", onFocusOut);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("keydown", onKeyDown);
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("compositionstart", onCompositionStart);
+      input.removeEventListener("compositionend", onCompositionEnd);
+      input.form?.removeEventListener("reset", onReset);
+      if (nativeInvalid) field?.setNativeInvalid(false);
+      root.removeAttribute("data-citry-editable-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CEditable_620b5b", "bd4c0c8cfb02b240b32dc0e93ecedacf", atob("eyJ2YWx1ZSI6IkZpZWxkIG5vdGVzIiwiZWRpdGluZyI6ZmFsc2UsInJlcXVpcmVkIjp0cnVlLCJkaXNhYmxlZCI6ZmFsc2UsInJlYWRvbmx5IjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsInN1Ym1pdE1vZGUiOiJib3RoIiwic2VsZWN0T25Gb2N1cyI6dHJ1ZSwiYWN0aW9uUG9zaXRpb24iOiJpbnNpZGUiLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCIsInBsYWNlaG9sZGVyIjoiQ2xpY2sgdG8gZWRpdCIsImNhdGFsb2dQbGFjZWhvbGRlciI6dHJ1ZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CField_81c723", {
+  props: {
+    required: {},
+    disabled: {},
+    readonly: {},
+    invalid: {},
+    orientation: {},
+    density: {},
+  },
+  init: ({ els, data, props, effect, reactive, provide, inject }) => {
+    const root = els[0];
+    const requiredIndicator = root.querySelector(
+      ':scope > [data-citry-ui-part="label"] > [data-citry-ui-part="required-indicator"]',
+    );
+    // Controls may expose parts with the same public names. Restrict the
+    // lookup to this Field's direct status node so nested component
+    // internals are never mistaken for Field-owned UI.
+    const error = root.querySelector(':scope > [data-citry-ui-part="error"]');
+    const controls = root.querySelectorAll('[data-citry-field-control]');
+    if (controls.length !== 1) {
+      throw new Error(
+        `[citry-ui] CField requires exactly one marked control, but found ${controls.length}.`,
+      );
+    }
+    const control = controls[0];
+    const initialSupportsRequired = control.getAttribute(
+      "data-citry-field-supports-required",
+    ) !== "false";
+    const initialSupportsReadonly = control.getAttribute(
+      "data-citry-field-supports-readonly",
+    ) !== "false";
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const allowedValues = {
+      orientation: ["vertical", "horizontal"],
+      density: ["default", "comfortable", "compact"],
+    };
+    const invalidEpisodes = new Map();
+    let externalInvalid = data.invalid;
+    let capabilityGeneration = 0;
+    let activeCapabilityGeneration = null;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name} received invalid client value ${describedValue}; `
+          + "using the server-rendered fallback.",
+        root,
+      );
+    };
+    const reportUnsupported = (name) => {
+      const episode = `capability:${name}`;
+      const fingerprint = "unsupported:true";
+      if (invalidEpisodes.get(episode) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(episode, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name}=true is not supported by its registered control; using false.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const context = reactive({
+      controlId: data.controlId,
+      descriptionId: data.descriptionId,
+      errorId: data.errorId,
+      hasDescription: data.hasDescription,
+      hasError: data.hasError,
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      nativeInvalid: false,
+      supportsRequired: initialSupportsRequired,
+      supportsReadonly: initialSupportsReadonly,
+      registerCapabilities(capabilities) {
+        const generation = ++capabilityGeneration;
+        activeCapabilityGeneration = generation;
+        context.supportsRequired = capabilities.required !== false;
+        context.supportsReadonly = capabilities.readonly !== false;
+        return () => {
+          if (activeCapabilityGeneration !== generation) {
+            return;
+          }
+          activeCapabilityGeneration = null;
+          context.supportsRequired = true;
+          context.supportsReadonly = true;
+        };
+      },
+      setNativeInvalid(value) {
+        context.nativeInvalid = Boolean(value);
+        applyInvalid();
+      },
+    });
+    provide(Symbol.for("citry-ui:field"), context);
+
+    const applyInvalid = () => {
+      const invalid = externalInvalid || context.nativeInvalid;
+      context.invalid = invalid;
+      root.toggleAttribute("data-invalid", invalid);
+      error.hidden = !(invalid && context.hasError);
+    };
+    effect(() => {
+      const requestedRequired = resolveBoolean("required", data.required);
+      const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+      // CForm uses a native disabled fieldset, so its disabled state
+      // must win over a descendant's local configuration.
+      const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+      const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
+      const required = requestedRequired && context.supportsRequired;
+      const readonly = requestedReadonly && context.supportsReadonly;
+      if (requestedRequired && !context.supportsRequired) {
+        reportUnsupported("required");
+      } else {
+        invalidEpisodes.delete("capability:required");
+      }
+      if (requestedReadonly && !context.supportsReadonly) {
+        reportUnsupported("readonly");
+      } else {
+        invalidEpisodes.delete("capability:readonly");
+      }
+      externalInvalid = resolveBoolean("invalid", data.invalid);
+      const orientation = resolveChoice("orientation");
+      const density = resolveChoice("density");
+
+      context.required = required;
+      context.disabled = disabled;
+      context.readonly = readonly;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", readonly);
+      root.dataset.orientation = orientation;
+      root.dataset.density = density;
+      requiredIndicator.hidden = !required;
+      applyInvalid();
+    });
+    root.setAttribute("data-citry-field-initialized", "");
+
+    return () => {
+      root.removeAttribute("data-citry-field-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CField_81c723", "666deb45bd0ff294c58727c693024c04", atob("eyJyZXF1aXJlZCI6dHJ1ZSwiZGlzYWJsZWQiOmZhbHNlLCJyZWFkb25seSI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOnRydWUsImludmFsaWQiOmZhbHNlLCJvcmllbnRhdGlvbiI6InZlcnRpY2FsIiwiZGVuc2l0eSI6ImRlZmF1bHQiLCJjb250cm9sSWQiOiJjdWktZmllbGQtY3RsM2J6cGJhLWNvbnRyb2wiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWZpZWxkLWN0bDNienBiYS1jb250cm9sLWRlc2NyaXB0aW9uIiwiZXJyb3JJZCI6ImN1aS1maWVsZC1jdGwzYnpwYmEtY29udHJvbC1lcnJvciIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiaGFzRXJyb3IiOmZhbHNlfQ=="));
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "987f49144a583063534f08584ae20c60", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Imdob3N0IiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script></body></html><!--citry:g1:bcb534ec:0:i:1:e-->

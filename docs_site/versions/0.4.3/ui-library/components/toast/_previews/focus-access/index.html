@@ -1,0 +1,607 @@
+<!--citry:g1:52d26265:0:i:1:s--><!doctype html><html data-cid-ctl3bzstz lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Use the F6 focus route</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=ToastFocusAccess_48a654>:where(.toast-example) { min-block-size:16rem; padding:1rem; }</style><style data-citry-css-class=CToastRegion_eec238>@layer citry-ui.theme{:where(.cui-toast-region){--_cui-toast-inline-offset:var(--cui-toast-inline-offset,1rem);--_cui-toast-block-offset:var(--cui-toast-block-offset,1rem);--_cui-toast-gap:var(--cui-toast-gap,.75rem);--_cui-toast-width:var(--cui-toast-width,22rem);--_cui-toast-background:var(--cui-toast-background,Canvas);--_cui-toast-foreground:var(--cui-toast-foreground,CanvasText);--_cui-toast-border-color:var(--cui-toast-border-color,color-mix(in srgb, CanvasText 18%, transparent));--_cui-toast-shadow:var(--cui-toast-shadow,0 1rem 3rem #0f172a38);--_cui-toast-radius:var(--cui-toast-radius,.75rem);--_cui-toast-padding:var(--cui-toast-padding,1rem);--_cui-toast-accent:var(--cui-toast-accent,currentColor);--_cui-toast-z-index:var(--cui-toast-z-index,1000);z-index:var(--_cui-toast-z-index);box-sizing:border-box;gap:var(--_cui-toast-gap);inline-size:min(var(--_cui-toast-width), calc(100dvi - 2 * var(--_cui-toast-inline-offset)));max-block-size:calc(100dvb - 2 * var(--_cui-toast-block-offset));overscroll-behavior:contain;pointer-events:none;flex-direction:column;padding:0;display:flex;position:fixed;overflow:auto}:where(.cui-toast-region[data-placement^=block-start]){inset-block-start:max(var(--_cui-toast-block-offset), env(safe-area-inset-top));inset-block-end:auto}:where(.cui-toast-region[data-placement^=block-end]){inset-block-start:auto;inset-block-end:max(var(--_cui-toast-block-offset), env(safe-area-inset-bottom))}:where(.cui-toast-region[data-placement$=-start]){inset-inline-start:max(var(--_cui-toast-inline-offset), env(safe-area-inset-left), env(safe-area-inset-right));inset-inline-end:auto}:where(.cui-toast-region[data-placement$=-end]){inset-inline-start:auto;inset-inline-end:max(var(--_cui-toast-inline-offset), env(safe-area-inset-left), env(safe-area-inset-right))}:where(.cui-toast-region[data-citry-toast-modal-paused]){visibility:hidden}:where(.cui-toast-region__announcer){clip-path:inset(50%);white-space:nowrap;border:0;block-size:1px;inline-size:1px;margin:-1px;padding:0;position:absolute;overflow:hidden}:where(.cui-toast-region__list){display:contents}:where(.cui-toast){--_cui-toast-item-accent:var(--_cui-toast-accent);box-sizing:border-box;inline-size:100%;min-inline-size:0;padding:var(--_cui-toast-padding);border:1px solid var(--_cui-toast-border-color);border-inline-start:.25rem solid var(--_cui-toast-item-accent);border-radius:var(--_cui-toast-radius);background:var(--_cui-toast-background);color:var(--_cui-toast-foreground);box-shadow:var(--_cui-toast-shadow);pointer-events:auto;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:.75rem;display:grid}:where(.cui-toast[data-intent=info]){--_cui-toast-item-accent:light-dark(#175cd3,#84adff)}:where(.cui-toast[data-intent=success]){--_cui-toast-item-accent:light-dark(#087443,#75e0a7)}:where(.cui-toast[data-intent=warn]){--_cui-toast-item-accent:light-dark(#b54708,#fec84b)}:where(.cui-toast[data-intent=error]){--_cui-toast-item-accent:light-dark(#b42318,#fda29b)}:where(.cui-toast__content){overflow-wrap:anywhere;gap:.25rem;min-inline-size:0;display:grid}:where(.cui-toast__title){font-weight:700;line-height:1.35}:where(.cui-toast__description){color:color-mix(in srgb, currentColor 76%, transparent);line-height:1.45}:where(.cui-toast__description[hidden]){display:none}:where(.cui-toast__actions){flex-wrap:wrap;align-items:center;gap:.5rem;min-inline-size:0;display:flex}:where(.cui-toast__actions[hidden]){display:none}:where(.cui-toast__actions button){min-block-size:2.75rem;color:inherit;font:inherit;overflow-wrap:anywhere;cursor:pointer;background:0 0;border:1px solid;border-radius:.5rem;padding:.5rem .75rem}:where(.cui-toast__actions [data-citry-toast-dismiss]){inline-size:2.75rem;padding:0;font-size:1.35rem;line-height:1}:where(.cui-toast__actions button[hidden]){display:none}:where(.cui-toast:focus-visible,.cui-toast__actions button:focus-visible){outline-offset:.125rem;outline:.1875rem solid highlight}@media (forced-colors:active){:where(.cui-toast){border-color:canvastext;border-inline-start-width:.375rem}}@media print{:where(.cui-toast-region){display:none}}}</style></head><body><main><!--citry:g1:52d26265:0:i:2:s--><section class=toast-example data-cid-ctl3bzsu0><p>Focus this page, then press F6 to enter the notification and F6 again to return.</p><!--citry:g1:52d26265:0:i:3:s--><!--citry:g1:52d26265:0:i:4:s--><button class=cui-button data-cid=ctl3bzsu1 data-cid-ctl3bzsu1 data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:52d26265:0:r:1:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:52d26265:0:r:2:s--> <span class=cui-button__spinner></span> <!--citry:g1:52d26265:0:r:2:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:52d26265:0:r:3:s-->Focus before F6<!--citry:g1:52d26265:0:r:3:e--> </span><!--citry:g1:52d26265:0:r:1:e--></button><!--citry:g1:52d26265:0:i:4:e--><!--citry:g1:52d26265:0:i:3:e--><!--citry:g1:52d26265:0:i:5:s--><section aria-label=Notifications class=cui-toast-region data-cid=ctl3bzsu3 data-cid-ctl3bzsu3 data-citry-root data-citry-ui-part=region data-placement=block-end-end id=cui-toast-region-ctl3bzsu3 role=region tabindex=-1><div aria-atomic=true aria-live=polite class=cui-toast-region__announcer data-citry-ui-part=announcer-polite></div><div aria-atomic=true aria-live=assertive class=cui-toast-region__announcer data-citry-ui-part=announcer-assertive></div><div class=cui-toast-region__list data-citry-toast-list><div aria-labelledby=cui-toast-region-ctl3bzsu3-title-0 class=cui-toast data-citry-toast-id=f6 data-citry-ui-part=toast data-intent=neutral data-priority=polite role=group tabindex=0><div class=cui-toast__content data-citry-ui-part=content><div class=cui-toast__title data-citry-ui-part=title id=cui-toast-region-ctl3bzsu3-title-0>F6 reaches this message</div></div><div class=cui-toast__actions data-citry-ui-part=actions><button aria-label="Dismiss ⁨F6 reaches this message⁩" data-citry-toast-dismiss data-citry-ui-part=dismiss type=button>×</button></div></div></div></section><!--citry:g1:52d26265:0:i:5:e--></section><!--citry:g1:52d26265:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ToastFocusAccess_48a654","className":"ToastFocusAccess"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CToastRegion_eec238","className":"CToastRegion"}],"componentExecutionOrderConstraints":[{"childRenderId":"ctl3bzsu1","invocationId":2,"parentRenderId":"ctl3bzsu0"},{"childRenderId":"ctl3bzsu3","invocationId":3,"parentRenderId":"ctl3bzsu0"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzstz","transparent":false},{"classId":"ToastFocusAccess_48a654","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzsu0","transparent":false},{"classId":"CButton_353146","instanceId":3,"invocationId":2,"parentRenderId":"ctl3bzsu0","renderId":"ctl3bzsu1","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":4,"parentRenderId":"ctl3bzsu1","renderId":"ctl3bzsu2","transparent":true},{"classId":"CToastRegion_eec238","instanceId":5,"invocationId":3,"parentRenderId":"ctl3bzsu0","renderId":"ctl3bzsu3","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ToastFocusAccess_48a654","ownerRenderId":"ctl3bzsu0","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzsu1","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzsu1","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzsu2","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":4,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzsu1","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzsu1","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ToastFocusAccess_48a654","sourceRenderId":"ctl3bzsu0","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzsu1"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ToastFocusAccess_48a654","sourceRenderId":"ctl3bzsu0","tagName":"ctoastregion","targetClassId":"CToastRegion_eec238","targetRenderId":"ctl3bzsu3"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzsu1","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzsu2"}],"slotRegions":[{"fillId":2,"ownerRenderId":"ctl3bzsu1","parentRegionId":null,"receiverRenderId":"ctl3bzsu2","regionId":1,"resultOwnerRenderId":"ctl3bzsu1","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzsu2"},{"fillId":4,"ownerRenderId":"ctl3bzsu1","parentRegionId":1,"receiverRenderId":"ctl3bzsu1","regionId":2,"resultOwnerRenderId":"ctl3bzsu1","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzsu1"},{"fillId":1,"ownerRenderId":"ctl3bzsu0","parentRegionId":1,"receiverRenderId":"ctl3bzsu1","regionId":3,"resultOwnerRenderId":"ctl3bzsu0","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzsu1"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"52d26265b33270954f300d4019213a535bd4ba2d154f55dc0f4d49558d8113d5"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz", "L2NpdHJ5L2NhY2hlL0NUb2FzdFJlZ2lvbl9lZWMyMzguOTIyNjkzNmJlZjhiLmpz", "L2NpdHJ5L2NhY2hlL0NUb2FzdFJlZ2lvbl9lZWMyMzguNWU3ODAxOWVmNTY3Mjk4ODFlNzkwYTJhZmVhMTllODguanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1RvYXN0Rm9jdXNBY2Nlc3NfNDhhNjU0LjVhNGRkMDJlZmEwYy5jc3M=", "L2NpdHJ5L2NhY2hlL0NUb2FzdFJlZ2lvbl9lZWMyMzguYTExYjVjNDUxNWM4LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6c3Ux", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"], ["Q1RvYXN0UmVnaW9uX2VlYzIzOA==", "Y3RsM2J6c3Uz", "NWU3ODAxOWVmNTY3Mjk4ODFlNzkwYTJhZmVhMTllODg=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6c3R6"], ["VG9hc3RGb2N1c0FjY2Vzc180OGE2NTQ=", "Y3RsM2J6c3Uw"]], "graph": "52d26265b33270954f300d4019213a535bd4ba2d154f55dc0f4d49558d8113d5", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+const toastRegistryKey=Symbol.for("citry-ui:toast-region-runtime"),toastRegistry=globalThis[toastRegistryKey]??new WeakMap;globalThis[toastRegistryKey]=toastRegistry,Citry.manager.registerComponent("CToastRegion_eec238", {props:{items:{},placement:{},limit:{},durationMs:{},pauseOnHover:{},pauseOnFocus:{},pauseOnHidden:{},onDismiss:{},onAction:{}},init:({els:e,data:t,props:n,effect:i,i18n:s})=>{const o=e[0],r=o.getRootNode(),a=o.ownerDocument,d=toastRegistry.get(r);if(d?.isConnected&&d!==o)return console.error("[citry-ui] CToastRegion permits only one initialized Region per root.",o),void(o.inert=!0);toastRegistry.set(r,o);const c=o.querySelector("[data-citry-toast-list]"),l=o.querySelector('[data-citry-ui-part="announcer-polite"]'),u=o.querySelector('[data-citry-ui-part="announcer-assertive"]');if(!c||!l||!u)return console.error("[citry-ui] CToastRegion could not resolve its owned anatomy.",o),void toastRegistry.delete(r);l.textContent="",u.textContent="";const m=["block-start-start","block-start-end","block-end-start","block-end-end"],p=["neutral","info","success","warn","error"],g=["polite","assertive"],f=o.__citryUiToastRuntime??{entries:[],suppressedIds:[],timers:{},focusReturn:null,focusedId:null,focusedPart:null,nodeCounter:0,announcedFingerprints:new Map};o.__citryUiToastRuntime=f;const y=new Set,b=new Set(f.suppressedIds??[]),v=f.announcedFingerprints instanceof Map?new Map(f.announcedFingerprints):new Map,h=new Map,w=new Map(Object.entries(f.timers??{}).map(([e,t])=>[e,{remaining:t.remaining,started:0,handle:null}])),A=new Set,E=new MutationObserver(e=>{e.some(e=>"attributes"===e.type||[...e.addedNodes,...e.removedNodes].some(e=>e instanceof Element&&(e.matches("dialog")||e.querySelector("dialog")||e.shadowRoot)))&&me()});let L=(f.entries??[]).map(e=>({message:{...e.message},announcePending:v.get(e.message.id)!==e.message.fingerprint})),M={placement:t.placement,limit:t.limit,durationMs:t.durationMs,pauseOnHover:t.pauseOnHover,pauseOnFocus:t.pauseOnFocus,pauseOnHidden:t.pauseOnHidden},O=null,R=null,S=!1,T=!1,C=!1,$=f.focusReturn?.isConnected?f.focusReturn:null,x=f.focusedId??null,I=f.focusedPart??null,H=0,N=!1,_=[],k=!1,B=f.nodeCounter??0;const F=e=>{if(e?.parentNode)return e.parentNode;const t=e?.getRootNode?.();return t instanceof ShadowRoot?t.host:null},P=(e,t)=>{for(let n=t;n;n=F(n))if(n===e)return!0;return!1},q=()=>{let e=a.activeElement;for(;e?.shadowRoot?.activeElement;)e=e.shadowRoot.activeElement;return e},D=e=>e instanceof HTMLElement&&e.isConnected&&!e.hidden&&!e.matches(":disabled,[inert]")&&!e.closest("[inert]")&&e.getClientRects().length>0,j=()=>{const e=a.body;if(!e)return;const t=e.hasAttribute("tabindex"),n=e.getAttribute("tabindex");t||(e.tabIndex=-1),e.focus({preventScroll:!0}),t?null!==n&&e.setAttribute("tabindex",n):e.removeAttribute("tabindex")},K=e=>({id:e.id,title:e.title,description:e.description,intent:e.intent,priority:e.priority,durationMs:e.durationMs,actionLabel:e.actionLabel,closeOnAction:e.closeOnAction,dismissible:e.dismissible}),z=()=>{const e=performance.now(),t=q(),n=t?.closest?.("[data-citry-toast-id]");f.entries=L.map(e=>({message:{...e.message,fingerprint:e.message.fingerprint}})),f.suppressedIds=[...b],f.announcedFingerprints=new Map(v),f.timers=Object.fromEntries([...w].map(([t,n])=>[t,{remaining:null===n.handle?n.remaining:Math.max(0,n.remaining-(e-n.started))}])),f.focusReturn=$?.isConnected?$:null,f.focusedId=n?.dataset.citryToastId??null,f.focusedPart=t?.matches?.("[data-citry-toast-action]")?"action":t?.matches?.("[data-citry-toast-dismiss]")?"dismiss":"toast",f.nodeCounter=B},U=(e,t)=>{if(y.has(e))return;let n;y.add(e);try{n=JSON.stringify(t)??String(t)}catch{n=String(t)}console.error(`[citry-ui] CToastRegion ${e} received invalid client value ${n}; retaining its fallback.`,o)},J=e=>{const i=void 0===n[e]?t[e]:n[e];return"boolean"==typeof i?(y.delete(e),i):(U(e,i),t[e])},W=(e,t,i)=>{const s=void 0===n[e]?t:n[e];return Number.isInteger(s)&&i(s)?(y.delete(e),s):(U(e,s),t)},G=e=>{const t=n[e];return null==t||"function"==typeof t?(y.delete(e),t??null):(U(e,t),null)},Q=(e,t,{optional:n=!1,identity:i=!1}={})=>{if(null===t&&n)return null;if("string"!=typeof t)throw new TypeError(`${e} must be a string.`);const s=t.replace(/\r\n?/g,"\n");if(s.includes("\0"))throw new TypeError(`${e} cannot contain U+0000.`);if(!s.trim())throw new TypeError(`${e} cannot be blank.`);if(i&&/[\t\n\f\r ]/.test(s))throw new TypeError(`${e} cannot contain ASCII whitespace.`);return s},V=(e,t,n)=>e.split(`{${t}}`).join(n),X=e=>e.replace(/[\n\r\u001c-\u001e\u0085\u2029]/gu," ").replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu,""),Y=()=>L.slice(0,M.limit),Z=()=>C||M.pauseOnHover&&S||M.pauseOnFocus&&T||M.pauseOnHidden&&a.hidden,ee=e=>{const t=w.get(e.message.id);t&&null!==t.handle&&(clearTimeout(t.handle),A.delete(t.handle),t.remaining=Math.max(0,t.remaining-(performance.now()-t.started)),t.handle=null)},te=(e,t,n)=>{if(N||!L.includes(e))return;const i=q(),s=h.get(e.message.id)?.root,o=s&&P(s,i),r=Y().indexOf(e);if(b.add(e.message.id),L=L.filter(t=>t!==e),_=_.filter(t=>t.id!==e.message.id),ee(e),w.delete(e.message.id),ce(),o&&(i===q()||!D(q()))){const e=Y(),t=e[r]??e[r-1];t?h.get(t.message.id)?.root.focus({preventScroll:!0}):D($)?$.focus({preventScroll:!0}):j()}O?.(e.message.id,{reason:t,source:n,message:K(e.message)})},ne=e=>{if(!Y().includes(e)||Z())return;const t=(e=>e.message.durationMs??M.durationMs)(e);if(0===t)return;let n=w.get(e.message.id);n||(n={remaining:t,started:0,handle:null},w.set(e.message.id,n)),null===n.handle&&(n.remaining<=0?te(e,"timeout",o):(n.started=performance.now(),n.handle=setTimeout(()=>{A.delete(n.handle),n.handle=null,n.remaining=0,te(e,"timeout",o)},n.remaining),A.add(n.handle)))},ie=()=>{const e=new Set(Y());for(const t of L)!e.has(t)||Z()?ee(t):ne(t)},se=e=>e.actionLabel?t.catalogActionAnnouncement?s?s.tr("citry-ui-toast-action-available",{action_label:X(e.actionLabel)}):V(t.actionAnnouncementPattern,"action_label",X(e.actionLabel)):V(t.actionAnnouncementPattern,"action_label",e.actionLabel):null,oe=()=>{if(k||N||C||M.pauseOnHidden&&a.hidden||0===_.length)return;k=!0;const e=_.shift(),t="assertive"===e.priority?u:l;t.textContent="";const n=H,i=setTimeout(()=>{A.delete(i);const s=L.find(t=>t.message.id===e.id);if(N||n!==H||!s||s.message.fingerprint!==e.fingerprint)return k=!1,void oe();if(C||M.pauseOnHidden&&a.hidden)return _.unshift(e),void(k=!1);t.textContent=e.text,v.set(e.id,e.fingerprint),z();const o=setTimeout(()=>{A.delete(o),t.textContent="",k=!1,oe()},250);A.add(o)},20);A.add(i)},re=e=>{var t;_=_.filter(t=>t.id!==e.message.id),_.push({id:e.message.id,fingerprint:e.message.fingerprint,priority:e.message.priority,text:(t=e.message,[t.title,t.description,se(t)].filter(Boolean).join(" "))}),oe()},ae=e=>{const n=h.get(e.message.id)??(e=>{B+=1;const t=a.createElement("div"),n=a.createElement("div"),i=a.createElement("div"),s=a.createElement("div"),r=a.createElement("div"),d=a.createElement("button"),c=a.createElement("button"),l=`${o.id}-title-client-${B}`,u=`${o.id}-description-client-${B}`;t.className="cui-toast",t.setAttribute("role","group"),t.tabIndex=0,t.setAttribute("aria-labelledby",l),t.setAttribute("data-citry-ui-part","toast"),t.setAttribute("data-citry-toast-id",e.message.id),n.className="cui-toast__content",n.setAttribute("data-citry-ui-part","content"),i.id=l,i.className="cui-toast__title",i.setAttribute("data-citry-ui-part","title"),s.id=u,s.className="cui-toast__description",s.setAttribute("data-citry-ui-part","description"),r.className="cui-toast__actions",r.setAttribute("data-citry-ui-part","actions"),d.type="button",d.setAttribute("data-citry-toast-action",""),d.setAttribute("data-citry-ui-part","action"),c.type="button",c.textContent="×",c.setAttribute("data-citry-toast-dismiss",""),c.setAttribute("data-citry-ui-part","dismiss"),n.append(i,s),r.append(d,c),t.append(n,r);const m={root:t,title:i,description:s,actions:r,action:d,dismissButton:c,descriptionId:u,dismissBinding:null};return h.set(e.message.id,m),m})(e),i=e.message;return n.root.dataset.intent=i.intent,n.root.dataset.priority=i.priority,n.title.textContent=i.title,n.description.textContent=i.description??"",n.description.hidden=null===i.description,i.description?n.root.setAttribute("aria-describedby",n.descriptionId):n.root.removeAttribute("aria-describedby"),n.action.textContent=i.actionLabel??"",n.action.hidden=null===i.actionLabel,n.dismissButton.hidden=!i.dismissible,t.catalogDismiss&&s?null===n.dismissBinding?n.dismissBinding=s.bind({message:"citry-ui-toast-dismiss",values:()=>({title:X(e.message.title)}),onChange:e=>n.dismissButton.setAttribute("aria-label",e)}):n.dismissBinding.refresh():(t.catalogDismiss,n.dismissButton.setAttribute("aria-label",V(t.dismissPattern,"title",X(i.title)))),n.actions.hidden=null===i.actionLabel&&!i.dismissible,n},de=(e,t)=>{if(!t||h.has(t))return;const n=e.findIndex(e=>e.message.id===t),i=Y(),s=(i[n]??i[n-1])?.message.id??null,o=H,r=setTimeout(()=>{if(A.delete(r),N||o!==H)return;const e=q();if(e!==a.body&&D(e))return;const t=s?h.get(s)?.root:null;D(t)?t.focus({preventScroll:!0}):D($)?$.focus({preventScroll:!0}):j()},0);A.add(r)};function ce(){const e=[...h.keys()],t=q(),n=e.find(e=>P(h.get(e).root,t)),i=Y(),s=new Set(i.map(e=>e.message.id));for(const[e,t]of h)s.has(e)||(t.dismissBinding?.dispose(),t.root.remove(),h.delete(e));for(const e of i){const t=ae(e);c.append(t.root),e.announcePending&&(e.announcePending=!1,re(e))}if(de(e.map(e=>({message:{id:e}})),n),x&&h.has(x)){const e=x,t=I;x=null,I=null;const n=H,i=setTimeout(()=>{if(A.delete(i),N||n!==H)return;const s=h.get(e);if(!s)return;const o="action"===t?s.action:"dismiss"===t?s.dismissButton:s.root;D(o)&&o.focus({preventScroll:!0})},0);A.add(i)}ie(),z()}const le=()=>{const e=[a];for(let t=0;t<e.length;t+=1)for(const n of e[t].querySelectorAll("*"))n.shadowRoot&&e.push(n.shadowRoot);return e},ue=()=>{E.disconnect();for(const e of le())E.observe(e,{subtree:!0,childList:!0,attributes:!0,attributeFilter:["open"]})};function me(){ue();const e=le().flatMap(e=>[...e.querySelectorAll("dialog:modal")]).some(e=>!P(e,o));e!==C&&(C=e,o.toggleAttribute("data-citry-toast-modal-paused",C),o.inert=C,pe(),C||oe())}const pe=()=>{o.toggleAttribute("data-paused",Z()),ie(),z()},ge=()=>{S=!0,pe()},fe=()=>{S=!1,pe()},ye=()=>{T=!0,pe(),z()},be=()=>{queueMicrotask(()=>{N||(T=P(o,q()),pe(),z())})},ve=()=>{pe(),a.hidden||oe()},he=e=>{const t=e.target.closest?.("[data-citry-toast-id]");if(!t||!P(o,t))return;const n=L.find(e=>e.message.id===t.dataset.citryToastId);if(!n)return;if(e.target.closest("[data-citry-toast-dismiss]"))return void te(n,"dismiss",e.target);if(!e.target.closest("[data-citry-toast-action]"))return;const i=H;R?.(n.message.id,{source:e.target,message:K(n.message)}),!N&&i===H&&o.isConnected&&n.message.closeOnAction&&te(n,"action",e.target)},we=e=>{if(e.defaultPrevented||"F6"!==e.key||e.altKey||e.ctrlKey||e.metaKey)return;const t=q();if(P(o,t))return e.preventDefault(),D($)?$.focus({preventScroll:!0}):j(),void z();const n=Y()[0],i=n&&h.get(n.message.id)?.root;i&&!C&&(e.preventDefault(),$=t,i.focus({preventScroll:!0}),z())};return c.replaceChildren(),o.addEventListener("pointerenter",ge),o.addEventListener("pointerleave",fe),o.addEventListener("focusin",ye),o.addEventListener("focusout",be),o.addEventListener("click",he),r.addEventListener("keydown",we,!0),a.addEventListener("visibilitychange",ve),me(),i(()=>{const e=void 0===n.placement?t.placement:n.placement;m.includes(e)?(M.placement=e,y.delete("placement")):U("placement",e),M.limit=W("limit",t.limit,e=>e>=1&&e<=10);const i=W("durationMs",t.durationMs,e=>0===e||e>=1e3&&e<=12e4);if(i!==M.durationMs){M.durationMs=i;for(const e of L)null===e.message.durationMs&&(ee(e),w.delete(e.message.id))}M.pauseOnHover=J("pauseOnHover"),M.pauseOnFocus=J("pauseOnFocus"),M.pauseOnHidden=J("pauseOnHidden"),O=G("onDismiss"),R=G("onAction"),o.dataset.placement=M.placement;const s=void 0===n.items?t.items:n.items;try{(e=>{const t=new Map(L.map(e=>[e.message.id,e])),n=new Set(e.map(e=>e.id));for(const e of[...b])n.has(e)||(b.delete(e),v.delete(e));const i=[];for(const n of e){if(b.has(n.id))continue;const e=t.get(n.id);e&&e.message.fingerprint===n.fingerprint?i.push(e):e?(ee(e),w.delete(n.id),e.message=n,e.announcePending=!0,i.push(e)):i.push({message:n,announcePending:v.get(n.id)!==n.fingerprint})}for(const e of L)i.includes(e)||(ee(e),w.delete(e.message.id),_=_.filter(t=>t.id!==e.message.id),n.has(e.message.id)||v.delete(e.message.id));L=i,ce()})((e=>{if(!Array.isArray(e))throw new TypeError("items must be an Array.");const t=new Set,n=e.map((e,n)=>{const i=((e,t)=>{if(!e||"object"!=typeof e||Array.isArray(e))throw new TypeError(`items[${t}] must be an object.`);const n=void 0===e.durationMs||null===e.durationMs?null:e.durationMs;if(null!==n&&(!Number.isInteger(n)||0!==n&&(n<1e3||n>12e4)))throw new TypeError(`items[${t}].durationMs is invalid.`);const i=e.intent??"neutral",s=e.priority??"polite";if(!p.includes(i)||!g.includes(s))throw new TypeError(`items[${t}] intent or priority is invalid.`);const o=e.closeOnAction??!0,r=e.dismissible??!0;if("boolean"!=typeof o||"boolean"!=typeof r)throw new TypeError(`items[${t}] Boolean field is invalid.`);const a={id:Q(`items[${t}].id`,e.id,{identity:!0}),title:Q(`items[${t}].title`,e.title),description:void 0===e.description?null:Q(`items[${t}].description`,e.description,{optional:!0}),intent:i,priority:s,durationMs:n,actionLabel:void 0===e.actionLabel?null:Q(`items[${t}].actionLabel`,e.actionLabel,{optional:!0}),closeOnAction:o,dismissible:r,dismissLabel:void 0===e.dismissLabel?null:Q(`items[${t}].dismissLabel`,e.dismissLabel,{optional:!0}),actionAnnouncement:void 0===e.actionAnnouncement?null:Q(`items[${t}].actionAnnouncement`,e.actionAnnouncement,{optional:!0})};return a.fingerprint=JSON.stringify(a),a})(e,n);if(t.has(i.id))throw new TypeError("items require unique ids.");return t.add(i.id),i});return y.delete("items"),n})(s))}catch(e){U("items",s)}pe(),z()}),o.setAttribute("data-citry-toast-initialized",""),()=>{for(const e of L)ee(e);z(),N=!0,H+=1,E.disconnect();for(const e of A)clearTimeout(e);A.clear(),w.clear();for(const e of h.values())e.dismissBinding?.dispose();o.removeEventListener("pointerenter",ge),o.removeEventListener("pointerleave",fe),o.removeEventListener("focusin",ye),o.removeEventListener("focusout",be),o.removeEventListener("click",he),r.removeEventListener("keydown",we,!0),a.removeEventListener("visibilitychange",ve),toastRegistry.get(r)===o&&toastRegistry.delete(r),o.removeAttribute("data-citry-toast-initialized")}}});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CToastRegion_eec238", "5e78019ef56729881e790a2afea19e88", atob("eyJpdGVtcyI6W3siaWQiOiJmNiIsInRpdGxlIjoiRjYgcmVhY2hlcyB0aGlzIG1lc3NhZ2UiLCJkZXNjcmlwdGlvbiI6bnVsbCwiaW50ZW50IjoibmV1dHJhbCIsInByaW9yaXR5IjoicG9saXRlIiwiZHVyYXRpb25NcyI6bnVsbCwiYWN0aW9uTGFiZWwiOm51bGwsImNsb3NlT25BY3Rpb24iOnRydWUsImRpc21pc3NpYmxlIjp0cnVlLCJkaXNtaXNzTGFiZWwiOiJEaXNtaXNzIFx1MjA2OEY2IHJlYWNoZXMgdGhpcyBtZXNzYWdlXHUyMDY5IiwiYWN0aW9uQW5ub3VuY2VtZW50IjpudWxsfV0sInBsYWNlbWVudCI6ImJsb2NrLWVuZC1lbmQiLCJsaW1pdCI6MywiZHVyYXRpb25NcyI6MCwicGF1c2VPbkhvdmVyIjp0cnVlLCJwYXVzZU9uRm9jdXMiOnRydWUsInBhdXNlT25IaWRkZW4iOnRydWUsImNhdGFsb2dEaXNtaXNzIjp0cnVlLCJjYXRhbG9nQWN0aW9uQW5ub3VuY2VtZW50Ijp0cnVlLCJkaXNtaXNzUGF0dGVybiI6IkRpc21pc3MgXHUyMDY4e3RpdGxlfVx1MjA2OSIsImFjdGlvbkFubm91bmNlbWVudFBhdHRlcm4iOiJBY3Rpb24gYXZhaWxhYmxlOiBcdTIwNjh7YWN0aW9uX2xhYmVsfVx1MjA2OS4ifQ=="));
+})();</script></body></html><!--citry:g1:52d26265:0:i:1:e-->

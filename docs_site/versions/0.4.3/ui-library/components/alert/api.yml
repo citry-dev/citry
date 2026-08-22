@@ -1,0 +1,138 @@
+schema_version: 1
+family: alert
+
+components:
+  - CAlert
+
+inputs:
+  - id: calert-server-inputs
+    component: CAlert
+    channel: server
+    column_widths: [fit, 15rem, 9rem, auto]
+    entries:
+      - id: intent
+        name: intent
+        type: {display: '"info" | "success" | "warn" | "error"', interfaces: [CAlertIntent]}
+        default: {kind: literal, value: info}
+        effect: Selects visual meaning, colors, and the automatic icon without choosing announcement urgency.
+      - id: variant
+        name: variant
+        type: {display: '"soft" | "solid" | "outline"', interfaces: [CAlertVariant]}
+        default: {kind: literal, value: soft}
+        effect: Selects quiet, strong, or transparent visual emphasis.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CAlertSize]}
+        default: {kind: literal, value: md}
+        effect: Selects spacing, text scale, icon size, and action gap.
+      - id: announce
+        name: announce
+        type: {display: '"off" | "polite" | "assertive"', interfaces: [CAlertAnnounce]}
+        default: {kind: literal, value: 'off'}
+        effect: Applies no role, `status`, or `alert` to the content wrapper. It does not guarantee delivery by assistive technology.
+      - {id: icon, name: icon, type: bool, default: {kind: literal, value: true}, effect: Shows or hides the decorative automatic or fixed icon.}
+      - id: icon-name
+        name: icon_name
+        type: {display: 'CIconName | None', interfaces: [CIconName]}
+        default: {kind: literal, value: null}
+        effect: Uses one registered fixed glyph. Omit it to let the icon follow intent.
+      - {id: actions-label, name: actions_label, type: 'non-whitespace str | None', default: {kind: literal, value: null}, effect: 'Names the optional action group and emits its owned `group` role; requires the actions slot.'}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned root attributes. Alert semantics, children, structural Alpine directives, focus ownership, public mirrors, and runtime namespaces are reserved.'}
+      - {id: actions-attrs, name: actions_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned action-wrapper attributes. Group naming, focus, live-region, children, structural or initialization-suppressing directives, and runtime ownership are reserved; a nonempty mapping requires actions.'}
+
+  - id: calert-client-inputs
+    component: CAlert
+    channel: client
+    column_widths: [fit, 13rem, 14rem, auto]
+    entries:
+      - id: intent
+        name: intent
+        type: {display: '"info" | "success" | "warn" | "error"', interfaces: [CAlertIntent]}
+        omitted: Uses the server input.
+        effect: Controls visual meaning, colors, and the automatic icon.
+      - id: variant
+        name: variant
+        type: {display: '"soft" | "solid" | "outline"', interfaces: [CAlertVariant]}
+        omitted: Uses the server input.
+        effect: Controls visual emphasis.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CAlertSize]}
+        omitted: Uses the server input.
+        effect: Controls geometry and text scale.
+      - id: announce
+        name: announce
+        type: {display: '"off" | "polite" | "assertive"', interfaces: [CAlertAnnounce]}
+        omitted: Uses the server input.
+        effect: Controls the content wrapper's announcement role.
+      - {id: icon, name: icon, type: boolean, omitted: Uses the server input., effect: Controls decorative icon visibility.}
+
+slots:
+  - id: calert-slots
+    component: CAlert
+    entries:
+      - {id: title, name: title, required: false, data: {display: '{}', interfaces: [CAlertTitleSlotData]}, fallback: 'No title wrapper. At least title or default is required.'}
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CAlertDefaultSlotData]}, fallback: 'No message wrapper. At least title or default is required.'}
+      - {id: actions, name: actions, required: false, data: {display: '{}', interfaces: [CAlertActionsSlotData]}, fallback: 'No action group.'}
+
+events: []
+methods: []
+
+css:
+  - id: calert-css-variables
+    component: CAlert
+    entries:
+      - {id: cui-alert-background, name: --cui-alert-background, type: color, purpose: Root background., default: Variant- and intent-derived color.}
+      - {id: cui-alert-foreground, name: --cui-alert-foreground, type: color, purpose: 'Title, message, and action foreground.', default: Variant- and intent-derived color.}
+      - {id: cui-alert-border-color, name: --cui-alert-border-color, type: color, purpose: Root boundary color., default: Variant- and intent-derived color.}
+      - {id: cui-alert-icon-color, name: --cui-alert-icon-color, type: color, purpose: Automatic or fixed icon foreground., default: Intent color or solid foreground.}
+      - {id: cui-alert-border-width, name: --cui-alert-border-width, type: length, purpose: Root border width., default: 1px}
+      - {id: cui-alert-radius, name: --cui-alert-radius, type: length, purpose: Root corner radius., default: 0.75rem}
+      - {id: cui-alert-padding, name: --cui-alert-padding, type: length, purpose: Root block and inline padding., default: Size-derived spacing.}
+      - {id: cui-alert-gap, name: --cui-alert-gap, type: length, purpose: 'Gap between indicator, content, and actions.', default: Size-derived spacing.}
+      - {id: cui-alert-content-gap, name: --cui-alert-content-gap, type: length, purpose: Space between title and message., default: Size-derived spacing.}
+      - {id: cui-alert-actions-gap, name: --cui-alert-actions-gap, type: length, purpose: Gap between direct action controls., default: Size-derived spacing.}
+      - {id: cui-alert-title-font-weight, name: --cui-alert-title-font-weight, type: number, purpose: Title emphasis without choosing heading semantics., default: '650'}
+
+attributes:
+  - id: calert-attributes
+    component: CAlert
+    entries:
+      - {id: data-intent, name: data-intent, element: Root, type: '"info" | "success" | "warn" | "error"', meaning: Mirrors effective visual intent.}
+      - {id: data-variant, name: data-variant, element: Root, type: '"soft" | "solid" | "outline"', meaning: Mirrors effective visual emphasis.}
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg"', meaning: Mirrors effective geometry.}
+      - {id: data-announce, name: data-announce, element: Root, type: '"off" | "polite" | "assertive"', meaning: Mirrors effective announcement configuration.}
+      - {id: data-icon, name: data-icon, element: Root, type: 'present | absent', meaning: Present while the decorative indicator is visible.}
+      - {id: role, name: role, element: Content wrapper, type: 'absent | "status" | "alert"', meaning: Native role derived from effective announcement configuration.}
+
+selectors:
+  - id: calert-selectors
+    component: CAlert
+    entries:
+      - {id: alert, selector: '[data-citry-ui-part="alert"]', element: Root div, purpose: 'Stable Alert surface and `attrs` destination.'}
+      - {id: indicator, selector: '[data-citry-ui-part="indicator"]', element: Decorative indicator wrapper, purpose: Automatic or fixed registered icon container.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: Content wrapper, purpose: Title/message group and announcement-role destination.}
+      - {id: title, selector: '[data-citry-ui-part="title"]', element: Optional title wrapper, purpose: Authored title content.}
+      - {id: message, selector: '[data-citry-ui-part="message"]', element: Optional message wrapper, purpose: Authored default-slot content.}
+      - {id: actions, selector: '[data-citry-ui-part="actions"]', element: Optional action wrapper, purpose: 'Action layout, group naming, and `actions_attrs` destination.'}
+
+interfaces:
+  - id: alert-type-aliases
+    kind: aliases
+    entries:
+      - {id: alert-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: alert-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: alert-intent, name: CAlertIntent, definition: 'Literal["info", "success", "warn", "error"]'}
+      - {id: alert-variant, name: CAlertVariant, definition: 'Literal["soft", "solid", "outline"]'}
+      - {id: alert-size, name: CAlertSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: alert-announce, name: CAlertAnnounce, definition: 'Literal["off", "polite", "assertive"]'}
+      - id: alert-icon-name
+        name: CIconName
+        definition: 'Literal["arrow-down", "arrow-left", "arrow-right", "arrow-up", "calendar", "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up", "circle-check", "circle-help", "circle-info", "circle-x", "clock", "copy", "download", "edit", "external-link", "eye", "eye-off", "file", "folder", "heart", "home", "leaf", "link", "lock", "mail", "menu", "minus", "more-horizontal", "more-vertical", "plus", "refresh-cw", "search", "settings", "star", "trash", "triangle-alert", "unlock", "upload", "user", "x", "back", "forward", "prev", "next", "close", "clear", "success", "info", "warn", "danger", "expand", "collapse", "dropdown"]'
+  - {id: alert-title-slot-data, kind: record, name: CAlertTitleSlotData, entries: []}
+  - {id: alert-default-slot-data, kind: record, name: CAlertDefaultSlotData, entries: []}
+  - {id: alert-actions-slot-data, kind: record, name: CAlertActionsSlotData, entries: []}
+
+translations: []

@@ -1,0 +1,647 @@
+<!--citry:g1:6f39137e:0:i:1:s--><!doctype html><html data-cid-ctl3bzpqf lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Native Select at a glance</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=NativeSelectAtAGlance_d68b31>:where(.ocean-glance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 54rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.ocean-glance > *) {
+  padding: 1rem;
+  border: 1px solid light-dark(#9ccbd3, #315f6a);
+  border-radius: 0.875rem;
+  background: light-dark(#f1fbfc, #10272d);
+}
+
+:where(.ocean-glance__deep) {
+  --cui-native-select-background: #142f36;
+  --cui-native-select-border-color: #57828c;
+  --cui-native-select-focus-color: #7ddbea;
+}</style><style data-citry-css-class=CNativeSelect_bd67d3>@layer citry-ui.theme{:where(.cui-native-select){--_cui-native-select-background:var(--cui-native-select-background,Canvas);--_cui-native-select-foreground:var(--cui-native-select-foreground,CanvasText);--_cui-native-select-border-color:var(--cui-native-select-border-color,color-mix(in srgb, CanvasText 38%, transparent));--_cui-native-select-hover-border-color:var(--cui-native-select-hover-border-color,color-mix(in srgb, CanvasText 68%, transparent));--_cui-native-select-focus-color:var(--cui-native-select-focus-color,Highlight);--_cui-native-select-invalid-border-color:var(--cui-native-select-invalid-border-color,light-dark(#d92d20,#f97066));--_cui-native-select-disabled-background:var(--cui-native-select-disabled-background,color-mix(in srgb, CanvasText 7%, Canvas));--_cui-native-select-placeholder-color:var(--cui-native-select-placeholder-color,color-mix(in srgb, CanvasText 55%, transparent));--_cui-native-select-radius:var(--cui-native-select-radius,.5rem);--_cui-native-select-inline-padding:var(--cui-native-select-inline-padding,.75rem);--_cui-native-select-block-padding:var(--cui-native-select-block-padding,.625rem);--_cui-native-select-font-size:var(--cui-native-select-font-size,1rem);--_cui-native-select-indicator-size:var(--cui-native-select-indicator-size,.4rem);--_cui-native-select-indicator-gap:var(--cui-native-select-indicator-gap,.75rem);box-sizing:border-box;inline-size:100%;min-inline-size:0;padding-block:var(--_cui-native-select-block-padding);appearance:none;border:1px solid var(--_cui-native-select-border-color);border-radius:var(--_cui-native-select-radius);background-color:var(--_cui-native-select-background);background-image:linear-gradient(45deg,#0000 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,#0000 50%);background-repeat:no-repeat;background-position:right calc(var(--_cui-native-select-indicator-gap) + var(--_cui-native-select-indicator-size)) center, right var(--_cui-native-select-indicator-gap) center;background-size:var(--_cui-native-select-indicator-size) var(--_cui-native-select-indicator-size);color:var(--_cui-native-select-foreground);font:inherit;font-size:var(--_cui-native-select-font-size);padding-inline-start:var(--_cui-native-select-inline-padding);padding-inline-end:calc(var(--_cui-native-select-inline-padding) + var(--_cui-native-select-indicator-size) + var(--_cui-native-select-indicator-size) + var(--_cui-native-select-indicator-gap));line-height:1.5;display:block}:where([dir=rtl] .cui-native-select,.cui-native-select:dir(rtl)){background-position:left calc(var(--_cui-native-select-indicator-gap) + var(--_cui-native-select-indicator-size)) center, left var(--_cui-native-select-indicator-gap) center}:where(.cui-native-select[data-empty]){color:var(--_cui-native-select-placeholder-color)}:where(.cui-native-select[data-variant=filled]){--_cui-native-select-background:var(--cui-native-select-background,color-mix(in srgb, CanvasText 7%, Canvas));--_cui-native-select-border-color:var(--cui-native-select-border-color,transparent)}:where(.cui-native-select[data-variant=plain]){--_cui-native-select-background:var(--cui-native-select-background,transparent);--_cui-native-select-border-color:var(--cui-native-select-border-color,transparent);--_cui-native-select-radius:var(--cui-native-select-radius,0)}:where(.cui-native-select[data-size=sm]){--_cui-native-select-inline-padding:var(--cui-native-select-inline-padding,.625rem);--_cui-native-select-block-padding:var(--cui-native-select-block-padding,.5rem);--_cui-native-select-font-size:var(--cui-native-select-font-size,.875rem)}:where(.cui-native-select[data-size=lg]){--_cui-native-select-inline-padding:var(--cui-native-select-inline-padding,.875rem);--_cui-native-select-block-padding:var(--cui-native-select-block-padding,.75rem);--_cui-native-select-font-size:var(--cui-native-select-font-size,1.0625rem)}@media (hover:hover){:where(.cui-native-select:not(:disabled):hover){border-color:var(--_cui-native-select-hover-border-color)}}:where(.cui-native-select:focus-visible){border-color:var(--_cui-native-select-focus-color);outline:.1875rem solid color-mix(in srgb, var(--_cui-native-select-focus-color) 28%, transparent);outline-offset:.125rem}:where(.cui-native-select[data-invalid]){border-color:var(--_cui-native-select-invalid-border-color)}:where(.cui-native-select:disabled){cursor:not-allowed;background-color:var(--_cui-native-select-disabled-background);opacity:.72}@media (forced-colors:active){:where(.cui-native-select){appearance:auto;forced-color-adjust:auto;background-image:none;border-color:buttontext;padding-inline-end:var(--_cui-native-select-inline-padding)}:where(.cui-native-select[data-invalid]){border-color:mark}}@media print{:where(.cui-native-select){background-image:none;padding-inline-end:var(--_cui-native-select-inline-padding)}}}</style><style data-citry-css-class=CField_81c723>@layer citry-ui.theme{:where(.cui-field){--_cui-field-gap:var(--cui-field-gap,.5rem);--_cui-field-label-color:var(--cui-field-label-color,CanvasText);--_cui-field-label-weight:var(--cui-field-label-weight,600);--_cui-field-description-color:var(--cui-field-description-color,color-mix(in srgb, CanvasText 68%, transparent));--_cui-field-error-color:var(--cui-field-error-color,light-dark(#b42318,#fda29b));--_cui-field-required-color:var(--cui-field-required-color,var(--_cui-field-error-color));gap:var(--_cui-field-gap);color:canvastext;min-inline-size:0;font-family:ui-sans-serif,system-ui,sans-serif;display:grid}:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(8rem,.35fr) minmax(0,1fr);align-items:start}:where(.cui-field[data-density=comfortable]){--_cui-field-gap:var(--cui-field-gap,.375rem)}:where(.cui-field[data-density=compact]){--_cui-field-gap:var(--cui-field-gap,.25rem)}:where(.cui-field>[data-citry-ui-part=label]){color:var(--_cui-field-label-color);font-weight:var(--_cui-field-label-weight)}:where(.cui-field__required){color:var(--_cui-field-required-color)}:where(.cui-field>[data-citry-ui-part=description]){color:var(--_cui-field-description-color);font-size:.875em}:where(.cui-field>[data-citry-ui-part=error]){color:var(--_cui-field-error-color);font-size:.875em}@media (width<=32rem){:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(0,1fr)}}@media (forced-colors:active){:where(.cui-field[data-invalid]>[data-citry-ui-part=error]){color:mark}}}</style></head><body><main><!--citry:g1:6f39137e:0:i:2:s--><section aria-label="Ocean habitat survey" class=ocean-glance data-cid-ctl3bzpqg><!--citry:g1:6f39137e:0:i:3:s--><div class=cui-field data-cid=ctl3bzpqh data-cid-ctl3bzpqh data-citry-field-root data-citry-root data-citry-ui-part=field data-density=default data-orientation=vertical data-required id=cui-field-ctl3bzpqh-control-field><label data-citry-ui-part=label for=cui-field-ctl3bzpqh-control id=cui-field-ctl3bzpqh-control-label><!--citry:g1:6f39137e:0:r:1:s-->Primary habitat<!--citry:g1:6f39137e:0:r:1:e--> <span aria-hidden=true class=cui-field__required data-citry-ui-part=required-indicator> * </span></label><div data-citry-ui-part=control><!--citry:g1:6f39137e:0:r:2:s--><!--citry:g1:6f39137e:0:i:4:s--><select aria-describedby=cui-field-ctl3bzpqh-control-description class=cui-native-select data-cid=ctl3bzpqi data-cid-ctl3bzpqi data-citry-field-control data-citry-field-supports-readonly=false data-citry-field-supports-required=true data-citry-root data-citry-ui-part=native-select data-required data-size=md data-variant=outline id=cui-field-ctl3bzpqh-control name=habitat required><option data-citry-key=:native-select-placeholder value>Choose a habitat</option><optgroup label=Coastal><option data-citry-key=:native-select-option-280f8bb8c43d532f389ef0e2a5321220b0782b065205dcdfcb8d8f02ed5115b9 value=kelp>Kelp forest</option><option data-citry-key=:native-select-option-3297cb78604badb2f37a572b83cfcd7cb2fb43a3acf1e0830d7f7e832ea98c87 selected value=reef>Coral reef</option><option data-citry-key=:native-select-option-5c72b04a83991e944f69b111240bce505db9293a55460d5560a4d61716167d5e value=mangrove>Mangrove nursery</option></optgroup><optgroup label="Open ocean"><option data-citry-key=:native-select-option-e6be704e31d92cc989d3f34beb72054d9deeb2936bb81869bd366ff3d1ad39aa value=pelagic>Pelagic zone</option><option data-citry-key=:native-select-option-0e062e4c2ee475679d9cfd9cd30c295dec2a0eb7a02ffb0c5b239d2617022a8a value=abyss>Abyssal plain</option></optgroup></select><!--citry:g1:6f39137e:0:i:4:e--><!--citry:g1:6f39137e:0:r:2:e--></div><div data-citry-ui-part=description id=cui-field-ctl3bzpqh-control-description><!--citry:g1:6f39137e:0:r:3:s-->Choose the habitat represented by this dive.<!--citry:g1:6f39137e:0:r:3:e--></div><div aria-live=polite data-citry-ui-part=error hidden id=cui-field-ctl3bzpqh-control-error></div></div><!--citry:g1:6f39137e:0:i:3:e--><div style="color-scheme: dark" class=ocean-glance__deep><!--citry:g1:6f39137e:0:i:5:s--><div class=cui-field data-cid=ctl3bzpqj data-cid-ctl3bzpqj data-citry-field-root data-citry-root data-citry-ui-part=field data-density=default data-invalid data-orientation=vertical id=cui-field-ctl3bzpqj-control-field><label data-citry-ui-part=label for=cui-field-ctl3bzpqj-control id=cui-field-ctl3bzpqj-control-label><!--citry:g1:6f39137e:0:r:4:s-->Unverified station<!--citry:g1:6f39137e:0:r:4:e--> <span aria-hidden=true class=cui-field__required data-citry-ui-part=required-indicator hidden> * </span></label><div data-citry-ui-part=control><!--citry:g1:6f39137e:0:r:5:s--><!--citry:g1:6f39137e:0:i:6:s--><select aria-describedby=cui-field-ctl3bzpqj-control-error aria-errormessage=cui-field-ctl3bzpqj-control-error aria-invalid=true class=cui-native-select data-cid=ctl3bzpqk data-cid-ctl3bzpqk data-citry-field-control data-citry-field-supports-readonly=false data-citry-field-supports-required=true data-citry-root data-citry-ui-part=native-select data-empty data-invalid data-size=md data-variant=filled id=cui-field-ctl3bzpqj-control><option data-citry-key=:native-select-placeholder selected value>Choose a station type</option><optgroup label=Coastal><option data-citry-key=:native-select-option-280f8bb8c43d532f389ef0e2a5321220b0782b065205dcdfcb8d8f02ed5115b9 value=kelp>Kelp forest</option><option data-citry-key=:native-select-option-3297cb78604badb2f37a572b83cfcd7cb2fb43a3acf1e0830d7f7e832ea98c87 value=reef>Coral reef</option><option data-citry-key=:native-select-option-5c72b04a83991e944f69b111240bce505db9293a55460d5560a4d61716167d5e value=mangrove>Mangrove nursery</option></optgroup><optgroup label="Open ocean"><option data-citry-key=:native-select-option-e6be704e31d92cc989d3f34beb72054d9deeb2936bb81869bd366ff3d1ad39aa value=pelagic>Pelagic zone</option><option data-citry-key=:native-select-option-0e062e4c2ee475679d9cfd9cd30c295dec2a0eb7a02ffb0c5b239d2617022a8a value=abyss>Abyssal plain</option></optgroup></select><!--citry:g1:6f39137e:0:i:6:e--><!--citry:g1:6f39137e:0:r:5:e--></div><div aria-live=polite data-citry-ui-part=error id=cui-field-ctl3bzpqj-control-error><!--citry:g1:6f39137e:0:r:6:s-->Match this station to a surveyed habitat.<!--citry:g1:6f39137e:0:r:6:e--></div></div><!--citry:g1:6f39137e:0:i:5:e--></div></section><!--citry:g1:6f39137e:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"NativeSelectAtAGlance_d68b31","className":"NativeSelectAtAGlance"},{"classId":"CField_81c723","className":"CField"},{"classId":"CNativeSelect_bd67d3","className":"CNativeSelect"}],"componentExecutionOrderConstraints":[{"childRenderId":"ctl3bzpqh","invocationId":2,"parentRenderId":"ctl3bzpqg"},{"childRenderId":"ctl3bzpqi","invocationId":4,"parentRenderId":"ctl3bzpqg"},{"childRenderId":"ctl3bzpqj","invocationId":3,"parentRenderId":"ctl3bzpqg"},{"childRenderId":"ctl3bzpqk","invocationId":5,"parentRenderId":"ctl3bzpqg"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzpqf","transparent":false},{"classId":"NativeSelectAtAGlance_d68b31","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzpqg","transparent":false},{"classId":"CField_81c723","instanceId":3,"invocationId":2,"parentRenderId":"ctl3bzpqg","renderId":"ctl3bzpqh","transparent":false},{"classId":"CNativeSelect_bd67d3","instanceId":4,"invocationId":4,"parentRenderId":"ctl3bzpqg","renderId":"ctl3bzpqi","transparent":false},{"classId":"CField_81c723","instanceId":5,"invocationId":3,"parentRenderId":"ctl3bzpqg","renderId":"ctl3bzpqj","transparent":false},{"classId":"CNativeSelect_bd67d3","instanceId":6,"invocationId":5,"parentRenderId":"ctl3bzpqg","renderId":"ctl3bzpqk","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"NativeSelectAtAGlance_d68b31","ownerRenderId":"ctl3bzpqg","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpqh","slotName":"label","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"NativeSelectAtAGlance_d68b31","ownerRenderId":"ctl3bzpqg","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpqh","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"NativeSelectAtAGlance_d68b31","ownerRenderId":"ctl3bzpqg","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpqh","slotName":"description","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"NativeSelectAtAGlance_d68b31","ownerRenderId":"ctl3bzpqg","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpqj","slotName":"label","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"NativeSelectAtAGlance_d68b31","ownerRenderId":"ctl3bzpqg","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpqj","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"NativeSelectAtAGlance_d68b31","ownerRenderId":"ctl3bzpqg","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzpqj","slotName":"error","sourceInvocationId":3}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"NativeSelectAtAGlance_d68b31","sourceRenderId":"ctl3bzpqg","tagName":"cfield","targetClassId":"CField_81c723","targetRenderId":"ctl3bzpqh"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"NativeSelectAtAGlance_d68b31","sourceRenderId":"ctl3bzpqg","tagName":"cfield","targetClassId":"CField_81c723","targetRenderId":"ctl3bzpqj"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"NativeSelectAtAGlance_d68b31","sourceRenderId":"ctl3bzpqg","tagName":"cnativeselect","targetClassId":"CNativeSelect_bd67d3","targetRenderId":"ctl3bzpqi"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":5,"sourceClassId":"NativeSelectAtAGlance_d68b31","sourceRenderId":"ctl3bzpqg","tagName":"cnativeselect","targetClassId":"CNativeSelect_bd67d3","targetRenderId":"ctl3bzpqk"}],"slotRegions":[{"fillId":1,"ownerRenderId":"ctl3bzpqg","parentRegionId":null,"receiverRenderId":"ctl3bzpqh","regionId":1,"resultOwnerRenderId":"ctl3bzpqg","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpqh"},{"fillId":2,"ownerRenderId":"ctl3bzpqg","parentRegionId":null,"receiverRenderId":"ctl3bzpqh","regionId":2,"resultOwnerRenderId":"ctl3bzpqg","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpqh"},{"fillId":3,"ownerRenderId":"ctl3bzpqg","parentRegionId":null,"receiverRenderId":"ctl3bzpqh","regionId":3,"resultOwnerRenderId":"ctl3bzpqg","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpqh"},{"fillId":4,"ownerRenderId":"ctl3bzpqg","parentRegionId":null,"receiverRenderId":"ctl3bzpqj","regionId":4,"resultOwnerRenderId":"ctl3bzpqg","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpqj"},{"fillId":5,"ownerRenderId":"ctl3bzpqg","parentRegionId":null,"receiverRenderId":"ctl3bzpqj","regionId":5,"resultOwnerRenderId":"ctl3bzpqg","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpqj"},{"fillId":6,"ownerRenderId":"ctl3bzpqg","parentRegionId":null,"receiverRenderId":"ctl3bzpqj","regionId":6,"resultOwnerRenderId":"ctl3bzpqg","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzpqj"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"6f39137e239ed68d9bc7b5c02f59fadb190cc5c14b9ca65f0795ccc17f2f917b"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NOYXRpdmVTZWxlY3RfYmQ2N2QzLmExN2NmM2FkM2RlMC5qcw==", "L2NpdHJ5L2NhY2hlL0NOYXRpdmVTZWxlY3RfYmQ2N2QzLmI2NTliOTc0ZjRhN2E4OGUxZDkyMzljNmYwZDA5YWQ4Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuZDNhODE3Yjg5YjI5Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuNjJmMzI4ODAxYmYyMzVlZGFjODg5MGRmNDYyY2Y4ZTcuanM=", "L2NpdHJ5L2NhY2hlL0NOYXRpdmVTZWxlY3RfYmQ2N2QzLmYwOGQ0NzI3NWQ1OWZlNGEwOTY1ZjVlNWU5ODVkN2Y0Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuNGJiZjdhOTQ4YmVjN2VhYzhlN2VlNTJmZTBhNmNjMzguanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL05hdGl2ZVNlbGVjdEF0QUdsYW5jZV9kNjhiMzEuNTNkNDMwMjIzNjM0LmNzcw==", "L2NpdHJ5L2NhY2hlL0NOYXRpdmVTZWxlY3RfYmQ2N2QzLmJkODI1Yzk4OTQxYy5jc3M=", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuODczNDgyMmEzNjFmLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q05hdGl2ZVNlbGVjdF9iZDY3ZDM=", "Y3RsM2J6cHFp", "YjY1OWI5NzRmNGE3YTg4ZTFkOTIzOWM2ZjBkMDlhZDg=", "init"], ["Q0ZpZWxkXzgxYzcyMw==", "Y3RsM2J6cHFo", "NjJmMzI4ODAxYmYyMzVlZGFjODg5MGRmNDYyY2Y4ZTc=", "init"], ["Q05hdGl2ZVNlbGVjdF9iZDY3ZDM=", "Y3RsM2J6cHFr", "ZjA4ZDQ3Mjc1ZDU5ZmU0YTA5NjVmNWU1ZTk4NWQ3ZjQ=", "init"], ["Q0ZpZWxkXzgxYzcyMw==", "Y3RsM2J6cHFq", "NGJiZjdhOTQ4YmVjN2VhYzhlN2VlNTJmZTBhNmNjMzg=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6cHFm"], ["TmF0aXZlU2VsZWN0QXRBR2xhbmNlX2Q2OGIzMQ==", "Y3RsM2J6cHFn"]], "graph": "6f39137e239ed68d9bc7b5c02f59fadb190cc5c14b9ca65f0795ccc17f2f917b", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CNativeSelect_bd67d3", {
+  props: {
+    value: {},
+    required: {},
+    disabled: {},
+    invalid: {},
+    variant: {},
+    size: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const select = els[0];
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const handoffKey = Symbol.for("citry-ui:native-select-handoff");
+    const placeholder = data.hasPlaceholder ? select.options[0] : null;
+    const allowedValues = {
+      variant: ["outline", "filled", "plain"],
+      size: ["sm", "md", "lg"],
+    };
+    const invalidEpisodes = new Map();
+    const optionByValue = new Map();
+    Array.from(select.options).forEach((option) => {
+      if (option !== placeholder) {
+        optionByValue.set(option.value, option);
+      }
+    });
+    let controlled = false;
+    let controlledTarget = null;
+    let nativeInvalid = false;
+    let reconcileTimer = null;
+    const resetTimers = new Set();
+
+    const optionEnabled = (option) => Boolean(
+      option
+        && !option.disabled
+        && !(option.parentElement instanceof HTMLOptGroupElement && option.parentElement.disabled)
+    );
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CNativeSelect ${name} received invalid client value ${describedValue}; `
+          + "using the documented fallback.",
+        select,
+      );
+    };
+    const reportFieldOwned = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `field:${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CNativeSelect ${name} is controlled by its enclosing CField; `
+          + `ignoring client value ${describedValue}.`,
+        select,
+      );
+    };
+    const reportUnsupportedRequired = () => {
+      const episode = "required:placeholder";
+      if (invalidEpisodes.get(episode) === "unsupported:true") {
+        return;
+      }
+      invalidEpisodes.set(episode, "unsupported:true");
+      console.error(
+        "[citry-ui] CNativeSelect required=true requires a placeholder; using false.",
+        select,
+      );
+    };
+    const canonicalize = (value) => {
+      if (value.includes("\0")) {
+        return null;
+      }
+      return value.replace(/\r\n?/g, "\n");
+    };
+    const valueTarget = (value) => {
+      if (value === null) {
+        return data.hasPlaceholder ? { kind: "value", value: "" } : { kind: "none" };
+      }
+      if (typeof value !== "string") {
+        return null;
+      }
+      const canonical = canonicalize(value);
+      if (canonical === null) {
+        return null;
+      }
+      if (canonical === "") {
+        return data.hasPlaceholder ? { kind: "value", value: "" } : null;
+      }
+      const option = optionByValue.get(canonical);
+      return optionEnabled(option) ? { kind: "value", value: canonical } : null;
+    };
+    const currentTarget = () => {
+      if (select.selectedIndex === -1) {
+        return { kind: "none" };
+      }
+      return { kind: "value", value: select.value };
+    };
+    const targetAvailable = (target) => {
+      if (!target) {
+        return false;
+      }
+      if (target.kind === "none") {
+        return true;
+      }
+      if (target.value === "") {
+        return Boolean(placeholder);
+      }
+      return optionEnabled(optionByValue.get(target.value));
+    };
+    const targetMatches = (target) => {
+      if (target.kind === "none") {
+        return select.selectedIndex === -1;
+      }
+      if (target.value === "") {
+        return select.selectedIndex === 0 && select.options[0] === placeholder;
+      }
+      const option = optionByValue.get(target.value);
+      return optionEnabled(option)
+        && select.selectedOptions.length === 1
+        && select.selectedOptions[0] === option;
+    };
+    const applyTarget = (target) => {
+      if (targetMatches(target)) {
+        return;
+      }
+      if (target.kind === "none") {
+        select.selectedIndex = -1;
+      } else {
+        select.value = target.value;
+      }
+    };
+    const structuralFallback = () => {
+      if (data.value !== null) {
+        const incoming = valueTarget(data.value);
+        if (incoming && targetAvailable(incoming)) {
+          return incoming;
+        }
+      }
+      if (placeholder) {
+        return { kind: "value", value: "" };
+      }
+      const firstEnabled = Array.from(select.options).find(optionEnabled);
+      return firstEnabled ? { kind: "value", value: firstEnabled.value } : { kind: "none" };
+    };
+    const handoff = select[handoffKey];
+    delete select[handoffKey];
+    if (handoff?.kind === "none") {
+      applyTarget(handoff);
+    } else if (handoff?.kind === "value" && targetAvailable(handoff)) {
+      applyTarget(handoff);
+    } else if (handoff) {
+      applyTarget(structuralFallback());
+    }
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const idrefs = (...values) => {
+      const result = [];
+      values.forEach((value) => {
+        if (typeof value !== "string") {
+          return;
+        }
+        value.split(/\s+/).filter(Boolean).forEach((token) => {
+          if (!result.includes(token)) {
+            result.push(token);
+          }
+        });
+      });
+      return result.join(" ") || null;
+    };
+    const syncRelationships = (invalid) => {
+      const describedBy = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const errorMessage = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (describedBy) {
+        select.setAttribute("aria-describedby", describedBy);
+      } else {
+        select.removeAttribute("aria-describedby");
+      }
+      if (errorMessage) {
+        select.setAttribute("aria-errormessage", errorMessage);
+      } else {
+        select.removeAttribute("aria-errormessage");
+      }
+    };
+    const syncEmpty = () => {
+      select.toggleAttribute("data-empty", select.selectedIndex === -1 || select.value === "");
+    };
+    const applyState = () => {
+      let required;
+      let disabled;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "invalid"].forEach((name) => {
+          if (props[name] !== undefined) {
+            reportFieldOwned(name, props[name]);
+          } else {
+            invalidEpisodes.delete(name);
+          }
+        });
+        required = field.required;
+        disabled = field.disabled;
+        externalInvalid = field.invalid;
+      } else {
+        const requestedRequired = resolveBoolean("required", data.required);
+        if (requestedRequired && !data.hasPlaceholder) {
+          reportUnsupportedRequired();
+          required = false;
+        } else {
+          invalidEpisodes.delete("required:placeholder");
+          required = requestedRequired;
+        }
+        disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+        externalInvalid = resolveBoolean("invalid", data.invalid);
+      }
+      const invalid = externalInvalid || nativeInvalid;
+      select.required = required;
+      select.disabled = disabled;
+      select.toggleAttribute("data-required", required);
+      select.toggleAttribute("data-disabled", disabled);
+      select.toggleAttribute("data-invalid", invalid);
+      select.dataset.variant = resolveChoice("variant");
+      select.dataset.size = resolveChoice("size");
+      if (invalid) {
+        select.setAttribute("aria-invalid", "true");
+      } else {
+        select.removeAttribute("aria-invalid");
+      }
+      syncRelationships(invalid);
+      syncEmpty();
+    };
+    const clearNativeInvalidWhenValid = () => {
+      if (!nativeInvalid || !select.validity.valid) {
+        return;
+      }
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+      applyState();
+    };
+    const applyLatestValueProp = () => {
+      const value = props.value;
+      if (value === undefined) {
+        controlled = false;
+        controlledTarget = null;
+        invalidEpisodes.delete("value");
+        syncEmpty();
+        clearNativeInvalidWhenValid();
+        return;
+      }
+      const target = valueTarget(value);
+      if (!target) {
+        reportInvalid("value", value);
+        if (controlled) {
+          if (!targetAvailable(controlledTarget)) {
+            controlledTarget = structuralFallback();
+          }
+          applyTarget(controlledTarget);
+        }
+        syncEmpty();
+        clearNativeInvalidWhenValid();
+        return;
+      }
+      invalidEpisodes.delete("value");
+      controlled = true;
+      controlledTarget = target;
+      applyTarget(target);
+      syncEmpty();
+      clearNativeInvalidWhenValid();
+    };
+    const scheduleReconcile = () => {
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      reconcileTimer = setTimeout(() => {
+        reconcileTimer = null;
+        applyLatestValueProp();
+      }, 0);
+    };
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const onInput = () => {
+      syncEmpty();
+      if (controlled) {
+        scheduleReconcile();
+      } else {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onChange = () => {
+      syncEmpty();
+      if (!controlled) {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onReset = (event) => {
+      const resetTimer = setTimeout(() => {
+        resetTimers.delete(resetTimer);
+        if (event.defaultPrevented) {
+          return;
+        }
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        applyLatestValueProp();
+        applyState();
+      }, 0);
+      resetTimers.add(resetTimer);
+    };
+    const unregisterCapabilities = field?.registerCapabilities({
+      required: data.hasPlaceholder,
+      readonly: false,
+    });
+    const nativeForm = select.form;
+
+    select.addEventListener("invalid", onInvalid);
+    select.addEventListener("input", onInput);
+    select.addEventListener("change", onChange);
+    nativeForm?.addEventListener("reset", onReset);
+    effect(() => {
+      applyState();
+      clearNativeInvalidWhenValid();
+    });
+    effect(() => {
+      applyLatestValueProp();
+    });
+    select.setAttribute("data-citry-native-select-initialized", "");
+
+    return () => {
+      select[handoffKey] = currentTarget();
+      select.removeEventListener("invalid", onInvalid);
+      select.removeEventListener("input", onInput);
+      select.removeEventListener("change", onChange);
+      nativeForm?.removeEventListener("reset", onReset);
+      unregisterCapabilities?.();
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      resetTimers.forEach((resetTimer) => clearTimeout(resetTimer));
+      resetTimers.clear();
+      if (nativeInvalid) {
+        field?.setNativeInvalid(false);
+      }
+      select.removeAttribute("data-citry-native-select-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CNativeSelect_bd67d3", "b659b974f4a7a88e1d9239c6f0d09ad8", atob("eyJ2YWx1ZSI6InJlZWYiLCJoYXNQbGFjZWhvbGRlciI6dHJ1ZSwicmVxdWlyZWQiOnRydWUsImRpc2FibGVkIjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsInZhcmlhbnQiOiJvdXRsaW5lIiwic2l6ZSI6Im1kIiwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CField_81c723", {
+  props: {
+    required: {},
+    disabled: {},
+    readonly: {},
+    invalid: {},
+    orientation: {},
+    density: {},
+  },
+  init: ({ els, data, props, effect, reactive, provide, inject }) => {
+    const root = els[0];
+    const requiredIndicator = root.querySelector(
+      ':scope > [data-citry-ui-part="label"] > [data-citry-ui-part="required-indicator"]',
+    );
+    // Controls may expose parts with the same public names. Restrict the
+    // lookup to this Field's direct status node so nested component
+    // internals are never mistaken for Field-owned UI.
+    const error = root.querySelector(':scope > [data-citry-ui-part="error"]');
+    const controls = root.querySelectorAll('[data-citry-field-control]');
+    if (controls.length !== 1) {
+      throw new Error(
+        `[citry-ui] CField requires exactly one marked control, but found ${controls.length}.`,
+      );
+    }
+    const control = controls[0];
+    const initialSupportsRequired = control.getAttribute(
+      "data-citry-field-supports-required",
+    ) !== "false";
+    const initialSupportsReadonly = control.getAttribute(
+      "data-citry-field-supports-readonly",
+    ) !== "false";
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const allowedValues = {
+      orientation: ["vertical", "horizontal"],
+      density: ["default", "comfortable", "compact"],
+    };
+    const invalidEpisodes = new Map();
+    let externalInvalid = data.invalid;
+    let capabilityGeneration = 0;
+    let activeCapabilityGeneration = null;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name} received invalid client value ${describedValue}; `
+          + "using the server-rendered fallback.",
+        root,
+      );
+    };
+    const reportUnsupported = (name) => {
+      const episode = `capability:${name}`;
+      const fingerprint = "unsupported:true";
+      if (invalidEpisodes.get(episode) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(episode, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name}=true is not supported by its registered control; using false.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const context = reactive({
+      controlId: data.controlId,
+      descriptionId: data.descriptionId,
+      errorId: data.errorId,
+      hasDescription: data.hasDescription,
+      hasError: data.hasError,
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      nativeInvalid: false,
+      supportsRequired: initialSupportsRequired,
+      supportsReadonly: initialSupportsReadonly,
+      registerCapabilities(capabilities) {
+        const generation = ++capabilityGeneration;
+        activeCapabilityGeneration = generation;
+        context.supportsRequired = capabilities.required !== false;
+        context.supportsReadonly = capabilities.readonly !== false;
+        return () => {
+          if (activeCapabilityGeneration !== generation) {
+            return;
+          }
+          activeCapabilityGeneration = null;
+          context.supportsRequired = true;
+          context.supportsReadonly = true;
+        };
+      },
+      setNativeInvalid(value) {
+        context.nativeInvalid = Boolean(value);
+        applyInvalid();
+      },
+    });
+    provide(Symbol.for("citry-ui:field"), context);
+
+    const applyInvalid = () => {
+      const invalid = externalInvalid || context.nativeInvalid;
+      context.invalid = invalid;
+      root.toggleAttribute("data-invalid", invalid);
+      error.hidden = !(invalid && context.hasError);
+    };
+    effect(() => {
+      const requestedRequired = resolveBoolean("required", data.required);
+      const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+      // CForm uses a native disabled fieldset, so its disabled state
+      // must win over a descendant's local configuration.
+      const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+      const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
+      const required = requestedRequired && context.supportsRequired;
+      const readonly = requestedReadonly && context.supportsReadonly;
+      if (requestedRequired && !context.supportsRequired) {
+        reportUnsupported("required");
+      } else {
+        invalidEpisodes.delete("capability:required");
+      }
+      if (requestedReadonly && !context.supportsReadonly) {
+        reportUnsupported("readonly");
+      } else {
+        invalidEpisodes.delete("capability:readonly");
+      }
+      externalInvalid = resolveBoolean("invalid", data.invalid);
+      const orientation = resolveChoice("orientation");
+      const density = resolveChoice("density");
+
+      context.required = required;
+      context.disabled = disabled;
+      context.readonly = readonly;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", readonly);
+      root.dataset.orientation = orientation;
+      root.dataset.density = density;
+      requiredIndicator.hidden = !required;
+      applyInvalid();
+    });
+    root.setAttribute("data-citry-field-initialized", "");
+
+    return () => {
+      root.removeAttribute("data-citry-field-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CField_81c723", "62f328801bf235edac8890df462cf8e7", atob("eyJyZXF1aXJlZCI6dHJ1ZSwiZGlzYWJsZWQiOmZhbHNlLCJyZWFkb25seSI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOnRydWUsImludmFsaWQiOmZhbHNlLCJvcmllbnRhdGlvbiI6InZlcnRpY2FsIiwiZGVuc2l0eSI6ImRlZmF1bHQiLCJjb250cm9sSWQiOiJjdWktZmllbGQtY3RsM2J6cHFoLWNvbnRyb2wiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWZpZWxkLWN0bDNienBxaC1jb250cm9sLWRlc2NyaXB0aW9uIiwiZXJyb3JJZCI6ImN1aS1maWVsZC1jdGwzYnpwcWgtY29udHJvbC1lcnJvciIsImhhc0Rlc2NyaXB0aW9uIjp0cnVlLCJoYXNFcnJvciI6ZmFsc2V9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CNativeSelect_bd67d3", "f08d47275d59fe4a0965f5e5e985d7f4", atob("eyJ2YWx1ZSI6bnVsbCwiaGFzUGxhY2Vob2xkZXIiOnRydWUsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjp0cnVlLCJ2YXJpYW50IjoiZmlsbGVkIiwic2l6ZSI6Im1kIiwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CField_81c723", "4bbf7a948bec7eac8e7ee52fe0a6cc38", atob("eyJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5Ijp0cnVlLCJpbnZhbGlkIjp0cnVlLCJvcmllbnRhdGlvbiI6InZlcnRpY2FsIiwiZGVuc2l0eSI6ImRlZmF1bHQiLCJjb250cm9sSWQiOiJjdWktZmllbGQtY3RsM2J6cHFqLWNvbnRyb2wiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWZpZWxkLWN0bDNienBxai1jb250cm9sLWRlc2NyaXB0aW9uIiwiZXJyb3JJZCI6ImN1aS1maWVsZC1jdGwzYnpwcWotY29udHJvbC1lcnJvciIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiaGFzRXJyb3IiOnRydWV9"));
+})();</script></body></html><!--citry:g1:6f39137e:0:i:1:e-->

@@ -1,0 +1,218 @@
+schema_version: 1
+family: tour
+
+components:
+  - CTour
+  - CTourStep
+
+inputs:
+  - id: ctour-server-inputs
+    component: CTour
+    channel: server
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the host ID and bases dialog title and description IDs.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial open state.}
+      - {id: active, name: active, type: int, default: {kind: literal, value: 0}, effect: Sets the initial zero-based step index.}
+      - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Enables the built-in close action and permitted dismissal.}
+      - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Allows Escape dismissal when dismissible.}
+      - {id: close-on-outside, name: close_on_outside, type: bool, default: {kind: literal, value: false}, effect: Allows pointer dismissal outside the card when dismissible.}
+      - {id: skippable, name: skippable, type: bool, default: {kind: literal, value: true}, effect: Shows and enables the skip action.}
+      - {id: scroll, name: scroll, type: {display: CTourScroll, interfaces: [CTourScroll]}, default: {kind: literal, value: auto}, effect: Selects target scrolling or disables it.}
+      - {id: missing-target, name: missing_target, type: {display: CTourMissingTarget, interfaces: [CTourMissingTarget]}, default: {kind: literal, value: skip}, effect: Skips unavailable targeted steps or closes the Tour.}
+      - {id: size, name: size, type: {display: CTourSize, interfaces: [CTourSize]}, default: {kind: literal, value: md}, effect: Selects the default card width profile.}
+      - {id: close-label, name: close_label, type: str, default: {kind: literal, value: Close tour}, effect: Overrides the localized close action name.}
+      - {id: previous-label, name: previous_label, type: str, default: {kind: literal, value: Previous}, effect: Overrides the localized previous action text.}
+      - {id: next-label, name: next_label, type: str, default: {kind: literal, value: Next}, effect: Overrides the localized next action text.}
+      - {id: finish-label, name: finish_label, type: str, default: {kind: literal, value: Finish}, effect: Overrides the localized finish action text.}
+      - {id: skip-label, name: skip_label, type: str, default: {kind: literal, value: Skip tour}, effect: Overrides the localized skip action text.}
+      - {id: progress-label, name: progress_label, type: str, default: {kind: literal, value: 'Step {current} of {total}'}, effect: Overrides progress text and must retain both placeholders.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the Tour host.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the Tour host.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed host attributes without replacing owned Tour state identity or behavior.}
+  - id: ctour-client-inputs
+    component: CTour
+    channel: client
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control to the committed value., effect: Controls Tour visibility independently from active step.}
+      - {id: active, name: active, type: 'number | null', omitted: Releases control to the committed value., effect: Controls the zero-based active step independently from visibility.}
+      - {id: dismissible, name: dismissible, type: boolean, omitted: Uses the server value., effect: Controls dismissal availability.}
+      - {id: close-on-escape, name: closeOnEscape, type: boolean, omitted: Uses the server value., effect: Controls Escape dismissal.}
+      - {id: close-on-outside, name: closeOnOutside, type: boolean, omitted: Uses the server value., effect: Controls outside-pointer dismissal.}
+      - {id: skippable, name: skippable, type: boolean, omitted: Uses the server value., effect: Controls skip availability.}
+      - {id: scroll, name: scroll, type: {display: CTourScroll, interfaces: [CTourScroll]}, omitted: Uses the server value., effect: Controls target scroll behavior.}
+      - {id: missing-target, name: missingTarget, type: {display: CTourMissingTarget, interfaces: [CTourMissingTarget]}, omitted: Uses the server value., effect: Controls missing-target reconciliation.}
+      - {id: size, name: size, type: {display: CTourSize, interfaces: [CTourSize]}, omitted: Uses the server value., effect: Controls card width profile.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No open-state callback., effect: Receives reasoned visibility requests and commits.}
+      - {id: on-active-change, name: onActiveChange, type: function, omitted: No active-step callback., effect: Receives reasoned step requests and commits.}
+  - id: ctour-step-server-inputs
+    component: CTourStep
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies unique stable step identity.}
+      - {id: target-id, name: target_id, type: 'str | None', default: {kind: literal, value: null}, effect: Targets one exact document element ID; omission creates a centered step.}
+      - {id: placement, name: placement, type: {display: CTourPlacement, interfaces: [CTourPlacement]}, default: {kind: literal, value: bottom}, effect: Requests logical target-relative card placement with flip and clamp.}
+      - {id: arrow, name: arrow, type: bool, default: {kind: literal, value: true}, effect: Shows the target-pointing arrow for targeted steps.}
+      - {id: describe, name: describe, type: bool, default: {kind: literal, value: false}, effect: Connects the active body through aria-describedby.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the native step section.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the native step section.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed step attributes without replacing owned identity state or visibility.}
+
+slots:
+  - id: ctour-slots
+    component: CTour
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CTourDefaultSlotData]}, fallback: None; contains direct CTourStep declarations.}
+      - {id: activator, name: activator, required: false, data: {display: '{activator_attrs}', interfaces: [CTourActivatorSlotData]}, fallback: Omitted.}
+      - {id: close, name: close, required: false, data: {display: '{}', interfaces: [CTourCloseSlotData]}, fallback: Decorative multiplication sign.}
+  - id: ctour-step-slots
+    component: CTourStep
+    entries:
+      - {id: title, name: title, required: true, data: {display: '{index, total, value}', interfaces: [CTourStepTitleSlotData]}, fallback: None.}
+      - {id: default, name: default, required: true, data: {display: '{index, total, value}', interfaces: [CTourStepDefaultSlotData]}, fallback: None.}
+      - {id: media, name: media, required: false, data: {display: '{index, total, value}', interfaces: [CTourStepMediaSlotData]}, fallback: Omitted.}
+
+events:
+  - id: ctour-events
+    component: CTour
+    entries:
+      - {id: on-open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CTourOpenChangeDetail) => void', interfaces: [CTourOpenChangeDetail]}, trigger: Activator dismissal skip finish target loss or native lifecycle requests a visibility change., detail: {display: '{reason, active, value, controlled, source}', interfaces: [CTourOpenChangeDetail]}, behavior: Uncontrolled state commits before notification; controlled state is request-only.}
+      - {id: on-active-change, name: onActiveChange, signature: {display: '(active: number, detail: CTourActiveChangeDetail) => void', interfaces: [CTourActiveChangeDetail]}, trigger: Previous next client reconciliation or missing-target skip requests a step change., detail: {display: '{previousActive, value, previousValue, reason, controlled, source}', interfaces: [CTourActiveChangeDetail]}, behavior: Uncontrolled state commits before notification; controlled state is request-only.}
+
+methods: []
+
+css:
+  - id: ctour-css-variables
+    component: CTour
+    entries:
+      - {id: width, name: --cui-tour-width, type: length, purpose: Card inline size overriding the selected profile., default: 'sm 20rem; md 26rem; lg 30rem'}
+      - {id: background, name: --cui-tour-background, type: color, purpose: Card and arrow background., default: Adaptive canvas}
+      - {id: foreground, name: --cui-tour-foreground, type: color, purpose: Card text and control color., default: CanvasText}
+      - {id: muted-color, name: --cui-tour-muted-color, type: color, purpose: Progress and secondary action foreground., default: Adaptive high-contrast neutral}
+      - {id: border-color, name: --cui-tour-border-color, type: color, purpose: Card control and arrow borders., default: Adaptive neutral}
+      - {id: shadow, name: --cui-tour-shadow, type: shadow, purpose: Card elevation., default: Elevated overlay shadow}
+      - {id: radius, name: --cui-tour-radius, type: length, purpose: Card corner radius., default: 0.875rem}
+      - {id: padding, name: --cui-tour-padding, type: length, purpose: Step panel padding., default: 1.25rem}
+      - {id: gap, name: --cui-tour-gap, type: length, purpose: Step anatomy spacing., default: 1rem}
+      - {id: offset, name: --cui-tour-offset, type: length, purpose: Target-to-card distance., default: 0.75rem}
+      - {id: spotlight-padding, name: --cui-tour-spotlight-padding, type: length, purpose: Space around the highlighted target., default: 0.5rem}
+      - {id: spotlight-radius, name: --cui-tour-spotlight-radius, type: length, purpose: Highlighted target corner radius., default: 0.625rem}
+      - {id: backdrop-color, name: --cui-tour-backdrop-color, type: color, purpose: Centered mask and target spotlight surround., default: 'rgb(0 0 0 / 58%)'}
+      - {id: focus-color, name: --cui-tour-focus-color, type: color, purpose: Action and title focus outline., default: Highlight}
+
+attributes:
+  - id: ctour-attributes
+    component: CTour
+    entries:
+      - {id: data-open, name: data-open, element: Tour host and dialog, type: present | absent, meaning: Marks effective Tour visibility.}
+      - {id: data-active, name: data-active, element: Tour host, type: nonnegative integer, meaning: Mirrors effective active index.}
+      - {id: data-value, name: data-value, element: Tour host and step panels, type: string, meaning: Mirrors stable active or declared step identity.}
+      - {id: data-size, name: data-size, element: Tour host and surface, type: {display: CTourSize, interfaces: [CTourSize]}, meaning: Mirrors card width profile.}
+      - {id: data-targeted, name: data-targeted, element: Tour host, type: present | absent, meaning: Marks an active available target step.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Native dialog, type: IDREF, meaning: Refers to the active step title.}
+      - {id: aria-describedby, name: aria-describedby, element: Native dialog, type: IDREF | absent, meaning: Refers to the active body only when describe is enabled.}
+      - {id: aria-modal, name: aria-modal, element: Native dialog, type: 'false', meaning: States that the explained page remains available for interaction.}
+      - {id: data-index, name: data-index, element: Step panel, type: nonnegative integer, meaning: Mirrors server-rendered order.}
+      - {id: data-current, name: data-current, element: Step panel, type: present | absent, meaning: Marks the active panel.}
+      - {id: data-placement, name: data-placement, element: Step panel and surface, type: string, meaning: Stores requested logical and applied physical placement respectively.}
+      - {id: data-target-id, name: data-target-id, element: Step panel, type: IDREF | absent, meaning: Stores the exact authored target ID.}
+      - {id: data-describe, name: data-describe, element: Step panel, type: boolean-string, meaning: Mirrors whether the body describes the dialog.}
+
+selectors:
+  - id: ctour-selectors
+    component: CTour
+    entries:
+      - {id: tour, selector: '[data-citry-ui-part="tour"]', element: Host div, purpose: State reflections and customization destination.}
+      - {id: dialog, selector: '[data-citry-ui-part="dialog"]', element: Native nonmodal dialog, purpose: Full-viewport Tour geometry owner.}
+      - {id: spotlight, selector: '[data-citry-ui-part="spotlight"]', element: Decorative div, purpose: Pointer-transparent target geometry and mask cutout.}
+      - {id: surface, selector: '[data-citry-ui-part="surface"]', element: Fixed card div, purpose: Placement scroll and visual surface.}
+      - {id: panel, selector: '[data-citry-ui-part="panel"]', element: Native section, purpose: Server-rendered step content and visibility owner.}
+      - {id: media, selector: '[data-citry-ui-part="media"]', element: Optional div, purpose: Authored step media.}
+      - {id: header, selector: '[data-citry-ui-part="header"]', element: Native header, purpose: Active step heading region.}
+      - {id: title, selector: '[data-citry-ui-part="title"]', element: Native h2, purpose: Dialog name and step focus destination.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Native div, purpose: Authored step body and optional dialog description.}
+      - {id: arrow, selector: '[data-citry-ui-part="arrow"]', element: Decorative span, purpose: Target direction indicator.}
+      - {id: close, selector: '[data-citry-ui-part="close"]', element: Native Button, purpose: Dismissal action.}
+      - {id: footer, selector: '[data-citry-ui-part="footer"]', element: Native footer, purpose: Progress and navigation grouping.}
+      - {id: progress-group, selector: '[data-citry-ui-part="progress-group"]', element: Div, purpose: Groups text and visual step position.}
+      - {id: progress, selector: '[data-citry-ui-part="progress"]', element: Polite span, purpose: Localized step position.}
+      - {id: steps, selector: '[data-citry-ui-part="steps"]', element: Decorative span, purpose: Visual step indicator group.}
+      - {id: step-dot, selector: '[data-citry-ui-part="step-dot"]', element: Decorative span, purpose: One visual step position marker.}
+      - {id: actions, selector: '[data-citry-ui-part="actions"]', element: Div, purpose: Skip previous next and finish controls.}
+
+interfaces:
+  - id: ctour-aliases
+    kind: aliases
+    entries:
+      - {id: placement, name: CTourPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end", "inline-start", "inline-end"]'}
+      - {id: scroll, name: CTourScroll, definition: 'Literal["auto", "smooth", "none"]'}
+      - {id: missing-target, name: CTourMissingTarget, definition: 'Literal["skip", "close"]'}
+      - {id: size, name: CTourSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: open-reason, name: CTourOpenReason, definition: 'Literal["activator", "close", "escape", "outside", "skip", "finish", "missing-target", "native"]'}
+      - {id: active-reason, name: CTourActiveReason, definition: 'Literal["next", "previous", "client", "missing-target"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: ctour-default-slot-data, kind: record, name: CTourDefaultSlotData, entries: []}
+  - id: ctour-activator-slot-data
+    kind: record
+    name: CTourActivatorSlotData
+    entries:
+      - {id: activator-attrs, name: activator_attrs, type: 'dict[str, object]', meaning: Form-safe dialog activation ARIA and behavior attributes.}
+  - {id: ctour-close-slot-data, kind: record, name: CTourCloseSlotData, entries: []}
+  - id: ctour-step-slot-data
+    kind: record
+    name: CTourStepSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Zero-based server-rendered index.}
+      - {id: total, name: total, type: int, meaning: Total rendered step count.}
+      - {id: value, name: value, type: str, meaning: Stable step identity.}
+  - id: ctour-step-title-slot-data
+    kind: record
+    name: CTourStepTitleSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Zero-based server-rendered index.}
+      - {id: total, name: total, type: int, meaning: Total rendered step count.}
+      - {id: value, name: value, type: str, meaning: Stable step identity.}
+  - id: ctour-step-default-slot-data
+    kind: record
+    name: CTourStepDefaultSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Zero-based server-rendered index.}
+      - {id: total, name: total, type: int, meaning: Total rendered step count.}
+      - {id: value, name: value, type: str, meaning: Stable step identity.}
+  - id: ctour-step-media-slot-data
+    kind: record
+    name: CTourStepMediaSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Zero-based server-rendered index.}
+      - {id: total, name: total, type: int, meaning: Total rendered step count.}
+      - {id: value, name: value, type: str, meaning: Stable step identity.}
+  - id: ctour-open-change-detail
+    kind: record
+    name: CTourOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: {display: CTourOpenReason, interfaces: [CTourOpenReason]}, meaning: Cause of the visibility request or commit.}
+      - {id: active, name: active, type: int, meaning: Effective active index.}
+      - {id: value, name: value, type: str, meaning: Effective stable step identity.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client state controls visibility.}
+      - {id: source, name: source, type: 'object | None', meaning: Native source element or null for client reconciliation.}
+  - id: ctour-active-change-detail
+    kind: record
+    name: CTourActiveChangeDetail
+    entries:
+      - {id: previous-active, name: previousActive, type: int, meaning: Effective index before the request.}
+      - {id: value, name: value, type: str, meaning: Requested stable step identity.}
+      - {id: previous-value, name: previousValue, type: str, meaning: Effective stable identity before the request.}
+      - {id: reason, name: reason, type: {display: CTourActiveReason, interfaces: [CTourActiveReason]}, meaning: Cause of the step request or commit.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client state controls the active index.}
+      - {id: source, name: source, type: 'object | None', meaning: Native source element or null for client reconciliation.}
+
+translations:
+  - id: ctour-translations
+    component: CTour
+    entries:
+      - {id: close, key: citry-ui-tour-close, purpose: Names the built-in dismissal control., variables: None., override: '`close_label`', updates: '`$c-tr` updates each stable `aria-label` destination.'}
+      - {id: previous, key: citry-ui-tour-previous, purpose: Labels previous-step actions., variables: None., override: '`previous_label`', updates: '`$c-tr` updates server-rendered action text.'}
+      - {id: next, key: citry-ui-tour-next, purpose: Labels next-step actions., variables: None., override: '`next_label`', updates: '`$c-tr` updates server-rendered action text.'}
+      - {id: finish, key: citry-ui-tour-finish, purpose: Labels final-step completion actions., variables: None., override: '`finish_label`', updates: '`$c-tr` updates server-rendered action text.'}
+      - {id: skip, key: citry-ui-tour-skip, purpose: Labels skip actions., variables: None., override: '`skip_label`', updates: '`$c-tr` updates server-rendered action text.'}
+      - {id: progress, key: citry-ui-tour-progress, purpose: Reports current step position., variables: 'current: str; total: str', override: '`progress_label` with `{current}` and `{total}`', updates: '`$c-tr` updates every stable progress destination with checked literal values.'}

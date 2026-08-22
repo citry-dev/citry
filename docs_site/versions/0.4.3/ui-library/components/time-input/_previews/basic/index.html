@@ -1,0 +1,473 @@
+<!--citry:g1:2c86be23:0:i:1:s--><!doctype html><html data-cid-ctl3bzq9w lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Collect one time</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CTimeInput_f74743>@layer citry-ui.theme{:where(.cui-time-input){--_cui-time-input-background:var(--cui-time-input-background,Canvas);--_cui-time-input-foreground:var(--cui-time-input-foreground,CanvasText);--_cui-time-input-border-color:var(--cui-time-input-border-color,color-mix(in srgb, CanvasText 38%, transparent));--_cui-time-input-hover-border-color:var(--cui-time-input-hover-border-color,color-mix(in srgb, CanvasText 68%, transparent));--_cui-time-input-focus-color:var(--cui-time-input-focus-color,Highlight);--_cui-time-input-invalid-border-color:var(--cui-time-input-invalid-border-color,light-dark(#d92d20,#f97066));--_cui-time-input-disabled-background:var(--cui-time-input-disabled-background,color-mix(in srgb, CanvasText 7%, Canvas));--_cui-time-input-radius:var(--cui-time-input-radius,.5rem);--_cui-time-input-height:var(--cui-time-input-height,2.5rem);--_cui-time-input-inline-padding:var(--cui-time-input-inline-padding,.75rem);--_cui-time-input-block-padding:var(--cui-time-input-block-padding,.5rem);--_cui-time-input-font-size:var(--cui-time-input-font-size,1rem);--_cui-time-input-min-inline-size:var(--cui-time-input-min-inline-size,10rem);box-sizing:border-box;inline-size:100%;min-inline-size:min(100%, var(--_cui-time-input-min-inline-size));min-block-size:var(--_cui-time-input-height);padding-block:var(--_cui-time-input-block-padding);padding-inline:var(--_cui-time-input-inline-padding);border:1px solid var(--_cui-time-input-border-color);border-radius:var(--_cui-time-input-radius);background:var(--_cui-time-input-background);color:var(--_cui-time-input-foreground);font:inherit;font-size:var(--_cui-time-input-font-size);line-height:1.25}:where(.cui-time-input[data-variant=filled]){--_cui-time-input-background:var(--cui-time-input-background,color-mix(in srgb, CanvasText 7%, Canvas));--_cui-time-input-border-color:var(--cui-time-input-border-color,transparent)}:where(.cui-time-input[data-variant=plain]){--_cui-time-input-background:var(--cui-time-input-background,transparent);--_cui-time-input-border-color:var(--cui-time-input-border-color,transparent);--_cui-time-input-radius:var(--cui-time-input-radius,0)}:where(.cui-time-input[data-size=sm]){--_cui-time-input-height:var(--cui-time-input-height,2.25rem);--_cui-time-input-inline-padding:var(--cui-time-input-inline-padding,.625rem);--_cui-time-input-block-padding:var(--cui-time-input-block-padding,.375rem);--_cui-time-input-font-size:var(--cui-time-input-font-size,.875rem)}:where(.cui-time-input[data-size=lg]){--_cui-time-input-height:var(--cui-time-input-height,2.75rem);--_cui-time-input-inline-padding:var(--cui-time-input-inline-padding,.875rem);--_cui-time-input-block-padding:var(--cui-time-input-block-padding,.625rem);--_cui-time-input-font-size:var(--cui-time-input-font-size,1.0625rem)}@media (hover:hover){:where(.cui-time-input:not(:disabled):not([data-readonly]):hover){border-color:var(--_cui-time-input-hover-border-color)}}:where(.cui-time-input:focus-visible){border-color:var(--_cui-time-input-focus-color);outline:.1875rem solid color-mix(in srgb, var(--_cui-time-input-focus-color) 38%, transparent);outline-offset:.125rem}:where(.cui-time-input[data-invalid]){border-color:var(--_cui-time-input-invalid-border-color)}:where(.cui-time-input:disabled){background:var(--_cui-time-input-disabled-background);cursor:not-allowed}:where(.cui-time-input[readonly]){cursor:default}@media (forced-colors:active){:where(.cui-time-input){forced-color-adjust:auto;border-color:buttontext}:where(.cui-time-input[data-invalid]){border-color:mark}}}</style><style data-citry-css-class=CField_81c723>@layer citry-ui.theme{:where(.cui-field){--_cui-field-gap:var(--cui-field-gap,.5rem);--_cui-field-label-color:var(--cui-field-label-color,CanvasText);--_cui-field-label-weight:var(--cui-field-label-weight,600);--_cui-field-description-color:var(--cui-field-description-color,color-mix(in srgb, CanvasText 68%, transparent));--_cui-field-error-color:var(--cui-field-error-color,light-dark(#b42318,#fda29b));--_cui-field-required-color:var(--cui-field-required-color,var(--_cui-field-error-color));gap:var(--_cui-field-gap);color:canvastext;min-inline-size:0;font-family:ui-sans-serif,system-ui,sans-serif;display:grid}:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(8rem,.35fr) minmax(0,1fr);align-items:start}:where(.cui-field[data-density=comfortable]){--_cui-field-gap:var(--cui-field-gap,.375rem)}:where(.cui-field[data-density=compact]){--_cui-field-gap:var(--cui-field-gap,.25rem)}:where(.cui-field>[data-citry-ui-part=label]){color:var(--_cui-field-label-color);font-weight:var(--_cui-field-label-weight)}:where(.cui-field__required){color:var(--_cui-field-required-color)}:where(.cui-field>[data-citry-ui-part=description]){color:var(--_cui-field-description-color);font-size:.875em}:where(.cui-field>[data-citry-ui-part=error]){color:var(--_cui-field-error-color);font-size:.875em}@media (width<=32rem){:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(0,1fr)}}@media (forced-colors:active){:where(.cui-field[data-invalid]>[data-citry-ui-part=error]){color:mark}}}</style></head><body><main><!--citry:g1:2c86be23:0:i:2:s--><!--citry:g1:2c86be23:0:i:3:s--><div class=cui-field data-cid=ctl3bzq9y data-cid-ctl3bzq9x data-cid-ctl3bzq9y data-citry-field-root data-citry-root data-citry-ui-part=field data-density=default data-orientation=vertical data-required id=cui-field-ctl3bzq9y-control-field><label data-citry-ui-part=label for=cui-field-ctl3bzq9y-control id=cui-field-ctl3bzq9y-control-label><!--citry:g1:2c86be23:0:r:1:s-->Start time<!--citry:g1:2c86be23:0:r:1:e--> <span aria-hidden=true class=cui-field__required data-citry-ui-part=required-indicator> * </span></label><div data-citry-ui-part=control><!--citry:g1:2c86be23:0:r:2:s--><!--citry:g1:2c86be23:0:i:4:s--><input aria-describedby=cui-field-ctl3bzq9y-control-description class=cui-time-input data-cid=ctl3bzq9z data-cid-ctl3bzq9z data-citry-field-control data-citry-root data-citry-ui-part=time-input data-empty data-required data-size=md data-variant=outline id=cui-field-ctl3bzq9y-control name=start required step=60 type=time><!--citry:g1:2c86be23:0:i:4:e--><!--citry:g1:2c86be23:0:r:2:e--></div><div data-citry-ui-part=description id=cui-field-ctl3bzq9y-control-description><!--citry:g1:2c86be23:0:r:3:s-->Choose when the session starts.<!--citry:g1:2c86be23:0:r:3:e--></div><div aria-live=polite data-citry-ui-part=error hidden id=cui-field-ctl3bzq9y-control-error></div></div><!--citry:g1:2c86be23:0:i:3:e--><!--citry:g1:2c86be23:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"BasicTimeInput_ad2b9a","className":"BasicTimeInput"},{"classId":"CField_81c723","className":"CField"},{"classId":"CTimeInput_f74743","className":"CTimeInput"}],"componentExecutionOrderConstraints":[{"childRenderId":"ctl3bzq9y","invocationId":2,"parentRenderId":"ctl3bzq9x"},{"childRenderId":"ctl3bzq9z","invocationId":3,"parentRenderId":"ctl3bzq9x"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzq9w","transparent":false},{"classId":"BasicTimeInput_ad2b9a","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzq9x","transparent":false},{"classId":"CField_81c723","instanceId":3,"invocationId":2,"parentRenderId":"ctl3bzq9x","renderId":"ctl3bzq9y","transparent":false},{"classId":"CTimeInput_f74743","instanceId":4,"invocationId":3,"parentRenderId":"ctl3bzq9x","renderId":"ctl3bzq9z","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"BasicTimeInput_ad2b9a","ownerRenderId":"ctl3bzq9x","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzq9y","slotName":"label","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"BasicTimeInput_ad2b9a","ownerRenderId":"ctl3bzq9x","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzq9y","slotName":"description","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"BasicTimeInput_ad2b9a","ownerRenderId":"ctl3bzq9x","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzq9y","slotName":"default","sourceInvocationId":2}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"BasicTimeInput_ad2b9a","sourceRenderId":"ctl3bzq9x","tagName":"cfield","targetClassId":"CField_81c723","targetRenderId":"ctl3bzq9y"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"BasicTimeInput_ad2b9a","sourceRenderId":"ctl3bzq9x","tagName":"ctimeinput","targetClassId":"CTimeInput_f74743","targetRenderId":"ctl3bzq9z"}],"slotRegions":[{"fillId":1,"ownerRenderId":"ctl3bzq9x","parentRegionId":null,"receiverRenderId":"ctl3bzq9y","regionId":1,"resultOwnerRenderId":"ctl3bzq9x","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzq9y"},{"fillId":3,"ownerRenderId":"ctl3bzq9x","parentRegionId":null,"receiverRenderId":"ctl3bzq9y","regionId":2,"resultOwnerRenderId":"ctl3bzq9x","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzq9y"},{"fillId":2,"ownerRenderId":"ctl3bzq9x","parentRegionId":null,"receiverRenderId":"ctl3bzq9y","regionId":3,"resultOwnerRenderId":"ctl3bzq9x","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzq9y"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"2c86be23050fb2e5da279fef883d987d7e3134d71354ea786c39355a40b869fb"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NUaW1lSW5wdXRfZjc0NzQzLjEyYTI0MjZkZGYxNi5qcw==", "L2NpdHJ5L2NhY2hlL0NUaW1lSW5wdXRfZjc0NzQzLjcyYTFhMjM1ZjE0NzE3MGQwMDdiZGIxOTg2NTIyMWJkLmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuZDNhODE3Yjg5YjI5Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuODUxYWM4MGQzNDk5NmE0NDEyMmQzZjFhNDdlYWVmZWQuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NUaW1lSW5wdXRfZjc0NzQzLjA2YWNjMDI3ZDBiMi5jc3M=", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuODczNDgyMmEzNjFmLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1RpbWVJbnB1dF9mNzQ3NDM=", "Y3RsM2J6cTl6", "NzJhMWEyMzVmMTQ3MTcwZDAwN2JkYjE5ODY1MjIxYmQ=", "init"], ["Q0ZpZWxkXzgxYzcyMw==", "Y3RsM2J6cTl5", "ODUxYWM4MGQzNDk5NmE0NDEyMmQzZjFhNDdlYWVmZWQ=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6cTl3"]], "graph": "2c86be23050fb2e5da279fef883d987d7e3134d71354ea786c39355a40b869fb", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      (()=>{
+        const key=Symbol.for('citry-ui:form-control-runtime'),prior=globalThis[key];
+        if(prior){if(prior.generation!==1)throw new Error('[citry-ui] cannot replace an incompatible form-control runtime; reload the page.');return}
+        const resetKey=Symbol.for('citry-ui:form-control-reset-registry');
+        const attr=(element,name,value)=>value==null||value===''?element.removeAttribute(name):element.setAttribute(name,String(value));
+        const attrs=(elements,values)=>[...elements].forEach(element=>Object.entries(values).forEach(([name,value])=>attr(element,name,value)));
+        const states=(element,values)=>Object.entries(values).forEach(([name,value])=>element.toggleAttribute(`data-${name}`,Boolean(value)));
+        const idrefs=(...items)=>{const out=[];items.filter(item=>typeof item==='string').forEach(item=>item.split(/\s+/).filter(Boolean).forEach(token=>{if(!out.includes(token))out.push(token)}));return out.join(' ')||null};
+        const relationships=(elements,field,values,invalid)=>{const described=idrefs(field?.hasDescription?field.descriptionId:null,invalid&&field?.hasError?field.errorId:null,values.describedby),error=invalid?idrefs(field?.hasError?field.errorId:null,values.errormessage):null,owned={'aria-describedby':described,'aria-errormessage':error,'aria-invalid':invalid?'true':null};if('label' in values)Object.assign(owned,{'aria-label':values.label,'aria-labelledby':field?.labelId??values.labelledby});attrs(elements,owned);const state={};for(const name of ['required','disabled','readonly'])if(name in values)state[`aria-${name}`]=values[name]?'true':null;attrs(values.control?[values.control]:elements,state)};
+        const trim=value=>value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g,'');
+        const canonical=(value,delimiters=[],strict=false)=>{if(typeof value!=='string'||!value.length||value.includes('\0'))return null;const normalized=value.replace(/\r\n?/g,'\n');if(!strict)return normalized;const trimmed=trim(normalized);return trimmed===value&&trimmed&&!trimmed.includes('\n')&&!delimiters.some(delimiter=>trimmed.includes(delimiter))?trimmed:null};
+        const stringList=(current,candidates,normalize,maximum=null)=>{const seen=new Set(current),values=[];for(const candidate of candidates){if(candidate==='')return{reason:'empty',candidate};const value=normalize(candidate);if(value===null)return{reason:'invalid-value',candidate};if(seen.has(value)){return{reason:'duplicate',candidate}}seen.add(value);values.push(value)}return maximum!==null&&current.length+values.length>maximum?{reason:'maximum',candidate:values.at(-1)??null}:{values}};
+        const split=(text,delimiters)=>{const normalized=text.replace(/\r\n?/g,'\n'),separators=new Set([...delimiters,'\n']);let fragments=[''];for(const character of normalized)separators.has(character)?fragments.push(''):fragments[fragments.length-1]+=character;return{candidates:fragments.slice(0,-1).map(trim),draft:separators.has(normalized.at(-1))?'':fragments.at(-1)}};
+        const format=(template,key,value)=>template.replaceAll(`{${key}}`,String(value));
+        const same=(left,right)=>left.length===right.length&&left.every((value,index)=>value===right[index]);
+        const commit=select=>{select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}))};
+        const resolver=(root,props,owner)=>{
+          const episodes=new Map(),retained=new Map();
+          const describe=value=>{try{return JSON.stringify(value)??String(value)}catch{return String(value)}};
+          const report=(name,value,suffix='using the previous valid value or server fallback')=>{const fingerprint=`${typeof value}:${describe(value)}`;if(episodes.get(name)===fingerprint)return;episodes.set(name,fingerprint);console.error(`[citry-ui] ${owner} ${name} received invalid client value ${describe(value)}; ${suffix}.`,root)};
+          const clear=name=>episodes.delete(name);
+          const callback=name=>{const value=props[name];if(value==null){clear(name);return null}if(typeof value==='function'){clear(name);return value}report(name,value,'ignoring it');return null};
+          const release=(name,fallback)=>{retained.delete(name);clear(name);return fallback};
+          const boolean=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='boolean'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const string=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='string'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const choice=(name,fallback,allowed)=>{const value=props[name];if(value==null)return release(name,fallback);if(allowed.includes(value)){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const maximum=(name,fallback)=>{const value=props[name];if(value===undefined)return release(name,fallback);if(value===null){retained.set(name,null);clear(name);return null}if(Number.isInteger(value)&&value>0){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          return{describe,report,clear,callback,boolean,string,choice,maximum};
+        };
+        const fieldsetDisabled=element=>{for(let node=element.parentElement;node;node=node.parentElement){if(!(node instanceof HTMLFieldSetElement)||!node.disabled)continue;const legend=[...node.children].find(child=>child instanceof HTMLLegendElement);if(!legend?.contains(element))return true}return false};
+        const syncOptions=(select,values,rebuild=false)=>{if(rebuild)select.replaceChildren(...values.map(value=>{const option=select.ownerDocument.createElement('option');option.value=value;option.textContent=value;option.defaultSelected=true;option.selected=true;return option}));else{const selected=new Set(values);[...select.options].forEach(option=>option.selected=selected.has(option.value))}};
+        const syncHidden=(container,values,name,form,enabled)=>{container.replaceChildren();if(!enabled||!name)return;values.forEach(value=>{const input=container.ownerDocument.createElement('input');input.type='hidden';input.name=name;input.value=value;if(form)input.setAttribute('form',form);container.append(input)})};
+        const syncTransport=(select,hidden,values,settings)=>{syncOptions(select,values,settings.rebuild);const readonly=settings.readonly&&!settings.disabled;select.name=readonly?'':settings.name??'';select.disabled=settings.disabled||settings.readonly;select.required=settings.required&&!settings.readonly&&!settings.disabled;if(settings.form)select.setAttribute('form',settings.form);else select.removeAttribute('form');syncHidden(hidden,values,settings.name,settings.form,readonly)};
+        const renderTokens=(container,values,settings)=>container.replaceChildren(...values.map(value=>{const token=container.ownerDocument.createElement('span');token.className=settings.className;token.dataset.citryUiPart=settings.part;token.dataset.value=value;if(settings.active?.(value))token.toggleAttribute('data-highlighted',true);const text=settings.label?.(value)??value;if(settings.labelPart){const label=container.ownerDocument.createElement('span');label.dataset.citryUiPart=settings.labelPart;label.textContent=text;token.append(label)}else token.textContent=text;if(settings.removeLabel){const remove=container.ownerDocument.createElement('button');remove.type='button';remove.tabIndex=-1;remove.disabled=Boolean(settings.removeDisabled);remove.dataset.citryUiPart='remove';remove.dataset.value=value;remove.textContent='\u00d7';remove.setAttribute('aria-label',settings.removeLabel(value));token.append(remove)}return token}));
+        const disableRemovals=(container,disabled)=>container.querySelectorAll(':scope > [data-citry-ui-part="tag"] > [data-citry-ui-part="remove"]').forEach(remove=>remove.disabled=disabled);
+        const blockedTransition=apply=>{let prior;return current=>{const next=`${Number(current.disabled)}:${Number(current.readonly)}`;if(prior!==undefined&&next!==prior)apply();prior=next}};
+        const highlight=(container,selector,value)=>container.querySelectorAll(selector).forEach(item=>item.toggleAttribute('data-highlighted',item.dataset.value===value));
+        const focus=element=>element.focus({preventScroll:true});
+        const status=(root,element)=>{let generation=0;return{announce:text=>{const token=++generation;element.textContent='';queueMicrotask(()=>{if(token===generation&&root.isConnected)element.textContent=text})},invalidate:()=>++generation}};
+        const listeners=()=>{const entries=[];return{add:(target,type,listener,options)=>{target.addEventListener(type,listener,options);entries.push([target,type,listener,options])},stop:()=>entries.splice(0).forEach(([target,type,listener,options])=>target.removeEventListener(type,listener,options))}};
+        const enhanceNative=(native,visible,settings,enabled=true)=>{if(settings.publicId){native.id=enabled?settings.nativeId:settings.publicId;visible.id=enabled?settings.publicId:settings.visibleId}attr(native,'aria-hidden',enabled?'true':null);if(enabled)native.tabIndex=-1;else native.removeAttribute('tabindex');if(settings.className)native.classList.toggle(settings.className,enabled)};
+        const ownership=(root,key)=>{const retained=root[key]??null,state=retained??{},owner=Symbol();root[key]=state;state.owner=owner;return{retained,state,owns:()=>state.owner===owner}};
+        const tokenHandoff=(root,key,server,editor,name)=>{const handle=ownership(root,key),retained=handle.retained,[structure,value,draft,full,serverValues,serverDraft]=server,sameStructure=retained?.s===structure,sameValue=retained?.v===value,sameDraft=retained?.d===draft,prior=Array.isArray(retained?.V)?retained.V:[],values=sameValue?[...prior]:[...serverValues],input=sameDraft&&typeof retained?.I==='string'?retained.I:serverDraft,valueBaseline=sameValue&&Array.isArray(retained?.B)?[...retained.B]:[...serverValues],draftBaseline=sameDraft&&typeof retained?.J==='string'?retained.J:serverDraft,index=prior.indexOf(retained?.A),active=values.includes(retained?.A)?retained.A:values[index]??values[index-1]??null,composing=Boolean(sameDraft&&retained?.C);if(composing&&retained.E!==editor)throw new Error(`[citry-ui] ${name} cannot replace its editor during composition.`);return[handle,sameStructure,sameValue,sameDraft,values,input,valueBaseline,draftBaseline,active,composing,sameDraft?retained?.S:null,Boolean(sameDraft&&retained?.E===editor&&retained?.F),Boolean(sameStructure&&retained?.X),sameStructure&&typeof retained?.T==='string'?retained.T:null]};
+        const restoreTokenHandoff=(handoff,editor,status,owned)=>{const[,sameStructure,,sameDraft,,draft,,,,composing,selection,focused,,,]=handoff;owned(()=>{if(sameStructure&&handoff[13]!==null)status.textContent=handoff[13];if(sameDraft&&!composing&&Array.isArray(selection)){const start=Math.min(selection[0]??draft.length,draft.length),end=Math.min(selection[1]??start,draft.length);try{editor.setSelectionRange(start,end)}catch{}}});if(focused&&!editor.disabled)focus(editor)};
+        const saveTokenHandoff=(handoff,server,editor,current)=>{const handle=handoff[0];if(!handle.owns())return false;const [structure,value,draft,full]=server,[values,valueBaseline,input,draftBaseline,active,composing,invalid,status]=current;Object.assign(handle.state,{s:structure,v:value,d:draft,z:full,V:[...values],B:[...valueBaseline],I:input,J:draftBaseline,A:active,C:composing,E:editor,S:[editor.selectionStart??input.length,editor.selectionEnd??editor.selectionStart??input.length],F:editor.matches(':focus'),X:invalid,T:status});return true};
+        const exactAnatomy=entries=>entries.every(([parent,selector,node])=>parent.querySelectorAll(`:scope > ${selector}`).length===1&&parent.querySelector(`:scope > ${selector}`)===node);
+        const sanitizeFormControl=(root,input)=>{['id','role','part','hidden','inert','popover','contenteditable','tabindex','name','form','type','value','required','disabled','readonly','aria-label','aria-labelledby','aria-describedby','aria-errormessage','aria-invalid','aria-required','aria-disabled','aria-readonly'].forEach(name=>root.removeAttribute(name));input.type='text';['name','form','required','role','tabindex','hidden','inert','popover'].forEach(name=>input.removeAttribute(name))};
+        const mutations=root=>{let observer=null,timer=null;const observe=()=>observer?.observe(root,{subtree:true,childList:true,attributes:true});return{owned:fn=>{observer?.disconnect();try{fn()}finally{observe()}},start:reconcile=>{observer=new MutationObserver(()=>{if(timer!==null)clearTimeout(timer);timer=setTimeout(()=>{timer=null;reconcile()},0)});observe()},stop:()=>{observer?.disconnect();if(timer!==null)clearTimeout(timer);timer=null}}};
+        const watchFieldset=(root,control,apply)=>{let observer,scope;const observe=()=>{const next=root.getRootNode();if(next===scope)return;observer?.disconnect();scope=next;observer=new MutationObserver(records=>{const relevant=records.some(record=>record.type==='attributes'?record.target instanceof HTMLFieldSetElement&&record.target.contains(root):[...record.addedNodes,...record.removedNodes].some(node=>node===root||node.contains?.(root)||(node instanceof HTMLLegendElement&&record.target.contains(root))));if(!relevant)return;if(root.getRootNode()!==scope)observe();apply()});observer.observe(next instanceof Document?next.documentElement:next,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']})};observe();return()=>observer?.disconnect()};
+        const registerReset=(root,proxy,entry)=>{let unregister=()=>{};const register=()=>{const scope=root.getRootNode();let registry=scope[resetKey];if(!registry){const entries=new Map(),timers=new Set(),handler=event=>{const form=event.target,current=[...entries.entries()].filter(([control])=>control.form===form).map(([control,item])=>[control,item,++item.sequence]),timer=setTimeout(()=>{timers.delete(timer);if(event.defaultPrevented)return;current.filter(([control,item,sequence])=>entries.get(control)===item&&item.sequence===sequence&&control.isConnected&&control.form===form).forEach(([,item])=>{item.invalidate?.();item.reset(event)})},0);timers.add(timer)},observer=new MutationObserver(()=>entries.forEach(item=>item.refresh()));scope.addEventListener('reset',handler,true);observer.observe(scope instanceof Document?scope.documentElement:scope,{subtree:true,childList:true});registry={entries,timers,handler,observer};scope[resetKey]=registry}const item={...entry,sequence:0,refresh:()=>{if(root.isConnected&&root.getRootNode()!==scope){unregister();unregister=register()}}};registry.entries.set(proxy,item);return()=>{if(registry.entries.get(proxy)!==item)return;registry.entries.delete(proxy);if(!registry.entries.size&&scope[resetKey]===registry){scope.removeEventListener('reset',registry.handler,true);registry.observer.disconnect();registry.timers.forEach(clearTimeout);registry.timers.clear();delete scope[resetKey]}}};unregister=register();return()=>unregister()};
+        const deepActive=document=>{let active=document.activeElement;while(active?.shadowRoot?.activeElement)active=active.shadowRoot.activeElement;return active};
+        const composedParent=node=>node?.assignedSlot??node?.parentNode??(node?.getRootNode() instanceof ShadowRoot?node.getRootNode().host:null);
+        const invalidFocus=(root,editor,current)=>{const document=root.ownerDocument,snapshot=deepActive(document);let node=root,dialog=null;while(node){if(node instanceof HTMLDialogElement&&node.open){dialog=node;break}node=composedParent(node)}requestAnimationFrame(()=>{if(!current()||!root.isConnected)return;const active=deepActive(document);if(active!==snapshot&&!root.contains(active))return;if(editor.isConnected&&!editor.disabled&&editor.getClientRects().length&&!editor.closest('[inert]')){editor.focus({preventScroll:true});if(deepActive(document)===editor)return}const target=dialog?.isConnected&&dialog.open&&dialog.getClientRects().length?dialog:document.body;if(!target?.isConnected)return;const temporary=!target.hasAttribute('tabindex');if(temporary)target.tabIndex=-1;target.focus({preventScroll:true});if(temporary)queueMicrotask(()=>target.removeAttribute('tabindex'))})};
+        globalThis[key]={generation:1,attr,attrs,states,idrefs,relationships,trim,canonical,stringList,split,format,same,commit,resolver,fieldsetDisabled,syncOptions,syncHidden,syncTransport,renderTokens,disableRemovals,blockedTransition,highlight,focus,status,listeners,enhanceNative,ownership,tokenHandoff,restoreTokenHandoff,saveTokenHandoff,exactAnatomy,sanitizeFormControl,mutations,watchFieldset,registerReset,invalidFocus};
+      })();
+    
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CTimeInput_f74743", {
+  props: {
+    value: {}, min: {}, max: {}, step: {}, required: {}, disabled: {}, readonly: {}, invalid: {},
+    variant: {}, size: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const input = els[0];
+    if (!(input instanceof HTMLInputElement) || input.type !== 'time') {
+      throw new Error('[citry-ui] CTimeInput settled anatomy is invalid.');
+    }
+    const field = inject(Symbol.for('citry-ui:field'), null);
+    const form = inject(Symbol.for('citry-ui:form'), null);
+    const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
+    if (runtime?.generation !== 1) throw new Error('[citry-ui] CTimeInput form-control runtime is unavailable.');
+    const resolver = runtime.resolver(input, props, 'CTimeInput');
+    const listeners = runtime.listeners();
+    const mutations = runtime.mutations(input);
+    const owned = mutations.owned;
+    let controlled = false;
+    let current = data.value ?? '';
+    const initialValue = current;
+    let nativeInvalid = false;
+    let invalidGeneration = 0;
+    let configuration = null;
+    let previousConstraints = { min: data.min, max: data.max, step: data.step };
+
+    const canonicalTime = value => {
+      if (typeof value !== 'string') return null;
+      const match = value.match(/^([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?$/);
+      if (match === null) return null;
+      const hour = Number(match[1]);
+      const minute = Number(match[2]);
+      const second = Number(match[3] ?? 0);
+      return hour <= 23 && minute <= 59 && second <= 59 ? value : null;
+    };
+    const optionalTime = (name, fallback) => {
+      const value = props[name];
+      if (value === undefined) { resolver.clear(name); return fallback; }
+      if (value === null) { resolver.clear(name); return null; }
+      const valid = canonicalTime(value);
+      if (valid !== null) { resolver.clear(name); return valid; }
+      resolver.report(name, value);
+      return previousConstraints[name];
+    };
+    const resolveConstraints = () => {
+      const minimum = optionalTime('min', data.min);
+      const maximum = optionalTime('max', data.max);
+      const requestedStep = props.step === undefined ? data.step : props.step;
+      const step = Number.isInteger(requestedStep) && requestedStep > 0
+        ? requestedStep : previousConstraints.step;
+      if (step === requestedStep) resolver.clear('step'); else resolver.report('step', requestedStep);
+      previousConstraints = { min: minimum, max: maximum, step };
+      return previousConstraints;
+    };
+    const resolveConfiguration = () => ({
+      required: field ? field.required : resolver.boolean('required', data.required),
+      disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(input),
+      readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
+      invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
+      variant: resolver.choice('variant', data.variant, ['outline', 'filled', 'plain']),
+      size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+      constraints: resolveConstraints(),
+    });
+    const reportFieldOwned = () => {
+      if (!field) return;
+      ['required', 'disabled', 'readonly', 'invalid'].forEach(name => {
+        if (props[name] === undefined) resolver.clear(name);
+        else resolver.report(name, props[name], 'ignoring it because the enclosing CField owns this state');
+      });
+    };
+    const syncRelationships = invalid => runtime.relationships([input], field, {
+      describedby: data.describedby,
+      errormessage: data.errormessage,
+      control: input,
+      required: configuration.required,
+      disabled: configuration.disabled,
+      readonly: configuration.readonly,
+    }, invalid);
+    const render = () => owned(() => {
+      if (input.value !== current) input.value = current;
+      const constraints = configuration.constraints;
+      runtime.attr(input, 'min', constraints.min);
+      runtime.attr(input, 'max', constraints.max);
+      input.step = String(constraints.step);
+      input.required = configuration.required;
+      input.disabled = configuration.disabled;
+      input.readOnly = configuration.readonly;
+      const invalid = configuration.invalid || nativeInvalid;
+      runtime.states(input, {
+        required: configuration.required,
+        disabled: configuration.disabled,
+        readonly: configuration.readonly,
+        invalid,
+        empty: !current,
+      });
+      input.dataset.variant = configuration.variant;
+      input.dataset.size = configuration.size;
+      syncRelationships(invalid);
+    });
+    const clearNativeInvalid = () => {
+      if (!nativeInvalid || !input.validity.valid) return;
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+    };
+    const onInput = () => {
+      const requested = input.value;
+      clearNativeInvalid();
+      if (controlled) {
+        queueMicrotask(() => { if (controlled) render(); });
+        return;
+      }
+      current = requested;
+      render();
+    };
+    const reset = runtime.registerReset(input, input, {
+      reset: event => {
+        if (event.defaultPrevented) return;
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        if (!controlled) current = initialValue;
+        render();
+      },
+      invalidate: () => { invalidGeneration += 1; },
+    });
+    const stopFieldset = runtime.watchFieldset(input, input, () => {
+      configuration = resolveConfiguration();
+      render();
+    });
+
+    listeners.add(input, 'input', onInput);
+    listeners.add(input, 'change', clearNativeInvalid);
+    listeners.add(input, 'invalid', event => {
+      event.preventDefault();
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      render();
+      const token = ++invalidGeneration;
+      runtime.invalidFocus(input, input, () => token === invalidGeneration);
+    }, true);
+    effect(() => {
+      reportFieldOwned();
+      configuration = resolveConfiguration();
+      const requested = props.value;
+      if (requested === undefined) {
+        controlled = false;
+        resolver.clear('value');
+      } else if (requested === null) {
+        controlled = true;
+        current = '';
+        resolver.clear('value');
+      } else {
+        const normalized = canonicalTime(requested);
+        if (normalized === null) resolver.report('value', requested);
+        else { controlled = true; current = normalized; resolver.clear('value'); }
+      }
+      clearNativeInvalid();
+      render();
+    });
+    mutations.start(() => render());
+    owned(() => input.setAttribute('data-citry-time-input-initialized', ''));
+    render();
+
+    return () => {
+      invalidGeneration += 1;
+      listeners.stop();
+      mutations.stop();
+      stopFieldset();
+      reset();
+      if (nativeInvalid) field?.setNativeInvalid(false);
+      owned(() => input.removeAttribute('data-citry-time-input-initialized'));
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CTimeInput_f74743", "72a1a235f147170d007bdb19865221bd", atob("eyJ2YWx1ZSI6bnVsbCwibWluIjpudWxsLCJtYXgiOm51bGwsInN0ZXAiOjYwLCJyZXF1aXJlZCI6dHJ1ZSwiZGlzYWJsZWQiOmZhbHNlLCJyZWFkb25seSI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5IjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJkZXNjcmliZWRieSI6bnVsbCwiZXJyb3JtZXNzYWdlIjpudWxsfQ=="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CField_81c723", {
+  props: {
+    required: {},
+    disabled: {},
+    readonly: {},
+    invalid: {},
+    orientation: {},
+    density: {},
+  },
+  init: ({ els, data, props, effect, reactive, provide, inject }) => {
+    const root = els[0];
+    const requiredIndicator = root.querySelector(
+      ':scope > [data-citry-ui-part="label"] > [data-citry-ui-part="required-indicator"]',
+    );
+    // Controls may expose parts with the same public names. Restrict the
+    // lookup to this Field's direct status node so nested component
+    // internals are never mistaken for Field-owned UI.
+    const error = root.querySelector(':scope > [data-citry-ui-part="error"]');
+    const controls = root.querySelectorAll('[data-citry-field-control]');
+    if (controls.length !== 1) {
+      throw new Error(
+        `[citry-ui] CField requires exactly one marked control, but found ${controls.length}.`,
+      );
+    }
+    const control = controls[0];
+    const initialSupportsRequired = control.getAttribute(
+      "data-citry-field-supports-required",
+    ) !== "false";
+    const initialSupportsReadonly = control.getAttribute(
+      "data-citry-field-supports-readonly",
+    ) !== "false";
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const allowedValues = {
+      orientation: ["vertical", "horizontal"],
+      density: ["default", "comfortable", "compact"],
+    };
+    const invalidEpisodes = new Map();
+    let externalInvalid = data.invalid;
+    let capabilityGeneration = 0;
+    let activeCapabilityGeneration = null;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name} received invalid client value ${describedValue}; `
+          + "using the server-rendered fallback.",
+        root,
+      );
+    };
+    const reportUnsupported = (name) => {
+      const episode = `capability:${name}`;
+      const fingerprint = "unsupported:true";
+      if (invalidEpisodes.get(episode) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(episode, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name}=true is not supported by its registered control; using false.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const context = reactive({
+      controlId: data.controlId,
+      descriptionId: data.descriptionId,
+      errorId: data.errorId,
+      hasDescription: data.hasDescription,
+      hasError: data.hasError,
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      nativeInvalid: false,
+      supportsRequired: initialSupportsRequired,
+      supportsReadonly: initialSupportsReadonly,
+      registerCapabilities(capabilities) {
+        const generation = ++capabilityGeneration;
+        activeCapabilityGeneration = generation;
+        context.supportsRequired = capabilities.required !== false;
+        context.supportsReadonly = capabilities.readonly !== false;
+        return () => {
+          if (activeCapabilityGeneration !== generation) {
+            return;
+          }
+          activeCapabilityGeneration = null;
+          context.supportsRequired = true;
+          context.supportsReadonly = true;
+        };
+      },
+      setNativeInvalid(value) {
+        context.nativeInvalid = Boolean(value);
+        applyInvalid();
+      },
+    });
+    provide(Symbol.for("citry-ui:field"), context);
+
+    const applyInvalid = () => {
+      const invalid = externalInvalid || context.nativeInvalid;
+      context.invalid = invalid;
+      root.toggleAttribute("data-invalid", invalid);
+      error.hidden = !(invalid && context.hasError);
+    };
+    effect(() => {
+      const requestedRequired = resolveBoolean("required", data.required);
+      const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+      // CForm uses a native disabled fieldset, so its disabled state
+      // must win over a descendant's local configuration.
+      const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+      const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
+      const required = requestedRequired && context.supportsRequired;
+      const readonly = requestedReadonly && context.supportsReadonly;
+      if (requestedRequired && !context.supportsRequired) {
+        reportUnsupported("required");
+      } else {
+        invalidEpisodes.delete("capability:required");
+      }
+      if (requestedReadonly && !context.supportsReadonly) {
+        reportUnsupported("readonly");
+      } else {
+        invalidEpisodes.delete("capability:readonly");
+      }
+      externalInvalid = resolveBoolean("invalid", data.invalid);
+      const orientation = resolveChoice("orientation");
+      const density = resolveChoice("density");
+
+      context.required = required;
+      context.disabled = disabled;
+      context.readonly = readonly;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", readonly);
+      root.dataset.orientation = orientation;
+      root.dataset.density = density;
+      requiredIndicator.hidden = !required;
+      applyInvalid();
+    });
+    root.setAttribute("data-citry-field-initialized", "");
+
+    return () => {
+      root.removeAttribute("data-citry-field-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CField_81c723", "851ac80d34996a44122d3f1a47eaefed", atob("eyJyZXF1aXJlZCI6dHJ1ZSwiZGlzYWJsZWQiOmZhbHNlLCJyZWFkb25seSI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOnRydWUsImludmFsaWQiOmZhbHNlLCJvcmllbnRhdGlvbiI6InZlcnRpY2FsIiwiZGVuc2l0eSI6ImRlZmF1bHQiLCJjb250cm9sSWQiOiJjdWktZmllbGQtY3RsM2J6cTl5LWNvbnRyb2wiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWZpZWxkLWN0bDNienE5eS1jb250cm9sLWRlc2NyaXB0aW9uIiwiZXJyb3JJZCI6ImN1aS1maWVsZC1jdGwzYnpxOXktY29udHJvbC1lcnJvciIsImhhc0Rlc2NyaXB0aW9uIjp0cnVlLCJoYXNFcnJvciI6ZmFsc2V9"));
+})();</script></body></html><!--citry:g1:2c86be23:0:i:1:e-->

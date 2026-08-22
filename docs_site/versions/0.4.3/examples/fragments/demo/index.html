@@ -1,0 +1,12 @@
+<!doctype html><html data-cid-ctl3bzu1o lang=en><head><meta charset=utf-8><title>Fragments example</title><!-- Load citry's client runtime up front. Its MutationObserver notices
+         the fragment's manifest when it is inserted below, then fetches and
+         runs the fragment's CSS/JS on demand. --><script src=/citry/citry.js></script></head><body style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"><p>Load a component rendered on the server and sent as an HTML fragment:</p><button style="padding: 0.5rem 1rem; cursor: pointer;" data-fragment-url=/examples/fragments/demo/widget/ id=frag-load>Load fragment</button><div style="margin-top: 1rem;" id=frag-target></div><script>document
+        .getElementById("frag-load")
+        .addEventListener("click", async (event) => {
+          const url = event.currentTarget.dataset.fragmentUrl;
+          const response = await fetch(url);
+          const html = await response.text();
+          // Inserting the fragment's manifest triggers the runtime, which
+          // loads the component scripts from static /citry/cache/ files.
+          document.getElementById("frag-target").innerHTML = html;
+        });</script></body></html>

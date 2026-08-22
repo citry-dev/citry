@@ -1,0 +1,181 @@
+schema_version: 1
+family: date-range
+
+components:
+  - CDateRange
+
+inputs:
+  - id: cdate-range-server-inputs
+    component: CDateRange
+    channel: server
+    column_widths: [fit, 18rem, 17rem, auto]
+    entries:
+      - {id: start, name: start, type: {display: 'CDateRangeDate | None', interfaces: [CDateRangeDate]}, default: {kind: literal, value: null}, effect: Sets the initial and reset canonical start date or empty range.}
+      - {id: end, name: end, type: {display: 'CDateRangeDate | None', interfaces: [CDateRangeDate]}, default: {kind: literal, value: null}, effect: Sets the initial and reset canonical end date or empty range.}
+      - {id: start-name, name: start_name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the start native transport Form field name.}
+      - {id: end-name, name: end_name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the end native transport Form field name and must differ from start_name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates both native transports with an external Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the enhanced Button ID and owned ID prefix.}
+      - {id: min, name: min, type: {display: 'CDateRangeDate | None', interfaces: [CDateRangeDate]}, default: {kind: literal, value: null}, effect: Sets the inclusive minimum endpoint.}
+      - {id: max, name: max, type: {display: 'CDateRangeDate | None', interfaces: [CDateRangeDate]}, default: {kind: literal, value: null}, effect: Sets the inclusive maximum endpoint.}
+      - {id: unavailable-dates, name: unavailable_dates, type: 'Sequence[CDateRangeDate]', default: {kind: derived, display: '()'}, effect: Rejects any range crossing one of at most 4096 unique dates.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Requires both endpoint transports.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks opening selection clearing and Form participation; Form disabledness also wins.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Keeps the range focusable and submitted but blocks commits.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds application invalid state to revealed native validity.}
+      - {id: clearable, name: clearable, type: bool, default: {kind: literal, value: true}, effect: Shows a clear action for an optional non-empty writable range.}
+      - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Permits Escape outside and focus-outside close requests.}
+      - {id: placement, name: placement, type: {display: CPopoverPlacement, interfaces: [CPopoverPlacement]}, default: {kind: literal, value: bottom-start}, effect: Sets the preferred logical Popover placement.}
+      - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: true}, effect: Makes the Popover at least as wide as the visible control.}
+      - {id: first-day-of-week, name: first_day_of_week, type: 'Literal[1, 2, 3, 4, 5, 6, 7] | None', default: {kind: literal, value: null}, effect: Overrides locale week start using ISO Monday 1 through Sunday 7.}
+      - {id: show-adjacent-days, name: show_adjacent_days, type: bool, default: {kind: literal, value: true}, effect: Shows selectable neighboring-month dates in the Calendar.}
+      - {id: fixed-weeks, name: fixed_weeks, type: bool, default: {kind: literal, value: true}, effect: Uses six stable Calendar rows instead of the natural month row count.}
+      - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose dates}, effect: Supplies visible empty-state text when explicitly overridden.}
+      - {id: range-label, name: range_label, type: str, default: {kind: literal, value: Choose date range}, effect: Names the group popup and empty trigger when explicitly overridden.}
+      - {id: change-label, name: change_label, type: str, default: {kind: literal, value: 'Change date range, {start} to {end}'}, effect: Formats a committed trigger name and must retain both placeholders when explicitly overridden.}
+      - {id: start-label, name: start_label, type: str, default: {kind: literal, value: Start date}, effect: Names the native start input and Calendar start endpoint when explicitly overridden.}
+      - {id: end-label, name: end_label, type: str, default: {kind: literal, value: End date}, effect: Names the native end input and Calendar end endpoint when explicitly overridden.}
+      - {id: clear-label, name: clear_label, type: str, default: {kind: literal, value: Clear date range}, effect: Names the clear Button when explicitly overridden.}
+      - {id: unavailable-message, name: unavailable_message, type: str, default: {kind: literal, value: Choose an available date range.}, effect: Supplies native custom validity if a committed interval becomes unavailable.}
+      - {id: variant, name: variant, type: {display: CDateRangeVariant, interfaces: [CDateRangeVariant]}, default: {kind: literal, value: outline}, effect: Selects outline filled or plain field treatment.}
+      - {id: size, name: size, type: {display: CDateRangeSize, interfaces: [CDateRangeSize]}, default: {kind: literal, value: md}, effect: Selects coordinated control and text sizing.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned state identity or runtime markers.}
+
+  - id: cdate-range-client-inputs
+    component: CDateRange
+    channel: client
+    column_widths: [fit, 18rem, 18rem, auto]
+    entries:
+      - {id: value, name: value, type: {display: 'CDateRangeValue | null', interfaces: [CDateRangeValue]}, omitted: Releases control at the latest committed range., effect: Controls both ordered selected and submitted endpoints while supplied.}
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control at the latest committed visibility., effect: Controls popup visibility while supplied.}
+      - {id: required, name: required, type: boolean, omitted: Uses server state., effect: Controls two-endpoint native required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or Form state., effect: Controls interaction and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or Form state., effect: Controls focusable nonmutable state.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server state., effect: Controls application invalid state.}
+      - {id: clearable, name: clearable, type: boolean, omitted: Uses the server input., effect: Controls the optional clear action.}
+      - {id: dismissible, name: dismissible, type: boolean, omitted: Uses the server input., effect: Controls passive popup dismissal.}
+      - {id: placement, name: placement, type: {display: CPopoverPlacement, interfaces: [CPopoverPlacement]}, omitted: Uses the server input., effect: Controls preferred logical placement.}
+      - {id: match-width, name: matchWidth, type: boolean, omitted: Uses the server input., effect: Controls trigger-width matching.}
+      - {id: variant, name: variant, type: {display: CDateRangeVariant, interfaces: [CDateRangeVariant]}, omitted: Uses the server input., effect: Controls field presentation.}
+      - {id: size, name: size, type: {display: CDateRangeSize, interfaces: [CDateRangeSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic range callback., effect: Receives Calendar clear native and reset range requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic visibility callback., effect: Receives trigger selection dismissal reset and forced-close requests.}
+
+slots: []
+
+events:
+  - id: cdate-range-events
+    component: CDateRange
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: {display: '(value: CDateRangeValue | null, detail: CDateRangeValueChangeDetail) => void', interfaces: [CDateRangeValue, CDateRangeValueChangeDetail]}
+        trigger: A completed Calendar pair clear reset or valid native pair requests another range.
+        detail: {display: '{value, previousValue, controlled, source, sourceEvent}', interfaces: [CDateRangeValueChangeDetail]}
+        behavior: Uncontrolled commits emit native input/change for endpoints that changed; controlled requests wait for the owner.
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(open: boolean, detail: CDateRangeOpenChangeDetail) => void', interfaces: [CDateRangeOpenChangeDetail]}
+        trigger: Trigger selection clear reset Escape outside focus-outside native or forced layer changes request visibility.
+        detail: {display: '{reason, controlled, forced, source}', interfaces: [CDateRangeOpenChangeDetail]}
+        behavior: Uncontrolled requests commit before notification; controlled requests wait except forced safety closure.
+
+methods: []
+
+css:
+  - id: cdate-range-css-variables
+    component: CDateRange
+    entries:
+      - {id: background, name: --cui-date-range-background, type: color, purpose: Visible control clear and fallback input background., default: Canvas or variant-derived.}
+      - {id: foreground, name: --cui-date-range-foreground, type: color, purpose: Text and icon color., default: CanvasText}
+      - {id: border-color, name: --cui-date-range-border-color, type: color, purpose: Control clear and native endpoint boundaries., default: Mixed CanvasText.}
+      - {id: invalid-border-color, name: --cui-date-range-invalid-border-color, type: color, purpose: Revealed invalid control boundary., default: Theme error.}
+      - {id: focus-color, name: --cui-date-range-focus-color, type: color, purpose: Focus outlines and draft-range indication., default: Highlight}
+      - {id: range-background, name: --cui-date-range-range-background, type: color, purpose: Committed and preview interval background., default: Highlight mixed with Canvas.}
+      - {id: endpoint-background, name: --cui-date-range-endpoint-background, type: color, purpose: Start and end date background., default: Theme primary.}
+      - {id: endpoint-foreground, name: --cui-date-range-endpoint-foreground, type: color, purpose: Start and end date foreground., default: white}
+      - {id: radius, name: --cui-date-range-radius, type: length, purpose: Control clear and native input corner radius., default: 0.625rem}
+      - {id: min-block-size, name: --cui-date-range-min-block-size, type: length, purpose: Minimum interactive control height., default: 2.5rem}
+      - {id: padding-inline, name: --cui-date-range-padding-inline, type: length, purpose: Visible control and native endpoint inline inset., default: 0.75rem}
+      - {id: gap, name: --cui-date-range-gap, type: length, purpose: Endpoint field and control content gap., default: 0.5rem}
+
+attributes:
+  - id: cdate-range-root-attributes
+    component: CDateRange
+    entries:
+      - {id: data-empty, name: data-empty, element: Root, type: present | absent, meaning: Marks no committed pair.}
+      - {id: data-open, name: data-open, element: Root, type: present | absent, meaning: Mirrors effective popup visibility.}
+      - {id: data-required, name: data-required, element: Root, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root, type: present | absent, meaning: Mirrors application unavailable or revealed native invalidity.}
+      - {id: data-variant, name: data-variant, element: Root, type: {display: CDateRangeVariant, interfaces: [CDateRangeVariant]}, meaning: Mirrors visual treatment.}
+      - {id: data-size, name: data-size, element: Root, type: {display: CDateRangeSize, interfaces: [CDateRangeSize]}, meaning: Mirrors coordinated sizing.}
+      - {id: data-enhanced, name: data-enhanced, element: Root, type: present | absent, meaning: Marks completed custom control activation.}
+      - {id: data-in-range, name: data-in-range, element: Calendar day, type: present | absent, meaning: Marks selectable days within the committed or preview interval.}
+      - {id: data-range-start, name: data-range-start, element: Calendar day, type: present | absent, meaning: Marks the displayed interval start.}
+      - {id: data-range-end, name: data-range-end, element: Calendar day, type: present | absent, meaning: Marks the displayed interval end.}
+      - {id: data-range-preview, name: data-range-preview, element: Calendar day, type: present | absent, meaning: Marks draft interval days before the second commit.}
+
+selectors:
+  - id: cdate-range-selectors
+    component: CDateRange
+    entries:
+      - {id: date-range, selector: '[data-citry-ui-part="date-range"]', element: Root div, purpose: State reflections root attrs and styling destination.}
+      - {id: fallback-group, selector: '[data-citry-ui-part="fallback-group"]', element: Div, purpose: Contains the two no-JavaScript and Form transport fields.}
+      - {id: start-input, selector: '[data-citry-ui-part="start-input"]', element: Native Date input, purpose: Start endpoint transport validity and reset owner.}
+      - {id: end-input, selector: '[data-citry-ui-part="end-input"]', element: Native Date input, purpose: End endpoint transport validity and reset owner.}
+      - {id: enhanced-control, selector: '[data-citry-ui-part="enhanced-control"]', element: Layout div, purpose: Groups the Popover activator and optional clear action.}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Native Button, purpose: Full-width popup activator and enhanced public focus target.}
+      - {id: value, selector: '[data-citry-ui-part="value"]', element: Span, purpose: Displays the localized committed range or placeholder.}
+      - {id: calendar, selector: '[data-citry-ui-part="calendar"]', element: CCalendar root, purpose: Owns draft preview endpoint labels and final range selection.}
+      - {id: clear, selector: '[data-citry-ui-part="clear"]', element: Native Button, purpose: Requests an empty optional range.}
+
+interfaces:
+  - id: cdate-range-aliases
+    kind: aliases
+    entries:
+      - {id: date, name: CDateRangeDate, definition: 'date | str'}
+      - {id: variant, name: CDateRangeVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CDateRangeSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: value-source, name: CDateRangeValueChangeSource, definition: 'Literal["calendar", "clear", "reset", "native"]'}
+      - {id: popover-placement, name: CPopoverPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - id: cdate-range-value
+    kind: record
+    name: CDateRangeValue
+    entries:
+      - {id: start, name: start, type: canonical string, meaning: Inclusive ordered start endpoint.}
+      - {id: end, name: end, type: canonical string, meaning: Inclusive ordered end endpoint.}
+  - id: cdate-range-value-change-detail
+    kind: record
+    name: CDateRangeValueChangeDetail
+    entries:
+      - {id: value, name: value, type: {display: 'CDateRangeValue | null', interfaces: [CDateRangeValue]}, meaning: Requested ordered range or empty state.}
+      - {id: previous-value, name: previousValue, type: {display: 'CDateRangeValue | null', interfaces: [CDateRangeValue]}, meaning: Effective range before the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns the commit.}
+      - {id: source, name: source, type: {display: CDateRangeValueChangeSource, interfaces: [CDateRangeValueChangeSource]}, meaning: Calendar clear reset or native cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native interaction event when one exists.}
+  - id: cdate-range-open-change-detail
+    kind: record
+    name: CDateRangeOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: trigger | selection | clear | reset | escape | outside | focus-outside | native | ancestor | modal, meaning: Exact request or forced-close cause.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client open owns ordinary visibility commits.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether ancestor or modal safety required closure.}
+      - {id: source, name: source, type: 'object | null', meaning: Associated browser source when one exists.}
+
+translations:
+  - id: cdate-range-translations
+    component: CDateRange
+    entries:
+      - {id: placeholder, key: citry-ui-date-range-placeholder, purpose: Displays the empty enhanced control value., variables: none, override: '`placeholder`', updates: 'Parent i18n subscription calls `tr()` because the destination later displays formatted dates.'}
+      - {id: label, key: citry-ui-date-range-label, purpose: Names the group popup Calendar and empty trigger., variables: none, override: '`range_label` or root `attrs` accessible name', updates: '`$c-tr` updates stable HTML destinations; parent state forwards it into the composed Calendar and dynamic trigger.'}
+      - {id: change, key: citry-ui-date-range-change, purpose: Names a trigger with a committed range., variables: '`start: str` and `end: str` localized by `citry-ui-date-picker-display`', override: '`change_label` containing `{start}` and `{end}`', updates: 'Parent i18n subscription recomputes both formatted endpoints and calls `tr()`.'}
+      - {id: start-label, key: citry-ui-date-range-start-label, purpose: Names the native start input and Calendar start endpoint., variables: none, override: '`start_label`', updates: '`$c-tr` updates stable native text; parent state forwards it into Calendar endpoint presentation.'}
+      - {id: end-label, key: citry-ui-date-range-end-label, purpose: Names the native end input and Calendar end endpoint., variables: none, override: '`end_label`', updates: '`$c-tr` updates stable native text; parent state forwards it into Calendar endpoint presentation.'}
+      - {id: clear, key: citry-ui-date-range-clear, purpose: Names the optional clear Button., variables: none, override: '`clear_label`', updates: '`$c-tr` updates the stable aria-label destination.'}
+      - {id: unavailable, key: citry-ui-date-range-unavailable, purpose: Supplies native custom validity when the committed interval becomes unavailable., variables: none, override: '`unavailable_message`', updates: '`i18n.bind()` updates the browser-owned validity message.'}

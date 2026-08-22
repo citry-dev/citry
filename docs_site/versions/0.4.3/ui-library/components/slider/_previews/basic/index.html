@@ -1,0 +1,686 @@
+<!--citry:g1:d802a3e2:0:i:1:s--><!doctype html><html data-cid-ctl3bzq1t lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Choose one value</title><style>@layer citry-ui.theme {
+        :where(.cui-form-control__native--enhanced, .cui-form-control__status) {
+          position: absolute !important;
+          inline-size: 1px !important;
+          block-size: 1px !important;
+          padding: 0 !important;
+          margin: -1px !important;
+          overflow: hidden !important;
+          clip-path: inset(50%) !important;
+          white-space: nowrap !important;
+          border: 0 !important;
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=BasicSlider_074df4>:where(.slider-example-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1.5rem}
+:where(.slider-example-grid article){display:grid;gap:.75rem}:where(.slider-example-grid h3){margin:0}</style><style data-citry-css-class=CSlider_27065e>@layer citry-ui.theme{:where(.cui-slider){--_cui-slider-track-color:var(--cui-slider-track-color,color-mix(in srgb, CanvasText 22%, transparent));--_cui-slider-fill-color:var(--cui-slider-fill-color,AccentColor);--_cui-slider-thumb-color:var(--cui-slider-thumb-color,Canvas);--_cui-slider-thumb-border-color:var(--cui-slider-thumb-border-color,AccentColor);--_cui-slider-focus-color:var(--cui-slider-focus-color,Highlight);--_cui-slider-mark-color:var(--cui-slider-mark-color,CanvasText);--_cui-slider-value-background:var(--cui-slider-value-background,#111827);--_cui-slider-value-foreground:var(--cui-slider-value-foreground,#fff);--_cui-slider-track-size:var(--cui-slider-track-size,.375rem);--_cui-slider-thumb-size:var(--cui-slider-thumb-size,1.25rem);--_cui-slider-control-size:var(--cui-slider-control-size,2.75rem);--_cui-slider-radius:var(--cui-slider-radius,999px);color:canvastext;inline-size:min(100%,24rem);display:block}:where(.cui-slider[data-orientation=vertical]){inline-size:var(--_cui-slider-control-size);block-size:12rem}:where(.cui-slider[data-enhanced]>[data-citry-ui-part=native-input]){display:none}:where(.cui-slider>[data-citry-ui-part=native-input]){inline-size:100%}:where(.cui-slider [data-citry-ui-part=control]){min-block-size:var(--_cui-slider-control-size);touch-action:none;user-select:none;position:relative}:where(.cui-slider[data-orientation=vertical] [data-citry-ui-part=control]){min-block-size:100%;min-inline-size:var(--_cui-slider-control-size)}:where(.cui-slider [data-citry-ui-part=track]){inset-inline:calc(var(--_cui-slider-thumb-size) / 2);block-size:var(--_cui-slider-track-size);border-radius:var(--_cui-slider-radius);background:var(--_cui-slider-track-color);position:absolute;inset-block-start:50%;translate:0 -50%}:where(.cui-slider[data-orientation=vertical] [data-citry-ui-part=track]){inset-block:calc(var(--_cui-slider-thumb-size) / 2);inline-size:var(--_cui-slider-track-size);block-size:auto;inset-inline-start:50%;translate:-50%}:where(.cui-slider [data-citry-ui-part=fill]){inline-size:calc(var(--_cui-slider-fill-stop,0%) - var(--_cui-slider-fill-start,0%));border-radius:inherit;background:var(--_cui-slider-fill-color);position:absolute;inset-block:0;inset-inline-start:var(--_cui-slider-fill-start,0%)}:where(.cui-slider[data-orientation=vertical] [data-citry-ui-part=fill]){inline-size:auto;block-size:calc(var(--_cui-slider-fill-stop,0%) - var(--_cui-slider-fill-start,0%));inset-block-start:auto;inset-block-end:var(--_cui-slider-fill-start,0%);inset-inline:0}:where(.cui-slider [data-citry-ui-part=thumb]){z-index:1;box-sizing:border-box;inline-size:var(--_cui-slider-thumb-size);block-size:var(--_cui-slider-thumb-size);border:2px solid var(--_cui-slider-thumb-border-color);border-radius:var(--_cui-slider-radius);background:var(--_cui-slider-thumb-color);color:inherit;cursor:grab;padding:0;position:absolute;inset-block-start:50%;inset-inline-start:var(--_cui-slider-position);translate:-50% -50%}:where([dir=rtl] .cui-slider [data-citry-ui-part=thumb]){translate:50% -50%}:where(.cui-slider[data-orientation=vertical] [data-citry-ui-part=thumb]){inset-block-start:auto;inset-block-end:var(--_cui-slider-position);inset-inline-start:50%;translate:-50% 50%}:where([dir=rtl] .cui-slider[data-orientation=vertical] [data-citry-ui-part=thumb]){translate:50% 50%}:where(.cui-slider [data-citry-ui-part=thumb]:focus-visible){outline:3px solid var(--_cui-slider-focus-color);outline-offset:3px}:where(.cui-slider[data-dragging] [data-citry-ui-part=thumb][data-active]){cursor:grabbing;scale:1.08}:where(.cui-slider [data-citry-ui-part=value]){background:var(--_cui-slider-value-background);min-inline-size:max-content;color:var(--_cui-slider-value-foreground);pointer-events:none;visibility:hidden;opacity:0;border-radius:.375rem;padding:.2rem .4rem;font:500 .75rem/1.2 system-ui,sans-serif;position:absolute;inset-block-end:calc(100% + .5rem);inset-inline-start:50%;translate:-50%}:where([dir=rtl] .cui-slider [data-citry-ui-part=value]){translate:50%}:where(.cui-slider[data-orientation=vertical] [data-citry-ui-part=value]){inset-block-end:auto;inset-inline-start:calc(100% + .5rem);translate:0 -50%}:where(.cui-slider [data-citry-ui-part=thumb]:focus [data-citry-ui-part=value],.cui-slider[data-dragging] [data-citry-ui-part=thumb][data-active] [data-citry-ui-part=value],.cui-slider [data-citry-ui-part=thumb]:hover [data-citry-ui-part=value]),:where(.cui-slider[data-show-value=always] [data-citry-ui-part=value]){visibility:visible;opacity:1}:where(.cui-slider [data-citry-ui-part=mark]){background:var(--_cui-slider-mark-color);border-radius:50%;block-size:.25rem;inline-size:.25rem;position:absolute;inset-block-start:50%;inset-inline-start:var(--_cui-slider-mark-position);translate:-50% -50%}:where([dir=rtl] .cui-slider [data-citry-ui-part=mark]){translate:50% -50%}:where(.cui-slider [data-citry-ui-part=mark-label]){text-align:center;inline-size:max-content;max-inline-size:8rem;font-size:.75rem;position:absolute;inset-block-start:.75rem;inset-inline-start:50%;translate:-50%}:where(.cui-slider[data-orientation=vertical] [data-citry-ui-part=mark]){inset-block-start:auto;inset-block-end:var(--_cui-slider-mark-position);inset-inline-start:50%;translate:-50% 50%}:where(.cui-slider[data-orientation=vertical] [data-citry-ui-part=mark-label]){inset-block-start:50%;inset-inline-start:.75rem;translate:0 -50%}:where(.cui-slider[data-size=sm]){--_cui-slider-thumb-size:1rem;--_cui-slider-control-size:2.25rem;--_cui-slider-track-size:.25rem}:where(.cui-slider[data-size=lg]){--_cui-slider-thumb-size:1.5rem;--_cui-slider-control-size:3rem;--_cui-slider-track-size:.5rem}:where(.cui-slider[data-variant=subtle]){--_cui-slider-fill-color:color-mix(in srgb, AccentColor 62%, Canvas)}:where(.cui-slider[data-disabled]){opacity:.5}:where(.cui-slider[data-disabled] [data-citry-ui-part=thumb]){cursor:not-allowed}:where(.cui-slider[data-invalid]){--_cui-slider-thumb-border-color:light-dark(#d92d20,#f97066);--_cui-slider-fill-color:light-dark(#d92d20,#f97066)}:where(.cui-slider__visually-hidden){clip-path:inset(50%);white-space:nowrap;block-size:1px;inline-size:1px;position:absolute;overflow:hidden}@media (pointer:coarse){:where(.cui-slider){--_cui-slider-control-size:max(2.75rem, var(--cui-slider-control-size,2.75rem))}}@media (prefers-reduced-motion:reduce){:where(.cui-slider [data-citry-ui-part=thumb],.cui-slider [data-citry-ui-part=value]){transition:none}}@media (forced-colors:active){:where(.cui-slider){--_cui-slider-track-color:GrayText;--_cui-slider-fill-color:Highlight;--_cui-slider-thumb-color:Canvas;--_cui-slider-thumb-border-color:ButtonText}}@media print{:where(.cui-slider [data-citry-ui-part=value]){opacity:1}}}</style><style data-citry-css-class=CField_81c723>@layer citry-ui.theme{:where(.cui-field){--_cui-field-gap:var(--cui-field-gap,.5rem);--_cui-field-label-color:var(--cui-field-label-color,CanvasText);--_cui-field-label-weight:var(--cui-field-label-weight,600);--_cui-field-description-color:var(--cui-field-description-color,color-mix(in srgb, CanvasText 68%, transparent));--_cui-field-error-color:var(--cui-field-error-color,light-dark(#b42318,#fda29b));--_cui-field-required-color:var(--cui-field-required-color,var(--_cui-field-error-color));gap:var(--_cui-field-gap);color:canvastext;min-inline-size:0;font-family:ui-sans-serif,system-ui,sans-serif;display:grid}:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(8rem,.35fr) minmax(0,1fr);align-items:start}:where(.cui-field[data-density=comfortable]){--_cui-field-gap:var(--cui-field-gap,.375rem)}:where(.cui-field[data-density=compact]){--_cui-field-gap:var(--cui-field-gap,.25rem)}:where(.cui-field>[data-citry-ui-part=label]){color:var(--_cui-field-label-color);font-weight:var(--_cui-field-label-weight)}:where(.cui-field__required){color:var(--_cui-field-required-color)}:where(.cui-field>[data-citry-ui-part=description]){color:var(--_cui-field-description-color);font-size:.875em}:where(.cui-field>[data-citry-ui-part=error]){color:var(--_cui-field-error-color);font-size:.875em}@media (width<=32rem){:where(.cui-field[data-orientation=horizontal]){grid-template-columns:minmax(0,1fr)}}@media (forced-colors:active){:where(.cui-field[data-invalid]>[data-citry-ui-part=error]){color:mark}}}</style></head><body><main><!--citry:g1:d802a3e2:0:i:2:s--><section class=slider-example-grid data-cid-ctl3bzq1u><!--citry:g1:d802a3e2:0:i:4:s--><div class=cui-field data-cid=ctl3bzq1w data-cid-ctl3bzq1w data-citry-field-root data-citry-root data-citry-ui-part=field data-density=default data-orientation=vertical id=cui-field-ctl3bzq1w-control-field><label data-citry-ui-part=label for=cui-field-ctl3bzq1w-control id=cui-field-ctl3bzq1w-control-label><!--citry:g1:d802a3e2:0:r:1:s-->Volume<!--citry:g1:d802a3e2:0:r:1:e--> <span aria-hidden=true class=cui-field__required data-citry-ui-part=required-indicator hidden> * </span></label><div data-citry-ui-part=control><!--citry:g1:d802a3e2:0:r:2:s--><!--citry:g1:d802a3e2:0:i:5:s--><div class=cui-slider data-cid=ctl3bzq1x data-cid-ctl3bzq1x data-citry-root data-citry-ui-part=slider data-orientation=horizontal data-show-value=interaction data-size=md data-variant=solid><input aria-describedby=cui-field-ctl3bzq1w-control-description aria-labelledby=cui-field-ctl3bzq1w-control-label data-citry-field-control data-citry-ui-part=native-input data-thumb=single id=cui-field-ctl3bzq1w-control max=100 min=0 name=volume step=1 type=range value=40><input data-citry-ui-part=readonly-transport data-thumb=single-or-lower disabled id=cui-field-ctl3bzq1w-control-readonly name=volume type=hidden value=40><div data-citry-ui-part=control hidden><div data-citry-ui-part=track><span data-citry-ui-part=fill></span><button style="--_cui-slider-position: 40.0%;" aria-describedby=cui-field-ctl3bzq1w-control-description aria-labelledby=cui-field-ctl3bzq1w-control-label aria-valuemax=100 aria-valuemin=0 aria-valuenow=40 aria-valuetext=40 data-citry-ui-part=thumb data-thumb=single role=slider type=button><span data-citry-ui-part=value>40</span></button></div></div></div><!--citry:g1:d802a3e2:0:i:5:e--><!--citry:g1:d802a3e2:0:r:2:e--></div><div data-citry-ui-part=description id=cui-field-ctl3bzq1w-control-description><!--citry:g1:d802a3e2:0:r:3:s-->Use arrow keys for one-percent steps.<!--citry:g1:d802a3e2:0:r:3:e--></div><div aria-live=polite data-citry-ui-part=error hidden id=cui-field-ctl3bzq1w-control-error></div></div><!--citry:g1:d802a3e2:0:i:4:e--><article><h3>Python composition</h3><!--citry:g1:d802a3e2:0:i:3:s--><div class=cui-slider data-cid=ctl3bzq1v data-cid-ctl3bzq1v data-citry-root data-citry-ui-part=slider data-orientation=horizontal data-show-value=interaction data-size=md data-variant=solid><input aria-label="Python opacity" data-citry-ui-part=native-input data-thumb=single id=cui-slider-ctl3bzq1v max=1 min=0 step=0.1 type=range value=0.5><input data-citry-ui-part=readonly-transport data-thumb=single-or-lower disabled id=cui-slider-ctl3bzq1v-readonly type=hidden value=0.5><div data-citry-ui-part=control hidden><div data-citry-ui-part=track><span data-citry-ui-part=fill></span><button aria-label="Python opacity" style="--_cui-slider-position: 50.0%;" aria-valuemax=1 aria-valuemin=0 aria-valuenow=0.5 aria-valuetext=0.5 data-citry-ui-part=thumb data-thumb=single role=slider type=button><span data-citry-ui-part=value>0.5</span></button></div></div></div><!--citry:g1:d802a3e2:0:i:3:e--></article></section><!--citry:g1:d802a3e2:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"BasicSlider_074df4","className":"BasicSlider"},{"classId":"CSlider_27065e","className":"CSlider"},{"classId":"CField_81c723","className":"CField"}],"componentExecutionOrderConstraints":[{"childRenderId":"ctl3bzq1w","invocationId":2,"parentRenderId":"ctl3bzq1u"},{"childRenderId":"ctl3bzq1x","invocationId":3,"parentRenderId":"ctl3bzq1u"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzq1t","transparent":false},{"classId":"BasicSlider_074df4","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzq1u","transparent":false},{"classId":"CSlider_27065e","instanceId":3,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzq1v","transparent":false},{"classId":"CField_81c723","instanceId":4,"invocationId":2,"parentRenderId":"ctl3bzq1u","renderId":"ctl3bzq1w","transparent":false},{"classId":"CSlider_27065e","instanceId":5,"invocationId":3,"parentRenderId":"ctl3bzq1u","renderId":"ctl3bzq1x","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"BasicSlider_074df4","ownerRenderId":"ctl3bzq1u","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzq1w","slotName":"label","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"BasicSlider_074df4","ownerRenderId":"ctl3bzq1u","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzq1w","slotName":"description","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"BasicSlider_074df4","ownerRenderId":"ctl3bzq1u","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"ctl3bzq1w","slotName":"default","sourceInvocationId":2}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"BasicSlider_074df4","sourceRenderId":"ctl3bzq1u","tagName":"cfield","targetClassId":"CField_81c723","targetRenderId":"ctl3bzq1w"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"BasicSlider_074df4","sourceRenderId":"ctl3bzq1u","tagName":"cslider","targetClassId":"CSlider_27065e","targetRenderId":"ctl3bzq1x"}],"slotRegions":[{"fillId":1,"ownerRenderId":"ctl3bzq1u","parentRegionId":null,"receiverRenderId":"ctl3bzq1w","regionId":1,"resultOwnerRenderId":"ctl3bzq1u","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzq1w"},{"fillId":3,"ownerRenderId":"ctl3bzq1u","parentRegionId":null,"receiverRenderId":"ctl3bzq1w","regionId":2,"resultOwnerRenderId":"ctl3bzq1u","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzq1w"},{"fillId":2,"ownerRenderId":"ctl3bzq1u","parentRegionId":null,"receiverRenderId":"ctl3bzq1w","regionId":3,"resultOwnerRenderId":"ctl3bzq1u","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzq1w"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"d802a3e283145c1a2094ee2ac387de951f162c06c39815fa7e16b6c1e81e6fa2"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTbGlkZXJfMjcwNjVlLmVhYmVmMGI3YzVlMy5qcw==", "L2NpdHJ5L2NhY2hlL0NTbGlkZXJfMjcwNjVlLjQwYjE2OTVlYjUyNWMyMDkwNmU5MWJiOTg3NWE3YWE4Lmpz", "L2NpdHJ5L2NhY2hlL0NTbGlkZXJfMjcwNjVlLjVkNDY1YWIwZDhhYzdlZDczNmJiOTZiNTZlZGEzNThjLmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuZDNhODE3Yjg5YjI5Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuY2QwY2RhOTI4ZTUxNmE1ZjM2MzJiZjQ0OTJjMjhkMzAuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0Jhc2ljU2xpZGVyXzA3NGRmNC4wZjkwZjg3NjhmMWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NTbGlkZXJfMjcwNjVlLjhkMDI5ODExZWEzNS5jc3M=", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuODczNDgyMmEzNjFmLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1NsaWRlcl8yNzA2NWU=", "Y3RsM2J6cTF2", "NDBiMTY5NWViNTI1YzIwOTA2ZTkxYmI5ODc1YTdhYTg=", "init"], ["Q1NsaWRlcl8yNzA2NWU=", "Y3RsM2J6cTF4", "NWQ0NjVhYjBkOGFjN2VkNzM2YmI5NmI1NmVkYTM1OGM=", "init"], ["Q0ZpZWxkXzgxYzcyMw==", "Y3RsM2J6cTF3", "Y2QwY2RhOTI4ZTUxNmE1ZjM2MzJiZjQ0OTJjMjhkMzA=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6cTF0"], ["QmFzaWNTbGlkZXJfMDc0ZGY0", "Y3RsM2J6cTF1"]], "graph": "d802a3e283145c1a2094ee2ac387de951f162c06c39815fa7e16b6c1e81e6fa2", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      (()=>{
+        const key=Symbol.for('citry-ui:form-control-runtime'),prior=globalThis[key];
+        if(prior){if(prior.generation!==1)throw new Error('[citry-ui] cannot replace an incompatible form-control runtime; reload the page.');return}
+        const resetKey=Symbol.for('citry-ui:form-control-reset-registry');
+        const attr=(element,name,value)=>value==null||value===''?element.removeAttribute(name):element.setAttribute(name,String(value));
+        const attrs=(elements,values)=>[...elements].forEach(element=>Object.entries(values).forEach(([name,value])=>attr(element,name,value)));
+        const states=(element,values)=>Object.entries(values).forEach(([name,value])=>element.toggleAttribute(`data-${name}`,Boolean(value)));
+        const idrefs=(...items)=>{const out=[];items.filter(item=>typeof item==='string').forEach(item=>item.split(/\s+/).filter(Boolean).forEach(token=>{if(!out.includes(token))out.push(token)}));return out.join(' ')||null};
+        const relationships=(elements,field,values,invalid)=>{const described=idrefs(field?.hasDescription?field.descriptionId:null,invalid&&field?.hasError?field.errorId:null,values.describedby),error=invalid?idrefs(field?.hasError?field.errorId:null,values.errormessage):null,owned={'aria-describedby':described,'aria-errormessage':error,'aria-invalid':invalid?'true':null};if('label' in values)Object.assign(owned,{'aria-label':values.label,'aria-labelledby':field?.labelId??values.labelledby});attrs(elements,owned);const state={};for(const name of ['required','disabled','readonly'])if(name in values)state[`aria-${name}`]=values[name]?'true':null;attrs(values.control?[values.control]:elements,state)};
+        const trim=value=>value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g,'');
+        const canonical=(value,delimiters=[],strict=false)=>{if(typeof value!=='string'||!value.length||value.includes('\0'))return null;const normalized=value.replace(/\r\n?/g,'\n');if(!strict)return normalized;const trimmed=trim(normalized);return trimmed===value&&trimmed&&!trimmed.includes('\n')&&!delimiters.some(delimiter=>trimmed.includes(delimiter))?trimmed:null};
+        const stringList=(current,candidates,normalize,maximum=null)=>{const seen=new Set(current),values=[];for(const candidate of candidates){if(candidate==='')return{reason:'empty',candidate};const value=normalize(candidate);if(value===null)return{reason:'invalid-value',candidate};if(seen.has(value)){return{reason:'duplicate',candidate}}seen.add(value);values.push(value)}return maximum!==null&&current.length+values.length>maximum?{reason:'maximum',candidate:values.at(-1)??null}:{values}};
+        const split=(text,delimiters)=>{const normalized=text.replace(/\r\n?/g,'\n'),separators=new Set([...delimiters,'\n']);let fragments=[''];for(const character of normalized)separators.has(character)?fragments.push(''):fragments[fragments.length-1]+=character;return{candidates:fragments.slice(0,-1).map(trim),draft:separators.has(normalized.at(-1))?'':fragments.at(-1)}};
+        const format=(template,key,value)=>template.replaceAll(`{${key}}`,String(value));
+        const same=(left,right)=>left.length===right.length&&left.every((value,index)=>value===right[index]);
+        const commit=select=>{select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}))};
+        const resolver=(root,props,owner)=>{
+          const episodes=new Map(),retained=new Map();
+          const describe=value=>{try{return JSON.stringify(value)??String(value)}catch{return String(value)}};
+          const report=(name,value,suffix='using the previous valid value or server fallback')=>{const fingerprint=`${typeof value}:${describe(value)}`;if(episodes.get(name)===fingerprint)return;episodes.set(name,fingerprint);console.error(`[citry-ui] ${owner} ${name} received invalid client value ${describe(value)}; ${suffix}.`,root)};
+          const clear=name=>episodes.delete(name);
+          const callback=name=>{const value=props[name];if(value==null){clear(name);return null}if(typeof value==='function'){clear(name);return value}report(name,value,'ignoring it');return null};
+          const release=(name,fallback)=>{retained.delete(name);clear(name);return fallback};
+          const boolean=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='boolean'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const string=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='string'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const choice=(name,fallback,allowed)=>{const value=props[name];if(value==null)return release(name,fallback);if(allowed.includes(value)){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const maximum=(name,fallback)=>{const value=props[name];if(value===undefined)return release(name,fallback);if(value===null){retained.set(name,null);clear(name);return null}if(Number.isInteger(value)&&value>0){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          return{describe,report,clear,callback,boolean,string,choice,maximum};
+        };
+        const fieldsetDisabled=element=>{for(let node=element.parentElement;node;node=node.parentElement){if(!(node instanceof HTMLFieldSetElement)||!node.disabled)continue;const legend=[...node.children].find(child=>child instanceof HTMLLegendElement);if(!legend?.contains(element))return true}return false};
+        const syncOptions=(select,values,rebuild=false)=>{if(rebuild)select.replaceChildren(...values.map(value=>{const option=select.ownerDocument.createElement('option');option.value=value;option.textContent=value;option.defaultSelected=true;option.selected=true;return option}));else{const selected=new Set(values);[...select.options].forEach(option=>option.selected=selected.has(option.value))}};
+        const syncHidden=(container,values,name,form,enabled)=>{container.replaceChildren();if(!enabled||!name)return;values.forEach(value=>{const input=container.ownerDocument.createElement('input');input.type='hidden';input.name=name;input.value=value;if(form)input.setAttribute('form',form);container.append(input)})};
+        const syncTransport=(select,hidden,values,settings)=>{syncOptions(select,values,settings.rebuild);const readonly=settings.readonly&&!settings.disabled;select.name=readonly?'':settings.name??'';select.disabled=settings.disabled||settings.readonly;select.required=settings.required&&!settings.readonly&&!settings.disabled;if(settings.form)select.setAttribute('form',settings.form);else select.removeAttribute('form');syncHidden(hidden,values,settings.name,settings.form,readonly)};
+        const renderTokens=(container,values,settings)=>container.replaceChildren(...values.map(value=>{const token=container.ownerDocument.createElement('span');token.className=settings.className;token.dataset.citryUiPart=settings.part;token.dataset.value=value;if(settings.active?.(value))token.toggleAttribute('data-highlighted',true);const text=settings.label?.(value)??value;if(settings.labelPart){const label=container.ownerDocument.createElement('span');label.dataset.citryUiPart=settings.labelPart;label.textContent=text;token.append(label)}else token.textContent=text;if(settings.removeLabel){const remove=container.ownerDocument.createElement('button');remove.type='button';remove.tabIndex=-1;remove.disabled=Boolean(settings.removeDisabled);remove.dataset.citryUiPart='remove';remove.dataset.value=value;remove.textContent='\u00d7';remove.setAttribute('aria-label',settings.removeLabel(value));token.append(remove)}return token}));
+        const disableRemovals=(container,disabled)=>container.querySelectorAll(':scope > [data-citry-ui-part="tag"] > [data-citry-ui-part="remove"]').forEach(remove=>remove.disabled=disabled);
+        const blockedTransition=apply=>{let prior;return current=>{const next=`${Number(current.disabled)}:${Number(current.readonly)}`;if(prior!==undefined&&next!==prior)apply();prior=next}};
+        const highlight=(container,selector,value)=>container.querySelectorAll(selector).forEach(item=>item.toggleAttribute('data-highlighted',item.dataset.value===value));
+        const focus=element=>element.focus({preventScroll:true});
+        const status=(root,element)=>{let generation=0;return{announce:text=>{const token=++generation;element.textContent='';queueMicrotask(()=>{if(token===generation&&root.isConnected)element.textContent=text})},invalidate:()=>++generation}};
+        const listeners=()=>{const entries=[];return{add:(target,type,listener,options)=>{target.addEventListener(type,listener,options);entries.push([target,type,listener,options])},stop:()=>entries.splice(0).forEach(([target,type,listener,options])=>target.removeEventListener(type,listener,options))}};
+        const enhanceNative=(native,visible,settings,enabled=true)=>{if(settings.publicId){native.id=enabled?settings.nativeId:settings.publicId;visible.id=enabled?settings.publicId:settings.visibleId}attr(native,'aria-hidden',enabled?'true':null);if(enabled)native.tabIndex=-1;else native.removeAttribute('tabindex');if(settings.className)native.classList.toggle(settings.className,enabled)};
+        const ownership=(root,key)=>{const retained=root[key]??null,state=retained??{},owner=Symbol();root[key]=state;state.owner=owner;return{retained,state,owns:()=>state.owner===owner}};
+        const tokenHandoff=(root,key,server,editor,name)=>{const handle=ownership(root,key),retained=handle.retained,[structure,value,draft,full,serverValues,serverDraft]=server,sameStructure=retained?.s===structure,sameValue=retained?.v===value,sameDraft=retained?.d===draft,prior=Array.isArray(retained?.V)?retained.V:[],values=sameValue?[...prior]:[...serverValues],input=sameDraft&&typeof retained?.I==='string'?retained.I:serverDraft,valueBaseline=sameValue&&Array.isArray(retained?.B)?[...retained.B]:[...serverValues],draftBaseline=sameDraft&&typeof retained?.J==='string'?retained.J:serverDraft,index=prior.indexOf(retained?.A),active=values.includes(retained?.A)?retained.A:values[index]??values[index-1]??null,composing=Boolean(sameDraft&&retained?.C);if(composing&&retained.E!==editor)throw new Error(`[citry-ui] ${name} cannot replace its editor during composition.`);return[handle,sameStructure,sameValue,sameDraft,values,input,valueBaseline,draftBaseline,active,composing,sameDraft?retained?.S:null,Boolean(sameDraft&&retained?.E===editor&&retained?.F),Boolean(sameStructure&&retained?.X),sameStructure&&typeof retained?.T==='string'?retained.T:null]};
+        const restoreTokenHandoff=(handoff,editor,status,owned)=>{const[,sameStructure,,sameDraft,,draft,,,,composing,selection,focused,,,]=handoff;owned(()=>{if(sameStructure&&handoff[13]!==null)status.textContent=handoff[13];if(sameDraft&&!composing&&Array.isArray(selection)){const start=Math.min(selection[0]??draft.length,draft.length),end=Math.min(selection[1]??start,draft.length);try{editor.setSelectionRange(start,end)}catch{}}});if(focused&&!editor.disabled)focus(editor)};
+        const saveTokenHandoff=(handoff,server,editor,current)=>{const handle=handoff[0];if(!handle.owns())return false;const [structure,value,draft,full]=server,[values,valueBaseline,input,draftBaseline,active,composing,invalid,status]=current;Object.assign(handle.state,{s:structure,v:value,d:draft,z:full,V:[...values],B:[...valueBaseline],I:input,J:draftBaseline,A:active,C:composing,E:editor,S:[editor.selectionStart??input.length,editor.selectionEnd??editor.selectionStart??input.length],F:editor.matches(':focus'),X:invalid,T:status});return true};
+        const exactAnatomy=entries=>entries.every(([parent,selector,node])=>parent.querySelectorAll(`:scope > ${selector}`).length===1&&parent.querySelector(`:scope > ${selector}`)===node);
+        const sanitizeFormControl=(root,input)=>{['id','role','part','hidden','inert','popover','contenteditable','tabindex','name','form','type','value','required','disabled','readonly','aria-label','aria-labelledby','aria-describedby','aria-errormessage','aria-invalid','aria-required','aria-disabled','aria-readonly'].forEach(name=>root.removeAttribute(name));input.type='text';['name','form','required','role','tabindex','hidden','inert','popover'].forEach(name=>input.removeAttribute(name))};
+        const mutations=root=>{let observer=null,timer=null;const observe=()=>observer?.observe(root,{subtree:true,childList:true,attributes:true});return{owned:fn=>{observer?.disconnect();try{fn()}finally{observe()}},start:reconcile=>{observer=new MutationObserver(()=>{if(timer!==null)clearTimeout(timer);timer=setTimeout(()=>{timer=null;reconcile()},0)});observe()},stop:()=>{observer?.disconnect();if(timer!==null)clearTimeout(timer);timer=null}}};
+        const watchFieldset=(root,control,apply)=>{let observer,scope;const observe=()=>{const next=root.getRootNode();if(next===scope)return;observer?.disconnect();scope=next;observer=new MutationObserver(records=>{const relevant=records.some(record=>record.type==='attributes'?record.target instanceof HTMLFieldSetElement&&record.target.contains(root):[...record.addedNodes,...record.removedNodes].some(node=>node===root||node.contains?.(root)||(node instanceof HTMLLegendElement&&record.target.contains(root))));if(!relevant)return;if(root.getRootNode()!==scope)observe();apply()});observer.observe(next instanceof Document?next.documentElement:next,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']})};observe();return()=>observer?.disconnect()};
+        const registerReset=(root,proxy,entry)=>{let unregister=()=>{};const register=()=>{const scope=root.getRootNode();let registry=scope[resetKey];if(!registry){const entries=new Map(),timers=new Set(),handler=event=>{const form=event.target,current=[...entries.entries()].filter(([control])=>control.form===form).map(([control,item])=>[control,item,++item.sequence]),timer=setTimeout(()=>{timers.delete(timer);if(event.defaultPrevented)return;current.filter(([control,item,sequence])=>entries.get(control)===item&&item.sequence===sequence&&control.isConnected&&control.form===form).forEach(([,item])=>{item.invalidate?.();item.reset(event)})},0);timers.add(timer)},observer=new MutationObserver(()=>entries.forEach(item=>item.refresh()));scope.addEventListener('reset',handler,true);observer.observe(scope instanceof Document?scope.documentElement:scope,{subtree:true,childList:true});registry={entries,timers,handler,observer};scope[resetKey]=registry}const item={...entry,sequence:0,refresh:()=>{if(root.isConnected&&root.getRootNode()!==scope){unregister();unregister=register()}}};registry.entries.set(proxy,item);return()=>{if(registry.entries.get(proxy)!==item)return;registry.entries.delete(proxy);if(!registry.entries.size&&scope[resetKey]===registry){scope.removeEventListener('reset',registry.handler,true);registry.observer.disconnect();registry.timers.forEach(clearTimeout);registry.timers.clear();delete scope[resetKey]}}};unregister=register();return()=>unregister()};
+        const deepActive=document=>{let active=document.activeElement;while(active?.shadowRoot?.activeElement)active=active.shadowRoot.activeElement;return active};
+        const composedParent=node=>node?.assignedSlot??node?.parentNode??(node?.getRootNode() instanceof ShadowRoot?node.getRootNode().host:null);
+        const invalidFocus=(root,editor,current)=>{const document=root.ownerDocument,snapshot=deepActive(document);let node=root,dialog=null;while(node){if(node instanceof HTMLDialogElement&&node.open){dialog=node;break}node=composedParent(node)}requestAnimationFrame(()=>{if(!current()||!root.isConnected)return;const active=deepActive(document);if(active!==snapshot&&!root.contains(active))return;if(editor.isConnected&&!editor.disabled&&editor.getClientRects().length&&!editor.closest('[inert]')){editor.focus({preventScroll:true});if(deepActive(document)===editor)return}const target=dialog?.isConnected&&dialog.open&&dialog.getClientRects().length?dialog:document.body;if(!target?.isConnected)return;const temporary=!target.hasAttribute('tabindex');if(temporary)target.tabIndex=-1;target.focus({preventScroll:true});if(temporary)queueMicrotask(()=>target.removeAttribute('tabindex'))})};
+        globalThis[key]={generation:1,attr,attrs,states,idrefs,relationships,trim,canonical,stringList,split,format,same,commit,resolver,fieldsetDisabled,syncOptions,syncHidden,syncTransport,renderTokens,disableRemovals,blockedTransition,highlight,focus,status,listeners,enhanceNative,ownership,tokenHandoff,restoreTokenHandoff,saveTokenHandoff,exactAnatomy,sanitizeFormControl,mutations,watchFieldset,registerReset,invalidFocus};
+      })();
+    
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CSlider_27065e", {
+  props: {
+    value: {}, min: {}, max: {}, step: {}, largeStep: {}, minStepsBetweenThumbs: {},
+    disabled: {}, readonly: {}, invalid: {}, orientation: {}, variant: {}, size: {},
+    showValue: {}, format: {}, onValueChange: {}, onValueChangeEnd: {},
+  },
+  init: ({ els, data, props, effect, inject, i18n }) => {
+    const root = els[0];
+    const nativeInputs = Array.from(root.querySelectorAll(':scope > [data-citry-ui-part="native-input"]'));
+    const transports = Array.from(root.querySelectorAll(':scope > [data-citry-ui-part="readonly-transport"]'));
+    const control = root.querySelector(':scope > [data-citry-ui-part="control"]');
+    const track = control?.querySelector(':scope > [data-citry-ui-part="track"]');
+    const fill = track?.querySelector(':scope > [data-citry-ui-part="fill"]');
+    const thumbs = Array.from(track?.querySelectorAll(':scope > [data-citry-ui-part="thumb"]') ?? []);
+    const expected = data.kind === 'range' ? 2 : 1;
+    if (nativeInputs.length !== expected || transports.length !== expected || thumbs.length !== expected || !(control instanceof HTMLElement && track instanceof HTMLElement && fill instanceof HTMLElement) || nativeInputs.some(input => !(input instanceof HTMLInputElement)) || transports.some(input => !(input instanceof HTMLInputElement)) || thumbs.some(thumb => !(thumb instanceof HTMLButtonElement))) {
+      throw new Error('[citry-ui] Slider settled anatomy is invalid.');
+    }
+    const field = inject(Symbol.for('citry-ui:field'), null);
+    const form = inject(Symbol.for('citry-ui:form'), null);
+    const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
+    if (runtime?.generation !== 1) throw new Error('[citry-ui] Slider form-control runtime is unavailable.');
+    const resolver = runtime.resolver(root, props, data.kind === 'range' ? 'CRangeSlider' : 'CSlider');
+    const listeners = runtime.listeners();
+    const mutations = runtime.mutations(root);
+    const owned = mutations.owned;
+    let current = data.kind === 'range' ? [...data.value] : [data.value];
+    let committed = [...current];
+    let lastRequested = [...current];
+    let initialValue = [...current];
+    let controlled = false;
+    let configuration = null;
+    let activeIndex = 0;
+    let lastFocusedIndex = null;
+    let dragging = false;
+    let changedDuringDrag = false;
+    let dragPrevious = null;
+    let pendingPointer = null;
+    let frame = 0;
+
+    const canonical = value => {
+      if (typeof value !== 'string' || !/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value)) return undefined;
+      let negative = value.startsWith('-');
+      let unsigned = negative ? value.slice(1) : value;
+      let [integer, fraction = ''] = unsigned.split('.');
+      integer = integer.replace(/^0+(?=\d)/, '') || '0';
+      fraction = fraction.replace(/0+$/, '');
+      let result = integer + (fraction ? `.${fraction}` : '');
+      if (negative && result !== '0') result = `-${result}`;
+      return result.replace('-', '').replace('.', '').length <= 128 ? result : undefined;
+    };
+    const parts = value => {
+      const normalized = canonical(value);
+      if (normalized === undefined) return null;
+      const negative = normalized.startsWith('-');
+      const unsigned = negative ? normalized.slice(1) : normalized;
+      const [integer, fraction = ''] = unsigned.split('.');
+      return { integer: BigInt(`${negative ? '-' : ''}${integer}${fraction}`), scale: fraction.length };
+    };
+    const power = count => BigInt(`1${'0'.repeat(count)}`);
+    const fromParts = (integer, scale) => {
+      const negative = integer < BigInt(0);
+      const digits = (negative ? -integer : integer).toString().padStart(scale + 1, '0');
+      const text = scale ? `${digits.slice(0, -scale)}.${digits.slice(-scale)}` : digits;
+      return canonical(`${negative ? '-' : ''}${text}`);
+    };
+    const aligned = values => {
+      const parsed = values.map(parts);
+      if (parsed.some(value => value === null)) return null;
+      const scale = Math.max(...parsed.map(value => value.scale));
+      return { values: parsed.map(value => value.integer * power(scale - value.scale)), scale };
+    };
+    const compare = (left, right) => {
+      const result = aligned([left, right]);
+      return result.values[0] < result.values[1] ? -1 : result.values[0] > result.values[1] ? 1 : 0;
+    };
+    const grid = (min, max, step) => {
+      const result = aligned([min, max, step]);
+      if (!result) return null;
+      const [a, b, interval] = result.values;
+      const difference = b - a;
+      if (a >= b || interval <= BigInt(0) || difference % interval !== BigInt(0)) return null;
+      const count = difference / interval;
+      if (count <= BigInt(0) || count > BigInt(1000000)) return null;
+      return { min: a, max: b, step: interval, count: Number(count), scale: result.scale };
+    };
+    const indexFor = value => {
+      const result = aligned([configuration.min, value, configuration.step]);
+      if (!result) return null;
+      const [min, item, step] = result.values;
+      const difference = item - min;
+      if (difference < BigInt(0) || difference % step !== BigInt(0)) return null;
+      const index = Number(difference / step);
+      return index <= configuration.count ? index : null;
+    };
+    const valueFor = index => fromParts(configuration.gridMin + configuration.gridStep * BigInt(index), configuration.scale);
+    const format = value => i18n ? i18n.format.number(value, { format: configuration.format }) : value;
+    const normalizeValue = (raw, fallback) => {
+      const value = canonical(raw);
+      if (value === undefined) return fallback;
+      return indexFor(value) === null ? fallback : value;
+    };
+    const valuesEqual = (left, right) => left.length === right.length && left.every((value, index) => value === right[index]);
+    const boundsFor = index => data.kind === 'range'
+      ? index === 0
+        ? [0, indexFor(current[1]) - configuration.gap]
+        : [indexFor(current[0]) + configuration.gap, configuration.count]
+      : [0, configuration.count];
+    const clampIndex = (index, thumbIndex) => {
+      const [minimum, maximum] = boundsFor(thumbIndex);
+      return Math.max(minimum, Math.min(maximum, index));
+    };
+    const percentFor = value => indexFor(value) / configuration.count * 100;
+    const applyGeometry = () => {
+      const percentages = current.map(percentFor);
+      thumbs.forEach((thumb, index) => thumb.style.setProperty('--_cui-slider-position', `${percentages[index]}%`));
+      const start = data.kind === 'range' ? percentages[0] : 0;
+      const stop = data.kind === 'range' ? percentages[1] : percentages[0];
+      fill.style.setProperty('--_cui-slider-fill-start', `${start}%`);
+      fill.style.setProperty('--_cui-slider-fill-stop', `${stop}%`);
+    };
+    const syncRelationships = () => thumbs.forEach((thumb, index) => runtime.relationships([thumb], field, data.kind === 'range' ? {
+      labelledby: data.rangeLabelledby[index], describedby: data.describedby[index], errormessage: data.errormessage[index],
+      control: thumb, disabled: configuration.disabled, readonly: configuration.readonly,
+    } : {
+      label: data.ariaLabel, labelledby: data.ariaLabelledby, describedby: data.describedby[0], errormessage: data.errormessage[0],
+      control: thumb, disabled: configuration.disabled, readonly: configuration.readonly,
+    }, configuration.invalid));
+    const applyState = () => owned(() => {
+      root.dataset.orientation = configuration.orientation;
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.dataset.showValue = configuration.showValue;
+      root.toggleAttribute('data-disabled', configuration.disabled);
+      root.toggleAttribute('data-readonly', configuration.readonly);
+      root.toggleAttribute('data-invalid', configuration.invalid);
+      root.toggleAttribute('data-dragging', dragging);
+      current.forEach((value, index) => {
+        const native = nativeInputs[index];
+        const transport = transports[index];
+        const thumb = thumbs[index];
+        native.min = configuration.min;
+        native.max = configuration.max;
+        native.step = configuration.step;
+        native.value = value;
+        native.name = configuration.disabled || configuration.readonly ? '' : (data.names[index] ?? '');
+        native.disabled = configuration.disabled || configuration.readonly || !data.names[index];
+        native.tabIndex = -1;
+        transport.value = value;
+        transport.name = configuration.disabled || !configuration.readonly ? '' : (data.names[index] ?? '');
+        transport.disabled = configuration.disabled || !configuration.readonly || !data.names[index];
+        thumb.disabled = configuration.disabled;
+        thumb.setAttribute('aria-readonly', configuration.readonly ? 'true' : 'false');
+        thumb.setAttribute('aria-valuenow', value);
+        thumb.setAttribute('aria-valuetext', format(value));
+        const [allowedMin, allowedMax] = boundsFor(index);
+        thumb.setAttribute('aria-valuemin', valueFor(allowedMin));
+        thumb.setAttribute('aria-valuemax', valueFor(allowedMax));
+        thumb.setAttribute('aria-invalid', configuration.invalid ? 'true' : 'false');
+        if (configuration.orientation === 'vertical') thumb.setAttribute('aria-orientation', 'vertical');
+        else thumb.removeAttribute('aria-orientation');
+        const bubble = thumb.querySelector(':scope > [data-citry-ui-part="value"]');
+        if (bubble) {
+          bubble.textContent = format(value);
+          bubble.hidden = configuration.showValue === 'never';
+        }
+        thumb.toggleAttribute('data-active', activeIndex === index && (dragging || document.activeElement === thumb));
+      });
+      syncRelationships();
+      applyGeometry();
+    });
+    const nativeEvents = (index, phase) => {
+      nativeInputs[index].dispatchEvent(new Event(phase === 'change' ? 'input' : 'change', { bubbles: true }));
+    };
+    const detail = (next, previous, source, event, phase, index) => {
+      const result = { value: data.kind === 'range' ? [...next] : next[0], previousValue: data.kind === 'range' ? [...previous] : previous[0], controlled, source, sourceEvent: event, phase };
+      if (data.kind === 'range') result.activeThumb = index === 0 ? 'lower' : 'upper';
+      return result;
+    };
+    const request = (next, index, source, event, phase = 'change') => {
+      if (valuesEqual(next, controlled ? lastRequested : current)) return null;
+      const previous = [...current];
+      lastRequested = [...next];
+      if (!controlled) {
+        current = [...next];
+        committed = [...next];
+      }
+      resolver.callback(phase === 'change' ? 'onValueChange' : 'onValueChangeEnd')?.(data.kind === 'range' ? [...next] : next[0], detail(next, previous, source, event, phase, index));
+      if (!controlled) nativeEvents(index, phase);
+      applyState();
+      return { previous, next: [...next] };
+    };
+    const changeIndex = (nextIndex, index, source, event) => {
+      const bounded = clampIndex(nextIndex, index);
+      const next = [...current];
+      next[index] = valueFor(bounded);
+      return request(next, index, source, event, 'change');
+    };
+    const end = (index, source, event, previous, next = current) => {
+      if (!previous || valuesEqual(previous, next)) return false;
+      resolver.callback('onValueChangeEnd')?.(data.kind === 'range' ? [...next] : next[0], detail(next, previous, source, event, 'end', index));
+      if (!controlled) nativeEvents(index, 'end');
+      else lastRequested = [...current];
+      return true;
+    };
+    const pointerRatio = event => {
+      const rect = track.getBoundingClientRect();
+      if (configuration.orientation === 'vertical') return Math.max(0, Math.min(1, (rect.bottom - event.clientY) / rect.height));
+      const raw = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      return getComputedStyle(root).direction === 'rtl' ? 1 - raw : raw;
+    };
+    const pointerIndex = event => Math.round(pointerRatio(event) * configuration.count);
+    const chooseThumb = (index, event) => {
+      if (data.kind !== 'range') return 0;
+      const target = event.target.closest?.('[data-citry-ui-part="thumb"]');
+      const direct = thumbs.indexOf(target);
+      if (direct >= 0) return direct;
+      const distances = current.map(value => Math.abs(indexFor(value) - index));
+      if (distances[0] !== distances[1]) return distances[0] < distances[1] ? 0 : 1;
+      if (lastFocusedIndex !== null) return lastFocusedIndex;
+      return index >= indexFor(current[0]) ? 1 : 0;
+    };
+    const flushPointer = event => {
+      if (!event) return;
+      changedDuringDrag = Boolean(changeIndex(pointerIndex(event), activeIndex, 'pointer', event)) || changedDuringDrag;
+    };
+    const queuePointer = event => {
+      pendingPointer = event;
+      if (frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; const pending = pendingPointer; pendingPointer = null; flushPointer(pending); });
+    };
+    listeners.add(control, 'pointerdown', event => {
+      if (configuration.disabled || configuration.readonly || event.button !== 0) return;
+      const index = pointerIndex(event);
+      activeIndex = chooseThumb(index, event);
+      lastFocusedIndex = activeIndex;
+      dragging = true;
+      changedDuringDrag = false;
+      dragPrevious = [...current];
+      lastRequested = [...current];
+      control.setPointerCapture(event.pointerId);
+      thumbs[activeIndex].focus({ preventScroll: true });
+      event.preventDefault();
+      changedDuringDrag = Boolean(changeIndex(index, activeIndex, 'pointer', event)) || changedDuringDrag;
+      applyState();
+    });
+    listeners.add(control, 'pointermove', event => { if (dragging && control.hasPointerCapture(event.pointerId)) queuePointer(event); });
+    const stopPointer = event => {
+      if (!dragging) return;
+      if (frame) { cancelAnimationFrame(frame); frame = 0; flushPointer(pendingPointer); pendingPointer = null; }
+      dragging = false;
+      if (control.hasPointerCapture(event.pointerId)) control.releasePointerCapture(event.pointerId);
+      if (changedDuringDrag) end(activeIndex, 'pointer', event, dragPrevious, lastRequested);
+      dragPrevious = null;
+      applyState();
+    };
+    listeners.add(control, 'pointerup', stopPointer);
+    listeners.add(control, 'pointercancel', stopPointer);
+    thumbs.forEach((thumb, index) => {
+      listeners.add(thumb, 'focus', () => { activeIndex = index; lastFocusedIndex = index; applyState(); });
+      listeners.add(thumb, 'blur', () => applyState());
+      listeners.add(thumb, 'keydown', event => {
+        if (configuration.disabled || configuration.readonly) return;
+        let nextIndex = indexFor(current[index]);
+        if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextIndex += 1;
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextIndex -= 1;
+        else if (event.key === 'PageUp') nextIndex += configuration.largeSteps;
+        else if (event.key === 'PageDown') nextIndex -= configuration.largeSteps;
+        else if (event.key === 'Home') nextIndex = boundsFor(index)[0];
+        else if (event.key === 'End') nextIndex = boundsFor(index)[1];
+        else return;
+        event.preventDefault();
+        const previous = [...current];
+        const requested = changeIndex(nextIndex, index, 'keyboard', event);
+        if (requested) end(index, 'keyboard', event, previous, requested.next);
+      });
+    });
+    const reset = runtime.registerReset(root, nativeInputs[0], {
+      reset: () => {
+        const previous = [...current];
+        if (controlled) {
+          resolver.callback('onValueChange')?.(data.kind === 'range' ? [...initialValue] : initialValue[0], detail(initialValue, previous, 'reset', null, 'change', 0));
+          resolver.callback('onValueChangeEnd')?.(data.kind === 'range' ? [...initialValue] : initialValue[0], detail(initialValue, previous, 'reset', null, 'end', 0));
+        } else {
+          current = [...initialValue]; committed = [...initialValue]; lastRequested = [...initialValue]; applyState(); nativeInputs.forEach((_, index) => { nativeEvents(index, 'change'); nativeEvents(index, 'end'); });
+        }
+      },
+      invalidate: () => {},
+    });
+    const stopFieldset = runtime.watchFieldset(root, nativeInputs[0], () => { configuration = resolveConfiguration(); if (dragging && configuration.disabled) dragging = false; applyState(); });
+    const configValue = (name, fallback) => {
+      const raw = props[name];
+      if (raw === undefined) return fallback;
+      const value = canonical(raw);
+      if (value === undefined) { resolver.report(name, raw); return fallback; }
+      resolver.clear(name); return value;
+    };
+    const resolveConfiguration = () => {
+      let min = configValue('min', data.min), max = configValue('max', data.max), step = configValue('step', data.step);
+      let exactGrid = grid(min, max, step);
+      if (!exactGrid) { resolver.report('min', min, 'min/max/step must form a finite whole-step grid'); min = data.min; max = data.max; step = data.step; exactGrid = grid(min, max, step); }
+      const largeStep = configValue('largeStep', data.largeStep);
+      const largeIndex = (() => { const result = aligned([largeStep, step]); return result && result.values[0] > BigInt(0) && result.values[0] % result.values[1] === BigInt(0) ? Number(result.values[0] / result.values[1]) : null; })();
+      let gap = 0;
+      if (data.kind === 'range') {
+        const requestedGap = props.minStepsBetweenThumbs;
+        if (requestedGap === undefined) {
+          gap = data.minStepsBetweenThumbs;
+          resolver.clear('minStepsBetweenThumbs');
+        } else if (Number.isInteger(requestedGap) && requestedGap >= 0 && requestedGap <= exactGrid.count) {
+          gap = requestedGap;
+          resolver.clear('minStepsBetweenThumbs');
+        } else {
+          gap = data.minStepsBetweenThumbs;
+          resolver.report('minStepsBetweenThumbs', requestedGap);
+        }
+      }
+      return {
+        min, max, step, count: exactGrid.count, gridMin: exactGrid.min, gridStep: exactGrid.step, scale: exactGrid.scale,
+        largeSteps: largeIndex ?? Math.min(10, exactGrid.count), gap,
+        disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled),
+        readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
+        invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
+        orientation: resolver.choice('orientation', data.orientation, ['horizontal', 'vertical']),
+        variant: resolver.choice('variant', data.variant, ['solid', 'subtle']),
+        size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+        showValue: resolver.choice('showValue', data.showValue, ['never', 'interaction', 'always']),
+        format: resolver.string('format', data.format) || data.format,
+      };
+    };
+    let unsubscribe = null;
+    effect(() => {
+      const previousConfiguration = configuration;
+      configuration = resolveConfiguration();
+      if (previousConfiguration && dragging && (configuration.min !== previousConfiguration.min || configuration.max !== previousConfiguration.max || configuration.step !== previousConfiguration.step || configuration.orientation !== previousConfiguration.orientation || configuration.disabled || configuration.readonly)) {
+        dragging = false; changedDuringDrag = false; dragPrevious = null;
+      }
+      const requested = props.value;
+      if (requested === undefined) {
+        if (controlled) { controlled = false; current = [...committed]; lastRequested = [...current]; }
+        resolver.clear('value');
+      } else {
+        const raw = data.kind === 'range' ? requested : [requested];
+        if (!Array.isArray(raw) || raw.length !== expected) resolver.report('value', requested);
+        else {
+          const normalized = raw.map((value, index) => normalizeValue(value, current[index]));
+          const indices = normalized.map(indexFor);
+          const validRange = data.kind !== 'range' || indices[1] - indices[0] >= configuration.gap;
+          if (indices.some(index => index === null) || !validRange) resolver.report('value', requested);
+          else { resolver.clear('value'); controlled = true; current = normalized; lastRequested = [...normalized]; }
+        }
+      }
+      applyState();
+    });
+    if (i18n) unsubscribe = i18n.subscribe(() => applyState());
+    if (data.kind === 'range' && data.fieldLabelId) {
+      const label = root.ownerDocument.getElementById(data.fieldLabelId);
+      if (label) listeners.add(label, 'click', event => queueMicrotask(() => {
+        if (!event.defaultPrevented && root.isConnected && !configuration.disabled) thumbs[0].focus({ preventScroll: true });
+      }));
+    }
+    mutations.start(() => applyState());
+    owned(() => { control.hidden = false; root.setAttribute('data-enhanced', ''); root.setAttribute('data-citry-slider-initialized', ''); });
+    applyState();
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      unsubscribe?.(); listeners.stop(); mutations.stop(); stopFieldset(); reset();
+      owned(() => { control.hidden = true; root.removeAttribute('data-enhanced'); root.removeAttribute('data-citry-slider-initialized'); });
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSlider_27065e", "40b1695eb525c20906e91bb9875a7aa8", atob("eyJraW5kIjoic2luZ2xlIiwiaWQiOiJjdWktc2xpZGVyLWN0bDNienExdiIsInJvb3RJZCI6bnVsbCwiaWRzIjpbImN1aS1zbGlkZXItY3RsM2J6cTF2Il0sInRyYW5zcG9ydElkcyI6WyJjdWktc2xpZGVyLWN0bDNienExdi1yZWFkb25seSJdLCJuYW1lcyI6W251bGxdLCJmb3JtIjpudWxsLCJ2YWx1ZSI6IjAuNSIsIm1pbiI6IjAiLCJtYXgiOiIxIiwic3RlcCI6IjAuMSIsImxhcmdlU3RlcCI6IjEuMCIsIm1pblN0ZXBzQmV0d2VlblRodW1icyI6MCwiZGlzYWJsZWQiOmZhbHNlLCJyZWFkb25seSI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOnRydWUsImludmFsaWQiOmZhbHNlLCJvcmllbnRhdGlvbiI6Imhvcml6b250YWwiLCJ2YXJpYW50Ijoic29saWQiLCJzaXplIjoibWQiLCJzaG93VmFsdWUiOiJpbnRlcmFjdGlvbiIsImZvcm1hdCI6ImNpdHJ5LXVpLXNsaWRlciIsImRlc2NyaWJlZGJ5IjpbbnVsbF0sImVycm9ybWVzc2FnZSI6W251bGxdLCJhcmlhTGFiZWwiOiJQeXRob24gb3BhY2l0eSIsImFyaWFMYWJlbGxlZGJ5IjpudWxsLCJyYW5nZUxhYmVsbGVkYnkiOltdLCJmaWVsZExhYmVsSWQiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSlider_27065e", "5d465ab0d8ac7ed736bb96b56eda358c", atob("eyJraW5kIjoic2luZ2xlIiwiaWQiOiJjdWktZmllbGQtY3RsM2J6cTF3LWNvbnRyb2wiLCJyb290SWQiOm51bGwsImlkcyI6WyJjdWktZmllbGQtY3RsM2J6cTF3LWNvbnRyb2wiXSwidHJhbnNwb3J0SWRzIjpbImN1aS1maWVsZC1jdGwzYnpxMXctY29udHJvbC1yZWFkb25seSJdLCJuYW1lcyI6WyJ2b2x1bWUiXSwiZm9ybSI6bnVsbCwidmFsdWUiOiI0MCIsIm1pbiI6IjAiLCJtYXgiOiIxMDAiLCJzdGVwIjoiMSIsImxhcmdlU3RlcCI6IjEwIiwibWluU3RlcHNCZXR3ZWVuVGh1bWJzIjowLCJkaXNhYmxlZCI6ZmFsc2UsInJlYWRvbmx5IjpmYWxzZSwiaW5oZXJpdHNSZWFkb25seSI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJvcmllbnRhdGlvbiI6Imhvcml6b250YWwiLCJ2YXJpYW50Ijoic29saWQiLCJzaXplIjoibWQiLCJzaG93VmFsdWUiOiJpbnRlcmFjdGlvbiIsImZvcm1hdCI6ImNpdHJ5LXVpLXNsaWRlciIsImRlc2NyaWJlZGJ5IjpbImN1aS1maWVsZC1jdGwzYnpxMXctY29udHJvbC1kZXNjcmlwdGlvbiJdLCJlcnJvcm1lc3NhZ2UiOltudWxsXSwiYXJpYUxhYmVsIjpudWxsLCJhcmlhTGFiZWxsZWRieSI6ImN1aS1maWVsZC1jdGwzYnpxMXctY29udHJvbC1sYWJlbCIsInJhbmdlTGFiZWxsZWRieSI6W10sImZpZWxkTGFiZWxJZCI6ImN1aS1maWVsZC1jdGwzYnpxMXctY29udHJvbC1sYWJlbCJ9"));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CField_81c723", {
+  props: {
+    required: {},
+    disabled: {},
+    readonly: {},
+    invalid: {},
+    orientation: {},
+    density: {},
+  },
+  init: ({ els, data, props, effect, reactive, provide, inject }) => {
+    const root = els[0];
+    const requiredIndicator = root.querySelector(
+      ':scope > [data-citry-ui-part="label"] > [data-citry-ui-part="required-indicator"]',
+    );
+    // Controls may expose parts with the same public names. Restrict the
+    // lookup to this Field's direct status node so nested component
+    // internals are never mistaken for Field-owned UI.
+    const error = root.querySelector(':scope > [data-citry-ui-part="error"]');
+    const controls = root.querySelectorAll('[data-citry-field-control]');
+    if (controls.length !== 1) {
+      throw new Error(
+        `[citry-ui] CField requires exactly one marked control, but found ${controls.length}.`,
+      );
+    }
+    const control = controls[0];
+    const initialSupportsRequired = control.getAttribute(
+      "data-citry-field-supports-required",
+    ) !== "false";
+    const initialSupportsReadonly = control.getAttribute(
+      "data-citry-field-supports-readonly",
+    ) !== "false";
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const allowedValues = {
+      orientation: ["vertical", "horizontal"],
+      density: ["default", "comfortable", "compact"],
+    };
+    const invalidEpisodes = new Map();
+    let externalInvalid = data.invalid;
+    let capabilityGeneration = 0;
+    let activeCapabilityGeneration = null;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name} received invalid client value ${describedValue}; `
+          + "using the server-rendered fallback.",
+        root,
+      );
+    };
+    const reportUnsupported = (name) => {
+      const episode = `capability:${name}`;
+      const fingerprint = "unsupported:true";
+      if (invalidEpisodes.get(episode) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(episode, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name}=true is not supported by its registered control; using false.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const context = reactive({
+      controlId: data.controlId,
+      descriptionId: data.descriptionId,
+      errorId: data.errorId,
+      hasDescription: data.hasDescription,
+      hasError: data.hasError,
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      nativeInvalid: false,
+      supportsRequired: initialSupportsRequired,
+      supportsReadonly: initialSupportsReadonly,
+      registerCapabilities(capabilities) {
+        const generation = ++capabilityGeneration;
+        activeCapabilityGeneration = generation;
+        context.supportsRequired = capabilities.required !== false;
+        context.supportsReadonly = capabilities.readonly !== false;
+        return () => {
+          if (activeCapabilityGeneration !== generation) {
+            return;
+          }
+          activeCapabilityGeneration = null;
+          context.supportsRequired = true;
+          context.supportsReadonly = true;
+        };
+      },
+      setNativeInvalid(value) {
+        context.nativeInvalid = Boolean(value);
+        applyInvalid();
+      },
+    });
+    provide(Symbol.for("citry-ui:field"), context);
+
+    const applyInvalid = () => {
+      const invalid = externalInvalid || context.nativeInvalid;
+      context.invalid = invalid;
+      root.toggleAttribute("data-invalid", invalid);
+      error.hidden = !(invalid && context.hasError);
+    };
+    effect(() => {
+      const requestedRequired = resolveBoolean("required", data.required);
+      const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+      // CForm uses a native disabled fieldset, so its disabled state
+      // must win over a descendant's local configuration.
+      const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+      const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
+      const required = requestedRequired && context.supportsRequired;
+      const readonly = requestedReadonly && context.supportsReadonly;
+      if (requestedRequired && !context.supportsRequired) {
+        reportUnsupported("required");
+      } else {
+        invalidEpisodes.delete("capability:required");
+      }
+      if (requestedReadonly && !context.supportsReadonly) {
+        reportUnsupported("readonly");
+      } else {
+        invalidEpisodes.delete("capability:readonly");
+      }
+      externalInvalid = resolveBoolean("invalid", data.invalid);
+      const orientation = resolveChoice("orientation");
+      const density = resolveChoice("density");
+
+      context.required = required;
+      context.disabled = disabled;
+      context.readonly = readonly;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", readonly);
+      root.dataset.orientation = orientation;
+      root.dataset.density = density;
+      requiredIndicator.hidden = !required;
+      applyInvalid();
+    });
+    root.setAttribute("data-citry-field-initialized", "");
+
+    return () => {
+      root.removeAttribute("data-citry-field-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CField_81c723", "cd0cda928e516a5f3632bf4492c28d30", atob("eyJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5Ijp0cnVlLCJpbnZhbGlkIjpmYWxzZSwib3JpZW50YXRpb24iOiJ2ZXJ0aWNhbCIsImRlbnNpdHkiOiJkZWZhdWx0IiwiY29udHJvbElkIjoiY3VpLWZpZWxkLWN0bDNienExdy1jb250cm9sIiwiZGVzY3JpcHRpb25JZCI6ImN1aS1maWVsZC1jdGwzYnpxMXctY29udHJvbC1kZXNjcmlwdGlvbiIsImVycm9ySWQiOiJjdWktZmllbGQtY3RsM2J6cTF3LWNvbnRyb2wtZXJyb3IiLCJoYXNEZXNjcmlwdGlvbiI6dHJ1ZSwiaGFzRXJyb3IiOmZhbHNlfQ=="));
+})();</script></body></html><!--citry:g1:d802a3e2:0:i:1:e-->

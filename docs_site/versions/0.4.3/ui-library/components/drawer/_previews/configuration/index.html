@@ -1,0 +1,1170 @@
+<!--citry:g1:075fb5e9:0:i:1:s--><!doctype html><html data-cid-ctl3bztic lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Configure Drawer geometry</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CDrawer_01cc33>@layer citry-ui.theme{:where(.cui-drawer-host){color:canvastext;font-family:ui-sans-serif,system-ui,sans-serif;display:contents}:where(.cui-drawer){--_cui-drawer-backdrop:var(--cui-drawer-backdrop,#0f172a94);--_cui-drawer-background:var(--cui-drawer-background,Canvas);--_cui-drawer-foreground:var(--cui-drawer-foreground,CanvasText);--_cui-drawer-border-color:var(--cui-drawer-border-color,color-mix(in srgb, CanvasText 16%, transparent));--_cui-drawer-shadow:var(--cui-drawer-shadow,0 1.5rem 4rem #0f172a47);--_cui-drawer-extent:var(--cui-drawer-extent,28rem);--_cui-drawer-padding:var(--cui-drawer-padding,1.25rem);--_cui-drawer-gap:var(--cui-drawer-gap,1rem);--_cui-drawer-radius:var(--cui-drawer-radius,.875rem);--_cui-drawer-close-size:var(--cui-drawer-close-size,2.5rem);--_cui-drawer-close-radius:var(--cui-drawer-close-radius,.5rem);box-sizing:border-box;background:var(--_cui-drawer-background);max-block-size:none;max-inline-size:none;color:var(--_cui-drawer-foreground);box-shadow:var(--_cui-drawer-shadow);border:0;margin:0;padding:0;position:fixed;overflow:hidden}:where(){background:var(--_cui-drawer-backdrop)}:where(.cui-drawer[data-size=sm]){--_cui-drawer-extent:var(--cui-drawer-extent,20rem)}:where(.cui-drawer[data-size=lg]){--_cui-drawer-extent:var(--cui-drawer-extent,40rem)}:where(.cui-drawer[data-placement^=inline-]){inline-size:min(var(--_cui-drawer-extent), 100dvi);border-block:0;block-size:100dvb;inset-block:0}:where(.cui-drawer[data-placement=inline-start]){border-inline-end:1px solid var(--_cui-drawer-border-color);border-start-end-radius:var(--_cui-drawer-radius);border-end-end-radius:var(--_cui-drawer-radius);inset-inline:0 auto}:where(.cui-drawer[data-placement=inline-end]){border-inline-start:1px solid var(--_cui-drawer-border-color);border-start-start-radius:var(--_cui-drawer-radius);border-end-start-radius:var(--_cui-drawer-radius);inset-inline:auto 0}:where(.cui-drawer[data-placement^=block-]){inline-size:100dvi;block-size:min(var(--_cui-drawer-extent), 100dvb);border-inline:0;inset-inline:0}:where(.cui-drawer[data-placement=block-start]){border-block-end:1px solid var(--_cui-drawer-border-color);border-end-end-radius:var(--_cui-drawer-radius);border-end-start-radius:var(--_cui-drawer-radius);inset-block:0 auto}:where(.cui-drawer[data-placement=block-end]){border-block-start:1px solid var(--_cui-drawer-border-color);border-start-start-radius:var(--_cui-drawer-radius);border-start-end-radius:var(--_cui-drawer-radius);inset-block:auto 0}:where(.cui-drawer[data-size=full]){--_cui-drawer-extent:var(--cui-drawer-extent,100%);border-width:0;border-radius:0}:where(.cui-drawer__surface){box-sizing:border-box;gap:var(--_cui-drawer-gap);block-size:100%;min-block-size:0;inline-size:100%;min-inline-size:0;padding-top:max(var(--_cui-drawer-padding), env(safe-area-inset-top));padding-right:max(var(--_cui-drawer-padding), env(safe-area-inset-right));padding-bottom:max(var(--_cui-drawer-padding), env(safe-area-inset-bottom));padding-left:max(var(--_cui-drawer-padding), env(safe-area-inset-left));flex-direction:column;display:flex}:where(.cui-drawer[data-scroll=drawer]){overscroll-behavior:contain;overflow:auto}:where(.cui-drawer[data-scroll=drawer] .cui-drawer__surface){block-size:auto;min-block-size:100%}:where(.cui-drawer__header){gap:var(--_cui-drawer-gap);grid-template-columns:minmax(0,1fr) auto;align-items:start;display:grid}:where(.cui-drawer__title){overflow-wrap:anywhere;min-inline-size:0;margin:0;font-size:1.25rem;font-weight:700;line-height:1.3}:where(.cui-drawer__description){overflow-wrap:anywhere;min-inline-size:0;color:color-mix(in srgb, currentColor 72%, transparent);line-height:1.5}:where(.cui-drawer__body){overflow-wrap:anywhere;flex:auto;min-block-size:0;min-inline-size:0;line-height:1.5}:where(.cui-drawer[data-scroll=body] .cui-drawer__body){overscroll-behavior:contain;overflow:auto}:where(.cui-drawer__actions){overflow-wrap:anywhere;flex-wrap:wrap;justify-content:end;gap:.75rem;min-inline-size:0;display:flex}:where(.cui-drawer__close){inline-size:var(--_cui-drawer-close-size);block-size:var(--_cui-drawer-close-size);border-radius:var(--_cui-drawer-close-radius);color:inherit;font:inherit;cursor:pointer;background:0 0;border:0;place-items:center;padding:0;font-size:1.5rem;line-height:1;display:inline-grid}:where(.cui-drawer__close[hidden]){display:none}@media (hover:hover){:where(.cui-drawer__close:hover){background:color-mix(in srgb, currentColor 10%, transparent)}}:where(.cui-drawer__close:focus-visible){outline-offset:.125rem;outline:.1875rem solid highlight}@media (forced-colors:active){:where(.cui-drawer){border-color:canvastext}:where(.cui-drawer__close){border:1px solid buttontext}}@media print{:where(.cui-drawer:not([open])){display:none}}}</style></head><body><main><!--citry:g1:075fb5e9:0:i:2:s--><section @citry-ui-preview-controls.window="Object.assign($data, $event.detail)" x-data="{placement:'inline-end', size:'md', scroll:'body'}" data-cid=ctl3bztid data-cid-ctl3bztid data-citry-root><!--citry:g1:075fb5e9:0:i:3:s--><div class=cui-drawer-host data-cid=ctl3bztie data-cid-ctl3bztie data-citry-drawer-host data-citry-root><!--citry:g1:075fb5e9:0:r:1:s--><!--citry:g1:075fb5e9:0:i:4:s--><!--citry:g1:075fb5e9:0:i:5:s--><button aria-controls=cui-drawer-ctl3bztie aria-expanded=false aria-haspopup=dialog class=cui-button data-cid=ctl3bztif data-cid-ctl3bztif data-citry-drawer-trigger data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:075fb5e9:0:r:4:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:075fb5e9:0:r:5:s--> <span class=cui-button__spinner></span> <!--citry:g1:075fb5e9:0:r:5:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:075fb5e9:0:r:6:s-->Preview geometry<!--citry:g1:075fb5e9:0:r:6:e--> </span><!--citry:g1:075fb5e9:0:r:4:e--></button><!--citry:g1:075fb5e9:0:i:5:e--><!--citry:g1:075fb5e9:0:i:4:e--><!--citry:g1:075fb5e9:0:r:1:e--><dialog aria-labelledby=cui-drawer-ctl3bztie-title aria-modal=true class=cui-drawer data-citry-ui-part=drawer data-placement=inline-end data-scroll=body data-size=md id=cui-drawer-ctl3bztie><div class=cui-drawer__surface data-citry-ui-part=surface><header class=cui-drawer__header data-citry-ui-part=header><h2 class=cui-drawer__title data-citry-ui-part=title id=cui-drawer-ctl3bztie-title><!--citry:g1:075fb5e9:0:r:2:s-->Configurable archive<!--citry:g1:075fb5e9:0:r:2:e--></h2><button aria-label=Close class=cui-drawer__close data-citry-drawer-built-in-close data-citry-drawer-close data-citry-ui-part=close type=button><span aria-hidden=true>×</span></button></header><div class=cui-drawer__body data-citry-ui-part=body><!--citry:g1:075fb5e9:0:r:3:s-->Change the logical edge, extent, and scrolling policy.<!--citry:g1:075fb5e9:0:r:3:e--></div></div></dialog></div><!--citry:g1:075fb5e9:0:i:3:e--></section><!--citry:g1:075fb5e9:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ConfigureDrawer_8a8f2c","className":"ConfigureDrawer"},{"classId":"CDrawer_01cc33","className":"CDrawer"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"ctl3bztie","invocationId":2,"parentRenderId":"ctl3bztid"},{"childRenderId":"ctl3bztif","invocationId":3,"parentRenderId":"ctl3bztid"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bztic","transparent":false},{"classId":"ConfigureDrawer_8a8f2c","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bztid","transparent":false},{"classId":"CDrawer_01cc33","instanceId":3,"invocationId":2,"parentRenderId":"ctl3bztid","renderId":"ctl3bztie","transparent":false},{"classId":"CButton_353146","instanceId":4,"invocationId":3,"parentRenderId":"ctl3bztid","renderId":"ctl3bztif","transparent":false},{"classId":"DynamicElement_29900a","instanceId":5,"invocationId":4,"parentRenderId":"ctl3bztif","renderId":"ctl3bztig","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"ConfigureDrawer_8a8f2c","ownerRenderId":"ctl3bztid","policy":"template","receiverClassId":"CDrawer_01cc33","receiverRenderId":"ctl3bztie","slotName":"activator","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"ConfigureDrawer_8a8f2c","ownerRenderId":"ctl3bztid","policy":"template","receiverClassId":"CDrawer_01cc33","receiverRenderId":"ctl3bztie","slotName":"title","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"ConfigureDrawer_8a8f2c","ownerRenderId":"ctl3bztid","policy":"template","receiverClassId":"CDrawer_01cc33","receiverRenderId":"ctl3bztie","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"ConfigureDrawer_8a8f2c","ownerRenderId":"ctl3bztid","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bztif","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":8,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bztif","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bztig","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":10,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bztif","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bztif","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{placement, size, scroll}","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ConfigureDrawer_8a8f2c","sourceRenderId":"ctl3bztid","tagName":"cdrawer","targetClassId":"CDrawer_01cc33","targetRenderId":"ctl3bztie"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ConfigureDrawer_8a8f2c","sourceRenderId":"ctl3bztid","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bztif"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bztif","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bztig"}],"slotRegions":[{"fillId":1,"ownerRenderId":"ctl3bztid","parentRegionId":null,"receiverRenderId":"ctl3bztie","regionId":1,"resultOwnerRenderId":"ctl3bztid","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bztie"},{"fillId":2,"ownerRenderId":"ctl3bztid","parentRegionId":null,"receiverRenderId":"ctl3bztie","regionId":2,"resultOwnerRenderId":"ctl3bztid","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bztie"},{"fillId":3,"ownerRenderId":"ctl3bztid","parentRegionId":null,"receiverRenderId":"ctl3bztie","regionId":3,"resultOwnerRenderId":"ctl3bztid","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bztie"},{"fillId":8,"ownerRenderId":"ctl3bztif","parentRegionId":1,"receiverRenderId":"ctl3bztig","regionId":4,"resultOwnerRenderId":"ctl3bztif","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bztid"},{"fillId":10,"ownerRenderId":"ctl3bztif","parentRegionId":4,"receiverRenderId":"ctl3bztif","regionId":5,"resultOwnerRenderId":"ctl3bztif","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bztif"},{"fillId":5,"ownerRenderId":"ctl3bztid","parentRegionId":4,"receiverRenderId":"ctl3bztif","regionId":6,"resultOwnerRenderId":"ctl3bztid","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bztif"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"075fb5e915bbce5a8544d86050c5b7c343631489e910ee6d211246b46c484bce"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz", "L2NpdHJ5L2NhY2hlL0NEcmF3ZXJfMDFjYzMzLjc1NTZiMGQzMzNjZS5qcw==", "L2NpdHJ5L2NhY2hlL0NEcmF3ZXJfMDFjYzMzLmVkYzZmZmU2ZTNjZTJhY2E1M2Y3MmRjMTZiNGQxZjkwLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NEcmF3ZXJfMDFjYzMzLmIzYjczMGNjYjQ2Ni5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6dGlm", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"], ["Q0RyYXdlcl8wMWNjMzM=", "Y3RsM2J6dGll", "ZWRjNmZmZTZlM2NlMmFjYTUzZjcyZGMxNmI0ZDFmOTA=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6dGlj"]], "graph": "075fb5e915bbce5a8544d86050c5b7c343631489e910ee6d211246b46c484bce", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+
+const modalRuntimeKey = Symbol.for("citry-ui:dialog-runtime");
+const modalRuntime = globalThis[modalRuntimeKey] ?? {
+  dialogs: [], overflow: "", paddingInlineEnd: "",
+};
+globalThis[modalRuntimeKey] = modalRuntime;
+modalRuntime.drawerControllers ??= new WeakMap();
+
+Citry.manager.registerComponent("CDrawer_01cc33", {
+  props: {
+    open: {}, dismissible: {}, closeOnEscape: {}, closeOnOutside: {},
+    initialFocus: {}, placement: {}, size: {}, scroll: {}, onOpenChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const host = els[0];
+    const nearestHost = (element) => element?.closest?.("[data-citry-drawer-host]") ?? null;
+    const drawer = [...host.querySelectorAll('[data-citry-ui-part="drawer"]')]
+      .find((candidate) => nearestHost(candidate) === host);
+    const surface = drawer?.querySelector(':scope > [data-citry-ui-part="surface"]');
+    const title = surface?.querySelector('[data-citry-ui-part="title"]');
+    const closeButton = surface?.querySelector('[data-citry-drawer-built-in-close]');
+    if (!(drawer instanceof HTMLDialogElement) || !surface || !title || !closeButton) {
+      console.error("[citry-ui] CDrawer could not resolve its owned anatomy.", host);
+      return;
+    }
+
+    const allowed = {
+      initialFocus: ["auto", "title"],
+      placement: ["inline-start", "inline-end", "block-start", "block-end"],
+      size: ["sm", "md", "lg", "full"],
+      scroll: ["body", "drawer"],
+    };
+    const invalidEpisodes = new Set();
+    let internalOpen = data.open;
+    let controlled = false;
+    let appliedOpen = false;
+    let suppressedControlledOpen = false;
+    let pendingReturnValue = "";
+    let pendingOpenSource = null;
+    let expectedNativeClose = false;
+    let pendingNativeUserClose = false;
+    let pointerStartedOutside = false;
+    let previousFocus = null;
+    let onOpenChange = null;
+    let structureValid = false;
+    let structureEpisode = false;
+    let disposed = false;
+    let generation = 0;
+    let eligibilitySource = null;
+    let configuration = {
+      dismissible: data.dismissible,
+      closeOnEscape: data.closeOnEscape,
+      closeOnOutside: data.closeOnOutside,
+      initialFocus: data.initialFocus,
+      placement: data.placement,
+      size: data.size,
+      scroll: data.scroll,
+    };
+
+    const deepActiveElement = () => {
+      let active = drawer.ownerDocument.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+      return active;
+    };
+    const composedParent = (node) => {
+      if (node?.parentNode) return node.parentNode;
+      const root = node?.getRootNode?.();
+      return root instanceof ShadowRoot ? root.host : null;
+    };
+    const composedContains = (ancestor, node) => {
+      for (let current = node; current; current = composedParent(current)) {
+        if (current === ancestor) return true;
+      }
+      return false;
+    };
+    const openRoots = () => {
+      const roots = [drawer.ownerDocument];
+      for (let index = 0; index < roots.length; index += 1) {
+        const root = roots[index];
+        for (const element of root.querySelectorAll("*")) {
+          if (element.shadowRoot) roots.push(element.shadowRoot);
+        }
+      }
+      return roots;
+    };
+    const mayOpen = () => {
+      if (!host.isConnected || !drawer.isConnected || !structureValid) return false;
+      if (drawer.hidden || drawer.inert) return false;
+      if (drawer.open) {
+        const drawerStyle = getComputedStyle(drawer);
+        if (drawerStyle.display === "none" || drawerStyle.visibility === "hidden") return false;
+      }
+      for (let node = host; node; node = composedParent(node)) {
+        if (node instanceof HTMLElement) {
+          const style = getComputedStyle(node);
+          if (node.hidden || node.inert || style.display === "none" || style.visibility === "hidden") {
+            return false;
+          }
+          if (node instanceof HTMLDialogElement && node !== drawer && !node.open) return false;
+          if (node.hasAttribute("popover") && !node.matches(":popover-open")) return false;
+        }
+      }
+      const modals = openRoots().flatMap((root) => [...root.querySelectorAll("dialog:modal")]);
+      return modals.every((modal) => modal === drawer || composedContains(modal, host));
+    };
+    const isFocusable = (element) => element instanceof HTMLElement
+      && element.isConnected
+      && !element.hidden
+      && !element.matches(":disabled,[inert]")
+      && !element.closest("[inert]")
+      && element.getClientRects().length > 0
+      && getComputedStyle(element).visibility !== "hidden";
+    const focusableElements = () => [...drawer.querySelectorAll(
+      'a[href],area[href],button:not(:disabled),input:not(:disabled):not([type="hidden"]),'
+        + 'select:not(:disabled),textarea:not(:disabled),iframe,object,embed,audio[controls],'
+        + 'video[controls],summary,[contenteditable]:not([contenteditable="false"]),'
+        + '[tabindex]:not([tabindex="-1"]):not([inert])',
+    )].filter((element) => isFocusable(element) && element.closest("dialog") === drawer)
+      .filter((element, _index, elements) => {
+        if (!(element instanceof HTMLInputElement) || element.type !== "radio" || !element.name) {
+          return true;
+        }
+        const group = elements.filter((candidate) => candidate instanceof HTMLInputElement
+          && candidate.type === "radio" && candidate.name === element.name
+          && candidate.form === element.form);
+        const checked = group.find((candidate) => candidate.checked);
+        return checked ? element === checked : element === group[0];
+      })
+      .map((element, index) => ({ element, index, tabIndex: element.tabIndex }))
+      .filter(({ tabIndex }) => tabIndex >= 0)
+      .sort((left, right) => {
+        if (left.tabIndex > 0 && right.tabIndex === 0) return -1;
+        if (left.tabIndex === 0 && right.tabIndex > 0) return 1;
+        if (left.tabIndex > 0 && right.tabIndex > 0 && left.tabIndex !== right.tabIndex) {
+          return left.tabIndex - right.tabIndex;
+        }
+        return left.index - right.index;
+      }).map(({ element }) => element);
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      let shown;
+      try { shown = JSON.stringify(value) ?? String(value); } catch { shown = String(value); }
+      console.error(
+        `[citry-ui] CDrawer ${name} received invalid client value ${shown}; using its fallback.`,
+        drawer,
+      );
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "boolean") { invalidEpisodes.delete(name); return value; }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveEnum = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowed[name].includes(value)) { invalidEpisodes.delete(name); return value; }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveCallback = () => {
+      const value = props.onOpenChange;
+      if (value === undefined || value === null || typeof value === "function") {
+        invalidEpisodes.delete("onOpenChange");
+        return value ?? null;
+      }
+      reportInvalid("onOpenChange", value);
+      return null;
+    };
+    const ownedActivators = () => [...host.querySelectorAll("[data-citry-drawer-trigger]")]
+      .filter((element) => nearestHost(element) === host && !drawer.contains(element));
+    const updateActivators = (open) => {
+      for (const activator of ownedActivators()) {
+        activator.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+    };
+    const interactiveSelector = 'button,a[href],input,select,textarea,[tabindex],'
+      + '[contenteditable]:not([contenteditable="false"])';
+    const hasInteractiveDescendant = (element) => Boolean(element.querySelector(interactiveSelector));
+    const validateStructure = () => {
+      const activators = ownedActivators();
+      const outsideInteractive = [...host.querySelectorAll(interactiveSelector)]
+        .filter((element) => !drawer.contains(element));
+      const activatorValid = !data.hasActivator || (
+        activators.length === 1
+        && activators[0] instanceof HTMLButtonElement
+        && activators[0].type === "button"
+        && outsideInteractive.length === 1
+        && outsideInteractive[0] === activators[0]
+      );
+      const contentValid = !hasInteractiveDescendant(title)
+        && ![...surface.querySelectorAll('[data-citry-ui-part="description"]')]
+          .some(hasInteractiveDescendant)
+        && ![...closeButton.children].some((child) => child.matches?.(interactiveSelector)
+          || child.querySelector?.(interactiveSelector));
+      const valid = activatorValid && contentValid;
+      if (!valid && !structureEpisode) {
+        structureEpisode = true;
+        console.error("[citry-ui] CDrawer settled anatomy is invalid; failing closed.", host);
+      } else if (valid) {
+        structureEpisode = false;
+      }
+      structureValid = valid;
+      return valid;
+    };
+    const lockScroll = () => {
+      if (modalRuntime.dialogs.includes(drawer)) return;
+      if (modalRuntime.dialogs.length === 0) {
+        const root = drawer.ownerDocument.documentElement;
+        modalRuntime.overflow = root.style.overflow;
+        modalRuntime.paddingInlineEnd = root.style.paddingInlineEnd;
+        const view = drawer.ownerDocument.defaultView;
+        const scrollbarWidth = Math.max(0, view.innerWidth - root.clientWidth);
+        const currentPadding = Number.parseFloat(view.getComputedStyle(root).paddingInlineEnd) || 0;
+        root.style.overflow = "hidden";
+        if (scrollbarWidth > 0) root.style.paddingInlineEnd = `${currentPadding + scrollbarWidth}px`;
+      }
+      modalRuntime.dialogs.push(drawer);
+    };
+    const unlockScroll = () => {
+      const index = modalRuntime.dialogs.indexOf(drawer);
+      if (index === -1) return;
+      modalRuntime.dialogs.splice(index, 1);
+      if (modalRuntime.dialogs.length === 0) {
+        const root = drawer.ownerDocument.documentElement;
+        root.style.overflow = modalRuntime.overflow;
+        root.style.paddingInlineEnd = modalRuntime.paddingInlineEnd;
+      }
+    };
+    const closeDescendants = () => {
+      for (const candidate of [...modalRuntime.dialogs].reverse()) {
+        if (candidate === drawer || !drawer.contains(candidate) || !candidate.open) continue;
+        const controller = modalRuntime.drawerControllers.get(candidate);
+        if (controller) controller.forceClose("ancestor", drawer);
+        else candidate.close();
+      }
+    };
+    const stopEligibilityWatch = () => eligibilityObserver.disconnect();
+    const forceClose = (reason, source) => {
+      const wasOpen = appliedOpen || drawer.open;
+      suppressedControlledOpen = controlled && props.open === true;
+      internalOpen = false;
+      normalizeClosed();
+      if (wasOpen) notify(false, reason, source, "", true);
+      restoreFocus();
+    };
+    modalRuntime.drawerControllers.set(drawer, { forceClose });
+    const reconcileEligibility = (records) => {
+      if (!appliedOpen) return;
+      if (!drawer.open) { onNativeClose(); return; }
+      if (mayOpen()) return;
+      eligibilitySource = records.find((record) => record.target instanceof Element)?.target ?? host;
+      forceClose("ancestor", eligibilitySource);
+    };
+    const eligibilityObserver = new MutationObserver(reconcileEligibility);
+    const startEligibilityWatch = () => {
+      eligibilityObserver.disconnect();
+      const observed = new Set();
+      for (let node = host; node; node = composedParent(node)) {
+        if (node instanceof Element && !observed.has(node)) {
+          observed.add(node);
+          eligibilityObserver.observe(node, {
+            attributes: true,
+            attributeFilter: ["class", "hidden", "inert", "open", "style"],
+          });
+        }
+        if (node?.parentNode && !observed.has(node.parentNode)) {
+          observed.add(node.parentNode);
+          eligibilityObserver.observe(node.parentNode, { childList: true });
+        }
+      }
+      eligibilityObserver.observe(drawer, {
+        attributes: true,
+        attributeFilter: ["class", "hidden", "inert", "open", "style"],
+      });
+    };
+    const normalizeClosed = () => {
+      stopEligibilityWatch();
+      closeDescendants();
+      expectedNativeClose = drawer.open;
+      if (drawer.open) drawer.close();
+      drawer.removeAttribute("data-open");
+      appliedOpen = false;
+      updateActivators(false);
+      unlockScroll();
+    };
+    const restoreFocus = (immediate = false) => {
+      const token = generation;
+      const restore = () => {
+        if ((!immediate && disposed) || token !== generation) return;
+        const active = deepActiveElement();
+        const browserNeedsTarget = active === drawer.ownerDocument.body
+          || active === drawer
+          || composedContains(drawer, active);
+        if (
+          browserNeedsTarget
+          && previousFocus?.isConnected
+          && active !== previousFocus
+          && isFocusable(previousFocus)
+        ) {
+          previousFocus.focus({ preventScroll: true });
+        }
+      };
+      if (immediate) restore();
+      else queueMicrotask(restore);
+    };
+    const applyOpen = (nextOpen, source = null, returnValue = "") => {
+      if (!nextOpen) closeDescendants();
+      if (nextOpen === appliedOpen && drawer.open === nextOpen) return;
+      generation += 1;
+      if (nextOpen) {
+        if (!mayOpen()) {
+          if (controlled) suppressedControlledOpen = props.open === true;
+          else internalOpen = false;
+          normalizeClosed();
+          return;
+        }
+        previousFocus = source instanceof HTMLElement ? source : deepActiveElement();
+        drawer.returnValue = "";
+        if (drawer.open) drawer.removeAttribute("open");
+        try { drawer.showModal(); } catch (error) {
+          console.error("[citry-ui] CDrawer could not enter modal state:", error, drawer);
+          normalizeClosed();
+          return;
+        }
+        appliedOpen = true;
+        drawer.setAttribute("data-open", "");
+        updateActivators(true);
+        lockScroll();
+        startEligibilityWatch();
+        const token = generation;
+        queueMicrotask(() => {
+          if (
+            !disposed && token === generation
+            && configuration.initialFocus === "title" && isFocusable(title)
+          ) {
+            title.focus({ preventScroll: true });
+          }
+        });
+        return;
+      }
+      expectedNativeClose = drawer.open;
+      stopEligibilityWatch();
+      if (drawer.open) drawer.close(returnValue);
+      drawer.removeAttribute("data-open");
+      appliedOpen = false;
+      updateActivators(false);
+      unlockScroll();
+      restoreFocus();
+    };
+    const notify = (nextOpen, reason, source, returnValue = "", forced = false) => onOpenChange?.(nextOpen, {
+      reason, controlled, forced, source, returnValue,
+    });
+    const requestOpen = (nextOpen, reason, source, returnValue = "") => {
+      if (nextOpen === appliedOpen) return;
+      if (controlled) {
+        pendingReturnValue = nextOpen ? "" : returnValue;
+        if (nextOpen && source instanceof HTMLElement) pendingOpenSource = source;
+        notify(nextOpen, reason, source, returnValue);
+        return;
+      }
+      internalOpen = nextOpen;
+      applyOpen(nextOpen, source, returnValue);
+      if (appliedOpen === nextOpen) notify(nextOpen, reason, source, returnValue);
+    };
+    const eventIsOutside = (event) => {
+      if (event.target !== drawer) return false;
+      const rect = surface.getBoundingClientRect();
+      return event.clientX < rect.left || event.clientX > rect.right
+        || event.clientY < rect.top || event.clientY > rect.bottom;
+    };
+    const onHostClick = (event) => {
+      const trigger = event.target.closest?.("[data-citry-drawer-trigger]");
+      if (trigger && nearestHost(trigger) === host) { requestOpen(true, "trigger", trigger); return; }
+      const close = event.target.closest?.("[data-citry-drawer-close]");
+      if (!close || nearestHost(close) !== host || !drawer.contains(close)) return;
+      const builtIn = close.hasAttribute("data-citry-drawer-built-in-close");
+      if (builtIn && !configuration.dismissible) return;
+      requestOpen(false, builtIn ? "close-button" : "action", close,
+        close instanceof HTMLButtonElement ? close.value : "");
+    };
+    const onCancel = (event) => {
+      event.preventDefault();
+      if (configuration.dismissible && configuration.closeOnEscape) requestOpen(false, "escape", drawer);
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "Tab" || event.target.closest?.("dialog") !== drawer) return;
+      const focusable = focusableElements();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        (configuration.initialFocus === "title" ? title : drawer).focus({ preventScroll: true });
+        return;
+      }
+      const active = deepActiveElement();
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (active === first || active === drawer || active === title)) {
+        event.preventDefault(); last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault(); first.focus({ preventScroll: true });
+      }
+    };
+    const rememberNativeDialogSubmission = (target) => {
+      if (controlled || target.closest?.("[data-citry-drawer-close]")) return;
+      const submitter = target.closest?.("button,input");
+      if (!(submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)
+        || submitter.form?.closest("dialog") !== drawer) return;
+      const isSubmit = submitter instanceof HTMLButtonElement
+        ? submitter.type === "submit"
+        : submitter.type === "submit" || submitter.type === "image";
+      const method = submitter.hasAttribute("formmethod")
+        ? submitter.getAttribute("formmethod")
+        : submitter.form.getAttribute("method") ?? "get";
+      if (isSubmit && method.toLowerCase() === "dialog") pendingNativeUserClose = true;
+    };
+    const onPointerDown = (event) => {
+      pointerStartedOutside = eventIsOutside(event);
+      rememberNativeDialogSubmission(event.target);
+    };
+    const onPointerCancel = () => { pointerStartedOutside = false; };
+    const onDrawerClick = (event) => {
+      rememberNativeDialogSubmission(event.target);
+      const close = pointerStartedOutside && eventIsOutside(event);
+      pointerStartedOutside = false;
+      if (close && configuration.dismissible && configuration.closeOnOutside) {
+        requestOpen(false, "outside", drawer);
+      }
+    };
+    const onSubmit = (event) => {
+      const form = event.target;
+      if (event.defaultPrevented || !(form instanceof HTMLFormElement)
+        || form.closest("dialog") !== drawer) return;
+      const submitter = event.submitter;
+      const overridden = (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)
+        && submitter.hasAttribute("formmethod");
+      if ((overridden ? submitter.formMethod : form.method).toLowerCase() !== "dialog") return;
+      if (!controlled) {
+        pendingNativeUserClose = true;
+        return;
+      }
+      event.preventDefault();
+      requestOpen(false, "native", submitter ?? form,
+        submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement
+          ? submitter.value : "");
+    };
+    const onNativeClose = () => {
+      if (expectedNativeClose) { expectedNativeClose = false; return; }
+      if (!appliedOpen) return;
+      closeDescendants();
+      suppressedControlledOpen = controlled && props.open === true;
+      appliedOpen = false;
+      internalOpen = false;
+      drawer.removeAttribute("data-open");
+      updateActivators(false);
+      unlockScroll();
+      stopEligibilityWatch();
+      let closedAncestor = null;
+      for (let node = composedParent(host); node; node = composedParent(node)) {
+        if (node instanceof HTMLDialogElement && !node.open) { closedAncestor = node; break; }
+      }
+      const forced = closedAncestor !== null || !pendingNativeUserClose;
+      pendingNativeUserClose = false;
+      notify(false, closedAncestor ? "ancestor" : "native", closedAncestor ?? drawer,
+        drawer.returnValue, forced);
+      restoreFocus();
+    };
+    const reconcileStructure = () => {
+      if (validateStructure()) {
+        host.setAttribute("data-citry-drawer-initialized", "");
+      } else {
+        host.removeAttribute("data-citry-drawer-initialized");
+        if (appliedOpen || drawer.open) {
+          forceClose("ancestor", host);
+        }
+      }
+    };
+
+    host.addEventListener("click", onHostClick);
+    drawer.addEventListener("cancel", onCancel);
+    drawer.addEventListener("keydown", onKeyDown);
+    drawer.addEventListener("pointerdown", onPointerDown, true);
+    drawer.addEventListener("pointercancel", onPointerCancel);
+    drawer.addEventListener("click", onDrawerClick);
+    drawer.addEventListener("submit", onSubmit);
+    drawer.addEventListener("close", onNativeClose);
+    const structureObserver = new MutationObserver(reconcileStructure);
+    structureObserver.observe(host, {
+      subtree: true, childList: true, attributes: true,
+      attributeFilter: ["contenteditable", "href", "role", "tabindex", "type"],
+    });
+    validateStructure();
+
+    effect(() => {
+      const suppliedOpen = props.open;
+      let nextOpen = internalOpen;
+      if (suppliedOpen === undefined || suppliedOpen === null) {
+        suppressedControlledOpen = false;
+        pendingReturnValue = "";
+        if (controlled) internalOpen = appliedOpen;
+        controlled = false;
+        nextOpen = internalOpen;
+        invalidEpisodes.delete("open");
+      } else if (typeof suppliedOpen === "boolean") {
+        controlled = true;
+        if (!suppliedOpen) suppressedControlledOpen = false;
+        nextOpen = suppressedControlledOpen ? false : suppliedOpen;
+        invalidEpisodes.delete("open");
+      } else {
+        suppressedControlledOpen = false;
+        pendingReturnValue = "";
+        reportInvalid("open", suppliedOpen);
+        if (controlled) internalOpen = appliedOpen;
+        controlled = false;
+        nextOpen = internalOpen;
+      }
+      configuration = {
+        dismissible: resolveBoolean("dismissible"),
+        closeOnEscape: resolveBoolean("closeOnEscape"),
+        closeOnOutside: resolveBoolean("closeOnOutside"),
+        initialFocus: resolveEnum("initialFocus"),
+        placement: resolveEnum("placement"),
+        size: resolveEnum("size"),
+        scroll: resolveEnum("scroll"),
+      };
+      onOpenChange = resolveCallback();
+      closeButton.hidden = !configuration.dismissible;
+      if (configuration.initialFocus === "title") title.setAttribute("tabindex", "-1");
+      else title.removeAttribute("tabindex");
+      drawer.dataset.placement = configuration.placement;
+      drawer.dataset.size = configuration.size;
+      drawer.dataset.scroll = configuration.scroll;
+      applyOpen(nextOpen, nextOpen ? pendingOpenSource : null, nextOpen ? "" : pendingReturnValue);
+      if (appliedOpen === nextOpen) {
+        pendingReturnValue = "";
+        if (nextOpen) pendingOpenSource = null;
+      }
+    });
+    if (structureValid) host.setAttribute("data-citry-drawer-initialized", "");
+
+    return () => {
+      generation += 1;
+      structureObserver.disconnect();
+      eligibilityObserver.disconnect();
+      host.removeEventListener("click", onHostClick);
+      drawer.removeEventListener("cancel", onCancel);
+      drawer.removeEventListener("keydown", onKeyDown);
+      drawer.removeEventListener("pointerdown", onPointerDown, true);
+      drawer.removeEventListener("pointercancel", onPointerCancel);
+      drawer.removeEventListener("click", onDrawerClick);
+      drawer.removeEventListener("submit", onSubmit);
+      drawer.removeEventListener("close", onNativeClose);
+      modalRuntime.drawerControllers.delete(drawer);
+      closeDescendants();
+      expectedNativeClose = drawer.open;
+      if (drawer.open) drawer.close();
+      appliedOpen = false;
+      updateActivators(false);
+      unlockScroll();
+      restoreFocus(true);
+      disposed = true;
+      host.removeAttribute("data-citry-drawer-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CDrawer_01cc33", "edc6ffe6e3ce2aca53f72dc16b4d1f90", atob("eyJvcGVuIjpmYWxzZSwiZGlzbWlzc2libGUiOnRydWUsImNsb3NlT25Fc2NhcGUiOnRydWUsImNsb3NlT25PdXRzaWRlIjp0cnVlLCJpbml0aWFsRm9jdXMiOiJhdXRvIiwicGxhY2VtZW50IjoiaW5saW5lLWVuZCIsInNpemUiOiJtZCIsInNjcm9sbCI6ImJvZHkiLCJoYXNBY3RpdmF0b3IiOnRydWV9"));
+})();</script></body></html><!--citry:g1:075fb5e9:0:i:1:e-->

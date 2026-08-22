@@ -1,0 +1,104 @@
+schema_version: 1
+family: switch
+
+components: [CSwitch]
+
+inputs:
+  - id: cswitch-server-inputs
+    component: CSwitch
+    channel: server
+    column_widths: [fit, 16rem, 7rem, auto]
+    entries:
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the optional native/FormData name.}
+      - {id: value, name: value, type: str, default: {kind: literal, value: 'on'}, effect: Sets the submitted token while checked.}
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native input identity and the label relationship.}
+      - {id: checked, name: checked, type: bool, default: {kind: literal, value: false}, effect: Sets server default checkedness.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Requires the setting to be on; CField owns it when composed.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Disables activation and submission; Field/Form remain dominant.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets explicit invalid styling and relationships; CField owns it when composed.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CSwitchSize]}, default: {kind: literal, value: md}, effect: Sets control and text scale.}
+      - {id: label-pos, name: label_pos, type: {display: '"start" | "end"', interfaces: [CSwitchLabelPos]}, default: {kind: literal, value: end}, effect: Places the visible label before or after the track.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting metadata and targeted Alpine attributes to the root.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting naming metadata and native listeners to the input.}
+  - id: cswitch-client-inputs
+    component: CSwitch
+    channel: client
+    column_widths: [fit, 16rem, 7rem, auto]
+    entries:
+      - {id: checked, name: checked, type: boolean, omitted: Releases control to native checkedness., effect: Controls current checkedness; omission releases control.}
+      - {id: value, name: value, type: string, omitted: Uses the server fallback., effect: Controls the native submission token.}
+      - {id: required, name: required, type: boolean, omitted: Uses the server or Field fallback., effect: Controls native required state outside Field.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server or Field/Form fallback., effect: Controls local disabled state outside Field.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses the server or Field fallback., effect: Controls explicit invalid state outside Field.}
+      - {id: size, name: size, type: '"sm" | "md" | "lg"', omitted: Uses the server fallback., effect: Controls public size.}
+      - {id: label-pos, name: label_pos, type: '"start" | "end"', omitted: Uses the server fallback., effect: Controls logical label placement.}
+
+slots:
+  - id: cswitch-slots
+    component: CSwitch
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CSwitchDefaultSlotData]}, fallback: Label-free standalone Switch requires an ARIA name; the slot is forbidden under CField.}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CSwitchDescriptionSlotData]}, fallback: Description and relationship are omitted; the slot is forbidden under CField.}
+
+events: []
+methods: []
+
+css:
+  - id: cswitch-css-variables
+    component: CSwitch
+    entries:
+      - {id: cui-switch-off-color, name: --cui-switch-off-color, type: color, purpose: Track color while off., default: Scheme-aware neutral.}
+      - {id: cui-switch-on-color, name: --cui-switch-on-color, type: color, purpose: Track color while on., default: Scheme-aware primary.}
+      - {id: cui-switch-thumb-color, name: --cui-switch-thumb-color, type: color, purpose: Thumb fill., default: Canvas.}
+      - {id: cui-switch-foreground, name: --cui-switch-foreground, type: color, purpose: Label and description foreground., default: CanvasText.}
+      - {id: cui-switch-focus-color, name: --cui-switch-focus-color, type: color, purpose: Keyboard focus ring., default: Highlight.}
+      - {id: cui-switch-invalid-color, name: --cui-switch-invalid-color, type: color, purpose: Invalid-state outline., default: Scheme-aware danger.}
+      - {id: cui-switch-disabled-opacity, name: --cui-switch-disabled-opacity, type: number, purpose: Disabled root opacity., default: 0.52.}
+      - {id: cui-switch-width, name: --cui-switch-width, type: length, purpose: Track inline size., default: Size-derived length.}
+      - {id: cui-switch-height, name: --cui-switch-height, type: length, purpose: Track block size., default: Size-derived length.}
+      - {id: cui-switch-padding, name: --cui-switch-padding, type: length, purpose: Track inset around the thumb., default: 0.1875rem.}
+      - {id: cui-switch-gap, name: --cui-switch-gap, type: length, purpose: Track-to-label spacing., default: 0.625rem.}
+      - {id: cui-switch-duration, name: --cui-switch-duration, type: time, purpose: Track and thumb transition duration., default: 140ms.}
+
+attributes:
+  - id: cswitch-attributes
+    component: CSwitch
+    entries:
+      - {id: role, name: role, element: Native input, type: '"switch"', meaning: Exposes on/off semantics.}
+      - {id: checked, name: checked, element: Native input, type: boolean present or absent, meaning: Server default checkedness; current checkedness is the native property.}
+      - {id: required, name: required, element: Native input, type: boolean present or absent, meaning: Native required state.}
+      - {id: disabled, name: disabled, element: Native input, type: boolean present or absent, meaning: Native disabled state.}
+      - {id: data-checked, name: data-checked, element: Root, type: boolean present or absent, meaning: Mirrors current native checkedness.}
+      - {id: data-required, name: data-required, element: Root, type: boolean present or absent, meaning: Mirrors effective required state.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: boolean present or absent, meaning: Mirrors effective disabled state.}
+      - {id: data-invalid, name: data-invalid, element: Root, type: boolean present or absent, meaning: Mirrors explicit or native invalid state.}
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg"', meaning: Mirrors effective size.}
+      - {id: data-label-pos, name: data-label-pos, element: Root, type: '"start" | "end"', meaning: Mirrors logical label placement.}
+
+selectors:
+  - id: cswitch-selectors
+    component: CSwitch
+    entries:
+      - {id: switch, selector: '[data-citry-ui-part="switch"]', element: Root span, purpose: Root styling and attrs destination.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native checkbox input, purpose: Focus form state and native events.}
+      - {id: surface, selector: '[data-citry-ui-part="surface"]', element: Presentation span, purpose: Shared track and text layout surface.}
+      - {id: track, selector: '[data-citry-ui-part="track"]', element: Decorative span, purpose: Off/on visual track.}
+      - {id: thumb, selector: '[data-citry-ui-part="thumb"]', element: Decorative span, purpose: Moving state indicator.}
+      - {id: body, selector: '[data-citry-ui-part="body"]', element: Text wrapper span, purpose: Label and description layout.}
+      - {id: label, selector: '[data-citry-ui-part="label"]', element: Visible label span, purpose: Stable setting name.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Description span, purpose: Optional connected guidance.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: size, name: CSwitchSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: label-pos, name: CSwitchLabelPos, definition: 'Literal["start", "end"]'}
+  - {id: default, kind: record, name: CSwitchDefaultSlotData, entries: []}
+  - {id: description, kind: record, name: CSwitchDescriptionSlotData, entries: []}
+
+translations: []

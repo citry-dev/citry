@@ -1,0 +1,79 @@
+<!doctype html><html data-cid-ctl3bzqjp lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Align and distribute Row children</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=GroupAlignment_8c3c37>:where(.flow-alignments) {
+  max-inline-size: 44rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-alignments__group) {
+  min-block-size: 3.5rem;
+  padding: 0.65rem;
+  border-radius: 0.55rem;
+  background: light-dark(#f2e4cf, #362c24);
+}
+
+:where(.flow-alignments__group span) {
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  background: light-dark(#b96540, #d7815b);
+  color: #ffffff;
+  font-size: 0.78rem;
+}</style><style data-citry-css-class=CRow_c22819>@layer citry-ui.theme{:where([data-citry-ui-part=row]){--_cui-row-gap:var(--cui-row-gap,.5rem);justify-content:flex-start;align-items:center;gap:var(--_cui-row-gap);flex-flow:row;min-inline-size:0;display:flex}:where([data-citry-ui-part=row][data-wrap]){flex-wrap:wrap}:where([data-citry-ui-part=row][data-gap="0"]){--_cui-row-gap:var(--cui-row-gap,0)}:where([data-citry-ui-part=row][data-gap=xs]){--_cui-row-gap:var(--cui-row-gap,.25rem)}:where([data-citry-ui-part=row][data-gap=md]){--_cui-row-gap:var(--cui-row-gap,.75rem)}:where([data-citry-ui-part=row][data-gap=lg]){--_cui-row-gap:var(--cui-row-gap,1rem)}:where([data-citry-ui-part=row][data-gap=xl]){--_cui-row-gap:var(--cui-row-gap,1.5rem)}:where([data-citry-ui-part=row][data-align=start]){align-items:flex-start}:where([data-citry-ui-part=row][data-align=end]){align-items:flex-end}:where([data-citry-ui-part=row][data-align=stretch]){align-items:stretch}:where([data-citry-ui-part=row][data-align=baseline]){align-items:baseline}:where([data-citry-ui-part=row][data-justify=center]){justify-content:center}:where([data-citry-ui-part=row][data-justify=end]){justify-content:flex-end}:where([data-citry-ui-part=row][data-justify=between]){justify-content:space-between}:where([data-citry-ui-part=row][data-justify=around]){justify-content:space-around}:where([data-citry-ui-part=row][data-justify=evenly]){justify-content:space-evenly}:where([data-citry-ui-part=row][data-reverse]){flex-direction:row-reverse}:where([data-citry-ui-part=row]>*){min-inline-size:0}}</style><style data-citry-css-class=CCol_a23ecf>@layer citry-ui.theme{:where([data-citry-ui-part=col]){--_cui-col-gap:var(--cui-col-gap,.75rem);justify-content:flex-start;align-items:stretch;gap:var(--_cui-col-gap);flex-direction:column;min-inline-size:0;display:flex}:where([data-citry-ui-part=col][data-gap="0"]){--_cui-col-gap:var(--cui-col-gap,0)}:where([data-citry-ui-part=col][data-gap=xs]){--_cui-col-gap:var(--cui-col-gap,.25rem)}:where([data-citry-ui-part=col][data-gap=sm]){--_cui-col-gap:var(--cui-col-gap,.5rem)}:where([data-citry-ui-part=col][data-gap=lg]){--_cui-col-gap:var(--cui-col-gap,1rem)}:where([data-citry-ui-part=col][data-gap=xl]){--_cui-col-gap:var(--cui-col-gap,1.5rem)}:where([data-citry-ui-part=col][data-align=start]){align-items:flex-start}:where([data-citry-ui-part=col][data-align=center]){align-items:center}:where([data-citry-ui-part=col][data-align=end]){align-items:flex-end}:where([data-citry-ui-part=col][data-align=baseline]){align-items:baseline}:where([data-citry-ui-part=col][data-justify=center]){justify-content:center}:where([data-citry-ui-part=col][data-justify=end]){justify-content:flex-end}:where([data-citry-ui-part=col][data-justify=between]){justify-content:space-between}:where([data-citry-ui-part=col][data-justify=around]){justify-content:space-around}:where([data-citry-ui-part=col][data-justify=evenly]){justify-content:space-evenly}:where([data-citry-ui-part=col][data-reverse]){flex-direction:column-reverse}:where([data-citry-ui-part=col]>*){min-inline-size:0}}</style></head><body><main><div class="cui-col flow-alignments" data-align=stretch data-cid-ctl3bzqjq data-cid-ctl3bzqjr data-citry-ui-part=col data-gap=lg data-justify=start><div class=cui-col data-align=stretch data-cid-ctl3bzqjt data-citry-ui-part=col data-gap=xs data-justify=start><strong>justify=start</strong><div class="cui-row flow-alignments__group" data-align=center data-cid-ctl3bzqjv data-citry-ui-part=row data-gap=sm data-justify=start data-wrap><span>Trim</span><span>Bisque</span><span>Glaze</span></div></div><div class=cui-col data-align=stretch data-cid-ctl3bzqjx data-citry-ui-part=col data-gap=xs data-justify=start><strong>justify=center</strong><div class="cui-row flow-alignments__group" data-align=center data-cid-ctl3bzqjz data-citry-ui-part=row data-gap=sm data-justify=center data-wrap><span>Trim</span><span>Bisque</span><span>Glaze</span></div></div><div class=cui-col data-align=stretch data-cid-ctl3bzqk1 data-citry-ui-part=col data-gap=xs data-justify=start><strong>justify=end</strong><div class="cui-row flow-alignments__group" data-align=center data-cid-ctl3bzqk3 data-citry-ui-part=row data-gap=sm data-justify=end data-wrap><span>Trim</span><span>Bisque</span><span>Glaze</span></div></div><div class=cui-col data-align=stretch data-cid-ctl3bzqk5 data-citry-ui-part=col data-gap=xs data-justify=start><strong>justify=between</strong><div class="cui-row flow-alignments__group" data-align=center data-cid-ctl3bzqk7 data-citry-ui-part=row data-gap=sm data-justify=between data-wrap><span>Trim</span><span>Bisque</span><span>Glaze</span></div></div><div class=cui-col data-align=stretch data-cid-ctl3bzqk9 data-citry-ui-part=col data-gap=xs data-justify=start><strong>justify=around</strong><div class="cui-row flow-alignments__group" data-align=center data-cid-ctl3bzqkb data-citry-ui-part=row data-gap=sm data-justify=around data-wrap><span>Trim</span><span>Bisque</span><span>Glaze</span></div></div><div class=cui-col data-align=stretch data-cid-ctl3bzqkd data-citry-ui-part=col data-gap=xs data-justify=start><strong>justify=evenly</strong><div class="cui-row flow-alignments__group" data-align=center data-cid-ctl3bzqkf data-citry-ui-part=row data-gap=sm data-justify=evenly data-wrap><span>Trim</span><span>Bisque</span><span>Glaze</span></div></div></div></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0dyb3VwQWxpZ25tZW50XzhjM2MzNy42NDQxOGY2NTcyOTUuY3Nz", "L2NpdHJ5L2NhY2hlL0NSb3dfYzIyODE5LjkwYzQ3NGQ5ZmFkMS5jc3M=", "L2NpdHJ5L2NhY2hlL0NDb2xfYTIzZWNmLjQ5NDhjZDhlYTI0MC5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6cWpw"], ["R3JvdXBBbGlnbm1lbnRfOGMzYzM3", "Y3RsM2J6cWpx"], ["Q1Jvd19jMjI4MTk=", "Y3RsM2J6cWp2"], ["Q0NvbF9hMjNlY2Y=", "Y3RsM2J6cWp0"], ["Q1Jvd19jMjI4MTk=", "Y3RsM2J6cWp6"], ["Q0NvbF9hMjNlY2Y=", "Y3RsM2J6cWp4"], ["Q1Jvd19jMjI4MTk=", "Y3RsM2J6cWsz"], ["Q0NvbF9hMjNlY2Y=", "Y3RsM2J6cWsx"], ["Q1Jvd19jMjI4MTk=", "Y3RsM2J6cWs3"], ["Q0NvbF9hMjNlY2Y=", "Y3RsM2J6cWs1"], ["Q1Jvd19jMjI4MTk=", "Y3RsM2J6cWti"], ["Q0NvbF9hMjNlY2Y=", "Y3RsM2J6cWs5"], ["Q1Jvd19jMjI4MTk=", "Y3RsM2J6cWtm"], ["Q0NvbF9hMjNlY2Y=", "Y3RsM2J6cWtk"], ["Q0NvbF9hMjNlY2Y=", "Y3RsM2J6cWpy"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

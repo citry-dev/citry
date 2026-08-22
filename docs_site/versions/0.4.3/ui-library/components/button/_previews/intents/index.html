@@ -1,0 +1,648 @@
+<!--citry:g1:7d8a8e40:0:i:1:s--><!doctype html><html data-cid-ctl3bzogn lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compare Button intents</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=ButtonIntents_434287>:where(.button-intents) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 0.75rem;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.button-intents article) {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid light-dark(#d5ddd8, #40594b);
+  border-radius: 0.75rem;
+  background: Canvas;
+}
+
+:where(.button-intents h2) {
+  margin-block: 0;
+  font-size: 0.875rem;
+}
+
+:where(.button-intents article div) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}</style></head><body><main><!--citry:g1:7d8a8e40:0:i:2:s--><section class=button-intents data-cid-ctl3bzogo><article><h2>Neutral</h2><div><!--citry:g1:7d8a8e40:0:i:3:s--><!--citry:g1:7d8a8e40:0:i:4:s--><button class=cui-button data-cid=ctl3bzogp data-cid-ctl3bzogp data-citry-root data-citry-ui-part=button data-intent=neutral data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:7d8a8e40:0:r:1:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:2:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:2:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:3:s-->View habitat<!--citry:g1:7d8a8e40:0:r:3:e--> </span><!--citry:g1:7d8a8e40:0:r:1:e--></button><!--citry:g1:7d8a8e40:0:i:4:e--><!--citry:g1:7d8a8e40:0:i:3:e--><!--citry:g1:7d8a8e40:0:i:5:s--><!--citry:g1:7d8a8e40:0:i:6:s--><button class=cui-button data-cid=ctl3bzogr data-cid-ctl3bzogr data-citry-root data-citry-ui-part=button data-intent=neutral data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:7d8a8e40:0:r:4:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:5:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:5:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:6:s-->View habitat<!--citry:g1:7d8a8e40:0:r:6:e--> </span><!--citry:g1:7d8a8e40:0:r:4:e--></button><!--citry:g1:7d8a8e40:0:i:6:e--><!--citry:g1:7d8a8e40:0:i:5:e--></div></article><article><h2>Accent</h2><div><!--citry:g1:7d8a8e40:0:i:7:s--><!--citry:g1:7d8a8e40:0:i:8:s--><button class=cui-button data-cid=ctl3bzogt data-cid-ctl3bzogt data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:7d8a8e40:0:r:7:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:8:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:8:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:9:s-->Begin survey<!--citry:g1:7d8a8e40:0:r:9:e--> </span><!--citry:g1:7d8a8e40:0:r:7:e--></button><!--citry:g1:7d8a8e40:0:i:8:e--><!--citry:g1:7d8a8e40:0:i:7:e--><!--citry:g1:7d8a8e40:0:i:9:s--><!--citry:g1:7d8a8e40:0:i:10:s--><button class=cui-button data-cid=ctl3bzogv data-cid-ctl3bzogv data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:7d8a8e40:0:r:10:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:11:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:11:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:12:s-->Begin survey<!--citry:g1:7d8a8e40:0:r:12:e--> </span><!--citry:g1:7d8a8e40:0:r:10:e--></button><!--citry:g1:7d8a8e40:0:i:10:e--><!--citry:g1:7d8a8e40:0:i:9:e--></div></article><article><h2>Positive</h2><div><!--citry:g1:7d8a8e40:0:i:11:s--><!--citry:g1:7d8a8e40:0:i:12:s--><button class=cui-button data-cid=ctl3bzogx data-cid-ctl3bzogx data-citry-root data-citry-ui-part=button data-intent=success data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:7d8a8e40:0:r:13:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:14:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:14:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:15:s-->Protect grove<!--citry:g1:7d8a8e40:0:r:15:e--> </span><!--citry:g1:7d8a8e40:0:r:13:e--></button><!--citry:g1:7d8a8e40:0:i:12:e--><!--citry:g1:7d8a8e40:0:i:11:e--><!--citry:g1:7d8a8e40:0:i:13:s--><!--citry:g1:7d8a8e40:0:i:14:s--><button class=cui-button data-cid=ctl3bzogz data-cid-ctl3bzogz data-citry-root data-citry-ui-part=button data-intent=success data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:7d8a8e40:0:r:16:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:17:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:17:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:18:s-->Protect grove<!--citry:g1:7d8a8e40:0:r:18:e--> </span><!--citry:g1:7d8a8e40:0:r:16:e--></button><!--citry:g1:7d8a8e40:0:i:14:e--><!--citry:g1:7d8a8e40:0:i:13:e--></div></article><article><h2>Warning</h2><div><!--citry:g1:7d8a8e40:0:i:15:s--><!--citry:g1:7d8a8e40:0:i:16:s--><button class=cui-button data-cid=ctl3bzoh1 data-cid-ctl3bzoh1 data-citry-root data-citry-ui-part=button data-intent=warn data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:7d8a8e40:0:r:19:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:20:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:20:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:21:s-->Check conditions<!--citry:g1:7d8a8e40:0:r:21:e--> </span><!--citry:g1:7d8a8e40:0:r:19:e--></button><!--citry:g1:7d8a8e40:0:i:16:e--><!--citry:g1:7d8a8e40:0:i:15:e--><!--citry:g1:7d8a8e40:0:i:17:s--><!--citry:g1:7d8a8e40:0:i:18:s--><button class=cui-button data-cid=ctl3bzoh3 data-cid-ctl3bzoh3 data-citry-root data-citry-ui-part=button data-intent=warn data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:7d8a8e40:0:r:22:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:23:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:23:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:24:s-->Check conditions<!--citry:g1:7d8a8e40:0:r:24:e--> </span><!--citry:g1:7d8a8e40:0:r:22:e--></button><!--citry:g1:7d8a8e40:0:i:18:e--><!--citry:g1:7d8a8e40:0:i:17:e--></div></article><article><h2>Negative</h2><div><!--citry:g1:7d8a8e40:0:i:19:s--><!--citry:g1:7d8a8e40:0:i:20:s--><button class=cui-button data-cid=ctl3bzoh5 data-cid-ctl3bzoh5 data-citry-root data-citry-ui-part=button data-intent=danger data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:7d8a8e40:0:r:25:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:26:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:26:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:27:s-->Remove invasive<!--citry:g1:7d8a8e40:0:r:27:e--> </span><!--citry:g1:7d8a8e40:0:r:25:e--></button><!--citry:g1:7d8a8e40:0:i:20:e--><!--citry:g1:7d8a8e40:0:i:19:e--><!--citry:g1:7d8a8e40:0:i:21:s--><!--citry:g1:7d8a8e40:0:i:22:s--><button class=cui-button data-cid=ctl3bzoh7 data-cid-ctl3bzoh7 data-citry-root data-citry-ui-part=button data-intent=danger data-loading-position=center data-size=md data-variant=outline type=button><!--citry:g1:7d8a8e40:0:r:28:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:7d8a8e40:0:r:29:s--> <span class=cui-button__spinner></span> <!--citry:g1:7d8a8e40:0:r:29:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:7d8a8e40:0:r:30:s-->Remove invasive<!--citry:g1:7d8a8e40:0:r:30:e--> </span><!--citry:g1:7d8a8e40:0:r:28:e--></button><!--citry:g1:7d8a8e40:0:i:22:e--><!--citry:g1:7d8a8e40:0:i:21:e--></div></article></section><!--citry:g1:7d8a8e40:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ButtonIntents_434287","className":"ButtonIntents"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"}],"componentExecutionOrderConstraints":[{"childRenderId":"ctl3bzogp","invocationId":2,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzogr","invocationId":3,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzogt","invocationId":4,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzogv","invocationId":5,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzogx","invocationId":6,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzogz","invocationId":7,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzoh1","invocationId":8,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzoh3","invocationId":9,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzoh5","invocationId":10,"parentRenderId":"ctl3bzogo"},{"childRenderId":"ctl3bzoh7","invocationId":11,"parentRenderId":"ctl3bzogo"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzogn","transparent":false},{"classId":"ButtonIntents_434287","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"ctl3bzogo","transparent":false},{"classId":"CButton_353146","instanceId":3,"invocationId":2,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzogp","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":12,"parentRenderId":"ctl3bzogp","renderId":"ctl3bzogq","transparent":true},{"classId":"CButton_353146","instanceId":5,"invocationId":3,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzogr","transparent":false},{"classId":"DynamicElement_29900a","instanceId":6,"invocationId":13,"parentRenderId":"ctl3bzogr","renderId":"ctl3bzogs","transparent":true},{"classId":"CButton_353146","instanceId":7,"invocationId":4,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzogt","transparent":false},{"classId":"DynamicElement_29900a","instanceId":8,"invocationId":14,"parentRenderId":"ctl3bzogt","renderId":"ctl3bzogu","transparent":true},{"classId":"CButton_353146","instanceId":9,"invocationId":5,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzogv","transparent":false},{"classId":"DynamicElement_29900a","instanceId":10,"invocationId":15,"parentRenderId":"ctl3bzogv","renderId":"ctl3bzogw","transparent":true},{"classId":"CButton_353146","instanceId":11,"invocationId":6,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzogx","transparent":false},{"classId":"DynamicElement_29900a","instanceId":12,"invocationId":16,"parentRenderId":"ctl3bzogx","renderId":"ctl3bzogy","transparent":true},{"classId":"CButton_353146","instanceId":13,"invocationId":7,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzogz","transparent":false},{"classId":"DynamicElement_29900a","instanceId":14,"invocationId":17,"parentRenderId":"ctl3bzogz","renderId":"ctl3bzoh0","transparent":true},{"classId":"CButton_353146","instanceId":15,"invocationId":8,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzoh1","transparent":false},{"classId":"DynamicElement_29900a","instanceId":16,"invocationId":18,"parentRenderId":"ctl3bzoh1","renderId":"ctl3bzoh2","transparent":true},{"classId":"CButton_353146","instanceId":17,"invocationId":9,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzoh3","transparent":false},{"classId":"DynamicElement_29900a","instanceId":18,"invocationId":19,"parentRenderId":"ctl3bzoh3","renderId":"ctl3bzoh4","transparent":true},{"classId":"CButton_353146","instanceId":19,"invocationId":10,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzoh5","transparent":false},{"classId":"DynamicElement_29900a","instanceId":20,"invocationId":20,"parentRenderId":"ctl3bzoh5","renderId":"ctl3bzoh6","transparent":true},{"classId":"CButton_353146","instanceId":21,"invocationId":11,"parentRenderId":"ctl3bzogo","renderId":"ctl3bzoh7","transparent":false},{"classId":"DynamicElement_29900a","instanceId":22,"invocationId":21,"parentRenderId":"ctl3bzoh7","renderId":"ctl3bzoh8","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogp","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogr","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogt","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogv","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogx","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":6,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogz","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh1","slotName":"default","sourceInvocationId":8},{"fallbackLocationId":null,"fillId":8,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh3","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":9,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh5","slotName":"default","sourceInvocationId":10},{"fallbackLocationId":null,"fillId":10,"kind":"implicit","locationId":null,"ownerClassId":"ButtonIntents_434287","ownerRenderId":"ctl3bzogo","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh7","slotName":"default","sourceInvocationId":11},{"fallbackLocationId":null,"fillId":11,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogp","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzogq","slotName":"default","sourceInvocationId":12},{"fallbackLocationId":null,"fillId":13,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogp","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogp","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":15,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogr","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzogs","slotName":"default","sourceInvocationId":13},{"fallbackLocationId":null,"fillId":17,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogr","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogr","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":19,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogt","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzogu","slotName":"default","sourceInvocationId":14},{"fallbackLocationId":null,"fillId":21,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogt","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogt","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":23,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogv","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzogw","slotName":"default","sourceInvocationId":15},{"fallbackLocationId":null,"fillId":25,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogv","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogv","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":27,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogx","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzogy","slotName":"default","sourceInvocationId":16},{"fallbackLocationId":null,"fillId":29,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogx","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogx","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":31,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogz","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzoh0","slotName":"default","sourceInvocationId":17},{"fallbackLocationId":null,"fillId":33,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzogz","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzogz","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":35,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh1","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzoh2","slotName":"default","sourceInvocationId":18},{"fallbackLocationId":null,"fillId":37,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh1","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh1","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":39,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh3","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzoh4","slotName":"default","sourceInvocationId":19},{"fallbackLocationId":null,"fillId":41,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh3","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh3","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":43,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh5","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzoh6","slotName":"default","sourceInvocationId":20},{"fallbackLocationId":null,"fillId":45,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh5","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh5","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":47,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh7","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"ctl3bzoh8","slotName":"default","sourceInvocationId":21},{"fallbackLocationId":null,"fillId":49,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"ctl3bzoh7","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"ctl3bzoh7","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzogp"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzogr"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzogt"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzogv"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzogx"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzogz"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzoh1"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzoh3"},{"clientBindings":[],"invocationId":10,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzoh5"},{"clientBindings":[],"invocationId":11,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ButtonIntents_434287","sourceRenderId":"ctl3bzogo","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"ctl3bzoh7"},{"clientBindings":[],"invocationId":12,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzogp","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzogq"},{"clientBindings":[],"invocationId":13,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzogr","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzogs"},{"clientBindings":[],"invocationId":14,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzogt","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzogu"},{"clientBindings":[],"invocationId":15,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzogv","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzogw"},{"clientBindings":[],"invocationId":16,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzogx","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzogy"},{"clientBindings":[],"invocationId":17,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzogz","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzoh0"},{"clientBindings":[],"invocationId":18,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzoh1","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzoh2"},{"clientBindings":[],"invocationId":19,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzoh3","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzoh4"},{"clientBindings":[],"invocationId":20,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzoh5","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzoh6"},{"clientBindings":[],"invocationId":21,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CButton_353146","sourceRenderId":"ctl3bzoh7","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"ctl3bzoh8"}],"slotRegions":[{"fillId":11,"ownerRenderId":"ctl3bzogp","parentRegionId":null,"receiverRenderId":"ctl3bzogq","regionId":1,"resultOwnerRenderId":"ctl3bzogp","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogq"},{"fillId":13,"ownerRenderId":"ctl3bzogp","parentRegionId":1,"receiverRenderId":"ctl3bzogp","regionId":2,"resultOwnerRenderId":"ctl3bzogp","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogp"},{"fillId":1,"ownerRenderId":"ctl3bzogo","parentRegionId":1,"receiverRenderId":"ctl3bzogp","regionId":3,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogp"},{"fillId":15,"ownerRenderId":"ctl3bzogr","parentRegionId":null,"receiverRenderId":"ctl3bzogs","regionId":4,"resultOwnerRenderId":"ctl3bzogr","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogs"},{"fillId":17,"ownerRenderId":"ctl3bzogr","parentRegionId":4,"receiverRenderId":"ctl3bzogr","regionId":5,"resultOwnerRenderId":"ctl3bzogr","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogr"},{"fillId":2,"ownerRenderId":"ctl3bzogo","parentRegionId":4,"receiverRenderId":"ctl3bzogr","regionId":6,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogr"},{"fillId":19,"ownerRenderId":"ctl3bzogt","parentRegionId":null,"receiverRenderId":"ctl3bzogu","regionId":7,"resultOwnerRenderId":"ctl3bzogt","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogu"},{"fillId":21,"ownerRenderId":"ctl3bzogt","parentRegionId":7,"receiverRenderId":"ctl3bzogt","regionId":8,"resultOwnerRenderId":"ctl3bzogt","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogt"},{"fillId":3,"ownerRenderId":"ctl3bzogo","parentRegionId":7,"receiverRenderId":"ctl3bzogt","regionId":9,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogt"},{"fillId":23,"ownerRenderId":"ctl3bzogv","parentRegionId":null,"receiverRenderId":"ctl3bzogw","regionId":10,"resultOwnerRenderId":"ctl3bzogv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogw"},{"fillId":25,"ownerRenderId":"ctl3bzogv","parentRegionId":10,"receiverRenderId":"ctl3bzogv","regionId":11,"resultOwnerRenderId":"ctl3bzogv","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogv"},{"fillId":4,"ownerRenderId":"ctl3bzogo","parentRegionId":10,"receiverRenderId":"ctl3bzogv","regionId":12,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogv"},{"fillId":27,"ownerRenderId":"ctl3bzogx","parentRegionId":null,"receiverRenderId":"ctl3bzogy","regionId":13,"resultOwnerRenderId":"ctl3bzogx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogy"},{"fillId":29,"ownerRenderId":"ctl3bzogx","parentRegionId":13,"receiverRenderId":"ctl3bzogx","regionId":14,"resultOwnerRenderId":"ctl3bzogx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogx"},{"fillId":5,"ownerRenderId":"ctl3bzogo","parentRegionId":13,"receiverRenderId":"ctl3bzogx","regionId":15,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogx"},{"fillId":31,"ownerRenderId":"ctl3bzogz","parentRegionId":null,"receiverRenderId":"ctl3bzoh0","regionId":16,"resultOwnerRenderId":"ctl3bzogz","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh0"},{"fillId":33,"ownerRenderId":"ctl3bzogz","parentRegionId":16,"receiverRenderId":"ctl3bzogz","regionId":17,"resultOwnerRenderId":"ctl3bzogz","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogz"},{"fillId":6,"ownerRenderId":"ctl3bzogo","parentRegionId":16,"receiverRenderId":"ctl3bzogz","regionId":18,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzogz"},{"fillId":35,"ownerRenderId":"ctl3bzoh1","parentRegionId":null,"receiverRenderId":"ctl3bzoh2","regionId":19,"resultOwnerRenderId":"ctl3bzoh1","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh2"},{"fillId":37,"ownerRenderId":"ctl3bzoh1","parentRegionId":19,"receiverRenderId":"ctl3bzoh1","regionId":20,"resultOwnerRenderId":"ctl3bzoh1","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh1"},{"fillId":7,"ownerRenderId":"ctl3bzogo","parentRegionId":19,"receiverRenderId":"ctl3bzoh1","regionId":21,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh1"},{"fillId":39,"ownerRenderId":"ctl3bzoh3","parentRegionId":null,"receiverRenderId":"ctl3bzoh4","regionId":22,"resultOwnerRenderId":"ctl3bzoh3","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh4"},{"fillId":41,"ownerRenderId":"ctl3bzoh3","parentRegionId":22,"receiverRenderId":"ctl3bzoh3","regionId":23,"resultOwnerRenderId":"ctl3bzoh3","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh3"},{"fillId":8,"ownerRenderId":"ctl3bzogo","parentRegionId":22,"receiverRenderId":"ctl3bzoh3","regionId":24,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh3"},{"fillId":43,"ownerRenderId":"ctl3bzoh5","parentRegionId":null,"receiverRenderId":"ctl3bzoh6","regionId":25,"resultOwnerRenderId":"ctl3bzoh5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh6"},{"fillId":45,"ownerRenderId":"ctl3bzoh5","parentRegionId":25,"receiverRenderId":"ctl3bzoh5","regionId":26,"resultOwnerRenderId":"ctl3bzoh5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh5"},{"fillId":9,"ownerRenderId":"ctl3bzogo","parentRegionId":25,"receiverRenderId":"ctl3bzoh5","regionId":27,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh5"},{"fillId":47,"ownerRenderId":"ctl3bzoh7","parentRegionId":null,"receiverRenderId":"ctl3bzoh8","regionId":28,"resultOwnerRenderId":"ctl3bzoh7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh8"},{"fillId":49,"ownerRenderId":"ctl3bzoh7","parentRegionId":28,"receiverRenderId":"ctl3bzoh7","regionId":29,"resultOwnerRenderId":"ctl3bzoh7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh7"},{"fillId":10,"ownerRenderId":"ctl3bzogo","parentRegionId":28,"receiverRenderId":"ctl3bzoh7","regionId":30,"resultOwnerRenderId":"ctl3bzogo","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"ctl3bzoh7"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"7d8a8e4083b95fad58ee022146b6f9e3719ced31e464fadcf3da03ad3daa4210"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2Ljk4MDE5ZTBlOWZjMDEyNDdjMjJmMTM0YmM4MjEyNTBmLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjRlNTRjZGIzMzljNTA0ZjdkODBjZGMzMWVkNzQ0OTJjLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjM2NWE5MGIyNDBkYmM4OWE2ZWRkYjUzODQwMzAyNzZlLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LmY2MWY2M2FmMmQxNzcxNmVjYTEwZTg3YjY2NmMzN2U0Lmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjAwZjI1MGZkMmVlZDQzMjg4MDU1NjhlZGZhZjMzODgzLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjJjM2FiYThkN2E1ODdkMDdhY2NjMGJiNDY4ZjdiMTc3Lmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2Ljg5N2Y4MWZmMjFhNDQxYTczMmE3ZjJkOTUxN2FjNWRiLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjMzMWE4YTkxY2QwMzMzODc0NmNjZDlmNjgzMGQ2ZTEzLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LmQ5OGEyZjNhZDJlOTc2MzIwOTdkMzY3OWY3MWUwZTUxLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0J1dHRvbkludGVudHNfNDM0Mjg3LmIyYjc2NmVlYzZhOC5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2dw", "OTgwMTllMGU5ZmMwMTI0N2MyMmYxMzRiYzgyMTI1MGY=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2dy", "NGU1NGNkYjMzOWM1MDRmN2Q4MGNkYzMxZWQ3NDQ5MmM=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2d0", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2d2", "MzY1YTkwYjI0MGRiYzg5YTZlZGRiNTM4NDAzMDI3NmU=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2d4", "ZjYxZjYzYWYyZDE3NzE2ZWNhMTBlODdiNjY2YzM3ZTQ=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2d6", "MDBmMjUwZmQyZWVkNDMyODgwNTU2OGVkZmFmMzM4ODM=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2gx", "MmMzYWJhOGQ3YTU4N2QwN2FjY2MwYmI0NjhmN2IxNzc=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2gz", "ODk3ZjgxZmYyMWE0NDFhNzMyYTdmMmQ5NTE3YWM1ZGI=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2g1", "MzMxYThhOTFjZDAzMzM4NzQ2Y2NkOWY2ODMwZDZlMTM=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3RsM2J6b2g3", "ZDk4YTJmM2FkMmU5NzYzMjA5N2QzNjc5ZjcxZTBlNTE=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3RsM2J6b2du"], ["QnV0dG9uSW50ZW50c180MzQyODc=", "Y3RsM2J6b2dv"]], "graph": "7d8a8e4083b95fad58ee022146b6f9e3719ced31e464fadcf3da03ad3daa4210", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "98019e0e9fc01247c22f134bc821250f", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoibmV1dHJhbCIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "4e54cdb339c504f7d80cdc31ed74492c", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJuZXV0cmFsIiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "365a90b240dbc89a6eddb5384030276e", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "f61f63af2d17716eca10e87b666c37e4", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50Ijoic3VjY2VzcyIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "00f250fd2eed4328805568edfaf33883", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJzdWNjZXNzIiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "2c3aba8d7a587d07accc0bb468f7b177", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50Ijoid2FybiIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "897f81ff21a441a732a7f2d9517ac5db", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJ3YXJuIiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "331a8a91cd03338746ccd9f6830d6e13", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoiZGFuZ2VyIiwic2l6ZSI6Im1kIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "d98a2f3ad2e97632097d3679f71e0e51", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJkYW5nZXIiLCJzaXplIjoibWQiLCJibG9jayI6ZmFsc2UsImxvYWRpbmdQb3NpdGlvbiI6ImNlbnRlciJ9"));
+})();</script></body></html><!--citry:g1:7d8a8e40:0:i:1:e-->
