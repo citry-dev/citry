@@ -214,7 +214,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     runtime_version = page.evaluate(
         "async () => (await (await fetch('/static/playground/runtime.json')).json()).citry.version"
     )
-    assert runtime_version == "0.4.2"
+    assert runtime_version == "0.4.3"
     examples = page.locator("[data-citry-live-code]")
     expect(examples).to_have_count(1)
 
