@@ -10,7 +10,7 @@
   "citry": {
     "version": "0.4.2",
     "core_version": "1.5.1",
-    "ui_version": "0.1.0"
+    "ui_version": "0.2.0"
   },
   "packages": [
     {
@@ -40,8 +40,8 @@
     },
     {
       "name": "citry-ui",
-      "version": "0.1.0",
-      "url": "https://files.pythonhosted.org/packages/c9/83/746de52b70a8e9a97ad28cd926ea7375aa0c5515426c03259304c15ce806/citry_ui-0.1.0-py3-none-any.whl"
+      "version": "0.2.0",
+      "url": "https://files.pythonhosted.org/packages/9a/03/b5732a6c4aaef07540c597041a5b788c2c3dae44674905472ab2d7a594b9/citry_ui-0.2.0-py3-none-any.whl"
     }
   ]
 }

@@ -185,7 +185,7 @@ def test_published_runtime_runs_citry_ui_twice(page: Any, docs_site_url: str) ->
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.2 · Citry UI 0.1.0")
+    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.2 · Citry UI 0.2.0")
 
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')

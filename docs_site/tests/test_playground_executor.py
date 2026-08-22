@@ -156,7 +156,7 @@ def test_runtime_manifest_pins_the_complete_published_tuple() -> None:
     assert runtime["citry"] == {
         "version": "0.4.2",
         "core_version": "1.5.1",
-        "ui_version": "0.1.0",
+        "ui_version": "0.2.0",
     }
     assert len(packages) == len(runtime["packages"])
     assert packages["citry-core"] == {
@@ -170,8 +170,8 @@ def test_runtime_manifest_pins_the_complete_published_tuple() -> None:
     }
     assert packages["citry"]["version"] == "0.4.2"
     assert packages["citry"]["url"].endswith("/citry-0.4.2-py3-none-any.whl")
-    assert packages["citry-ui"]["version"] == "0.1.0"
-    assert packages["citry-ui"]["url"].endswith("/citry_ui-0.1.0-py3-none-any.whl")
+    assert packages["citry-ui"]["version"] == "0.2.0"
+    assert packages["citry-ui"]["url"].endswith("/citry_ui-0.2.0-py3-none-any.whl")
 
 
 def test_executor_accepts_html_markup_element_render_and_starter() -> None:
