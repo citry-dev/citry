@@ -287,7 +287,15 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                       height="42"
                       src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
                     />
-                    <video controls aria-label="Native media path"></video>
+                    <video controls aria-label="Native media path">
+                      <track
+                        default
+                        kind="captions"
+                        label="English"
+                        srclang="en"
+                        src="data:text/vtt,WEBVTT%0A"
+                      />
+                    </video>
                     <context-menu-quality-host>Custom element</context-menu-quality-host>
                     <div
                       data-citry-context-menu-native
@@ -299,7 +307,7 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                     >Open shadow host</div>
                     <iframe
                       title="Separate quality document"
-                      srcdoc="<p>Child document browser menu.</p>"
+                      srcdoc="<!doctype html><html lang='en'><title>Child</title><p>Child document menu.</p></html>"
                     ></iframe>
                     <div data-quality-eligible tabindex="0">Eligible file row</div>
                   </div>
@@ -485,7 +493,8 @@ def context_menu_states_component(app: Citry) -> type[Component]:
           :where(.context-menu-quality__native-target > *) {
             min-inline-size: 0;
             padding: 0.5rem;
-            background: color-mix(in srgb, Highlight 7%, Canvas);
+            background: #f5f8ff;
+            color: #172b4d;
           }
 
           :where(.context-menu-quality__native-target iframe) {

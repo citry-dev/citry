@@ -898,6 +898,9 @@ or overwrite a later focus snapshot. An unequal focus target/policy, missing,
 invalid, or unconsumed provisional handoff closes the old native Dialog and
 descendants synchronously before new initialization. Focused `CDialog`
 equal/changed/replaced morph gates must pass on the same helper bytes.
+A retained owner reclaims a delayed close event only while the native Dialog
+is still open. A real `dialog.close()` after handoff closes the current owner,
+preserves its return value, and runs the current native-close callback once.
 
 A retained changed-record morph preserves open/query/input focus and reconciles
 commands by value. The old active value survives only when still visible and
@@ -957,183 +960,30 @@ filtered, modified, secondary, cross-owner, and disconnected events do not.
 
 ## 16. Assets and performance
 
-The implementation extracts one private Dialog controller consumed by both
-`CDialog` and `CCommandPalette`, and one private active-descendant collection
-foundation consumed by both `CCombobox` and `CCommandPalette`. It adds one
-CommandPalette initializer and one CSS frame. It adds no icon font, image,
+Command Palette reuses the private Dialog controller, active-descendant
+collection foundation, and anchored-layer runtime shared with Dialog and
+Combobox. It adds one initializer and one CSS asset, with no icon font, image,
 network request, worker, global shortcut listener, polling loop, per-command
-listener, or async registry.
+listener, or asynchronous registry. Shared dependencies must still emit once
+when these families are combined.
 
-Immutable pre-Command baselines are:
+Asset accounting uses ordinary family measurements. The standalone measurement
+includes every unique JavaScript and CSS payload reachable from a page that
+registers only Command Palette. The incremental measurement remains a
+regression signal for the initializer beyond Dialog and Combobox. Catalog-wide
+budgets protect shared-runtime growth.
 
-| Foundation | Source SHA-256 | Emitted frame SHA-256 | Raw | Gzip | Brotli |
-|---|---|---|---:|---:|---:|
-| Dialog source | `58678782ef912ba4701890b6447106211ea3add1cc67ddbceb538d30b7663ddd` | JavaScript `17b49a6cc706860b32316c42c6d4822e1d85f245e508e9af07995933d2ca50db` | 17,870 | 4,327 | 3,723 |
-| Dialog CSS | same source | `606c850bc1579e5fec93634659fb286521fcff0c75469682cdb86f20833b15fa` | 4,533 | 1,122 | 948 |
-| Combobox source | `0e7d61f545075e6513c91c366a73009e1235780d103000b734157c3282fb9cea` | JavaScript `f1d24c5827e40c9990542b61375ab8aaa880b0703818bca1506df8cf760f078e` | 38,243 | 7,596 | 6,648 |
-| Combobox CSS | same source | `60294c2d6a6575b3dc847e0b58bf8951fd42fabddd41b022aac28f07c461e86f` | 7,059 | 1,416 | 1,197 |
+The stable production limits are:
 
-Final accounting records readable source, every uniquely registered/emitted
-frame, and an optional reproducible Terser diagnostic. Acceptance gives no
-Terser credit.
-
-For each asset kind, a frame set is the ordered dependency payloads returned by
-a fresh `Citry.register_library` installation. Exact duplicate payload bytes
-are removed while preserving first topological dependency/emission order.
-`M(payloads)` concatenates those remaining payload bytes with no inserted
-delimiter, then reports raw length, deterministic
-`gzip.compress(..., mtime=0)`, and default Brotli length. Compression is over
-that canonical concatenation, never the sum of independently compressed frame
-sizes. Individual frame hashes and sizes remain provenance evidence.
-
-Incremental accounting uses stable logical attribution, not aggregate
-subtraction. Production source marks every CommandPalette-specific initializer
-and every CommandPalette-motivated addition inside the shared Dialog or
-active-descendant helpers with unique reviewed begin/end anchors. Extraction
-of behavior already present in frozen Dialog/Combobox bytes is baseline
-foundation work; any new branch, option, guard, callback, or data field needed
-for CommandPalette is CommandPalette-attributed even when another component
-also consumes it later.
-
-Let `P` be the exact ordered marker-bounded emitted bytes for all such
-CommandPalette-attributed JavaScript or CSS, deduplicated by content. The
-release report records each enclosing emitted frame hash, marker pair, slice
-hash, raw/gzip/Brotli sizes, and their canonical `M(P)`. Moving an unchanged
-slice between the CommandPalette initializer and a separately emitted shared
-dependency leaves `P` byte-identical.
-
-For every final shared Dialog/Combobox logical frame, the report removes the
-`P` slices and compares the remaining anchored logical frame with its frozen
-pre-Command counterpart. New non-`P` shared frames have a zero-byte baseline;
-changed frames contribute `max(0, post - pre)` independently for raw, gzip,
-and Brotli; removed/shrunk frames contribute zero and cannot offset another
-frame. The strict incremental charge is `M(P)` plus every positive shared
-logical-frame delta. CSS uses the same algorithm. A source/parser test fails if
-markers overlap, are missing/duplicated, move bytes across ownership without a
-provenance update, or do not reconstruct the exact emitted frames.
-
-The standalone set is a fresh page registering only CommandPalette plus every
-required private dependency and uses `M` over all unique full emitted frames.
-It independently prevents logical attribution from hiding shipped helper cost.
-
-Strict binary ceilings are:
-
-| Charge | Raw | Gzip | Brotli |
+| Asset | Raw | gzip | Brotli |
 |---|---:|---:|---:|
-| Attributed JavaScript `P` plus all positive shared logical-frame deltas | `< 65,536` | `< 13,312` | `< 11,264` |
-| Complete unique JavaScript reachable from a page using only CommandPalette | `< 114,688` | `< 20,480` | `< 17,408` |
-| Attributed CSS `P` plus all positive shared logical-frame deltas | `< 10,240` | `< 2,304` | `< 2,048` |
+| Complete Command Palette JavaScript, including shared dependencies | `< 112 KiB` | `< 20 KiB` | `< 17 KiB` |
+| Complete Command Palette CSS, including shared dependencies | `< 10 KiB` | `< 2.25 KiB` | `< 2 KiB` |
 
-The correctness-frozen readable CommandPalette JavaScript is 44,313 raw /
-8,227 gzip / 7,217 Brotli bytes, SHA-256
-`8ba0eba3a70430a2a9847c782dbe1c78b846317db9711d76ef7d95ed3021be00`.
-Its registered initializer frame is 38,165 / 8,071 / 7,074 bytes,
-SHA-256
-`9e212dd9eba9c5d9439d0c273c4dd8e1db6c993d8c0757384c9de5e62744f185`.
-The readable CSS is 11,440 / 1,797 / 1,539 bytes, SHA-256
-`db5eb273fc0b0639c4a033031e235f581fc33d8b6a7339b6625db4360d4cbab4`;
-the registered CSS frame is 9,714 / 1,760 / 1,523 bytes, SHA-256
-`b969aee04a8dda0f9bb3f8d067375de3fa10093948fc706afa3494ad82bde0c8`.
-
-The exact marker blocks in topological frame order are:
-
-| Marker | Slice SHA-256 | Raw | Gzip | Brotli |
-|---|---|---:|---:|---:|
-| `initializer` | `8798500a6daf09ef5c6ea2ae12128b504e69009c94b9d2d6ef799f84b969c731` | 38,163 | 8,069 | 7,076 |
-| `dialog-layer-preparation` | `f546714412b15bc9bc03e1e0cfbab623fac4ba6a66eb0a339c01cb146842257a` | 850 | 385 | 308 |
-| `dialog-document-lock-state` | `8915078664595b1831407306a06a7d63289feebea10913963ccadbbc6c9d29e7` | 194 | 129 | 102 |
-| `dialog-handoff-keys` | `e5090b2285cfa12fbdadc9183773931a0f57d222e35ce5dd9829b287a951ae69` | 281 | 151 | 129 |
-| `dialog-root-scope-state` | `700056c404db3d445f6735e2f71ddeb80e171c08e9b8b8d60123a99c4c250c32` | 713 | 319 | 266 |
-| `dialog-document-lock` | `4fd95ef4939f6bdc566aea6560f4ebcb4f297bce2aa1eec4c8e9b8992dcc7688` | 1,585 | 534 | 435 |
-| `dialog-root-scope-manager` | `a24c21d8b734380631e49a34109b26425753ca2b2c0de2ebef979b6329ca1bd5` | 911 | 379 | 316 |
-| `dialog-handoff-close-state` | `45f7dde61337c29f0b9eef6ee7516cd82a83001433505a95c57cd86185b983dd` | 261 | 140 | 112 |
-| `dialog-focus-target` | `a4ef28977e3749ef7727212a171da2be377ca0527c2b3b0e2fc66fe57875aea5` | 200 | 133 | 108 |
-| `dialog-handoff-consume` | `e0d47db9ecf279fc9534220079fb12db7952cf3c5f981557fbc74639fd901e08` | 1,450 | 465 | 392 |
-| `dialog-focus-hooks` | `570fc52b3affaccca3e3f7fdd6470ab6b4a6220fd30b3775fcbe815bc11aa719` | 494 | 265 | 214 |
-| `dialog-focus-restore` | `127f781c297f64eae55687bd40fb9610255183a6267701e13e814715f66b1145` | 832 | 345 | 277 |
-| `dialog-handoff-close-intent` | `0968552314616b9e895f435df9b0cd251b2b3848d82e9929a0c34e509480704e` | 297 | 188 | 155 |
-| `dialog-handoff-close-expected` | `f05963be04725f9600eded70df5a0e2deb60490430c98a98f6480b0d4df3bbf6` | 203 | 127 | 100 |
-| `dialog-handoff-close-reclaim` | `b03bdc2b5c1ea068e26b8f017f7eb55ebd726017288a84b377da600f14e034ae` | 610 | 273 | 215 |
-| `dialog-handoff-close-retire` | `91438cfb95a7036687bbd5bf10a8198d56cb66db93eddbd9ec1ba9baf240294a` | 195 | 124 | 97 |
-| `dialog-root-scope-refresh` | `c179e45501c20cd2170f2fd655c79f63dd541624cd1845e2ade7bff81c76bfbb` | 1,120 | 395 | 333 |
-| `dialog-handoff-close-listener` | `b7af13d89b1be1e8fe6e914b7b720e1bd6a69fe12aef7eafd5a8af81ef061425` | 224 | 144 | 116 |
-| `dialog-handoff-close-cleanup` | `f9946ec657223c5c69751fcaa20c38141af57e91d0a578a3375b5fbcacfc1125` | 332 | 170 | 149 |
-| `dialog-handoff-close-unlisten` | `f9e8f61c38e1f55f024e42775dfb69c6013373d4823f8e2c56f554a162835a2e` | 231 | 148 | 121 |
-| `dialog-handoff-produce` | `8dd79fa974a41e758f4cf2a75d8eda2c24156a500e7c2f87074bd6fdf28ac4d1` | 1,153 | 441 | 367 |
-| `dialog-handoff-abort` | `7cd757fca5f55f135041a6beac3fa0d1c067bb318fce616183562b436cc1fc7f` | 441 | 227 | 189 |
-| `active-owner-key` | `63e82480940b1925753a78ded09ea21b73d6c31eac81732d2c1eb4ed48c511fa` | 202 | 138 | 114 |
-| `active-owner-transfer` | `870ff916fed2f2d1f3799711f185b6e64c58657f27eb0a54de76ee980ad8e0dd` | 888 | 362 | 319 |
-| `active-neighbor-handoff` | `e4e2bfe18026764575219524edcf7de05e7df2e18acb1b2e40be56c5562aad6b` | 968 | 379 | 317 |
-| `active-group-registration` | `dd91e18fbd56fb6b393d3c69780c499defa5969062514fe14ecba7d592985d5d` | 377 | 198 | 159 |
-| `active-owner-cleanup` | `5b40c7c87725629103816ac29dac224128dd8a8f5deffb989b5c113a0c8bd874` | 318 | 181 | 141 |
-
-Canonical `M(P)` is 53,493 raw / 10,685 gzip / 9,208 Brotli
-bytes, SHA-256
-`62630986d4f4dd0e8613b77abc90a213194fc3dfb32b80ae4035dc83d15f2305`.
-The CSS marker block is 9,712 / 1,760 / 1,508 bytes, SHA-256
-`cb33b3d988f130cbf726d72ba8fbd1428a0d5d22cb069283daa054bc92f6a076`.
-
-Removing those complete marker blocks and comparing each remaining logical
-foundation independently produces these conservative positive deltas:
-
-| Logical foundation | Current logical SHA-256 | Current raw/gzip/Brotli | Positive raw/gzip/Brotli delta |
-|---|---|---:|---:|
-| Dialog adapter plus extracted controller | `5ea7c89e58a908b74d897061f7b60170cedfb6ff87322ecd0a10234701440c05` | 21,442 / 4,899 / 4,273 | 3,572 / 572 / 550 |
-| Anchored-layer foundation | `b4f93fb285d6bfe031fa04dffd2ef9b1b03436ed3b5cbb45eb80a1f46fafe909` | 29,545 / 5,608 / 4,884 | 11 / 1 / 2 |
-| Combobox adapter plus extracted active-descendant controller | `9841c493487ced24be5622bca4c5d9b0aefa4c41fa08ac8463fd8238373474b3` | 41,116 / 8,497 / 7,367 | 2,873 / 901 / 719 |
-
-The total positive shared JavaScript delta is therefore 6,456 raw / 1,474
-gzip / 1,271 Brotli bytes. There is no positive shared CSS delta. The strict
-attributed JavaScript charge is 59,949 / 12,159 / 10,479 bytes, leaving 5,587
-/ 1,153 / 785 bytes, or 8.53% / 8.66% / 6.97% of each round ceiling,
-for maintenance. CSS leaves 528 / 544 / 540 bytes.
-
-The standalone installation emits exactly four unique JavaScript frames:
-
-| Frame | SHA-256 | Raw | Gzip | Brotli |
-|---|---|---:|---:|---:|
-| CommandPalette initializer | `9e212dd9eba9c5d9439d0c273c4dd8e1db6c993d8c0757384c9de5e62744f185` | 38,165 | 8,071 | 7,074 |
-| Anchored-layer runtime | `fa492f777a1752e9b6671f69d92bc3aa4983ee68f7bdfda489388f5b85fa2469` | 30,395 | 5,712 | 4,977 |
-| Dialog controller | `066105ceba93c5a425b798e3f1ebf6606a0784ad79f89537e9c4c86a60737789` | 22,763 | 4,750 | 4,146 |
-| Active-descendant controller | `f6eb4fbff815f87208ec3690db4546ef800673b27ef689c2551a795f9dced8b7` | 6,876 | 1,892 | 1,625 |
-
-Their delimiter-free canonical payload is 98,199 raw / 18,754 gzip / 15,948
-Brotli bytes, SHA-256
-`3e87497507aef85e3ff4b8f7d726283f734356f856f72f5a0ab1335a81150831`,
-leaving 16,489 / 1,726 / 1,460 bytes below the standalone ceilings.
-
-The correctness freeze binds source hashes
-`5072eb399bbfacb657893bcc56e5c8a15f9c21ab9841735e2a7f9a59f46acc97`
-for Dialog,
-`7fc12967908a6789a8f3c1f24718a759b8e792e994b80a1b9e96a8cab190e0be`
-for Combobox,
-`5439f917d4918c8926ee82f0a33056ae58d4f2a0b2c7bd903308df37b9c157c3`
-for the Dialog controller,
-`041544b5de5f5d59bc8ca8d5910516347f27c2e2591a48aca7c7f27d409766c6`
-for the active-descendant controller, and
-`7a27e4491359af9a4f916726e1423d1fd846fe55e9be24063748c2d8798f9694`
-for anchored layers. Their current emitted adapter/helper frame identities are
-`f5f69bbf2754d1b1230dec38bc055eeb4ed9ed9a40c94b2823c8a872a557a107`,
-`97e56b416a5d33b31fc5c0297b7517c4fd4d5fa21336b77a91c552aec3860395`,
-`066105ceba93c5a425b798e3f1ebf6606a0784ad79f89537e9c4c86a60737789`,
-`f6eb4fbff815f87208ec3690db4546ef800673b27ef689c2551a795f9dced8b7`,
-and `fa492f777a1752e9b6671f69d92bc3aa4983ee68f7bdfda489388f5b85fa2469`
-respectively.
-
-The former 32 KiB / 8 KiB / 7 KiB attributed and 48 KiB / 11 KiB / 10 KiB
-standalone assumptions were falsified by the behavior-complete extraction and
-runtime: per-root open ShadowRoot ownership, correlated handoff and stale
-cleanup, callback-moved focus, pre-modal anchored-layer ordering, nested-group
-active registration, controlled decline timing, IME/Form guards, hostile
-anatomy validation, and privacy-safe diagnostics are required behavior. As a
-reproducible lower-bound diagnostic, Terser 5.50.0 over the complete emitted
-standalone payload with
-`--compress passes=3,pure_getters=true,unsafe=true --mangle --ecma 2022`
-produces 37,361 raw / 11,896 gzip / 10,697 Brotli bytes, SHA-256
-`99746809e8bb7cf1d7d31b9b91c36e07526f2f02c2eed531fe2533382a5121b3`.
-Even that non-emitted aggressive transform exceeds both former standalone
-compressed ceilings. It receives no budget credit, and no behavior, trust,
-diagnostic, readiness, or cleanup contract is removed for size.
+The asset report and focused tests are authoritative for current measurements.
+Volatile implementation snapshots are not duplicated here. Behavior, trust
+boundaries, diagnostics, readiness, and cleanup cannot be removed merely to
+meet a limit; a legitimate overage returns to design review.
 
 One instance has bounded delegated input/listbox/Dialog listeners. Collection
 rows have no listeners. Root-scope mutation/clone management is shared among
@@ -1203,11 +1053,9 @@ Automated release evidence must include:
 - light/dark/opposite nested schemes, RTL, sm/md/lg, default/danger, long text,
   200%/400% zoom, text spacing, narrow/wide, coarse pointer, virtual keyboard,
   reduced motion, forced colors, print, axe, console, and page-error gates;
-- exact readable/emitted asset frames, positive shared deltas, strict ceilings,
-  canonical no-delimiter set measurement, marker-bounded logical attribution,
-  helper-frame relocation invariance,
-  duplicate-frame detection, wheel inclusion, import/export boundaries, and
-  1/10/100 instance plus 10/100/500 command scaling; and
+- standalone, incremental, and catalog asset budgets; shared-payload
+  deduplication; wheel inclusion; import/export boundaries; and 1/10/100
+  instance plus 10/100/500 command scaling; and
 - every catalog example rendered independently through the actual docs preview
   path plus the signed quality scenario in Chromium, Firefox, and WebKit.
 

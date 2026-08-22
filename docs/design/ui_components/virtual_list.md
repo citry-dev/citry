@@ -108,7 +108,7 @@ stable key, item attributes, position metadata, and arbitrary server content.
 | `CVirtualList.aria_label` | `str | None` | `None` | structural | Names the complete-DOM list. |
 | `CVirtualList.estimated_item_size` | positive `int` pixels | `48` | initial geometry | Supplies the intrinsic containment estimate. |
 | `CVirtualList.viewport_size` | positive `int` pixels | `400` | initial geometry | Sets the initial block size; root style may override the public variable. |
-| `CVirtualList.focusable` | `bool` | `True` | structural | Adds `tabindex=0` for keyboard scrolling. |
+| `CVirtualList.focusable` | `bool` | `True` | structural | Adds `tabindex=0` for keyboard scrolling. `False` requires a keyboard-reachable control inside an Item. |
 | `CVirtualWindow.total_count` | nonnegative `int` | required | controlled collection state | Exact logical list size. |
 | `CVirtualWindow.start_index` | nonnegative `int` | `0` | controlled collection state | Index of the first supplied item. |
 | `CVirtualWindow.item_size` | positive `int` pixels | `48` | reactive geometry | Fixed item stride; total extent may not exceed 16,000,000 CSS pixels. |
@@ -116,7 +116,7 @@ stable key, item attributes, position metadata, and arbitrary server content.
 | `CVirtualWindow.overscan` | `int` from `0` through `100` | `3` | reactive configuration | Adds requested items before and after the visible range. |
 | `CVirtualWindow.initial_index` | nonnegative `int` | `0` | initial value | One-shot initial scroll target, clamped to the collection. |
 | `CVirtualWindow.aria_label` | `str | None` | `None` | structural | Names the windowed list. |
-| `CVirtualWindow.focusable` | `bool` | `True` | structural | Adds `tabindex=0` for keyboard scrolling. |
+| `CVirtualWindow.focusable` | `bool` | `True` | structural | Adds `tabindex=0` for keyboard scrolling. `False` requires a keyboard-reachable control inside an Item. |
 | both owners: `class_`, `style`, `attrs` | structured values | `None` | structural | Extend the root without replacing owned behavior. |
 | `CVirtualListItem.item_key` | nonempty `str` | required | identity | Unique stable identity within the logical collection. |
 | `CVirtualListItem.class_`, `style`, `attrs` | structured values | `None` | structural | Extend the rendered list item. |
@@ -184,6 +184,11 @@ Interactive descendants keep native Tab order. A focused descendant pins the
 desired range around its item; if the application nonetheless replaces that
 item, normal Citry morph focus rules apply and the list does not synthesize a
 different target.
+
+When `focusable=False`, the supplied Items must contain a keyboard-reachable
+control. That control gives keyboard users a way to enter the scrollable
+region. A viewport with no root tab stop and no focusable descendant is not
+keyboard accessible.
 
 `CVirtualList` preserves every item in the DOM and accessibility tree.
 `CVirtualWindow` exposes only the supplied range plus exact set position metadata;
@@ -323,6 +328,12 @@ Planned examples are:
 | `controlled.py` | tune overscan and item size through `$c-props` | live request geometry | validation and newest request |
 | `accessibility.py` | compare complete and windowed semantics | set position and fallback guidance | accessibility snapshot |
 | `customization.py` | customize viewport and items | public variables/selectors | computed styles |
+
+Static documentation cannot perform the application's server replacement.
+Its window examples therefore use a small self-contained range with no omitted
+leading or trailing Items. They must not expose scrollable blank space that the
+static page cannot replace. Browser evidence for partial ranges separately
+keeps both spacer directions and verifies the request/pending protocol.
 
 ## 20. Open decisions and deferred work
 

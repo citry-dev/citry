@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class DisabledFiles(Component):
     template = """
-      <c-CStack>
+      <c-CCol>
         <c-CFileInput c-attrs="{'aria-label': 'Disabled picker'}" disabled />
         <fieldset disabled>
           <legend>Archived upload</legend>
@@ -14,7 +14,7 @@ class DisabledFiles(Component):
             Uploads are unavailable
           </c-CDropTarget>
         </fieldset>
-      </c-CStack>
+      </c-CCol>
     """
 
 

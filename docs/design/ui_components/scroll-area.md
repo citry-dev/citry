@@ -733,10 +733,10 @@ the required geometry helper:
 | incremental JavaScript | 12 KiB | 3 KiB | 2.75 KiB |
 | incremental CSS | 6 KiB | 1.5 KiB | 1.25 KiB |
 
-Actual raw, gzip, and Brotli sizes must replace provisional measurements in
-the implementation evidence without raising these ceilings. Asset evidence
-reports the ScrollArea-only catalog delta separately and proves that the
-geometry helper occurs exactly once for Carousel-only, ScrollArea-only,
+The machine-generated asset report owns current raw, gzip, and Brotli
+measurements without raising these ceilings. Asset evidence reports the
+ScrollArea-only catalog delta separately and proves that the geometry helper
+occurs exactly once for Carousel-only, ScrollArea-only,
 Carousel-plus-ScrollArea, and 1, 10, and 100 Scroll Area instances.
 
 Steady-state scroll performs one synchronous offset snapshot, schedules at

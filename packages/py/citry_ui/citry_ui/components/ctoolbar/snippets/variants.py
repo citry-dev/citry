@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class ToolbarVariants(Component):
     template = """
-      <c-CStack gap="md">
+      <c-CCol gap="md">
         <c-CToolbar
           c-for="variant, size in [('plain', 'sm'), ('soft', 'md'), ('outline', 'lg')]"
           c-label="variant + ' ' + size + ' tools'"
@@ -17,7 +17,7 @@ class ToolbarVariants(Component):
           <c-CButton>Copy</c-CButton>
           <c-CButton>Paste</c-CButton>
         </c-CToolbar>
-      </c-CStack>
+      </c-CCol>
     """
 
 

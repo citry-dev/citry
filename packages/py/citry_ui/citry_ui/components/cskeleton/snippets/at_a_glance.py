@@ -8,10 +8,10 @@ class SkeletonGlance(Component):
     template = """
       <section class="skeleton-glance" aria-label="Loading field note" aria-busy="true">
         <c-CSkeleton height="8rem" animation="wave" />
-        <c-CGroup c-gap="'sm'">
+        <c-CRow c-gap="'sm'">
           <c-CSkeleton kind="circle" width="2.75rem" />
           <c-CSkeleton kind="text" c-lines="3" />
-        </c-CGroup>
+        </c-CRow>
       </section>
     """
     css = """

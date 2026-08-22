@@ -8,7 +8,7 @@ citry.register_library(citry_ui)
 
 class HoverCardThemes(Component):
     template = """
-      <c-CGroup>
+      <c-CRow>
         <div style="color-scheme:light;background:Canvas;color:CanvasText;padding:2rem">
           <c-CHoverCard>
             <c-fill name="activator" data="{ activator_attrs }"><a href="#day" c-bind="activator_attrs">Day profile</a></c-fill>
@@ -21,7 +21,7 @@ class HoverCardThemes(Component):
             <c-fill name="default"><strong>Dark scheme</strong><p>Follows its anchor context.</p></c-fill>
           </c-CHoverCard>
         </div>
-      </c-CGroup>
+      </c-CRow>
     """
 
 

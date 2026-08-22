@@ -583,7 +583,7 @@ collection shapes; direct-string de-trusting; rejected arbitrary `__html__`;
 owned and dynamic-ownership attributes; trusted native listeners; copied
 option/group attrs; one nested snapshot per render; Field required and
 read-only capabilities; Form read-only opt-out; merged Field IDREFs; root
-class/style/attrs; no slots; exports; and exact assets.
+class/style/attrs; no slots; exports; and family/catalog asset budgets.
 
 Checked-in focused browser tests cover:
 

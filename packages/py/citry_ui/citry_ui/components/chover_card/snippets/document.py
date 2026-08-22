@@ -11,11 +11,11 @@ class DocumentHoverCard(Component):
           <a href="#survey" c-bind="activator_attrs">Northern reef survey</a>
         </c-fill>
         <c-fill name="default">
-          <c-CStack gap="sm">
+          <c-CCol gap="sm">
             <strong>Northern reef survey</strong>
             <span>Updated today · 42 observations</span>
             <c-CProgress c-value="68" label="Review progress" />
-          </c-CStack>
+          </c-CCol>
         </c-fill>
       </c-CHoverCard>
     """

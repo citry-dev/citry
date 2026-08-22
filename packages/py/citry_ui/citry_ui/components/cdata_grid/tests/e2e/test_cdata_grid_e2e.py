@@ -11,7 +11,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
-from citry_ui import CDataGridColumn, CDataGridRow
+from citry_ui import CDataGridColumn, CDataGridEditOption, CDataGridRow
 
 pytestmark = pytest.mark.e2e
 
@@ -73,12 +73,27 @@ def _page() -> str:
                 reason:detail.reason,
               })}"
             />
+            <c-CDataGrid
+              id="editable"
+              c-columns="editable_columns"
+              c-rows="editable_rows"
+              label="Editable members"
+              $c-props="{
+                onCellEditStart:(detail)=>$store.grid.editStarts.push([detail.rowKey,detail.columnKey]),
+                onCellEditCommit:(value,detail)=>{
+                  $store.grid.editCommits.push([value,detail.rowKey,detail.columnKey,detail.reason]);
+                  return value !== 'reject';
+                },
+                onCellEditCancel:(detail)=>$store.grid.editCancels.push([detail.rowKey,detail.columnKey,detail.reason]),
+              }"
+            />
           </body></html>
         """
         js = """
           Alpine.store('grid', {
             sort:[], selected:['grace'], acceptSort:false, acceptSelection:false,
             sortEvents:[], selectionEvents:[], activations:[], ranges:[],
+            editStarts:[], editCommits:[], editCancels:[],
           });
         """
 
@@ -93,7 +108,7 @@ def _page() -> str:
                 "rows": (
                     CDataGridRow("ada", {"name": "Ada", "role": "Engineer", "score": 98}),
                     CDataGridRow("grace", {"name": "Grace", "role": "Admiral", "score": 95}),
-                    CDataGridRow("locked", {"name": "Locked", "role": "Security", "score": 90}, disabled=True),
+                    CDataGridRow("locked", {"name": "Ada", "role": "Security", "score": 90}, disabled=True),
                 ),
                 "window_rows": tuple(
                     CDataGridRow(
@@ -101,6 +116,26 @@ def _page() -> str:
                         {"name": f"Record {index + 1}", "role": "Release", "score": index},
                     )
                     for index in range(20, 34)
+                ),
+                "editable_columns": (
+                    CDataGridColumn("name", "Name", editable=True),
+                    CDataGridColumn(
+                        "score", "Score", editable=True, editor="number", editor_attrs={"min": 0, "max": 100}
+                    ),
+                    CDataGridColumn(
+                        "role",
+                        "Role",
+                        editable=True,
+                        editor="select",
+                        editor_options=(
+                            CDataGridEditOption("engineer", "Engineer"),
+                            CDataGridEditOption("lead", "Lead"),
+                        ),
+                    ),
+                    CDataGridColumn("active", "Active", editable=True, editor="checkbox"),
+                ),
+                "editable_rows": (
+                    CDataGridRow("ada", {"name": "Ada", "score": 98, "role": "engineer", "active": True}),
                 ),
             }
 
@@ -112,7 +147,7 @@ def _load(page: Any) -> list[str]:
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.set_content(_page(), wait_until="load")
-    for selector in ("#grid", "#windowed"):
+    for selector in ("#grid", "#windowed", "#editable"):
         page.wait_for_selector(f"{selector}[data-citry-data-grid-initialized]")
     return errors
 
@@ -149,6 +184,7 @@ def test_sort_and_selection_requests_wait_for_controlled_acceptance(page: Any) -
     errors = _load(page)
     root = page.locator("#grid")
     name_header = root.locator('[data-citry-ui-part="header-cell"][data-column-key="name"]')
+    role_header = root.locator('[data-citry-ui-part="header-cell"][data-column-key="role"]')
     ada = root.locator('[data-citry-ui-part="row"][data-row-key="ada"]')
 
     name_header.click()
@@ -161,6 +197,23 @@ def test_sort_and_selection_requests_wait_for_controlled_acceptance(page: Any) -
     page.wait_for_function("document.querySelector('#grid [data-column-key=name]').ariaSort === 'ascending'")
     assert name_header.get_attribute("data-sort") == "asc"
     assert "sorted ascending" in root.locator('[data-citry-ui-part="status"]').text_content()
+    assert root.locator('[data-citry-ui-part="row"]').evaluate_all("rows => rows.map(row => row.dataset.rowKey)") == [
+        "ada",
+        "locked",
+        "grace",
+    ]
+
+    role_header.click(modifiers=["Shift"])
+    page.wait_for_function("document.querySelector('#grid [data-column-key=role]').ariaSort === 'ascending'")
+    role_header.click(modifiers=["Shift"])
+    page.wait_for_function("document.querySelector('#grid [data-column-key=role]').ariaSort === 'descending'")
+    assert name_header.get_attribute("data-sort-priority") == "1"
+    assert role_header.get_attribute("data-sort-priority") == "2"
+    assert root.locator('[data-citry-ui-part="row"]').evaluate_all("rows => rows.map(row => row.dataset.rowKey)") == [
+        "locked",
+        "ada",
+        "grace",
+    ]
 
     ada.locator('[data-citry-ui-part="cell"]').first.click()
     assert ada.get_attribute("aria-selected") == "false"
@@ -223,6 +276,43 @@ def test_shift_space_toggles_and_pointer_drag_selects_enabled_rows(page: Any) ->
     page.keyboard.press("Shift+Space")
     page.wait_for_function("Alpine.store('grid').selected.join(',') === 'ada,grace'")
     assert grace_cell.locator("xpath=..").get_attribute("aria-selected") == "true"
+    assert errors == []
+
+
+def test_inline_editors_commit_cancel_validate_and_keep_rows_authoritative(page: Any) -> None:
+    errors = _load(page)
+    root = page.locator("#editable")
+    name = root.locator('[data-row-key="ada"][data-column-key="name"]')
+    name.focus()
+    name.press("Enter")
+    editor = name.locator('[data-citry-ui-part="editor"]')
+    assert editor.get_attribute("type") == "text"
+    editor.fill("Aster")
+    editor.press("Enter")
+    assert name.inner_text() == "Ada"
+    assert page.evaluate("Alpine.store('grid').editCommits.at(-1).slice(0,3)") == ["Aster", "ada", "name"]
+
+    role = root.locator('[data-row-key="ada"][data-column-key="role"]')
+    role.dblclick()
+    role.locator("select").select_option("lead")
+    role.locator("select").press("Enter")
+    assert page.evaluate("Alpine.store('grid').editCommits.at(-1)[0]") == "lead"
+
+    score = root.locator('[data-row-key="ada"][data-column-key="score"]')
+    score.focus()
+    score.press("F2")
+    score.locator("input").fill("101")
+    score.locator("input").press("Enter")
+    assert score.locator("input").get_attribute("aria-invalid") == "true"
+    score.locator("input").press("Escape")
+    assert page.evaluate("Alpine.store('grid').editCancels.at(-1)") == ["ada", "score", "escape"]
+
+    active = root.locator('[data-row-key="ada"][data-column-key="active"]')
+    active.focus()
+    active.press("Enter")
+    active.locator('input[type="checkbox"]').uncheck()
+    active.locator('input[type="checkbox"]').press("Enter")
+    assert page.evaluate("Alpine.store('grid').editCommits.at(-1)[0]") is False
     assert errors == []
 
 

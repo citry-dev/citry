@@ -271,6 +271,7 @@ def test_request_submit_validation_loading_guard_and_click_token_dedupe(page):
     )
     page.wait_for_function("window.__submitCount === 1")
     page.wait_for_function("!document.querySelector('#submit-split').hasAttribute('data-open')")
+    page.wait_for_function("window.__splitEvents.some(event => event[0] === 'open' && event[3] === 'action')")
     action_notices = page.evaluate(
         "window.__splitEvents.filter(event => event[0] === 'open' && event[3] === 'action').length"
     )

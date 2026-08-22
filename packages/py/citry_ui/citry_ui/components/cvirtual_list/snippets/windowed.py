@@ -6,14 +6,12 @@ citry.register_library(citry_ui)
 
 class VirtualWindowExample(Component):
     template = """
-      <section x-data="{last:'This preview shows the final server range'}">
-        <output x-text="last">This preview shows the final server range</output>
+      <section x-data="{last:'This static preview supplies one complete window'}">
+        <output x-text="last">This static preview supplies one complete window</output>
         <c-CVirtualWindow
           aria_label="Audit records"
-          c-total_count="36"
-          c-start_index="20"
+          c-total_count="16"
           c-item_size="48"
-          c-initial_index="20"
           $c-props="{onRangeChange:(detail)=>last=`Requested ${detail.startIndex}-${detail.endIndex - 1}`}"
         >
           <c-for each="record in records">
@@ -39,7 +37,7 @@ class VirtualWindowExample(Component):
         return {
             "records": [
                 {"key": f"audit-{index}", "number": f"#{index + 1:05d}", "label": "Signed deployment record"}
-                for index in range(20, 36)
+                for index in range(16)
             ]
         }
 

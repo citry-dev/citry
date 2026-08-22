@@ -1,4 +1,4 @@
-"""Browser evidence for Stack and Group layout contracts."""
+"""Browser evidence for Col and Row layout contracts."""
 
 from __future__ import annotations
 
@@ -26,50 +26,50 @@ def _flow_page() -> str:
             <head>
               <meta charset="utf-8" />
               <style>
-                .part-override [data-citry-ui-part="group"] {
+                .part-override [data-citry-ui-part="row"] {
                   gap: 19px;
                 }
               </style>
               <c-css />
             </head>
             <body>
-              <c-CStack
-                c-attrs="{'id': 'stack'}"
+              <c-CCol
+                c-attrs="{'id': 'col'}"
                 gap="lg"
                 align="center"
                 justify="between"
                 reverse
               >
                 <span>One</span><span>Two</span>
-              </c-CStack>
-              <div style="--cui-group-gap: 13px">
-                <c-CGroup
-                  c-attrs="{'id': 'group'}"
+              </c-CCol>
+              <div style="--cui-row-gap: 13px">
+                <c-CRow
+                  c-attrs="{'id': 'row'}"
                   align="baseline"
                   justify="evenly"
                 >
                   <span>Clay</span><span>Glaze</span>
-                </c-CGroup>
+                </c-CRow>
               </div>
               <div class="part-override">
-                <c-CGroup c-attrs="{'id': 'part-group'}"><span>A</span><span>B</span></c-CGroup>
+                <c-CRow c-attrs="{'id': 'part-row'}"><span>A</span><span>B</span></c-CRow>
               </div>
-              <c-CGroup
+              <c-CRow
                 class_="narrow"
-                c-attrs="{'id': 'wrap-group'}"
+                c-attrs="{'id': 'wrap-row'}"
               >
                 <span>Porcelain preparation</span>
                 <span>Reduction schedule</span>
                 <span>Celadon glaze</span>
-              </c-CGroup>
+              </c-CRow>
               <div dir="rtl">
-                <c-CGroup tag="nav" c-attrs="{'id': 'rtl-group', 'aria-label': 'Studio'}">
+                <c-CRow tag="nav" c-attrs="{'id': 'rtl-row', 'aria-label': 'Studio'}">
                   <a href="#one">الطين</a><a href="#two">التزجيج</a>
-                </c-CGroup>
+                </c-CRow>
               </div>
-              <c-CStack c-attrs="{'id': 'nested-stack'}">
-                <c-CGroup c-attrs="{'id': 'nested-group'}"><span>Nested</span></c-CGroup>
-              </c-CStack>
+              <c-CCol c-attrs="{'id': 'nested-col'}">
+                <c-CRow c-attrs="{'id': 'nested-row'}"><span>Nested</span></c-CRow>
+              </c-CCol>
             </body>
           </html>
         """
@@ -90,31 +90,31 @@ def _flow_page() -> str:
 def test_stack_and_group_compute_the_requested_flex_contract(page: Any) -> None:
     page.set_content(_flow_page(), wait_until="load")
 
-    stack = page.locator("#stack")
-    assert stack.evaluate("el => getComputedStyle(el).display") == "flex"
-    assert stack.evaluate("el => getComputedStyle(el).flexDirection") == "column-reverse"
-    assert stack.evaluate("el => getComputedStyle(el).alignItems") == "center"
-    assert stack.evaluate("el => getComputedStyle(el).justifyContent") == "space-between"
-    assert stack.evaluate("el => getComputedStyle(el).gap") == "16px"
+    col = page.locator("#col")
+    assert col.evaluate("el => getComputedStyle(el).display") == "flex"
+    assert col.evaluate("el => getComputedStyle(el).flexDirection") == "column-reverse"
+    assert col.evaluate("el => getComputedStyle(el).alignItems") == "center"
+    assert col.evaluate("el => getComputedStyle(el).justifyContent") == "space-between"
+    assert col.evaluate("el => getComputedStyle(el).gap") == "16px"
 
-    group = page.locator("#group")
-    assert group.evaluate("el => getComputedStyle(el).flexDirection") == "row"
-    assert group.evaluate("el => getComputedStyle(el).flexWrap") == "wrap"
-    assert group.evaluate("el => getComputedStyle(el).alignItems") == "baseline"
-    assert group.evaluate("el => getComputedStyle(el).justifyContent") == "space-evenly"
+    row = page.locator("#row")
+    assert row.evaluate("el => getComputedStyle(el).flexDirection") == "row"
+    assert row.evaluate("el => getComputedStyle(el).flexWrap") == "wrap"
+    assert row.evaluate("el => getComputedStyle(el).alignItems") == "baseline"
+    assert row.evaluate("el => getComputedStyle(el).justifyContent") == "space-evenly"
 
 
 def test_public_variable_and_part_selector_overrides_win(page: Any) -> None:
     page.set_content(_flow_page(), wait_until="load")
 
-    assert page.locator("#group").evaluate("el => getComputedStyle(el).gap") == "13px"
-    assert page.locator("#part-group").evaluate("el => getComputedStyle(el).gap") == "19px"
+    assert page.locator("#row").evaluate("el => getComputedStyle(el).gap") == "13px"
+    assert page.locator("#part-row").evaluate("el => getComputedStyle(el).gap") == "19px"
 
 
 def test_wrapping_prevents_horizontal_overflow_for_authored_wrappable_content(page: Any) -> None:
     page.set_content(_flow_page(), wait_until="load")
 
-    geometry = page.locator("#wrap-group").evaluate(
+    geometry = page.locator("#wrap-row").evaluate(
         "el => ({client: el.clientWidth, scroll: el.scrollWidth, "
         "rows: new Set([...el.children].map(c => c.offsetTop)).size})"
     )
@@ -125,9 +125,9 @@ def test_wrapping_prevents_horizontal_overflow_for_authored_wrappable_content(pa
 def test_semantic_and_nested_roots_remain_native(page: Any) -> None:
     page.set_content(_flow_page(), wait_until="load")
 
-    rtl = page.locator("#rtl-group")
+    rtl = page.locator("#rtl-row")
     assert rtl.evaluate("el => el.tagName") == "NAV"
     assert rtl.get_attribute("role") is None
     assert rtl.get_attribute("tabindex") is None
     assert rtl.evaluate("el => getComputedStyle(el).direction") == "rtl"
-    assert page.locator("#nested-stack > #nested-group").count() == 1
+    assert page.locator("#nested-col > #nested-row").count() == 1

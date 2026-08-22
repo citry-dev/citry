@@ -73,7 +73,25 @@ def test_public_spacing_alternate_sides_and_horizontal_overflow_compute(page: An
         items.nth(0).locator("[data-citry-ui-part='content']").evaluate("el => getComputedStyle(el).paddingTop")
         == "21px"
     )
+    track_centers = vertical.locator(":scope > li > [data-citry-ui-part='track']").evaluate_all(
+        """elements => elements.map(element => {
+          const box = element.getBoundingClientRect();
+          return box.x + box.width / 2;
+        })"""
+    )
+    assert max(track_centers) - min(track_centers) < 1
+    assert vertical.get_attribute("data-has-opposite") == ""
+    assert items.nth(0).locator("[data-citry-ui-part='opposite']").evaluate(
+        "element => getComputedStyle(element).textAlign"
+    ) in {"end", "right"}
 
     horizontal = page.locator("#horizontal")
     assert horizontal.evaluate("el => getComputedStyle(el).overflowX") == "auto"
     assert horizontal.evaluate("el => el.scrollWidth > el.clientWidth")
+    horizontal_track_centers = horizontal.locator(":scope > li > [data-citry-ui-part='track']").evaluate_all(
+        """elements => elements.map(element => {
+          const box = element.getBoundingClientRect();
+          return box.y + box.height / 2;
+        })"""
+    )
+    assert max(horizontal_track_centers) - min(horizontal_track_centers) < 1

@@ -7,7 +7,7 @@ citry.register_library(citry_ui)
 class CustomRangeProgress(Component):
     template = """
       <section class="progress-range">
-        <c-CGroup justify="between"><h2>Sample crates cataloged</h2><strong>6 / 10</strong></c-CGroup>
+        <c-CRow justify="between"><h2>Sample crates cataloged</h2><strong>6 / 10</strong></c-CRow>
         <c-CProgress
           label="Sample crates cataloged"
           c-value="6"

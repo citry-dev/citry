@@ -1,47 +1,47 @@
 ---
-title: Stack and Group
-description: Arrange Citry UI content in predictable vertical stacks and wrapping horizontal groups.
+title: Col and Row
+description: Arrange Citry UI content in predictable vertical columns and wrapping horizontal rows.
 ---
 
-# Stack and Group
+# Col and Row
 
-Use `CStack` for vertical flow and `CGroup` for horizontal flow. Both keep your
+Use `CCol` for vertical flow and `CRow` for horizontal flow. Both keep your
 children unchanged, expose one native root, and render without JavaScript.
 
 ## Layout at a glance
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cflow/snippets/at_a_glance.py"
-  title="Compose Stack and Group"
+  title="Compose Col and Row"
 />
 
 ```citry-html
-<c-CStack gap="lg">
+<c-CCol gap="lg">
   <h2>Glaze tests</h2>
-  <c-CGroup>
+  <c-CRow>
     <c-CButton>Archive</c-CButton>
     <c-CButton intent="primary">Publish</c-CButton>
-  </c-CGroup>
-</c-CStack>
+  </c-CRow>
+</c-CCol>
 ```
 
 Compose the same layout in Python:
 
 ```python
-from citry_ui import CGroup, CStack
+from citry_ui import CCol, CRow
 
-actions = CGroup(slots={"default": ["Archive", "Publish"]})
-panel = CStack(gap="lg", slots={"default": ["Glaze tests", actions]})
+actions = CRow(slots={"default": ["Archive", "Publish"]})
+panel = CCol(gap="lg", slots={"default": ["Glaze tests", actions]})
 ```
 
 ## Choose spacing
 
-Use the shared `0`, `xs`, `sm`, `md`, `lg`, and `xl` presets. Stack defaults to
-`md`; Group defaults to the tighter `sm`.
+Use the shared `0`, `xs`, `sm`, `md`, `lg`, and `xl` presets. Col defaults to
+`md`; Row defaults to the tighter `sm`.
 
 <c-ui-demo
-  path="packages/py/citry_ui/citry_ui/components/cflow/snippets/stack_spacing.py"
-  title="Compare Stack spacing"
+  path="packages/py/citry_ui/citry_ui/components/cflow/snippets/col_spacing.py"
+  title="Compare Col spacing"
 />
 
 ## Align and distribute children
@@ -50,13 +50,13 @@ Use the shared `0`, `xs`, `sm`, `md`, `lg`, and `xl` presets. Stack defaults to
 flow axis. The same vocabulary works across both components.
 
 <c-ui-demo
-  path="packages/py/citry_ui/citry_ui/components/cflow/snippets/group_alignment.py"
-  title="Align and distribute Group children"
+  path="packages/py/citry_ui/citry_ui/components/cflow/snippets/row_alignment.py"
+  title="Align and distribute Row children"
 />
 
 ## Wrap horizontal content
 
-Group wraps by default, making action rows and short metadata collections safe
+Row wraps by default, making action rows and short metadata collections safe
 at narrow widths. Set `wrap=False` only when horizontal overflow is deliberate.
 
 <c-ui-demo
@@ -80,7 +80,7 @@ native structure required by your content.
 
 ## Nest layouts
 
-Stack and Group can be nested without extra coordination or client state.
+Col and Row can be nested without extra coordination or client state.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cflow/snippets/nested_layouts.py"

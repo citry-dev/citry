@@ -9,6 +9,15 @@ Use `CSidebar` for persistent application navigation or complementary tools.
 It gives header and footer content fixed positions around one scrollable region
 and supports rail or off-canvas collapse.
 
+When a header is present, it shares the first Row with the collapse toggle.
+Only the rail width transition clips horizontal overflow while the fixed-width
+inner panel moves behind it, so labels do not flash as one-character columns.
+At rest, the collapsed panel uses the actual rail width, preserving complete
+icon boxes instead of clipping expanded boxes at the rail edge. Arbitrary slot
+text stays on one clipped line in the steady rail instead of wrapping into a
+tall one-character column; mark content with
+`data-citry-sidebar-expanded-only` when it should disappear entirely.
+
 ## Sidebar at a glance
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/csidebar/snippets/at_a_glance.py" title="Sidebar at a glance" />
@@ -41,7 +50,9 @@ keep or change your value to reject or accept it.
 
 Sticky Sidebars use `--cui-sidebar-sticky-offset` to leave room for an
 application header. `variant="floating"` adds a contained border, radius, and
-elevation without registering page-layout insets.
+elevation without registering page-layout insets. Sticky positioning applies
+an offset and a viewport-sized maximum; it does not force a fixed height, so a
+preview iframe cannot enter a self-expanding height loop.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/csidebar/snippets/presentation.py" title="Choose Sidebar presentation" />
 

@@ -6,14 +6,14 @@ citry.register_library(citry_ui)
 
 class BadgeCustomization(Component):
     template = """
-      <c-CGroup class_="badge-themes">
+      <c-CRow class_="badge-themes">
         <div class="badge-themes__quartz">
           <c-CBadge>Quartz archive</c-CBadge>
         </div>
         <div class="badge-themes__basalt">
           <c-CBadge variant="outline">Basalt archive</c-CBadge>
         </div>
-      </c-CGroup>
+      </c-CRow>
     """
     css = """
       :where(.badge-themes > div) {

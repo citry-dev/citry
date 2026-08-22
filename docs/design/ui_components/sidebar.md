@@ -136,14 +136,26 @@ Public parts are `sidebar`, `toggle`, `toggle-icon`, `toggle-label`, `panel`,
 `--cui-sidebar-sticky-offset`.
 
 Root mirrors are `data-collapsed`, `data-collapsible`, `data-side`,
-`data-variant`, `data-size`, and `data-sticky`. Size sets the current default
+`data-variant`, `data-size`, `data-sticky`, and `data-has-header`. The last
+marker makes an authored header share its first Row with the owned toggle
+instead of starting below it. Size sets the current default
 expanded width; public variables override size through private fallbacks.
 
 ## 11. Environmental behavior
 
-All edge geometry is logical and follows RTL/writing direction. Long content
-wraps inside the owned scroll area. Narrow containers may use off-canvas
-collapse but do not automatically become modal. Reduced motion disables width
+All edge geometry is logical and follows RTL/writing direction. The root clips
+horizontal overflow only during a rail width transition while its inner panel
+retains the full expanded width; labels therefore do not flash as one-character
+columns. Once collapsed, the panel settles to the real rail width so List icon
+surfaces retain their normal complete box geometry. Plain header/footer text is
+hidden at rest in rail mode; authors can provide a rail-only replacement.
+Arbitrary content-slot text uses a single clipped line at rest so an authored
+paragraph cannot inflate the rail into one-character columns. Authors use
+`data-citry-sidebar-expanded-only` when that content should disappear entirely.
+Long content wraps inside the owned vertical scroll area. Sticky mode uses a
+viewport-sized maximum rather than a forced block size, avoiding document or
+iframe height feedback. Narrow containers may use off-canvas collapse but do
+not automatically become modal. Reduced motion disables width
 transitions, forced colors retains borders/focus, touch targets remain at least
 44 CSS pixels, nested color schemes inherit, and print expands content while
 omitting the toggle.

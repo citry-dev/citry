@@ -1,4 +1,4 @@
-"""Browser evidence for Tour modality, navigation, geometry, and cleanup."""
+"""Browser evidence for Tour navigation, target interaction, geometry, and cleanup."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _page() -> str:
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tour evidence</title><c-css /></head>
           <body x-data>
-            <button id="target" type="button">Target action</button>
+            <button id="target" type="button" @click="$store.tour.targetClicks++">Target action</button>
             <c-CTour id="guide">
               <c-fill name="activator" data="{ activator_attrs }">
                 <button id="start" c-bind="activator_attrs">Start tour</button>
@@ -39,7 +39,7 @@ def _page() -> str:
               <c-fill name="default">
                 <c-CTourStep value="intro" c-describe="True">
                   <c-fill name="title">Introduction</c-fill>
-                  <c-fill name="default">Centered modal introduction.</c-fill>
+                  <c-fill name="default">Centered Tour introduction.</c-fill>
                 </c-CTourStep>
                 <c-CTourStep value="target" target_id="target" placement="bottom-end">
                   <c-fill name="title">Target step</c-fill>
@@ -85,6 +85,7 @@ def _page() -> str:
         js = """
           Alpine.store('tour', {
             open:false, active:0, acceptOpen:false, acceptActive:false, openEvents:[], activeEvents:[],
+            targetClicks:0,
           });
         """
 
@@ -108,7 +109,8 @@ def test_uncontrolled_navigation_target_geometry_skip_and_focus_restore(page: An
     dialog = guide.locator("dialog")
 
     start.click()
-    page.wait_for_function("document.querySelector('#guide dialog').matches(':modal')")
+    page.wait_for_function("document.querySelector('#guide dialog').open")
+    assert dialog.evaluate("element => element.matches(':modal')") is False
     assert guide.get_attribute("data-active") == "0"
     assert guide.get_attribute("data-value") == "intro"
     assert dialog.get_attribute("aria-describedby") == "guide-description-0"
@@ -128,7 +130,24 @@ def test_uncontrolled_navigation_target_geometry_skip_and_focus_restore(page: An
     assert surface_box is not None
     assert target_box is not None
     assert 0 <= surface_box["x"] <= page.viewport_size["width"] - surface_box["width"]
-    assert surface.get_attribute("data-placement") in {"top-start", "bottom-start", "top-end", "bottom-end"}
+    assert surface.get_attribute("data-placement") in {
+        "top-start",
+        "bottom-start",
+        "top-end",
+        "bottom-end",
+        "top",
+        "bottom",
+        "left",
+        "right",
+    }
+    assert not (
+        surface_box["x"] < target_box["x"] + target_box["width"]
+        and surface_box["x"] + surface_box["width"] > target_box["x"]
+        and surface_box["y"] < target_box["y"] + target_box["height"]
+        and surface_box["y"] + surface_box["height"] > target_box["y"]
+    )
+    target.click()
+    assert page.evaluate("Alpine.store('tour').targetClicks") == 1
 
     guide.locator('[data-citry-tour-action="next"]:visible').click()
     page.wait_for_function("document.querySelector('#guide').dataset.active === '3'")
@@ -148,7 +167,7 @@ def test_controlled_open_and_active_requests_wait_for_acceptance(page: Any) -> N
     assert controlled.locator("dialog").get_attribute("open") is None
     assert page.evaluate("Alpine.store('tour').openEvents") == [[True, "activator", True]]
     page.evaluate("Alpine.store('tour').acceptOpen = true; Alpine.store('tour').open = true")
-    page.wait_for_function("document.querySelector('#controlled dialog').matches(':modal')")
+    page.wait_for_function("document.querySelector('#controlled dialog').open")
 
     controlled.locator('[data-citry-tour-action="next"]:visible').click()
     assert controlled.get_attribute("data-active") == "0"
@@ -159,16 +178,40 @@ def test_controlled_open_and_active_requests_wait_for_acceptance(page: Any) -> N
     assert errors == []
 
 
+def test_narrow_surface_stacks_progress_above_actions(page: Any) -> None:
+    errors = _load(page)
+    guide = page.locator("#guide")
+    guide.evaluate("element => element.style.setProperty('--cui-tour-width', '20rem')")
+    page.locator("#start").click()
+    page.wait_for_function("document.querySelector('#guide dialog').open")
+    guide.locator('[data-citry-tour-action="next"]:visible').click()
+    page.wait_for_function("document.querySelector('#guide').dataset.active === '1'")
+    guide.locator('[data-citry-tour-action="next"]:visible').click()
+    page.wait_for_function("document.querySelector('#guide').dataset.active === '3'")
+
+    footer = guide.locator('[data-citry-ui-part="footer"]:visible')
+    progress = footer.locator('[data-citry-ui-part="progress-group"]')
+    actions = footer.locator('[data-citry-ui-part="actions"]')
+    progress_box = progress.bounding_box()
+    actions_box = actions.bounding_box()
+    assert footer.evaluate("element => getComputedStyle(element).flexDirection") == "column"
+    assert progress_box is not None
+    assert actions_box is not None
+    assert progress_box["y"] + progress_box["height"] <= actions_box["y"]
+    action_boxes = actions.locator("button:visible").evaluate_all(
+        "elements => elements.map(element => element.getBoundingClientRect().y)"
+    )
+    assert len(action_boxes) == 3
+    assert max(action_boxes) - min(action_boxes) <= 1
+    assert errors == []
+
+
 def test_escape_shift_tab_environment_axe_and_cleanup(page: Any) -> None:
     errors = _load(page)
     page.locator("#start").click()
-    page.wait_for_function("document.querySelector('#guide dialog').matches(':modal')")
+    page.wait_for_function("document.querySelector('#guide dialog').open")
     title = page.locator("#guide-title-0")
     title.focus()
-    page.keyboard.press("Shift+Tab")
-    assert page.locator('#guide [data-citry-tour-action="next"]:visible').evaluate(
-        "element => document.activeElement === element"
-    )
     page.keyboard.press("Escape")
     page.wait_for_function("!document.querySelector('#guide dialog').open")
 

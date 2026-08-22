@@ -51,7 +51,7 @@ uv run --no-sync python -m citry_ui.quality.validate_html \
   /tmp/tabs.html --scenario tabs.overview
 uv build --wheel packages/py/citry_ui --out-dir /tmp/citry-ui-dist
 uv run --no-sync python -m citry_ui.quality.qualify_wheel \
-  /tmp/citry-ui-dist/citry_ui-0.1.0-py3-none-any.whl
+  /tmp/citry-ui-dist/citry_ui-0.2.0-py3-none-any.whl
 uv run --no-sync python -m citry_ui.quality.capture_visuals \
   /tmp/citry-ui-visuals --scenario tabs.overview --profile desktop-light
 ```

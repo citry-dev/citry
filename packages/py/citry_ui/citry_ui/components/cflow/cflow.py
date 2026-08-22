@@ -33,7 +33,7 @@ _OWNERSHIP_DIRECTIVES = frozenset(
         "x-text",
     }
 )
-_STACK_OWNED_ATTRS = frozenset(
+_COL_OWNED_ATTRS = frozenset(
     {
         "data-align",
         "data-citry-ui-part",
@@ -42,14 +42,14 @@ _STACK_OWNED_ATTRS = frozenset(
         "data-reverse",
     }
 )
-_GROUP_OWNED_ATTRS = _STACK_OWNED_ATTRS | {"data-wrap"}
+_ROW_OWNED_ATTRS = _COL_OWNED_ATTRS | {"data-wrap"}
 
 
-class CStackDefaultSlotData:
+class CColDefaultSlotData:
     pass
 
 
-class CGroupDefaultSlotData:
+class CRowDefaultSlotData:
     pass
 
 
@@ -110,7 +110,7 @@ def _copy_attrs(
     return copied
 
 
-class CStack(LibraryComponent):
+class CCol(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         tag: CFlowTag = "div"
@@ -124,19 +124,19 @@ class CStack(LibraryComponent):
 
     @dataclass(slots=True)
     class Slots:
-        default: SlotInput[CStackDefaultSlotData] | None = None
+        default: SlotInput[CColDefaultSlotData] | None = None
 
     def template_data(
         self,
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, Any]:
-        tag = _plain_choice("CStack", "tag", kwargs.tag, _TAGS)
-        gap = _plain_choice("CStack", "gap", kwargs.gap, _GAPS)
-        align = _plain_choice("CStack", "align", kwargs.align, _ALIGNS)
-        justify = _plain_choice("CStack", "justify", kwargs.justify, _JUSTIFIES)
-        validate_boolean("CStack", "reverse", kwargs.reverse)
-        attrs = _copy_attrs("CStack", kwargs.attrs, _STACK_OWNED_ATTRS)
+        tag = _plain_choice("CCol", "tag", kwargs.tag, _TAGS)
+        gap = _plain_choice("CCol", "gap", kwargs.gap, _GAPS)
+        align = _plain_choice("CCol", "align", kwargs.align, _ALIGNS)
+        justify = _plain_choice("CCol", "justify", kwargs.justify, _JUSTIFIES)
+        validate_boolean("CCol", "reverse", kwargs.reverse)
+        attrs = _copy_attrs("CCol", kwargs.attrs, _COL_OWNED_ATTRS)
         return {
             "tag": tag,
             "gap": gap,
@@ -149,9 +149,9 @@ class CStack(LibraryComponent):
     template = """
       <c-element
         c-is="tag"
-        class="cui-stack"
+        class="cui-col"
         c-bind="attrs"
-        data-citry-ui-part="stack"
+        data-citry-ui-part="col"
         c-data-gap="gap"
         c-data-align="align"
         c-data-justify="justify"
@@ -164,7 +164,7 @@ class CStack(LibraryComponent):
     css_file = "runtime.min.css"
 
 
-class CGroup(LibraryComponent):
+class CRow(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         tag: CFlowTag = "div"
@@ -179,20 +179,20 @@ class CGroup(LibraryComponent):
 
     @dataclass(slots=True)
     class Slots:
-        default: SlotInput[CGroupDefaultSlotData] | None = None
+        default: SlotInput[CRowDefaultSlotData] | None = None
 
     def template_data(
         self,
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, Any]:
-        tag = _plain_choice("CGroup", "tag", kwargs.tag, _TAGS)
-        gap = _plain_choice("CGroup", "gap", kwargs.gap, _GAPS)
-        align = _plain_choice("CGroup", "align", kwargs.align, _ALIGNS)
-        justify = _plain_choice("CGroup", "justify", kwargs.justify, _JUSTIFIES)
-        validate_boolean("CGroup", "reverse", kwargs.reverse)
-        validate_boolean("CGroup", "wrap", kwargs.wrap)
-        attrs = _copy_attrs("CGroup", kwargs.attrs, _GROUP_OWNED_ATTRS)
+        tag = _plain_choice("CRow", "tag", kwargs.tag, _TAGS)
+        gap = _plain_choice("CRow", "gap", kwargs.gap, _GAPS)
+        align = _plain_choice("CRow", "align", kwargs.align, _ALIGNS)
+        justify = _plain_choice("CRow", "justify", kwargs.justify, _JUSTIFIES)
+        validate_boolean("CRow", "reverse", kwargs.reverse)
+        validate_boolean("CRow", "wrap", kwargs.wrap)
+        attrs = _copy_attrs("CRow", kwargs.attrs, _ROW_OWNED_ATTRS)
         return {
             "tag": tag,
             "gap": gap,
@@ -206,9 +206,9 @@ class CGroup(LibraryComponent):
     template = """
       <c-element
         c-is="tag"
-        class="cui-group"
+        class="cui-row"
         c-bind="attrs"
-        data-citry-ui-part="group"
+        data-citry-ui-part="row"
         c-data-gap="gap"
         c-data-align="align"
         c-data-justify="justify"
@@ -219,16 +219,16 @@ class CGroup(LibraryComponent):
       </c-element>
     """
 
-    css_file = "runtime.c-group.min.css"
+    css_file = "runtime.c-row.min.css"
 
 
 __all__ = [
+    "CCol",
+    "CColDefaultSlotData",
     "CFlowAlign",
     "CFlowGap",
     "CFlowJustify",
     "CFlowTag",
-    "CGroup",
-    "CGroupDefaultSlotData",
-    "CStack",
-    "CStackDefaultSlotData",
+    "CRow",
+    "CRowDefaultSlotData",
 ]

@@ -16,7 +16,7 @@ class DateInputForm(Component):
           <c-fill name="label">Departure date</c-fill>
           <c-fill name="default"><c-CDateInput name="departure" value="2026-08-22" /></c-fill>
         </c-CField>
-        <c-CGroup><c-CButton type="submit">Submit</c-CButton><c-CButton type="reset" variant="outline">Reset</c-CButton></c-CGroup>
+        <c-CRow><c-CButton type="submit">Submit</c-CButton><c-CButton type="reset" variant="outline">Reset</c-CButton></c-CRow>
         <output x-text="result">Submit or reset the Form</output>
       </form>
     """

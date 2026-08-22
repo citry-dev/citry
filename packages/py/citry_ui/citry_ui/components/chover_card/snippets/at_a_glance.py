@@ -12,11 +12,11 @@ class HoverCardAtAGlance(Component):
             <a href="#maya" c-bind="activator_attrs">Maya Chen</a>
           </c-fill>
           <c-fill name="default">
-            <c-CStack gap="sm">
+            <c-CCol gap="sm">
               <c-CAvatar>MC</c-CAvatar>
               <strong>Maya Chen</strong>
               <span>Field researcher · 18 shared observations</span>
-            </c-CStack>
+            </c-CCol>
           </c-fill>
         </c-CHoverCard>
       </p>

@@ -12,16 +12,16 @@ class GroupAlignment(Component):
         pass
 
     template = """
-      <c-CStack class_="flow-alignments" gap="lg">
+      <c-CCol class_="flow-alignments" gap="lg">
         <c-for each="justify in justifies">
-          <c-CStack gap="xs">
+          <c-CCol gap="xs">
             <strong>justify={{ justify }}</strong>
-            <c-CGroup c-justify="justify" class_="flow-alignments__group">
+            <c-CRow c-justify="justify" class_="flow-alignments__group">
               <span>Trim</span><span>Bisque</span><span>Glaze</span>
-            </c-CGroup>
-          </c-CStack>
+            </c-CRow>
+          </c-CCol>
         </c-for>
-      </c-CStack>
+      </c-CCol>
     """
 
     def template_data(

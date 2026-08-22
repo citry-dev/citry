@@ -448,7 +448,7 @@ dev = [
 
 [[package]]
 name = "citry-ui"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/py/citry_ui" }
 dependencies = [
     { name = "citry" },

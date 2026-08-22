@@ -18,7 +18,7 @@
     inline-size: min(100%, var(--_cui-sidebar-width));
     min-inline-size: 0;
     max-block-size: calc(100dvb - var(--_cui-sidebar-sticky-offset));
-    overflow: hidden;
+    overflow: visible;
     border-inline-end: 1px solid var(--_cui-sidebar-border-color);
     color: var(--_cui-sidebar-foreground);
     background: var(--_cui-sidebar-background);
@@ -44,6 +44,9 @@
   :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]) {
     inline-size: var(--_cui-sidebar-rail-width);
   }
+  :where([data-citry-ui-part="sidebar"][data-citry-sidebar-transitioning]) {
+    overflow: hidden;
+  }
   :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="offcanvas"]) {
     inline-size: calc(var(--_cui-sidebar-toggle-size) + var(--_cui-sidebar-gap));
     border-color: transparent;
@@ -59,6 +62,11 @@
     min-block-size: 0;
     padding: var(--_cui-sidebar-padding);
     overflow: hidden;
+  }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]:not(
+    [data-citry-sidebar-transitioning]
+  ) > [data-citry-ui-part="panel"]) {
+    inline-size: var(--_cui-sidebar-rail-width);
   }
   :where([data-citry-ui-part="sidebar"]:not([data-has-header])
     > [data-citry-ui-part="panel"]) {
@@ -91,6 +99,11 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     overflow-wrap: anywhere;
+  }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]:not(
+    [data-citry-sidebar-transitioning]
+  ) > [data-citry-ui-part="panel"] > [data-citry-ui-part="content"]) {
+    white-space: nowrap;
   }
   :where([data-citry-ui-part="sidebar"] > [data-citry-ui-part="toggle"]) {
     position: absolute;
@@ -134,6 +147,19 @@
     line-height: 1;
   }
   :where([data-citry-ui-part="sidebar"] [data-citry-sidebar-rail-only]) { display: none; }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]:not(
+    [data-citry-sidebar-transitioning]
+  ) :is([data-citry-ui-part="header"], [data-citry-ui-part="footer"])) {
+    visibility: hidden;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]:not(
+    [data-citry-sidebar-transitioning]
+  ) :is([data-citry-ui-part="header"], [data-citry-ui-part="footer"])
+    [data-citry-sidebar-rail-only]) {
+    visibility: visible;
+  }
   :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]
     [data-citry-sidebar-expanded-only]) { display: none; }
   :where([data-citry-ui-part="sidebar"][data-collapsed][data-collapsible="rail"]

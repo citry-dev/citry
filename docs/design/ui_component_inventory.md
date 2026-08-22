@@ -1,12 +1,12 @@
 # Citry UI component inventory
 
-**Status (2026-08-21): provisional Phase 8 inventory for the current
-source-development catalog. The worktree contains 71 component-family
-directories and documentation entries and 137 registered definitions,
+**Status (2026-08-22): provisional Phase 8 inventory for the current
+source-development catalog. The worktree contains 77 component-family
+directories and documentation entries and 156 registered definitions,
 including compound-family declarations and private renderers.**
-This document orders component work while publication waits for compatible
-`citry` and `citry_core` releases. It does not freeze the v1 public contract,
-package compatibility range, exact class names, or release contents.
+The compatible `citry>=0.4.2,<0.5.0` line is public, and this catalog is being
+prepared for the `citry-ui` 0.2.0 alpha release. This document does not freeze
+the v1 public contract, package compatibility range, or later release contents.
 
 The dated ecosystem census remains in the
 [Phase 5 component taxonomy](ui_research/component-taxonomy.md). The
@@ -80,7 +80,7 @@ evidence before the candidate earns a batch slot.
 | Checkbox | `CCheckbox` | Native checked and mixed states, Field/Form ownership, documentation, and focused family automation complete | Final cross-family qualification plus human visual and assistive-technology review |
 | Alert | `CAlert` | Persistent feedback, announcement roles, registered icons, actions, documentation, and focused automation complete | Human visual, live-region, and assistive-technology review |
 | Accordion | `CAccordion`, `CAccordionItem` | Single/multiple expansion, declaration ownership, keyboard/focus behavior, documentation, focused automation, and independent closure review complete | Human visual, assistive-technology, and release qualification |
-| Flow layout | `CStack`, `CGroup` | Server-only one-dimensional layout, semantic roots, direction, wrapping, documentation, and focused automation complete | Human visual, responsive-layout, and host-CSS review |
+| Flow layout | `CCol`, `CRow` | Server-only one-dimensional layout, semantic roots, direction, wrapping, documentation, and focused automation complete | Human visual, responsive-layout, and host-CSS review |
 | Badge | `CBadge` | Static inline status, count, metadata, icons, documentation, and focused automation complete | Human visual and assistive-technology review |
 | Progress | `CProgress` | Native determinate and indeterminate task progress, documentation, and focused automation complete | Human visual, announcement-context, and assistive-technology review |
 | Spinner | `CSpinner` | Compact unknown-duration activity cue, delayed composition, documentation, and focused automation complete | Human visual, motion, and assistive-technology review |
@@ -108,7 +108,7 @@ previews, and structured API reference generation.
 
 ### 3.1 Subsequent source-development passes
 
-The following 37 families have since joined the source-development baseline.
+The following 43 families have since joined the source-development baseline.
 Each has live runtime source, a component specification, family-owned public
 documentation and structured reference, docs-catalog projection, and contract
 coverage. Family-specific human, assistive-technology, device, browser, and
@@ -118,19 +118,23 @@ in this table.
 | Family | Public boundary |
 |---|---|
 | AlertDialog | `CAlertDialog` |
+| Cascader | `CCascader`, `CCascaderOption` |
 | Carousel | `CCarousel`, `CCarouselSlide` |
+| ColorPicker | `CColorPicker` with named `CColorSwatch` records |
 | CommandPalette | `CCommandPalette` and its command/group records |
 | ContextMenu | `CContextMenu` over the Menu declaration family |
-| DataGrid | `CDataGrid` with typed Column, Row, Cell, and Sort records |
+| DataGrid | `CDataGrid` with typed Column, Row, Cell, Sort, and built-in editor records |
 | Calendar | `CCalendar` |
 | DateInput | `CDateInput` |
 | DatePicker | `CDatePicker` |
 | DateRange | `CDateRange` |
 | Disclosure | `CDisclosure` |
 | Editable | `CEditable` |
+| Form Collection | `CFormCollection`, `CFormCollectionItem` |
 | FileInput | `CFileInput`, `CDropTarget` |
 | HoverCard | `CHoverCard` |
 | Image | `CImage` |
+| Infinite Scroll | `CInfiniteScroll` |
 | Listbox | `CListbox`, `CListboxOption`, `CListboxGroup` |
 | MultiSelect | `CMultiSelect` and option/group records |
 | NavigationMenu | `CNavigationMenu`, `CNavigationMenuItem`, `CNavigationMenuLink` |
@@ -140,6 +144,7 @@ in this table.
 | ScrollArea | `CScrollArea` |
 | Sidebar | `CSidebar` |
 | Select | `CSelect` and option/group records |
+| Sortable | `CSortable`, `CSortableItem` |
 | SplitButton | `CSplitButton` |
 | Splitter | `CSplitter`, `CSplitterPanel` |
 | Slider and RangeSlider | `CSlider`, `CRangeSlider` |
@@ -153,6 +158,7 @@ in this table.
 | Tour | `CTour`, `CTourStep` |
 | Transfer List | `CTransferList`, `CTransferListItem` |
 | Tree | `CTree`, `CTreeItem` |
+| TreeGrid | `CTreeGrid` with recursive Row and aligned Column records |
 | Virtual List | `CVirtualList`, `CVirtualListItem`, `CVirtualWindow` |
 
 ## 4. Completed source-development batch
@@ -209,7 +215,7 @@ The pass deliberately did not spend batch slots on these adjacent jobs:
   verbose, unsafe, or inconsistent.
 - **Surface:** keep the shared visual recipe private unless applications need a
   stable component job that Card cannot satisfy.
-- **Layout:** carry Flow (`CStack`/`CGroup`) first, then Container and Grid.
+- **Layout:** carry Flow (`CCol`/`CRow`) first, then Container and Grid.
   This batch used its seven slots for more immediate foundation, form, choice,
   feedback, and interaction jobs. Named responsive Grid inputs additionally
   wait for a public breakpoint or container-query vocabulary.
@@ -263,7 +269,7 @@ share visual tokens or native form lessons.
 
 | Order | Selected family | Initial public boundary | Main reason to advance |
 |---:|---|---|---|
-| 1 | Flow layout | `CStack` and `CGroup` for one-dimensional vertical and horizontal layout | Establish the spacing and alignment vocabulary used by later families while remaining server-only. |
+| 1 | Flow layout | `CCol` and `CRow` for one-dimensional vertical and horizontal layout | Establish the spacing and alignment vocabulary used by later families while remaining server-only. |
 | 2 | Badge | `CBadge` for static status, count, and metadata presentation | Add a common low-cost data-display primitive without absorbing interactive Tag or Chip behavior. |
 | 3 | Progress | `CProgress` for determinate and indeterminate task progress | Cover native progress semantics, async status, and public value styling. |
 | 4 | Spinner | `CSpinner` for unknown-duration activity feedback | Provide a compact activity cue with a contract distinct from measurable Progress. |
@@ -271,7 +277,7 @@ share visual tokens or native form lessons.
 | 6 | Switch | `CSwitch` for an immediate Boolean setting | Preserve Switch semantics and feedback instead of treating it as a visual Checkbox alias. |
 | 7 | Breadcrumbs | `CBreadcrumbs` for semantic hierarchical navigation | Add a high-commonality navigation family without requiring popup or route-provider infrastructure. |
 
-The second batch is complete. Flow retains separate concise Stack and Group
+The second batch is complete. Flow retains separate concise Col and Row
 surfaces; Badge stays an inline, text-bearing static label
 without absorbing Chip/Tag or overlay behavior; Progress preserves native
 determinate and indeterminate task semantics; Spinner stays a compact,
@@ -301,7 +307,7 @@ the earlier batches, every row is one independently qualified family.
 | 1 | Divider | `CDivider` for semantic or decorative separation | Establish a concise native separation primitive with horizontal and vertical presentation before later dense layouts. |
 | 2 | Avatar | `CAvatar` for images, initials, and icon fallbacks | Add a common identity surface while proving image failure, fallback, naming, and layout-stability contracts. |
 | 3 | Skeleton | `CSkeleton` primitives and common presets composed through Flow | Match mature-suite placeholder flexibility without adopting a string mini-language or component-owned announcements. |
-| 4 | ButtonGroup | `CButtonGroup` for related momentary `CButton` commands | Decide whether connected styling, shared sizing, naming, and direct-child validation add durable value beyond `CGroup`; otherwise keep it as a recipe and use the substitute queue. |
+| 4 | ButtonGroup | `CButtonGroup` for related momentary `CButton` commands | Decide whether connected styling, shared sizing, naming, and direct-child validation add durable value beyond `CRow`; otherwise keep it as a recipe and use the substitute queue. |
 | 5 | Toggle | `CToggle` and `CToggleGroup` for persistent pressed state | Keep pressed buttons distinct from immediate Switch settings, ordinary Button commands, and radio-backed segmented selection. |
 | 6 | Pagination | `CPagination` for finite page navigation through links or controlled requests | Add a common dynamic navigation collection with exact current-page, ellipsis, responsive, URL, and callback ownership. |
 | 7 | List | `CList` with the smallest justified semantic item surface | Add reusable native list presentation without importing Menu, Listbox, Tree, or selection behavior into a static collection. |
@@ -427,7 +433,7 @@ completed their research, accepted specifications, source implementation,
 structured public references, preview sets, reusable quality scenarios,
 localization work, and focused three-browser evidence. The accepted DataGrid
 boundary owns composite navigation, request/accept sorting, supplied-Row
-selection, and fixed-height server windows without claiming editing, grouping,
+selection, built-in Cell editing, and fixed-height server windows without claiming Row editing, grouping,
 pivoting, browser data sources, or a spreadsheet engine. Virtual List keeps
 complete-DOM containment separate from fixed server windows; Transfer List
 owns a finite form-capable PickList rather than remote or virtualized
@@ -462,8 +468,8 @@ depends on lessons from the completed batch and final Phase 8 scope.
 |---|---|---|
 | Calendar, custom date picker, time, date range, and locale-sensitive number controls | Completed source-development families | The implemented families use core locale, calendar, direction, and formatting contracts, preserve canonical Form values, document every translation key, and carry focused three-browser evidence. Generic browser temporal parsing was not an entry gate. |
 | Upload transport and storage around FileInput and DropTarget | Companion work | Native file selection and drop are implemented. Upload transport, storage, previews, cancellation, retry, and server validation form a larger security and lifecycle product. |
-| Drag-sortable and editable collections, infinite loading, and variable-height or two-axis virtualization | Later or companion work | The fixed server-window and request/accept foundations are implemented; drag, editing, async replacement, and richer geometry need their own contracts. |
-| Advanced DataGrid/spreadsheet features | Companion candidate | The core DataGrid owns navigation, sorting requests, supplied-Row selection, and fixed windows. Editing, grouping, aggregation, pivoting, pinning, export, clipboard mutation, and browser data engines remain separate specialist work. |
+| Variable-height or two-axis virtualization and remote collection replacement | Later or companion work | Sortable, Form Collection, Infinite Scroll, fixed server windows, and request/accept foundations are implemented; richer geometry and remote ownership still need separate contracts. |
+| Advanced DataGrid/spreadsheet features | Companion candidate | The core DataGrid owns navigation, sorting requests, supplied-Row selection, built-in Cell editors, and fixed windows. Row editing, custom editors, grouping, aggregation, pivoting, pinning, export, clipboard mutation, and browser data engines remain separate specialist work. |
 | Charts, rich-text editing, maps, schedulers, diagramming, and media editors | Companion packages | Each adds a specialist engine, payload, security model, accessibility contract, or domain model. |
 | Headless component APIs | Follow-up research | Real applications and a broader styled catalog must first reveal the authoring jobs, API shape, and representative performance cases. |
 | Storybook | Optional extension | The docs live-component host remains the first-party preview surface. Storybook does not gate component work or publication. |

@@ -12,7 +12,7 @@ class AlertDialogSizes(Component):
         pass
 
     template = """
-      <c-CGroup gap="md" wrap>
+      <c-CRow gap="md" wrap>
         <c-for each="size in sizes">
           <c-CAlertDialog c-size="size">
             <c-fill name="activator" data="{activator_attrs}">
@@ -28,7 +28,7 @@ class AlertDialogSizes(Component):
             </c-fill>
           </c-CAlertDialog>
         </c-for>
-      </c-CGroup>
+      </c-CRow>
     """
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

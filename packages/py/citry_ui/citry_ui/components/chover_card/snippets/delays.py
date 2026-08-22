@@ -8,7 +8,7 @@ citry.register_library(citry_ui)
 
 class HoverCardDelays(Component):
     template = """
-      <c-CGroup>
+      <c-CRow>
         <c-CHoverCard c-delay="0" c-close_delay="0">
           <c-fill name="activator" data="{ activator_attrs }"><a href="#instant" c-bind="activator_attrs">Instant</a></c-fill>
           <c-fill name="default">No opening or closing delay.</c-fill>
@@ -17,7 +17,7 @@ class HoverCardDelays(Component):
           <c-fill name="activator" data="{ activator_attrs }"><a href="#deliberate" c-bind="activator_attrs">Deliberate</a></c-fill>
           <c-fill name="default">A slower, forgiving preview.</c-fill>
         </c-CHoverCard>
-      </c-CGroup>
+      </c-CRow>
     """
 
 

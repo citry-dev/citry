@@ -7,10 +7,10 @@ citry.register_library(citry_ui)
 class ProgressAtAGlance(Component):
     template = """
       <section class="progress-glance">
-        <c-CGroup justify="between">
+        <c-CRow justify="between">
           <div><p>Research dive 08</p><h2>Mapping the reef shelf</h2></div>
           <strong>68%</strong>
-        </c-CGroup>
+        </c-CRow>
         <c-CProgress label="Mapping the reef shelf" c-value="68" shape="pill" />
         <p>Sonar pass 17 of 25 · 42 minutes remaining</p>
       </section>
@@ -32,7 +32,7 @@ class ProgressAtAGlance(Component):
         margin: 0;
       }
 
-      :where(.progress-glance > p, .progress-glance [data-citry-ui-part="group"] p) {
+      :where(.progress-glance > p, .progress-glance [data-citry-ui-part="row"] p) {
         color: light-dark(#416a78, #a7cbd7);
         font-size: 0.78rem;
       }

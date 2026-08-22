@@ -151,7 +151,7 @@ def qualification_record(
             },
         ],
         "known_limitations": [
-            "Localization remains separate follow-up work after component text contracts stabilize.",
+            "The bundled catalog supplies en-US source messages; applications provide any additional locale catalogs.",
             "Headless counterparts remain parked until applications provide representative APIs and render trees.",
             "Scaling timings are diagnostic and do not act as cross-machine pass thresholds.",
         ],

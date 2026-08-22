@@ -21,11 +21,11 @@ class BreadcrumbSizes(Component):
         }
 
     template = """
-      <c-CStack>
+      <c-CCol>
         <c-for each="size in sizes">
           <c-CBreadcrumbs c-items="items" c-size="size" c-label="f'{size} book location'" />
         </c-for>
-      </c-CStack>
+      </c-CCol>
     """
 
 

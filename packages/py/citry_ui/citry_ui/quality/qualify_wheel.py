@@ -166,8 +166,24 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/components/ctree/ctree.py",
 }
 EXPECTED_RUNTIME_FILES |= {
+    "citry_ui/components/ccascader/__init__.py",
+    "citry_ui/components/ccascader/ccascader.py",
+    "citry_ui/components/ccascader/runtime.min.css",
+    "citry_ui/components/ccascader/runtime.min.js",
+    "citry_ui/components/ccolor_picker/__init__.py",
+    "citry_ui/components/ccolor_picker/ccolor_picker.py",
+    "citry_ui/components/ccolor_picker/runtime.min.css",
+    "citry_ui/components/ccolor_picker/runtime.min.js",
     "citry_ui/components/cdata_grid/__init__.py",
     "citry_ui/components/cdata_grid/cdata_grid.py",
+    "citry_ui/components/cform_collection/__init__.py",
+    "citry_ui/components/cform_collection/cform_collection.py",
+    "citry_ui/components/cform_collection/runtime.min.css",
+    "citry_ui/components/cform_collection/runtime.min.js",
+    "citry_ui/components/cinfinite_scroll/__init__.py",
+    "citry_ui/components/cinfinite_scroll/cinfinite_scroll.py",
+    "citry_ui/components/cinfinite_scroll/runtime.min.css",
+    "citry_ui/components/cinfinite_scroll/runtime.min.js",
     "citry_ui/components/csidebar/__init__.py",
     "citry_ui/components/csidebar/csidebar.py",
     "citry_ui/components/ctimeline/__init__.py",
@@ -203,7 +219,7 @@ EXPECTED_RUNTIME_FILES |= {
     "citry_ui/components/cfield/runtime.min.css",
     "citry_ui/components/cfile_input/runtime.c-drop-target.min.css",
     "citry_ui/components/cfile_input/runtime.min.css",
-    "citry_ui/components/cflow/runtime.c-group.min.css",
+    "citry_ui/components/cflow/runtime.c-row.min.css",
     "citry_ui/components/cflow/runtime.min.css",
     "citry_ui/components/cform/runtime.min.css",
     "citry_ui/components/cgrid/runtime.c-grid-item.min.css",
@@ -229,6 +245,10 @@ EXPECTED_RUNTIME_FILES |= {
     "citry_ui/components/cselect/runtime.min.js",
     "citry_ui/components/csidebar/runtime.min.css",
     "citry_ui/components/csidebar/runtime.min.js",
+    "citry_ui/components/csortable/__init__.py",
+    "citry_ui/components/csortable/csortable.py",
+    "citry_ui/components/csortable/runtime.min.css",
+    "citry_ui/components/csortable/runtime.min.js",
     "citry_ui/components/cskeleton/runtime.min.css",
     "citry_ui/components/cslider/runtime.min.css",
     "citry_ui/components/cspinner/runtime.min.css",
@@ -253,6 +273,10 @@ EXPECTED_RUNTIME_FILES |= {
     "citry_ui/components/ctransfer_list/runtime.min.css",
     "citry_ui/components/ctransfer_list/runtime.min.js",
     "citry_ui/components/ctree/runtime.min.css",
+    "citry_ui/components/ctree_grid/__init__.py",
+    "citry_ui/components/ctree_grid/ctree_grid.py",
+    "citry_ui/components/ctree_grid/runtime.min.css",
+    "citry_ui/components/ctree_grid/runtime.min.js",
     "citry_ui/components/cvirtual_list/runtime.min.css",
     "citry_ui/components/cvirtual_list/runtime.min.js",
 }
@@ -269,8 +293,8 @@ EXPECTED_I18N_FILES = {
 }
 _FORBIDDEN_SUFFIXES = {".html", ".json", ".md", ".png", ".svg"}
 _THIRD_PARTY_NOTICE_SHA256 = "0f1b152923fc9ff1181a9e6c87aa5877e258efe6d7dbc4c3198ab25e9dd3e8ad"
-MAX_WHEEL_BYTES = 700 * 1024
-MAX_I18N_COMPRESSED_BYTES = 20 * 1024
+MAX_WHEEL_BYTES = 800 * 1024
+MAX_I18N_COMPRESSED_BYTES = 28 * 1024
 _WHEEL_NAME = re.compile(r"citry_ui-(?P<version>[0-9A-Za-z.!+_]+)-py3-none-any\.whl")
 
 

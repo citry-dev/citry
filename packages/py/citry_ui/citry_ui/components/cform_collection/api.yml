@@ -1,0 +1,144 @@
+schema_version: 1
+family: form-collection
+components: [CFormCollection, CFormCollectionItem]
+
+inputs:
+  - id: cform-collection-server-inputs
+    component: CFormCollection
+    channel: server
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the visible native legend and collection name.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the fieldset ID and bases stable Item label IDs.}
+      - {id: description, name: description, type: 'str | None', default: {kind: literal, value: null}, effect: Adds plain described-by guidance below the legend.}
+      - {id: action-name, name: action_name, type: 'str | None', default: {kind: literal, value: null}, effect: When supplied actions are named submit buttons; otherwise they are client-only Buttons.}
+      - {id: add-value, name: add_value, type: str, default: {kind: literal, value: add}, effect: Sets the Add submit-button value.}
+      - {id: allow-add, name: allow_add, type: bool, default: {kind: literal, value: true}, effect: Includes the Add control.}
+      - {id: allow-remove, name: allow_remove, type: bool, default: {kind: literal, value: true}, effect: Includes permitted Item Remove controls.}
+      - {id: allow-reorder, name: allow_reorder, type: bool, default: {kind: literal, value: true}, effect: Includes permitted Move controls.}
+      - {id: min-items, name: min_items, type: int, default: {kind: literal, value: 0}, effect: Rejects fewer rendered Items and disables Remove at the minimum.}
+      - {id: max-items, name: max_items, type: 'int | None', default: {kind: literal, value: null}, effect: Rejects more rendered Items and disables Add at the maximum.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables collection mutation controls without disabling consumer fields.}
+      - {id: size, name: size, type: {display: CFormCollectionSize, interfaces: [CFormCollectionSize]}, default: {kind: literal, value: md}, effect: Selects collection spacing density.}
+      - {id: add-label, name: add_label, type: str, default: {kind: literal, value: Add item}, effect: Overrides the localized Add text.}
+      - {id: remove-label, name: remove_label, type: str, default: {kind: literal, value: 'Remove {item}'}, effect: Overrides localized Remove names and must retain item.}
+      - {id: move-up-label, name: move_up_label, type: str, default: {kind: literal, value: 'Move {item} up'}, effect: Overrides localized Move up names and must retain item.}
+      - {id: move-down-label, name: move_down_label, type: str, default: {kind: literal, value: 'Move {item} down'}, effect: Overrides localized Move down names and must retain item.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the fieldset.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the fieldset.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed fieldset attributes.}
+  - id: cform-collection-client-inputs
+    component: CFormCollection
+    channel: client
+    entries:
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables mutation controls.}
+      - {id: on-action, name: onAction, type: function, omitted: No component callback runs., effect: Receives Add Remove Move up and Move down requests.}
+  - id: cform-collection-item-server-inputs
+    component: CFormCollectionItem
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies unique stable Item identity and default action-value suffix.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the visible group heading and action-name interpolation.}
+      - {id: remove-value, name: remove_value, type: 'str | None', default: {kind: generated}, effect: Overrides the default remove colon value action protocol.}
+      - {id: move-up-value, name: move_up_value, type: 'str | None', default: {kind: generated}, effect: Overrides the default move-up colon value action protocol.}
+      - {id: move-down-value, name: move_down_value, type: 'str | None', default: {kind: generated}, effect: Overrides the default move-down colon value action protocol.}
+      - {id: removable, name: removable, type: bool, default: {kind: literal, value: true}, effect: Includes this Item's Remove control when root removal is allowed.}
+      - {id: movable, name: movable, type: bool, default: {kind: literal, value: true}, effect: Includes this Item's Move controls when root reorder is allowed.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables this Item's collection actions only.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the Item group.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the Item group.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed Item-group attributes.}
+
+slots:
+  - id: cform-collection-slots
+    component: CFormCollection
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CFormCollectionDefaultSlotData]}, fallback: Empty collection.}
+  - id: cform-collection-item-slots
+    component: CFormCollectionItem
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{value, label, index, count, is_first, is_last, disabled}', interfaces: [CFormCollectionItemSlotData]}, fallback: None; contains the actual repeated fields.}
+
+events:
+  - id: cform-collection-events
+    component: CFormCollection
+    entries:
+      - {id: action, name: onAction, signature: {display: '(detail: CFormCollectionActionDetail) => void', interfaces: [CFormCollectionActionDetail]}, trigger: An enabled collection action Button is activated., detail: {display: '{action, value, index, toIndex, sourceEvent}', interfaces: [CFormCollectionActionDetail]}, behavior: Reports a request and never mutates the collection DOM.}
+
+methods: []
+
+css:
+  - id: cform-collection-css-variables
+    component: CFormCollection
+    entries:
+      - {id: gap, name: --cui-form-collection-gap, type: length, purpose: Space between Item groups and Add., default: 0.875rem}
+      - {id: surface, name: --cui-form-collection-item-surface, type: color, purpose: Item group surface., default: Canvas}
+      - {id: border, name: --cui-form-collection-item-border, type: complete border, purpose: Item and header boundary., default: Adaptive 1px neutral}
+      - {id: radius, name: --cui-form-collection-item-radius, type: length, purpose: Item corners., default: 0.75rem}
+      - {id: action-gap, name: --cui-form-collection-action-gap, type: length, purpose: Gap between mutation controls., default: 0.375rem}
+      - {id: focus, name: --cui-form-collection-focus, type: color, purpose: Mutation-control focus ring., default: Highlight}
+      - {id: disabled-opacity, name: --cui-form-collection-disabled-opacity, type: number, purpose: Disabled collection and control opacity., default: '0.55'}
+
+attributes:
+  - id: cform-collection-attributes
+    component: CFormCollection
+    entries:
+      - {id: data-count, name: data-count, element: Root, type: nonnegative integer string, meaning: Reflects rendered Item count.}
+      - {id: data-size, name: data-size, element: Root, type: {display: CFormCollectionSize, interfaces: [CFormCollectionSize]}, meaning: Reflects spacing density.}
+      - {id: data-disabled, name: data-disabled, element: Root and Item, type: present | absent, meaning: Reflects unavailable collection actions.}
+      - {id: data-first, name: data-first, element: Item, type: present | absent, meaning: Marks first current Item.}
+      - {id: data-last, name: data-last, element: Item, type: present | absent, meaning: Marks last current Item.}
+      - {id: data-value, name: data-value, element: Item, type: string, meaning: Exposes stable Item identity.}
+
+selectors:
+  - id: cform-collection-selectors
+    component: CFormCollection
+    entries:
+      - {id: form-collection, selector: '[data-citry-ui-part="form-collection"]', element: Native fieldset root, purpose: Semantic theme and reflected-state destination.}
+      - {id: legend, selector: '[data-citry-ui-part="legend"]', element: Native legend, purpose: Visible collection name.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Optional paragraph, purpose: Collection guidance.}
+      - {id: items, selector: '[data-citry-ui-part="items"]', element: Ordered list, purpose: Current server Item order.}
+      - {id: item, selector: '[data-citry-ui-part="item"]', element: Grouped list item, purpose: Stable repeated group.}
+      - {id: item-header, selector: '[data-citry-ui-part="item-header"]', element: Header, purpose: Groups label and actions.}
+      - {id: item-label, selector: '[data-citry-ui-part="item-label"]', element: Heading, purpose: Visible Item group name.}
+      - {id: item-actions, selector: '[data-citry-ui-part="item-actions"]', element: Action container, purpose: Move and Remove controls.}
+      - {id: item-content, selector: '[data-citry-ui-part="item-content"]', element: Content div, purpose: Actual repeated fields.}
+      - {id: add, selector: '[data-citry-ui-part="add"]', element: Native Button, purpose: Add request.}
+
+interfaces:
+  - id: cform-collection-aliases
+    kind: aliases
+    entries:
+      - {id: size, name: CFormCollectionSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: action, name: CFormCollectionAction, definition: 'Literal["add", "remove", "move-up", "move-down"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: cform-collection-default-slot-data, kind: record, name: CFormCollectionDefaultSlotData, entries: []}
+  - id: cform-collection-item-slot-data
+    kind: record
+    name: CFormCollectionItemSlotData
+    entries:
+      - {id: value, name: value, type: str, meaning: Stable Item identity.}
+      - {id: label, name: label, type: str, meaning: Plain application-owned Item label.}
+      - {id: index, name: index, type: int, meaning: Zero-based current server index.}
+      - {id: count, name: count, type: int, meaning: Current rendered Item count.}
+      - {id: is-first, name: is_first, type: bool, meaning: Whether this is the first Item.}
+      - {id: is-last, name: is_last, type: bool, meaning: Whether this is the last Item.}
+      - {id: disabled, name: disabled, type: bool, meaning: Initial effective collection-action disabled state.}
+  - id: cform-collection-action-detail
+    kind: record
+    name: CFormCollectionActionDetail
+    entries:
+      - {id: action, name: action, type: {display: CFormCollectionAction, interfaces: [CFormCollectionAction]}, meaning: Requested mutation.}
+      - {id: value, name: value, type: 'str | None', meaning: Item value or null for Add.}
+      - {id: index, name: index, type: 'int | None', meaning: Current Item index or null for Add.}
+      - {id: to-index, name: toIndex, type: 'int | None', meaning: Requested adjacent destination or null.}
+      - {id: source-event, name: sourceEvent, type: object, meaning: Native click Event.}
+
+translations:
+  - id: cform-collection-translations
+    component: CFormCollection
+    entries:
+      - {id: add, key: citry-ui-form-collection-add, purpose: Labels the Add control., variables: None., override: '`add_label`', updates: Stable `$c-tr` text.}
+      - {id: remove, key: citry-ui-form-collection-remove, purpose: Names an Item Remove control., variables: 'item: str', override: '`remove_label` with `{item}`', updates: Stable reactive `$c-tr` attribute.}
+      - {id: move-up, key: citry-ui-form-collection-move-up, purpose: Names an Item Move up control., variables: 'item: str', override: '`move_up_label` with `{item}`', updates: Stable reactive `$c-tr` attribute.}
+      - {id: move-down, key: citry-ui-form-collection-move-down, purpose: Names an Item Move down control., variables: 'item: str', override: '`move_down_label` with `{item}`', updates: Stable reactive `$c-tr` attribute.}

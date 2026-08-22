@@ -20,14 +20,9 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
     }
 
     const modalRecords = [];
-    /* citry-ui:command-palette-attribution:dialog-document-lock-state:begin */
     const documentLocks = new WeakMap();
-    /* citry-ui:command-palette-attribution:dialog-document-lock-state:end */
-    /* citry-ui:command-palette-attribution:dialog-handoff-keys:begin */
     const handoffKey = Symbol.for("citry-ui:dialog-controller-handoff");
     const ownerKey = Symbol.for("citry-ui:dialog-controller-owner");
-    /* citry-ui:command-palette-attribution:dialog-handoff-keys:end */
-    /* citry-ui:command-palette-attribution:dialog-root-scope-state:begin */
     const scopeManagers = new WeakMap();
 
     const deepActive = (documentOwner) => {
@@ -43,7 +38,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           && root.host.ownerDocument === documentOwner
           && root.host.shadowRoot === root);
     };
-    /* citry-ui:command-palette-attribution:dialog-root-scope-state:end */
     const isFocusable = (element) => element instanceof HTMLElement
       && element.isConnected
       && !element.hidden
@@ -51,7 +45,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       && !element.closest("[inert]")
       && element.getClientRects().length > 0
       && getComputedStyle(element).visibility !== "hidden";
-    /* citry-ui:command-palette-attribution:dialog-document-lock:begin */
     const lock = (documentOwner, dialog) => {
       let state = documentLocks.get(documentOwner);
       if (!state) {
@@ -84,7 +77,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         documentLocks.delete(documentOwner);
       }
     };
-    /* citry-ui:command-palette-attribution:dialog-document-lock:end */
     const register = (record) => {
       if (!modalRecords.includes(record)) modalRecords.push(record);
     };
@@ -92,7 +84,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       const index = modalRecords.indexOf(record);
       if (index >= 0) modalRecords.splice(index, 1);
     };
-    /* citry-ui:command-palette-attribution:dialog-root-scope-manager:begin */
     const watchScope = (scope, owner) => {
       let manager = scopeManagers.get(scope);
       if (!manager) {
@@ -116,7 +107,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         }
       };
     };
-    /* citry-ui:command-palette-attribution:dialog-root-scope-manager:end */
 
     const create = ({
       host,
@@ -158,11 +148,9 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       let previousFocus = null;
       let focusGeneration = 0;
       let handedOff = false;
-      /* citry-ui:command-palette-attribution:dialog-handoff-close-state:begin */
       let handoffCloseGuard = false;
       let handoffCloseIntent = false;
       let handoffFrame = null;
-      /* citry-ui:command-palette-attribution:dialog-handoff-close-state:end */
       let actualRoot = host.getRootNode();
       const liveOwner = dialog[ownerKey] ?? null;
       liveOwner?.transfer?.();
@@ -171,11 +159,8 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         transfer: null,
         validate: null,
       };
-      /* citry-ui:command-palette-attribution:dialog-focus-target:begin */
       const initialFocusTarget = initialFocus?.() ?? null;
-      /* citry-ui:command-palette-attribution:dialog-focus-target:end */
 
-      /* citry-ui:command-palette-attribution:dialog-handoff-consume:begin */
       const previous = dialog[handoffKey] ?? null;
       const abortPrevious = () => {
         if (!previous) return;
@@ -208,7 +193,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         });
         delete dialog[handoffKey];
       }
-      /* citry-ui:command-palette-attribution:dialog-handoff-consume:end */
 
       const currentPolicy = () => policy?.() ?? {};
       const ownedFocusables = () => {
@@ -232,7 +216,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           })
           .map(({ element }) => element);
       };
-      /* citry-ui:command-palette-attribution:dialog-focus-hooks:begin */
       const focusInitial = () => {
         const generation = ++focusGeneration;
         queueMicrotask(() => {
@@ -241,8 +224,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           if (isFocusable(target)) target.focus({ preventScroll: true });
         });
       };
-      /* citry-ui:command-palette-attribution:dialog-focus-hooks:end */
-      /* citry-ui:command-palette-attribution:dialog-focus-restore:begin */
       const restoreFocus = (browserFocus = null) => {
         const generation = ++focusGeneration;
         queueMicrotask(() => {
@@ -259,7 +240,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           }
         });
       };
-      /* citry-ui:command-palette-attribution:dialog-focus-restore:end */
       const eventIsOutside = (event) => {
         if (event.target !== dialog) return false;
         const rect = surface.getBoundingClientRect();
@@ -368,26 +348,22 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           || submitter instanceof HTMLInputElement ? submitter.value : "";
         requestClose?.("native", submitter ?? form, returnValue);
       };
-      /* citry-ui:command-palette-attribution:dialog-handoff-close-intent:begin */
       const onBeforeToggle = (event) => {
         if (handoffCloseGuard && event.newState === "closed") handoffCloseIntent = true;
       };
-      /* citry-ui:command-palette-attribution:dialog-handoff-close-intent:end */
       const onNativeClose = () => {
         if (expectedNativeClose) {
           expectedNativeClose = false;
-          /* citry-ui:command-palette-attribution:dialog-handoff-close-expected:begin */
           handoffCloseIntent = false;
-          /* citry-ui:command-palette-attribution:dialog-handoff-close-expected:end */
           return;
         }
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-reclaim:begin */
         if (
           handoffCloseGuard
           && !handoffCloseIntent
           && active
           && dialog[ownerKey] === owner
           && appliedOpen
+          && dialog.open
         ) {
           try {
             dialog.showModal();
@@ -401,10 +377,7 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           focusInitial();
           return;
         }
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-reclaim:end */
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-retire:begin */
         handoffCloseIntent = false;
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-retire:end */
         closeDescendants();
         appliedOpen = false;
         unregister(record);
@@ -419,7 +392,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       };
 
       const record = { dialog, force };
-      /* citry-ui:command-palette-attribution:dialog-root-scope-refresh:begin */
       let unwatchScope = watchScope(actualRoot, owner);
       const refreshRoot = () => {
         const nextRoot = host.getRootNode();
@@ -446,16 +418,13 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           || !refreshRoot()
         ) force("ancestor", host);
       };
-      /* citry-ui:command-palette-attribution:dialog-root-scope-refresh:end */
       dialog.addEventListener("cancel", onCancel);
       dialog.addEventListener("keydown", onKeyDown);
       dialog.addEventListener("pointerdown", onPointerDown);
       dialog.addEventListener("pointercancel", onPointerCancel);
       dialog.addEventListener("click", onClick);
       dialog.addEventListener("submit", onSubmit);
-      /* citry-ui:command-palette-attribution:dialog-handoff-close-listener:begin */
       dialog.addEventListener("beforetoggle", onBeforeToggle);
-      /* citry-ui:command-palette-attribution:dialog-handoff-close-listener:end */
       dialog.addEventListener("close", onNativeClose);
       if (retained && appliedOpen) register(record);
 
@@ -464,21 +433,17 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         active = false;
         owner.active = false;
         focusGeneration += 1;
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-cleanup:begin */
         if (handoffFrame !== null) cancelAnimationFrame(handoffFrame);
         handoffFrame = null;
         handoffCloseGuard = false;
         handoffCloseIntent = false;
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-cleanup:end */
         dialog.removeEventListener("cancel", onCancel);
         dialog.removeEventListener("keydown", onKeyDown);
         dialog.removeEventListener("pointerdown", onPointerDown);
         dialog.removeEventListener("pointercancel", onPointerCancel);
         dialog.removeEventListener("click", onClick);
         dialog.removeEventListener("submit", onSubmit);
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-unlisten:begin */
         dialog.removeEventListener("beforetoggle", onBeforeToggle);
-        /* citry-ui:command-palette-attribution:dialog-handoff-close-unlisten:end */
         dialog.removeEventListener("close", onNativeClose);
         unwatchScope();
         if (dialog[ownerKey] === owner) delete dialog[ownerKey];
@@ -486,7 +451,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           && host.isConnected
           && dialog.isConnected
           && supportedRoot(host, documentOwner);
-        /* citry-ui:command-palette-attribution:dialog-handoff-produce:begin */
         if (canHandoff) {
           handedOff = true;
           unregister(record);
@@ -520,7 +484,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           }, 1000);
           return true;
         }
-        /* citry-ui:command-palette-attribution:dialog-handoff-produce:end */
         closeDescendants();
         expectedNativeClose = dialog.open;
         if (dialog.open) dialog.close();
@@ -545,7 +508,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       };
     };
 
-    /* citry-ui:command-palette-attribution:dialog-handoff-abort:begin */
     const abortHandoff = (dialog) => {
       const record = dialog?.[handoffKey] ?? null;
       if (!record) return false;
@@ -554,7 +516,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       if (dialog[handoffKey] === record) delete dialog[handoffKey];
       return true;
     };
-    /* citry-ui:command-palette-attribution:dialog-handoff-abort:end */
 
     globalThis[key] = {
       generation: 1,

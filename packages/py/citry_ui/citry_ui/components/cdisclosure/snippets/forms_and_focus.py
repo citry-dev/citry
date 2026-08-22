@@ -37,7 +37,7 @@ class DisclosureFormsAndFocus(Component):
         >
           <c-fill name="title">Notification settings</c-fill>
           <c-fill name="default">
-            <c-CStack gap="sm">
+            <c-CCol gap="sm">
               <c-CField>
                 <c-fill name="label">Notification email</c-fill>
                 <c-fill name="default">
@@ -46,7 +46,7 @@ class DisclosureFormsAndFocus(Component):
                 <c-fill name="description">Edits survive closing and reopening.</c-fill>
               </c-CField>
               <c-CCheckbox name="weekly-summary">Send a weekly summary</c-CCheckbox>
-            </c-CStack>
+            </c-CCol>
           </c-fill>
         </c-CDisclosure>
         <c-CDisclosure

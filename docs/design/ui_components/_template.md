@@ -287,10 +287,13 @@ async results, and any component-specific threat.
 
 ## 16. Assets and performance
 
-List component CSS, JavaScript, icons, fonts, observers, listeners, and shared
-dependencies. Record raw, gzip, and Brotli sizes plus the relevant repeated
-instance and first-interaction budgets. State whether the component adds a
-client asset when used statically.
+Describe the component's CSS, JavaScript, icons, fonts, observers, listeners,
+and shared dependencies at the level needed to understand runtime cost and
+deduplication. Define stable family/catalog ceilings and the relevant repeated-
+instance and first-interaction budgets. Keep current file inventories, digests,
+and measured byte counts in the machine-generated asset report rather than in
+this design document. State whether the component adds a client asset when used
+statically.
 
 ## 17. Acceptance matrix
 

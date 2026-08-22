@@ -74,7 +74,7 @@ Client inputs are passed through `$c-props="{...}"`. `src` accepts a URL or
 ## Compose adjacent UI
 
 Avatar does not own presence, badges, or overlapping groups. Compose those jobs
-with `CBadge`, `CGroup`, and application layout.
+with `CBadge`, `CRow`, and application layout.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cavatar/snippets/composition.py"

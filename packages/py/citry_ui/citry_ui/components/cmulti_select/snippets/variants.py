@@ -7,7 +7,7 @@ citry.register_library(citry_ui)
 
 class MultiSelectVariants(Component):
     template = """
-      <c-CStack>
+      <c-CCol>
         <c-CMultiSelect
           c-options="options" placeholder="Outline" variant="outline" size="sm"
           c-trigger_attrs="{'aria-label':'Small outline'}"
@@ -20,7 +20,7 @@ class MultiSelectVariants(Component):
           c-options="options" placeholder="Plain" variant="plain" size="lg"
           c-trigger_attrs="{'aria-label':'Large plain'}"
         />
-      </c-CStack>
+      </c-CCol>
     """
 
     def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

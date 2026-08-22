@@ -25,12 +25,14 @@ def _pagination_page() -> str:
           <html lang="en">
             <head>
               <meta charset="utf-8" />
+              <script>
+                document.addEventListener("alpine:init", () => {
+                  Alpine.store("paginationTest", {page: 5, details: []});
+                });
+              </script>
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('paginationTest', {page: 5, details: []})"
-            >
+            <body x-data>
               <c-CPagination
                 c-pages="20"
                 c-page="10"
@@ -63,9 +65,11 @@ def test_native_links_keep_urls_and_current_page_semantics(page: Any) -> None:
     page.wait_for_selector("#links[data-citry-pagination-initialized]")
     links = page.locator("#links")
 
-    assert links.get_by_role("link", name="Page 10").get_attribute("aria-current") == "page"
-    assert links.get_by_role("link", name="Page 11").get_attribute("href") == "?page=11"
-    assert links.get_by_role("link", name="First page").get_attribute("href") == "?page=1"
+    current = links.locator('a[data-page="10"]')
+    assert current.get_attribute("aria-current") == "page"
+    assert current.get_attribute("aria-label") == "Page \u206810\u2069"
+    assert links.locator('a[data-kind="page"][data-page="11"]').get_attribute("href") == "?page=11"
+    assert links.locator('a[data-kind="first"]').get_attribute("href") == "?page=1"
 
 
 def test_controlled_and_uncontrolled_buttons_update_the_visible_range(page: Any) -> None:
@@ -73,16 +77,17 @@ def test_controlled_and_uncontrolled_buttons_update_the_visible_range(page: Any)
     page.wait_for_selector("#controlled[data-citry-pagination-initialized]")
 
     controlled = page.locator("#controlled")
-    assert controlled.get_by_role("button", name="Page 5").get_attribute("aria-current") == "page"
+    page.wait_for_function("document.querySelector('#controlled [aria-current=page]').dataset.page === '5'")
+    assert controlled.locator('[aria-current="page"]').get_attribute("data-page") == "5"
     controlled.get_by_role("button", name="Next page").click()
     page.wait_for_function("Alpine.store('paginationTest').page === 6")
-    assert controlled.get_by_role("button", name="Page 6").get_attribute("aria-current") == "page"
+    assert controlled.locator('button[data-kind="page"][data-page="6"]').get_attribute("aria-current") == "page"
     assert page.evaluate("Alpine.store('paginationTest').details.at(-1).previousPage") == 5
     assert page.evaluate("Alpine.store('paginationTest').details.at(-1).kind") == "next"
 
     uncontrolled = page.locator("#uncontrolled")
-    uncontrolled.get_by_role("button", name="Page 4").click()
-    assert uncontrolled.get_by_role("button", name="Page 4").get_attribute("aria-current") == "page"
+    uncontrolled.locator('button[data-kind="page"][data-page="4"]').click()
+    assert uncontrolled.locator('button[data-kind="page"][data-page="4"]').get_attribute("aria-current") == "page"
 
 
 def test_invalid_client_page_reports_once_per_episode_and_retains_the_last_valid_page(page: Any) -> None:
@@ -91,11 +96,12 @@ def test_invalid_client_page_reports_once_per_episode_and_retains_the_last_valid
     page.set_content(_pagination_page(), wait_until="load")
     page.wait_for_selector("#controlled[data-citry-pagination-initialized]")
     controlled = page.locator("#controlled")
+    page.wait_for_function("document.querySelector('#controlled [aria-current=page]').dataset.page === '5'")
 
     page.evaluate("Alpine.store('paginationTest').page = 0")
     page.evaluate("Alpine.store('paginationTest').page = 99")
     page.wait_for_timeout(0)
-    assert controlled.get_by_role("button", name="Page 5").get_attribute("aria-current") == "page"
+    assert controlled.locator('[aria-current="page"]').get_attribute("data-page") == "5"
     assert len([error for error in errors if "CPagination page" in error]) == 1
 
     page.evaluate("Alpine.store('paginationTest').page = 6")

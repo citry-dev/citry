@@ -14,11 +14,11 @@ class SkeletonList(Component):
     template = """
       <div class="skeleton-list" aria-label="Loading specimen index" aria-busy="true">
         <c-for each="item in items">
-          <c-CGroup #c-key="item" c-gap="'sm'" c-align="'center'">
+          <c-CRow #c-key="item" c-gap="'sm'" c-align="'center'">
             <c-CSkeleton kind="circle" width="2.5rem" />
             <c-CSkeleton kind="text" c-lines="2" c-last_line_width="f'{45 + item * 8}%'" />
             <c-CSkeleton width="3.5rem" height="1.5rem" />
-          </c-CGroup>
+          </c-CRow>
         </c-for>
       </div>
     """
@@ -37,7 +37,7 @@ class SkeletonList(Component):
         gap: 1rem;
       }
 
-      :where(.skeleton-list [data-citry-ui-part="group"] > :nth-child(2)) {
+      :where(.skeleton-list [data-citry-ui-part="row"] > :nth-child(2)) {
         flex: 1 1 auto;
       }
     """

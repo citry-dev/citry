@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
@@ -25,6 +26,8 @@ CDataGridSortDirection = Literal["asc", "desc"]
 CDataGridSortSource = Literal["pointer", "keyboard", "client"]
 CDataGridSelectionSource = Literal["pointer", "keyboard", "client"]
 CDataGridRangeReason = Literal["initial", "scroll", "resize", "configuration", "navigation"]
+CDataGridEditor = Literal["text", "number", "checkbox", "select"]
+CDataGridEditSource = Literal["pointer", "keyboard"]
 
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _DIRECTIVES = frozenset(
@@ -39,6 +42,8 @@ _ROOT_OWNED = frozenset(
         "data-column-borders",
         "data-density",
         "data-disabled",
+        "data-editable",
+        "data-editing",
         "data-pending",
         "data-selection",
         "data-selecting",
@@ -69,6 +74,9 @@ _CELL_OWNED = frozenset(
         "data-sort",
         "data-sort-priority",
         "data-sortable",
+        "data-editable",
+        "data-editing",
+        "data-editor",
         "id",
         "role",
         "tabindex",
@@ -90,6 +98,12 @@ _ROW_OWNED = frozenset(
     }
 )
 _MAX_EXTENT = 16_000_000
+_EDITOR_ATTRS = {
+    "text": frozenset({"autocomplete", "inputmode", "maxlength", "minlength", "pattern", "placeholder", "required"}),
+    "number": frozenset({"max", "min", "placeholder", "required", "step"}),
+    "checkbox": frozenset(),
+    "select": frozenset({"required"}),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,12 +115,24 @@ class CDataGridColumn:
     align: CDataGridAlign = "start"
     header_attrs: Mapping[str, object] | None = None
     cell_attrs: Mapping[str, object] | None = None
+    editable: bool = False
+    editor: CDataGridEditor = "text"
+    editor_options: Sequence[CDataGridEditOption] = ()
+    editor_attrs: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class CDataGridCell:
     value: object
     attrs: Mapping[str, object] | None = None
+    editable: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CDataGridEditOption:
+    value: str
+    label: str
+    disabled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +157,8 @@ class _ResolvedColumn:
     cell_attrs: Mapping[str, object]
     sort_direction: CDataGridSortDirection | None
     sort_priority: int | None
+    editor_options: tuple[CDataGridEditOption, ...]
+    editor_attrs: Mapping[str, object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +167,8 @@ class _ResolvedCell:
     column: CDataGridColumn
     column_index: int
     attrs: Mapping[str, object]
+    editable: bool
+    edit_value: str | float | bool | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +256,18 @@ class CDataGridCellActivateDetail(TypedDict):
     sourceEvent: object
 
 
+class CDataGridCellEditDetail(TypedDict):
+    rowKey: str
+    columnKey: str
+    rowIndex: int
+    columnIndex: int
+    editor: CDataGridEditor
+    previousValue: str | float | bool
+    source: CDataGridEditSource
+    reason: str
+    sourceEvent: object
+
+
 def _dynamic_target(key: str) -> str | None:
     if key.startswith("x-bind:"):
         return key.removeprefix("x-bind:").split(".", 1)[0]
@@ -271,6 +313,78 @@ def _positive_int(name: str, value: object, *, zero: bool = False) -> int:
     return value
 
 
+def _editor_attrs(column: CDataGridColumn) -> dict[str, str | int | float | bool]:
+    value = column.editor_attrs
+    if value is not None and not isinstance(value, Mapping):
+        raise TypeError(f"CDataGrid column {column.key!r} editor_attrs must be a mapping or None, got {value!r}.")
+    copied: dict[str, str | int | float | bool] = {}
+    allowed = _EDITOR_ATTRS[column.editor]
+    for key, raw in dict(value or {}).items():
+        if not isinstance(key, str) or key.casefold() not in allowed:
+            raise ValueError(
+                f"CDataGrid column {column.key!r} editor_attrs cannot contain {key!r} for editor={column.editor!r}."
+            )
+        if not isinstance(raw, (str, int, float, bool)):
+            raise TypeError(
+                f"CDataGrid column {column.key!r} editor_attrs[{key!r}] must be a string, number, or bool."
+            )
+        if isinstance(raw, float) and not math.isfinite(raw):
+            raise ValueError(f"CDataGrid column {column.key!r} editor_attrs[{key!r}] must be finite.")
+        copied[key.casefold()] = raw
+    return copied
+
+
+def _editor_options(column: CDataGridColumn) -> tuple[CDataGridEditOption, ...]:
+    values = _sequence(f"CDataGrid column {column.key!r} editor_options", column.editor_options)
+    if column.editor != "select" and values:
+        raise ValueError(f"CDataGrid column {column.key!r} editor_options require editor='select'.")
+    if column.editor == "select" and not values:
+        raise ValueError(f"CDataGrid select column {column.key!r} requires editor_options.")
+    result: list[CDataGridEditOption] = []
+    seen: set[str] = set()
+    for index, raw in enumerate(values):
+        if not isinstance(raw, CDataGridEditOption):
+            raise TypeError(
+                f"CDataGrid column {column.key!r} editor_options[{index}] must be CDataGridEditOption, got {raw!r}."
+            )
+        validate_non_empty_string("CDataGridEditOption", "value", raw.value)
+        validate_non_empty_string("CDataGridEditOption", "label", raw.label)
+        validate_boolean("CDataGridEditOption", "disabled", raw.disabled)
+        if raw.value in seen:
+            raise ValueError(f"CDataGrid column {column.key!r} editor option {raw.value!r} is duplicated.")
+        seen.add(raw.value)
+        result.append(raw)
+    return tuple(result)
+
+
+def _edit_value(column: CDataGridColumn, cell: CDataGridCell, *, editable: bool) -> str | float | bool | None:
+    if not editable:
+        return None
+    value = cell.value
+    if column.editor in {"text", "select"}:
+        if not isinstance(value, str):
+            raise TypeError(
+                f"Editable {column.editor} cell in column {column.key!r} must contain a string, got {value!r}."
+            )
+        if column.editor == "select" and value not in {option.value for option in column.editor_options}:
+            raise ValueError(
+                f"Editable select cell in column {column.key!r} has value {value!r}, which is not an editor option."
+            )
+        return value
+    if column.editor == "number":
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(
+                f"Editable number cell in column {column.key!r} must contain an int or float, got {value!r}."
+            )
+        result = float(value)
+        if not math.isfinite(result):
+            raise ValueError(f"Editable number cell in column {column.key!r} must contain a finite value.")
+        return result
+    if not isinstance(value, bool):
+        raise TypeError(f"Editable checkbox cell in column {column.key!r} must contain a bool, got {value!r}.")
+    return value
+
+
 class CDataGrid(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
@@ -305,6 +419,11 @@ class CDataGrid(LibraryComponent):
         sort_cleared_label: str = "Sort cleared for {column}"
         selected_one_label: str = "One row selected"
         selected_label: str = "{count} rows selected"
+        edit_label: str = "Edit {column}"
+        editing_label: str = "Editing {column}"
+        edit_submitted_label: str = "Changes submitted for {column}"
+        edit_cancelled_label: str = "Changes cancelled for {column}"
+        edit_invalid_label: str = "Enter a valid value for {column}"
         class_: CClassValue | None = None
         style: CStyleValue | None = None
         attrs: Mapping[str, object] | None = None
@@ -336,7 +455,9 @@ class CDataGrid(LibraryComponent):
             validate_non_empty_string("CDataGridColumn", "key", raw.key)
             validate_non_empty_string("CDataGridColumn", "label", raw.label)
             validate_boolean("CDataGridColumn", "sortable", raw.sortable)
+            validate_boolean("CDataGridColumn", "editable", raw.editable)
             validate_choice("CDataGridColumn", "align", raw.align, ("start", "center", "end"))
+            validate_choice("CDataGridColumn", "editor", raw.editor, ("text", "number", "checkbox", "select"))
             width = _positive_int(f"CDataGrid column {raw.key!r} width", raw.width)
             if not 40 <= width <= 2_000:
                 raise ValueError(f"CDataGrid column {raw.key!r} width must be from 40 through 2000 pixels.")
@@ -352,6 +473,8 @@ class CDataGrid(LibraryComponent):
                     cell_attrs=_attrs(f"CDataGrid column {raw.key!r} cell_attrs", raw.cell_attrs, _CELL_OWNED),
                     sort_direction=direction,
                     sort_priority=priority,
+                    editor_options=_editor_options(raw),
+                    editor_attrs=_editor_attrs(raw),
                 )
             )
         return tuple(resolved)
@@ -407,6 +530,11 @@ class CDataGrid(LibraryComponent):
             for column in columns:
                 raw_cell = raw.cells[column.column.key]
                 cell = raw_cell if isinstance(raw_cell, CDataGridCell) else CDataGridCell(raw_cell)
+                if cell.editable is not None:
+                    validate_boolean(
+                        f"CDataGrid row {raw.key!r}, column {column.column.key!r}", "editable", cell.editable
+                    )
+                editable = column.column.editable if cell.editable is None else cell.editable
                 cell_attrs = _attrs(
                     f"CDataGrid row {raw.key!r}, column {column.column.key!r} attrs", cell.attrs, _CELL_OWNED
                 )
@@ -416,6 +544,8 @@ class CDataGrid(LibraryComponent):
                         column=column.column,
                         column_index=column.index,
                         attrs=merge_attrs(column.cell_attrs, cell_attrs),
+                        editable=editable,
+                        edit_value=_edit_value(column.column, cell, editable=editable),
                     )
                 )
             result.append(
@@ -491,6 +621,11 @@ class CDataGrid(LibraryComponent):
                 "sort_cleared",
                 "selected_one",
                 "selected",
+                "edit",
+                "editing",
+                "edit_submitted",
+                "edit_cancelled",
+                "edit_invalid",
             )
         }
         labels = {
@@ -502,14 +637,47 @@ class CDataGrid(LibraryComponent):
             "sort_cleared": kwargs.sort_cleared_label,
             "selected_one": kwargs.selected_one_label,
             "selected": kwargs.selected_label,
+            "edit": kwargs.edit_label,
+            "editing": kwargs.editing_label,
+            "edit_submitted": kwargs.edit_submitted_label,
+            "edit_cancelled": kwargs.edit_cancelled_label,
+            "edit_invalid": kwargs.edit_invalid_label,
         }
         for name, value in labels.items():
             validate_non_empty_string("CDataGrid", f"{name}_label", value)
-        for name in ("sort_ascending", "sort_descending", "sort_cleared"):
+        for name in (
+            "sort_ascending",
+            "sort_descending",
+            "sort_cleared",
+            "edit",
+            "editing",
+            "edit_submitted",
+            "edit_cancelled",
+            "edit_invalid",
+        ):
             if not catalog[name] and "{column}" not in labels[name]:
                 raise ValueError(f"CDataGrid {name}_label must contain {{column}}.")
         if not catalog["selected"] and "{count}" not in labels["selected"]:
             raise ValueError("CDataGrid selected_label must contain {count}.")
+        editors = [
+            {
+                "rowKey": row.row.key,
+                "columnKey": cell.column.key,
+                "rowIndex": row.logical_index,
+                "columnIndex": cell.column_index,
+                "editor": cell.column.editor,
+                "value": cell.edit_value,
+                "columnLabel": cell.column.label,
+                "options": [
+                    {"value": option.value, "label": option.label, "disabled": option.disabled}
+                    for option in next(item for item in columns if item.column.key == cell.column.key).editor_options
+                ],
+                "attrs": dict(next(item for item in columns if item.column.key == cell.column.key).editor_attrs),
+            }
+            for row in rows
+            for cell in row.cells
+            if cell.editable
+        ]
         root_id = kwargs.id or f"cui-data-grid-{self.id}"
         root_attrs = merge_attrs(
             _attrs("CDataGrid attrs", kwargs.attrs, _ROOT_OWNED, kwargs.class_, kwargs.style),
@@ -524,7 +692,7 @@ class CDataGrid(LibraryComponent):
         table_attrs = _attrs("CDataGrid table_attrs", kwargs.table_attrs, _TABLE_OWNED)
         before_size = start_index * row_height
         after_size = max(0, total_count - start_index - len(rows)) * row_height
-        state_output = kwargs.state
+        state_output: CDataGridState | Literal["empty"] = kwargs.state
         if kwargs.state == "ready" and total_count == 0:
             state_output = "empty"
         return {
@@ -556,6 +724,8 @@ class CDataGrid(LibraryComponent):
             "has_before": before_size > 0 and kwargs.state == "ready",
             "has_after": after_size > 0 and kwargs.state == "ready",
             "is_ready": kwargs.state == "ready" and total_count > 0,
+            "has_editable": bool(editors),
+            "editors": editors,
             "lc": catalog["loading"],
             "ll": labels["loading"],
             "lb": {"$c-tr:citry-ui-data-grid-loading": True if catalog["loading"] else None},
@@ -593,6 +763,7 @@ class CDataGrid(LibraryComponent):
                 "column_labels",
                 "labels",
                 "catalog",
+                "editors",
             )
         }
 
@@ -607,6 +778,7 @@ class CDataGrid(LibraryComponent):
         c-data-column-borders="True if column_borders else None"
         c-data-sticky-header="True if sticky_header else None"
         c-data-selection="selection"
+        c-data-editable="True if has_editable else None"
         c-data-disabled="True if disabled else None"
         c-aria-disabled="'true' if disabled else 'false'"
         data-citry-ui-part="data-grid"
@@ -702,6 +874,8 @@ class CDataGrid(LibraryComponent):
                         c-data-column-key="resolved_cell.column.key"
                         c-data-column-index="resolved_cell.column_index"
                         c-data-align="resolved_cell.column.align"
+                        c-data-editable="True if resolved_cell.editable else None"
+                        c-data-editor="resolved_cell.column.editor if resolved_cell.editable else None"
                         c-aria-colindex="resolved_cell.column_index + 1"
                         role="gridcell"
                         c-tabindex="0 if resolved_row.supplied_index == 0 and resolved_cell.column_index == 0 else -1"
@@ -774,6 +948,16 @@ class CDataGrid(LibraryComponent):
       citry-ui-data-grid-selected-one = One row selected
       # @param {str} $count - Locale-formatted selected supplied-row count.
       citry-ui-data-grid-selected = { $count } rows selected
+      # @param {str} $column - Application-localized column label.
+      citry-ui-data-grid-edit = Edit { $column }
+      # @param {str} $column - Application-localized column label.
+      citry-ui-data-grid-editing = Editing { $column }
+      # @param {str} $column - Application-localized column label.
+      citry-ui-data-grid-edit-submitted = Changes submitted for { $column }
+      # @param {str} $column - Application-localized column label.
+      citry-ui-data-grid-edit-cancelled = Changes cancelled for { $column }
+      # @param {str} $column - Application-localized column label.
+      citry-ui-data-grid-edit-invalid = Enter a valid value for { $column }
     """
 
 
@@ -783,9 +967,13 @@ __all__ = [
     "CDataGridCaptionSlotData",
     "CDataGridCell",
     "CDataGridCellActivateDetail",
+    "CDataGridCellEditDetail",
     "CDataGridCellSlotData",
     "CDataGridColumn",
     "CDataGridDensity",
+    "CDataGridEditOption",
+    "CDataGridEditSource",
+    "CDataGridEditor",
     "CDataGridEmptySlotData",
     "CDataGridErrorSlotData",
     "CDataGridHeaderSlotData",

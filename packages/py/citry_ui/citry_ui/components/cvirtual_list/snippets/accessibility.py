@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class VirtualListAccessibility(Component):
     template = """
-      <c-CStack>
+      <c-CCol>
         <section>
           <h2>Complete collection</h2>
           <c-CVirtualList aria_label="All release notes" c-viewport_size="220">
@@ -30,7 +30,7 @@ class VirtualListAccessibility(Component):
             </c-for>
           </c-CVirtualWindow>
         </section>
-      </c-CStack>
+      </c-CCol>
     """
     css = """
       :where([data-citry-ui-part="item"]) {

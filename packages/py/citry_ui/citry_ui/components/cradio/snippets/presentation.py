@@ -12,7 +12,7 @@ class RadioPresentation(Component):
         pass
 
     template = """
-      <c-CStack gap="xl">
+      <c-CCol gap="xl">
         <c-for each="variant in variants">
           <c-CRadioGroup c-name="f'variant-{variant}'" value="one" c-variant="variant" orientation="horizontal">
             <c-fill name="label">{{ variant }}</c-fill>
@@ -28,7 +28,7 @@ class RadioPresentation(Component):
             </c-fill>
           </c-CRadioGroup>
         </c-for>
-      </c-CStack>
+      </c-CCol>
     """
 
     def template_data(

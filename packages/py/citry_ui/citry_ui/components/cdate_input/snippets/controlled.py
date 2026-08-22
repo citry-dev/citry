@@ -13,7 +13,7 @@ class ControlledDateInput(Component):
     template = """
       <section class="date-input-demo-stack" x-data="{day:'2026-08-19',last:'No native input yet'}">
         <c-CDateInput c-attrs="{'aria-label':'Controlled arrival date'}" value="2026-08-19" $c-props="{value:day}" @input="last=$event.currentTarget.value" />
-        <c-CGroup><button type="button" @click="day='2026-08-22'">Set 22 August</button><button type="button" @click="day=null">Clear</button></c-CGroup>
+        <c-CRow><button type="button" @click="day='2026-08-22'">Set 22 August</button><button type="button" @click="day=null">Clear</button></c-CRow>
         <output x-text="last">No native input yet</output>
       </section>
     """

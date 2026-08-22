@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class RadioOrientation(Component):
     template = """
-      <c-CStack gap="xl">
+      <c-CCol gap="xl">
         <c-CRadioGroup name="season-vertical" value="spring">
           <c-fill name="label">Vertical</c-fill>
           <c-fill name="default">
@@ -21,7 +21,7 @@ class RadioOrientation(Component):
             <c-CRadio value="autumn">Autumn</c-CRadio>
           </c-fill>
         </c-CRadioGroup>
-      </c-CStack>
+      </c-CCol>
     """
 
 

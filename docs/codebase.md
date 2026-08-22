@@ -1659,7 +1659,8 @@ The launch floor registers the library, renders representative Button and
 Pagination components with the bundled i18n catalog, and exercises Tabs in an
 installed-artifact Chromium session. The broader visual,
 assistive-technology, and real-device matrix informs later stabilization but
-does not block the 0.1 early-access release.
+does not block alpha releases, including 0.2.0. Failed or unavailable manual
+rows remain recorded honestly and must not be reported as passing evidence.
 
 The manual run retains `verified-citry-ui-distributions` and its exact byte
 inventory for 14 days. The matching tag selects only a successful manual run
@@ -1669,10 +1670,11 @@ to remain on `main`, and fails closed if the PyPI version or GitHub Release
 already exists. It never rebuilds, skips an existing PyPI file, or overwrites
 a release asset.
 
-For the first release, create a pending PyPI Trusted Publisher with project
+The PyPI Trusted Publisher created for the first release uses project
 `citry-ui`, owner `citry-dev`, repository `citry`, workflow
-`py--citry-ui--publish.yml`, and environment `pypi`. Configure the GitHub
-`pypi` environment to permit `citry-ui@*` tags.
+`py--citry-ui--publish.yml`, and environment `pypi`. Before every release,
+recheck that identity and confirm that the GitHub `pypi` environment permits
+`citry-ui@*` tags.
 
 ### VS Code extension development and distribution qualification
 

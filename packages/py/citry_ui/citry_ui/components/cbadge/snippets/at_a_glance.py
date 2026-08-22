@@ -11,11 +11,11 @@ class BadgeAtAGlance(Component):
           <p>Mineral archive · specimen 184</p>
           <h2 id="badge-glance-title">Azurite rosette</h2>
         </div>
-        <c-CGroup>
+        <c-CRow>
           <c-CBadge intent="primary">Copper carbonate</c-CBadge>
           <c-CBadge intent="success" variant="outline">Verified</c-CBadge>
           <c-CBadge shape="pill">3 fragments</c-CBadge>
-        </c-CGroup>
+        </c-CRow>
       </section>
     """
     css = """

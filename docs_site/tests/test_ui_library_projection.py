@@ -211,6 +211,24 @@ def test_projection_guard_accepts_an_opted_in_preview_catalog(tmp_path):
     assert findings == []
 
 
+def test_projection_guard_rejects_an_unpublished_component_owned_guide(tmp_path):
+    relative = "packages/py/citry_ui/citry_ui/components/cwidget/api.md"
+    projection = UiLibraryProjection("widget", "widget", PurePosixPath(relative))
+    _write_component_guide(tmp_path, relative=relative)
+    missing = _write_component_guide(
+        tmp_path,
+        relative="packages/py/citry_ui/citry_ui/components/cmissing/api.md",
+    )
+    context = _context(tmp_path)
+
+    with use_docs_project(_project_with(projection)):
+        findings = list(check(context))
+
+    assert len(findings) == 1
+    assert findings[0].source == missing.relative_to(tmp_path).as_posix()
+    assert "missing from docs_site/ui_library.yml" in findings[0].message
+
+
 def test_projection_guard_applies_registered_preview_requirements_to_synthetic_source(
     tmp_path,
     monkeypatch,

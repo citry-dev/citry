@@ -97,7 +97,7 @@ css:
       - {id: cui-listbox-max-block-size, name: --cui-listbox-max-block-size, type: length, purpose: Maximum scrollable collection height., default: 18rem}
       - {id: cui-listbox-background, name: --cui-listbox-background, type: color, purpose: Collection background., default: variant-derived Canvas surface}
       - {id: cui-listbox-foreground, name: --cui-listbox-foreground, type: color, purpose: Collection foreground., default: CanvasText}
-      - {id: cui-listbox-muted-color, name: --cui-listbox-muted-color, type: color, purpose: Disabled and secondary foreground., default: 'light #667085; dark #a4a7ae'}
+      - {id: cui-listbox-muted-color, name: --cui-listbox-muted-color, type: color, purpose: Disabled and secondary foreground., default: 'light #475467; dark #a4a7ae'}
       - {id: cui-listbox-border-color, name: --cui-listbox-border-color, type: color, purpose: Outline border., default: 'light #d0d5dd; dark #535862'}
       - {id: cui-listbox-hover-background, name: --cui-listbox-hover-background, type: color, purpose: Enabled hover surface., default: '7% CanvasText mix'}
       - {id: cui-listbox-selected-background, name: --cui-listbox-selected-background, type: color, purpose: Selected Option surface., default: 'light #dbeafe; dark #1e3a5f'}

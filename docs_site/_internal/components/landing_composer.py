@@ -32,12 +32,12 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
         "kind": "layout",
         "slots": {"default": _slot("Container content", _BROAD_CONTENT)},
     },
-    "CStack": {
+    "CCol": {
         "label": "Stack",
         "kind": "layout",
         "slots": {"default": _slot("Stack content", _BROAD_CONTENT)},
     },
-    "CGroup": {
+    "CRow": {
         "label": "Group",
         "kind": "layout",
         "slots": {"default": _slot("Group content", _BROAD_CONTENT)},
@@ -340,7 +340,7 @@ _RECIPES: tuple[dict[str, Any], ...] = (
         "family": "flow-layout",
         "label": "Group",
         "node": _node(
-            "CGroup",
+            "CRow",
             props={
                 "gap": "md",
                 "align": "center",
@@ -390,7 +390,7 @@ _RECIPES: tuple[dict[str, Any], ...] = (
                                     slots={
                                         "header": [
                                             _node(
-                                                "CGroup",
+                                                "CRow",
                                                 props={"align": "center", "justify": "between"},
                                                 slots={
                                                     "default": [
@@ -427,7 +427,7 @@ _RECIPES: tuple[dict[str, Any], ...] = (
                                     slots={
                                         "header": [
                                             _node(
-                                                "CGroup",
+                                                "CRow",
                                                 props={"align": "center", "justify": "between"},
                                                 slots={
                                                     "default": [
@@ -661,7 +661,7 @@ _RECIPES: tuple[dict[str, Any], ...] = (
             slots={
                 "header": [
                     _node(
-                        "CGroup",
+                        "CRow",
                         props={"align": "center", "justify": "between"},
                         slots={
                             "default": [
@@ -799,7 +799,7 @@ def _initial_state() -> dict[str, Any]:
         "nextId": 1,
         "root": {
             "id": "composer-root",
-            "component": "CStack",
+            "component": "CCol",
             "props": {"gap": "lg"},
             "slots": {"default": []},
             "locked": True,

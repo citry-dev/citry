@@ -3,7 +3,9 @@
 Use this checklist only for a release candidate built from the same commit as
 the automated Phase 7.5 record. Automated axe, keyboard, screenshot capture,
 and browser tests must pass first. A person records observations here; running
-the route is not itself a pass.
+the route is not itself a pass. This manual profile does not block Citry UI
+alpha releases. Failed or unavailable rows remain useful evidence and must not
+be rewritten as passing results.
 
 ## Record the environment
 

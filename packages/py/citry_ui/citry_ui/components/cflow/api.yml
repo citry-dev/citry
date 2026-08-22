@@ -2,12 +2,12 @@ schema_version: 1
 family: flow-layout
 
 components:
-  - CStack
-  - CGroup
+  - CCol
+  - CRow
 
 inputs:
-  - id: cstack-server-inputs
-    component: CStack
+  - id: ccol-server-inputs
+    component: CCol
     channel: server
     column_widths: [fit, 16rem, 7rem, auto]
     entries:
@@ -19,8 +19,8 @@ inputs:
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
-  - id: cgroup-server-inputs
-    component: CGroup
+  - id: crow-server-inputs
+    component: CRow
     channel: server
     column_widths: [fit, 16rem, 7rem, auto]
     entries:
@@ -35,38 +35,38 @@ inputs:
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
 
 slots:
-  - id: cstack-slots
-    component: CStack
+  - id: ccol-slots
+    component: CCol
     entries:
-      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CStackDefaultSlotData]}, fallback: Renders an empty layout root.}
-  - id: cgroup-slots
-    component: CGroup
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CColDefaultSlotData]}, fallback: Renders an empty layout root.}
+  - id: crow-slots
+    component: CRow
     entries:
-      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CGroupDefaultSlotData]}, fallback: Renders an empty layout root.}
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CRowDefaultSlotData]}, fallback: Renders an empty layout root.}
 
 events: []
 methods: []
 
 css:
-  - id: cstack-css-variables
-    component: CStack
+  - id: ccol-css-variables
+    component: CCol
     entries:
-      - {id: cui-stack-gap, name: --cui-stack-gap, type: length, purpose: Overrides the selected direct-child gap., default: Gap-preset length.}
-  - id: cgroup-css-variables
-    component: CGroup
+      - {id: cui-col-gap, name: --cui-col-gap, type: length, purpose: Overrides the selected direct-child gap., default: Gap-preset length.}
+  - id: crow-css-variables
+    component: CRow
     entries:
-      - {id: cui-group-gap, name: --cui-group-gap, type: length, purpose: Overrides horizontal and wrapped-row gaps., default: Gap-preset length.}
+      - {id: cui-row-gap, name: --cui-row-gap, type: length, purpose: Overrides horizontal and wrapped-row gaps., default: Gap-preset length.}
 
 attributes:
-  - id: cstack-attributes
-    component: CStack
+  - id: ccol-attributes
+    component: CCol
     entries:
       - {id: data-gap, name: data-gap, element: Root, type: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', meaning: Reflects the selected spacing preset.}
       - {id: data-align, name: data-align, element: Root, type: '"start" | "center" | "end" | "stretch" | "baseline"', meaning: Reflects cross-axis alignment.}
       - {id: data-justify, name: data-justify, element: Root, type: '"start" | "center" | "end" | "between" | "around" | "evenly"', meaning: Reflects main-axis distribution.}
       - {id: data-reverse, name: data-reverse, element: Root, type: Boolean presence, meaning: Present while visual order is reversed.}
-  - id: cgroup-attributes
-    component: CGroup
+  - id: crow-attributes
+    component: CRow
     entries:
       - {id: data-gap, name: data-gap, element: Root, type: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', meaning: Reflects the selected spacing preset.}
       - {id: data-align, name: data-align, element: Root, type: '"start" | "center" | "end" | "stretch" | "baseline"', meaning: Reflects cross-axis alignment.}
@@ -75,14 +75,14 @@ attributes:
       - {id: data-reverse, name: data-reverse, element: Root, type: Boolean presence, meaning: Present while visual order is reversed.}
 
 selectors:
-  - id: cstack-selectors
-    component: CStack
+  - id: ccol-selectors
+    component: CCol
     entries:
-      - {id: data-citry-ui-part-stack, selector: '[data-citry-ui-part="stack"]', element: Native root, purpose: Stable Stack root and `attrs` destination.}
-  - id: cgroup-selectors
-    component: CGroup
+      - {id: data-citry-ui-part-col, selector: '[data-citry-ui-part="col"]', element: Native root, purpose: Stable Col root and `attrs` destination.}
+  - id: crow-selectors
+    component: CRow
     entries:
-      - {id: data-citry-ui-part-group, selector: '[data-citry-ui-part="group"]', element: Native root, purpose: Stable Group root and `attrs` destination.}
+      - {id: data-citry-ui-part-row, selector: '[data-citry-ui-part="row"]', element: Native root, purpose: Stable Row root and `attrs` destination.}
 
 interfaces:
   - id: input-type-aliases
@@ -94,7 +94,7 @@ interfaces:
       - {id: input-type-aliases-cflow-gap, name: CFlowGap, definition: 'Literal["0", "xs", "sm", "md", "lg", "xl"]'}
       - {id: input-type-aliases-cflow-align, name: CFlowAlign, definition: 'Literal["start", "center", "end", "stretch", "baseline"]'}
       - {id: input-type-aliases-cflow-justify, name: CFlowJustify, definition: 'Literal["start", "center", "end", "between", "around", "evenly"]'}
-  - {id: cstack-default-slot-data, kind: record, name: CStackDefaultSlotData, entries: []}
-  - {id: cgroup-default-slot-data, kind: record, name: CGroupDefaultSlotData, entries: []}
+  - {id: ccol-default-slot-data, kind: record, name: CColDefaultSlotData, entries: []}
+  - {id: crow-default-slot-data, kind: record, name: CRowDefaultSlotData, entries: []}
 
 translations: []

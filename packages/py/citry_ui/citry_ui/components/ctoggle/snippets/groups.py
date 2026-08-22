@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class ToggleGroups(Component):
     template = """
-      <c-CStack gap="lg">
+      <c-CCol gap="lg">
         <c-CToggleGroup label="Chart scale" value="linear">
           <c-CToggle value="linear">Linear</c-CToggle>
           <c-CToggle value="log">Log</c-CToggle>
@@ -16,7 +16,7 @@ class ToggleGroups(Component):
           <c-CToggle value="labels">Labels</c-CToggle>
           <c-CToggle value="grid">Grid</c-CToggle>
         </c-CToggleGroup>
-      </c-CStack>
+      </c-CCol>
     """
 
 

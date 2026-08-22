@@ -1400,7 +1400,7 @@ def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
 @pytest.mark.parametrize(
     ("slug", "preview_count", "ready_selector"),
     [
-        ("stack-group", 8, '[data-citry-ui-part="stack"], [data-citry-ui-part="group"]'),
+        ("col-row", 8, '[data-citry-ui-part="col"], [data-citry-ui-part="row"]'),
         (
             "container-grid",
             8,
@@ -1423,6 +1423,12 @@ def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
         ("menu", 13, "[data-citry-menu-initialized]"),
         ("tooltip", 10, "[data-citry-tooltip-initialized]"),
         ("toast", 10, "[data-citry-toast-initialized]"),
+        ("sortable", 6, "[data-citry-sortable-initialized]"),
+        ("form-collection", 6, "[data-citry-form-collection-initialized]"),
+        ("infinite-scroll", 6, "[data-citry-infinite-scroll-initialized]"),
+        ("cascader", 6, "[data-citry-cascader-initialized]"),
+        ("tree-grid", 6, "[data-citry-tree-grid-initialized]"),
+        ("color-picker", 6, "[data-citry-color-picker-initialized]"),
     ],
 )
 def test_recent_batch_ui_previews_render_in_the_public_docs_host(
@@ -1449,6 +1455,91 @@ def test_recent_batch_ui_previews_render_in_the_public_docs_host(
         frame.locator(ready_selector).first.wait_for(state="attached")
         assert frame.locator(ready_selector).count() >= 1
 
+    assert console_errors == []
+
+
+def test_cascader_docs_preview_uses_fit_based_columns_and_visually_closes(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/cascader/", wait_until="networkidle")
+    frame_selector = 'iframe[src$="/cascader/_previews/at-a-glance/"]'
+    page.locator(frame_selector).wait_for(state="attached")
+    preview = page.frame_locator(frame_selector)
+    root = preview.locator('[data-citry-ui-part="cascader"]')
+    trigger = root.locator('[data-citry-ui-part="trigger"]')
+    popup = root.locator('[data-citry-ui-part="popup"]')
+    trigger.click()
+
+    columns = popup.locator(":scope > [data-citry-cascader-column]:not([hidden])")
+    assert columns.count() == 3
+    lefts = columns.evaluate_all("columns => columns.map(column => Math.round(column.getBoundingClientRect().left))")
+    assert len(set(lefts)) == 3
+    assert popup.get_attribute("data-citry-cascader-stacked") is None
+
+    europe = root.get_by_role("treeitem", name="Europe")
+    czechia = root.get_by_role("treeitem", name="Czechia")
+    europe.click()
+    assert europe.get_attribute("aria-expanded") == "false"
+    assert czechia.is_hidden()
+    europe.click()
+    assert europe.get_attribute("aria-expanded") == "true"
+    czechia.click()
+    assert czechia.get_attribute("aria-expanded") == "true"
+    czechia.click()
+    assert czechia.get_attribute("aria-expanded") == "false"
+
+    trigger.click()
+    assert popup.is_hidden()
+    assert popup.bounding_box() is None
+
+    stacked_selector = 'iframe[src$="/cascader/_previews/accessibility/"]'
+    page.locator(stacked_selector).wait_for(state="attached")
+    stacked_preview = page.frame_locator(stacked_selector)
+    stacked_root = stacked_preview.locator('[data-citry-ui-part="cascader"]')
+    stacked_root.locator('[data-citry-ui-part="trigger"]').click()
+    stacked_popup = stacked_root.locator('[data-citry-ui-part="popup"]')
+    stacked_columns = stacked_popup.locator(":scope > [data-citry-cascader-column]:not([hidden])")
+    assert stacked_columns.count() == 3
+    stacked_lefts = stacked_columns.evaluate_all(
+        "columns => columns.map(column => Math.round(column.getBoundingClientRect().left))"
+    )
+    assert len(set(stacked_lefts)) == 1
+    assert stacked_popup.get_attribute("data-citry-cascader-stacked") == ""
+    assert console_errors == []
+
+
+def test_infinite_scroll_docs_preview_remains_available_after_repeated_loads(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/infinite-scroll/", wait_until="networkidle")
+    frame_selector = 'iframe[src$="/infinite-scroll/_previews/automatic/"]'
+    frame_element = page.locator(frame_selector)
+    frame_element.wait_for(state="attached")
+    frame_element.scroll_into_view_if_needed()
+    preview = page.frame_locator(frame_selector)
+    root = preview.locator('[data-citry-ui-part="infinite-scroll"]')
+    assert root.locator("li").count() == 8
+
+    for expected_count in (12, 16, 20):
+        root.evaluate("element => { element.scrollTop = element.scrollHeight; }")
+        root.locator("li").nth(expected_count - 1).wait_for(state="attached")
+        assert root.locator("li").count() == expected_count
+        assert root.locator('[data-citry-ui-part="content"]').get_attribute("aria-busy") == "false"
+
+    assert root.evaluate("element => element.hasAttribute('data-end')") is False
+    assert root.locator('[data-citry-ui-part="action"]').is_visible()
     assert console_errors == []
 
 

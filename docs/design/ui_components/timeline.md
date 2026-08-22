@@ -152,7 +152,13 @@ Public parts are `timeline`, `item`, `opposite`, `track`, `before`, `indicator`,
 `--cui-timeline-muted-color`.
 
 Root reflections are `data-orientation`, `data-side`, `data-line-style`,
-`data-density`, and `data-size`. Item reflections are `data-index`,
+`data-density`, `data-size`, and `data-has-opposite`. The root marker reserves
+one stable metadata column when any vertical Item has opposite content, so the
+track does not jump between mixed Items. Alternate vertical layout always
+retains three symmetric columns. Text in the logical start column aligns
+toward the track. Horizontal Items use the root's shared three-Row subgrid so
+every connector and indicator occupies one axis even when content heights
+differ. Item reflections are `data-index`,
 `data-state`, `data-side`, and `data-has-opposite`; the last is present when
 the optional opposite slot has authored content.
 

@@ -17,10 +17,10 @@ class ControlledStepper(Component):
           <c-CStep>Members</c-CStep>
           <c-CStep>Permissions</c-CStep>
         </c-CStepper>
-        <c-CGroup>
+        <c-CRow>
           <c-CButton @click="active = Math.max(0, active - 1)">Previous</c-CButton>
           <c-CButton @click="active = Math.min(2, active + 1)">Next</c-CButton>
-        </c-CGroup>
+        </c-CRow>
       </section>
     """
 

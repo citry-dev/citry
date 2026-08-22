@@ -237,7 +237,7 @@ jobs:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
     needs: [verify-version, select-qualification]
     runs-on: ubuntu-latest
-    # Pending PyPI publisher identity:
+    # PyPI publisher identity:
     # citry-ui / citry-dev / citry / py--citry-ui--publish.yml / pypi
     environment: pypi
     env:

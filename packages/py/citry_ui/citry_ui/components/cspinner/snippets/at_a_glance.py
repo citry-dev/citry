@@ -8,10 +8,10 @@ class SpinnerAtAGlance(Component):
     template = """
       <section class="spinner-glance">
         <div class="spinner-glance__sky" aria-hidden="true">✦ · ✧ · ✦</div>
-        <c-CGroup justify="center">
+        <c-CRow justify="center">
           <c-CSpinner label="Calibrating deep-sky camera" size="lg" />
           <div><h2>Calibrating the camera</h2><p>Reading dark frames from the observatory sensor.</p></div>
-        </c-CGroup>
+        </c-CRow>
       </section>
     """
     css = """

@@ -28,7 +28,7 @@ the placeholder resemble real prose.
 
 ## Compose real layouts
 
-Build familiar patterns with `CStack`, `CGroup`, and ordinary CSS. The visible
+Build familiar patterns with `CCol`, `CRow`, and ordinary CSS. The visible
 structure stays inspectable and responsive.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cskeleton/snippets/field_note_card.py" title="Compose a field-note card" />

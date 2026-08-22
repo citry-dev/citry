@@ -19,9 +19,7 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
       return;
     }
 
-    /* citry-ui:command-palette-attribution:active-owner-key:begin */
     const ownerKey = Symbol.for("citry-ui:active-descendant-owner");
-    /* citry-ui:command-palette-attribution:active-owner-key:end */
     const canonicalizeText = (
       value,
       { compatibility = false, collapseWhitespace = false, trim = false } = {},
@@ -42,7 +40,6 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
       if (!(input instanceof HTMLElement) || !(listbox instanceof HTMLElement)) {
         throw new TypeError("[citry-ui] active-descendant requires an input and listbox.");
       }
-      /* citry-ui:command-palette-attribution:active-owner-transfer:begin */
       const previous = listbox[ownerKey] ?? null;
       const retained = Boolean(previous
         && previous.input === input
@@ -65,7 +62,6 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
         },
       };
       listbox[ownerKey] = owner;
-      /* citry-ui:command-palette-attribution:active-owner-transfer:end */
 
       const idFor = (value) => {
         if (!owner.ids.has(value)) {
@@ -95,7 +91,6 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
         if (!loop) return activeValue;
         return candidate < 0 ? available.at(-1).value : available[0].value;
       };
-      /* citry-ui:command-palette-attribution:active-neighbor-handoff:begin */
       const nearest = (items, activeValue, previousOrder = []) => {
         const available = eligible(items);
         if (available.some((item) => item.value === activeValue)) return activeValue;
@@ -111,7 +106,6 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
         }
         return available[0]?.value ?? null;
       };
-      /* citry-ui:command-palette-attribution:active-neighbor-handoff:end */
       const sync = ({
         items,
         activeValue,
@@ -126,14 +120,12 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
         let activeElement = null;
         for (const item of items) {
           const option = optionFor(item.value);
-          /* citry-ui:command-palette-attribution:active-group-registration:begin */
           if (
             !(option instanceof HTMLElement)
             || !option.isConnected
             || option.getRootNode() !== listbox.getRootNode()
             || !listbox.contains(option)
           ) continue;
-          /* citry-ui:command-palette-attribution:active-group-registration:end */
           const active = open && !unavailable && !item.disabled && item.value === activeValue;
           const selected = item.value === selectedValue;
           const selectedWithoutActive = selected && (!open || activeValue === null);
@@ -157,14 +149,12 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
       const resetScroll = () => {
         owner.lastScrolled = null;
       };
-      /* citry-ui:command-palette-attribution:active-owner-cleanup:begin */
       const cleanup = () => {
         owner.active = false;
         if (listbox[ownerKey] !== owner) return;
         owner.abort();
         delete listbox[ownerKey];
       };
-      /* citry-ui:command-palette-attribution:active-owner-cleanup:end */
       return { idFor, retain, edge, move, nearest, sync, resetScroll, cleanup, retained };
     };
 

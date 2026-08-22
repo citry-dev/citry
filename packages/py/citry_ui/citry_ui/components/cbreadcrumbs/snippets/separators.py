@@ -20,7 +20,7 @@ class BreadcrumbSeparators(Component):
         }
 
     template = """
-      <c-CStack>
+      <c-CCol>
         <c-CBreadcrumbs c-items="items" separator="/" label="Slash trail" />
         <c-CBreadcrumbs c-items="items" separator="»" label="Chevron trail" />
         <c-CBreadcrumbs c-items="items" label="Arrow trail">
@@ -28,7 +28,7 @@ class BreadcrumbSeparators(Component):
             →
           </c-fill>
         </c-CBreadcrumbs>
-      </c-CStack>
+      </c-CCol>
     """
 
 

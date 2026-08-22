@@ -284,7 +284,8 @@ class CDialog(LibraryComponent):
             .find((candidate) => nearestHost(candidate) === host);
           const surface = dialog.querySelector(':scope > [data-citry-ui-part="surface"]');
           const title = surface.querySelector('[data-citry-ui-part="title"]');
-          const closeButton = surface.querySelector('[data-citry-dialog-built-in-close]');
+          const closeButton = surface.querySelector('[data-citry-dialog-built-in-close]')
+            ?? surface.querySelector('[data-citry-dialog-close]');
           const controllerRuntime = globalThis[Symbol.for("citry-ui:dialog-controller-runtime")];
           if (controllerRuntime?.generation !== 1) {
             throw new Error("[citry-ui] CDialog controller runtime dependency did not load.");

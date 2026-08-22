@@ -560,7 +560,7 @@ class CMultiSelect(LibraryComponent):
               data-citry-ui-part="chip"
             >{{ option.label }}</span>
           </span>
-          <span class="cui-multi-select__indicator" aria-hidden="true" data-citry-ui-part="indicator">&#9662;</span>
+          <span class="cui-multi-select__indicator" aria-hidden="true" data-citry-ui-part="indicator"></span>
         </button>
         <select
           class="cui-multi-select__native"
@@ -629,7 +629,7 @@ class CMultiSelect(LibraryComponent):
                   c-data-disabled="option.disabled"
                   data-citry-ui-part="option"
                 >
-                  <span class="cui-multi-select__check" aria-hidden="true">&#10003;</span>
+                  <span class="cui-multi-select__check" aria-hidden="true"></span>
                   <span>
                     <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>
                     <span c-if="option.description is not None" c-id="option.description_id" data-citry-ui-part="option-description">{{ option.description }}</span>
@@ -653,7 +653,7 @@ class CMultiSelect(LibraryComponent):
                     c-data-disabled="option.disabled"
                     data-citry-ui-part="option"
                   >
-                    <span class="cui-multi-select__check" aria-hidden="true">&#10003;</span>
+                    <span class="cui-multi-select__check" aria-hidden="true"></span>
                     <span>
                       <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>
                       <span c-if="option.description is not None" c-id="option.description_id" data-citry-ui-part="option-description">{{ option.description }}</span>

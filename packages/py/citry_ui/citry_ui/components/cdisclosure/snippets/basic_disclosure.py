@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class BasicDisclosure(Component):
     template = """
-      <c-CStack gap="md">
+      <c-CCol gap="md">
         <c-CDisclosure open heading_level="2" region>
           <c-fill name="title">Install prerequisites</c-fill>
           <c-fill name="default">
@@ -19,7 +19,7 @@ class BasicDisclosure(Component):
             Add the PostgreSQL client only when the application uses it.
           </c-fill>
         </c-CDisclosure>
-      </c-CStack>
+      </c-CCol>
     """
 
 

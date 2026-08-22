@@ -18,23 +18,16 @@ def _assets(*, kind: str, names: set[str] | None = None) -> bytes:
 def test_complete_component_catalog_stays_inside_compressed_asset_budgets() -> None:
     catalog = asset_report()["catalog"]
 
-    assert catalog["javascript"] == {
-        "sha256": "8dfdc632fa6f09590c4fdf359e3c51ce18c5a8adda7553a1462077f4c430b4cc",
-        "raw": 1_007_551,
-        "gzip": 194_598,
-        "brotli": 142_756,
-    }
-    assert catalog["css"] == {
-        "sha256": "c0d55aeb6b074a64ccc4083d7637658d5fa87d72164de9407e4120f00c510536",
-        "raw": 335_766,
-        "gzip": 43_751,
-        "brotli": 34_937,
-    }
     assert catalog["limits"] == {
-        "javascript": {"raw": 1024 * 1024, "gzip": 192 * 1024, "brotli": 144 * 1024},
-        "css": {"raw": 360 * 1024, "gzip": 44 * 1024, "brotli": 36 * 1024},
+        "javascript": {"raw": 1088 * 1024, "gzip": 208 * 1024, "brotli": 152 * 1024},
+        "css": {"raw": 368 * 1024, "gzip": 48 * 1024, "brotli": 40 * 1024},
     }
-    assert all(value > 0 for values in catalog["headroom"].values() for value in values.values())
+    for kind in ("javascript", "css"):
+        assert catalog["headroom"][kind] == {
+            dimension: catalog["limits"][kind][dimension] - catalog[kind][dimension]
+            for dimension in ("raw", "gzip", "brotli")
+        }
+        assert all(value > 0 for value in catalog["headroom"][kind].values())
 
 
 def test_basic_action_form_and_table_route_stays_inside_narrow_budget() -> None:

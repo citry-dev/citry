@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class ListPresentation(Component):
     template = """
-      <c-CStack gap="lg">
+      <c-CCol gap="lg">
         <c-CList label="Comfortable list" variant="surface">
           <c-CListItem>Andromeda Galaxy</c-CListItem>
           <c-CListItem>Triangulum Galaxy</c-CListItem>
@@ -15,7 +15,7 @@ class ListPresentation(Component):
           <c-CListItem>Whirlpool Galaxy</c-CListItem>
           <c-CListItem>Sombrero Galaxy</c-CListItem>
         </c-CList>
-      </c-CStack>
+      </c-CCol>
     """
 
 

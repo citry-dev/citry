@@ -1,0 +1,54 @@
+@layer citry-ui.theme {
+  :where([data-citry-ui-part="infinite-scroll"]) {
+    --_cui-infinite-scroll-gap: var(--cui-infinite-scroll-gap, 0.875rem);
+    --_cui-infinite-scroll-border: var(--cui-infinite-scroll-action-border, 1px solid light-dark(#d6d3d1, #57534e));
+    --_cui-infinite-scroll-surface: var(--cui-infinite-scroll-action-surface, Canvas);
+    --_cui-infinite-scroll-radius: var(--cui-infinite-scroll-action-radius, 0.625rem);
+    --_cui-infinite-scroll-focus: var(--cui-infinite-scroll-focus, Highlight);
+    --_cui-infinite-scroll-muted: var(--cui-infinite-scroll-muted, color-mix(in srgb, CanvasText 68%, Canvas));
+    display: grid;
+    justify-items: stretch;
+    gap: var(--_cui-infinite-scroll-gap);
+    min-inline-size: 0;
+    color: CanvasText;
+  }
+  :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="content"]) { min-inline-size: 0; }
+  :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="status"]) {
+    min-block-size: 1.5em;
+    color: var(--_cui-infinite-scroll-muted);
+    text-align: center;
+  }
+  :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="action"]) {
+    justify-self: center;
+    min-block-size: 2.75rem;
+    padding-inline: 1rem;
+    border: var(--_cui-infinite-scroll-border);
+    border-radius: var(--_cui-infinite-scroll-radius);
+    background: var(--_cui-infinite-scroll-surface);
+    color: inherit;
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="action"]:focus-visible) {
+    outline: 0.1875rem solid var(--_cui-infinite-scroll-focus);
+    outline-offset: 0.125rem;
+  }
+  :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="action"]:disabled) { opacity: 0.55; cursor: not-allowed; }
+  :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="sentinel"]) {
+    display: block;
+    inline-size: 1px;
+    block-size: 1px;
+    justify-self: center;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="infinite-scroll"] *) { transition: none !important; }
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="action"]) { border-color: ButtonText; }
+  }
+  @media print {
+    :where([data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="action"],
+      [data-citry-ui-part="infinite-scroll"] > [data-citry-ui-part="sentinel"]) { display: none !important; }
+  }
+}

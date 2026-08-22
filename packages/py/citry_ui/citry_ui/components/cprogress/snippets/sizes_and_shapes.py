@@ -6,11 +6,11 @@ citry.register_library(citry_ui)
 
 class ProgressSizesAndShapes(Component):
     template = """
-      <c-CStack class_="progress-sizes">
+      <c-CCol class_="progress-sizes">
         <c-CProgress label="Small square progress" c-value="35" size="sm" shape="square" />
         <c-CProgress label="Medium rounded progress" c-value="55" />
         <c-CProgress label="Large pill progress" c-value="75" size="lg" shape="pill" />
-      </c-CStack>
+      </c-CCol>
     """
     css = """
       :where(.progress-sizes) {

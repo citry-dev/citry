@@ -1,0 +1,1 @@
+"""Color Picker quality fixture."""

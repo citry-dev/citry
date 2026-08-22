@@ -653,7 +653,6 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             layer.__citryAnchoredSuppressed = false;
             layer.__citryAnchoredBlockedReason = null;
           };
-          /* citry-ui:command-palette-attribution:dialog-layer-preparation:begin */
           coordinator.prepareModal = (container, source = container) => {
             if (!(container instanceof HTMLDialogElement)) {
               throw new TypeError(
@@ -671,7 +670,6 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             }
             syncScopes();
           };
-          /* citry-ui:command-palette-attribution:dialog-layer-preparation:end */
           coordinator.beginAncestorClose = (container, source = container) => {
             if (!(container instanceof Element)) {
               throw new TypeError(

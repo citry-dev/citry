@@ -6,7 +6,7 @@ from citry import Citry, Component
 
 
 def flow_states_component(app: Citry) -> type[Component]:
-    """Create the reusable Stack and Group environment scenario."""
+    """Create the reusable Col and Row environment scenario."""
 
     class CitryUiFlowStates(Component):
         citry = app
@@ -19,57 +19,57 @@ def flow_states_component(app: Citry) -> type[Component]:
 
         template = """
           <section class="citry-ui-quality-stack" aria-labelledby="flow-states-title">
-            <h1 id="flow-states-title">Stack and Group states</h1>
+            <h1 id="flow-states-title">Col and Row states</h1>
 
             <c-for each="gap in gaps">
-              <c-CStack c-gap="gap" c-attrs="{'data-quality-gap': gap}">
+              <c-CCol c-gap="gap" c-attrs="{'data-quality-gap': gap}">
                 <span>Clay</span>
                 <span>Slip</span>
-              </c-CStack>
+              </c-CCol>
             </c-for>
 
             <c-for each="justify in justifies">
-              <c-CGroup
+              <c-CRow
                 c-justify="justify"
                 c-attrs="{'data-quality-justify': justify}"
               >
                 <span>Shape</span>
                 <span>Dry</span>
                 <span>Fire</span>
-              </c-CGroup>
+              </c-CRow>
             </c-for>
 
-            <c-CGroup class_="flow-quality-narrow" gap="xs">
+            <c-CRow class_="flow-quality-narrow" gap="xs">
               <span>Long porcelain preparation</span>
               <span>Reduction firing schedule</span>
               <span>Transparent celadon glaze</span>
-            </c-CGroup>
+            </c-CRow>
 
-            <c-CStack tag="section" gap="lg">
+            <c-CCol tag="section" gap="lg">
               <h2>Nested kiln plan</h2>
-              <c-CGroup align="baseline" justify="between">
+              <c-CRow align="baseline" justify="between">
                 <strong>1,280°C</strong>
                 <small>12 hour cycle</small>
-              </c-CGroup>
-            </c-CStack>
+              </c-CRow>
+            </c-CCol>
 
-            <c-CGroup tag="nav" reverse c-attrs="{'aria-label': 'Studio sections'}">
+            <c-CRow tag="nav" reverse c-attrs="{'aria-label': 'Studio sections'}">
               <a href="#clay">Clay</a>
               <a href="#glaze">Glaze</a>
-            </c-CGroup>
+            </c-CRow>
 
             <div dir="rtl">
-              <c-CGroup justify="between">
+              <c-CRow justify="between">
                 <span>الطين</span>
                 <span>التزجيج</span>
-              </c-CGroup>
+              </c-CRow>
             </div>
 
             <div class="flow-quality-brand flow-quality-brand--chalk">
-              <c-CStack><span>Chalk studio</span><span>Quiet spacing</span></c-CStack>
+              <c-CCol><span>Chalk studio</span><span>Quiet spacing</span></c-CCol>
             </div>
             <div class="flow-quality-brand flow-quality-brand--ink">
-              <c-CGroup><span>Ink studio</span><span>Compact tools</span></c-CGroup>
+              <c-CRow><span>Ink studio</span><span>Compact tools</span></c-CRow>
             </div>
           </section>
         """
@@ -105,13 +105,13 @@ def flow_states_component(app: Citry) -> type[Component]:
           }
 
           :where(.flow-quality-brand--chalk) {
-            --cui-stack-gap: 1.125rem;
+            --cui-col-gap: 1.125rem;
             background: light-dark(#fff8eb, #2e281f);
             color: light-dark(#392d21, #f8ead7);
           }
 
           :where(.flow-quality-brand--ink) {
-            --cui-group-gap: 0.375rem;
+            --cui-row-gap: 0.375rem;
             background: light-dark(#e7f0f6, #16242e);
             color: light-dark(#172d3b, #e6f2f8);
           }

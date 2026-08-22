@@ -12,13 +12,13 @@ class StackSpacing(Component):
         pass
 
     template = """
-      <section class="flow-spacing" aria-label="Stack gap presets">
+      <section class="flow-spacing" aria-label="Col gap presets">
         <c-for each="gap in gaps">
-          <c-CStack c-gap="gap" class_="flow-spacing__stack">
+          <c-CCol c-gap="gap" class_="flow-spacing__stack">
             <strong>{{ gap }}</strong>
             <span>Clay body</span>
             <span>Glaze test</span>
-          </c-CStack>
+          </c-CCol>
         </c-for>
       </section>
     """

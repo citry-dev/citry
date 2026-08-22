@@ -6,11 +6,11 @@ citry.register_library(citry_ui)
 
 class BasicSpinners(Component):
     template = """
-      <c-CGroup class_="spinner-basic" gap="lg">
+      <c-CRow class_="spinner-basic" gap="lg">
         <c-CSpinner label="Loading lunar atlas" />
         <c-CSpinner label="Aligning telescope mount" intent="success" />
         <c-CSpinner label="Reconnecting weather station" intent="warn" />
-      </c-CGroup>
+      </c-CRow>
     """
     css = """
       :where(.spinner-basic) {

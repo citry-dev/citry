@@ -23,7 +23,7 @@ Server inputs: `pages`, `page`, `href`, `siblings`, `boundaries`, `show_controls
 
 ## 5. State model
 
-Page numbering starts at 1. `1 <= page <= pages`. Omitted client page releases ownership to browser-local state initialized by Python. Valid supplied client page wins. Invalid values report once per continuous episode and retain the prior valid state. Structure is rebuilt deterministically after a client page change so the compact range stays correct.
+Page numbering starts at 1. `1 <= page <= pages`. Omitted client page releases ownership to browser-local state initialized by Python. Valid supplied client page wins. Invalid values report once per continuous episode and retain the prior valid state. Structure is rebuilt deterministically after a client page change so the compact range stays correct. When no browser i18n provider exists, rebuilt controls use the fixed server-translated label patterns; with client i18n, imperative bindings keep those recreated labels reactive.
 
 ## 6. Slots and slot data
 

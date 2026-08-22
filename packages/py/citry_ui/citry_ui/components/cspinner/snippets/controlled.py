@@ -10,7 +10,7 @@ class ControlledSpinner(Component):
         class="spinner-controlled"
         x-init="Alpine.store('spinnerControls', {intent: 'primary', size: 'md'})"
       >
-        <c-CGroup>
+        <c-CRow>
           <c-CSpinner
             label="Refreshing orbital catalog"
             $c-props="{
@@ -19,8 +19,8 @@ class ControlledSpinner(Component):
             }"
           />
           <span>Refreshing orbital catalog</span>
-        </c-CGroup>
-        <c-CGroup wrap>
+        </c-CRow>
+        <c-CRow wrap>
           <label>
             Intent
             <select x-model="$store.spinnerControls.intent">
@@ -34,7 +34,7 @@ class ControlledSpinner(Component):
               <option>sm</option><option>md</option><option>lg</option>
             </select>
           </label>
-        </c-CGroup>
+        </c-CRow>
       </section>
     """
     css = """

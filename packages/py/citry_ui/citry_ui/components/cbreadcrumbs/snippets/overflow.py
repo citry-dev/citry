@@ -23,10 +23,10 @@ class BreadcrumbOverflow(Component):
         }
 
     template = """
-      <c-CStack class_="breadcrumb-overflow">
+      <c-CCol class_="breadcrumb-overflow">
         <c-CBreadcrumbs c-items="items" label="Wrapping book location" />
         <c-CBreadcrumbs c-items="items" label="Scrolling book location" c-wrap="False" />
-      </c-CStack>
+      </c-CCol>
     """
     css = """
       :where(.breadcrumb-overflow) {

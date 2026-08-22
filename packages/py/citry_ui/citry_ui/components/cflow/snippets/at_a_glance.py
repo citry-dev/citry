@@ -6,22 +6,22 @@ citry.register_library(citry_ui)
 
 class FlowAtAGlance(Component):
     template = """
-      <c-CStack class_="flow-glance" gap="lg">
-        <c-CStack gap="xs">
+      <c-CCol class_="flow-glance" gap="lg">
+        <c-CCol gap="xs">
           <p class="flow-glance__eyebrow">Kiln room · shelf 4</p>
           <h2>Moon jar firing notes</h2>
           <p>Hold at 1,280°C until the glaze softens to a pale blue-white.</p>
-        </c-CStack>
-        <c-CGroup>
+        </c-CCol>
+        <c-CRow>
           <span class="flow-glance__tag">Porcelain</span>
           <span class="flow-glance__tag">Reduction</span>
           <span class="flow-glance__tag">12 hours</span>
-        </c-CGroup>
-        <c-CGroup justify="end">
+        </c-CRow>
+        <c-CRow justify="end">
           <c-CButton variant="ghost">Archive</c-CButton>
           <c-CButton>Save firing</c-CButton>
-        </c-CGroup>
-      </c-CStack>
+        </c-CRow>
+      </c-CCol>
     """
 
     css = """

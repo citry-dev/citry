@@ -5,9 +5,9 @@
     --_cui-select-foreground: var(--cui-select-foreground, CanvasText);
     --_cui-select-placeholder-color: var(
       --cui-select-placeholder-color,
-      light-dark(#667085, #a4a7ae)
+      light-dark(#475467, #a4a7ae)
     );
-    --_cui-select-muted-color: var(--cui-select-muted-color, light-dark(#667085, #a4a7ae));
+    --_cui-select-muted-color: var(--cui-select-muted-color, light-dark(#475467, #a4a7ae));
     --_cui-select-border-color: var(--cui-select-border-color, light-dark(#d0d5dd, #535862));
     --_cui-select-hover-background: var(
       --cui-select-hover-background,
@@ -127,9 +127,16 @@
     white-space: nowrap;
   }
   :where(.cui-select__indicator) {
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    border-inline-end: 0.125rem solid currentcolor;
+    border-block-end: 0.125rem solid currentcolor;
+    transform: translateY(-0.125rem) rotate(45deg);
     transition: transform var(--_cui-select-duration) ease-out;
   }
-  :where(.cui-select[data-open] .cui-select__indicator) { transform: rotate(180deg); }
+  :where(.cui-select[data-open] .cui-select__indicator) {
+    transform: translateY(0.125rem) rotate(225deg);
+  }
   :where(.cui-select__popup) {
     position: fixed;
     position-anchor: var(--_cui-select-anchor);

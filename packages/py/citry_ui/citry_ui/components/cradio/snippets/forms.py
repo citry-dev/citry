@@ -19,7 +19,7 @@ class RadioForm(Component):
             <c-CRadio value="pond">Pond margin</c-CRadio>
           </c-fill>
         </c-CRadioGroup>
-        <c-CGroup><c-CButton type="submit">Reserve plot</c-CButton><button type="reset">Reset</button></c-CGroup>
+        <c-CRow><c-CButton type="submit">Reserve plot</c-CButton><button type="reset">Reset</button></c-CRow>
         <output x-text="result"></output>
       </form>
     """

@@ -15,6 +15,8 @@ _WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "rust--tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publish.yml"
 _CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
 _CITRY_LSP_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-lsp--publish.yml"
+_CITRY_UI_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-ui--publish.yml"
+_PYTHON_TEST_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--tests.yml"
 _ROOT_CARGO = REPO_ROOT / "Cargo.toml"
 _CORE_BINDING_CARGO = REPO_ROOT / "crates" / "citry_core_py" / "Cargo.toml"
 _PYODIDE_CONFIG = REPO_ROOT / "packages" / "py" / "citry_core" / "pyodide-build.json"
@@ -55,6 +57,8 @@ def check() -> list[str]:
         _PUBLISH_WORKFLOW,
         _CITRY_PUBLISH_WORKFLOW,
         _CITRY_LSP_PUBLISH_WORKFLOW,
+        _CITRY_UI_PUBLISH_WORKFLOW,
+        _PYTHON_TEST_WORKFLOW,
         _ROOT_CARGO,
         _CORE_BINDING_CARGO,
         _PYODIDE_CONFIG,
@@ -69,6 +73,31 @@ def check() -> list[str]:
         return missing
 
     errors: list[str] = []
+
+    # Each event owns its path list, so a duplicate in one list cannot hide an omission in the other.
+    python_test_workflow = _PYTHON_TEST_WORKFLOW.read_text(encoding="utf-8")
+    _, pull_request_marker, after_push = python_test_workflow.partition("  pull_request:\n")
+    pull_request_section, workflow_dispatch_marker, _ = after_push.partition("  workflow_dispatch:\n")
+    event_sections = {
+        "push": python_test_workflow.partition("  push:\n")[2].partition("  pull_request:\n")[0],
+        "pull_request": pull_request_section if pull_request_marker and workflow_dispatch_marker else "",
+    }
+    event_path_lists = {
+        event: (
+            match.group(1).splitlines()
+            if (match := re.search(r"(?m)^    paths:\n((?:      - .*\n)+)", section))
+            else []
+        )
+        for event, section in event_sections.items()
+    }
+    for path in (
+        "scripts/verify_citry_ui_distribution.py",
+        ".github/workflows/py--citry-ui--publish.yml",
+    ):
+        marker = f'      - "{path}"'
+        for event, path_list in event_path_lists.items():
+            if marker not in path_list:
+                errors.append(f"py--tests.yml {event} path filters must include {path!r}")
 
     channel = tomllib.loads(_TOOLCHAIN_FILE.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
 
@@ -286,4 +315,30 @@ def check() -> list[str]:
     ):
         if marker not in citry_lsp_publish:
             errors.append(f"citry-lsp release immutability preflight is missing {marker!r}")
+
+    citry_ui_publish = _CITRY_UI_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    if citry_ui_publish.count(release_guard) != 2:
+        errors.append("citry-ui publish selection and release jobs must both reject workflow_dispatch refs")
+    if citry_ui_publish.count(f"uses: {_PYPI_ACTION}") != 1:
+        errors.append("citry-ui Trusted Publishing must use the reviewed immutable action commit")
+    if citry_ui_publish.count(f"uses: {_UV_ACTION}") != len(
+        re.findall(r"uses:\s+astral-sh/setup-uv@", citry_ui_publish)
+    ):
+        errors.append("every citry-ui publish uv action must use the reviewed immutable commit")
+    if "skip-existing" in citry_ui_publish or "--clobber" in citry_ui_publish:
+        errors.append("citry-ui release retries must fail closed instead of replacing or skipping artifacts")
+    for marker in (
+        "select-qualification:",
+        "--workflow py--citry-ui--publish.yml",
+        "--artifact-name verified-citry-ui-distributions",
+        "needs: [verify-version, select-qualification]",
+        "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
+        "--promote-archive qualification.zip",
+        "retention-days: 14",
+        "Require a new PyPI version and GitHub Release",
+        "https://pypi.org/pypi/citry-ui/${CITRY_UI_VERSION}/json",
+        "releases/tags/$GITHUB_REF_NAME",
+    ):
+        if marker not in citry_ui_publish:
+            errors.append(f"citry-ui release immutability preflight is missing {marker!r}")
     return errors

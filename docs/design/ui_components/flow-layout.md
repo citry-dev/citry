@@ -7,8 +7,8 @@ release review remains.**
 
 ## 1. Purpose and product bar
 
-`CStack` and `CGroup` arrange direct content in one dimension. Stack is a
-vertical flex container. Group is a horizontal flex container that wraps by
+`CCol` and `CRow` arrange direct content in one dimension. Col is a
+vertical flex container. Row is a horizontal flex container that wraps by
 default. Both provide concise spacing and alignment without activating client
 behavior or introducing a responsive breakpoint vocabulary.
 
@@ -16,15 +16,15 @@ Common jobs:
 
 | Job | Shortest template | Python composition | Support path |
 |---|---|---|---|
-| Space form sections vertically | `<c-CStack>...</c-CStack>` | `CStack(slots={"default": ...})` | direct API |
-| Place actions in one row | `<c-CGroup><c-CButton>...</c-CButton></c-CGroup>` | `CGroup(slots={"default": ...})` | direct API |
-| Change spacing | `<c-CStack gap="lg">...</c-CStack>` | `CStack(gap="lg", ...)` | direct API |
-| Align children | `<c-CGroup align="end">...</c-CGroup>` | `CGroup(align="end", ...)` | direct API |
-| Distribute free space | `<c-CGroup justify="between">...</c-CGroup>` | `CGroup(justify="between", ...)` | direct API |
-| Keep actions on one line | `<c-CGroup c-wrap="False">...</c-CGroup>` | `CGroup(wrap=False, ...)` | direct API |
-| Reverse visual order | `<c-CStack c-reverse="True">...</c-CStack>` | `CStack(reverse=True, ...)` | direct API; DOM and reading order stay unchanged |
-| Use list or navigation semantics | `<c-CGroup tag="nav">...</c-CGroup>` | `CGroup(tag="nav", ...)` | direct API; caller owns required content semantics and naming |
-| Use an arbitrary gap | `style="--cui-stack-gap: 2.25rem"` | structured `style` | public CSS variable |
+| Space form sections vertically | `<c-CCol>...</c-CCol>` | `CCol(slots={"default": ...})` | direct API |
+| Place actions in one row | `<c-CRow><c-CButton>...</c-CButton></c-CRow>` | `CRow(slots={"default": ...})` | direct API |
+| Change spacing | `<c-CCol gap="lg">...</c-CCol>` | `CCol(gap="lg", ...)` | direct API |
+| Align children | `<c-CRow align="end">...</c-CRow>` | `CRow(align="end", ...)` | direct API |
+| Distribute free space | `<c-CRow justify="between">...</c-CRow>` | `CRow(justify="between", ...)` | direct API |
+| Keep actions on one line | `<c-CRow c-wrap="False">...</c-CRow>` | `CRow(wrap=False, ...)` | direct API |
+| Reverse visual order | `<c-CCol c-reverse="True">...</c-CCol>` | `CCol(reverse=True, ...)` | direct API; DOM and reading order stay unchanged |
+| Use list or navigation semantics | `<c-CRow tag="nav">...</c-CRow>` | `CRow(tag="nav", ...)` | direct API; caller owns required content semantics and naming |
+| Use an arbitrary gap | `style="--cui-col-gap: 2.25rem"` | structured `style` | public CSS variable |
 | Change direction responsively | class or public selector CSS | same | consumer CSS; Flow has no breakpoint inputs |
 | Build a two-dimensional layout | `CGrid` and `CGridItem` | same | separate component family |
 
@@ -67,8 +67,8 @@ Vuetify disposition:
 
 | Vuetify surface or job | Citry support path | Citry surface | Decision |
 |---|---|---|---|
-| `VRow` horizontal flex layout | direct API | `CGroup` | Adopt the one-dimensional job without Grid column ownership. |
-| `gap` | direct API and CSS | `gap`, `--cui-stack-gap`, `--cui-group-gap` | Adopt named presets plus arbitrary CSS override. |
+| `VRow` horizontal flex layout | direct API | `CRow` | Adopt the one-dimensional job without Grid column ownership. |
+| `gap` | direct API and CSS | `gap`, `--cui-col-gap`, `--cui-row-gap` | Adopt named presets plus arbitrary CSS override. |
 | align and justify | direct API | `align`, `justify` | Keep concise logical values; responsive variants stay CSS. |
 | align-content | CSS | `class_`, `style`, selector | Omit until multi-line alignment is a repeated job. |
 | density, gutters, column count | separate Grid | none | Omit from Flow. |
@@ -86,24 +86,24 @@ public generic `CFlow` abstraction.
 ## 3. Public composition and anatomy
 
 ```citry-html
-<c-CStack gap="lg">
+<c-CCol gap="lg">
   <h2>Glaze notes</h2>
   <p>Layer the pale ash glaze over the iron slip.</p>
-  <c-CGroup>
+  <c-CRow>
     <c-CButton>Save notes</c-CButton>
     <c-CButton variant="outline">Discard</c-CButton>
-  </c-CGroup>
-</c-CStack>
+  </c-CRow>
+</c-CCol>
 ```
 
 ```python
-from citry_ui import CGroup, CStack
+from citry_ui import CCol, CRow
 
-actions = CGroup(
+actions = CRow(
     gap="sm",
     slots={"default": "..."},
 )
-panel = CStack(
+panel = CCol(
     gap="lg",
     slots={"default": actions},
 )
@@ -111,8 +111,8 @@ panel = CStack(
 
 | Component | Semantic root | Attribute destination | Relationship |
 |---|---|---|---|
-| `CStack` | selected `tag`, default `div` | root receives `attrs`, `class_`, and `style` | lays out direct children vertically |
-| `CGroup` | selected `tag`, default `div` | root receives `attrs`, `class_`, and `style` | lays out direct children horizontally and wraps by default |
+| `CCol` | selected `tag`, default `div` | root receives `attrs`, `class_`, and `style` | lays out direct children vertically |
+| `CRow` | selected `tag`, default `div` | root receives `attrs`, `class_`, and `style` | lays out direct children horizontally and wraps by default |
 
 Each component renders exactly one root and the supplied default slot. There
 are no child wrappers. Supported tags are `div`, `section`, `nav`, `ul`, and
@@ -128,7 +128,7 @@ Shared aliases:
 - `CFlowAlign = Literal["start", "center", "end", "stretch", "baseline"]`
 - `CFlowJustify = Literal["start", "center", "end", "between", "around", "evenly"]`
 
-`CStack` inputs:
+`CCol` inputs:
 
 | Python input | Type | Default | Class | Effect |
 |---|---|---|---|---|
@@ -141,7 +141,7 @@ Shared aliases:
 | `style` | `CStyleValue | None` | `None` | root styling | Merges root inline styles. |
 | `attrs` | `Mapping[str, object] | None` | `None` | root attributes | Adds native, ARIA, data, and bounded Alpine attributes. |
 
-`CGroup` has the same inputs except `gap` defaults to `"sm"`, `align`
+`CRow` has the same inputs except `gap` defaults to `"sm"`, `align`
 defaults to `"center"`, and it adds `wrap: bool = True`.
 
 There are no client inputs. Flow contributes no JavaScript. Browser-owned
@@ -164,8 +164,8 @@ against using reverse to create a semantic order different from the source.
 
 | Owner | Slot | Required | Cardinality | Slot data | Fallback |
 |---|---|---|---|---|---|
-| `CStack` | `default` | no | zero or one fill | `{}` (`CStackDefaultSlotData`) | empty root |
-| `CGroup` | `default` | no | zero or one fill | `{}` (`CGroupDefaultSlotData`) | empty root |
+| `CCol` | `default` | no | zero or one fill | `{}` (`CColDefaultSlotData`) | empty root |
+| `CRow` | `default` | no | zero or one fill | `{}` (`CRowDefaultSlotData`) | empty root |
 
 The default slot accepts ordinary flow content and nested components. The
 selected root's HTML content model remains the caller's responsibility. Slot
@@ -193,7 +193,7 @@ focus indicators under descendant ownership.
 
 Flow is not a form participant. Native controls inside its slot preserve their
 own Form owner, order, successful-control behavior, reset, validation, and
-submission. A `CGroup` of Buttons does not become a Button group semantic or
+submission. A `CRow` of Buttons does not become a Button group semantic or
 state owner.
 
 ## 10. Styling and theme contract
@@ -211,13 +211,13 @@ Gap presets:
 
 | Public variable | Type | Purpose | Current default |
 |---|---|---|---|
-| `--cui-stack-gap` | length | Overrides the selected Stack gap. | selected `gap` fallback |
-| `--cui-group-gap` | length | Overrides the selected Group gap. | selected `gap` fallback |
+| `--cui-col-gap` | length | Overrides the selected Col gap. | selected `gap` fallback |
+| `--cui-row-gap` | length | Overrides the selected Row gap. | selected `gap` fallback |
 
 | Public selector | Element | Supported conditions | Stable relationship |
 |---|---|---|---|
-| `[data-citry-ui-part="stack"]` | Stack root | all Stack configuration attributes | one native root |
-| `[data-citry-ui-part="group"]` | Group root | all Group configuration attributes | one native root |
+| `[data-citry-ui-part="col"]` | Col root | all Col configuration attributes | one native root |
+| `[data-citry-ui-part="row"]` | Row root | all Row configuration attributes | one native root |
 
 | Public attribute | Values | Meaning |
 |---|---|---|
@@ -225,7 +225,7 @@ Gap presets:
 | `data-align` | `start`, `center`, `end`, `stretch`, `baseline` | Cross-axis alignment. |
 | `data-justify` | `start`, `center`, `end`, `between`, `around`, `evenly` | Main-axis distribution. |
 | `data-reverse` | present or absent | Visual direction is reversed when present. |
-| `data-wrap` | present or absent on Group | Group wrapping is enabled when present. |
+| `data-wrap` | present or absent on Row | Row wrapping is enabled when present. |
 
 Default CSS lives in `citry-ui.theme`, uses `:where()` selectors, and applies
 native flexbox directly to the root. Direct element children receive
@@ -237,7 +237,7 @@ overflow owned by consumer content.
 Flow has no authored colors and follows every light, dark, and nested scheme.
 It uses logical start/end alignment and native direction-aware row layout.
 No animation means reduced motion has no special path. Forced colors and print
-preserve the same layout. At narrow widths, Group wraps by default and Stack
+preserve the same layout. At narrow widths, Row wraps by default and Col
 children can shrink; `wrap=False` deliberately allows the caller to choose
 overflow or child shrinking.
 
@@ -302,8 +302,8 @@ Checked-in focused evidence must cover:
 - every valid and invalid enum and Boolean input;
 - root tag, default slot, empty root, class/style merge, attrs copying, and
   trust-boundary rejection;
-- exact Stack and Group anatomy with zero child wrappers;
-- gap, alignment, justification, reverse, and Group wrap computed styles;
+- exact Col and Row anatomy with zero child wrappers;
+- gap, alignment, justification, reverse, and Row wrap computed styles;
 - ancestor and root public variable overrides and a public selector override;
 - direct-child min-inline-size behavior, nested Flow, narrow wrapping, LTR,
   RTL, print, and forced colors;
@@ -318,12 +318,12 @@ approval or assistive-technology sign-off.
 
 ## 18. Compatibility classification
 
-Stable public API: `CStack`, `CGroup`, their server inputs, aliases, default
+Stable public API: `CCol`, `CRow`, their server inputs, aliases, default
 slots, public CSS variables, selectors, reflected attributes, validation, and
 zero-JavaScript behavior.
 
-Behavioral contract: one native root, no child wrappers, Stack vertical layout,
-Group horizontal layout and default wrapping, DOM-order semantics, and no
+Behavioral contract: one native root, no child wrappers, Col vertical layout,
+Row horizontal layout and default wrapping, DOM-order semantics, and no
 stacking or clipping context.
 
 Evolvable design: exact gap fallback lengths and undocumented `.cui-*`
@@ -337,12 +337,12 @@ cases. Planned previews:
 
 | Module | Reader task | Visible coverage | Focused evidence |
 |---|---|---|---|
-| `at_a_glance.py` | recognize Stack and Group | studio note Stack plus action Group | roots, default gaps, no wrappers |
-| `stack_spacing.py` | choose vertical rhythm | all six gaps | reflected gaps and computed spacing |
-| `group_alignment.py` | align and distribute actions | align and justify combinations | computed flex properties |
+| `at_a_glance.py` | recognize Col and Row | studio note Col plus action Row | roots, default gaps, no wrappers |
+| `col_spacing.py` | choose vertical rhythm | all six gaps | reflected gaps and computed spacing |
+| `row_alignment.py` | align and distribute actions | align and justify combinations | computed flex properties |
 | `wrapping.py` | handle narrow action rows | wrapping and no-wrap groups | narrow geometry |
 | `semantic_roots.py` | retain document meaning | nav and list roots | native tags and relationships |
-| `nested_layouts.py` | compose practical layouts | nested Stack and Group | direct-child isolation |
+| `nested_layouts.py` | compose practical layouts | nested Col and Row | direct-child isolation |
 | `customization.py` | apply brand spacing | public variables and selector override | computed cascade |
 | `direction.py` | support RTL and long content | LTR/RTL paired layout | order and overflow geometry |
 
@@ -369,7 +369,7 @@ Deferred:
 
 Falsifier for the two-component family: if implementation or public examples
 show that one class plus a direction input is materially clearer and no more
-verbose across the common horizontal wrapping jobs, remove `CGroup` before
+verbose across the common horizontal wrapping jobs, remove `CRow` before
 release. Current Mantine, Chakra, MUI, Web Awesome, and local composition
 evidence supports retaining the two concise names.
 

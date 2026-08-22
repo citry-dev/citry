@@ -7,7 +7,7 @@ citry.register_library(citry_ui)
 class ControlledProgress(Component):
     template = """
       <section class="progress-controlled" x-data="{value: 28}">
-        <c-CGroup justify="between"><h2>Transect upload</h2><output x-text="`${value}%`"></output></c-CGroup>
+        <c-CRow justify="between"><h2>Transect upload</h2><output x-text="`${value}%`"></output></c-CRow>
         <c-CProgress label="Transect upload" $c-props="{value}" shape="pill" />
         <label>Completion <input type="range" min="0" max="100" x-model.number="value" /></label>
       </section>

@@ -7,7 +7,7 @@ import pytest
 
 import citry_ui
 from citry import Citry, Component
-from citry_ui import CGroup, CStack
+from citry_ui import CCol, CRow
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
@@ -31,7 +31,7 @@ def _render(layout: object, *, include_css: bool = False) -> str:
 
 
 def test_flow_schemas_keep_the_frequent_surface_small():
-    assert [field.name for field in fields(CStack.Kwargs)] == [
+    assert [field.name for field in fields(CCol.Kwargs)] == [
         "tag",
         "gap",
         "align",
@@ -41,7 +41,7 @@ def test_flow_schemas_keep_the_frequent_surface_small():
         "style",
         "attrs",
     ]
-    assert [field.name for field in fields(CGroup.Kwargs)] == [
+    assert [field.name for field in fields(CRow.Kwargs)] == [
         "tag",
         "gap",
         "align",
@@ -52,28 +52,28 @@ def test_flow_schemas_keep_the_frequent_surface_small():
         "style",
         "attrs",
     ]
-    assert [field.name for field in fields(CStack.Slots)] == ["default"]
-    assert [field.name for field in fields(CGroup.Slots)] == ["default"]
+    assert [field.name for field in fields(CCol.Slots)] == ["default"]
+    assert [field.name for field in fields(CRow.Slots)] == ["default"]
 
 
 def test_defaults_render_one_root_without_child_wrappers():
-    group = CGroup(slots={"default": "Actions"})
-    html = _render(CStack(slots={"default": group}))
+    row = CRow(slots={"default": "Actions"})
+    html = _render(CCol(slots={"default": row}))
 
-    assert len(re.findall(r'<[^>]+data-citry-ui-part="stack"[^>]*>', html)) == 1
-    assert len(re.findall(r'<[^>]+data-citry-ui-part="group"[^>]*>', html)) == 1
+    assert len(re.findall(r'<[^>]+data-citry-ui-part="col"[^>]*>', html)) == 1
+    assert len(re.findall(r'<[^>]+data-citry-ui-part="row"[^>]*>', html)) == 1
     assert 'data-gap="md"' in html
     assert 'data-align="stretch"' in html
     assert 'data-justify="start"' in html
     assert 'data-gap="sm"' in html
     assert 'data-align="center"' in html
-    assert "cui-stack__" not in html
-    assert "cui-group__" not in html
+    assert "cui-col__" not in html
+    assert "cui-row__" not in html
 
 
 def test_semantic_root_configuration_and_root_styling_merge():
     html = _render(
-        CGroup(
+        CRow(
             tag="nav",
             gap="lg",
             align="baseline",
@@ -81,7 +81,7 @@ def test_semantic_root_configuration_and_root_styling_merge():
             reverse=True,
             wrap=False,
             class_=["studio-actions", {"is-ready": True}],
-            style={"--cui-group-gap": "2rem"},
+            style={"--cui-row-gap": "2rem"},
             attrs={
                 "aria-label": "Studio actions",
                 "class": "from-attrs",
@@ -94,8 +94,8 @@ def test_semantic_root_configuration_and_root_styling_merge():
     tag = re.search(r"<nav[^>]+>", html)
     assert tag is not None
     root = tag.group(0)
-    assert 'class="cui-group from-attrs studio-actions is-ready"' in root
-    assert 'style="--cui-group-gap: 2rem;"' in root
+    assert 'class="cui-row from-attrs studio-actions is-ready"' in root
+    assert 'style="--cui-row-gap: 2rem;"' in root
     assert 'aria-label="Studio actions"' in root
     assert 'data-studio="wheel-room"' in root
     assert 'data-gap="lg"' in root
@@ -106,11 +106,11 @@ def test_semantic_root_configuration_and_root_styling_merge():
 
 
 def test_empty_roots_are_valid_static_layout_destinations():
-    assert '<div class="cui-stack"' in _render(CStack())
-    assert '<div class="cui-group"' in _render(CGroup())
+    assert '<div class="cui-col"' in _render(CCol())
+    assert '<div class="cui-row"' in _render(CRow())
 
 
-@pytest.mark.parametrize("component", [CStack, CGroup])
+@pytest.mark.parametrize("component", [CCol, CRow])
 @pytest.mark.parametrize(
     ("input_name", "bad_value", "error", "match"),
     [
@@ -131,7 +131,7 @@ def test_invalid_shared_inputs_fail_deterministically(component, input_name, bad
 @pytest.mark.parametrize("bad_value", [1, "yes", None])
 def test_group_wrap_requires_a_boolean(bad_value):
     with pytest.raises(TypeError, match="wrap must be a bool"):
-        _render(CGroup(wrap=bad_value))
+        _render(CRow(wrap=bad_value))
 
 
 @pytest.mark.parametrize(
@@ -157,15 +157,15 @@ def test_group_wrap_requires_a_boolean(bad_value):
 )
 def test_stack_rejects_owned_runtime_and_structural_attributes(attribute):
     with pytest.raises(ValueError, match="cannot"):
-        _render(CStack(attrs={attribute: "consumer"}))
+        _render(CCol(attrs={attribute: "consumer"}))
 
 
 def test_group_also_owns_wrap_but_allows_unrelated_bindings_and_listeners():
     with pytest.raises(ValueError, match="owned attribute"):
-        _render(CGroup(attrs={"data-wrap": False}))
+        _render(CRow(attrs={"data-wrap": False}))
 
     html = _render(
-        CGroup(
+        CRow(
             attrs={
                 "x-data": "{active: false}",
                 ":class": "{active}",
@@ -181,9 +181,9 @@ def test_group_also_owns_wrap_but_allows_unrelated_bindings_and_listeners():
 def test_css_uses_public_gap_inputs_and_no_component_javascript():
     css = read_component_source_css("cflow")
 
-    assert "--_cui-stack-gap: var(--cui-stack-gap, 0.75rem)" in css
-    assert "--_cui-group-gap: var(--cui-group-gap, 0.5rem)" in css
-    assert ':where([data-citry-ui-part="stack"] > *)' in css
-    assert ':where([data-citry-ui-part="group"] > *)' in css
-    assert getattr(CStack, "js", None) is None
-    assert getattr(CGroup, "js", None) is None
+    assert "--_cui-col-gap: var(--cui-col-gap, 0.75rem)" in css
+    assert "--_cui-row-gap: var(--cui-row-gap, 0.5rem)" in css
+    assert ':where([data-citry-ui-part="col"] > *)' in css
+    assert ':where([data-citry-ui-part="row"] > *)' in css
+    assert getattr(CCol, "js", None) is None
+    assert getattr(CRow, "js", None) is None

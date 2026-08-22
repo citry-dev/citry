@@ -239,6 +239,19 @@ def _load_preview_catalog(path: Path) -> tuple[str, ...]:
 def check(ctx: GuardContext) -> Iterator[GuardResult]:
     project = ctx.project or current_docs_project()
     projections = project.ui_library.projections
+    component_sources = ctx.repo_root / "packages" / "py" / "citry_ui" / "citry_ui" / "components"
+    if component_sources.is_dir():
+        projected_sources = {
+            ui_library_source_path(projection, repo_root=ctx.repo_root).resolve() for projection in projections
+        }
+        for source in sorted(component_sources.glob("c*/api.md")):
+            if source.resolve() in projected_sources:
+                continue
+            yield GuardResult.error(
+                guard=_GUARD,
+                message="Component-owned API source is missing from docs_site/ui_library.yml",
+                source=source.relative_to(ctx.repo_root).as_posix(),
+            )
     sources_ready = True
     for projection in projections:
         source = ui_library_source_path(projection, repo_root=ctx.repo_root)

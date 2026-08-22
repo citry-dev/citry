@@ -13,6 +13,8 @@ $component({
     const invalid = new Set();
     let internalCollapsed = Boolean(data.collapsed);
     let collapsed = internalCollapsed;
+    let initialized = false;
+    let transitionTimer = 0;
     let controlled = false;
     let callback = null;
     let configuration = {
@@ -35,8 +37,24 @@ $component({
       }
       report(name, supplied); return fallback;
     };
+    const finishTransition = () => {
+      clearTimeout(transitionTimer);
+      transitionTimer = 0;
+      root.removeAttribute("data-citry-sidebar-transitioning");
+    };
+    const beginTransition = (previous, next) => {
+      if (!initialized || previous === next || configuration.collapsible !== "rail") return;
+      root.setAttribute("data-citry-sidebar-transitioning", "");
+      clearTimeout(transitionTimer);
+      transitionTimer = setTimeout(finishTransition, 240);
+    };
+    const onTransitionEnd = event => {
+      if (event.target === root && ["width", "inline-size"].includes(event.propertyName)) finishTransition();
+    };
     const apply = (next) => {
-      collapsed = configuration.collapsible === "none" ? false : Boolean(next);
+      const resolved = configuration.collapsible === "none" ? false : Boolean(next);
+      beginTransition(collapsed, resolved);
+      collapsed = resolved;
       const offcanvasHidden = collapsed && configuration.collapsible === "offcanvas";
       if (offcanvasHidden && panel.contains(root.ownerDocument.activeElement)) {
         toggle.focus({preventScroll: true});
@@ -99,11 +117,15 @@ $component({
       if (controlled) queueMicrotask(reconcile);
     };
     toggle.addEventListener("click", onClick);
+    root.addEventListener("transitionend", onTransitionEnd);
     const stop = effect(reconcile);
+    initialized = true;
     root.setAttribute("data-citry-sidebar-initialized", "");
     return () => {
       stop?.();
+      finishTransition();
       toggle.removeEventListener("click", onClick);
+      root.removeEventListener("transitionend", onTransitionEnd);
       root.removeAttribute("data-citry-sidebar-initialized");
     };
   },

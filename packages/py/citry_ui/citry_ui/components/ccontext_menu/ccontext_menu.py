@@ -510,7 +510,7 @@ class CContextMenu(LibraryComponent):
       ;A=null,v.cancelOpenRequest(e.request),oe(),te(),V("controlled-open",o.open,"; the synchronous true claim was not committed")
       }},De=e=>{const t=w;w=null;try{v.forceClose("ancestor",e)}catch{}finally{w=t,R=null,oe(),te()}},Oe=(e,t,n=null)=>{if(!ee()||!ae(e))return!1;R=e;let o;try{o=v.requestOpen(!0,t,e.source,null)}catch(t){De(e.source);throw t}
       ;if(o.same)return ee()?(se(e),v.focusRoot("first"),n?.preventDefault(),!0):(De(e.source),!1);if(o.controlled){
-      if(!o.accepted||!0!==o.callbackResult||!ee()||R!==e)return v.cancelOpenRequest(o.request),De(e.source),!1;se(e);const t={
+      if(!o.accepted||!0!==o.callbackResult||R!==e)return v.cancelOpenRequest(o.request),De(e.source),!1;if(!ee())return V("anatomy","invalid","; external owner structure is invalid after onOpenChange"),v.cancelOpenRequest(o.request),De(e.source),!1;se(e);const t={
       request:o.request,generation:e.generation,task:null,awaitedReconcile:!1};return A=t,t.task=$(()=>Ee(t)),
       n?.preventDefault(),!0}return o.accepted&&ee()&&v.isOpen()?(se(e),v.focusRoot("first"),n?.preventDefault(),!0):(R=null,
       De(e.source),!1)},Re=e=>{if(!e.isTrusted||!fe(e)||!Qe())return;const t=me(e);if(e.shiftKey)return void we(t);if(L){const t=L

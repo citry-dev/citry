@@ -55,6 +55,7 @@ _ROOT_OWNED = frozenset(
         "aria-labelledby",
         "contenteditable",
         "data-citry-sidebar-initialized",
+        "data-citry-sidebar-transitioning",
         "data-citry-ui-part",
         "data-collapsed",
         "data-collapsible",

@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class TagVariants(Component):
     template = """
-      <c-CStack gap="lg">
+      <c-CCol gap="lg">
         <c-CTagGroup
           c-for="variant in ['soft', 'solid', 'outline']"
           c-label="variant"
@@ -19,7 +19,7 @@ class TagVariants(Component):
         <c-CTagGroup c-for="size in ['sm', 'md', 'lg']" c-label="size" c-size="size">
           <c-CTag value="sample">Sample</c-CTag>
         </c-CTagGroup>
-      </c-CStack>
+      </c-CCol>
     """
 
 

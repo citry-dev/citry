@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class BadgeIcons(Component):
     template = """
-      <c-CGroup class_="badge-icons">
+      <c-CRow class_="badge-icons">
         <c-CBadge intent="success">
           <c-fill name="start"><c-CIcon name="check" /></c-fill>
           <c-fill name="default">Verified origin</c-fill>
@@ -15,7 +15,7 @@ class BadgeIcons(Component):
           <c-fill name="default">Requires gloves</c-fill>
           <c-fill name="end"><c-CIcon name="triangle-alert" /></c-fill>
         </c-CBadge>
-      </c-CGroup>
+      </c-CRow>
     """
     css = """
       :where(.badge-icons) {

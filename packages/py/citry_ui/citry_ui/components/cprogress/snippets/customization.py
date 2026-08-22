@@ -6,10 +6,10 @@ citry.register_library(citry_ui)
 
 class ProgressCustomization(Component):
     template = """
-      <c-CStack class_="progress-themes">
+      <c-CCol class_="progress-themes">
         <div class="progress-themes__coral"><c-CProgress label="Coral lab" c-value="58" shape="pill" /></div>
         <div class="progress-themes__abyss"><c-CProgress label="Abyss lab" c-value="58" shape="pill" /></div>
-      </c-CStack>
+      </c-CCol>
     """
     css = """
       :where(.progress-themes > div) {

@@ -172,6 +172,11 @@ class CPagination(LibraryComponent):
         labels = {name: _plain(name, getattr(kwargs, name)) for name in message_specs}
         if catalog["label"]:
             labels["label"] = self.i18n.tr("citry-ui-pagination-label")
+        if catalog["page_label"]:
+            labels["page_label"] = self.i18n.tr(
+                "citry-ui-pagination-page",
+                page="{page}",
+            )
         if catalog["previous_label"]:
             labels["previous_label"] = self.i18n.tr("citry-ui-pagination-previous")
         if catalog["next_label"]:
@@ -442,7 +447,6 @@ class CPagination(LibraryComponent):
             if (binding) translationBindings.push(binding);
           };
           const render = () => {
-            if (!i18n && data.catalog_page_label) return;
             translationBindings.forEach((binding) => binding.dispose());
             translationBindings = [];
             const items = [];

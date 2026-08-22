@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class DisabledListbox(Component):
     template = """
-      <c-CStack gap="lg">
+      <c-CCol gap="lg">
         <c-CListbox label="Deployment region" value="eu" variant="outline">
           <c-CListboxOption value="eu">Europe</c-CListboxOption>
           <c-CListboxOption value="us" disabled>United States — unavailable</c-CListboxOption>
@@ -16,7 +16,7 @@ class DisabledListbox(Component):
           <c-CListboxOption value="standard">Standard</c-CListboxOption>
           <c-CListboxOption value="strict">Strict</c-CListboxOption>
         </c-CListbox>
-      </c-CStack>
+      </c-CCol>
     """
 
 

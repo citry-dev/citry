@@ -9,10 +9,10 @@ class SkeletonCard(Component):
       <c-CCard c-attrs="{'aria-label': 'Loading moonfern field note', 'aria-busy': 'true'}">
         <c-fill name="media"><c-CSkeleton height="9rem" /></c-fill>
         <c-fill name="default">
-          <c-CStack c-gap="'sm'">
+          <c-CCol c-gap="'sm'">
             <c-CSkeleton kind="text" height="1.2rem" width="48%" />
             <c-CSkeleton kind="text" c-lines="3" />
-          </c-CStack>
+          </c-CCol>
         </c-fill>
       </c-CCard>
     """

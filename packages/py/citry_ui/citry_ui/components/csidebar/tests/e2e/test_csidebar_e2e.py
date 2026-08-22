@@ -33,7 +33,11 @@ def _page() -> str:
           <body x-data>
             <form>
               <c-CSidebar id="rail" tag="nav" label="Rail navigation" class_="brand-sidebar">
-                <a id="rail-link" href="#rail-destination">Destination</a>
+                <c-fill name="header"><strong>Northstar</strong></c-fill>
+                <c-fill name="default">
+                  <a id="rail-link" href="#rail-destination">Destination</a>
+                  <p id="rail-copy">A deliberately long authored explanation inside the narrow rail.</p>
+                </c-fill>
               </c-CSidebar>
               <button id="form-submit" type="submit">Submit</button>
             </form>
@@ -70,14 +74,28 @@ def test_uncontrolled_rail_toggle_is_form_safe_and_preserves_panel(page: Any) ->
     errors = _load(page)
     root = page.locator("#rail")
     toggle = root.locator('[data-citry-ui-part="toggle"]')
+    panel = root.locator('[data-citry-ui-part="panel"]')
+    header = root.locator('[data-citry-ui-part="header"]')
+    toggle_box = toggle.bounding_box()
+    header_box = header.bounding_box()
+    assert toggle_box is not None
+    assert header_box is not None
+    assert abs((toggle_box["y"] + toggle_box["height"] / 2) - (header_box["y"] + header_box["height"] / 2)) < 1
     toggle.click()
 
     assert root.get_attribute("data-collapsed") == ""
+    assert root.get_attribute("data-citry-sidebar-transitioning") == ""
     assert toggle.get_attribute("aria-expanded") == "false"
-    assert root.locator('[data-citry-ui-part="panel"]').is_visible()
+    assert panel.is_visible()
+    assert panel.evaluate("element => getComputedStyle(element).width") == "288px"
+    assert root.evaluate("element => getComputedStyle(element).overflowX") in {"hidden", "clip"}
     assert page.url.endswith("#") is False
-    page.wait_for_function("getComputedStyle(document.querySelector('#rail')).width === '64px'")
+    page.wait_for_function("!document.querySelector('#rail').hasAttribute('data-citry-sidebar-transitioning')")
     assert root.evaluate("element => getComputedStyle(element).width") == "64px"
+    assert panel.evaluate("element => getComputedStyle(element).width") == "64px"
+    assert root.evaluate("element => getComputedStyle(element).overflowX") == "visible"
+    assert page.locator("#rail-copy").evaluate("element => getComputedStyle(element).whiteSpace") == "nowrap"
+    assert root.evaluate("element => element.scrollHeight") < 800
     assert root.evaluate("element => getComputedStyle(element).borderRadius") == "0px"
     assert errors == []
 
@@ -110,6 +128,7 @@ def test_landmarks_logical_side_environment_and_axe(page: Any) -> None:
     rtl = page.locator("#rtl")
     assert rtl.evaluate("element => getComputedStyle(element).borderInlineStartWidth") == "1px"
     assert rtl.evaluate("element => getComputedStyle(element).borderInlineEndWidth") == "0px"
+    assert page.evaluate("document.documentElement.scrollHeight") < 1600
 
     page.emulate_media(reduced_motion="reduce")
     assert rtl.evaluate("element => parseFloat(getComputedStyle(element).transitionDuration)") <= 0.001

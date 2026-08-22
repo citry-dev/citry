@@ -12,12 +12,13 @@ widget. It supports complete server collections and contiguous server windows.
 The first pass owns:
 
 - arrow, Home, End, Page, and control-modified grid navigation;
-- single or multiple row selection;
+- single or multiple row selection, including loaded-Row mouse drag selection;
 - single and shift-modified multi-column sort requests;
 - exact row and column position metadata;
 - fixed-height server window requests;
 - controlled and uncontrolled selection;
 - loading, empty, error, and pending states;
+- inline text, number, checkbox, and select Cell editors;
 - responsive overflow, sticky headers, localization, and cleanup.
 
 The shortest intended use is Python composition because columns and rows are
@@ -41,9 +42,9 @@ Use `CTable` for document-like tabular reading, native links in the ordinary
 Tab order, spans, footers, and print-first output. Use `CDataGrid` when one
 managed cell stop and directional navigation materially improve the task.
 
-Non-goals for this pass are inline editing, arbitrary widgets in cells,
+Non-goals for this pass are arbitrary caller-authored widgets in cells,
 filter UI, grouping, aggregation, pivoting, tree rows, column pinning or
-reordering, resize handles, drag and drop, clipboard mutation, export, and a
+reordering, resize handles, row or column drag-and-drop reordering, clipboard mutation, export, and a
 browser-owned data source. There is no headless API.
 
 ## 2. Prior art and complaints
@@ -52,9 +53,11 @@ Research was refreshed on 2026-08-21.
 
 | Product or standard | Version or review date | Surface inspected | Citry UI decision |
 |---|---|---|---|
-| [WAI-ARIA APG Grid pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/) | current 2026-08-21 | composite focus, data-grid navigation, selection shortcuts, cell/widget focus boundary | Use one cell in the page Tab order, exact grid roles/positions, directional navigation, and Shift+Space row selection. Defer edit mode and multi-widget cells. |
+| [WAI-ARIA APG Grid pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/) | current 2026-08-21 | composite focus, data-grid navigation, selection shortcuts, and the Cell editing focus boundary | Use one Cell in the page Tab order, exact grid roles/positions, directional navigation, Shift+Space row selection, and Enter/F2 transitions between grid navigation and one owned editor. |
+| [MUI X Data Grid editing](https://mui.com/x/react-data-grid/editing/) | current 2026-08-21 | editable Columns, Cell versus Row mode, edit entry/exit, select value options, validation, and controlled data | Adopt per-Column and per-Cell eligibility, native editor kinds, named select options, request-only commits, and synchronous rejection. Keep Row editing and arbitrary custom editors deferred. |
+| [AG Grid Cell editing](https://www.ag-grid.com/javascript-data-grid/cell-editing-start-stop/) | current 2026-08-21 | Enter/F2/double-click/typing entry, Escape cancellation, Tab and Enter commit | Adopt familiar entry and exit keys while keeping one editor active and preserving server ownership of Row data. |
 | [Vuetify Data tables](https://vuetifyjs.com/en/components/data-tables/basics/) and [virtual tables](https://vuetifyjs.com/en/components/data-tables/virtual-tables/) | current 2026-08-21 | headers/items, selection, sorting, density, loading/no-data, server and virtual variants, scoped cells | Adopt data records, generic render slots, selection, sort models, density, status outputs, and explicit complete/windowed ownership. Do not copy pagination or footer ownership into the grid. |
-| [MUI X Data Grid 9](https://mui.com/x/react-data-grid/) and [accessibility](https://mui.com/x/react-data-grid/accessibility/) | 9.11, 2026-08-21 | controlled models, cell navigation, sorting, selection, virtualization, editing boundary, density | Adopt controlled sort/selection models, complete keyboard navigation, stable IDs, and fixed row geometry. Defer edit mode, column menus, and premium breadth. |
+| [MUI X Data Grid 9](https://mui.com/x/react-data-grid/) and [accessibility](https://mui.com/x/react-data-grid/accessibility/) | 9.11, 2026-08-21 | controlled models, cell navigation, sorting, selection, virtualization, editing boundary, density | Adopt controlled sort/selection models, complete keyboard navigation, stable IDs, fixed row geometry, and Cell editing. Defer Row editing, column menus, and premium breadth. |
 | [Vaadin Grid 25](https://vaadin.com/docs/latest/components/grid) | 25 docs, 2026-08-21 | Web Component columns, selection, sorting, lazy loading, pagination tradeoffs, cell focus | Adopt server-provider-shaped range requests and row/cell focus. Keep pagination composable because it provides different orientation and select-all semantics. |
 | [AG Grid 36](https://www.ag-grid.com/javascript-data-grid/server-side-model-datasource/) | 36.1, 2026-08-21 | server-side range/sort contracts, stable row IDs, selection across unloaded data | Adopt explicit half-open row ranges, request IDs, server sort metadata, and stable keys. Reject implicit “all rows” selection across unloaded data in v1. |
 | Native HTML table | current browsers | no-script reading, native row/column relationships, print | Render a native table with `role=grid`; retain meaningful no-JavaScript content and native table layout while taking composite keyboard ownership only after enhancement. |
@@ -71,7 +74,7 @@ Vuetify disposition:
 | `headers`, `items`, `item-value` | direct API | `columns`, `rows`, stable `row.key` | adopt typed server records |
 | per-column and per-cell slots | generic scoped slots | `header`, `cell` | adopt one typed fallback chain; dynamic keyed slots wait for parser/runtime support |
 | `show-select`, single/multiple value | direct API | `selection`, `selected`, `onSelectionChange` | adopt without an ambiguous all-pages checkbox |
-| `sort-by`, multi-sort | direct API | `sort`, `multi_sort`, `onSortChange` | server-owned request model |
+| `sort-by`, multi-sort | direct API | `sort`, `multi_sort`, `onSortChange` | Request/accept model; matching accepted Header requests reorder complete supplied collections while windows remain server-owned. |
 | `loading-text`, `no-data-text` | i18n/slots | state labels and state slots | adopt and add error state |
 | density, fixed header, height | direct API/CSS | `density`, `sticky_header`, `viewport_size` | adopt logical equivalents |
 | server table `items-length` | direct API | `total_count`, `start_index`, `onRangeChange` | use contiguous fixed-height windows |
@@ -102,7 +105,7 @@ CDataGrid → div.cui-data-grid
 ```
 
 `CDataGrid` is the only public component. `CDataGridColumn`, `CDataGridRow`,
-`CDataGridCell`, and `CDataGridSort` are immutable input records, not component
+`CDataGridCell`, `CDataGridEditOption`, and `CDataGridSort` are immutable input records, not component
 children. Root `attrs` and table `table_attrs` are separate destinations.
 Column, row, and cell mappings cannot replace owned roles, positions, focus,
 sort/selection state, IDs, keys, or part markers.
@@ -122,7 +125,7 @@ row, and column indices; stable keys preserve logical identity.
 | `label` | nonempty `str` | required accessible name |
 | `id` | `str | None` | stable identity; generated by default |
 | `state` | `ready | loading | error = ready` | body/state output |
-| `sort` | `Sequence[CDataGridSort] = ()` | server-authoritative sort model |
+| `sort` | `Sequence[CDataGridSort] = ()` | initial server-authored sort model |
 | `multi_sort` | `bool = True` | Shift-click/Shift+Enter model extension |
 | `selection` | `none | single | multiple = none` | row selection mode |
 | `selected` | `Sequence[str] = ()` | initial selected keys |
@@ -142,9 +145,10 @@ Record inputs are also public and checked eagerly:
 
 | Record | Fields and constraints |
 |---|---|
-| `CDataGridColumn` | unique nonempty `key`; nonempty application-localized `label`; `sortable`; `width` from 40 through 2000 CSS pixels; logical `align`; allowed `header_attrs` and `cell_attrs` |
+| `CDataGridColumn` | unique nonempty `key`; nonempty application-localized `label`; sorting/layout fields; `editable`; `text`, `number`, `checkbox`, or `select` editor; checked `editor_attrs`; unique named `editor_options` for select |
 | `CDataGridRow` | unique nonempty `key`; exact string-keyed Cell mapping for every Column; `disabled`; allowed Row `attrs` |
-| `CDataGridCell` | escaped or component-like `value`; allowed Cell `attrs` merged after Column Cell attributes |
+| `CDataGridCell` | escaped or component-like `value`; allowed Cell `attrs`; optional per-Cell `editable` override |
+| `CDataGridEditOption` | unique nonempty string `value`; nonempty application-localized `label`; `disabled` |
 | `CDataGridSort` | unique known sortable Column `key`; `asc` or `desc` direction |
 
 Client `$c-props`:
@@ -159,10 +163,19 @@ Client `$c-props`:
 | `onSelectionChange` | function | none | diagnose, retain | receives selection requests/commits |
 | `onRangeChange` | function | none | diagnose, retain | receives uncovered range requests |
 | `onCellActivate` | function | none | diagnose, retain | receives Enter/double-click activation |
+| `onCellEditStart` | function | none | diagnose, retain | receives entry into an owned editor |
+| `onCellEditCommit` | function | none | diagnose, retain | receives a changed typed value; synchronous `False` rejects |
+| `onCellEditCancel` | function | none | diagnose, retain | receives Escape or disabled cancellation |
 
-Server and valid client models remain isolated per instance. Sort is always
-request/accept because the component does not compare application values.
-Selection is uncontrolled unless a non-null client `selected` is supplied.
+Server and valid client models remain isolated per instance. Sort is
+request/accept. When a complete collection accepts the exact model requested by
+a Header action, the browser orders Rows by normalized rendered Cell text with
+an `Intl.Collator` configured for the active locale, numeric comparison, and
+base sensitivity. Sort entries compare in model priority order and server DOM
+order breaks ties. Initial or unrelated programmatic models retain the
+server-authored Row order. A partial server window never sorts only its loaded
+subset; its owner replaces the range. Selection is uncontrolled unless a
+non-null client `selected` is supplied.
 
 ## 5. State model
 
@@ -174,7 +187,10 @@ while retaining current rows.
 
 Sort activation cycles `none → asc → desc → none`. Without Shift, the request
 contains only the activated column. With Shift and `multi_sort=True`, it
-updates that column in the ordered existing model. It never reorders DOM rows.
+updates that column in the ordered existing model. Accepting that exact request
+reorders complete supplied Rows and rewrites their visual/ARIA Row positions;
+clearing the model restores server order. Locale changes repeat a locally
+accepted comparison. Server windows wait for authoritative replacement.
 
 Selection modes:
 
@@ -182,8 +198,32 @@ Selection modes:
 - `single`: one enabled row or none;
 - `multiple`: independent toggles plus loaded-range Shift selection.
 
+In multiple mode, primary-mouse drag is also a loaded-range gesture. Starting
+on an unselected Row adds every enabled supplied Row crossed by the drag;
+starting on a selected Row removes that range. Pointer capture keeps the
+gesture coherent, the trailing click is suppressed, and disabled Rows are
+skipped. Touch and pen input keep native viewport scrolling in this first pass.
+Shift+Space is an independent keyboard toggle: it selects an unselected focused
+Row and unselects a selected focused Row.
+
 Disabled rows cannot be selected or activated. Disabled grid state blocks all
 owned interactions but retains current selection and readable content.
+
+Each editable Cell resolves its editor from the Column and an optional Cell
+eligibility override. Text and select values are strings, number values are
+finite Python integers or floats and become browser numbers, and checkbox
+values are booleans. Select values must match one named option. Checked
+`editor_attrs` support ordinary native constraints without allowing identity,
+events, form ownership, or runtime markers.
+
+Only one Cell edits at a time. Enter, F2, double-click, a printable key, Delete,
+or Backspace starts an applicable editor. Enter or F2 submits, Escape cancels,
+Tab submits and moves to the adjacent Cell, and an outside pointer submits.
+Arrow keys belong to the native editor while editing. A synchronous `False`
+from `onCellEditCommit` or a callback exception marks the editor invalid and
+keeps it open. A valid commit closes the editor and reports a typed string,
+number, or boolean, but never rewrites the Row. A server rerender is the only
+acceptance path for application data.
 
 ## 6. Slots and slot data
 
@@ -198,22 +238,28 @@ owned interactions but retains current selection and readable content.
 | `error` | no | `{}` | localized error label |
 
 Generic slots avoid promising an unproven dynamic `cell.<key>` namespace.
-Header and cell slot output must not contain focusable or editable descendants
-in v1; client initialization rejects them because focus remains on cells.
+Header and cell slot output must not contain caller-authored focusable or
+editable descendants. Client initialization rejects them because the grid
+must distinguish navigation mode from its one runtime-owned editor.
 
 ## 7. Callbacks, native events, and methods
 
 | Callback | Arguments | Trigger and timing |
 |---|---|---|
 | `onSortChange` | `(sort, detail)` | request-only after sortable header click or Enter |
-| `onSelectionChange` | `(selected, detail)` | after uncontrolled commit or before controlled acceptance |
+| `onSelectionChange` | `(selected, detail)` | after click, Shift range, Shift+Space, or mouse-drag uncontrolled commit; before controlled acceptance |
 | `onRangeChange` | `(detail)` | animation-frame-coalesced uncovered desired range |
-| `onCellActivate` | `(detail)` | Enter or double-click on an enabled body cell |
+| `onCellActivate` | `(detail)` | Enter or double-click on an enabled noneditable body Cell |
+| `onCellEditStart` | `(detail)` | an editable Cell enters edit mode |
+| `onCellEditCommit` | `(value, detail)` | a valid changed value is submitted; `False` rejects and keeps editing |
+| `onCellEditCancel` | `(detail)` | Escape or reactive disabling restores server Cell content |
 
 Details include stable row/column keys, previous values, source, controlled
 flag, source event, and monotonic request ID where applicable. Failures are
 isolated and logged. No custom DOM events or public imperative methods ship.
-Native pointer, keydown, focus, and scroll events remain available through
+Edit commits are request-only. The grid closes a valid accepted editor but
+does not mutate the server-authored Row value. The owner applies the callback
+value and rerenders. Native pointer, keydown, focus, and scroll events remain available through
 ordinary Alpine listeners on consumer wrappers.
 
 ## 8. Semantics, keyboard, focus, and assistive technology
@@ -233,7 +279,13 @@ expose `aria-selected`. Only one navigable header/cell has `tabindex=0`.
 | sortable header | Shift+Enter/Shift+click | multi-sort request when enabled |
 | selectable row cell | Shift+Space | toggle current row |
 | multiple selection cell | Shift+click | select loaded enabled range from anchor |
-| enabled body cell | Enter/double-click | cell activation callback |
+| multiple selection cell | primary-mouse drag | add or remove the crossed loaded enabled range according to the starting Row state |
+| editable body Cell | Enter / F2 / double-click | replace view content with its owned native editor |
+| editable text/number Cell | printable key / Backspace / Delete | enter editing with the typed character or cleared value |
+| active editor | Enter / F2 | submit a valid value and restore Grid navigation |
+| active editor | Escape | cancel and restore server-rendered content |
+| active editor | Tab / Shift+Tab | submit and move to the adjacent rendered Cell |
+| enabled noneditable body Cell | Enter/double-click | Cell activation callback |
 | grid | Tab / Shift+Tab | enter at retained active cell, then leave composite |
 
 When a requested range is not supplied, focus stays on the nearest retained
@@ -244,10 +296,11 @@ virtualized ARIA grids are high risk.
 
 ## 9. Native forms and validation
 
-The family is not a form control. Row selection is application state and does
+The family is not a form control. Row selection and edit drafts are application state and do
 not submit hidden inputs, claim required validity, or intercept form reset.
 Applications that submit selected keys create their own inputs or controlled
-form field. Slots cannot contain form controls in v1.
+form field. Runtime editors have no `name` or `form`; the owner decides whether
+an accepted callback becomes form state. Slots cannot contain form controls.
 
 ## 10. Styling and theme contract
 
@@ -270,12 +323,12 @@ Public variables are:
 | `--cui-data-grid-radius` | length | viewport corners | 0.625rem |
 
 Stable parts are `data-grid`, `toolbar`, `viewport`, `table`, `caption`,
-`header`, `header-row`, `header-cell`, `sort-indicator`, `body`, `row`, `cell`,
+`header`, `header-row`, `header-cell`, `sort-indicator`, `body`, `row`, `cell`, `editor`,
 `spacer-row`, `state-row`, `loading`, `empty`, `error`, and `status`.
 
 Public reflected attributes are `data-state`, `data-density`, `data-striped`,
 `data-column-borders`, `data-sticky-header`, `data-selection`, `data-disabled`,
-`data-pending`, `data-selected`, `data-row-key`, `data-column-key`,
+`data-pending`, `data-selecting`, `data-editable`, `data-editing`, `data-editor`, `data-selected`, `data-row-key`, `data-column-key`,
 `data-row-index`, `data-column-index`, `data-align`, `data-sort`,
 `data-sort-priority`, `aria-busy`, `aria-disabled`,
 `aria-selected`, `aria-sort`, `aria-rowcount`, `aria-colcount`,
@@ -294,12 +347,15 @@ prints only supplied rows; a window cannot print unloaded rows.
 
 Application cell content retains its own language and direction. Column labels
 are application-localized. Library status, sort announcements, and selection
-announcements use Citry UI messages. No locale-sensitive client sorting occurs.
+announcements use Citry UI messages. Accepted complete-collection sorting uses
+the active client locale and numeric collation; applications needing domain
+ordering settle the request with a server render instead.
 
 ## 12. Overlay and layering behavior
 
-The family creates no overlay, column menu, editor, tooltip, or top-layer
-surface. Applications place external filters and actions in the toolbar slot.
+The family creates no overlay, column menu, tooltip, or top-layer surface.
+An active editor stays inside its Cell. Applications place external filters
+and actions in the toolbar slot.
 
 ## 13. Collections, async data, and identity
 
@@ -323,44 +379,53 @@ needs explicit include/exclude rules like mature server grids.
 
 Without JavaScript, the native table remains readable, sortable headers are
 not falsely interactive, and supplied range spacers preserve geometry. After
-activation, one delegated keydown, click, double-click, focus, and scroll path
-owns interaction. Repeated initialization is idempotent.
+activation, delegated keydown, click, double-click, focus, pointer, and scroll
+paths own interaction. An editor is created only for an active edit and its
+server-rendered child nodes are retained for exact cancellation. Repeated
+initialization is idempotent.
 
 A compatible replacement retains scroll position, active logical row/column,
-uncontrolled selection for surviving keys, and pending desired range. A hard
-replacement starts from server inputs. Cleanup cancels animation frames and
-timers, removes listeners/effects/markers, and prevents callbacks after
+uncontrolled selection for surviving keys, and pending desired range. Active
+editing is cancelled before replacement because Row data remains authoritative.
+A hard replacement starts from server inputs. Cleanup cancels animation frames and
+timers, restores retained Cell nodes, releases any pointer-selection state, removes listeners/effects/markers, and prevents callbacks after
 removal.
 
 ## 15. Security and content trust
 
 Labels and values use ordinary escaped Citry output. Slot output is trusted
 component composition but is checked for unsupported focusable descendants.
-No `innerHTML`, eval, client template generation, URL parsing, clipboard, or
-remote fetch occurs. Attribute maps reject owned semantics, identity,
+No `innerHTML`, eval, URL parsing, clipboard, or remote fetch occurs. Editors
+are created with DOM APIs. Select option labels use `textContent`, and
+editor attributes pass a kind-specific allowlist. Attribute maps reject owned semantics, identity,
 runtime markers, event directives, and dynamic bindings to owned targets.
 
 ## 16. Assets and performance
 
 The family adds one CSS asset and one component JavaScript asset. Runtime work
 is linear in supplied rows times columns. One instance owns delegated event
-listeners, at most one resize observer for viewport geometry, and one pending
-animation frame. It never clones cell content. Fixed windowing bounds row DOM;
+listeners, one document pointer listener, at most one resize observer for
+viewport geometry, one pending animation frame, and at most one native editor.
+It never clones Cell content. Fixed windowing bounds row DOM;
 column virtualization is deferred because it complicates keyboard and browser
 find behavior.
 
-Do not raise package asset ceilings for this family. Measure raw, gzip, and
-Brotli deltas and report them in batch reconciliation.
+Do not raise package asset ceilings for this family in isolation. Measure raw,
+gzip, and Brotli deltas and report them in batch reconciliation. The approved
+six-family plus Data Grid editing expansion rebaselines the complete-catalog
+ceiling once, in proportion to the catalog growth; narrow route budgets do not
+change.
 
 ## 17. Acceptance matrix
 
 | Area | Required evidence |
 |---|---|
 | schema/render | exact records, keys, mappings, positions, complete/windowed geometry, states, attrs ownership |
-| keyboard/focus | all APG navigation keys, one Tab stop, sort activation, selection, disabled rows, focus after range replacement |
-| models | sort request/accept, controlled selection rejection/acceptance, uncontrolled commit, invalid clients |
+| keyboard/focus | all APG navigation keys, one Tab stop, sort activation, Shift+Space select and unselect, mouse drag add and remove ranges, edit entry/commit/cancel/Tab transitions, disabled rows, focus after range replacement |
+| models | sort request/rejection/acceptance, complete Row reorder and clear restore, multi-sort priority, window non-reorder, controlled selection rejection/acceptance, uncontrolled commit, invalid clients |
 | async/window | desired ranges, pending state, request coalescing/IDs, edge clamping, cleanup |
-| i18n | all default/override paths, sort/selection announcements, live locale switching, no binding on caller text |
+| editing | text, number, checkbox, select options, Cell override, native constraints, synchronous rejection, callback failure, request-only Row ownership, outside pointer, cleanup |
+| i18n | all default/override paths, sort/selection/edit announcements, live locale switching, no binding on caller text or option labels |
 | environment | RTL, narrow overflow, fixed rows, forced colors, reduced motion, zoom/text growth, print |
 | quality | structured docs, six snippets, standalone scenario, axe, three browsers, asset evidence |
 
@@ -378,10 +443,14 @@ request scheduling, and class names remain implementation details.
 ## 19. Public documentation contract
 
 The guide teaches: choosing Table versus DataGrid; complete grid; sorting and
-selection; controlled models; server windowing; keyboard/accessibility;
-states; customization; and deferred editing/filtering. Planned snippets are
+selection; controlled models; server windowing; inline editing;
+keyboard/accessibility; states; customization; and deferred filtering. Planned snippets are
 `at_a_glance.py`, `sorting_selection.py`, `controlled.py`, `windowed.py`,
-`states.py`, `accessibility.py`, and `customization.py`.
+`editing.py`, `states.py`, `accessibility.py`, and `customization.py`.
+
+The static window preview uses one self-contained range with no omitted leading
+or trailing Rows. Partial-range spacer and replacement behavior remains covered
+by browser tests, where the test owner can observe and settle requests.
 
 The structured API ends with Translation keys and lists every family key.
 The quality scenario covers ready, selection, sorting, complete/windowed,
@@ -389,7 +458,8 @@ loading, empty, error, narrow, RTL, long content, and cleanup.
 
 ## 20. Open decisions and deferred work
 
-Inline editing, arbitrary focusable cell widgets, built-in filters, pagination
+Row editing, arbitrary custom editors or focusable Cell widgets, async
+validation, built-in filters, pagination
 footer, remote all-selection, resize/reorder/pin/hide columns, grouping,
 aggregation, pivoting, row details/tree data, export, clipboard mutation, and
 column virtualization are deferred. Each changes focus, data, async, or
@@ -398,10 +468,13 @@ selection ownership and requires its own evidence. None blocks the first pass.
 ## 21. Internationalization
 
 `CDataGrid.I18n.messages_locale` is `en-US`. The final class member owns
-loading, empty, error, ascending-sort, descending-sort, cleared-sort,
-one-row-selected, and multiple-rows-selected messages. Initial state DOM uses
+loading, empty, error, sorting, selection, editor naming, edit entry,
+submission, cancellation, and invalid-value messages. Initial state DOM uses
 server `tr()`. Stable state text uses `$c-tr`; browser sort and selection
-announcements use one-shot `i18n.tr()` with application-localized column labels
-and string counts. Explicit label overrides remain caller-owned and do not
-register catalog bindings. The grid never compares, folds, formats, parses, or
-sorts application data in the browser.
+announcements and runtime editor names use one-shot `i18n.tr()` with
+application-localized Column labels and string counts. Explicit label
+overrides remain caller-owned and do not
+register catalog bindings. After an accepted complete-collection Header
+request, the grid compares rendered Cell text with locale-aware numeric
+collation. It still does not parse or format application values, and it never
+sorts an incomplete server window.

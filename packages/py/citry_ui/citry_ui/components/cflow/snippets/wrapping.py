@@ -12,21 +12,21 @@ class GroupWrapping(Component):
         pass
 
     template = """
-      <section class="flow-wrapping" aria-label="Group wrapping">
-        <c-CStack gap="xs">
+      <section class="flow-wrapping" aria-label="Row wrapping">
+        <c-CCol gap="xs">
           <strong>Wraps by default</strong>
-          <c-CGroup class_="flow-wrapping__group">
+          <c-CRow class_="flow-wrapping__group">
             <c-for each="label in labels"><span>{{ label }}</span></c-for>
-          </c-CGroup>
-        </c-CStack>
-        <c-CStack gap="xs">
+          </c-CRow>
+        </c-CCol>
+        <c-CCol gap="xs">
           <strong>No wrap</strong>
           <div class="flow-wrapping__scroll">
-            <c-CGroup c-wrap="False" class_="flow-wrapping__group">
+            <c-CRow c-wrap="False" class_="flow-wrapping__group">
               <c-for each="label in labels"><span>{{ label }}</span></c-for>
-            </c-CGroup>
+            </c-CRow>
           </div>
-        </c-CStack>
+        </c-CCol>
       </section>
     """
 

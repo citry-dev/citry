@@ -9,7 +9,7 @@ import pytest
 
 import citry_ui
 from citry import Citry, Component, ComponentLike
-from citry_ui import CDataGrid, CDataGridCell, CDataGridColumn, CDataGridRow, CDataGridSort
+from citry_ui import CDataGrid, CDataGridCell, CDataGridColumn, CDataGridEditOption, CDataGridRow, CDataGridSort
 
 
 def _render(component: ComponentLike) -> str:
@@ -72,6 +72,11 @@ def test_public_schema_and_registration_are_explicit():
         "sort_cleared_label",
         "selected_one_label",
         "selected_label",
+        "edit_label",
+        "editing_label",
+        "edit_submitted_label",
+        "edit_cancelled_label",
+        "edit_invalid_label",
         "class_",
         "style",
         "attrs",
@@ -127,6 +132,51 @@ def test_sort_selection_and_cell_records_render_exact_accepted_state():
     assert 'data-cell="name"' in html
 
 
+def test_editable_columns_render_checked_editor_descriptors() -> None:
+    columns = (
+        CDataGridColumn("name", "Name", editable=True, editor_attrs={"maxlength": 40}),
+        CDataGridColumn(
+            "role",
+            "Role",
+            editable=True,
+            editor="select",
+            editor_options=(CDataGridEditOption("engineer", "Engineer"), CDataGridEditOption("lead", "Lead")),
+        ),
+        CDataGridColumn("active", "Active", editable=True, editor="checkbox"),
+    )
+    html = _render(
+        CDataGrid(
+            columns=columns,
+            rows=(CDataGridRow("ada", {"name": "Ada", "role": "engineer", "active": True}),),
+            label="People",
+        )
+    )
+    assert html.count("data-editable") >= 4
+    assert 'data-editor="select"' in html
+    assert 'data-editor="checkbox"' in html
+    assert CDataGridEditOption("lead", "Lead") in columns[1].editor_options
+    assert columns[0].editor_attrs == {"maxlength": 40}
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        (CDataGridColumn("x", "X", editable=True, editor="select"), "x", "requires editor_options"),
+        (CDataGridColumn("x", "X", editable=True, editor="number"), "not-number", "must contain an int or float"),
+        (CDataGridColumn("x", "X", editable=True, editor="checkbox"), "yes", "must contain a bool"),
+        (
+            CDataGridColumn("x", "X", editable=True, editor="select", editor_options=(CDataGridEditOption("a", "A"),)),
+            "b",
+            "not an editor option",
+        ),
+        (CDataGridColumn("x", "X", editable=True, editor_attrs={"onclick": "bad"}), "x", "cannot contain"),
+    ],
+)
+def test_invalid_editor_configuration_fails_early(column: CDataGridColumn, value: object, message: str) -> None:
+    with pytest.raises((TypeError, ValueError), match=message):
+        _render(CDataGrid(columns=(column,), rows=(CDataGridRow("row", {"x": value}),), label="Grid"))
+
+
 def test_window_geometry_uses_logical_counts_indices_and_spacers():
     html = _render(
         CDataGrid(
@@ -148,6 +198,9 @@ def test_window_geometry_uses_logical_counts_indices_and_spacers():
     assert "height: 3520px" in html
     assert "--cui-data-grid-row-height: 40px" in html
     assert "--cui-data-grid-viewport-size: 320px" in html
+
+    self_contained = _render(CDataGrid(columns=_columns(), rows=_rows(), label="People", total_count=2))
+    assert 'data-citry-ui-part="spacer-row"' not in self_contained
 
 
 @pytest.mark.parametrize(
@@ -246,12 +299,22 @@ def test_runtime_declares_models_navigation_i18n_range_requests_and_cleanup():
     assert "onSelectionChange: {}" in source
     assert "onRangeChange: {}" in source
     assert "onCellActivate: {}" in source
+    assert "onCellEditCommit: {}" in source
+    assert "startEdit" in source
+    assert "commitEdit" in source
     assert "getComputedStyle(table).direction === 'rtl'" in source
     assert "new ResizeObserver" in source
     assert "requestAnimationFrame" in source
     assert "citry-ui-data-grid-sort-ascending" in source
     assert "pendingSelection" in source
     assert "pendingSort" in source
+    assert "reorderCompleteRows" in source
+    assert "new Intl.Collator" in source
+    assert "acceptedPending" in source
+    assert "pointerSelection" in source
+    assert "data-selecting" in source
+    assert "event.pointerType !== 'mouse'" in source
+    assert "source !== 'keyboard'" in source
     assert "removeEventListener('keydown'" in source
     assert "data-citry-data-grid-initialized" in source
 
@@ -267,6 +330,11 @@ def test_messages_are_final_component_member_and_cover_every_library_output():
         "citry-ui-data-grid-sort-cleared",
         "citry-ui-data-grid-selected-one",
         "citry-ui-data-grid-selected",
+        "citry-ui-data-grid-edit",
+        "citry-ui-data-grid-editing",
+        "citry-ui-data-grid-edit-submitted",
+        "citry-ui-data-grid-edit-cancelled",
+        "citry-ui-data-grid-edit-invalid",
     }
     members = list(CDataGrid.__dict__)
     assert members.index("messages") > members.index("css_file")

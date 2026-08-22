@@ -256,8 +256,11 @@ def test_shared_helpers_transfer_shadow_focus_and_prepare_modal_in_order(page: A
           nativeFirst.setOpen(true, source);
           const nativeSecond = dialogs.create(nativeOwned.options);
           nativeFirst.cleanup();
+          const nativeCloseObserved = new Promise(resolve => {
+            nativeOwned.dialog.addEventListener('close', resolve, {once: true});
+          });
           nativeOwned.dialog.close('external');
-          await new Promise(resolve => setTimeout(resolve, 0));
+          await nativeCloseObserved;
           const retainedDirectNativeClose = !nativeOwned.dialog.open
             && !nativeSecond.isOpen()
             && JSON.stringify(nativeCloses) === JSON.stringify([['native', 'external']]);
@@ -359,7 +362,7 @@ def test_shared_helpers_transfer_shadow_focus_and_prepare_modal_in_order(page: A
         "activeStaleCleanupPreserved": True,
         "modalPrepared": True,
         "modalCount": 0,
-    }
+    }, result
 
 
 def test_controlled_open_query_decline_accept_and_close_reset(page: Any) -> None:

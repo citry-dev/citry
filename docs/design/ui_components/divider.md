@@ -194,7 +194,7 @@ HTML, including any independently owned form controls.
 
 Sizes map to fallback line thickness: `sm` 1px, `md` 2px, and `lg` 4px.
 Variants map to solid, dashed, or dotted border style. Divider adds no external
-block margin; surrounding `CStack`, `CGroup`, or application layout owns
+block margin; surrounding `CCol`, `CRow`, or application layout owns
 spacing.
 
 | Public variable | Value type | Purpose | Current default |

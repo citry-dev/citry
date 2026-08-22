@@ -1040,7 +1040,6 @@ class CCommandPalette(LibraryComponent):
     """
 
     js = r"""
-      /* citry-ui:command-palette-attribution:initializer:begin */
       const readyAttribute = "data-citry-command-palette-initialized";
       const ownerKey = Symbol.for("citry-ui:command-palette-owner");
       const handoffKey = Symbol.for("citry-ui:command-palette-handoff");
@@ -2078,11 +2077,9 @@ class CCommandPalette(LibraryComponent):
           return () => teardown(false);
         },
       });
-      /* citry-ui:command-palette-attribution:initializer:end */
     """
 
     css = """
-      /* citry-ui:command-palette-attribution:css:begin */
       @layer citry-ui.theme {
         :where(.cui-command-palette-host) {
           display: contents;
@@ -2404,7 +2401,6 @@ class CCommandPalette(LibraryComponent):
           display: none !important;
         }
       }
-      /* citry-ui:command-palette-attribution:css:end */
     """
 
     messages = """

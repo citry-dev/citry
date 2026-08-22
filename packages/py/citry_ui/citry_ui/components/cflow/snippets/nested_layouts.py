@@ -21,20 +21,20 @@ class NestedFlowLayouts(Component):
         pass
 
     template = """
-      <c-CStack class_="flow-nested" gap="lg">
+      <c-CCol class_="flow-nested" gap="lg">
         <c-for each="batch in batches">
-          <c-CGroup justify="between" class_="flow-nested__row">
-            <c-CStack gap="0">
+          <c-CRow justify="between" class_="flow-nested__row">
+            <c-CCol gap="0">
               <strong>{{ batch.name }}</strong>
               <span>{{ batch.clay }}</span>
-            </c-CStack>
-            <c-CGroup gap="xs">
+            </c-CCol>
+            <c-CRow gap="xs">
               <span class="flow-nested__cone">{{ batch.cone }}</span>
               <c-CButton size="sm" variant="outline">Open log</c-CButton>
-            </c-CGroup>
-          </c-CGroup>
+            </c-CRow>
+          </c-CRow>
         </c-for>
-      </c-CStack>
+      </c-CCol>
     """
 
     def template_data(

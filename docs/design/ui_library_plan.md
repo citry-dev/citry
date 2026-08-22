@@ -1,17 +1,17 @@
 # Plan: the Citry UI component library
 
-**Status (2026-08-21): `citry-ui` 0.1.0 is publicly available as an early-access
-release. The source-development catalog contains 71 documented component
-families and 137 registered definitions, including compound-family
-declarations and private renderers; its contracts remain alpha rather than
-stable.**
+**Status (2026-08-22): `citry-ui` 0.1.0 remains publicly available, while the
+source-development line targets the 0.2.0 early-access release. The current
+catalog contains 77 documented component families and 156 registered
+definitions, including compound-family declarations and private renderers;
+its contracts remain alpha rather than stable.**
 
 Phases 0 through 6 are complete. Citry's generic publishing contracts, slot
 contracts, client ambient context, and docs live-component host are
 implemented. Phase 7 began on the released `citry 0.3.1` and `citry_core
 1.4.0` floor. The released 0.1.0 line uses the published `citry 0.4.0` and
-`citry_core 1.5.0` floor. Current source development requires `citry 0.4.2`
-for component-owned source messages and checked browser translation bindings.
+`citry_core 1.5.0` floor. The 0.2.0 source line requires `citry 0.4.2` for
+component-owned source messages and checked browser translation bindings.
 The
 [active component inventory](ui_component_inventory.md) owns current family
 status. Counts and family lists inside the chronological phase records below
@@ -1180,6 +1180,15 @@ implementation, documentation, and focused browser evidence against the core
 i18n contracts. Each family ratified its own browser editing, stepping,
 calendar, direction, and server/browser agreement; generic browser temporal
 parsing was not used as an entry gate.
+
+The subsequent collection and data batch added Sortable, Repeatable Form
+Collection, Infinite Scroll, Cascader, TreeGrid, and ColorPicker as six
+independently documented families. The same pass extended `CDataGrid` with
+checked text, number, checkbox, and select Cell editors rather than introducing
+a second grid component. Each family owns its public API schema, translation
+inventory, examples, quality scenario, focused server evidence, and browser
+evidence. The approved catalog expansion is reflected in the package-wide
+asset snapshot while narrow route budgets remain unchanged.
 
 ## 5. Evaluation rubric
 

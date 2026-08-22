@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry-ui"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.10, <4.0"
 description = "First-party styled component library for Citry"
 readme = "README.md"

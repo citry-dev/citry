@@ -511,9 +511,9 @@ standalone naming, empty names, and malformed IDs; hostile Markup in the value,
 name, and placeholder paths; static numeric attributes and a
 `Const(Markup)` value; rejected non-string `__html__`; leading-newline values;
 root attrs, class/style merging, reserved attrs, native attribute forwarding;
-no slots; reflected attributes; zero wrappers; Python composition; and the
-exact asset set. Exhaustive safe-string-subclass and `Const` coverage across
-every named direct input remains release qualification.
+no slots; reflected attributes; zero wrappers; Python composition; and
+family/catalog asset budgets. Exhaustive safe-string-subclass and `Const`
+coverage across every named direct input remains release qualification.
 
 Checked-in focused browser tests cover:
 

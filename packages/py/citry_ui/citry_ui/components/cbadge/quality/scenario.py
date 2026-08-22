@@ -29,11 +29,11 @@ def badge_states_component(app: Citry) -> type[Component]:
                 </c-for>
               </c-for>
             </div>
-            <c-CGroup align="baseline">
+            <c-CRow align="baseline">
               <c-for each="size in sizes">
                 <c-CBadge c-size="size" shape="pill">{{ size }} · 12</c-CBadge>
               </c-for>
-            </c-CGroup>
+            </c-CRow>
             <c-CBadge intent="success">
               <c-fill name="start"><c-CIcon name="check" /></c-fill>
               <c-fill name="default">Verified specimen</c-fill>

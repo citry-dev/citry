@@ -14,7 +14,7 @@ class DisclosureOverlaysAndDialogs(Component):
         <c-CDisclosure open>
           <c-fill name="title">Credential help</c-fill>
           <c-fill name="default">
-            <c-CStack gap="sm" align="start">
+            <c-CCol gap="sm" align="start">
               <p>Review token scope before rotating a credential.</p>
               <c-CPopover>
                 <c-fill name="activator" data="{ activator_attrs }">
@@ -28,7 +28,7 @@ class DisclosureOverlaysAndDialogs(Component):
                 class="disclosure-overlay-demo__dialog-trigger"
                 data-open-credential-dialog
               >Rotate credential</button>
-            </c-CStack>
+            </c-CCol>
           </c-fill>
         </c-CDisclosure>
 

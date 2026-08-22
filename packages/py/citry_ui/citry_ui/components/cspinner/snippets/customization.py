@@ -6,11 +6,11 @@ citry.register_library(citry_ui)
 
 class SpinnerCustomization(Component):
     template = """
-      <c-CGroup class_="spinner-custom" gap="lg">
+      <c-CRow class_="spinner-custom" gap="lg">
         <div class="spinner-custom__violet"><c-CSpinner label="Violet observatory task" /></div>
         <div class="spinner-custom__solar"><c-CSpinner label="Solar observatory task" /></div>
         <div class="spinner-custom__ice"><c-CSpinner label="Ice observatory task" /></div>
-      </c-CGroup>
+      </c-CRow>
     """
     css = """
       :where(.spinner-custom > div) {

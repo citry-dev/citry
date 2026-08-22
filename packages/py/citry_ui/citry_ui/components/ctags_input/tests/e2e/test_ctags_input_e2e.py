@@ -286,7 +286,7 @@ def test_controlled_remove_announces_only_after_exact_owner_acceptance(page) -> 
     page.wait_for_function("() => document.querySelector('#controlled-native').selectedOptions.length === 0")
     page.wait_for_function(
         """() => document.querySelector('.cui-tags-input:has(#controlled) [role=status]')
-          .textContent.includes('Removed alpha')"""
+          .textContent === 'Removed \u2068alpha\u2069'"""
     )
     assert errors == []
 
@@ -310,7 +310,7 @@ def test_atomic_paste_duplicate_max_and_delimiter_restore(page) -> None:
     page.wait_for_function(
         "() => document.querySelector('.cui-tags-input:has(#uncontrolled) [role=status]').textContent"
     )
-    assert status.text_content().index("Added gamma") < status.text_content().index("Added delta")
+    assert status.text_content() == "Added \u2068gamma\u2069 Added \u2068delta\u2069"
 
     page.evaluate(
         """() => {

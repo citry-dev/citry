@@ -30,11 +30,11 @@ AXE_INCOMPLETE_DISPOSITIONS = {
         AxeIncompleteDisposition(
             rule="aria-valid-attr-value",
             reason=(
-                "Axe asks for manual confirmation when a Dialog activator's aria-controls target is hidden "
+                "Axe asks for manual confirmation when a closed overlay trigger's aria-controls target is hidden "
                 "in the initial state."
             ),
             automated_evidence=(
-                "Dialog browser tests assert that every activator references its rendered native dialog "
+                "Overlay browser tests assert that every trigger references its rendered dialog, listbox, or menu "
                 "before opening."
             ),
             manual_task="assistive-technology",

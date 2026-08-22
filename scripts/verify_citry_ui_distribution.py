@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry_ui"
 QUALIFIER: Final = PACKAGE_ROOT / "citry_ui" / "quality" / "qualify_wheel.py"
-MAX_SDIST_BYTES: Final = 700 * 1024
+MAX_SDIST_BYTES: Final = 768 * 1024
 EXPECTED_REQUIRES_DIST: Final = {"citry<0.5.0,>=0.4.2"}
 
 
@@ -424,7 +424,7 @@ from citry.ext.i18n import make_context
 
 assert importlib.metadata.version("citry-ui") == "__VERSION__"
 assert citry_ui.__version__ == "__VERSION__"
-assert len(citry_ui.COMPONENTS) == 137
+assert len(citry_ui.COMPONENTS) == 156
 assert importlib.resources.files("citry_ui").joinpath("py.typed").is_file()
 assert importlib.util.find_spec("citry_ui.quality") is None
 assert importlib.util.find_spec("citry_ui.components.ctabs.tests") is None

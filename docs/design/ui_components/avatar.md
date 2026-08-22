@@ -22,7 +22,7 @@ profile menu, badge positioner, or grouped-avatar collection.
 | Choose geometry | `size="lg" shape="rounded"` | direct API |
 | Style the fallback | `variant="solid"` and public variables | direct API and CSS |
 | Add status or count | compose `CBadge` in a consumer wrapper | composition |
-| Show overlapping identities | `CGroup` plus application CSS | composition; AvatarGroup deferred |
+| Show overlapping identities | `CRow` plus application CSS | composition; AvatarGroup deferred |
 
 Python composition uses the same inputs through `CAvatar(...)`.
 

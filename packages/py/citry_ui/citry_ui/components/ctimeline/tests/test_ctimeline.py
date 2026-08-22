@@ -82,6 +82,9 @@ def test_slots_render_with_settled_slot_data_and_decorative_indicator():
         "</c-CTimelineItem></c-CTimeline>"
     )
     assert re.search(r'data-citry-ui-part="opposite">0:end:True:True</div>', html)
+    root = re.search(r'<ol[^>]+data-citry-ui-part="timeline"[^>]*>', html)
+    assert root is not None
+    assert "data-has-opposite" in root.group(0)
     assert re.search(r'data-citry-ui-part="indicator">\s*I0', html)
     assert re.search(r'data-citry-ui-part="content">current</div>', html)
 
@@ -171,6 +174,8 @@ def test_owned_or_replacing_attrs_fail(source: str):
 
 def test_css_uses_public_variable_private_fallbacks_and_environment_rules():
     css = read_component_source_css("ctimeline")
+    assert "[data-has-opposite]" in css
+    assert "grid-template-rows: subgrid" in css
     for public in (
         "--cui-timeline-gap",
         "--cui-timeline-indicator-size",

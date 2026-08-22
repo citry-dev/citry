@@ -6,16 +6,16 @@ citry.register_library(citry_ui)
 
 class FlowSemanticRoots(Component):
     template = """
-      <c-CStack class_="flow-semantics" gap="lg">
-        <c-CGroup tag="nav" c-attrs="{'aria-label': 'Ceramics notebook'}">
+      <c-CCol class_="flow-semantics" gap="lg">
+        <c-CRow tag="nav" c-attrs="{'aria-label': 'Ceramics notebook'}">
           <a href="#clay">Clay</a><a href="#glaze">Glaze</a><a href="#kilns">Kilns</a>
-        </c-CGroup>
-        <c-CStack tag="ol" gap="sm" class_="flow-semantics__list">
+        </c-CRow>
+        <c-CCol tag="ol" gap="sm" class_="flow-semantics__list">
           <li>Wedge the porcelain.</li>
           <li>Center it on the wheel.</li>
           <li>Pull the walls evenly.</li>
-        </c-CStack>
-      </c-CStack>
+        </c-CCol>
+      </c-CCol>
     """
 
     css = """

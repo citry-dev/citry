@@ -80,6 +80,7 @@ attributes:
       - {id: data-variant, name: data-variant, element: Root landmark, type: {display: CSidebarVariant, interfaces: [CSidebarVariant]}, meaning: Mirrors surface treatment.}
       - {id: data-size, name: data-size, element: Root landmark, type: {display: CSidebarSize, interfaces: [CSidebarSize]}, meaning: Mirrors width profile.}
       - {id: data-sticky, name: data-sticky, element: Root landmark, type: present | absent, meaning: Marks sticky positioning.}
+      - {id: data-has-header, name: data-has-header, element: Root landmark, type: present | absent, meaning: Marks header anatomy so the header and toggle share the first Row.}
       - {id: aria-controls, name: aria-controls, element: Toggle Button, type: IDREF, meaning: Refers to the owned panel.}
       - {id: aria-expanded, name: aria-expanded, element: Toggle Button, type: boolean-string, meaning: Reflects expanded state.}
       - {id: data-citry-sidebar-expanded-only, name: data-citry-sidebar-expanded-only, element: Authored descendant, type: present | absent, meaning: Hides authored content in rail mode.}
@@ -93,7 +94,7 @@ selectors:
       - {id: toggle, selector: '[data-citry-ui-part="toggle"]', element: Native Button, purpose: Collapse control.}
       - {id: toggle-icon, selector: '[data-citry-ui-part="toggle-icon"]', element: Decorative span, purpose: Custom or fallback visual.}
       - {id: toggle-label, selector: '[data-citry-ui-part="toggle-label"]', element: Visually hidden span, purpose: Localized state-dependent accessible name.}
-      - {id: panel, selector: '[data-citry-ui-part="panel"]', element: Owned div, purpose: Visibility inertness and fixed/scroll region owner.}
+      - {id: panel, selector: '[data-citry-ui-part="panel"]', element: Owned div, purpose: Full-width clipped transition and fixed/scroll region owner.}
       - {id: header, selector: '[data-citry-ui-part="header"]', element: Optional header, purpose: Fixed branding and controls.}
       - {id: content, selector: '[data-citry-ui-part="content"]', element: Scrollable div, purpose: Primary authored Sidebar content.}
       - {id: footer, selector: '[data-citry-ui-part="footer"]', element: Optional footer, purpose: Fixed account status or actions.}

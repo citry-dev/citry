@@ -20,6 +20,7 @@ Put `{page}` in `href`. Server output then works before JavaScript and remains s
 ## Control the current page in the browser
 
 Omit `href` for Button controls. Client inputs are passed with `$c-props="{...}"`.
+Rebuilt Button ranges retain the server locale even without browser i18n; a client-enabled i18n provider also updates recreated labels when its locale changes.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cpagination/snippets/controlled.py" title="Control Pagination in the browser" />
 

@@ -6,17 +6,17 @@ citry.register_library(citry_ui)
 
 class BadgeSizesAndShapes(Component):
     template = """
-      <c-CStack class_="badge-sizes">
-        <c-CGroup align="baseline">
+      <c-CCol class_="badge-sizes">
+        <c-CRow align="baseline">
           <c-CBadge size="sm">Small</c-CBadge>
           <c-CBadge>Medium</c-CBadge>
           <c-CBadge size="lg">Large</c-CBadge>
-        </c-CGroup>
-        <c-CGroup>
+        </c-CRow>
+        <c-CRow>
           <c-CBadge shape="rounded" intent="success">Rounded</c-CBadge>
           <c-CBadge shape="pill" intent="success">Pill</c-CBadge>
-        </c-CGroup>
-      </c-CStack>
+        </c-CRow>
+      </c-CCol>
     """
     css = """
       :where(.badge-sizes) {

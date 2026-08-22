@@ -21,7 +21,9 @@ from citry_ui.components.cbutton_group.quality.scenario import button_group_stat
 from citry_ui.components.ccalendar.quality.scenario import calendar_states_component
 from citry_ui.components.ccard.quality.scenario import card_states_component
 from citry_ui.components.ccarousel.quality.scenario import carousel_states_component
+from citry_ui.components.ccascader.quality.scenario import cascader_states_component
 from citry_ui.components.ccheckbox.quality.scenario import checkbox_states_component
+from citry_ui.components.ccolor_picker.quality.scenario import color_picker_states_component
 from citry_ui.components.ccombobox.quality.scenario import combobox_states_component
 from citry_ui.components.ccommand_palette.quality.scenario import command_palette_states_component
 from citry_ui.components.ccontext_menu.quality.scenario import context_menu_states_component
@@ -38,10 +40,12 @@ from citry_ui.components.cfield.quality.scenario import field_input_states_compo
 from citry_ui.components.cfile_input.quality.scenario import file_input_states_component
 from citry_ui.components.cflow.quality.scenario import flow_states_component
 from citry_ui.components.cform.quality.scenario import form_states_component
+from citry_ui.components.cform_collection.quality.scenario import form_collection_states_component
 from citry_ui.components.cgrid.quality.scenario import grid_container_states_component
 from citry_ui.components.chover_card.quality.scenario import hover_card_states_component
 from citry_ui.components.cicon.quality.scenario import icon_states_component
 from citry_ui.components.cimage.quality.scenario import image_states_component
+from citry_ui.components.cinfinite_scroll.quality.scenario import infinite_scroll_states_component
 from citry_ui.components.clist.quality.scenario import list_states_component
 from citry_ui.components.clistbox.quality.scenario import listbox_states_component
 from citry_ui.components.cmenu.quality.scenario import menu_states_component
@@ -60,6 +64,7 @@ from citry_ui.components.cselect.quality.scenario import select_states_component
 from citry_ui.components.csidebar.quality.scenario import sidebar_states_component
 from citry_ui.components.cskeleton.quality.scenario import skeleton_states_component
 from citry_ui.components.cslider.quality.scenario import slider_states_component
+from citry_ui.components.csortable.quality.scenario import sortable_states_component
 from citry_ui.components.cspinner.quality.scenario import spinner_states_component
 from citry_ui.components.csplitbutton.quality.scenario import split_button_states_component
 from citry_ui.components.csplitter.quality.scenario import splitter_states_component
@@ -79,6 +84,7 @@ from citry_ui.components.ctooltip.quality.scenario import tooltip_states_compone
 from citry_ui.components.ctour.quality.scenario import tour_states_component
 from citry_ui.components.ctransfer_list.quality.scenario import transfer_list_states_component
 from citry_ui.components.ctree.quality.scenario import tree_states_component
+from citry_ui.components.ctree_grid.quality.scenario import tree_grid_states_component
 from citry_ui.components.cvirtual_list.quality.scenario import virtual_list_states_component
 from citry_ui.quality.compositions import (
     ledger_dashboard_component,
@@ -143,6 +149,12 @@ _SCENARIO_FACTORIES = {
     "data-grid.states": data_grid_states_component,
     "timeline.states": timeline_states_component,
     "transfer-list.states": transfer_list_states_component,
+    "form-collection.states": form_collection_states_component,
+    "sortable.states": sortable_states_component,
+    "infinite-scroll.states": infinite_scroll_states_component,
+    "cascader.states": cascader_states_component,
+    "tree-grid.states": tree_grid_states_component,
+    "color-picker.states": color_picker_states_component,
     "virtual-list.states": virtual_list_states_component,
     "tag.states": tag_states_component,
     "toolbar.states": toolbar_states_component,

@@ -472,11 +472,9 @@ Implemented and verified so far on 2026-07-30:
   `ctabs/snippets/` and projected through the docs live-code component. The
   block remains intentionally static until the published `citry-ui` package is
   present in the browser playground runtime; and
-- `CTabs` contributes 17,739 raw / 3,550 gzip / 3,082 Brotli bytes of JavaScript
-  and 6,370 raw / 1,244 gzip / 1,037 Brotli bytes of CSS in the development
-  source form. The complete production catalog contributes 10,805 Brotli
-  bytes of JavaScript and 4,458 Brotli bytes of CSS, inside the aggregate
-  Phase 7 limits.
+- the Tabs family and complete production catalog remain inside their aggregate
+  Phase 7 asset budgets; current measurements belong to the machine-generated
+  asset report rather than this design record.
 
 The remaining acceptance items in section 9 are not implied by this evidence.
 In particular, per-state axe, screenshots, complete-page Lighthouse, and the

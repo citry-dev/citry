@@ -39,6 +39,52 @@ citry-ui-editable-edit = Edit
 citry-ui-editable-save = Save
 citry-ui-editable-cancel = Cancel
 
+### citry_ui.components.cform_collection.cform_collection.CFormCollection
+citry-ui-form-collection-add = Add item
+# @param {str} $item - Application-localized Item label.
+citry-ui-form-collection-remove = Remove { $item }
+# @param {str} $item - Application-localized Item label.
+citry-ui-form-collection-move-up = Move { $item } up
+# @param {str} $item - Application-localized Item label.
+citry-ui-form-collection-move-down = Move { $item } down
+
+### citry_ui.components.cinfinite_scroll.cinfinite_scroll.CInfiniteScroll
+citry-ui-infinite-scroll-load-more = Load more
+citry-ui-infinite-scroll-retry = Try again
+citry-ui-infinite-scroll-loading = Loading more results
+citry-ui-infinite-scroll-error = More results could not be loaded
+citry-ui-infinite-scroll-end = No more results
+
+### citry_ui.components.ccascader.ccascader.CCascader
+citry-ui-cascader-placeholder = Choose an option
+citry-ui-cascader-empty = No options
+# @param {str} $path - Application-localized joined Option labels.
+citry-ui-cascader-selected = Selected { $path }
+
+### citry_ui.components.ctree_grid.ctree_grid.CTreeGrid
+# @param {str} $row - Application-localized Row label.
+citry-ui-tree-grid-expand = Expand { $row }
+# @param {str} $row - Application-localized Row label.
+citry-ui-tree-grid-collapse = Collapse { $row }
+# @param {str} $row - Application-localized Row label.
+citry-ui-tree-grid-expanded = Expanded { $row }
+# @param {str} $row - Application-localized Row label.
+citry-ui-tree-grid-collapsed = Collapsed { $row }
+# @param {str} $row - Application-localized Row label.
+citry-ui-tree-grid-selected = Selected { $row }
+# @param {str} $row - Application-localized Row label.
+citry-ui-tree-grid-unselected = Unselected { $row }
+
+### citry_ui.components.ccolor_picker.ccolor_picker.CColorPicker
+citry-ui-color-picker-open = Open color picker
+citry-ui-color-picker-area = Saturation and brightness
+citry-ui-color-picker-hue = Hue
+citry-ui-color-picker-format = Color format
+citry-ui-color-picker-value = Color value
+citry-ui-color-picker-invalid = Enter a valid color value
+# @param {str} $color - Canonical hexadecimal color.
+citry-ui-color-picker-selected = Selected { $color }
+
 ### citry_ui.components.cdata_grid.cdata_grid.CDataGrid
 citry-ui-data-grid-loading = Loading data...
 citry-ui-data-grid-empty = No data.
@@ -52,6 +98,16 @@ citry-ui-data-grid-sort-cleared = Sort cleared for { $column }
 citry-ui-data-grid-selected-one = One row selected
 # @param {str} $count - Locale-formatted selected supplied-row count.
 citry-ui-data-grid-selected = { $count } rows selected
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-edit = Edit { $column }
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-editing = Editing { $column }
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-edit-submitted = Changes submitted for { $column }
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-edit-cancelled = Changes cancelled for { $column }
+# @param {str} $column - Application-localized column label.
+citry-ui-data-grid-edit-invalid = Enter a valid value for { $column }
 
 ### citry_ui.components.ctags_input.ctags_input.CTagsInput
 # @param {str} $value - Visible tag label.
@@ -149,6 +205,28 @@ citry-ui-toast-action-available = Action available: { $action_label }.
 ### citry_ui.components.csidebar.csidebar.CSidebar
 citry-ui-sidebar-expand = Expand sidebar
 citry-ui-sidebar-collapse = Collapse sidebar
+
+### citry_ui.components.csortable.csortable.CSortable
+citry-ui-sortable-label = Reorder items
+# @param {str} $item - Plain item label.
+citry-ui-sortable-handle = Move { $item }
+citry-ui-sortable-instructions = Press Space or Enter to pick up. Use arrow keys to move. Press Space or Enter to drop, or Escape to cancel.
+# @param {str} $item - Plain item label.
+# @param {str} $position - Locale-formatted one-based position.
+# @param {str} $total - Locale-formatted total item count.
+citry-ui-sortable-picked-up = Picked up { $item }, position { $position } of { $total }
+# @param {str} $item - Plain item label.
+# @param {str} $position - Locale-formatted one-based position.
+# @param {str} $total - Locale-formatted total item count.
+citry-ui-sortable-moved = Moved { $item } to position { $position } of { $total }
+# @param {str} $item - Plain item label.
+# @param {str} $position - Locale-formatted one-based position.
+# @param {str} $total - Locale-formatted total item count.
+citry-ui-sortable-dropped = Dropped { $item } at position { $position } of { $total }
+# @param {str} $item - Plain item label.
+# @param {str} $position - Locale-formatted one-based position.
+# @param {str} $total - Locale-formatted total item count.
+citry-ui-sortable-cancelled = Cancelled moving { $item }. Position restored to { $position } of { $total }
 
 ### citry_ui.components.ctour.ctour.CTour
 citry-ui-tour-close = Close tour

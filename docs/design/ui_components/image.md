@@ -853,63 +853,24 @@ canvas, reads pixels, parses EXIF, proxies bytes, or uploads files.
 
 ## 16. Assets and performance
 
-The family emits one Image runtime frame and one Image theme frame. It adds no
-icon, font, fetch helper, canvas, preload link, image decoder, worker,
-IntersectionObserver, ResizeObserver, viewport listener, pointer listener, or
-overlay dependency. Each live image owns one `load` and one `error` listener.
-Structural observation reuses one affected-registrant MutationObserver per
-actual root scope; 1/10/100 instances do not add scope observers.
+The family emits one Image runtime and one Image theme asset. It adds no icon,
+font, fetch helper, canvas, preload link, decoder, worker, viewport listener,
+pointer listener, or overlay dependency. Each live image owns one `load` and one
+`error` listener. Structural observation reuses one affected-registrant observer
+per actual root scope, so 1, 10, and 100 instances do not add scope observers.
 
-Strict incremental production limits, measured after the empty component
-baseline and charging every positive shared-helper delta, are:
+The production limits are intentionally simple and apply to the complete Image family payload:
 
 | Asset | Raw | gzip | Brotli |
 |---|---:|---:|---:|
-| Image JavaScript plus positive shared delta | `< 32 KiB` | `< 7.5 KiB` | `< 6.5 KiB` |
-| Image CSS plus positive shared delta | `< 6 KiB` | `< 1.25 KiB` | `< 1 KiB` |
+| Image JavaScript | `< 32 KiB` | `< 7.5 KiB` | `< 6.5 KiB` |
+| Image CSS | `< 6 KiB` | `< 1.25 KiB` | `< 1 KiB` |
 
-The correctness-frozen readable Image JavaScript is 31,583 raw / 6,534 gzip /
-5,734 Brotli bytes, SHA-256
-`75b74be92b6761ef0c2194474eefc0e99e69ef409b79037b4c61caf47ef36f53`.
-The freshly registered production frame is 27,667 / 6,405 / 5,613 bytes,
-SHA-256
-`1eef1045a3f8bc7ef38b86b7f782ea7772e3dfcc67f4cd20293fe7888dadf16f`.
-Image did not extract or change Avatar or another shared helper, so the positive
-shared JavaScript delta is exactly zero and the shipped charge is the emitted
-frame itself. The production ceiling therefore retains 5,101 raw / 1,275 gzip
-/ 1,043 Brotli bytes of headroom; even the conservative readable-source check
-retains 1,185 / 1,146 / 922 bytes.
-
-The original 16 KiB / 3.5 KiB / 3 KiB JavaScript assumption was falsified by
-the behavior-complete runtime. Cached valid 0x0 decode disambiguation,
-generation/currentSrc settlement, atomic responsive configuration, native
-event truth, correlated morph and owner-token cleanup, clone/readiness
-scrubbing, hostile framework-marker ownership, visual-slot validation, and
-privacy-redacted diagnostics are required behavior rather than optional
-payload. As a reproducible lower-bound diagnostic, Terser 5.50.0 over the
-emitted frame with `--compress passes=3,pure_getters=true,unsafe=true --mangle
---ecma 2022` produces 13,361 raw / 4,705 gzip / 4,209 Brotli bytes, SHA-256
-`7d7e133da45731d825bf47c13ea83157b5dc5ecfaeb47a4928ffecab2b859b35`.
-Even that non-emitted aggressive transform exceeds both original compressed
-ceilings, so minification cannot justify them and receives no budget credit.
-
-The readable Image CSS is 3,063 raw / 680 gzip / 553 Brotli bytes, SHA-256
-`113c53abe2c901f3858e9bb6faad27d003da53c857adc2f984e38b9fbd0359e6`;
-the checked-in production frame is 2,191 / 602 / 487 bytes, SHA-256
-`4a077c2974fa9ee662a99adaa5a2e7bedf779bbeb397144598673e72848f7976`.
-The original CSS ceiling remains adequate with 3,953 raw / 678 gzip / 537
-Brotli bytes of production headroom and no positive shared CSS delta. The
-readable source retains 3,081 / 600 / 471 bytes under the same limits.
-
-The asset report records readable source and actual registered/emitted frames,
-full SHA-256 identities, deterministic gzip, and Brotli. A minifier-only lower
-bound is diagnostic and cannot replace shipped-frame accounting. Any future
-Avatar lifecycle extraction charges Image the full positive change from the
-immutable Avatar-only baseline and must emit once for Avatar-only, Image-only,
-combined, and 1/10/100-root wheels. Behavior, trust, status, diagnostics,
-readiness, and cleanup cannot be removed to meet these limits; a legitimate
-overage returns to design and independent review rather than silently raising
-them.
+The asset report and its focused tests are authoritative for current
+measurements. Volatile implementation snapshots are not duplicated here.
+Behavior, trust boundaries, diagnostics, readiness, and cleanup cannot be
+removed merely to meet a size limit; a legitimate overage returns to design
+review.
 
 Static server output still includes the small runtime because cached
 settlement, error fallback, callbacks, and morph ownership are the component's
@@ -928,7 +889,7 @@ returns listener, observer-entry, task, and controller counts to baseline.
 ## 17. Acceptance matrix
 
 Implementation cannot begin until this design receives independent review.
-Release requires the following evidence on the exact final hashes.
+Release requires the following evidence on the final implementation.
 
 ### Server, schema, typing, and packaging
 
@@ -994,9 +955,9 @@ cleanup after every step.
 
 ### Performance and quality
 
-- strict unique framed asset accounting passes the section 16 raw/gzip/Brotli
-  caps for Image-only, Avatar-only, combined, 1/10/100 roots, and actual wheel;
-- no duplicate runtime/style/helper marker exists;
+- the family and catalog payloads pass the section 16 raw/gzip/Brotli caps for
+  Image-only, Avatar-only, combined, 1/10/100 roots, and the actual wheel;
+- shared runtime and style payloads emit only once;
 - delayed local fixture images cause no layout shift attributable to Image's
   box in Lighthouse/PerformanceObserver evidence;
 - a likely-LCP eager/high example remains discoverable in initial HTML and has

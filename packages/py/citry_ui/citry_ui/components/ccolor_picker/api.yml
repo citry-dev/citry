@@ -1,0 +1,117 @@
+schema_version: 1
+family: color-picker
+components: [CColorPicker]
+
+inputs:
+  - id: ccolor-picker-server-inputs
+    component: CColorPicker
+    channel: server
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the visible field label.}
+      - {id: value, name: value, type: str, default: {kind: literal, value: '#7f56d9'}, effect: Sets a '#rgb' or '#rrggbb' color normalized to lowercase six-digit HEX.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID and derived control IDs.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Names the native color form control.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native input with an external form.}
+      - {id: format, name: format, type: {display: CColorPickerFormat, interfaces: [CColorPickerFormat]}, default: {kind: literal, value: hex}, effect: Chooses the editable HEX RGB or HSL representation.}
+      - {id: swatches, name: swatches, type: 'Sequence[CColorSwatch]', default: {kind: literal, value: '()'}, effect: Adds unique named solid-color shortcuts.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial popup visibility.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables focus mutation and form submission.}
+      - {id: readonly, name: readonly, type: bool, default: {kind: literal, value: false}, effect: Prevents color mutation while retaining the value.}
+      - {id: size, name: size, type: {display: CColorPickerSize, interfaces: [CColorPickerSize]}, default: {kind: literal, value: md}, effect: Selects trigger height.}
+      - {id: variant, name: variant, type: {display: CColorPickerVariant, interfaces: [CColorPickerVariant]}, default: {kind: literal, value: outline}, effect: Selects outline soft or plain trigger styling.}
+      - {id: open-label, name: open_label, type: str, default: {kind: literal, value: Open color picker}, effect: Overrides the catalog-backed trigger title.}
+      - {id: area-label, name: area_label, type: str, default: {kind: literal, value: Saturation and brightness}, effect: Overrides the compound slider name.}
+      - {id: hue-label, name: hue_label, type: str, default: {kind: literal, value: Hue}, effect: Overrides the hue label.}
+      - {id: format-label, name: format_label, type: str, default: {kind: literal, value: Color format}, effect: Overrides the format label.}
+      - {id: value-label, name: value_label, type: str, default: {kind: literal, value: Color value}, effect: Overrides the text input label.}
+      - {id: invalid-label, name: invalid_label, type: str, default: {kind: literal, value: Enter a valid color value}, effect: Overrides invalid edit announcements.}
+      - {id: selected-label, name: selected_label, type: "str containing '{color}'", default: {kind: literal, value: 'Selected {color}'}, effect: Overrides selection announcements.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes.}
+  - id: ccolor-picker-client-inputs
+    component: CColorPicker
+    channel: client
+    entries:
+      - {id: value, name: value, type: string, omitted: Uses uncontrolled state., effect: Controls the canonical HEX value.}
+      - {id: open, name: open, type: boolean, omitted: Uses uncontrolled popup state., effect: Controls popup visibility.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables the field.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses the server value., effect: Reactively prevents mutation.}
+      - {id: format, name: format, type: {display: CColorPickerFormat, interfaces: [CColorPickerFormat]}, omitted: Uses the server value., effect: Controls the editable representation.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic callback runs., effect: Receives valid color requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic callback runs., effect: Receives popup visibility requests.}
+
+slots: []
+
+events:
+  - id: ccolor-picker-events
+    component: CColorPicker
+    entries:
+      - {id: value, name: onValueChange, signature: {display: '(value: string, detail: CColorPickerValueChangeDetail) => void', interfaces: [CColorPickerValueChangeDetail]}, trigger: A valid area hue text swatch native or reset request occurs., detail: {display: '{value, previousValue, rgb, hsl, hsv, controlled, source, sourceEvent}', interfaces: [CColorPickerValueChangeDetail]}, behavior: Commits and dispatches native input and change only while uncontrolled.}
+      - {id: open, name: onOpenChange, signature: {display: '(open: boolean, detail: CColorPickerOpenChangeDetail) => void', interfaces: [CColorPickerOpenChangeDetail]}, trigger: The popup requests a visibility change., detail: {display: '{open, reason, sourceEvent}', interfaces: [CColorPickerOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
+
+methods: []
+
+css:
+  - id: ccolor-picker-css
+    component: CColorPicker
+    entries:
+      - {id: width, name: --cui-color-picker-width, type: length, purpose: Trigger and popup width., default: 20rem}
+      - {id: area-height, name: --cui-color-picker-area-height, type: length, purpose: Saturation and brightness area height., default: 12rem}
+      - {id: surface, name: --cui-color-picker-surface, type: color, purpose: Popup and trigger surface., default: Canvas}
+      - {id: border, name: --cui-color-picker-border, type: complete border, purpose: Control boundaries., default: Adaptive 1px neutral}
+      - {id: radius, name: --cui-color-picker-radius, type: length, purpose: Popup radius., default: 0.75rem}
+      - {id: shadow, name: --cui-color-picker-shadow, type: shadow, purpose: Popup elevation., default: Adaptive shadow}
+      - {id: focus, name: --cui-color-picker-focus, type: color, purpose: Focus and selected-swatch indicator., default: Highlight}
+
+attributes:
+  - id: ccolor-picker-attributes
+    component: CColorPicker
+    entries:
+      - {id: data-open, name: data-open, element: Root, type: present | absent, meaning: Reflects popup visibility.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present | absent, meaning: Reflects disabled state.}
+      - {id: data-readonly, name: data-readonly, element: Root, type: present | absent, meaning: Reflects readonly state.}
+      - {id: data-format, name: data-format, element: Root, type: {display: CColorPickerFormat, interfaces: [CColorPickerFormat]}, meaning: Reflects the editable representation.}
+      - {id: data-selected, name: data-selected, element: Swatch, type: present | absent, meaning: Marks the current swatch.}
+
+selectors:
+  - id: ccolor-picker-selectors
+    component: CColorPicker
+    entries:
+      - {id: root, selector: '[data-citry-ui-part="color-picker"]', element: Root, purpose: State and root customization destination.}
+      - {id: native, selector: '[data-citry-ui-part="native"]', element: Native color input, purpose: Progressive fallback form and reset owner.}
+      - {id: trigger, selector: '[data-citry-ui-part="trigger"]', element: Button, purpose: Opens the enhanced picker.}
+      - {id: popup, selector: '[data-citry-ui-part="popup"]', element: Dialog, purpose: Enhanced control container.}
+      - {id: area, selector: '[data-citry-ui-part="area"]', element: Compound slider, purpose: Changes saturation and brightness.}
+      - {id: hue, selector: '[data-citry-ui-part="hue"]', element: Label and range, purpose: Changes hue.}
+      - {id: format, selector: '[data-citry-ui-part="format"]', element: Select, purpose: Chooses editable representation.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Text input, purpose: Commits a parsed color.}
+      - {id: swatches, selector: '[data-citry-ui-part="swatches"]', element: List, purpose: Groups named shortcuts.}
+      - {id: swatch, selector: '[data-citry-ui-part="swatch"]', element: Button, purpose: Requests a named color.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Polite status, purpose: Announces validation and selection.}
+
+interfaces:
+  - id: ccolor-picker-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: format, name: CColorPickerFormat, definition: 'Literal["hex", "rgb", "hsl"]'}
+      - {id: size, name: CColorPickerSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: variant, name: CColorPickerVariant, definition: 'Literal["outline", "soft", "plain"]'}
+      - {id: source, name: CColorPickerSource, definition: 'Literal["area", "hue", "text", "swatch", "native", "reset"]'}
+      - {id: swatch, name: CColorSwatch, definition: 'CColorSwatch(value: str, label: str)'}
+  - {id: ccolor-picker-value-detail, kind: record, name: CColorPickerValueChangeDetail, entries: [{id: value, name: value, type: str, meaning: Requested canonical HEX value.}, {id: previous, name: previousValue, type: str, meaning: Previous value.}, {id: rgb, name: rgb, type: 'dict[str, int]', meaning: Requested integer RGB channels.}, {id: hsl, name: hsl, type: 'dict[str, float]', meaning: Requested HSL channels.}, {id: hsv, name: hsv, type: 'dict[str, float]', meaning: Requested HSV channels.}, {id: controlled, name: controlled, type: bool, meaning: Whether client value owns state.}, {id: source, name: source, type: CColorPickerSource, meaning: Interaction source.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
+  - {id: ccolor-picker-open-detail, kind: record, name: CColorPickerOpenChangeDetail, entries: [{id: open, name: open, type: bool, meaning: Requested popup state.}, {id: reason, name: reason, type: str, meaning: Trigger outside escape or selection reason.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
+
+translations:
+  - id: ccolor-picker-translations
+    component: CColorPicker
+    entries:
+      - {id: open, key: citry-ui-color-picker-open, purpose: Provides the enhanced trigger title., variables: none, override: '`open_label`', updates: Declarative `$c-tr` attribute binding.}
+      - {id: area, key: citry-ui-color-picker-area, purpose: Names the compound saturation and brightness slider., variables: none, override: '`area_label`', updates: Declarative `$c-tr` attribute binding.}
+      - {id: hue, key: citry-ui-color-picker-hue, purpose: Labels the hue range., variables: none, override: '`hue_label`', updates: Declarative `$c-tr` text binding.}
+      - {id: format, key: citry-ui-color-picker-format, purpose: Labels the format select., variables: none, override: '`format_label`', updates: Declarative `$c-tr` text binding.}
+      - {id: value, key: citry-ui-color-picker-value, purpose: Labels the editable value., variables: none, override: '`value_label`', updates: Declarative `$c-tr` text binding.}
+      - {id: invalid, key: citry-ui-color-picker-invalid, purpose: Announces an invalid text edit., variables: none, override: '`invalid_label`', updates: Browser-created one-shot `i18n.tr()`.}
+      - {id: selected, key: citry-ui-color-picker-selected, purpose: Announces an accepted color., variables: 'color: str', override: '`selected_label` with `{color}`', updates: Browser-created one-shot `i18n.tr()`.}

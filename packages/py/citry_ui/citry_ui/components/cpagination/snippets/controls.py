@@ -6,10 +6,10 @@ citry.register_library(citry_ui)
 
 class PaginationControls(Component):
     template = """
-      <c-CStack gap="md">
+      <c-CCol gap="md">
         <c-CPagination c-pages="14" c-page="7" c-show_edges="True" />
         <c-CPagination c-pages="14" c-page="7" c-show_controls="False" />
-      </c-CStack>
+      </c-CCol>
     """
 
 

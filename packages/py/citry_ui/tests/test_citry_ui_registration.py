@@ -47,6 +47,7 @@ from citry_ui import (
     CCarousel,
     CCarouselSlide,
     CCheckbox,
+    CCol,
     CCombobox,
     CCommandPalette,
     CContainer,
@@ -59,9 +60,10 @@ from citry_ui import (
     CEditable,
     CField,
     CFileInput,
+    CFormCollection,
+    CFormCollectionItem,
     CGrid,
     CGridItem,
-    CGroup,
     CHoverCard,
     CIcon,
     CImage,
@@ -89,14 +91,16 @@ from citry_ui import (
     CProgress,
     CRadio,
     CRadioGroup,
+    CRow,
     CScrollArea,
     CSelect,
     CSidebar,
+    CSortable,
+    CSortableItem,
     CSpinner,
     CSplitButton,
     CSplitter,
     CSplitterPanel,
-    CStack,
     CStep,
     CStepper,
     CSwitch,
@@ -133,7 +137,7 @@ print(citry_ui.__version__)
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "0.1.0"
+    assert result.stdout.strip() == "0.2.0"
 
 
 def test_package_exposes_one_explicit_ordered_component_library():
@@ -142,7 +146,7 @@ def test_package_exposes_one_explicit_ordered_component_library():
     assert manifest.name == "citry-ui"
     assert manifest.components == COMPONENTS
     assert manifest.required_extensions == ()
-    assert len(COMPONENTS) == 137
+    assert len(COMPONENTS) == 156
     assert all(issubclass(definition, LibraryComponent) for definition in COMPONENTS)
     assert all(not issubclass(definition, Component) for definition in COMPONENTS)
     assert tuple(definition.__name__ for definition in COMPONENTS) == (
@@ -180,8 +184,19 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CNativeSelect",
         "CCheckbox",
         "CForm",
-        "CStack",
-        "CGroup",
+        "CFormCollection",
+        "CFormCollectionItem",
+        "CInfiniteScroll",
+        "CCascader",
+        "CCascaderOption",
+        "CInternalCascaderDeclarations",
+        "CInternalCascader",
+        "CInternalCascaderGroup",
+        "CInternalCascaderOption",
+        "CTreeGrid",
+        "CColorPicker",
+        "CCol",
+        "CRow",
         "CContainer",
         "CGrid",
         "CGridItem",
@@ -233,6 +248,8 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CSidebar",
         "CSplitter",
         "CSplitterPanel",
+        "CSortable",
+        "CSortableItem",
         "CStepper",
         "CStep",
         "CTimeline",
@@ -274,6 +291,12 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CInternalTransferListDeclarations",
         "CInternalTransferList",
         "CInternalTransferListItem",
+        "CInternalSortableDeclarations",
+        "CInternalSortable",
+        "CInternalSortableItem",
+        "CInternalFormCollectionDeclarations",
+        "CInternalFormCollection",
+        "CInternalFormCollectionItem",
         "CInternalVirtualListDeclarations",
         "CInternalVirtualList",
         "CInternalVirtualListStatic",
@@ -370,6 +393,7 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.ctime_picker.ctime_picker",
         "citry_ui.components.csplitbutton.csplitbutton",
         "citry_ui.components.ccarousel.ccarousel",
+        "citry_ui.components.ccascader.ccascader",
         "citry_ui.components.ccombobox.ccombobox",
         "citry_ui.components.ccommand_palette.ccommand_palette",
         "citry_ui.components.ccontext_menu.ccontext_menu",
@@ -385,6 +409,8 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.cscroll_area.cscroll_area",
         "citry_ui.components.chover_card.chover_card",
         "citry_ui.components.cform.cform",
+        "citry_ui.components.cform_collection.cform_collection",
+        "citry_ui.components.cinfinite_scroll.cinfinite_scroll",
         "citry_ui.components.cicon.cicon",
         "citry_ui.components.clist.clist",
         "citry_ui.components.clistbox.clistbox",
@@ -412,6 +438,7 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.cradio.cradio",
         "citry_ui.components.cspinner.cspinner",
         "citry_ui.components.csidebar.csidebar",
+        "citry_ui.components.csortable.csortable",
         "citry_ui.components.csplitter.csplitter",
         "citry_ui.components.cstepper.cstepper",
         "citry_ui.components.ctimeline.ctimeline",
@@ -423,6 +450,8 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.ctoggle.ctoggle",
         "citry_ui.components.ctoolbar.ctoolbar",
         "citry_ui.components.ctree.ctree",
+        "citry_ui.components.ctree_grid.ctree_grid",
+        "citry_ui.components.ccolor_picker.ccolor_picker",
         "citry_ui.components.ccheckbox.ccheckbox",
     }
     assert [field.name for field in fields(CButton.Kwargs)] == [
@@ -765,8 +794,8 @@ def test_representative_component_definitions_remain_directly_importable():
     assert CCarouselSlide.__module__ == "citry_ui.components.ccarousel.ccarousel"
     assert CBreadcrumbs.__module__ == "citry_ui.components.cbreadcrumbs.cbreadcrumbs"
     assert CField.__module__ == "citry_ui.components.cfield.cfield"
-    assert CStack.__module__ == "citry_ui.components.cflow.cflow"
-    assert CGroup.__module__ == "citry_ui.components.cflow.cflow"
+    assert CCol.__module__ == "citry_ui.components.cflow.cflow"
+    assert CRow.__module__ == "citry_ui.components.cflow.cflow"
     assert CContainer.__module__ == "citry_ui.components.cgrid.cgrid"
     assert CGrid.__module__ == "citry_ui.components.cgrid.cgrid"
     assert CGridItem.__module__ == "citry_ui.components.cgrid.cgrid"
@@ -822,6 +851,10 @@ def test_representative_component_definitions_remain_directly_importable():
     assert CSplitButton.__module__ == "citry_ui.components.csplitbutton.csplitbutton"
     assert CSplitter.__module__ == "citry_ui.components.csplitter.csplitter"
     assert CSplitterPanel.__module__ == "citry_ui.components.csplitter.csplitter"
+    assert CSortable.__module__ == "citry_ui.components.csortable.csortable"
+    assert CSortableItem.__module__ == "citry_ui.components.csortable.csortable"
+    assert CFormCollection.__module__ == "citry_ui.components.cform_collection.cform_collection"
+    assert CFormCollectionItem.__module__ == "citry_ui.components.cform_collection.cform_collection"
     assert CStepper.__module__ == "citry_ui.components.cstepper.cstepper"
     assert CStep.__module__ == "citry_ui.components.cstepper.cstepper"
     assert CTimeline.__module__ == "citry_ui.components.ctimeline.ctimeline"

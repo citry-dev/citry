@@ -7,7 +7,7 @@ citry.register_library(citry_ui)
 
 class MultiSelectStates(Component):
     template = """
-      <c-CStack>
+      <c-CCol>
         <c-CMultiSelect
           c-options="options" placeholder="Choose" c-value="['active', 'paused']" readonly
           c-trigger_attrs="{'aria-label':'Read-only state'}"
@@ -20,7 +20,7 @@ class MultiSelectStates(Component):
           c-options="options" placeholder="Choose" invalid
           c-trigger_attrs="{'aria-label':'Invalid state'}"
         />
-      </c-CStack>
+      </c-CCol>
     """
 
     def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

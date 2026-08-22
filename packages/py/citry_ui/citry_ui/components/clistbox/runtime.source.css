@@ -4,7 +4,7 @@
     --_cui-listbox-max-block-size: var(--cui-listbox-max-block-size, 18rem);
     --_cui-listbox-background: var(--cui-listbox-background, Canvas);
     --_cui-listbox-foreground: var(--cui-listbox-foreground, CanvasText);
-    --_cui-listbox-muted-color: var(--cui-listbox-muted-color, light-dark(#667085, #a4a7ae));
+    --_cui-listbox-muted-color: var(--cui-listbox-muted-color, light-dark(#475467, #a4a7ae));
     --_cui-listbox-border-color: var(--cui-listbox-border-color, light-dark(#d0d5dd, #535862));
     --_cui-listbox-hover-background: var(
       --cui-listbox-hover-background,

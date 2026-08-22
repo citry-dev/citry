@@ -258,8 +258,8 @@ def test_flow_catalog_discovers_every_component_owned_preview() -> None:
 
     assert slugs == [
         "at-a-glance",
-        "stack-spacing",
-        "group-alignment",
+        "col-spacing",
+        "row-alignment",
         "wrapping",
         "semantic-roots",
         "nested-layouts",

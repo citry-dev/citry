@@ -97,6 +97,7 @@ def test_nav_offcanvas_and_optional_regions_render_exactly() -> None:
         'data-variant="floating"',
         'data-size="lg"',
         "data-sticky",
+        "data-has-header",
     ):
         assert token in root
     assert 'aria-expanded="false"' in _tag(html, "toggle")
@@ -173,6 +174,8 @@ def test_css_exposes_public_variables_parts_and_environment_rules() -> None:
         "--cui-sidebar-rail-width",
         "--cui-sidebar-background",
         "--cui-sidebar-sticky-offset",
+        "data-has-header",
+        "data-citry-sidebar-transitioning",
         "data-citry-sidebar-expanded-only",
         "data-citry-sidebar-rail-only",
         "prefers-reduced-motion",

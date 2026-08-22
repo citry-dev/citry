@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class FileCaptureHints(Component):
     template = """
-      <c-CGroup>
+      <c-CRow>
         <c-CField>
           <c-fill name="label">Take a photo</c-fill>
           <c-fill name="default">
@@ -19,7 +19,7 @@ class FileCaptureHints(Component):
             <c-CFileInput name="note" accept="audio/*" capture="user" />
           </c-fill>
         </c-CField>
-      </c-CGroup>
+      </c-CRow>
     """
 
 

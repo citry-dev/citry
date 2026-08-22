@@ -137,7 +137,7 @@ application-owned container or a future LoadingOverlay family.
 Each Spinner represents one active task and has no collection identity or
 async ownership. Common composition jobs:
 
-- Inline activity pairs Spinner with concise visible text in `CGroup`.
+- Inline activity pairs Spinner with concise visible text in `CRow`.
 - Region loading places Spinner near content while the owner controls
   `aria-busy` and presence.
 - Button loading uses `CButton(loading=True)`, which owns disabledness,

@@ -15,7 +15,7 @@ def tour_states_component(app: Citry) -> type[Component]:
             <h1>Tour states</h1>
             <div class="tour-quality__workspace">
               <button id="quality-tour-target" type="button">Target action</button>
-              <p>Page content remains visible behind the modal spotlight.</p>
+              <p>Page content remains visible and usable behind the spotlight.</p>
             </div>
             <c-CTour
               id="quality-tour"
@@ -31,13 +31,14 @@ def tour_states_component(app: Citry) -> type[Component]:
               <c-CTourStep value="intro" c-describe="True">
                 <c-fill name="title">Welcome to Tour quality</c-fill>
                 <c-fill name="default">
-                  This centered step exercises modal naming, progress, actions, and focus.
+                  This centered step exercises dialog naming, progress, actions, and focus.
                 </c-fill>
               </c-CTourStep>
               <c-CTourStep value="target" target_id="quality-tour-target" placement="bottom-end">
                 <c-fill name="title">A target-aware step</c-fill>
                 <c-fill name="default">
-                  The target remains inert while geometry follows viewport changes and very long content wraps safely.
+                  The target remains interactive while geometry follows viewport changes
+                  and very long content wraps safely.
                 </c-fill>
               </c-CTourStep>
               <c-CTourStep value="missing" target_id="quality-tour-missing">
@@ -61,7 +62,7 @@ def tour_states_component(app: Citry) -> type[Component]:
             return {
                 "quality_attrs": {
                     "data-quality-states": (
-                        "centered targeted modal controlled missing-target rtl long-content localized"
+                        "centered targeted interactive controlled missing-target rtl long-content localized"
                     )
                 }
             }

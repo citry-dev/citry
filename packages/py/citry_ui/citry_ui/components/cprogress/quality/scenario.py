@@ -36,11 +36,11 @@ def progress_states_component(app: Citry) -> type[Component]:
               value_text="6 of 10 sample crates"
               intent="success"
             />
-            <c-CGroup>
+            <c-CRow>
               <c-for each="size in sizes">
                 <c-CProgress c-label="f'{size} progress'" c-value="48" c-size="size" />
               </c-for>
-            </c-CGroup>
+            </c-CRow>
             <div x-data="{value: 28}" data-quality-state="controlled">
               <c-CProgress label="Controlled sonar upload" $c-props="{value}" />
               <button type="button" @click="value = value === null ? 28 : null">Toggle duration</button>

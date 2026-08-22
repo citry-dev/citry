@@ -18,9 +18,11 @@ class DataGridSortingSelection(Component):
           c-selected="['grace']"
           $c-props="{
             sort,
-            onSortChange:(next,detail)=>{
+            onSortChange:(next)=>{
               sort=next;
-              notice=`Accepted sort: ${detail.columnKey} ${detail.direction ?? 'none'}`;
+              notice=next.length
+                ? `Sorted: ${next.map((item,index)=>`${index + 1}. ${item.key} ${item.direction}`).join(', ')}`
+                : 'Server row order restored';
             },
             onSelectionChange:(selected)=>notice=`Selected: ${selected.join(', ') || 'none'}`,
           }"

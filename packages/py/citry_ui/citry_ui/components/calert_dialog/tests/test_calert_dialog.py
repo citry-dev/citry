@@ -39,6 +39,7 @@ _MINIMAL = """
 
 def test_server_anatomy_uses_exact_alertdialog_relationships_and_safe_buttons() -> None:
     html = _render(_MINIMAL)
+    assert "citry-ui:dialog-controller-runtime" in html
     dialog = re.search(r'<dialog[^>]+data-citry-ui-part="alert-dialog"[^>]*>', html)
     assert dialog is not None
     root = dialog.group(0)

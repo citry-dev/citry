@@ -39,6 +39,12 @@ event. It requests state; it never mutates or renders Item HTML. Fetch or
 render the new range, cancel superseded work in the application, and replace
 the component with the new `start_index` and Items.
 
+The static documentation examples use a small self-contained range with no
+omitted leading or trailing Items. They therefore never expose scrollable
+blank space that a static page cannot replace. A real partial range reserves
+blank geometry only while the server request is pending; the owner must replace
+it when `onRangeChange` fires.
+
 The runtime marks the root `aria-busy="true"` and `data-pending` until the
 committed server range covers the current desired range. A missing callback
 leaves the current range usable. Callback failures are isolated and logged.
@@ -64,7 +70,10 @@ Both owners render `role="list"` and `CVirtualListItem` renders
 `role="listitem"`. A Window Item also receives exact `aria-posinset` and
 `aria-setsize`; spacers are hidden from assistive technology. `focusable=True`
 adds one viewport tab stop so keyboard users can scroll even when Items contain
-no controls.
+no controls. Use `focusable=False` only when the supplied Items contain a
+keyboard-reachable control that lets keyboard users enter and scroll the
+viewport. A scrollable region with neither a root tab stop nor a focusable
+descendant is not keyboard accessible.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cvirtual_list/snippets/accessibility.py" title="Compare complete and windowed semantics" />
 

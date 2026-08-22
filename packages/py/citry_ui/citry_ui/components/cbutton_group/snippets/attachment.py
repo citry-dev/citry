@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class Attachment(Component):
     template = """
-      <c-CStack gap="md">
+      <c-CCol gap="md">
         <c-CButtonGroup label="Attached view controls">
           <c-CButton variant="outline">Map</c-CButton>
           <c-CButton variant="outline">Sky</c-CButton>
@@ -15,7 +15,7 @@ class Attachment(Component):
           <c-CButton variant="outline">Map</c-CButton>
           <c-CButton variant="outline">Sky</c-CButton>
         </c-CButtonGroup>
-      </c-CStack>
+      </c-CCol>
     """
 
 

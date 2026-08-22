@@ -71,6 +71,7 @@ attributes:
       - {id: data-line-style, name: data-line-style, element: Root ol, type: {display: CTimelineLineStyle, interfaces: [CTimelineLineStyle]}, meaning: Mirrors connector treatment.}
       - {id: data-density, name: data-density, element: Root ol, type: {display: CTimelineDensity, interfaces: [CTimelineDensity]}, meaning: Mirrors spacing density.}
       - {id: data-size, name: data-size, element: Root ol, type: {display: CTimelineSize, interfaces: [CTimelineSize]}, meaning: Mirrors geometry size.}
+      - {id: data-has-opposite, name: data-has-opposite, element: Root ol, type: present | absent, meaning: Reserves one consistent metadata column when any Item has opposite content.}
   - id: ctimeline-item-attributes
     component: CTimelineItem
     entries:

@@ -463,4 +463,4 @@ def test_dependencies_emit_each_private_helper_once() -> None:
     assert html.count("citry-ui:dialog-controller-runtime") >= 1
     assert html.count("citry-ui:active-descendant-runtime") >= 1
     assert html.count("citry-ui:anchored-layer-runtime") >= 1
-    assert html.count("citry-ui:command-palette-attribution:initializer:begin") == 1
+    assert html.count("CCommandPalette private runtime dependency did not load") == 1

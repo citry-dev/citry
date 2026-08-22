@@ -2,8 +2,8 @@
   :where(.cui-multi-select) {
     --_cui-multi-select-background:var(--cui-multi-select-background,Canvas);
     --_cui-multi-select-foreground:var(--cui-multi-select-foreground,CanvasText);
-    --_cui-multi-select-placeholder-color:var(--cui-multi-select-placeholder-color,light-dark(#667085,#a4a7ae));
-    --_cui-multi-select-muted-color:var(--cui-multi-select-muted-color,light-dark(#667085,#a4a7ae));
+    --_cui-multi-select-placeholder-color:var(--cui-multi-select-placeholder-color,light-dark(#475467,#a4a7ae));
+    --_cui-multi-select-muted-color:var(--cui-multi-select-muted-color,light-dark(#475467,#a4a7ae));
     --_cui-multi-select-border-color:var(--cui-multi-select-border-color,light-dark(#d0d5dd,#535862));
     --_cui-multi-select-hover-background:var(--cui-multi-select-hover-background,color-mix(in srgb,CanvasText 7%,transparent));
     --_cui-multi-select-selected-background:var(--cui-multi-select-selected-background,light-dark(#dbeafe,#1e3a5f));
@@ -36,8 +36,8 @@
   :where(.cui-multi-select__values){display:flex;flex-wrap:wrap;align-items:center;gap:.25rem;min-inline-size:0;overflow-wrap:anywhere}
   :where(.cui-multi-select [data-citry-ui-part="placeholder"]){color:var(--_cui-multi-select-placeholder-color)}
   :where(.cui-multi-select__chip){display:inline-flex;max-inline-size:100%;padding:.15rem .4rem;border-radius:calc(var(--_cui-multi-select-radius) - .2rem);background:var(--_cui-multi-select-chip-background);color:var(--_cui-multi-select-chip-foreground);overflow-wrap:anywhere}
-  :where(.cui-multi-select__indicator){transition:transform var(--_cui-multi-select-duration) ease-out}
-  :where(.cui-multi-select[data-open] .cui-multi-select__indicator){transform:rotate(180deg)}
+  :where(.cui-multi-select__indicator){inline-size:.5rem;block-size:.5rem;border-inline-end:.125rem solid currentcolor;border-block-end:.125rem solid currentcolor;transform:translateY(-.125rem) rotate(45deg);transition:transform var(--_cui-multi-select-duration) ease-out}
+  :where(.cui-multi-select[data-open] .cui-multi-select__indicator){transform:translateY(.125rem) rotate(225deg)}
   :where(.cui-multi-select__popup){position:fixed;box-sizing:border-box;inline-size:min(14rem,calc(100vw - 2rem));max-inline-size:calc(100vw - 2rem);max-block-size:min(var(--_cui-multi-select-max-block-size),calc(100vh - 2rem));margin:0;padding:.25rem;overflow:auto;border:1px solid var(--_cui-multi-select-border-color);border-radius:var(--_cui-multi-select-radius);background:var(--_cui-multi-select-background);color:var(--_cui-multi-select-foreground);box-shadow:var(--_cui-multi-select-shadow);font:inherit;overscroll-behavior:contain}
   :where(.cui-multi-select__popup:not(:popover-open)){display:none}
   :where(.cui-multi-select[data-match-width] .cui-multi-select__popup){inline-size:min(anchor-size(width),calc(100vw - 2rem))}
@@ -51,7 +51,7 @@
   :where(.cui-multi-select__option[data-highlighted]:not([data-disabled])){background:var(--_cui-multi-select-hover-background);outline:2px solid var(--_cui-multi-select-focus-color);outline-offset:-2px}
   :where(.cui-multi-select__option[data-selected]){background:var(--_cui-multi-select-selected-background);color:var(--_cui-multi-select-selected-foreground)}
   :where(.cui-multi-select__option[data-disabled]){color:var(--_cui-multi-select-muted-color);opacity:.72}
-  :where(.cui-multi-select__check){visibility:hidden}:where(.cui-multi-select__option[data-selected] .cui-multi-select__check){visibility:visible}
+  :where(.cui-multi-select__check){box-sizing:border-box;visibility:hidden;inline-size:.45rem;block-size:.75rem;border-inline-end:.125rem solid currentcolor;border-block-end:.125rem solid currentcolor;transform:translate(.2rem,-.08rem) rotate(45deg)}:where(.cui-multi-select__option[data-selected] .cui-multi-select__check){visibility:visible}
   :where(.cui-multi-select__option [data-citry-ui-part="option-label"]),:where(.cui-multi-select__option [data-citry-ui-part="option-description"]){display:block;min-inline-size:0;overflow-wrap:anywhere}
   :where(.cui-multi-select__option [data-citry-ui-part="option-description"]){color:var(--_cui-multi-select-muted-color);font-size:.875em}
   :where(.cui-multi-select__option[data-selected] [data-citry-ui-part="option-description"]){color:currentColor;opacity:.82}

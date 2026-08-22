@@ -17,6 +17,10 @@ loading, and date formatting remain owned by your application.
 
 Place semantic `<time>` elements, headings, descriptions, links, and actions
 inside each Item. The authored DOM order remains the reading order.
+When any Item has opposite metadata, the whole vertical Timeline reserves one
+consistent metadata column so the track never jumps between Items. Content on
+the logical start side—including opposite time labels—is aligned toward the
+track rather than toward the outside edge.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctimeline/snippets/activity.py" title="Present an activity feed" />
 
@@ -30,14 +34,15 @@ indicator is decorative, and only one Item may be `current`.
 ## Alternate content around the track
 
 Use `side="alternate"` for a centered vertical track. An Item can override its
-resolved side with `side="start"` or `side="end"`.
+resolved side with `side="start"` or `side="end"`. All Items retain the same
+three-column geometry even when only some of them provide opposite content.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctimeline/snippets/alternating.py" title="Build an alternating Timeline" />
 
 ## Build a horizontal roadmap
 
-Horizontal Timelines preserve chronological DOM order and scroll within their
-own bounds at narrow widths.
+Horizontal Timelines preserve chronological DOM order, share one Grid Row for
+the complete connector, and scroll within their own bounds at narrow widths.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctimeline/snippets/horizontal.py" title="Build a horizontal roadmap" />
 

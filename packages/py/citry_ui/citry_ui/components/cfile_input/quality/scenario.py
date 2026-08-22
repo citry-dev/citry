@@ -23,10 +23,10 @@ def file_input_states_component(app: Citry) -> type[Component]:
               </c-CDropTarget>
               <button type="reset">Reset files</button>
             </form>
-            <c-CGroup>
+            <c-CRow>
               <c-CFileInput c-attrs="{'aria-label': 'Small file'}" size="sm" />
               <c-CFileInput c-attrs="{'aria-label': 'Large file'}" size="lg" variant="plain" />
-            </c-CGroup>
+            </c-CRow>
             <fieldset disabled>
               <legend>Disabled</legend>
               <c-CDropTarget label="Disabled drop" c-disabled="False" />

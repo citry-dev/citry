@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class Layout(Component):
     template = """
-      <c-CStack gap="lg">
+      <c-CCol gap="lg">
         <c-CButtonGroup label="Time range" c-grow="True">
           <c-CButton variant="outline">Night</c-CButton>
           <c-CButton variant="outline">Week</c-CButton>
@@ -16,7 +16,7 @@ class Layout(Component):
           <c-CButton variant="outline">Star chart</c-CButton>
           <c-CButton variant="outline">Observation log</c-CButton>
         </c-CButtonGroup>
-      </c-CStack>
+      </c-CCol>
     """
 
 

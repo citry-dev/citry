@@ -7,20 +7,20 @@ citry.register_library(citry_ui)
 class FlowDirection(Component):
     template = """
       <section class="flow-direction" aria-label="Direction and long content">
-        <c-CStack gap="sm">
+        <c-CCol gap="sm">
           <strong>LTR kiln sequence</strong>
-          <c-CGroup><span>Load</span><span>Fire</span><span>Cool</span></c-CGroup>
-        </c-CStack>
+          <c-CRow><span>Load</span><span>Fire</span><span>Cool</span></c-CRow>
+        </c-CCol>
         <div dir="rtl">
-          <c-CStack gap="sm">
+          <c-CCol gap="sm">
             <strong>تسلسل الفرن</strong>
-            <c-CGroup><span>تحميل</span><span>حرق</span><span>تبريد</span></c-CGroup>
-          </c-CStack>
+            <c-CRow><span>تحميل</span><span>حرق</span><span>تبريد</span></c-CRow>
+          </c-CCol>
         </div>
-        <c-CGroup class_="flow-direction__long">
+        <c-CRow class_="flow-direction__long">
           <strong>Long label</strong>
           <span>celadon-test-series-with-a-deliberately-long-unbroken-identifier</span>
-        </c-CGroup>
+        </c-CRow>
       </section>
     """
 
@@ -33,7 +33,7 @@ class FlowDirection(Component):
         font-family: ui-sans-serif, system-ui, sans-serif;
       }
 
-      :where(.flow-direction [data-citry-ui-part="group"]) {
+      :where(.flow-direction [data-citry-ui-part="row"]) {
         padding: 0.7rem;
         background: light-dark(#eee0c9, #372d24);
       }

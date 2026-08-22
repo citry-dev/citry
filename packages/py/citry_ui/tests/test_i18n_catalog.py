@@ -58,7 +58,7 @@ def test_component_messages_generate_the_source_catalog() -> None:
     component_catalog = root.joinpath("locales", "en-US", "citry-ui.ftl").read_text(encoding="utf-8")
 
     assert component_catalog == render_component_catalog(citry_ui.COMPONENTS)
-    assert len(_catalog_outputs()) == 115
+    assert len(_catalog_outputs()) == 152
 
 
 def test_component_source_messages_are_the_final_class_member() -> None:
@@ -131,9 +131,13 @@ def test_every_catalog_message_resolves_through_the_configured_package() -> None
         "action_label": "Undo",
         "date": "August 19, 2026",
         "label": "Upload",
+        "item": "Design review",
         "max": "8",
         "min": "1",
         "page": "3",
+        "path": "World / Europe / Prague",
+        "position": "2",
+        "row": "Design review",
         "start": "August 19, 2026",
         "step": "0.5",
         "end": "August 24, 2026",
@@ -145,6 +149,7 @@ def test_every_catalog_message_resolves_through_the_configured_package() -> None
         "selected": 1,
         "count": 2,
         "column": "Name",
+        "color": "#7f56d9",
     }
 
     for message_id, entry in _catalog_outputs().items():

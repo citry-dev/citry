@@ -7,3 +7,5 @@
 redirects:
   - from: /advanced/const-optimization/
     to: /advanced/performance/
+  - from: /ui-library/components/stack-group/
+    to: /ui-library/components/col-row/

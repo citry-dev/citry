@@ -12,14 +12,14 @@ class SpinnerSizes(Component):
         pass
 
     template = """
-      <c-CGroup class_="spinner-sizes" gap="lg" align="center">
+      <c-CRow class_="spinner-sizes" gap="lg" align="center">
         <c-for each="size in sizes">
-          <c-CStack align="center" gap="xs">
+          <c-CCol align="center" gap="xs">
             <c-CSpinner c-label="f'{size} star-map load'" c-size="size" />
             <span>{{ size }}</span>
-          </c-CStack>
+          </c-CCol>
         </c-for>
-      </c-CGroup>
+      </c-CRow>
     """
 
     def template_data(

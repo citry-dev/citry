@@ -6,11 +6,11 @@ citry.register_library(citry_ui)
 
 class ProgressIntents(Component):
     template = """
-      <c-CStack class_="progress-intents" gap="sm">
+      <c-CCol class_="progress-intents" gap="sm">
         <c-for each="item in items">
           <div><span>{{ item[1] }}</span><c-CProgress c-label="item[1]" c-value="62" c-intent="item[0]" /></div>
         </c-for>
-      </c-CStack>
+      </c-CCol>
     """
 
     class Kwargs:

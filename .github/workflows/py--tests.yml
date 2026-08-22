@@ -18,6 +18,7 @@ on:
       - "scripts/verify_citry_core_distribution.py"
       - "scripts/verify_citry_distribution.py"
       - "scripts/verify_citry_lsp_distribution.py"
+      - "scripts/verify_citry_ui_distribution.py"
       - "scripts/verify_pygments_citry_distribution.py"
       - "scripts/verify_wheel_size.py"
       - "crates/**"
@@ -31,6 +32,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/py--tests.yml"
+      - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
   pull_request:
@@ -45,6 +47,7 @@ on:
       - "scripts/verify_citry_core_distribution.py"
       - "scripts/verify_citry_distribution.py"
       - "scripts/verify_citry_lsp_distribution.py"
+      - "scripts/verify_citry_ui_distribution.py"
       - "scripts/verify_pygments_citry_distribution.py"
       - "scripts/verify_wheel_size.py"
       - "crates/**"
@@ -58,6 +61,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/py--tests.yml"
+      - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
   workflow_dispatch:

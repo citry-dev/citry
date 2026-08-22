@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Protocol, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput
-from citry.ext.dependencies import Style
+from citry.ext.dependencies import Script, Style
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -19,6 +19,18 @@ from citry_ui.components.cdialog.cdialog import CDialog
 
 CAlertDialogSize = Literal["sm", "md", "lg"]
 CAlertDialogScroll = Literal["body", "dialog"]
+
+
+class _ScriptDependencies(Protocol):
+    js: Iterable[Script]
+
+
+def _dialog_scripts() -> tuple[Script, ...]:
+    dependencies = cast("_ScriptDependencies | None", CDialog.Dependencies)
+    if dependencies is None:
+        raise RuntimeError("CAlertDialog requires CDialog dependencies.")
+    return tuple(dependencies.js)
+
 
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNERSHIP_DIRECTIVES = frozenset(
@@ -108,6 +120,7 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
 
 class CAlertDialog(LibraryComponent):
     class Dependencies:
+        js = _dialog_scripts()
         css = (Style(content=CDialog.css),)
 
     @dataclass(slots=True)

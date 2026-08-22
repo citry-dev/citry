@@ -12,12 +12,12 @@ class SwitchPresentation(Component):
         pass
 
     template = """
-      <c-CStack>
+      <c-CCol>
         <c-for each="size in sizes">
           <c-CSwitch c-size="size" checked>{{ size }} switch</c-CSwitch>
         </c-for>
         <c-CSwitch label_pos="start" checked>Label before track</c-CSwitch>
-      </c-CStack>
+      </c-CCol>
     """
 
     def template_data(

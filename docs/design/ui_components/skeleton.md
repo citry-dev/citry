@@ -18,7 +18,7 @@ tables, and other domain-specific loading shapes.
 | Placeholder block | `<c-CSkeleton height="8rem" />` | direct API |
 | Avatar shape | `<c-CSkeleton kind="circle" width="3rem" height="3rem" />` | direct API |
 | Paragraph | `<c-CSkeleton kind="text" c-lines="3" />` | direct API |
-| Card or list shape | several Skeletons inside `CStack`/`CGroup` | composition |
+| Card or list shape | several Skeletons inside `CCol`/`CRow` | composition |
 | Announce loading | `aria-busy` and visible/status text on the owning region | native composition |
 
 The family deliberately rejects Vuetify's type mini-language. Primitive
@@ -41,7 +41,7 @@ Vuetify disposition:
 
 | Vuetify surface or job | Citry support path | Citry surface | Decision |
 |---|---|---|---|
-| predefined bones/type grammar | composition | `kind`, `lines`, `CStack`, `CGroup`, CSS | reject opaque grammar |
+| predefined bones/type grammar | composition | `kind`, `lines`, `CCol`, `CRow`, CSS | reject opaque grammar |
 | avatar/button/image/text/paragraph | direct primitive | `kind`, dimensions, lines | adopt capability |
 | card/list/table/article patterns | composition | ordinary component/layout tree | adopt capability without presets |
 | loading content switch | owner state | `c-if`/`x-if` outside Skeleton | omit competing async owner |
@@ -52,13 +52,13 @@ Vuetify disposition:
 ## 3. Public composition and anatomy
 
 ```citry-html
-<c-CGroup>
+<c-CRow>
   <c-CSkeleton kind="circle" width="3rem" height="3rem" />
-  <c-CStack c-gap="'xs'">
+  <c-CCol c-gap="'xs'">
     <c-CSkeleton kind="text" />
     <c-CSkeleton kind="text" width="65%" />
-  </c-CStack>
-</c-CGroup>
+  </c-CCol>
+</c-CRow>
 ```
 
 | Component | Semantic root | Attribute destination | Required relationships |

@@ -138,6 +138,13 @@ def test_window_accepts_empty_and_final_partial_ranges():
     assert 'style="block-size: 0px;"' in final
     assert 'aria-posinset="3"' in final
 
+    self_contained = _render(
+        '<c-CVirtualWindow c-total_count="2" c-item_size="50">'
+        '<c-CVirtualListItem item_key="first">First</c-CVirtualListItem>'
+        '<c-CVirtualListItem item_key="second">Second</c-CVirtualListItem></c-CVirtualWindow>'
+    )
+    assert self_contained.count('style="block-size: 0px;"') == 2
+
 
 def test_item_keys_are_required_nonempty_and_unique():
     with pytest.raises(SyntaxError, match="must have one of the following attributes"):

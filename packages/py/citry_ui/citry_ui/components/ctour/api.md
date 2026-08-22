@@ -1,13 +1,18 @@
 ---
 title: Tour
-description: Build modal, target-aware product walkthroughs with Citry UI.
+description: Build polished, target-aware product walkthroughs with Citry UI.
 ---
 
 # Tour
 
-Use `CTour` with direct `CTourStep` declarations for a short modal walkthrough.
+Use `CTour` with direct `CTourStep` declarations for a short walkthrough.
 Every title, body, and media slot renders on the server. A step can point to an
 exact element ID or remain centered in the viewport.
+
+When the Tour card is narrow, its progress text and step dots occupy their own
+row above the skip, previous, next, and finish actions. This responds to the
+card width, including a custom `--cui-tour-width`, rather than only to the page
+viewport.
 
 ## Tour at a glance
 
@@ -17,7 +22,8 @@ exact element ID or remain centered in the viewport.
 
 Set `target_id` to a stable HTML ID. Tour scrolls that element into view,
 positions the card using logical placement, and keeps the highlighted target
-noninteractive while the modal is open.
+available for interaction while the Tour is open. The spotlight never captures
+pointer input, and collision handling keeps the card off the highlighted area.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctour/snippets/targeted.py" title="Target page elements" />
 
@@ -49,22 +55,24 @@ selectors or trusted HTML.
 ## Customize Tour
 
 Public parts and `--cui-tour-*` variables customize the card, mask, spotlight,
-spacing, and focus treatment without replacing modal behavior.
+progress, spacing, and focus treatment without replacing Tour behavior.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctour/snippets/customization.py" title="Customize Tour" />
 
 ## Accessibility and localization
 
-Tour uses native modal `<dialog>` behavior, keeps Tab inside the card, supports
-Escape when allowed, and restores focus to the activator. Step changes focus
-the new title. `describe=True` explicitly connects a step body through
-`aria-describedby`; leave it false for complex structured content.
+Tour uses a nonmodal native `<dialog>` so the highlighted page control remains
+usable. Opening or changing a step focuses its title, Escape closes when
+allowed, and closing restores focus to the activator. Tab is not trapped: it
+may move between the Tour actions and the explained page. `describe=True`
+explicitly connects a step body through `aria-describedby`; leave it false for
+complex structured content.
 
 Close, previous, next, finish, skip, and progress text come from the Citry UI
 catalog. Explicit label inputs remain fixed; catalog defaults are server
 rendered and update through `$c-tr` under a client-enabled i18n provider.
 
-The highlighted page target is deliberately inert in this modal release. Use
-ordinary application UI outside Tour when a user must interact with a target.
+Because background controls remain interactive, do not use Tour for a decision
+that must block the rest of the page. Use `CDialog` for that job.
 
 <!-- UI_LIBRARY_API_REFERENCE -->

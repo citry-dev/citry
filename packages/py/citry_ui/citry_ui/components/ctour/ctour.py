@@ -1,15 +1,13 @@
-"""Modal, target-aware product Tours."""
+"""Target-aware product Tours with interactive highlighted elements."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Literal, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 from citry import CitryRender, LibraryComponent, Slot, SlotInput, const_value
-from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
-from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
@@ -52,7 +50,6 @@ _ROOT_OWNED = frozenset(
         "aria-hidden",
         "contenteditable",
         "data-active",
-        "data-citry-dialog-host",
         "data-citry-tour-host",
         "data-citry-tour-initialized",
         "data-citry-ui-part",
@@ -313,12 +310,22 @@ class CTour(LibraryComponent):
         return {
             **snapshot,
             "activator": (
-                Slot(lambda ctx: slots.activator(activator_data, provides=dict(ctx.provides or {})))
+                Slot(
+                    lambda ctx: cast("Slot[CTourActivatorSlotData]", slots.activator)(
+                        activator_data,
+                        provides=dict(ctx.provides or {}),
+                    )
+                )
                 if slots.activator is not None
                 else None
             ),
             "close": (
-                Slot(lambda ctx: slots.close({}, provides=dict(ctx.provides or {})))
+                Slot(
+                    lambda ctx: cast("Slot[CTourCloseSlotData]", slots.close)(
+                        {},
+                        provides=dict(ctx.provides or {}),
+                    )
+                )
                 if slots.close is not None
                 else None
             ),
@@ -372,13 +379,6 @@ class CTour(LibraryComponent):
       citry-ui-tour-progress =
           Step { $current } of { $total }
     """
-
-
-class _CTourDependencies:
-    js: ClassVar = [ANCHORED_LAYER_RUNTIME_DEPENDENCY, DIALOG_CONTROLLER_RUNTIME_DEPENDENCY]
-
-
-CTour.Dependencies = _CTourDependencies
 
 
 class CTourStep(LibraryComponent):
@@ -505,6 +505,7 @@ class CInternalTour(LibraryComponent):
                     "progress_current": str(index + 1),
                     "progress_total": str(total),
                     "progress_values": f"{{ current: '{index + 1}', total: '{total}' }}",
+                    "step_positions": list(range(total)),
                     "title": Slot(
                         lambda ctx, d=declaration, sd=slot_data: d.title(sd, provides=dict(ctx.provides or {}))
                     ),
@@ -549,7 +550,6 @@ class CInternalTour(LibraryComponent):
         c-data-active="active"
         c-data-value="active_value"
         c-data-size="size"
-        data-citry-dialog-host
         data-citry-tour-host
         data-citry-ui-part="tour"
       >
@@ -560,9 +560,8 @@ class CInternalTour(LibraryComponent):
           c-open="open"
           c-aria-labelledby="active_title_id"
           c-aria-describedby="active_description_id"
-          aria-modal="true"
+          aria-modal="false"
           c-data-open="open"
-          data-citry-dialog-surface
           data-citry-tour-dialog
           data-citry-ui-part="dialog"
         >
@@ -651,14 +650,21 @@ class CInternalTourStep(LibraryComponent):
         <div c-id="description_id" data-citry-ui-part="description">{{ content }}</div>
         <span c-hidden="not arrow" aria-hidden="true" data-citry-ui-part="arrow"></span>
         <footer data-citry-ui-part="footer">
-          <c-if cond="catalog['progress']">
-            <span
-              c-$c-tr:citry-ui-tour-progress="progress_values"
-              aria-live="polite"
-              data-citry-ui-part="progress"
-            >{{ tr('citry-ui-tour-progress', current=progress_current, total=progress_total) }}</span>
-          </c-if>
-          <c-else><span aria-live="polite" data-citry-ui-part="progress">{{ progress }}</span></c-else>
+          <div data-citry-ui-part="progress-group">
+            <c-if cond="catalog['progress']">
+              <span
+                c-$c-tr:citry-ui-tour-progress="progress_values"
+                aria-live="polite"
+                data-citry-ui-part="progress"
+              >{{ tr('citry-ui-tour-progress', current=progress_current, total=progress_total) }}</span>
+            </c-if>
+            <c-else><span aria-live="polite" data-citry-ui-part="progress">{{ progress }}</span></c-else>
+            <span aria-hidden="true" data-citry-ui-part="steps">
+              <c-for each="step_position in step_positions">
+                <span c-data-current="step_position == index" data-citry-ui-part="step-dot"></span>
+              </c-for>
+            </span>
+          </div>
           <div data-citry-ui-part="actions">
             <button
               type="button"

@@ -2,6 +2,7 @@ $component({
   props: {
     sort: {}, selected: {}, disabled: {}, overscan: {},
     onSortChange: {}, onSelectionChange: {}, onRangeChange: {}, onCellActivate: {},
+    onCellEditStart: {}, onCellEditCommit: {}, onCellEditCancel: {},
   },
   init: ({els, data, props, effect, i18n}) => {
     const root = els[0];
@@ -13,8 +14,8 @@ $component({
       throw new Error('[citry-ui] CDataGrid settled anatomy is invalid.');
     }
     const headers = [...table.querySelectorAll('[data-citry-ui-part="header-cell"]')];
-    const rows = [...table.querySelectorAll('[data-citry-ui-part="row"]')];
-    const cells = [...table.querySelectorAll('[data-citry-ui-part="cell"]')];
+    let rows = [...table.querySelectorAll('[data-citry-ui-part="row"]')];
+    let cells = [...table.querySelectorAll('[data-citry-ui-part="cell"]')];
     if (headers.length !== Number(table.getAttribute('aria-colcount'))
         || cells.length !== rows.length * headers.length) {
       throw new Error('[citry-ui] CDataGrid settled row and column anatomy is invalid.');
@@ -25,8 +26,12 @@ $component({
       throw new Error('[citry-ui] CDataGrid header and cell slots cannot contain focusable descendants.');
     }
     const byRow = new Map(rows.map(row => [row.dataset.rowKey, row]));
-    const knownRows = rows.map(row => row.dataset.rowKey);
+    let knownRows = rows.map(row => row.dataset.rowKey);
     const knownColumns = headers.map(header => header.dataset.columnKey);
+    const editorKey = (rowKey, columnKey) => `${rowKey}\u0000${columnKey}`;
+    const editors = new Map(data.editors.map(item => [editorKey(item.rowKey, item.columnKey), item]));
+    const serverRowOrder = new Map(knownRows.map((key, index) => [key, index]));
+    const completeCollection = data.start_index === 0 && data.total_count === rows.length;
     const invalid = new Set();
     let active = cells.find(cell => cell.tabIndex === 0) ?? headers[0] ?? null;
     let currentSort = data.sort.map(item => ({...item}));
@@ -39,9 +44,14 @@ $component({
     let onSelectionChange = null;
     let onRangeChange = null;
     let onCellActivate = null;
+    let onCellEditStart = null;
+    let onCellEditCommit = null;
+    let onCellEditCancel = null;
+    let activeEditor = null;
     let rangeFrame = 0;
     let requestId = 0;
     let pendingSort = null;
+    let locallySorted = false;
     let pendingSelection = null;
     let sortInitialized = false;
     let pointerSelection = null;
@@ -85,6 +95,14 @@ $component({
       return format(data.labels[direction === 'asc' ? 'sort_ascending'
         : direction === 'desc' ? 'sort_descending' : 'sort_cleared'], {column});
     };
+    const translateEdit = (kind, column) => {
+      try {
+        if (i18n && data.catalog[kind]) {
+          return i18n.tr(`citry-ui-data-grid-${kind.replaceAll('_', '-')}`, {column});
+        }
+      } catch (error) { console.error('[citry-ui] CDataGrid translation failed.', error, root); }
+      return format(data.labels[kind], {column});
+    };
     const announceSelection = count => {
       try {
         if (i18n && count === 1 && data.catalog.selected_one) {
@@ -101,6 +119,33 @@ $component({
     const announceSort = (key, direction) => {
       const column = data.column_labels[key];
       if (typeof column === 'string') status.textContent = translateSort(direction, column);
+    };
+    const rowSortValue = (row, key) => {
+      const cell = [...row.cells].find(candidate => candidate.dataset.columnKey === key);
+      return cell?.textContent?.trim().replace(/\s+/g, ' ') ?? '';
+    };
+    const reorderCompleteRows = sort => {
+      if (!completeCollection) return;
+      locallySorted = true;
+      const locale = i18n?.context.locale || root.ownerDocument.documentElement.lang || undefined;
+      const collator = new Intl.Collator(locale, {numeric: true, sensitivity: 'base'});
+      const ordered = [...rows].sort((left, right) => {
+        for (const item of sort) {
+          const result = collator.compare(rowSortValue(left, item.key), rowSortValue(right, item.key));
+          if (result) return item.direction === 'desc' ? -result : result;
+        }
+        return (serverRowOrder.get(left.dataset.rowKey) ?? 0) - (serverRowOrder.get(right.dataset.rowKey) ?? 0);
+      });
+      const body = table.tBodies[0];
+      for (const row of ordered) body.append(row);
+      rows = ordered;
+      knownRows = rows.map(row => row.dataset.rowKey);
+      rows.forEach((row, rowIndex) => {
+        row.dataset.rowIndex = String(rowIndex);
+        row.setAttribute('aria-rowindex', String(rowIndex + 2));
+        for (const cell of row.cells) cell.dataset.rowIndex = String(rowIndex);
+      });
+      cells = rows.flatMap(row => [...row.querySelectorAll('[data-citry-ui-part="cell"]')]);
     };
     const applySort = next => {
       currentSort = next.map(item => ({...item}));
@@ -225,6 +270,115 @@ $component({
       const changed = knownRows.filter(value => before.has(value) !== after.has(value));
       selectionRequest(next, changed, key, after.has(key), event, source);
     };
+    const editDetail = (session, event, reason) => ({
+      rowKey: session.descriptor.rowKey,
+      columnKey: session.descriptor.columnKey,
+      rowIndex: session.descriptor.rowIndex,
+      columnIndex: session.descriptor.columnIndex,
+      editor: session.descriptor.editor,
+      previousValue: session.descriptor.value,
+      source: session.source,
+      reason,
+      sourceEvent: event,
+    });
+    const restoreEditor = (session, {focus = true} = {}) => {
+      session.control.remove();
+      session.cell.append(...session.content);
+      session.cell.removeAttribute('data-editing');
+      root.removeAttribute('data-editing');
+      activeEditor = null;
+      if (focus) focusCell(session.cell, true);
+    };
+    const cancelEdit = (event, reason = 'escape', {notify = true, focus = true} = {}) => {
+      const session = activeEditor;
+      if (!session) return;
+      restoreEditor(session, {focus});
+      if (notify && onCellEditCancel) {
+        try { onCellEditCancel(editDetail(session, event, reason)); }
+        catch (error) { console.error('[citry-ui] CDataGrid onCellEditCancel callback failed.', error, root); }
+      }
+      if (notify) status.textContent = translateEdit('edit_cancelled', session.descriptor.columnLabel);
+    };
+    const commitEdit = (event, reason = 'enter', {focus = true} = {}) => {
+      const session = activeEditor;
+      if (!session) return true;
+      const {control, descriptor} = session;
+      let value;
+      if (descriptor.editor === 'checkbox') value = control.checked;
+      else if (descriptor.editor === 'number') {
+        value = control.value === '' ? Number.NaN : control.valueAsNumber;
+        if (!control.validity.valid || !Number.isFinite(value)) {
+          control.setAttribute('aria-invalid', 'true');
+          status.textContent = translateEdit('edit_invalid', descriptor.columnLabel);
+          return false;
+        }
+      } else value = control.value;
+      if (descriptor.editor === 'select' && !descriptor.options.some(option => option.value === value && !option.disabled)) {
+        control.setAttribute('aria-invalid', 'true');
+        status.textContent = translateEdit('edit_invalid', descriptor.columnLabel);
+        return false;
+      }
+      if (onCellEditCommit && value !== descriptor.value) {
+        try {
+          if (onCellEditCommit(value, editDetail(session, event, reason)) === false) {
+            control.setAttribute('aria-invalid', 'true');
+            status.textContent = translateEdit('edit_invalid', descriptor.columnLabel);
+            return false;
+          }
+        } catch (error) {
+          console.error('[citry-ui] CDataGrid onCellEditCommit callback failed.', error, root);
+          control.setAttribute('aria-invalid', 'true');
+          status.textContent = translateEdit('edit_invalid', descriptor.columnLabel);
+          return false;
+        }
+      }
+      restoreEditor(session, {focus});
+      status.textContent = translateEdit('edit_submitted', descriptor.columnLabel);
+      return true;
+    };
+    const startEdit = (cell, event, source, seed = null) => {
+      const row = cell.closest('[data-citry-ui-part="row"]');
+      const descriptor = editors.get(editorKey(row?.dataset.rowKey, cell.dataset.columnKey));
+      if (!row || !descriptor || disabled || row.hasAttribute('data-disabled')) return false;
+      if (activeEditor?.cell === cell) return true;
+      if (activeEditor && !commitEdit(event, 'next-cell', {focus: false})) return false;
+      const control = descriptor.editor === 'select'
+        ? root.ownerDocument.createElement('select') : root.ownerDocument.createElement('input');
+      if (descriptor.editor !== 'select') control.type = descriptor.editor;
+      control.setAttribute('data-citry-ui-part', 'editor');
+      control.setAttribute('aria-label', translateEdit('edit', descriptor.columnLabel));
+      for (const [name, value] of Object.entries(descriptor.attrs)) {
+        if (typeof value === 'boolean') control.toggleAttribute(name, value);
+        else control.setAttribute(name, String(value));
+      }
+      if (descriptor.editor === 'select') {
+        for (const option of descriptor.options) {
+          const element = root.ownerDocument.createElement('option');
+          element.value = option.value;
+          element.textContent = option.label;
+          element.disabled = option.disabled;
+          control.append(element);
+        }
+        control.value = descriptor.value;
+      } else if (descriptor.editor === 'checkbox') control.checked = descriptor.value;
+      else control.value = seed === null ? String(descriptor.value) : seed;
+      const content = [...cell.childNodes];
+      cell.replaceChildren(control);
+      cell.setAttribute('data-editing', '');
+      root.setAttribute('data-editing', '');
+      activeEditor = {cell, control, content, descriptor, source};
+      if (onCellEditStart) {
+        try { onCellEditStart(editDetail(activeEditor, event, seed === null ? event.type : 'printable')); }
+        catch (error) { console.error('[citry-ui] CDataGrid onCellEditStart callback failed.', error, root); }
+      }
+      status.textContent = translateEdit('editing', descriptor.columnLabel);
+      control.focus();
+      if (control instanceof HTMLInputElement && control.type !== 'checkbox') {
+        if (seed === null) control.select();
+        else control.setSelectionRange(control.value.length, control.value.length);
+      }
+      return true;
+    };
     const activate = (cell, event, source) => {
       const row = cell.closest('[data-citry-ui-part="row"]');
       if (!row || disabled || row.hasAttribute('data-disabled') || !onCellActivate) return;
@@ -239,13 +393,43 @@ $component({
     const onKeydown = event => {
       const cell = event.target.closest('[data-citry-ui-part="header-cell"],[data-citry-ui-part="cell"]');
       if (!cell || !table.contains(cell) || disabled || !data.is_ready) return;
+      if (activeEditor && event.target === activeEditor.control) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          cancelEdit(event);
+        } else if (event.key === 'Enter' || event.key === 'F2') {
+          event.preventDefault();
+          commitEdit(event, event.key.toLowerCase());
+        } else if (event.key === 'Tab') {
+          event.preventDefault();
+          const currentIndex = cells.indexOf(activeEditor.cell);
+          const target = cells[Math.max(0, Math.min(cells.length - 1, currentIndex + (event.shiftKey ? -1 : 1)))];
+          if (commitEdit(event, event.shiftKey ? 'shift-tab' : 'tab', {focus: false})) focusCell(target, true);
+        }
+        return;
+      }
       const header = cell.matches('[data-citry-ui-part="header-cell"]');
       const rowIndex = header ? -1 : Number(cell.dataset.rowIndex);
       const columnIndex = Number(cell.dataset.columnIndex);
       if (event.key === 'Enter') {
         event.preventDefault();
-        if (header) requestSort(cell, event, 'keyboard'); else activate(cell, event, 'keyboard');
+        if (header) requestSort(cell, event, 'keyboard');
+        else if (!startEdit(cell, event, 'keyboard')) activate(cell, event, 'keyboard');
         return;
+      }
+      if (!header && event.key === 'F2') {
+        event.preventDefault();
+        startEdit(cell, event, 'keyboard');
+        return;
+      }
+      if (!header && !event.ctrlKey && !event.metaKey && !event.altKey
+          && (event.key.length === 1 || event.key === 'Backspace' || event.key === 'Delete')) {
+        const descriptor = editors.get(editorKey(cell.dataset.rowKey, cell.dataset.columnKey));
+        if (descriptor && ['text', 'number'].includes(descriptor.editor)) {
+          event.preventDefault();
+          startEdit(cell, event, 'keyboard', event.key.length === 1 ? event.key : '');
+          return;
+        }
       }
       if (event.key === ' ' && event.shiftKey && !header) {
         event.preventDefault();
@@ -286,6 +470,7 @@ $component({
       }
     };
     const onClick = event => {
+      if (activeEditor && activeEditor.control.contains(event.target)) return;
       if (suppressClick) {
         suppressClick = false;
         clearTimeout(suppressClickTimer);
@@ -295,6 +480,7 @@ $component({
       if (disabled || !data.is_ready) return;
       const header = event.target.closest('[data-citry-ui-part="header-cell"]');
       if (header && table.contains(header)) {
+        if (activeEditor && !commitEdit(event, 'outside', {focus: false})) return;
         focusCell(header, true);
         requestSort(header, event, 'pointer');
         return;
@@ -320,6 +506,7 @@ $component({
       suppressClickTimer = setTimeout(() => { suppressClick = false; }, 0);
     };
     const onPointerDown = event => {
+      if (activeEditor && activeEditor.control.contains(event.target)) return;
       if (event.pointerType !== 'mouse' || !event.isPrimary || event.button !== 0
           || disabled || !data.is_ready || data.selection !== 'multiple') return;
       const cell = event.target.closest('[data-citry-ui-part="cell"]');
@@ -368,9 +555,18 @@ $component({
     const onDoubleClick = event => {
       if (disabled || !data.is_ready) return;
       const cell = event.target.closest('[data-citry-ui-part="cell"]');
-      if (cell && table.contains(cell)) activate(cell, event, 'pointer');
+      if (cell && table.contains(cell) && !startEdit(cell, event, 'pointer')) activate(cell, event, 'pointer');
+    };
+    const onDocumentPointerDown = event => {
+      if (activeEditor && !activeEditor.cell.contains(event.target)
+          && !commitEdit(event, 'outside', {focus: false})) {
+        event.preventDefault();
+        event.stopPropagation();
+        activeEditor.control.focus();
+      }
     };
     const onFocusIn = event => {
+      if (activeEditor && event.target === activeEditor.control) return;
       const cell = event.target.closest('[data-citry-ui-part="header-cell"],[data-citry-ui-part="cell"]');
       if (cell && table.contains(cell)) focusCell(cell, true);
     };
@@ -389,18 +585,25 @@ $component({
     table.addEventListener('pointermove', onPointerMove);
     table.addEventListener('pointerup', onPointerUp);
     table.addEventListener('pointercancel', onPointerCancel);
+    root.ownerDocument.addEventListener('pointerdown', onDocumentPointerDown, true);
     viewport.addEventListener('focus', onViewportFocus);
     viewport.addEventListener('scroll', onScroll, {passive: true});
     const observer = typeof ResizeObserver === 'function'
       ? new ResizeObserver(() => scheduleRange('resize')) : null;
     observer?.observe(viewport);
+    const stopI18n = i18n?.subscribe(() => {
+      if (locallySorted) reorderCompleteRows(currentSort);
+    });
     applySort(currentSort);
     applySelected(currentSelected);
     viewport.scrollTop = data.initial_index * data.row_height;
     root.setAttribute('data-citry-data-grid-initialized', '');
     scheduleRange('initial');
     effect(() => {
-      for (const name of ['onSortChange', 'onSelectionChange', 'onRangeChange', 'onCellActivate']) {
+      for (const name of [
+        'onSortChange', 'onSelectionChange', 'onRangeChange', 'onCellActivate',
+        'onCellEditStart', 'onCellEditCommit', 'onCellEditCancel',
+      ]) {
         const value = props[name];
         if (value !== undefined && value !== null && typeof value !== 'function') report(name, value);
         else invalid.delete(name);
@@ -409,11 +612,15 @@ $component({
       onSelectionChange = typeof props.onSelectionChange === 'function' ? props.onSelectionChange : null;
       onRangeChange = typeof props.onRangeChange === 'function' ? props.onRangeChange : null;
       onCellActivate = typeof props.onCellActivate === 'function' ? props.onCellActivate : null;
+      onCellEditStart = typeof props.onCellEditStart === 'function' ? props.onCellEditStart : null;
+      onCellEditCommit = typeof props.onCellEditCommit === 'function' ? props.onCellEditCommit : null;
+      onCellEditCancel = typeof props.onCellEditCancel === 'function' ? props.onCellEditCancel : null;
       if (props.disabled !== undefined && typeof props.disabled !== 'boolean') {
         report('disabled', props.disabled);
       }
       else invalid.delete('disabled');
       disabled = typeof props.disabled === 'boolean' ? props.disabled : data.disabled;
+      if (disabled && activeEditor) cancelEdit(new Event('disabled'), 'disabled');
       root.toggleAttribute('data-disabled', disabled);
       root.setAttribute('aria-disabled', String(disabled));
       table.setAttribute('aria-disabled', String(disabled || !data.is_ready));
@@ -428,9 +635,10 @@ $component({
         invalid.delete('sort');
         if (!sameSort(acceptedSort, currentSort)) {
           const previous = currentSort.map(item => ({...item}));
+          const acceptedPending = pendingSort && sameSort(acceptedSort, pendingSort.next);
           applySort(acceptedSort);
+          if (acceptedPending) reorderCompleteRows(acceptedSort);
           if (sortInitialized) {
-            const acceptedPending = pendingSort && sameSort(acceptedSort, pendingSort.next);
             if (acceptedPending) announceSort(pendingSort.key, pendingSort.direction);
             else {
               const changed = acceptedSort.find(item => !previous.some(
@@ -464,6 +672,8 @@ $component({
       alive = false;
       cancelAnimationFrame(rangeFrame);
       observer?.disconnect();
+      stopI18n?.();
+      if (activeEditor) cancelEdit(new Event('cleanup'), 'cleanup', {notify: false, focus: false});
       table.removeEventListener('keydown', onKeydown);
       table.removeEventListener('click', onClick);
       table.removeEventListener('dblclick', onDoubleClick);
@@ -472,6 +682,7 @@ $component({
       table.removeEventListener('pointermove', onPointerMove);
       table.removeEventListener('pointerup', onPointerUp);
       table.removeEventListener('pointercancel', onPointerCancel);
+      root.ownerDocument.removeEventListener('pointerdown', onDocumentPointerDown, true);
       viewport.removeEventListener('focus', onViewportFocus);
       viewport.removeEventListener('scroll', onScroll);
       root.removeAttribute('data-citry-data-grid-initialized');

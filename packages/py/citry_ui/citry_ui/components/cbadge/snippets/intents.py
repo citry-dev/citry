@@ -6,13 +6,13 @@ citry.register_library(citry_ui)
 
 class BadgeIntents(Component):
     template = """
-      <c-CGroup class_="badge-intents">
+      <c-CRow class_="badge-intents">
         <c-CBadge intent="neutral">Unsorted</c-CBadge>
         <c-CBadge intent="primary">In study</c-CBadge>
         <c-CBadge intent="success">Verified</c-CBadge>
         <c-CBadge intent="warn">Handle carefully</c-CBadge>
         <c-CBadge intent="danger">Restricted</c-CBadge>
-      </c-CGroup>
+      </c-CRow>
     """
     css = """
       :where(.badge-intents) {

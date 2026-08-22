@@ -11,8 +11,6 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CTour, CTourStep
-from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
-from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
@@ -103,12 +101,11 @@ def test_public_schema_aliases_dependencies_and_registration_are_exact() -> None
     assert tour_hints["scroll"] == citry_ui.CTourScroll
     assert tour_hints["missing_target"] == citry_ui.CTourMissingTarget
     assert step_hints["placement"] == citry_ui.CTourPlacement
-    assert CTour.Dependencies.js == [ANCHORED_LAYER_RUNTIME_DEPENDENCY, DIALOG_CONTROLLER_RUNTIME_DEPENDENCY]
     assert CTour in citry_ui.COMPONENTS
     assert CTourStep in citry_ui.COMPONENTS
 
 
-def test_default_tour_is_server_rendered_native_dialog_with_modal_anatomy() -> None:
+def test_default_tour_is_server_rendered_native_dialog_with_guided_anatomy() -> None:
     html = _render(_tour(_step("welcome")))
     root = _tag(html, "tour")
     dialog = _tag(html, "dialog")
@@ -121,13 +118,25 @@ def test_default_tour_is_server_rendered_native_dialog_with_modal_anatomy() -> N
     assert "data-open" not in root
     assert dialog.startswith("<dialog")
     assert 'id="guide-dialog"' in dialog
-    assert 'aria-modal="true"' in dialog
+    assert 'aria-modal="false"' in dialog
     assert 'aria-labelledby="guide-title-0"' in dialog
     assert "aria-describedby" not in dialog
     assert "data-current" in panel
     assert "hidden" not in panel
     assert "inert" not in panel
-    for part in ("spotlight", "surface", "title", "description", "footer", "progress", "actions", "close"):
+    for part in (
+        "spotlight",
+        "surface",
+        "title",
+        "description",
+        "footer",
+        "progress-group",
+        "progress",
+        "steps",
+        "step-dot",
+        "actions",
+        "close",
+    ):
         assert f'data-citry-ui-part="{part}"' in html
     assert 'type="button"' in html
     assert "Step \u20681\u2069 of \u20681\u2069" in html
@@ -272,9 +281,10 @@ def test_runtime_contract_covers_state_geometry_cleanup_and_reasoned_callbacks()
         "scrollIntoView",
         "getElementById",
         "requestAnimationFrame",
-        "controller.cleanup({handoff: true})",
-        'dialog.addEventListener("keydown", onKeyDown)',
-        'host.removeEventListener("click", onClick)',
+        "intersectArea",
+        "dialog.show()",
+        "host.ownerDocument.addEventListener('keydown', onKeyDown, true)",
+        "host.removeEventListener('click', onClick)",
     ):
         assert token in source
     assert "querySelector(data.target" not in source
@@ -288,8 +298,10 @@ def test_css_exposes_public_variables_and_environment_rules() -> None:
         "--cui-tour-backdrop-color",
         "--cui-tour-spotlight-padding",
         "--cui-tour-focus-color",
-        "::backdrop",
+        '[data-mode="backdrop"]',
         "100vmax",
+        "container-type: inline-size",
+        "@container (max-width: 22rem)",
         "prefers-reduced-motion",
         "forced-colors",
         "@media print",

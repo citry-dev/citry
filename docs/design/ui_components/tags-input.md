@@ -787,9 +787,9 @@ count); a single transaction performs at most one tag/proxy rebuild. The
 documented supported operating profile is 100 tags per instance and 100
 instances per page; larger values need profiling, not silent truncation.
 
-Asset tests must compare unique payload hashes, prove shared helpers appear
-once, and keep catalog budgets separate from this incremental gate. No icon
-font, third-party dependency, or eager overlay asset is added.
+Asset tests must prove shared helpers emit once and keep catalog budgets
+separate from this incremental gate. No icon font, third-party dependency, or
+eager overlay asset is added.
 
 ## 17. Acceptance matrix
 
@@ -896,4 +896,8 @@ use `i18n.bind()`. Interaction announcements call `i18n.tr()` once at the
 event's active locale and do not replay after a later switch. The package-owned
 `citry-ui-tags-input-maximum` profile formats the maximum. Every non-`None`
 field in `CTagsInputMessages` overrides only that field and registers no default
-binding for it.
+binding for it. Without a client-enabled i18n provider, browser-created remove
+labels and announcements substitute their already-validated inline value into
+the fixed server-translated pattern. This preserves the server-selected locale
+without maintaining a second English fallback table or claiming later locale
+switching.

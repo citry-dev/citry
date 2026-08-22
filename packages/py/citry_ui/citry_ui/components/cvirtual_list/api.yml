@@ -14,7 +14,7 @@ inputs:
       - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Optionally names the complete-DOM list.}
       - {id: estimated-item-size, name: estimated_item_size, type: int, default: {kind: literal, value: 48}, effect: Sets the positive pixel intrinsic-size estimate used while off-screen Item rendering is skipped.}
       - {id: viewport-size, name: viewport_size, type: int, default: {kind: literal, value: 400}, effect: Sets the positive initial viewport block size in CSS pixels.}
-      - {id: focusable, name: focusable, type: bool, default: {kind: literal, value: true}, effect: Adds or removes the root tabindex=0 keyboard-scroll stop.}
+      - {id: focusable, name: focusable, type: bool, default: {kind: literal, value: true}, effect: Adds or removes the root tabindex=0 keyboard-scroll stop. False requires a keyboard-reachable control inside the supplied Items.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the list viewport.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles before owned viewport geometry variables.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed viewport attributes without replacing owned roles geometry state or runtime markers.}
@@ -29,7 +29,7 @@ inputs:
       - {id: overscan, name: overscan, type: int, default: {kind: literal, value: 3}, effect: Requests zero through one hundred Items before and after the visible range.}
       - {id: initial-index, name: initial_index, type: int, default: {kind: literal, value: 0}, effect: Sets the one-shot nonnegative initial scroll index and clamps it to the collection.}
       - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Optionally names the windowed list.}
-      - {id: focusable, name: focusable, type: bool, default: {kind: literal, value: true}, effect: Adds or removes the root tabindex=0 keyboard-scroll stop.}
+      - {id: focusable, name: focusable, type: bool, default: {kind: literal, value: true}, effect: Adds or removes the root tabindex=0 keyboard-scroll stop. False requires a keyboard-reachable control inside the supplied Items.}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the Window viewport.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles before owned viewport geometry variables.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed viewport attributes without replacing owned roles geometry state or runtime markers.}

@@ -407,6 +407,8 @@ handshake:
   callback removal, mutation, or disconnection refuses, discards the point,
   cancels the pending Menu request, hides the point before listener return, and
   leaves the native default untouched;
+- a literal-true callback that synchronously invalidates the external owner is
+  diagnosed before the request is rolled back and the native default resumes;
 - the next props settle after a claim must supply `open=true`; otherwise the
   claim expires at the next task, remains closed, hides the point, and
   diagnoses one broken owner claim without inventing a native replay; and
@@ -995,124 +997,34 @@ values, clipboard data, URLs, callback objects, or event objects.
 
 ## 16. Assets and performance
 
-ContextMenu must reuse `_CMENU_SHARED_ASSETS.runtime` and `.style`, the current
-`citry-ui:menu-root-runtime` generation, `citry-ui:anchored-layer-runtime`,
-native-fieldset tracking, shared Menu collection rendering, and the existing
-Menu CSS payload. Combined CMenu, CSplitButton, and CContextMenu pages emit one
-copy of each shared payload.
+Context Menu reuses the Menu surface and collection runtime, anchored-layer
+coordinator, native-fieldset tracking, and Menu styling. Combined Menu, Split
+Button, and Context Menu pages must emit each shared payload once. Context Menu
+adds no icon, font, image, network, worker, or polling dependency.
 
-Before ContextMenu implementation, CMenu and CSplitButton must extract one
-private Menu surface renderer/record so the facade does not create a third
-copy of `div[role=menu][popover=manual]`, IDs/labels, declaration collection,
-placement/size attrs, or surface validation. The extraction is a stage gate:
-all existing focused CMenu and CSplitButton server/browser tests must remain
-unchanged before the adapter is added.
+One initialized instance owns only its bounded target listeners and
+point-popover guards. Long-press cancellation listeners exist only while a
+gesture is armed, and geometry repair batches to one animation frame. Shared
+root-scope, fieldset, mutation, and layer registries must return to baseline
+after final cleanup.
 
-The Menu controller receives a private external-activation mode. It skips
-native Button validation/writes/click keys, accepts separate point trigger and
-semantic owner, returns the existing `requestRootOpen` path through a bounded
-`requestOpen` result, forwards the controlled callback's exact synchronous
-claim return without duplicating state, and can cancel an unclaimed pending
-request. It uses adapter callbacks for owner validation, disabledness,
-reflection, and focus return. Default CMenu and SplitButton modes remain byte
-for behavior. ContextMenu adds no second Menu runtime symbol.
+Asset accounting uses ordinary incremental and standalone family measurements.
+The incremental measurement catches growth in Context Menu-specific payloads;
+the standalone and catalog-wide measurements catch growth moved into shared
+dependencies.
 
-One initialized ContextMenu adds listeners on its host/target for the owned
-trusted events and a point `beforetoggle`/`toggle` guard, with no new
-document-level outside/Escape listener. Long-press adds
-only generation-bound temporary root/viewport cancellation listeners while
-armed. Its matching derived-click capture listener exists only from accepted
-fallback until the click, 1,500 ms after matching pointerup, or the absolute
-10,000 ms acceptance deadline, whichever happens first.
-Root-scope, fieldset, and mutation tracking must use shared registries with
-affected-registrant filtering. Accepted invocation point writes, point
-`showPopover()`, geometry verification, Menu registration/surface
-`showPopover()`, and first focus are one synchronous ordered transaction. Close
-uses the reverse surface-unregister/point-hide dependency. Only later
-visualViewport or window geometry repair batches to one frame. There is no
-continuous geometry or `shadowRoot` polling.
+The stable production limits are:
 
-The strict incremental budget is attributed against the frozen pre-ContextMenu
-CMenu, anchored-layer, and shared-lifecycle payload. Accounting adds the
-ContextMenu adapter assets and the byte delta of every revised shared
-Menu/surface/runtime payload over that frozen baseline, even when the revised
-payload also appears on a CMenu-only page. Moving adapter code into a shared
-dependency cannot hide it.
+| Asset | Raw | gzip | Brotli |
+|---|---:|---:|---:|
+| Context Menu-specific incremental JavaScript | `< 32 KiB` | `< 10 KiB` | `< 9 KiB` |
+| Complete Context Menu JavaScript, including shared dependencies | `< 160 KiB` | `< 34 KiB` | `< 30 KiB` |
+| Complete Context Menu CSS, including shared dependencies | `< 20 KiB` | `< 3 KiB` | `< 2.5 KiB` |
 
-The original 3 KiB gzip estimate was falsified by the first complete
-behavior-proven adapter. The first asset reratification used a pre-adversarial
-Terser 5.50.0 candidate of 15,829 raw / 5,555 gzip / 4,985 Brotli bytes plus
-only +303 / +41 / +26 bytes of shared Menu growth. Independent runtime review
-then proved that the candidate omitted required safety machinery: composed
-ShadowRoot selection preservation, multi-pointer and scroll cancellation,
-temporary-resource ownership, hostile-anatomy and Popover repair, callback
-exception and reentrancy rollback, exact layer-parent refresh, and
-cleanup-before-reinitialization handoff. Those corrections are contract
-behavior, not optional optimization, so the later 24 KiB / 6 KiB / 5.5 KiB
-assumption is also falsified.
-
-The final asset reratification follows the correctness freeze and charges the
-actual freshly registered production frame. The final direct-Python preview
-closure additionally covers nested target-component readiness ownership and
-server-emitted Menu `position-anchor` parity. The readable ContextMenu class
-source is 28,081 raw / 9,088 gzip / 8,262 Brotli bytes, SHA-256
-`d74fd1adf4be44ed687c4753633a1e46c900b8d0710b58a5c4802a18a4bc4315`;
-the freshly registered adapter frame is 27,159 / 9,021 / 8,186 bytes, SHA-256
-`50f4a76c059a2893a3e88e875e7c333745555b11c917e0313eafd1b5363166db`.
-The readable ContextMenu CSS source is 575 / 257 / 193 bytes, SHA-256
-`22979cafffdd6a575000af38ba46f75bab8eed45c72bd7f2351b02d53eaf603a`;
-the registered CSS frame is 439 / 247 / 179 bytes, SHA-256
-`d6b81c103af87b1eceb56ca7326a4640f8c4bb9b914faf830f4cb7cd2a70488e`.
-No Terser or other non-emitted transform receives budget credit. Earlier
-aggressive-minifier records remain feasibility history, not shipped evidence.
-Compressed feature costs are non-additive, so the auditable breakdown is the
-exact total delta plus its source responsibilities: native/trust preservation;
-long-press token and temporary-listener lifecycle; transformed clipping and
-visible-point geometry; anatomy, capability, and hostile repair; provisional
-handoff, declaration fingerprinting, and layer-parent refresh; and focus,
-callback, exception, controlled-claim, and reentrancy transactions.
-
-The frozen pre-Context Menu runtime remains 82,023 raw / 15,494 gzip / 12,999
-Brotli bytes, SHA-256
-`1c44a9bbc35186fdcabb1a0e7f9f23e62f4743c462614a4fb33c8f65bafb4116`.
-The frozen Menu dependency content is 85,640 / 16,142 / 13,538 bytes, SHA-256
-`cf6d144c5b4fe322010e8c02d35ac4581cecbcb0bb4721de527abde47f473178`;
-its registered frame is 85,660 / 16,149 / 13,550 bytes, SHA-256
-`a0ecd20118f4ec8b07280366fbe8181c683c27fdc8e7cacabb12acc92a864c28`.
-The content delta against the immutable pre-Context frame is +3,617 / +648 /
-+539. The pre-Context anchored-layer
-runtime is 29,168 / 5,521 / 4,803 bytes, SHA-256
-`ca5ab04ec15f4abaa17a6878ea209e0165175cae0188b0c058d64f1273682624`;
-the frozen dependency content is 29,514 / 5,598 / 4,871 bytes, SHA-256
-`a695ff7cd36c37848769a072084679de0c815928a1eddd234a55fcd4fef9a3e2`,
-and its registered frame is 29,534 / 5,607 / 4,882 bytes, SHA-256
-`dcdb81484caa8915fda8df0496f69ee32bfb60f73a991620626bdf9b0b190951`.
-Its content delta is +346 / +77 / +68. Framing is measured on both sides and
-cancels symmetrically, so every positive shared delta totals +3,963 raw / +725
-gzip / +607 Brotli. No CSS or additional shared-helper delta is positive.
-
-The final shipped charge is therefore 31,122 raw / 9,746 gzip / 8,793 Brotli
-bytes. As a conservative parallel check, readable adapter source plus the same
-shared deltas is 32,044 / 9,813 / 8,869 bytes. The earlier 32 KiB / 8.5 KiB /
-7.75 KiB assumption was falsified by the final adversarial fixes for exact
-Selection timing, terminal capability invalidation, provisional handoff abort,
-transformed overflow clipping, and generation-owned controlled focus. Those
-are contract corrections, not optional payload. The final reratified limits
-are:
-
-- JavaScript: less than 32 KiB raw, 10 KiB gzip, and 9 KiB Brotli,
-  including the full unique emitted ContextMenu adapter, every positive byte
-  delta in the Menu controller/surface and anchored-layer coordinator, and any
-  shared helper first required on a ContextMenu-only page;
-- CSS: less than 0.5 KiB gzip, including root/point rules and exact private
-  Popover reset; and
-- no new icon, font, image, Menu theme, collection, or positioning payload.
-
-Asset tests compare unique framed payload hashes for ContextMenu-only,
-CMenu-only, SplitButton-only, and combined 1/10/100 roots. Behavior, trust,
-generation, diagnostics, readiness, and cleanup cannot be removed to meet the
-cap. If legitimate sharing and compact emission cannot meet it, implementation
-stops and returns to design review instead of raising the cap silently.
+The asset report and focused tests are authoritative for current measurements.
+Behavior, native-preservation rules, diagnostics, lifecycle safety, and cleanup
+cannot be removed merely to meet a limit; a legitimate overage returns to
+design review.
 
 ## 17. Acceptance matrix
 
@@ -1137,7 +1049,7 @@ human-reviewable evidence:
 | Morph/lifecycle | retained equal-baseline open/closed Popover handoff; changed axis; target/point/surface replacement; same-marker clone; hostile ID/role/label/anchor/part/runtime marker; root-scope move; attach open shadow while closed then external true and while open then next owned/prop/geometry hook; two remove/restore cycles; timers/listeners/layers/point top-layer entries/readiness return to baseline |
 | Environment | no JS; server-open/server-closed pre-readiness capability failure preserves fallback; post-readiness loss closes surface then point; print, reduced motion, forced colors, light/dark/nested schemes, high contrast, long target text, narrow, 400% zoom, RTL, scroll containers, console cleanliness |
 | Accessibility | Nu HTML, axe, browser AX label/roles/states, hardware/context keys, VoiceOver/NVDA/JAWS Menu name and focus, real touch/pen callouts, selected-text copy path |
-| Assets/scaling | exact raw/gzip/Brotli records below 32 KiB / 10 KiB / 9 KiB including every positive shared Menu, anchored-layer, or helper delta from the frozen pre-ContextMenu baseline; CSS remains below 0.5 KiB gzip; unique shared runtime/style markers, 1/10/100 roots, temporary-listener counts, shared observer/coordinator counts, final cleanup zeroes registrants |
+| Assets/scaling | incremental, standalone, and catalog budgets remain within section 16 limits; shared payloads emit once; 1/10/100 roots keep bounded temporary-listener, observer, and coordinator counts; final cleanup zeroes registrants |
 
 The disposable automated browser suite must run the trust, point, controlled,
 keyboard, focus, layer, ShadowRoot, morph, and cleanup falsifiers in Chromium,

@@ -601,14 +601,14 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
             return {"items": tuple(range(kwargs.count))}
 
         template = """
-          <c-CStack>
+          <c-CCol>
             <c-for each="item in items">
-              <c-CGroup #c-key="item">
+              <c-CRow #c-key="item">
                 <span>Label {{ item }}</span>
                 <span>Value {{ item }}</span>
-              </c-CGroup>
+              </c-CRow>
             </c-for>
-          </c-CStack>
+          </c-CCol>
         """
 
     class GridScale(Component):

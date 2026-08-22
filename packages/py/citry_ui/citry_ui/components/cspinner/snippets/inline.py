@@ -7,10 +7,10 @@ citry.register_library(citry_ui)
 class InlineSpinner(Component):
     template = """
       <section class="spinner-inline">
-        <c-CGroup gap="sm">
+        <c-CRow gap="sm">
           <c-CSpinner label="Indexing nebula spectra" size="sm" />
           <span>Indexing nebula spectra</span>
-        </c-CGroup>
+        </c-CRow>
         <p>The rest of the observing log remains readable while the index catches up.</p>
       </section>
     """

@@ -1,5 +1,7 @@
 """Shared Data Grid scenario used by repository quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from citry import Citry, Component
 from citry_ui import CDataGridColumn, CDataGridRow, CDataGridSort
 
@@ -11,7 +13,7 @@ def data_grid_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack"
             data-quality-data-grid-ready
-            data-quality-states="ready sort selection controlled window loading empty error rtl narrow cleanup"
+            data-quality-states="ready sort selection controlled editing window loading empty error rtl narrow cleanup"
           >
             <h1>Data Grid states</h1>
             <div x-data="{sort:[{key:'name',direction:'asc'}],selected:['grace'],notice:'Ready'}">
@@ -32,6 +34,7 @@ def data_grid_states_component(app: Citry) -> type[Component]:
                   onSortChange:(next)=>{sort=next;notice='Sort accepted'},
                   onSelectionChange:(next)=>{selected=next;notice='Selection accepted'},
                   onCellActivate:(detail)=>notice=`Activated ${detail.rowKey}/${detail.columnKey}`,
+                  onCellEditCommit:(value,detail)=>notice=`Edit requested ${detail.rowKey}/${detail.columnKey}: ${value}`,
                 }"
               >
                 <c-fill name="caption">Keyboard-navigable project members</c-fill>
@@ -60,9 +63,11 @@ def data_grid_states_component(app: Citry) -> type[Component]:
 
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
             columns = (
-                CDataGridColumn("name", "Name", sortable=True, width=210),
+                CDataGridColumn("name", "Name", sortable=True, width=210, editable=True),
                 CDataGridColumn("team", "Team with a long localized heading", sortable=True, width=220),
-                CDataGridColumn("score", "Score", sortable=True, width=110, align="end"),
+                CDataGridColumn(
+                    "score", "Score", sortable=True, width=110, align="end", editable=True, editor="number"
+                ),
             )
             return {
                 "columns": columns,

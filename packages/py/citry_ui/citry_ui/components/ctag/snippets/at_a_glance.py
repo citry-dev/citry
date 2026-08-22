@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class TagGlance(Component):
     template = """
-      <c-CStack gap="lg">
+      <c-CCol gap="lg">
         <c-CTagGroup label="Topics">
           <c-CTag value="css">CSS</c-CTag>
           <c-CTag value="html">HTML</c-CTag>
@@ -17,7 +17,7 @@ class TagGlance(Component):
           <c-CTag value="parking">Parking</c-CTag>
           <c-CTag value="pool">Pool</c-CTag>
         </c-CTagGroup>
-      </c-CStack>
+      </c-CCol>
     """
 
 

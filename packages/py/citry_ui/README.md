@@ -19,8 +19,10 @@ guides and API references.
 
 Citry UI is in alpha.
 
-Components that already exist won't be removed (for example, `CButton` stays
-`CButton`), but component inputs may yet change before v1.0.
+Before 1.0.0, a release may rename or remove components, inputs, template
+tags, CSS parts, or custom properties. Read the
+[changelog](https://github.com/citry-dev/citry/blob/main/packages/py/citry_ui/CHANGELOG.md)
+and test the component states your application depends on before upgrading.
 
 ## Installation
 

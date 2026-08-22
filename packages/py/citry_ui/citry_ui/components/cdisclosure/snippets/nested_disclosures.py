@@ -10,7 +10,7 @@ class NestedDisclosures(Component):
         <c-CDisclosure open>
           <c-fill name="title">Network setup</c-fill>
           <c-fill name="default">
-            <c-CStack gap="md">
+            <c-CCol gap="md">
               <p>Configure the application endpoint before optional proxy rules.</p>
               <c-CDisclosure variant="soft" size="sm">
                 <c-fill name="title">Proxy settings</c-fill>
@@ -22,7 +22,7 @@ class NestedDisclosures(Component):
                   <c-fill name="default">Check firewall and DNS resolution first.</c-fill>
                 </c-CAccordionItem>
               </c-CAccordion>
-            </c-CStack>
+            </c-CCol>
           </c-fill>
         </c-CDisclosure>
       </section>

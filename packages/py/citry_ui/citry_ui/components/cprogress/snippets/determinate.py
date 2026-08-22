@@ -6,20 +6,20 @@ citry.register_library(citry_ui)
 
 class DeterminateProgress(Component):
     template = """
-      <c-CStack class_="progress-values">
+      <c-CCol class_="progress-values">
         <div>
-          <c-CGroup justify="between"><span>Preparing vessel</span><strong>15%</strong></c-CGroup>
+          <c-CRow justify="between"><span>Preparing vessel</span><strong>15%</strong></c-CRow>
           <c-CProgress label="Preparing vessel" c-value="15" />
         </div>
         <div>
-          <c-CGroup justify="between"><span>Descending</span><strong>50%</strong></c-CGroup>
+          <c-CRow justify="between"><span>Descending</span><strong>50%</strong></c-CRow>
           <c-CProgress label="Descending" c-value="50" />
         </div>
         <div>
-          <c-CGroup justify="between"><span>Survey complete</span><strong>100%</strong></c-CGroup>
+          <c-CRow justify="between"><span>Survey complete</span><strong>100%</strong></c-CRow>
           <c-CProgress label="Survey complete" c-value="100" intent="success" />
         </div>
-      </c-CStack>
+      </c-CCol>
     """
     css = """
       :where(.progress-values) {

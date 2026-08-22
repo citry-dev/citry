@@ -26,12 +26,20 @@ def _repository_root() -> Path:
     raise RuntimeError(msg)
 
 
-def _axe_findings(page: Any) -> dict[str, list[dict[str, object]]]:
+def _axe_findings(
+    page: Any,
+    *,
+    test_embedded_frames: bool = True,
+) -> dict[str, list[dict[str, object]]]:
     result = page.evaluate(
-        """async () => {
-          const result = await axe.run(document, {
+        """async testEmbeddedFrames => {
+          const options = {
             resultTypes: ['violations', 'incomplete'],
-          });
+          };
+          if (!testEmbeddedFrames) {
+            options.rules = {'frame-tested': {enabled: false}};
+          }
+          const result = await axe.run(document, options);
           return {
             violations: result.violations.filter(
               (finding) => finding.impact === 'serious' || finding.impact === 'critical',
@@ -42,7 +50,8 @@ def _axe_findings(page: Any) -> dict[str, list[dict[str, object]]]:
               nodes: finding.nodes.length,
             })),
           };
-        }"""
+        }""",
+        test_embedded_frames,
     )
     return result
 
@@ -188,6 +197,18 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
         page.get_by_role("combobox", name="Remote catalog").fill("Vega")
         page.wait_for_timeout(50)
         return
+    if scenario_id == "select.states":
+        trigger = page.locator('.cui-select [role="combobox"]').first
+        trigger.click()
+        page.wait_for_function("document.querySelector('.cui-select [role=combobox]').ariaExpanded === 'true'")
+        page.wait_for_timeout(200)
+        return
+    if scenario_id == "multi-select.states":
+        trigger = page.locator('.cui-multi-select [role="combobox"]').first
+        trigger.click()
+        page.wait_for_function("document.querySelector('.cui-multi-select [role=combobox]').ariaExpanded === 'true'")
+        page.wait_for_timeout(200)
+        return
     if scenario_id == "toggle.states":
         page.get_by_role("button", name="Standalone pressed").click()
         return
@@ -255,12 +276,22 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
     axe_path = _repository_root() / "node_modules" / "axe-core" / "axe.min.js"
     assert axe_path.is_file(), "run `pnpm install` before Citry UI axe tests"
     page.add_script_tag(path=str(axe_path))
+    embedded_findings = []
+    if len(page.frames) > 1:
+        assert page.locator("iframe").evaluate_all("frames => frames.every(frame => Boolean(frame.title.trim()))")
+    for child_frame in page.frames[1:]:
+        child_frame.add_script_tag(path=str(axe_path))
+        embedded_findings.append(_axe_findings(child_frame))
+    for findings in embedded_findings:
+        assert findings["violations"] == []
 
-    initial = _axe_findings(page)
+    # Child documents are checked directly. Disable only axe's redundant
+    # frame-tested rule so every other rule still evaluates the iframe element.
+    initial = _axe_findings(page, test_embedded_frames=not embedded_findings)
     assert initial["violations"] == []
 
     _activate_representative_state(page, scenario.id)
-    active = _axe_findings(page)
+    active = _axe_findings(page, test_embedded_frames=not embedded_findings)
     assert active["violations"] == []
     if scenario.id in {
         "accordion.states",
@@ -283,7 +314,9 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
         "toast.states",
     }:
         assert console_errors == []
-    incomplete_rules = {finding["id"] for group in (initial["incomplete"], active["incomplete"]) for finding in group}
+    incomplete_groups = [initial["incomplete"], active["incomplete"]]
+    incomplete_groups.extend(findings["incomplete"] for findings in embedded_findings)
+    incomplete_rules = {finding["id"] for group in incomplete_groups for finding in group}
     assert incomplete_rules <= AXE_INCOMPLETE_DISPOSITIONS.keys()
 
     # The compact record makes axe's manual-review surface visible in test

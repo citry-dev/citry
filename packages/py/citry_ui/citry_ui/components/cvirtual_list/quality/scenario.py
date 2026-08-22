@@ -58,9 +58,15 @@ def virtual_list_states_component(app: Citry) -> type[Component]:
               </section>
               <section dir="rtl" style="color-scheme:dark">
                 <h2>RTL dark complete list</h2>
-                <c-CVirtualList aria_label="سجل كامل" c-viewport_size="220" c-focusable="False">
+                <c-CVirtualList
+                  aria_label="سجل كامل"
+                  c-viewport_size="220"
+                  c-focusable="False"
+                >
                   <c-for each="record in rtl_records">
-                    <c-CVirtualListItem c-item_key="record['key']">{{ record['title'] }}</c-CVirtualListItem>
+                    <c-CVirtualListItem c-item_key="record['key']">
+                      <button type="button">{{ record['title'] }}</button>
+                    </c-CVirtualListItem>
                   </c-for>
                 </c-CVirtualList>
               </section>

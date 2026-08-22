@@ -22,22 +22,22 @@ def spinner_states_component(app: Citry) -> type[Component]:
             <h1 id="spinner-states-title">Spinner states</h1>
             <div class="citry-ui-quality-grid">
               <c-for each="intent in intents">
-                <c-CGroup>
+                <c-CRow>
                   <c-CSpinner c-label="f'{intent} observatory task'" c-intent="intent" />
                   <span>{{ intent }}</span>
-                </c-CGroup>
+                </c-CRow>
               </c-for>
             </div>
-            <c-CGroup align="center">
+            <c-CRow align="center">
               <c-for each="size in sizes">
                 <c-CSpinner c-label="f'{size} catalog task'" c-size="size" />
               </c-for>
-            </c-CGroup>
+            </c-CRow>
             <div
               x-init="Alpine.store('spinnerQuality', {size: 'md'})"
               data-quality-state="controlled"
             >
-              <c-CGroup>
+              <c-CRow>
                 <c-CSpinner
                   label="Controlled sky survey"
                   $c-props="{size: $store.spinnerQuality.size}"
@@ -48,13 +48,13 @@ def spinner_states_component(app: Citry) -> type[Component]:
                 >
                   Change size
                 </button>
-              </c-CGroup>
+              </c-CRow>
             </div>
             <section aria-busy="true" aria-describedby="quality-spinner-busy">
-              <c-CGroup>
+              <c-CRow>
                 <c-CSpinner label="Refreshing constellation index" c-attrs="{'id': 'quality-spinner-busy'}" />
                 <span>Refreshing constellation index</span>
-              </c-CGroup>
+              </c-CRow>
             </section>
             <div dir="rtl"><c-CSpinner label="تحديث فهرس النجوم" /></div>
             <div style="color-scheme: dark"><c-CSpinner label="Nested dark" intent="success" /></div>
