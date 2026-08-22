@@ -28,6 +28,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
             <c-CDisclosure
               open
               region
+              heading_level="2"
               actions_label="System requirement actions"
               $c-props="{open,onOpenChange:(next)=>open=next}"
               c-attrs="{'data-quality-states':'controlled open actions region outline md indicator-end ltr'}"
@@ -42,6 +43,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
                 <c-CDisclosure
                   c-variant="variant"
                   open
+                  heading_level="2"
                   c-attrs="{'data-quality-states':variant}"
                 >
                   <c-fill name="title">{{ variant }} treatment</c-fill>
@@ -52,6 +54,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
                 <c-CDisclosure
                   c-size="size"
                   indicator_pos="start"
+                  heading_level="2"
                   c-attrs="{'data-quality-states':size + ' indicator-start'}"
                 >
                   <c-fill name="title">{{ size }} geometry</c-fill>
@@ -62,6 +65,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
 
             <c-CDisclosure
               disabled
+              heading_level="2"
               c-indicator="False"
               c-attrs="{'data-quality-states':'disabled-closed closed indicator-hidden'}"
             >
@@ -71,6 +75,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
             <c-CDisclosure
               open
               disabled
+              heading_level="2"
               c-attrs="{'data-quality-states':'disabled-open open'}"
             >
               <c-fill name="title">Disabled open guidance</c-fill>
@@ -78,14 +83,19 @@ def disclosure_states_component(app: Citry) -> type[Component]:
             </c-CDisclosure>
 
             <div dir="rtl" class="disclosure-quality__narrow">
-              <c-CDisclosure open variant="soft" c-attrs="{'data-quality-states':'rtl long-content'}">
+              <c-CDisclosure
+                open
+                variant="soft"
+                heading_level="2"
+                c-attrs="{'data-quality-states':'rtl long-content'}"
+              >
                 <c-fill name="title">requirementsrequirementsrequirementsrequirements</c-fill>
                 <c-fill name="default">Long logical-layout stress content.</c-fill>
               </c-CDisclosure>
             </div>
 
             <div class="disclosure-quality__dark" style="color-scheme:dark">
-              <c-CDisclosure open c-attrs="{'data-quality-states':'nested nested-dark'}">
+              <c-CDisclosure open heading_level="2" c-attrs="{'data-quality-states':'nested nested-dark'}">
                 <c-fill name="title">Nested handbook topic</c-fill>
                 <c-fill name="default">
                   <c-CDisclosure variant="plain" size="sm">
@@ -103,14 +113,24 @@ def disclosure_states_component(app: Citry) -> type[Component]:
             </div>
 
             <form class="disclosure-quality__orchard" id="disclosure-quality-form">
-              <c-CDisclosure open variant="soft" c-attrs="{'data-quality-states':'form-content brand-orchard'}">
+              <c-CDisclosure
+                open
+                variant="soft"
+                heading_level="2"
+                c-attrs="{'data-quality-states':'form-content brand-orchard'}"
+              >
                 <c-fill name="title">Notification settings</c-fill>
                 <c-fill name="default"><label>Email <input name="email" value="ops@example.com" /></label></c-fill>
               </c-CDisclosure>
             </form>
 
             <div class="disclosure-quality__harbor">
-              <c-CDisclosure open indicator_pos="start" c-attrs="{'data-quality-states':'brand-harbor'}">
+              <c-CDisclosure
+                open
+                indicator_pos="start"
+                heading_level="2"
+                c-attrs="{'data-quality-states':'brand-harbor'}"
+              >
                 <c-fill name="title">Harbor handbook</c-fill>
                 <c-fill name="default">Scheme-aware brand adaptation.</c-fill>
               </c-CDisclosure>
