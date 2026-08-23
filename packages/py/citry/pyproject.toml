@@ -73,7 +73,7 @@ dependencies = [
 # have. citry.reload imports only `watchfiles.watch`, and watchdog's
 # `FileSystemEventHandler` and `Observer`, which every release in range provides.
 [project.optional-dependencies]
-analysis-ty = ["ty==0.0.71"]       # Python expression types for analysis tooling
+analysis-ty = ["ty==0.0.73"]       # Python expression types for analysis tooling
 watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
 watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
 
