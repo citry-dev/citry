@@ -450,6 +450,7 @@ def render_page(
             site_url=project.site_url,
             base_path=config.base_path,
             google_site_verification=config.google_site_verification,
+            cloudflare_web_analytics_token=config.cloudflare_web_analytics_token,
             og_image=meta.og_image,
             searchable=meta.searchable,
             boost=meta.boost,

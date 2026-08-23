@@ -63,6 +63,11 @@ class DocsConfig:
     # a deploy sets DOCS_GOOGLE_SITE_VERIFICATION to turn it on.
     google_site_verification: str = field(default_factory=lambda: os.environ.get("DOCS_GOOGLE_SITE_VERIFICATION", ""))
 
+    # This public site token opts production builds into the analytics beacon.
+    cloudflare_web_analytics_token: str = field(
+        default_factory=lambda: os.environ.get("DOCS_CLOUDFLARE_WEB_ANALYTICS_TOKEN", "")
+    )
+
     def __post_init__(self) -> None:
         """Rebase every implicit path when ``base_dir`` or ``repo_root`` changes."""
         repo_root = self.repo_root or self.base_dir.parent

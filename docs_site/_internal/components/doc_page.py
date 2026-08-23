@@ -199,6 +199,7 @@ class DocPage(Component):
         # Google Search Console ownership token; when set, rendered as a
         # <meta name="google-site-verification"> in the head.
         google_site_verification: str = ""
+        cloudflare_web_analytics_token: str = ""
         # Whether this page is indexed for search (the 404 page opts out) and an
         # optional search-ranking boost (1.0 is the neutral default).
         searchable: bool = True
@@ -332,6 +333,11 @@ class DocPage(Component):
             "pypi_url": kwargs.pypi_url or settings.pypi_url,
             "discord_url": kwargs.discord_url or settings.discord_url,
             "google_site_verification": kwargs.google_site_verification,
+            "cloudflare_web_analytics_config": json.dumps(
+                {"token": kwargs.cloudflare_web_analytics_token}, separators=(",", ":")
+            )
+            if kwargs.cloudflare_web_analytics_token
+            else "",
             "top_nav_items": top_nav_items,
             "nav_sections": nav_sections,
             "breadcrumbs": breadcrumbs,
@@ -1296,6 +1302,13 @@ class DocPage(Component):
           </c-if>
           <c-if cond="is_landing">
             <script type="module" src="/static/playground/landing_composer.js"></script>
+          </c-if>
+          <c-if cond="cloudflare_web_analytics_config">
+            <script
+              defer
+              src="https://static.cloudflareinsights.com/beacon.min.js"
+              c-data-cf-beacon="cloudflare_web_analytics_config"
+            ></script>
           </c-if>
         </body>
       </html>

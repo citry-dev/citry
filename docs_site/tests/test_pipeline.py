@@ -55,6 +55,16 @@ def test_full_page_structure() -> None:
     assert "<strong>bold</strong>" in html
 
 
+def test_cloudflare_web_analytics_is_explicitly_configured() -> None:
+    assert "static.cloudflareinsights.com/beacon.min.js" not in render_page(SAMPLE).html
+
+    cfg = DocsConfig(cloudflare_web_analytics_token="public-site-token")  # noqa: S106
+    html = render_page(SAMPLE, config=cfg).html
+
+    assert html.count("https://static.cloudflareinsights.com/beacon.min.js") == 1
+    assert 'data-cf-beacon="{&#34;token&#34;:&#34;public-site-token&#34;}"' in html
+
+
 def test_exactly_one_h1() -> None:
     # Content with its own H1: the layout must not inject a second.
     with_h1 = render_page("---\ntitle: T\n---\n\n# My Heading\n\nText.").html

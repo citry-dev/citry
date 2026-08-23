@@ -66,6 +66,7 @@ env:
   # Subpath prefix for a project-Pages deploy (e.g. "/citry"); empty for a
   # custom-domain / root deploy.
   DOCS_BASE_PATH: ""
+  DOCS_CLOUDFLARE_WEB_ANALYTICS_TOKEN: ${{ vars.CLOUDFLARE_WEB_ANALYTICS_TOKEN }}
 
 jobs:
   build:
