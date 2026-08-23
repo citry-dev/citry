@@ -115,6 +115,44 @@ def test_nu_result_records_css_anchor_features_without_hiding_other_css_errors()
     )
 
 
+def test_nu_result_uses_columns_to_check_repeated_minified_anchor_declarations():
+    source = (
+        ":where(.first){position-area:block-end}"
+        ":where(.second){position-area:block-start}"
+        ":where(.match){min-inline-size:anchor-size(width)}"
+    )
+    first_end = source.index("block-end") + len("block-end")
+    second_end = source.index("block-start") + len("block-start")
+    report = qualify_nu_result(
+        {
+            "version": "test",
+            "messages": [
+                {
+                    "type": "error",
+                    "lastLine": 1,
+                    "lastColumn": first_end,
+                    "message": "CSS: “position-area”: Property “position-area” doesn't exist.",
+                },
+                {
+                    "type": "error",
+                    "lastLine": 1,
+                    "lastColumn": second_end,
+                    "message": "CSS: “position-area”: Property “position-area” doesn't exist.",
+                },
+                {
+                    "type": "error",
+                    "lastLine": 1,
+                    "message": ("CSS: “min-inline-size”: “anchor-size(width)” is not a “min-inline-size” value."),
+                },
+            ],
+        },
+        scenario="popover.states",
+        source=source,
+    )
+
+    assert report.css_anchor_features == ("anchor-size()", "position-area")
+
+
 @pytest.mark.parametrize(
     "declaration",
     [
@@ -156,6 +194,45 @@ def test_nu_result_rejects_an_invalid_value_for_a_known_anchor_property():
             },
             scenario="split-button.states",
             source="position-area: not-a-real-area;",
+        )
+
+
+def test_nu_result_rejects_an_invalid_repeated_minified_anchor_declaration():
+    source = ":where(.valid){position-area:block-end}:where(.invalid){position-area:not-a-real-area}"
+    invalid_end = source.index("not-a-real-area") + len("not-a-real-area")
+    with pytest.raises(HtmlQualificationError, match="position-area"):
+        qualify_nu_result(
+            {
+                "version": "test",
+                "messages": [
+                    {
+                        "type": "error",
+                        "lastLine": 1,
+                        "lastColumn": invalid_end,
+                        "message": "CSS: “position-area”: Property “position-area” doesn't exist.",
+                    }
+                ],
+            },
+            scenario="popover.states",
+            source=source,
+        )
+
+
+def test_nu_result_rejects_an_invalid_min_inline_anchor_size_value():
+    with pytest.raises(HtmlQualificationError, match="min-inline-size"):
+        qualify_nu_result(
+            {
+                "version": "test",
+                "messages": [
+                    {
+                        "type": "error",
+                        "lastLine": 1,
+                        "message": ("CSS: “min-inline-size”: “anchor-size(width)” is not a “min-inline-size” value."),
+                    }
+                ],
+            },
+            scenario="popover.states",
+            source="min-inline-size: anchor-size(not-a-real-dimension);",
         )
 
 

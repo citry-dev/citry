@@ -59,11 +59,7 @@ def test_default_avatar_is_decorative_fallback_with_exact_anatomy():
     assert "role=" not in root
     assert "aria-label" not in root
     assert len(re.findall(r'<span[^>]+data-citry-ui-part="fallback"', html)) == 1
-    assert len(re.findall(r'<img[^>]+data-citry-ui-part="image"', html)) == 1
-    image = re.search(r'<img[^>]+data-citry-ui-part="image"[^>]*>', html)
-    assert image is not None
-    assert 'src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="' in image.group(0)
-    assert re.search(r'alt(?:="")?[^>]+hidden', image.group(0))
+    assert "<img" not in html
 
 
 def test_named_image_uses_one_root_semantic_and_decorative_internal_image():
@@ -80,6 +76,7 @@ def test_named_image_uses_one_root_semantic_and_decorative_internal_image():
 def test_root_and_image_attributes_have_distinct_destinations():
     html = _render(
         CAvatar(
+            src="/fen.jpg",
             alt="Fen guide",
             class_="expedition-avatar",
             style={"--cui-avatar-size": "4rem"},
@@ -114,6 +111,15 @@ def test_root_and_image_attributes_have_distinct_destinations():
 def test_invalid_inputs_fail_deterministically(input_name, bad_value, error, match):
     with pytest.raises(error, match=match):
         _render(CAvatar(**{input_name: bad_value}))
+
+
+@pytest.mark.parametrize("attribute", ["bad name", '"><script', 7])
+def test_fallback_image_attributes_require_valid_html_names(attribute):
+    with pytest.raises(
+        (TypeError, ValueError),
+        match=r"(?:HTML attribute name|string attribute names|require string keys)",
+    ):
+        _render(CAvatar(img_attrs={attribute: "consumer"}))
 
 
 @pytest.mark.parametrize(

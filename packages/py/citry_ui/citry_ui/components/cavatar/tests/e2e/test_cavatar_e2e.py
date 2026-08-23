@@ -49,7 +49,16 @@ def _avatar_page() -> str:
                 c-attrs="{'id': 'missing'}"
               >MG</c-CAvatar>
               <div class="selector" style="--cui-avatar-size:64px; --cui-avatar-radius:12px">
-                <c-CAvatar alt="Styled guide" c-attrs="{'id': 'styled'}">SG</c-CAvatar>
+                <c-CAvatar
+                  alt="Styled guide"
+                  c-attrs="{'id': 'styled'}"
+                  c-img_attrs="{
+                    'loading': 'lazy',
+                    'class': ['portrait', {'active': True}],
+                    'style': {'object-fit': 'cover', 'opacity': 0.5},
+                    'data-guides': ['fen', 'mira']
+                  }"
+                >SG</c-CAvatar>
               </div>
               <c-CAvatar
                 alt="Reactive guide"
@@ -104,16 +113,19 @@ def test_reactive_source_name_variant_and_status_callback(page: Any) -> None:
     )
     page.evaluate("Alpine.store('avatarTest').source = null")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'fallback'")
-    image_src = reactive.locator("[data-citry-ui-part='image']").get_attribute("src")
-    assert image_src is not None
-    assert image_src.startswith("data:image/gif;base64,")
+    assert reactive.locator("[data-citry-ui-part='image']").get_attribute("src") is None
 
 
 def test_public_variables_and_selector_overrides_compute(page: Any) -> None:
     page.set_content(_avatar_page(), wait_until="load")
     styled = page.locator("#styled")
+    image = styled.locator("[data-citry-ui-part='image']")
     assert styled.evaluate("el => getComputedStyle(el).inlineSize") == "64px"
     assert styled.evaluate("el => getComputedStyle(el).borderRadius") == "12px"
+    assert image.get_attribute("loading") == "lazy"
+    assert image.get_attribute("class") == "portrait active cui-avatar__image"
+    assert image.get_attribute("style") == "object-fit: cover; opacity: 0.5;"
+    assert image.get_attribute("data-guides") == "['fen', 'mira']"
     assert (
         styled.locator("[data-citry-ui-part='fallback']").evaluate("el => getComputedStyle(el).letterSpacing") == "4px"
     )

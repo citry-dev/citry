@@ -266,10 +266,12 @@ class CRadioGroup(LibraryComponent):
             msg = "Standalone CRadioGroup requires a label slot."
             raise ValueError(msg)
         if field_context is not None:
-            if kwargs.id is not None and group_id != str(field_context.control_id):
-                msg = f"CRadioGroup id {group_id!r} conflicts with its CField control_id {field_context.control_id!r}."
+            field_control_id = str(field_context.control_id)
+            if kwargs.id is not None and group_id == field_control_id:
+                msg = f"CRadioGroup id {group_id!r} conflicts with its first CField-owned radio."
                 raise ValueError(msg)
-            group_id = str(field_context.control_id)
+            if kwargs.id is None:
+                group_id = f"{field_control_id}-group"
             supplied = [
                 key
                 for key, value in (
@@ -298,7 +300,7 @@ class CRadioGroup(LibraryComponent):
             required = bool(field_context.required)
             disabled = bool(field_context.disabled)
             invalid = bool(field_context.invalid)
-            first_input_id = None
+            first_input_id = str(field_context.control_id)
             labelledby = str(field_context.label_id)
             describedby = merge_idrefs(
                 field_context.description_id if field_context.has_description else None,

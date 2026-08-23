@@ -179,8 +179,9 @@ def test_field_relationship_and_native_required_validation(radio_page):
     assert group.get_attribute("aria-labelledby") == "signal-band-label"
     assert group.get_attribute("aria-describedby") == "signal-band-description"
     assert group.get_attribute("data-citry-field-control") == ""
-    assert group.get_attribute("id") == "signal-band"
-    assert radios.first.get_attribute("id").startswith("cui-radio-")
+    assert group.get_attribute("id") == "signal-band-group"
+    assert radios.first.get_attribute("id") == "signal-band"
+    assert field.locator(':scope > [data-citry-ui-part="label"]').get_attribute("for") == "signal-band"
     assert radios.first.get_attribute("required") == ""
     assert radios.first.evaluate("element => element.checkValidity()") is False
     radios.nth(1).click()

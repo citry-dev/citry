@@ -57,14 +57,16 @@ def image_states_component(app: Citry) -> type[Component]:
                 "responsive_sources": (
                     CImageSource(
                         media="(max-width: 47.99rem)",
-                        srcset=f"{_ASSET}/observatory-portrait-640.jpg",
+                        srcset=f"{_ASSET}/observatory-portrait-640.jpg 640w",
+                        sizes="(max-width: 48rem) 100vw, 48rem",
                         width=640,
                         height=960,
                     ),
                     CImageSource(
                         media="(min-width: 64rem)",
                         type="image/avif",
-                        srcset=f"{_ASSET}/observatory-1280.avif",
+                        srcset=f"{_ASSET}/observatory-1280.avif 1280w",
+                        sizes="(max-width: 48rem) 100vw, 48rem",
                         width=1280,
                         height=720,
                     ),

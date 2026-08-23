@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from citry import LibraryComponent, SlotInput, const_value
+from citry import LibraryComponent, SlotInput, const_value, merge_attrs
+from citry.attrs import validate_html_attr_name
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs
 
@@ -18,7 +19,6 @@ CAvatarStatus = Literal["fallback", "loading", "loaded", "error"]
 _VARIANTS = ("soft", "solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _SHAPES = ("circle", "rounded", "square")
-_EMPTY_IMAGE_SRC = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNERSHIP_DIRECTIVES = frozenset(
     {
@@ -129,6 +129,7 @@ def _copy_attrs(
     copied = dict(attrs or {})
     reject_owned_attrs(copied, owned, f"CAvatar {destination}")
     for key in copied:
+        validate_html_attr_name(key, where=f"CAvatar {destination}")
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
             msg = f"CAvatar {destination} cannot contain reserved Citry runtime attribute {key!r}."
@@ -146,6 +147,28 @@ def _copy_attrs(
             msg = f"CAvatar {destination} cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
     return copied
+
+
+def _client_image_attrs(attrs: Mapping[str, object] | None) -> dict[str, str]:
+    """Normalize attributes to the DOM values produced by server-side c-bind."""
+    copied = _copy_attrs(
+        attrs,
+        destination="img_attrs",
+        owned=_IMAGE_OWNED_ATTRS,
+        inert_only=True,
+    )
+    normalized = merge_attrs(copied)
+    client_attrs: dict[str, str] = {}
+    for key, value in normalized.items():
+        if value is None or value is False:
+            continue
+        if value is True:
+            client_attrs[key] = ""
+        elif hasattr(value, "__html__"):
+            client_attrs[key] = str(value.__html__())
+        else:
+            client_attrs[key] = str(value)
+    return client_attrs
 
 
 class CAvatar(LibraryComponent):
@@ -186,7 +209,6 @@ class CAvatar(LibraryComponent):
             {
                 "role": "img" if alt else None,
                 "status": "loading" if src is not None else "fallback",
-                "image_src": src or _EMPTY_IMAGE_SRC,
                 "has_fallback": "default" in self.raw_slots,
                 "attrs": merge_root_attrs(
                     _copy_attrs(
@@ -213,7 +235,7 @@ class CAvatar(LibraryComponent):
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
         data = self._normalized(kwargs)
-        data["empty_image_src"] = _EMPTY_IMAGE_SRC
+        data["imgAttrs"] = _client_image_attrs(kwargs.img_attrs)
         return data
 
     template = """
@@ -253,14 +275,15 @@ class CAvatar(LibraryComponent):
             </svg>
           </c-else>
         </span>
-        <img
-          class="cui-avatar__image"
-          c-bind="img_attrs"
-          data-citry-ui-part="image"
-          alt=""
-          c-src="image_src"
-          c-hidden="src is None"
-        />
+        <c-if cond="src is not None">
+          <img
+            class="cui-avatar__image"
+            c-bind="img_attrs"
+            data-citry-ui-part="image"
+            alt=""
+            c-src="src"
+          />
+        </c-if>
       </span>
     """
 
@@ -276,7 +299,18 @@ class CAvatar(LibraryComponent):
         },
         init: ({ els, data, props, effect }) => {
           const root = els[0];
-          const image = root.querySelector('[data-citry-ui-part="image"]');
+          let image = root.querySelector('[data-citry-ui-part="image"]');
+          if (!(image instanceof HTMLImageElement)) {
+            image = document.createElement("img");
+            for (const [name, value] of Object.entries(data.imgAttrs)) {
+              image.setAttribute(name, value);
+            }
+            image.classList.add("cui-avatar__image");
+            image.dataset.citryUiPart = "image";
+            image.alt = "";
+            image.hidden = true;
+            root.append(image);
+          }
           const allowedValues = {
             variant: ["soft", "solid", "outline"],
             size: ["sm", "md", "lg"],
@@ -410,7 +444,7 @@ class CAvatar(LibraryComponent):
               currentSource = source;
               sourceGeneration += 1;
               if (source === null) {
-                image.setAttribute("src", data.empty_image_src);
+                image.removeAttribute("src");
                 image.hidden = true;
                 setStatus("fallback", null);
               } else {

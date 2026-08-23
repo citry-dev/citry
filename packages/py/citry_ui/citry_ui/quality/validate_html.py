@@ -31,7 +31,10 @@ _CSS_ANCHOR_PROPERTY_ERROR = re.compile(
     r"doesn't exist\.$"
 )
 _CSS_ANCHOR_SIZE_ERROR = "CSS: “inline-size”: Parse Error."
-_STYLE_ATTRIBUTE = re.compile(r'\sstyle="(?P<value>[^"]*)"')
+_CSS_ANCHOR_SIZE_VALUE_ERROR = re.compile(
+    r"CSS: “(?P<property>min-inline-size)”: “anchor-size\(width\)” "
+    r"is not a “(?P=property)” value\."
+)
 _CSS_ANCHOR_VALUES = {
     "anchor-name": re.compile(r"--_cui-[a-z0-9-]+"),
     "position-anchor": re.compile(r"(?:var\(\s*--_cui-[a-z0-9-]+\s*\)|--_cui-[a-z0-9-]+)"),
@@ -46,6 +49,7 @@ _CSS_ANCHOR_VALUES = {
         r"min\(\s*anchor-size\(\s*width\s*\)\s*,\s*"
         r"(?:var\(\s*--_cui-menu-max-inline-size\s*\)|calc\(\s*100vw\s*-\s*2rem\s*\))\s*\)"
     ),
+    "min-inline-size": re.compile(r"anchor-size\(\s*width\s*\)"),
 }
 
 
@@ -74,19 +78,15 @@ def _source_declaration_value(finding: dict[str, Any], source: str | None, prope
     if not 1 <= line_number <= len(lines):
         return None
     line = lines[line_number - 1]
-    style_attributes = list(_STYLE_ATTRIBUTE.finditer(line))
-    if style_attributes:
-        if len(style_attributes) != 1:
-            return None
-        declaration_source = style_attributes[0].group("value")
-    else:
-        declaration_source = line.strip().removesuffix(";")
-    values: list[str] = []
-    for declaration in declaration_source.split(";"):
-        name, separator, value = declaration.partition(":")
-        if separator and name.strip() == property_name:
-            values.append(value.strip())
-    return values[0] if len(values) == 1 else None
+    declaration = re.compile(rf"(?<![-\w]){re.escape(property_name)}\s*:\s*(?P<value>[^;{{}}]+)")
+    matches = list(declaration.finditer(line))
+    if len(matches) == 1:
+        return matches[0].group("value").strip()
+    last_column = finding.get("lastColumn")
+    if not isinstance(last_column, int):
+        return None
+    matches = [match for match in matches if match.start() + 1 <= last_column <= match.end()]
+    return matches[0].group("value").strip() if len(matches) == 1 else None
 
 
 def _known_css_anchor_feature(finding: dict[str, Any], message: str, source: str | None) -> str | None:
@@ -97,6 +97,9 @@ def _known_css_anchor_feature(finding: dict[str, Any], message: str, source: str
         feature = property_name
     elif message == _CSS_ANCHOR_SIZE_ERROR:
         property_name = "inline-size"
+        feature = "anchor-size()"
+    elif (size_value_error := _CSS_ANCHOR_SIZE_VALUE_ERROR.fullmatch(message)) is not None:
+        property_name = size_value_error.group("property")
         feature = "anchor-size()"
     else:
         return None

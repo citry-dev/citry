@@ -86,6 +86,27 @@ def test_standalone_group_renders_native_fieldset_legend_and_radios():
     assert "aria-describedby=" in html
 
 
+def test_field_label_targets_the_first_radio_instead_of_the_group_fieldset():
+    html = _render(
+        """
+          <c-CField control_id="signal-band" required>
+            <c-fill name="label">Signal band</c-fill>
+            <c-fill name="default">
+              <c-CRadioGroup name="signal">
+                <c-CRadio value="x">X band</c-CRadio>
+                <c-CRadio value="ka">Ka band</c-CRadio>
+              </c-CRadioGroup>
+            </c-fill>
+          </c-CField>
+        """
+    )
+
+    assert '<label id="signal-band-label" for="signal-band"' in html
+    assert '<fieldset class="cui-radio-group" id="signal-band-group"' in html
+    assert 'aria-labelledby="signal-band-label"' in html
+    assert '<input class="cui-radio__input" id="signal-band"' in html
+
+
 def test_group_and_item_root_styling_and_form_owner_reach_exact_destinations():
     html = _render(
         """
