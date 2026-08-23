@@ -25,6 +25,12 @@ _ALPINE_ATTRIBUTE_ERROR = re.compile(
     rf"^Attribute “(?P<attribute>{_ALPINE_ATTRIBUTE})” "
     r"not allowed on element “[a-z][a-z0-9-]*” at this point\.$"
 )
+_CSS_ANCHOR_PROPERTY_ERROR = re.compile(
+    r"^CSS: “(?P<property>anchor-name|position-anchor|position-area|"
+    r"position-try-fallbacks|position-visibility)”: Property “(?P=property)” "
+    r"doesn't exist\.$"
+)
+_CSS_ANCHOR_SIZE_ERROR = "CSS: “inline-size”: Parse Error."
 
 
 class HtmlQualificationError(ValueError):
@@ -39,6 +45,7 @@ class HtmlReport:
     checker_version: str
     errors: int
     alpine_directives: tuple[str, ...]
+    css_anchor_features: tuple[str, ...]
     information: int
 
 
@@ -46,6 +53,7 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str) -> HtmlReport:
     """Reject Nu errors except its known inability to recognize Alpine directives."""
     unexpected: list[dict[str, Any]] = []
     alpine_directives: set[str] = set()
+    css_anchor_features: set[str] = set()
     information = 0
 
     for finding in result.get("messages", []):
@@ -59,6 +67,16 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str) -> HtmlReport:
             # Recorded rather than discarded: the report lists every directive
             # that was tolerated, so the exemption stays visible in CI output.
             alpine_directives.add(alpine.group("attribute"))
+            continue
+        css_anchor_property = _CSS_ANCHOR_PROPERTY_ERROR.fullmatch(message)
+        if css_anchor_property is not None:
+            # Nu's CSS parser has not caught up with browser-supported CSS
+            # anchor positioning. Keep each tolerated feature visible in the
+            # report instead of hiding CSS errors wholesale.
+            css_anchor_features.add(css_anchor_property.group("property"))
+            continue
+        if message == _CSS_ANCHOR_SIZE_ERROR and "anchor-size(" in str(finding.get("extract", "")):
+            css_anchor_features.add("anchor-size()")
             continue
         unexpected.append(finding)
 
@@ -74,6 +92,7 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str) -> HtmlReport:
         checker_version=str(result.get("version", "unknown")),
         errors=0,
         alpine_directives=tuple(sorted(alpine_directives)),
+        css_anchor_features=tuple(sorted(css_anchor_features)),
         information=information,
     )
 
