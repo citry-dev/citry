@@ -429,7 +429,7 @@ requires-dist = [
     { name = "packaging", marker = "extra == 'docs'" },
     { name = "pagefind", extras = ["bin"], marker = "extra == 'docs'" },
     { name = "playwright", marker = "extra == 'social-cards'" },
-    { name = "pygments", marker = "extra == 'docs'", specifier = "<2.21" },
+    { name = "pygments", marker = "extra == 'docs'", specifier = "<2.22" },
     { name = "pygments-citry", marker = "extra == 'docs'", editable = "packages/py/pygments_citry" },
     { name = "pymdown-extensions", marker = "extra == 'docs'" },
     { name = "pyyaml", marker = "extra == 'docs'" },
