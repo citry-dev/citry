@@ -17,7 +17,9 @@ fn utf16_units(value: &Bound<'_, PyString>) -> PyResult<Vec<u16>> {
     let encoded = value.call_method1("encode", ("utf-16-be", "surrogatepass"))?;
     let bytes = encoded.cast::<PyBytes>()?.as_bytes();
     Ok(bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
         .collect())
 }
