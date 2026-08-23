@@ -21,6 +21,6 @@
     "@storybook/server-webpack5": "10.5.7",
     "httpxy": "0.5.5",
     "storybook": "10.5.7",
-    "vite": "8.2.1"
+    "vite": "8.2.2"
   }
 }

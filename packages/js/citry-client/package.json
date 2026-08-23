@@ -12,15 +12,15 @@
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test"
   },
   "dependencies": {
-    "@alpinejs/csp": "3.16.1",
-    "@alpinejs/morph": "3.16.1",
+    "@alpinejs/csp": "3.16.2",
+    "@alpinejs/morph": "3.16.2",
     "@citry/protocol-client-graph-v1": "workspace:*",
     "@citry/protocol-events-v1": "workspace:*",
     "@fluent/bundle": "0.19.1",
-    "alpinejs": "3.16.1"
+    "alpinejs": "3.16.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.8",
+    "@biomejs/biome": "2.5.9",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
   }
