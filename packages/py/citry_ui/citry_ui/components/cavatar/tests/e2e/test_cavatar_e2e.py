@@ -104,6 +104,9 @@ def test_reactive_source_name_variant_and_status_callback(page: Any) -> None:
     )
     page.evaluate("Alpine.store('avatarTest').source = null")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'fallback'")
+    image_src = reactive.locator("[data-citry-ui-part='image']").get_attribute("src")
+    assert image_src is not None
+    assert image_src.startswith("data:image/gif;base64,")
 
 
 def test_public_variables_and_selector_overrides_compute(page: Any) -> None:

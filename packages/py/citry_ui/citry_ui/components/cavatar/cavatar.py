@@ -18,6 +18,7 @@ CAvatarStatus = Literal["fallback", "loading", "loaded", "error"]
 _VARIANTS = ("soft", "solid", "outline")
 _SIZES = ("sm", "md", "lg")
 _SHAPES = ("circle", "rounded", "square")
+_EMPTY_IMAGE_SRC = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNERSHIP_DIRECTIVES = frozenset(
     {
@@ -185,6 +186,7 @@ class CAvatar(LibraryComponent):
             {
                 "role": "img" if alt else None,
                 "status": "loading" if src is not None else "fallback",
+                "image_src": src or _EMPTY_IMAGE_SRC,
                 "has_fallback": "default" in self.raw_slots,
                 "attrs": merge_root_attrs(
                     _copy_attrs(
@@ -210,7 +212,9 @@ class CAvatar(LibraryComponent):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
-        return self._normalized(kwargs)
+        data = self._normalized(kwargs)
+        data["empty_image_src"] = _EMPTY_IMAGE_SRC
+        return data
 
     template = """
       <span
@@ -254,7 +258,7 @@ class CAvatar(LibraryComponent):
           c-bind="img_attrs"
           data-citry-ui-part="image"
           alt=""
-          c-src="src"
+          c-src="image_src"
           c-hidden="src is None"
         />
       </span>
@@ -406,7 +410,7 @@ class CAvatar(LibraryComponent):
               currentSource = source;
               sourceGeneration += 1;
               if (source === null) {
-                image.removeAttribute("src");
+                image.setAttribute("src", data.empty_image_src);
                 image.hidden = true;
                 setStatus("fallback", null);
               } else {

@@ -60,7 +60,10 @@ def test_default_avatar_is_decorative_fallback_with_exact_anatomy():
     assert "aria-label" not in root
     assert len(re.findall(r'<span[^>]+data-citry-ui-part="fallback"', html)) == 1
     assert len(re.findall(r'<img[^>]+data-citry-ui-part="image"', html)) == 1
-    assert re.search(r'<img[^>]+alt(?:="")?[^>]+hidden', html)
+    image = re.search(r'<img[^>]+data-citry-ui-part="image"[^>]*>', html)
+    assert image is not None
+    assert 'src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="' in image.group(0)
+    assert re.search(r'alt(?:="")?[^>]+hidden', image.group(0))
 
 
 def test_named_image_uses_one_root_semantic_and_decorative_internal_image():
