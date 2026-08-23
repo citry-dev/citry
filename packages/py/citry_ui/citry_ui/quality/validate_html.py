@@ -31,6 +31,22 @@ _CSS_ANCHOR_PROPERTY_ERROR = re.compile(
     r"doesn't exist\.$"
 )
 _CSS_ANCHOR_SIZE_ERROR = "CSS: “inline-size”: Parse Error."
+_STYLE_ATTRIBUTE = re.compile(r'\sstyle="(?P<value>[^"]*)"')
+_CSS_ANCHOR_VALUES = {
+    "anchor-name": re.compile(r"--_cui-[a-z0-9-]+"),
+    "position-anchor": re.compile(r"(?:var\(\s*--_cui-[a-z0-9-]+\s*\)|--_cui-[a-z0-9-]+)"),
+    "position-area": re.compile(
+        r"(?:block-end(?:\s+span-inline-(?:end|start))?|"
+        r"block-start(?:\s+span-inline-(?:end|start))?|"
+        r"inline-(?:end|start)\s+span-block-end)"
+    ),
+    "position-try-fallbacks": re.compile(r"flip-block,\s*flip-inline,\s*flip-block\s+flip-inline"),
+    "position-visibility": re.compile(r"anchors-visible"),
+    "inline-size": re.compile(
+        r"min\(\s*anchor-size\(\s*width\s*\)\s*,\s*"
+        r"(?:var\(\s*--_cui-menu-max-inline-size\s*\)|calc\(\s*100vw\s*-\s*2rem\s*\))\s*\)"
+    ),
+}
 
 
 class HtmlQualificationError(ValueError):
@@ -49,7 +65,48 @@ class HtmlReport:
     information: int
 
 
-def qualify_nu_result(result: dict[str, Any], *, scenario: str) -> HtmlReport:
+def _source_declaration_value(finding: dict[str, Any], source: str | None, property_name: str) -> str | None:
+    """Return one exact declaration value from Nu's reported source line."""
+    line_number = finding.get("lastLine")
+    if source is None or not isinstance(line_number, int):
+        return None
+    lines = source.splitlines()
+    if not 1 <= line_number <= len(lines):
+        return None
+    line = lines[line_number - 1]
+    style_attributes = list(_STYLE_ATTRIBUTE.finditer(line))
+    if style_attributes:
+        if len(style_attributes) != 1:
+            return None
+        declaration_source = style_attributes[0].group("value")
+    else:
+        declaration_source = line.strip().removesuffix(";")
+    values: list[str] = []
+    for declaration in declaration_source.split(";"):
+        name, separator, value = declaration.partition(":")
+        if separator and name.strip() == property_name:
+            values.append(value.strip())
+    return values[0] if len(values) == 1 else None
+
+
+def _known_css_anchor_feature(finding: dict[str, Any], message: str, source: str | None) -> str | None:
+    """Recognize only exact anchor declarations emitted by Citry UI."""
+    property_error = _CSS_ANCHOR_PROPERTY_ERROR.fullmatch(message)
+    if property_error is not None:
+        property_name = property_error.group("property")
+        feature = property_name
+    elif message == _CSS_ANCHOR_SIZE_ERROR:
+        property_name = "inline-size"
+        feature = "anchor-size()"
+    else:
+        return None
+    value = _source_declaration_value(finding, source, property_name)
+    if value is None or _CSS_ANCHOR_VALUES[property_name].fullmatch(value) is None:
+        return None
+    return feature
+
+
+def qualify_nu_result(result: dict[str, Any], *, scenario: str, source: str | None = None) -> HtmlReport:
     """Reject Nu errors except its known inability to recognize Alpine directives."""
     unexpected: list[dict[str, Any]] = []
     alpine_directives: set[str] = set()
@@ -68,15 +125,12 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str) -> HtmlReport:
             # that was tolerated, so the exemption stays visible in CI output.
             alpine_directives.add(alpine.group("attribute"))
             continue
-        css_anchor_property = _CSS_ANCHOR_PROPERTY_ERROR.fullmatch(message)
-        if css_anchor_property is not None:
+        css_anchor_feature = _known_css_anchor_feature(finding, message, source)
+        if css_anchor_feature is not None:
             # Nu's CSS parser has not caught up with browser-supported CSS
             # anchor positioning. Keep each tolerated feature visible in the
             # report instead of hiding CSS errors wholesale.
-            css_anchor_features.add(css_anchor_property.group("property"))
-            continue
-        if message == _CSS_ANCHOR_SIZE_ERROR and "anchor-size(" in str(finding.get("extract", "")):
-            css_anchor_features.add("anchor-size()")
+            css_anchor_features.add(css_anchor_feature)
             continue
         unexpected.append(finding)
 
@@ -133,7 +187,7 @@ def validate_html(path: Path, *, scenario: str) -> HtmlReport:
     except json.JSONDecodeError as error:
         detail = payload or f"checker exited with status {completed.returncode}"
         raise HtmlQualificationError(f"Nu did not return a JSON report: {detail}") from error
-    return qualify_nu_result(result, scenario=scenario)
+    return qualify_nu_result(result, scenario=scenario, source=path.read_text(encoding="utf-8"))
 
 
 def main() -> int:

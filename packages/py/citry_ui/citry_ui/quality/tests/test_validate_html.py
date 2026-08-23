@@ -57,38 +57,52 @@ def test_nu_result_records_alpines_shorthand_spellings():
 
 
 def test_nu_result_records_css_anchor_features_without_hiding_other_css_errors():
+    source = (
+        '<div style="anchor-name: --_cui-menu-anchor-ref-a1;"></div>\n'
+        "position-anchor: var(--_cui-menu-anchor);\n"
+        "position-area: block-end span-inline-end;\n"
+        "position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;\n"
+        "position-visibility: anchors-visible;\n"
+        "inline-size: min(anchor-size(width), var(--_cui-menu-max-inline-size));"
+    )
     report = qualify_nu_result(
         {
             "version": "test",
             "messages": [
                 {
                     "type": "error",
+                    "lastLine": 1,
                     "message": "CSS: “anchor-name”: Property “anchor-name” doesn't exist.",
                 },
                 {
                     "type": "error",
+                    "lastLine": 2,
                     "message": "CSS: “position-anchor”: Property “position-anchor” doesn't exist.",
                 },
                 {
                     "type": "error",
+                    "lastLine": 3,
                     "message": "CSS: “position-area”: Property “position-area” doesn't exist.",
                 },
                 {
                     "type": "error",
+                    "lastLine": 4,
                     "message": "CSS: “position-try-fallbacks”: Property “position-try-fallbacks” doesn't exist.",
                 },
                 {
                     "type": "error",
+                    "lastLine": 5,
                     "message": "CSS: “position-visibility”: Property “position-visibility” doesn't exist.",
                 },
                 {
                     "type": "error",
+                    "lastLine": 6,
                     "message": "CSS: “inline-size”: Parse Error.",
-                    "extract": "inline-size: min(anchor-size(width), 20rem)",
                 },
             ],
         },
         scenario="split-button.states",
+        source=source,
     )
 
     assert report.css_anchor_features == (
@@ -101,7 +115,15 @@ def test_nu_result_records_css_anchor_features_without_hiding_other_css_errors()
     )
 
 
-def test_nu_result_rejects_an_unrelated_inline_size_parse_error():
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "inline-size: calc(anchor-size(width) + );",
+        "inline-size: min(anchor-size(width), calc(100% - ));",
+        "inline-size: anchor-size(not-a-real-dimension);",
+    ],
+)
+def test_nu_result_rejects_an_unrelated_inline_size_parse_error(declaration: str):
     with pytest.raises(HtmlQualificationError, match="inline-size"):
         qualify_nu_result(
             {
@@ -109,13 +131,31 @@ def test_nu_result_rejects_an_unrelated_inline_size_parse_error():
                 "messages": [
                     {
                         "type": "error",
-                        "lastLine": 9,
+                        "lastLine": 1,
                         "message": "CSS: “inline-size”: Parse Error.",
-                        "extract": "inline-size: calc(100% - );",
                     }
                 ],
             },
             scenario="split-button.states",
+            source=declaration,
+        )
+
+
+def test_nu_result_rejects_an_invalid_value_for_a_known_anchor_property():
+    with pytest.raises(HtmlQualificationError, match="position-area"):
+        qualify_nu_result(
+            {
+                "version": "test",
+                "messages": [
+                    {
+                        "type": "error",
+                        "lastLine": 1,
+                        "message": "CSS: “position-area”: Property “position-area” doesn't exist.",
+                    }
+                ],
+            },
+            scenario="split-button.states",
+            source="position-area: not-a-real-area;",
         )
 
 
