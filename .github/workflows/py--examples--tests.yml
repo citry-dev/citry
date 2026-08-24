@@ -75,7 +75,7 @@ jobs:
       - name: Install qualification tools
         run: |
           uv venv .example-tools --python "${{ matrix.python-version }}"
-          uv pip install --python .example-tools/bin/python pytest==9.1.1
+          uv pip install --python .example-tools/bin/python pytest==9.1.1 "tomli==2.3.0; python_version < '3.11'"
 
       - name: Validate the catalog and archives
         run: .example-tools/bin/python -m pytest examples/tests -q

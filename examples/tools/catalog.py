@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI leg
+    import tomli as tomllib
 
 EXAMPLES_ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = EXAMPLES_ROOT / "catalog.toml"
