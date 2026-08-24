@@ -22,12 +22,13 @@ class TaskCard(Component):
             "title": task.title,
             "owner": task.owner,
             "completed": task.completed,
+            "toggle_label": "Move back to active" if task.completed else "Mark complete",
             "badge_component": ("high-priority-badge" if task.priority == "high" else "standard-priority-badge"),
             "accent_style": f"--board-accent: {theme.accent};",
         }
 
     def js_data(self, kwargs: Kwargs, slots: Slots):
-        return {"taskId": kwargs.task.id, "completed": kwargs.task.completed}
+        return {"taskId": kwargs.task.id}
 
     template = """
       <article
@@ -44,9 +45,8 @@ class TaskCard(Component):
           class="task-card__toggle"
           type="button"
           @click="$dispatch('board:toggle', { taskId })"
-          x-text="completed ? 'Move back to active' : 'Mark complete'"
         >
-          Mark complete
+          {{ toggle_label }}
         </button>
       </article>
     """
