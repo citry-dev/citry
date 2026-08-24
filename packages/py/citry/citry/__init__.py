@@ -71,6 +71,14 @@ from citry.citry_render import (
 from citry.citry_template import CitryTemplate
 from citry.command import CommandArg, CommandArgGroup, CommandSubcommand
 from citry.component import Component
+from citry.component_graph import (
+    ComponentGraph,
+    ComponentGraphLocation,
+    ComponentGraphNode,
+    ComponentGraphProblem,
+    ComponentGraphReference,
+    UnresolvedComponentReference,
+)
 from citry.component_like import ComponentLike
 from citry.component_registry import AlreadyRegistered, NotRegistered
 from citry.constness import Const, const_value, is_const
@@ -228,6 +236,11 @@ __all__ = [
     "ComponentAssets",
     "ComponentCatalog",
     "ComponentExtensionInfo",
+    "ComponentGraph",
+    "ComponentGraphLocation",
+    "ComponentGraphNode",
+    "ComponentGraphProblem",
+    "ComponentGraphReference",
     "ComponentInfo",
     "ComponentIntrospectionContext",
     "ComponentIntrospectionError",
@@ -377,6 +390,7 @@ __all__ = [
     "TimeSegments",
     "URLRoute",
     "UnitFormat",
+    "UnresolvedComponentReference",
     "citry",
     "collect_compiled_body_fills",
     "const_value",

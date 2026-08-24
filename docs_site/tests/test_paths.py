@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from docs_site._internal.paths import md_companion_path
+from docs_site._internal.paths import clean_url_to_companion_url, md_companion_path
 
 
 def test_md_companion_path_slug_cases() -> None:
@@ -16,3 +16,8 @@ def test_md_companion_path_slug_cases() -> None:
     assert md_companion_path(out, Path("guide/index.md")) == out / "guide" / "index.md"
     # The home page: index.md serves at /, companion at the site root.
     assert md_companion_path(out, Path("index.md")) == out / "index.md"
+
+
+def test_clean_url_to_companion_url() -> None:
+    assert clean_url_to_companion_url("/") == "/index.md"
+    assert clean_url_to_companion_url("/guide/intro/") == "/guide/intro/index.md"

@@ -50,6 +50,12 @@ def clean_url_to_companion_path(output_dir: Path, url_path: str) -> Path:
     return output_dir / clean / "index.md" if clean else output_dir / "index.md"
 
 
+def clean_url_to_companion_url(url_path: str) -> str:
+    """Root-relative Markdown-companion URL for a clean public URL."""
+    clean = url_path.strip("/")
+    return f"/{clean}/index.md" if clean else "/index.md"
+
+
 def md_to_url(rel: Path) -> str:
     """Clean URL path for a content markdown file (e.g. ``foo/`` or ``bar/baz/``)."""
     if rel.stem == "index":

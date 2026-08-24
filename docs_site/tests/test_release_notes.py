@@ -259,22 +259,22 @@ def test_real_changelog_index_renders() -> None:
     assert "Release notes" in html
 
 
-def test_llms_full_txt_includes_per_version_release_notes(tmp_path: Path) -> None:
-    # Generated version items must reach llms-full.txt through the resolved nav.
+def test_llms_txt_links_per_version_release_notes(tmp_path: Path) -> None:
+    # Generated version items must reach llms.txt through the resolved nav.
     from docs_site._internal.build import PageRecord
-    from docs_site._internal.llms import write_llms_full_txt
+    from docs_site._internal.llms import write_llms_txt
     from docs_site._internal.nav import NavTree
 
-    def rec(url: str, title: str, body: str) -> PageRecord:
+    def rec(url: str, title: str, description: str) -> PageRecord:
         return PageRecord(
             url=url,
             canonical="",
             title=title,
-            description="",
+            description=description,
             noindex=False,
             is_doc_page=True,
             source_md=None,
-            markdown_body=body,
+            markdown_body="",
         )
 
     # flat_pages reaches generated items the same way it reaches authored pages.
@@ -299,7 +299,7 @@ def test_llms_full_txt_includes_per_version_release_notes(tmp_path: Path) -> Non
         "releases": rec("releases/", "Release notes", "Pick a version."),
         "releases/v0.2.0": rec("releases/v0.2.0/", "v0.2.0", "A feature landed in v0.2.0."),
     }
-    n = write_llms_full_txt(tmp_path, nav, by_url, site_url="https://x.test")
-    out = (tmp_path / "llms-full.txt").read_text(encoding="utf-8")
-    assert "A feature landed in v0.2.0." in out  # per-version notes are included
-    assert n == 2  # the index plus the one version, both via flat_pages
+    n = write_llms_txt(tmp_path, nav, by_url, site_url="https://x.test", site_name="Citry")
+    out = (tmp_path / "llms.txt").read_text(encoding="utf-8")
+    assert ("[v0.2.0](https://x.test/releases/v0.2.0/index.md): A feature landed in v0.2.0.") in out
+    assert n == 2  # the index plus the one version, both via the resolved group

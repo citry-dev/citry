@@ -422,8 +422,28 @@ def test_head_has_structured_data_and_card_meta() -> None:
     # The default social-card image (absolute) on both og and twitter.
     assert 'property="og:image" content="https://x.test/citry/static/img/favicon.png"' in html
     assert 'name="twitter:image" content="https://x.test/citry/static/img/favicon.png"' in html
-    # The llms.txt alternate link.
-    assert 'rel="alternate" type="text/markdown" href="/llms.txt"' in html
+    # Agents can fetch this page as Markdown and find the site-wide index.
+    assert 'rel="alternate" type="text/markdown" href="/concepts/components/index.md"' in html
+    assert 'rel="describedby" href="/llms.txt"' in html
+
+
+def test_version_page_links_its_versioned_markdown_companion() -> None:
+    html = render_page(
+        "# Components\n",
+        nav_tree=_nav(),
+        current_path="concepts/components/",
+        version_prefix="/v/1.2.3",
+    ).html
+
+    assert 'href="/v/1.2.3/concepts/components/index.md"' in html
+    assert 'rel="describedby" href="/llms.txt"' in html
+
+
+def test_home_page_links_its_root_markdown_companion() -> None:
+    html = render_page("# Home\n", current_path="").html
+
+    assert 'rel="alternate" type="text/markdown" href="/index.md"' in html
+    assert 'rel="describedby" href="/llms.txt"' in html
 
 
 def test_home_page_has_no_breadcrumb_structured_data() -> None:

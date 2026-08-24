@@ -119,6 +119,5 @@ def test_build_pre_renders_example_demo(tmp_path: Path) -> None:
     assert "<iframe" not in companion
     assert "tabbed-set" not in companion
 
-    llms_full = (out / "llms-full.txt").read_text(encoding="utf-8")
-    assert "class Card(Component):" in llms_full
-    assert "[Open the live result](/examples/card/demo/)" in llms_full
+    llms = (out / "llms.txt").read_text(encoding="utf-8")
+    assert "https://citry.dev/examples/card/index.md" in llms

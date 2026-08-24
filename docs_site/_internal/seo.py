@@ -169,17 +169,15 @@ def write_robots(output_dir: Path, *, site_url: str, versions_root: Path | None 
     """
     Write robots.txt and return the number of old versions it disallowed.
 
-    Allows everything, disallows each old ``/v/<version>/`` tree, lists the AI
-    crawlers, and points at the sitemap. ``versions_root`` (the committed docs
-    version tree) defaults to the configured versions dir.
+    Allows every crawler, disallows each old ``/v/<version>/`` tree, and points
+    at the sitemap. ``versions_root`` (the committed docs version tree) defaults
+    to the configured versions dir.
     """
     root = versions_root if versions_root is not None else default_config.versions_dir
     disallowed = _disallowed_versions(root)
 
     lines = ["User-agent: *", "Allow: /"]
     lines += [f"Disallow: /v/{version}/" for version in disallowed]
-    lines += ["", f"Sitemap: {site_url}/sitemap.xml", "", "# AI crawlers - explicit allow"]
-    for bot in current_docs_project().settings.seo.ai_bots:
-        lines += [f"User-agent: {bot}", "Allow: /"]
+    lines += ["", f"Sitemap: {site_url}/sitemap.xml"]
     (output_dir / "robots.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return len(disallowed)

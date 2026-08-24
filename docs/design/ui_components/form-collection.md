@@ -1,7 +1,8 @@
 # Form Collection
 
-**Status:** accepted implementation contract for the first production pass.
-Research refreshed 2026-08-21.
+**Status (2026-08-22):** production implementation, public docs, structured
+reference, examples, quality scenario, and focused browser
+coverage shipped in `citry-ui` 0.2.0. Research refreshed 2026-08-21.
 
 ## 1. Purpose and product bar
 

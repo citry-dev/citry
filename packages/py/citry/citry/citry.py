@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from weakref import WeakKeyDictionary, WeakValueDictionary, ref
 
 from citry._class_introspection import _static_class_dict
+from citry._component_graph import _build_component_graph
 from citry._component_introspection import _build_component_catalog, _build_component_info
 from citry._linting import _application_lint_info, _component_lint_info
 from citry.analysis import TemplateAnalysis
@@ -83,6 +84,7 @@ if TYPE_CHECKING:
     from citry.citry_render import CitryRender
     from citry.citry_template import CitryTemplate
     from citry.component import Component
+    from citry.component_graph import ComponentGraph
     from citry.extension import Extension, ExtensionCommand, ForeignCompileContext
     from citry.introspection import ComponentCatalog, ComponentInfo
     from citry.library_component import (
@@ -1285,6 +1287,58 @@ class Citry:
             include_default_values=include_default_values,
         )
         return self.extensions._inspect_component_extensions(comp_cls, info, inspectors)
+
+    def inspect_component_graph(
+        self,
+        *,
+        include_builtins: bool = False,
+    ) -> ComponentGraph:
+        """
+        Return authored component dependencies from one registry snapshot.
+
+        Citry copies the complete name-to-class registry once, then reads each
+        selected component's effective primary template without rendering or
+        running template-load transforms. The graph includes direct dependency
+        and reverse-reference queries plus explicit unresolved targets and
+        source problems.
+
+        Args:
+            include_builtins: Include Citry's framework component definitions
+                and references to them.
+
+        Returns:
+            A versioned [`ComponentGraph`][citry.ComponentGraph] containing
+            copied values and authored source locations.
+
+        Raises:
+            TypeError: If ``include_builtins`` is not a bool.
+            CitryLifecycleInProgress: If another thread is changing component
+                lifecycle state.
+
+        Example:
+            ```python
+            graph = app.inspect_component_graph()
+
+            for dependency in graph.dependencies("account-page"):
+                print(dependency.name)
+
+            for dependent in graph.dependents("avatar"):
+                print(dependent.name)
+            ```
+
+        Note:
+            The graph covers component tags in authored primary templates. It
+            does not claim to find components composed from Python, inserted by
+            a transform, or chosen by a dynamic selector.
+
+        """
+        self._validate_introspection_bool(include_builtins, "include_builtins")
+        registrations = self.components
+        return _build_component_graph(
+            self,
+            registrations,
+            include_builtins=include_builtins,
+        )
 
     @staticmethod
     def _validate_introspection_bool(value: object, name: str) -> None:

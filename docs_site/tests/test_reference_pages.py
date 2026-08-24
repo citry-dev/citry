@@ -102,6 +102,7 @@ def test_component_public_class_members_are_visible_to_reference_extraction() ->
     assert extract_symbol("citry.Component.i18n") is not None
     assert extract_symbol("citry.Citry.engine_id") is not None
     assert extract_symbol("citry.Citry.inspect_component") is not None
+    assert extract_symbol("citry.Citry.inspect_component_graph") is not None
     assert extract_symbol("citry.Citry.inspect_components") is not None
 
 
@@ -140,6 +141,9 @@ def test_build_writes_reference_pages(tmp_path: Path) -> None:
     assert "<code>Component</code>" in component_html
     assert "id=citry-component-events" in component_html
     assert "Optional server event handlers" in component_html
+    assert (out / "reference" / "component" / "index.md").is_file()
+    assert (out / "releases" / "index.md").is_file()
+    assert any(path.is_file() for path in (out / "releases").glob("v*/index.md"))
 
     # Each authored category owns one record and a Markdown companion. The
     # generated pass must not overwrite or duplicate either one.

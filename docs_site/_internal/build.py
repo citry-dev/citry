@@ -44,6 +44,10 @@ from docs_site._internal.blog import (
     load_blog_catalog,
     serialize_atom_feed,
 )
+from docs_site._internal.community_packages import (
+    COMMUNITY_PACKAGE_PATHS,
+    load_community_package_catalog,
+)
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config_loading import DocsConfigError
 from docs_site._internal.crossrefs import build_objects_inv
@@ -121,7 +125,7 @@ class PageRecord:
     # The authored markdown source, which may live outside content_dir, or None
     # for a generated page.
     source_md: Path | None
-    # The page body as expanded markdown, for the llms full-text export.
+    # The page body as expanded markdown, written to its Markdown companion.
     markdown_body: str
     # Authored editorial timestamp for dated content. Sitemap generation uses
     # this instead of git history when present.
@@ -156,8 +160,8 @@ class BuildOutcome:
     minified: int = 0  # number of HTML files the minify pass shrank
     sitemap_urls: int = 0  # URLs listed in sitemap.xml
     redirects: int = 0  # redirect stubs written
-    llms_links: int = 0  # link entries in llms.txt
-    llms_pages: int = 0  # pages concatenated into llms-full.txt
+    llms_links: int = 0  # Markdown companion links in llms.txt
+    llms_pages: int = 0  # pages copied into the nonstandard bulk text export
     search_ok: bool = False  # whether the search index built
     search_message: str = ""  # the search-index result message
     base_path_files: int = 0  # HTML files rewritten for a subpath deploy
@@ -341,6 +345,12 @@ def _build_site_to_output(
         and _generic_loop_owns_authored_page(path, content_dir)
         and (include_site_content or nav_tree.scope_for_url(md_to_url(path.relative_to(content_dir))) != SCOPE_SITE)
     )
+    rendered_content_paths = {md_to_url(path.relative_to(content_dir)) for path in md_files}
+    community_package_catalog = (
+        load_community_package_catalog(config.community_packages_data)
+        if include_site_content and rendered_content_paths & COMMUNITY_PACKAGE_PATHS
+        else None
+    )
     source_routes = {
         **(blog_catalog.source_to_public_path if blog_catalog is not None else blog_source_routes(content_dir)),
         **ui_library_source_routes(project.ui_library, repo_root=config.repo_root),
@@ -405,6 +415,7 @@ def _build_site_to_output(
                 version=version,
                 source_path=md_path,
                 blog_catalog=blog_catalog,
+                community_package_catalog=community_package_catalog,
                 is_blog_index=rel == Path("blog/index.md"),
                 blog_feed_url=blog_feed_url,
                 version_prefix=version_prefix,
@@ -507,6 +518,7 @@ def _build_site_to_output(
             version_prefix=version_prefix,
         )
     outcome.reference = len(ref_records)
+    outcome.companions += len(ref_records)
     outcome.records.extend(ref_records)
     rel_records = []
     build_releases = include_site_content or (
@@ -524,6 +536,7 @@ def _build_site_to_output(
             version_prefix=version_prefix,
         )
     outcome.releases = len(rel_records)
+    outcome.companions += len(rel_records)
     outcome.records.extend(rel_records)
     if docs_version and not (output_dir / "index.html").is_file():
         _write_snapshot_home_redirect(output_dir, nav_tree, canonical_base)
@@ -1144,7 +1157,14 @@ def _build_reference(
         out_path = output_dir / page_url / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(result.html, encoding="utf-8")
-        records.append(_record_for(page_url, canonical, result, source_md=None))
+        record = _record_for(page_url, canonical, result, source_md=None)
+        _write_companion(
+            clean_url_to_companion_path(output_dir, page_url),
+            result.meta,
+            result.markdown_body,
+            record.canonical,
+        )
+        records.append(record)
 
     project = current_docs_project()
     write("reference/", reference_index_markdown(project.reference))
@@ -1190,7 +1210,14 @@ def _build_releases(
         out_path = output_dir / page_url / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(result.html, encoding="utf-8")
-        records.append(_record_for(page_url, canonical, result, source_md=None))
+        record = _record_for(page_url, canonical, result, source_md=None)
+        _write_companion(
+            clean_url_to_companion_path(output_dir, page_url),
+            result.meta,
+            result.markdown_body,
+            record.canonical,
+        )
+        records.append(record)
 
     # A missing CHANGELOG.md (some embed/test configs point repo_root at a bare
     # dir) yields no release pages. The "Release notes" nav entry is gated on the
@@ -1263,6 +1290,7 @@ def _build_not_found(
         blog_catalog=blog_catalog,
         blog_feed_url=blog_feed_url,
         version_prefix=version_prefix,
+        discovery_links=False,
     ).html
     (output_dir / "404.html").write_text(html, encoding="utf-8")
     return True

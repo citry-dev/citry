@@ -95,13 +95,6 @@ git:
   max_authors: 5 # Integer greater than or equal to 1.
 
 seo:
-  ai_bots: # Unique list of non-empty crawler user-agent strings.
-    - GPTBot
-    - ClaudeBot
-    - anthropic-ai
-    - Google-Extended
-    - PerplexityBot
-    - CCBot
   priorities: # Ordered, unique URL prefixes with numeric priorities from 0 to 1.
     - { prefix: getting-started, priority: 0.8 }
     - { prefix: concepts, priority: 0.6 }

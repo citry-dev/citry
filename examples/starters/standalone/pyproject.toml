@@ -1,0 +1,17 @@
+[project]
+name = "citry-example-standalone"
+version = "0.1.0"
+description = "Render an interactive Citry page without a web server"
+requires-python = ">=3.10,<4"
+dependencies = [
+  "citry>=0.4.3,<0.5",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9.0,<10",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

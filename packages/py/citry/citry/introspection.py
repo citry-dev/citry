@@ -796,7 +796,7 @@ class ComponentInfo:
         transparent: Whether the component joins its parent's serialization frame.
         builtin: Whether Citry created this as a framework component.
         schemas: The component's five effective typed schemas.
-        assets: The component's three primary asset declarations.
+        assets: The component's four primary asset declarations.
         extensions: Explicitly requested extension-owned metadata.
 
     """

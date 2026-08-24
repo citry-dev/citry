@@ -209,6 +209,15 @@ cd packages/py/citry_core
 uv run maturin develop
 ```
 
+### Managing Community package listings
+
+The Community extension and UI-library directories are rendered from
+[`docs_site/data/community_packages.yml`](../docs_site/data/community_packages.yml).
+Add, update, or remove listings there rather than formatting cards by hand.
+The schema, review policy, disclosure rules, publication lifecycle, and future
+weekly discovery process are defined in
+[`docs_community_packages.md`](design/docs_community_packages.md).
+
 ### Running tests
 
 Rust tests are scoped to the crates under `crates/`, one `-p` flag per crate.
@@ -564,7 +573,12 @@ To add a new tooling dependency (like a linter, formatter, or test utility) that
 Runtime extras on the `citry` package (the `pip install citry[...]` surface, as
 opposed to the root `dev`/`ci` tooling extras above) are namespaced
 `citry[<category>-<name>]` so the extras namespace stays collision-free and has
-room to grow. Two categories exist so far:
+room to grow. Three categories exist so far:
+
+- `analysis-<backend>`: an analysis backend used by editor or static-analysis
+  tooling. `citry[analysis-ty]` installs the pinned `ty` type checker so Citry
+  can resolve Python expression types; `citry-lsp` requests this extra for
+  diagnostics and completions. Ordinary runtime users do not need it.
 
 - `watcher-<backend>`: a file-watcher backend for hot reload, e.g.
   `citry[watcher-watchfiles]`, `citry[watcher-watchdog]`. See
@@ -907,6 +921,12 @@ at `https://github.com/citry-dev/citry/blob/main/...`. The
 `published_readme_links` validator enforces this, so a relative path fails the
 gate rather than shipping.
 
+PyPI stores the rendered project description in each release's uploaded
+metadata. Editing a package README on `main` does not change an already
+published version; the new description appears with that package's next
+release. Do not create an otherwise-empty patch release merely to refresh the
+description unless maintainers explicitly choose to do so.
+
 #### Recording Marketplace demo GIFs
 
 The first VS Code release used this practical macOS workflow. It favors crisp,
@@ -1045,6 +1065,13 @@ members = ["packages/py/*"]
 dev = ["maturin>=1.10.2", "ruff>=0.10.0", "mypy>=1.0.0"]
 ```
 
+The workspace has exactly one dependency lockfile: the root [`uv.lock`](../uv.lock).
+Run `uv lock` from the repository root and commit that file for every workspace
+dependency or package-version change. Package-local `uv.lock` files belong to
+the pre-workspace layout and are not development, CI, or release inputs; the
+remaining Citry Core copy is tracked for removal in
+[#87](https://github.com/citry-dev/citry/issues/87).
+
 **Usage:**
 
 ```bash
@@ -1170,22 +1197,49 @@ Python distribution. The VS Code extension uses `vscode-citry@<version>`.
 
 Currently, releases are managed manually:
 
-1. **Update version** in the package's `pyproject.toml` (or equivalent for other languages)
-2. **Re-lock**: run `uv lock` so `uv.lock` picks up the new version, and commit
-   `uv.lock` alongside `pyproject.toml`. The lockfile pins every workspace
-   package's version, so a bumped `pyproject.toml` without a matching `uv.lock`
-   makes CI fail its `uv sync --locked --all-packages` step (in `repo--check` and
-   the test workflows), not only at publish time.
-3. **Update the package's owning changelog** with release notes. Use the root
+1. **Update the version and compatibility constraints** in the package's
+   `pyproject.toml` or equivalent manifest. When Citry Core changes, update
+   Citry's exact Core pin in the same prepared change.
+2. **Re-lock**: run `uv lock` from the repository root so the sole root
+   `uv.lock` picks up the new version, and commit it alongside the manifest.
+   The lockfile pins every workspace package's version, so a bumped manifest
+   without a matching `uv.lock` makes CI fail its
+   `uv sync --locked --all-packages` step, not only at publish time.
+3. **Update the package's owning changelog and published README**. Use the root
    `CHANGELOG.md` only for `citry`; auxiliary packages use the `CHANGELOG.md`
-   in their own package directory.
-4. **Qualify the package or extension** by manually running its publish workflow on the
-   exact release commit on `main` and waiting for the complete distribution
-   gate. Citry Core, Citry, citry-lsp, citry-ui, and pygments-citry all retain
-   those checked artifacts. The VS Code extension does the same for its one
-   VSIX; the tag promotes that run's exact bytes.
-5. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
-6. **Push the tag**: `git push origin citry-core@1.3.0`
+   in their own package directory. README changes reach PyPI only with a new
+   package release.
+4. **Sweep current version references deliberately.** Classify every match as
+   current metadata, a dependency or runtime pin, a compatibility floor, a
+   test fixture, generated output, historical changelog/versioned docs, dated
+   research evidence, third-party code, or an unrelated version before editing
+   it. Do not bulk-replace old numbers or rewrite historical evidence; do
+   update living docs, examples, workflows, tests, and compatibility banners.
+5. **Verify and promote only the named release files to `main`** through the
+   clean worktree procedure below. Keep the original `review` branch pointer,
+   index, working files, and untracked files unchanged.
+6. **Recheck mutable external preconditions.** Confirm the target version is
+   absent from its public registry and GitHub Releases; the Trusted Publisher
+   or marketplace credential names the exact workflow/environment; the GitHub
+   environment permits the intended tag namespace; and, for a Citry release,
+   the Pages environment and snapshot commit-back path still accept the tag.
+7. **Qualify the package or extension** by manually running its publish
+   workflow on the exact release commit on `main` and waiting for the complete
+   distribution gate. Citry Core, Citry, citry-lsp, citry-ui, and
+   pygments-citry retain those checked artifacts. The VS Code extension does
+   the same for its VSIX; the tag promotes that run's exact bytes.
+8. **Create and push the annotated tag** at that exact qualified commit, for
+   example `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` followed
+   by `git push origin citry-core@1.3.0`. Use the matching package-specific tag
+   for another artifact.
+9. **Verify and close out the release from public bytes.** Check the registry
+   version and GitHub Release; install the exact public dependency chain with
+   no workspace resolution on the oldest and newest supported Python; exercise
+   imports and entry points; and record any consciously accepted gap. For the
+   VS Code extension, install both registry VSIX files and start the public
+   LSP. For Citry, verify the versioned docs snapshot and, once immutable wheel
+   URLs exist, promote and browser-test the complete playground tuple. Finish
+   with the same classified version/pin sweep used during preparation.
 
 Pushing the tag triggers the artifact's publish workflow and verifies that the
 tag matches the package version. Each Python package tag promotes exact bytes
@@ -1205,8 +1259,10 @@ Open VSX, and a GitHub Release from its own extension workflow.
 The packages are versioned and released **independently on purpose**, so each
 can ship on its own cadence. The ordering rule applies when `citry` and
 `citry-core` both change. A `citry-lsp` release whose minimum Citry version is
-new must likewise wait for that Citry release to reach PyPI. `pygments-citry`
-has no cross-package release ordering requirement.
+new must likewise wait for that Citry release to reach PyPI, as must a
+`citry-ui` release that raises its minimum Citry version. The VS Code extension
+waits for its compatible public `citry-lsp`. `pygments-citry` has no
+cross-package release ordering requirement.
 
 **`citry` pins one exact `citry-core` version** (`citry-core==1.6.0`, not a
 range). The runtime node classes in `citry.nodes` read the source that
@@ -1248,13 +1304,66 @@ A release therefore never comes from `review`. Assemble it in a throwaway
 worktree of `main` instead:
 
 ```bash
+git fetch origin main --tags
 git worktree add ../citry-release main
-# copy the named files this release needs into the worktree, then
-# commit, tag, and push from there
+git -C ../citry-release merge --ff-only origin/main
+# Apply the explicit promotion manifest, inspect, test, and commit here.
+git -C ../citry-release push origin main
 git worktree remove ../citry-release
 ```
 
-Two rules that came out of doing this five times:
+If a clean `main` worktree already exists, reuse it only after verifying that
+it has no staged, modified, deleted, or untracked files and fast-forwarding it
+to `origin/main`. Do not force-remove a dirty worktree.
+
+Use this promotion sequence:
+
+1. In the original worktree, require the current branch to be `review`; record
+   the `review`, local `main`, `origin/main`, and `reviewed-baseline` SHAs plus
+   the current status. Read-only inspection is allowed, but do not stage,
+   commit, merge, rebase, reset, or move any ref from this worktree.
+2. Fetch `origin/main` and tags, record the fetched `origin/main` SHA, then
+   create or update the clean `main` worktree with `--ff-only`. If local `main`
+   cannot fast-forward, stop and reconcile the unexpected state rather than
+   merging either branch or discarding work.
+3. Write an explicit promotion manifest before copying anything. It has three
+   inputs:
+
+   - tracked modifications and deletions relative to `review`'s `HEAD`;
+   - non-ignored untracked files selected for promotion; and
+   - explicit preserve/delete decisions for paths that exist only on newer
+     `main`.
+
+   In automation, obtain the first two inputs with the NUL-delimited forms of
+   `git diff --name-status --no-renames -z HEAD` and
+   `git ls-files --others --exclude-standard -z`. Never copy ignored files,
+   caches, environments, generated `site/` output, or whole directories merely
+   because one child is in the manifest.
+4. Treat absence from `review` as ambiguous, not as a deletion instruction. A
+   path may have been added directly to `main` after `review`'s old baseline,
+   including generated version snapshots and release records. Preserve every
+   such main-only path unless the manifest explicitly names its exact deletion.
+   Conversely, when a maintainer deliberately removes a main-only path, apply
+   that exact deletion in the `main` worktree even though `review` cannot show
+   it as `D` in `git status`.
+5. Copy only the manifest's named existing files and apply only its named
+   deletions. Confirm the source worktree did not change during the copy. In the
+   `main` worktree, inspect `git status`, `git diff --check`, the name/status and
+   stat summaries, and the complete diff. Stop on an unexpected path or byte
+   difference.
+6. Run the agreed integration gate, stage only the manifest, inspect the staged
+   diff again, and commit on local `main`. If a necessary fix is made in the
+   release worktree, mirror it into the original working tree before finishing.
+7. Fetch `origin/main` again immediately before pushing. Require it still to be
+   the recorded base commit; if it moved, stop and rebuild the promotion on the
+   new fast-forwarded base. Push `main` normally and let non-fast-forward
+   rejection protect the remote. Never force-push `main`.
+8. Verify the remote SHA and required CI/deployment result. Remove the
+   throwaway worktree only after it is clean. Recheck that the original
+   worktree is still on the recorded `review` SHA with its index, working files,
+   and untracked files intact.
+
+Two additional rules came out of doing this five times:
 
 - **Copy named files, never whole trees.** A wholesale copy drags in whatever
   other work is in progress on disk, and `main` may not be able to run it. Diff
@@ -1439,7 +1548,8 @@ types, coverage, the custom validators, and a single-environment test pass.
 - `third_party/**` - Third-party dependencies used by both Rust and Python
 - root Python, Cargo, pnpm, lockfile, and toolchain inputs
 - the exact release-helper scripts imported or executed by package tests
-- `.github/workflows/py--tests.yml` and the pygments publish workflow whose safety contract is tested
+- `.github/workflows/py--tests.yml` plus the Pygments and Citry UI publish
+  workflows whose safety contracts are tested
 - `.gitmodules` - Submodule configuration changes
 
 **What it tests**:

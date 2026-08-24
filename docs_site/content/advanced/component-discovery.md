@@ -86,6 +86,43 @@ component directory itself rather than a broad project or environment root.
 Only class definitions register components. Discovery does not instantiate or
 render them, and it does not load their templates, JavaScript, or CSS.
 
+## Inspect authored component dependencies
+
+Use [`inspect_component_graph()`][citry.Citry.inspect_component_graph] when a
+tool needs to know which registered components refer to each other:
+
+```python
+from myproject.engine import app
+
+graph = app.inspect_component_graph()
+
+for dependency in graph.dependencies("checkout-page"):
+    print(dependency.name)
+
+for dependent in graph.dependents("price"):
+    print(dependent.name)
+```
+
+The graph reads each component's effective primary template without rendering
+it. `references_from()` and `references_to()` retain every authored occurrence
+and its source range, while `dependencies()` and `dependents()` return unique
+component definitions. Names and aliases are matched case-insensitively.
+
+Unknown tags and dynamic `<c-component c-is="...">` targets appear in
+`graph.unresolved`. A missing, unreadable, or malformed source appears in
+`graph.problems` without discarding facts from other templates. Check
+`graph.coverage_complete` and `graph.fully_resolved` before treating the result
+as exhaustive for its documented scope.
+
+That scope is deliberately narrower than a runtime call graph. It covers
+component tags written in registered components' authored primary templates.
+It does not discover components composed in Python, inserted by a
+template-loading transform, or chosen dynamically at render time. Built-in
+components are omitted by default; pass `include_builtins=True` to include
+them. [`ComponentGraph.to_json()`][citry.ComponentGraph.to_json] produces a
+versioned local-tooling document, which may contain absolute developer-machine
+paths.
+
 ## Initialize before starting worker threads
 
 Call [`initialize()`][citry.Citry.initialize] before starting worker threads.
@@ -152,5 +189,7 @@ workers use the prepared engine.
 - [`Citry`][citry.Citry]
 - [`Citry.initialize()`][citry.Citry.initialize]
 - [`Citry.autodiscover()`][citry.Citry.autodiscover]
+- [`Citry.inspect_component_graph()`][citry.Citry.inspect_component_graph]
+- [`ComponentGraph`][citry.ComponentGraph]
 - [Registration](/concepts/registration/)
 - [Hot reload](/guides/dev-server/)

@@ -8,6 +8,17 @@ description: Runnable Citry components, each rendered live with its source.
 Each recipe is executable Citry code. The component source opens first; switch
 tabs to see the complete page and its live result.
 
+## Start from a complete project
+
+The recipes below are optimized for the documentation renderer. For an
+independently copyable application with its own `pyproject.toml`, lockfile,
+server command, and tests, use the
+[complete starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}.
+The collection includes standalone rendering, FastAPI, Django, Flask, bare
+ASGI, and bare WSGI, plus the larger Project Board demo. Every web starter
+shows the same Alpine and server Events behavior so the framework wiring is
+easy to compare.
+
 ## Try an example
 
 This complete module uses component State and a Python event handler. Select

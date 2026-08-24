@@ -1,8 +1,10 @@
 # Timeline
 
-**Status:** implementation contract accepted for the first production pass.
-The family is intentionally server rendered and non-interactive; browser and
-assistive-technology evidence still forms part of release qualification.
+**Status (2026-08-22):** production implementation, public docs, structured
+reference, examples, quality scenario, and focused browser
+coverage shipped in `citry-ui` 0.2.0. The family is intentionally server
+rendered and non-interactive; human visual and assistive-technology review
+remain stabilization evidence.
 
 ## 1. Purpose and product bar
 

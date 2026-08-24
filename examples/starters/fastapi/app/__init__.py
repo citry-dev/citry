@@ -1,0 +1,1 @@
+"""FastAPI Citry example application."""

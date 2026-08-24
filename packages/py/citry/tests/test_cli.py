@@ -138,7 +138,7 @@ class TestHelpListings:
         # (watch's wraps across lines, so its roster entry above stands in).
         assert "List the registered components." in out
         assert "Format statically identifiable Citry component assets." in out
-        assert "Emit the runtime component catalog as JSON." in out
+        assert "Emit runtime component metadata as JSON." in out
         assert "Scaffold a new component file." in out
         assert "Inspect and run extension commands." in out
 
@@ -340,11 +340,64 @@ class TestInspectComponents:
         assert document["components"][0]["schemas"]["kwargs"]["fields"][0]["default_value_state"] == "omitted"
         assert document["extension_versions"] == {}
 
+    def test_json_selects_one_component_by_case_insensitive_alias(self, capsys, monkeypatch):
+        engine = _Citry()
+
+        class MyButton(Component):
+            citry = engine
+            template = """
+            <button></button>
+            """
+
+        engine.register(MyButton, "action")
+
+        def plural_must_not_run(**_kwargs):
+            raise AssertionError("singular CLI inspection must not build the full catalog")
+
+        monkeypatch.setattr(engine, "inspect_components", plural_must_not_run)
+
+        run(build_cli(engine), ["inspect", "ACTION", "--json"], citry=engine)
+
+        document = json.loads(capsys.readouterr().out)
+        assert document["schema_version"] == 1
+        assert len(document["components"]) == 1
+        assert document["components"][0]["name"] == "my-button"
+        assert document["components"][0]["aliases"] == ["action", "mybutton"]
+
+    def test_json_can_select_a_builtin_component(self, capsys):
+        engine = _Citry()
+
+        run(build_cli(engine), ["inspect", "component", "--json"], citry=engine)
+
+        document = json.loads(capsys.readouterr().out)
+        assert [component["name"] for component in document["components"]] == ["component"]
+        assert document["components"][0]["builtin"] is True
+
+    def test_unknown_component_is_a_clean_usage_error(self, capsys):
+        engine = _Citry()
+
+        with pytest.raises(SystemExit) as exc:
+            run(build_cli(engine), ["inspect", "Missing", "--json"], citry=engine)
+
+        captured = capsys.readouterr()
+        assert exc.value.code == 2
+        assert captured.out == ""
+        assert captured.err == "citry inspect: error: No component registered as 'missing'.\n"
+
     def test_json_flag_is_required(self, capsys):
         engine = _Citry()
 
         with pytest.raises(SystemExit) as exc:
             run(build_cli(engine), ["inspect"], citry=engine)
+
+        assert exc.value.code == 2
+        assert "the following arguments are required: --json" in capsys.readouterr().err
+
+    def test_json_flag_is_required_with_a_component(self, capsys):
+        engine = _Citry()
+
+        with pytest.raises(SystemExit) as exc:
+            run(build_cli(engine), ["inspect", "component"], citry=engine)
 
         assert exc.value.code == 2
         assert "the following arguments are required: --json" in capsys.readouterr().err

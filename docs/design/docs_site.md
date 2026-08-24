@@ -90,6 +90,13 @@ release-note policy. `reference.yml`, `ui_library.yml`, `redirects.yml`, and
 belong to `ui_library.yml`; adding a family does not require a second Python
 registry.
 
+`data/community_packages.yml` is different from the command-wide manifests.
+It owns current site-scoped package listings and loads only when the root build
+or development request renders a Community package page. Snapshot builds must
+not read or validate it. Its routes, schema, projections, review process, and
+future discovery workflow are defined in
+[`docs_community_packages.md`](docs_community_packages.md).
+
 `_internal/config.py` is limited to runtime paths and environment overrides.
 Each build, check, assemble, or server process loads its five runtime manifests
 into one validated `DocsProject` and keeps that project active through nested
@@ -460,14 +467,16 @@ are back on; the build now produces a deploy-ready site. Slices:
   loads from flat files). The plain `build` minifies by default (`--no-minify`
   to skip).
 - *Slice 4.2 (done):* SEO and AI-readable index files, all built from the page
-  records. `seo.py` writes `sitemap.xml`, `robots.txt` (allow-all plus named AI
-  crawlers plus the sitemap), and `meta/indexing.json`; `llms.py` writes
-  `llms.txt` (nav-ordered) and `llms-full.txt` (concatenated page text);
+  records. `seo.py` writes `sitemap.xml`, `robots.txt` (one wildcard crawler
+  policy plus the sitemap), and `meta/indexing.json`; `llms.py` writes
+  a v2 `llms.txt` whose nav-ordered links open page-level Markdown companions.
+  It also retains `llms-full.txt` as a nonstandard bulk text export for existing
+  users;
   `redirects.py` carries an empty moved-URL map ready for the first rename. The
   `DocPage` head gained BreadcrumbList and TechArticle JSON-LD (escaped for safe
   `<script>` embedding, base path stripped from the trail), a default Open Graph
-  / Twitter card image (front-matter `og_image` overrides), and a `/llms.txt`
-  alternate link.
+  / Twitter card image (front-matter `og_image` overrides), a Markdown alternate
+  link for each page, and a `describedby` link to `/llms.txt`.
 - *Slice 4.3 (done):* Pagefind search. `pagefind.py` runs the bundled binary
   over the built HTML; a `SearchModal` citry component plus the header trigger,
   the `data-pagefind-body` / `data-pagefind-weight` article hooks, the
@@ -545,7 +554,7 @@ Current ownership is:
 | --- | --- |
 | Project landing page at `/` | Site content declared by `home` |
 | Docs, Examples, Reference, release notes | Versioned content |
-| Community, Blog index, posts, and feed | Site content |
+| Community, package directories, Blog index, posts, and feed | Site content |
 | Pagefind, sitemap, robots, LLM files, redirects, static files, Citry runtime, generated social cards | Root build |
 | `/v/<version>/` trees and aliases | Committed release snapshots |
 | Deploy artifact | Fresh root build plus copied committed snapshots |
@@ -579,7 +588,10 @@ the entire root and its root-owned indexes, then mounts the already committed
 snapshots unchanged. The host receives one atomic artifact; no partial upload
 and no snapshot regeneration are required. Only a Citry release creates a new
 snapshot. Historical snapshot chrome remains historical and is not dynamically
-replaced with the current global navigation.
+replaced with the current global navigation. The same immutability applies to
+their baked discovery metadata: older snapshots retain the relations emitted
+by their historical builder, while new snapshots receive the current Markdown
+`alternate` and `llms.txt` `describedby` relations.
 
 Shared root infrastructure is a deliberate size tradeoff, not full snapshot
 isolation. Search from an old version uses the current Pagefind index and may

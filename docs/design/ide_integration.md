@@ -26,10 +26,12 @@ work follows that vertical checklist instead of reconstructing the Template,
 JavaScript, and CSS implementation history from this document.
 The versioned runtime catalog is specified in
 [`component_introspection.md`](component_introspection.md); it represents
-classes successfully loaded into a `Citry` instance. Static analysis produces
-a separate partially known record and does not serialize that record as
-`ComponentInfo`. A later design must define that record plus its join key,
-combined-envelope behavior, ambiguity rules, and failure behavior. The tooling
+classes successfully loaded into a `Citry` instance. The registry-backed
+authored dependency graph is specified in
+[`component_graph.md`](component_graph.md). Import-free static analysis still
+needs a separate partially known record and must not serialize that record as
+`ComponentInfo`; a later design must define its join key, combined-envelope
+behavior, ambiguity rules, and failure behavior. The tooling
 issues this document concretizes are
 [#23](https://github.com/citry-dev/citry/issues/23) (language server) and
 [#24](https://github.com/citry-dev/citry/issues/24) (syntax highlighting),
@@ -410,7 +412,7 @@ without a source mapping. Until a tooling analysis callback or mapping
 contract exists, it reports extension-transform validation as unavailable and
 continues with the authored base syntax it can confidently identify.
 
-### 3.3 The shipped registry dump (`citry inspect --json`)
+### 3.3 The shipped registry dump (`citry inspect [component] --json`)
 
 The implemented command emits the versioned runtime `ComponentCatalog` after
 successfully importing the selected `Citry` instance. It uses the API defaults:
@@ -418,6 +420,10 @@ built-ins excluded, assets unresolved, default values omitted, and no extension
 inspector invoked. It is independently useful to scripts, CI, and other
 consumers of the component-introspection API (#26, including docs tooling and
 Storybook-style galleries).
+
+An optional registered primary name or alias filters the same versioned
+catalog envelope to one component. Selection is case-insensitive, and an
+explicit selector may name a built-in. Unknown selectors exit with status 2.
 
 The command is deliberately runtime-only. It has no static scan after import or
 discovery failure. The static syntax fallback described elsewhere uses a
@@ -838,8 +844,9 @@ enumerates that explicitly rather than assuming it).
   and VS Code formatting commands now exercise the opening-tag preview. The
   structural formatter remains the first public formatter release, and
   `citry check` does not grow `--fix`.
-- **#26 (component introspection API): implemented, including `citry inspect
-  --json`.** The command's runtime JSON is the versioned soft contract from
+- **#26 (component introspection API): implemented, including
+  `citry inspect [component] --json`.** The command's runtime JSON is the
+  versioned soft contract from
   [`component_introspection.md`](component_introspection.md), shared with other
   planned consumers such as docs tooling and component galleries. Effective
   fields now retain conservative per-field authoring provenance for exact

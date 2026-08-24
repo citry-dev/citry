@@ -1,8 +1,8 @@
 # Stepper
 
-**Status:** implementation contract accepted. Runtime, reference, examples,
-focused browser evidence, and quality wiring are checked in. Manual visual and
-assistive-technology review remains part of release qualification.
+**Status:** production implementation, public reference, examples, focused
+browser evidence, and quality wiring are checked in. Manual visual and
+assistive-technology review remains stabilization evidence.
 
 ## 1. Purpose and product bar
 

@@ -6,7 +6,8 @@ interface and the per-extension commands that feed it. Phases 1 to 4 of section
 14 are done: the declarative command model and runner (`citry/command.py`), the
 grown `ExtensionCommand`, the `ExtensionManager.commands` / `Citry.commands`
 aggregation, the `citry` executable with `ext list` / `ext run`, `--app` engine
-selection, and `--version`, and the core `list` / `inspect --json` / `create` /
+selection, and `--version`, and the core `list` /
+`inspect [component] --json` / `create` /
 `watch` commands (`citry/commands/`, `citry/__main__.py`), all with tests. Phase
 5 (a Django management-command bridge and an MCP server) was considered and
 deliberately not built; section 14 records why.
@@ -229,7 +230,7 @@ and collision-proof:
 citry ext list                              # list installed extensions
 citry ext run <extension> <command> [args]  # run any extension's command
 citry list                                  # core: list registered components
-citry inspect --json                        # core: emit the runtime component catalog
+citry inspect [component] --json            # core: emit all or one runtime catalog entry
 citry create <name>                         # core: scaffold a new component
 ```
 
@@ -424,8 +425,9 @@ Each phase is independently shippable and lands with tests.
    `--app` resolution).
 4. **Core commands. (Done.)** `citry list` (projects
    `Citry.inspect_components(include_builtins=True)`, which runs autodiscovery
-   first), `citry inspect --json` (emits the selected engine's runtime-only,
-   versioned `ComponentCatalog` using the introspection API defaults), and
+   first), `citry inspect [component] --json` (emits the selected engine's
+   runtime-only, versioned `ComponentCatalog`; the optional case-insensitive
+   name or alias filters it to one component), and
    `citry create <name>` (scaffolds a component file:
    the class name is the PascalCase of the given name, the file is its
    snake_case, and an existing file is never overwritten). Tested in

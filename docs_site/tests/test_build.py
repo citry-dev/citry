@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -348,6 +349,14 @@ def test_detached_version_build_supports_a_custom_output_without_manifest_mutati
 
 def test_build_writes_clean_urls(tmp_path: Path) -> None:
     config, content, out = _config(tmp_path)
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: Docs\n"
+        "    items:\n"
+        "      - { title: Home, path: / }\n"
+        "      - { title: Intro, path: /guide/intro/ }\n",
+        encoding="utf-8",
+    )
     (content / "index.md").write_text("---\ntitle: Home\n---\n\nHome page.\n", encoding="utf-8")
     (content / "guide").mkdir()
     (content / "guide" / "intro.md").write_text("# Intro\n\nIntro body.\n", encoding="utf-8")
@@ -364,6 +373,11 @@ def test_build_writes_clean_urls(tmp_path: Path) -> None:
     assert intro.is_file()
     assert "Intro body." in intro.read_text(encoding="utf-8")
     assert "<!DOCTYPE html>" in intro.read_text(encoding="utf-8")
+
+    llms = (out / "llms.txt").read_text(encoding="utf-8")
+    urls = [line.split("](", 1)[1].split(")", 1)[0] for line in llms.splitlines() if line.startswith("- [")]
+    assert urls == ["https://citry.dev/guide/intro/index.md"]
+    assert all((out / urlsplit(url).path.lstrip("/")).is_file() for url in urls)
 
 
 def test_build_copies_non_markdown_assets(tmp_path: Path) -> None:
@@ -590,9 +604,8 @@ def test_build_renders_ui_library_source_directly_to_its_catalog_route(tmp_path:
     assert "new ResizeObserver(publish)" in preview_source
     assert not (output / "ui-library/components/button/_previews/build-preview/index.md").exists()
     assert all(record.url != "ui-library/components/button/_previews/build-preview/" for record in outcome.records)
-    llms_full = (output / "llms-full.txt").read_text(encoding="utf-8")
-    assert "class BuildPreviewSmoke(Component):" in llms_full
-    assert "<iframe" not in llms_full
+    llms = (output / "llms.txt").read_text(encoding="utf-8")
+    assert "https://citry.dev/ui-library/components/button/index.md" in llms
     assert not (content / "ui-library/components/button.md").exists()
     assert any(record.source_md == source for record in outcome.records)
 
@@ -814,6 +827,8 @@ def test_build_writes_404_and_runtime(tmp_path: Path) -> None:
     text = not_found.read_text(encoding="utf-8")
     assert "Page not found" in text
     assert "noindex" in text  # the 404 must not be indexed
+    assert "text/markdown" not in text  # no Markdown companion exists for the 404
+    assert "describedby" not in text
 
     # The 404 offers three ways forward. The search trigger opens the same modal
     # search.js wires on every [data-search-open]; substrings only, since the
@@ -933,9 +948,11 @@ def test_build_writes_md_companions(tmp_path: Path) -> None:
 
     outcome = build_site(config=config, minify=False, search=False, social_cards=False)
 
-    # One `.md` companion per built content page, beside its index.html.
+    # Every content, Reference, and release page receives a companion beside
+    # its index.html. Generated Reference pages are counted separately from
+    # ordinary built content.
     assert outcome.built == 2
-    assert outcome.companions == 2
+    assert outcome.companions == outcome.built + outcome.reference + outcome.releases
 
     # guide/intro.md serves at /guide/intro/, so its companion sits at
     # guide/intro/index.md. Its front matter carries the title (taken from the
@@ -986,10 +1003,9 @@ def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
     outcome = build_site(config=config, minify=False, search=False, social_cards=False)
 
     assert outcome.failed == 0
-    for output in (out / "index.md", out / "llms-full.txt"):
-        text = output.read_text(encoding="utf-8")
-        assert "class IncludedFromSnippet:" in text
-        assert '--8<-- "snippet.py:example"' not in text
+    text = (out / "index.md").read_text(encoding="utf-8")
+    assert "class IncludedFromSnippet:" in text
+    assert '--8<-- "snippet.py:example"' not in text
 
 
 def test_build_projects_base_path_in_markdown_outputs(tmp_path: Path) -> None:

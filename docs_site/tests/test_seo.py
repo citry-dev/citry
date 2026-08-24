@@ -7,13 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from docs_site._internal.build import PageRecord
-from docs_site._internal.project import load_docs_project
 from docs_site._internal.seo import generate_seo_files, write_robots, write_sitemap
 from docs_site._internal.versioning import update_manifest
-
-
-def _ai_bots() -> tuple[str, ...]:
-    return load_docs_project().settings.seo.ai_bots
 
 
 def _rec(
@@ -114,8 +109,6 @@ def test_generate_seo_writes_robots_and_indexing(tmp_path: Path) -> None:
     assert "Disallow:" not in robots
     assert outcome.disallowed_versions == 0
     assert "Sitemap: https://x.test/sitemap.xml" in robots
-    for bot in _ai_bots():
-        assert f"User-agent: {bot}" in robots
 
     data = json.loads((tmp_path / "meta" / "indexing.json").read_text(encoding="utf-8"))
     assert data["version"] == "1.2.3"
@@ -147,8 +140,6 @@ def test_robots_disallows_old_versions(tmp_path: Path) -> None:
     assert "Disallow: /v/1.1.0/\nDisallow: /v/1.0.0/" in robots
     assert "Disallow: /v/1.2.0/" not in robots
     assert "Disallow: /v/1.3.0/" not in robots
-    # The allow-all stance, sitemap pointer, and AI bots still follow the disallows.
+    # The wildcard policy and sitemap pointer follow the disallows.
     assert robots.startswith("User-agent: *\nAllow: /\nDisallow: /v/1.1.0/")
     assert "Sitemap: https://x.test/sitemap.xml" in robots
-    for bot in _ai_bots():
-        assert f"User-agent: {bot}" in robots

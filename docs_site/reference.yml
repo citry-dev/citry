@@ -49,6 +49,18 @@ categories:
       - citry.NestedClassDeclaration
 
   - kind: generated_python
+    slug: component-graph
+    title: Component graph
+    intro: Authored component dependencies, reverse references, source locations, and partial-analysis problems.
+    symbols:
+      - citry.ComponentGraph
+      - citry.ComponentGraphNode
+      - citry.ComponentGraphReference
+      - citry.UnresolvedComponentReference
+      - citry.ComponentGraphLocation
+      - citry.ComponentGraphProblem
+
+  - kind: generated_python
     slug: component-libraries
     title: Component libraries
     intro: Engine-neutral component definitions, explicit manifests, and per-Citry installations.

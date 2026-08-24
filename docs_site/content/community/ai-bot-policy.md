@@ -5,26 +5,34 @@ description: Which AI training and search crawlers may index the Citry documenta
 
 # AI bot policy
 
-The Citry documentation allows AI and LLM crawlers. The robots file allows every
-crawler by default, and it also names the major AI bots so the stance is visible
-and easy to audit.
+The Citry documentation allows AI and LLM crawlers through the same wildcard
+policy as every other crawler.
 
-## Which crawlers are named
+## Which crawlers are allowed
 
 `robots.txt` starts with an allow-all rule (`User-agent: *` followed by
-`Allow: /`), so any well-behaved crawler may index the docs. On top of that,
-these AI training and search crawlers are listed by name:
+`Allow: /`), so any well-behaved crawler may index the docs. There is no list of
+named bots to keep current. The wildcard group also carries the generated
+exclusions for older documentation versions, so that policy applies uniformly
+to search and AI crawlers.
 
-- GPTBot (OpenAI)
-- ClaudeBot (Anthropic)
-- anthropic-ai (Anthropic, legacy)
-- Google-Extended (Google AI training)
-- PerplexityBot (Perplexity search)
-- CCBot (Common Crawl, feeds many models)
+## How AI tools find the documentation
 
-Naming them grants no extra access. The allow-all rule already covers them; the
-named entries exist so the policy is explicit in
-[robots.txt](/robots.txt){: target="_blank" rel="noopener"} rather than implied.
+The [llms.txt index](/llms.txt){: target="_blank" rel="noopener"} gives agents
+a short, organized list of the documentation. Its entries lead directly to
+page-level Markdown companions, so an agent can fetch only the pages relevant
+to a question. Authored pages contain expanded Markdown. Generated Reference
+pages may retain HTML-rich fragments from the reference renderer, but omit the
+surrounding site chrome.
+
+Every documentation page also identifies its own Markdown version and the
+covering `llms.txt` file through standard HTML link relations. These discovery
+links help an agent choose readable content. They do not grant or deny crawler
+access; `robots.txt` carries that separate policy.
+
+The larger [`llms-full.txt`](/llms-full.txt){: target="_blank" rel="noopener"}
+file remains available as a nonstandard bulk-download convenience. It is not
+part of the llms.txt v2 discovery contract.
 
 ## Why we allow them
 

@@ -1,0 +1,90 @@
+schema = 1
+
+[[projects]]
+id = "starter-standalone"
+kind = "starter"
+path = "starters/standalone"
+host = "none"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+build = ["uv", "run", "python", "-m", "app.render"]
+profile = "starter-standalone-v1"
+docs = ["/getting-started/installation/", "/syntax/alpine/"]
+
+[[projects]]
+id = "starter-fastapi"
+kind = "starter"
+path = "starters/fastapi"
+host = "fastapi"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+serve = ["uv", "run", "uvicorn", "app.main:web_app", "--host", "127.0.0.1", "--port", "{port}"]
+page_path = "/"
+citry_prefix = "/citry"
+profile = "starter-web-v1"
+docs = ["/getting-started/fastapi/", "/web-frameworks/#fastapi-and-starlette"]
+
+[[projects]]
+id = "starter-django"
+kind = "starter"
+path = "starters/django"
+host = "django"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+serve = ["uv", "run", "python", "manage.py", "runserver", "127.0.0.1:{port}", "--noreload"]
+page_path = "/"
+citry_prefix = "/citry"
+profile = "starter-web-v1"
+docs = ["/web-frameworks/#django", "/security/#protect-event-posts-from-csrf"]
+
+[[projects]]
+id = "starter-flask"
+kind = "starter"
+path = "starters/flask"
+host = "flask"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+serve = ["uv", "run", "flask", "--app", "app:create_app", "run", "--host", "127.0.0.1", "--port", "{port}", "--no-reload"]
+page_path = "/"
+citry_prefix = "/citry"
+profile = "starter-web-v1"
+docs = ["/web-frameworks/#flask", "/events/"]
+
+[[projects]]
+id = "starter-asgi"
+kind = "starter"
+path = "starters/asgi"
+host = "asgi"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+serve = ["uv", "run", "uvicorn", "app.main:application", "--host", "127.0.0.1", "--port", "{port}"]
+page_path = "/"
+citry_prefix = "/citry"
+profile = "starter-web-v1"
+docs = ["/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
+
+[[projects]]
+id = "starter-wsgi"
+kind = "starter"
+path = "starters/wsgi"
+host = "wsgi"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+serve = ["uv", "run", "waitress-serve", "--listen=127.0.0.1:{port}", "app.main:application"]
+page_path = "/"
+citry_prefix = "/citry"
+profile = "starter-web-v1"
+docs = ["/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
+
+[[projects]]
+id = "demo-project-board"
+kind = "demo"
+path = "demos/project_board"
+host = "fastapi"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+serve = ["uv", "run", "uvicorn", "app.main:web_app", "--host", "127.0.0.1", "--port", "{port}"]
+page_path = "/"
+citry_prefix = "/citry"
+profile = "demo-project-board-v1"
+docs = ["/examples/", "/events/"]

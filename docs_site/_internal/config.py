@@ -48,6 +48,7 @@ class DocsConfig:
     ui_library_config: Path | None = None
     redirects_config: Path | None = None
     people_sources_config: Path | None = None
+    community_packages_data: Path | None = None
 
     # Public site URL (drives canonical / Open Graph / sitemap URLs). A deploy
     # overrides it; the default points at the project's site (citry.dev).
@@ -83,6 +84,7 @@ class DocsConfig:
             "ui_library_config": self.base_dir / "ui_library.yml",
             "redirects_config": self.base_dir / "redirects.yml",
             "people_sources_config": self.base_dir / "people_sources.yml",
+            "community_packages_data": self.base_dir / "data" / "community_packages.yml",
         }
         for name, value in defaults.items():
             if getattr(self, name) is None:

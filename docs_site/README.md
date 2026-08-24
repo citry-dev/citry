@@ -3,7 +3,7 @@
 This directory contains the source and build system for
 [citry.dev](https://citry.dev/). The deployed site is static. Citry renders the
 Markdown and components, then the build writes HTML, assets, search data, SEO
-files, Markdown companions, LLM indexes, examples, generated API Reference
+files, Markdown companions, LLM navigation, examples, generated API Reference
 pages, and authored Reference pages for non-Python public APIs.
 
 Run every command in this README from the repository root.
@@ -27,6 +27,7 @@ Run every command in this README from the repository root.
 | `ui_library.yml` | Functionally grouped Citry UI source pages and public routes |
 | `redirects.yml` | Published clean-URL redirects |
 | `people_sources.yml` | People-generator repositories, featured people, and ignored bots |
+| `data/community_packages.yml` | Reviewed packages shown on the Community extension and UI-library pages |
 | `docs_versions.yml` | Version selection and publication policy |
 
 Most content work belongs in `content/`, `examples/`, `snippets/`, `static/`,
@@ -319,6 +320,55 @@ the shared inline editor only after activation. Deployed docs omit the action
 until a published `citry-ui` wheel is pinned in the browser runtime; the built
 preview and source remain fully usable without it.
 
+## List a Community package
+
+The manually reviewed package catalog lives in
+`data/community_packages.yml`. One entry may use either or both supported
+categories:
+
+```yaml
+schema_version: 1
+packages:
+  - distribution: example-citry-package
+    name: Example package
+    categories:
+      - extension
+      - ui_library
+    summary: One plain-text sentence explaining the package's job.
+    ownership: community
+    published: true
+    citry_requirement: ">=0.4.0,<0.5.0"
+    source_url: https://github.com/example/example-citry-package
+    docs_url: https://example.test/docs/
+    maintainer: "@example"
+    maintainer_url: https://github.com/example
+    notice: Optional plain-text maturity, licensing, or support disclosure.
+```
+
+Use `ownership: official` only for Citry-maintained packages. Set
+`published: false` for a source-only preview; the page then omits the PyPI link
+and installation command. `docs_url`, `maintainer_url`, and `notice` are
+optional. Use `notice` when a material maturity, licensing, or support fact
+must stay visible on both the rendered card and its Markdown projection. All
+other fields are required.
+
+Open a pull request for every addition, change, or removal. Maintainers verify
+the package category, ownership, public source, declared Citry compatibility,
+publication state, license intent, and factual summary. A `citry-` name or
+package keyword may help discovery but never grants inclusion. The complete
+governance rules and the future reporting-only automation design live in
+[`docs_community_packages.md`](../docs/design/docs_community_packages.md).
+
+The two authored pages contain one directive each:
+
+```html
+<c-community-packages category="extension" />
+<c-community-packages category="ui_library" />
+```
+
+The catalog is current site content. Root builds validate it before replacing
+output, while version snapshots neither read it nor copy the Community pages.
+
 ## Publish a Blog post
 
 Blog sources live in `content/blog/`. Keep `index.md` as the only undated file
@@ -432,7 +482,12 @@ uv run --no-sync python -m docs_site build --output path/to/output
 The normal root build writes current versioned documentation and all site-scoped
 pages, plus API reference, release notes, examples, static assets, Citry client
 assets, Pagefind index, sitemap, robots file, Markdown companions, `llms.txt`,
-and `llms-full.txt`. It also minifies HTML.
+and a nonstandard `llms-full.txt` bulk export. It also minifies HTML.
+
+The v2 `llms.txt` file points directly to each page's `index.md` companion.
+Rendered pages advertise that companion with `rel="alternate"` and advertise
+the covering `llms.txt` with `rel="describedby"`. Keep `llms-full.txt` for
+existing bulk-download users, but do not link it as part of the v2 proposal.
 
 Social-card generation is optional. Without the `social-cards` extra and a
 Chromium binary, it skips cleanly and pages retain the default Open Graph image.
@@ -559,7 +614,6 @@ duplicate values.
 | `blog.words_per_minute` | Integer at least 1 | Reading-time estimates |
 | `git.exclude_patterns` | Unique list of non-empty path-pattern strings | Pages omitted from author footers |
 | `git.max_authors` | Integer at least 1 | Maximum displayed page authors |
-| `seo.ai_bots` | Unique list of non-empty user-agent strings | AI crawler policy |
 | `seo.priorities` | Ordered list of unique `{prefix, priority}` mappings; priority is from 0 through 1 | Sitemap priority overrides |
 | `inventory.python_docs_url` | Absolute HTTP(S) URL ending in `/` | Python intersphinx inventory |
 | `release_notes.exclude` | Unique list of exact, non-empty changelog heading strings | Releases omitted from docs |
@@ -687,9 +741,12 @@ remains a valid version-picker destination.
 Snapshots share the current root Pagefind index, CSS, JavaScript, and Citry
 runtime. Search from an old version can therefore return current Docs,
 Community, or Blog pages, and shared asset changes must remain compatible with
-published snapshot markup. Snapshots keep their baked page metadata; they do
-not receive a per-version generated social-card set. Per-version search and
-version-pinned shared assets remain deliberate deferrals.
+published snapshot markup. Snapshots keep their baked page metadata, including
+the discovery relations emitted by their historical builder; only new
+snapshots receive the current Markdown `alternate` and `llms.txt`
+`describedby` contract. They do not receive a per-version generated social-card
+set. Per-version search and version-pinned shared assets remain deliberate
+deferrals.
 
 Each new snapshot stores its accepted site-route patterns in
 `_build_info.json`, so later scope changes do not reinterpret its intentional

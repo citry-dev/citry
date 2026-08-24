@@ -143,6 +143,13 @@ misattribute timing, slot placement, and ownership-sensitive client behavior.
 A toolbar may offer separate authored and placed presentations, or annotate one
 while displaying the other, but the underlying values cannot discard either.
 
+The static [`ComponentGraph`](component_graph.md) uses a third, deliberately
+definition-level relationship: component tags authored anywhere in one
+registered component's effective primary template. Its `dependencies` and
+`dependents` are possible source references, not occurrence parents or
+placement owners. Runtime tracing and the authored graph can join through
+`engine_id` and `definition_id`, but neither substitutes for the other.
+
 ## 6. Privacy, lifetime, and redaction
 
 Tracing is disabled unless an application explicitly installs a collector. A

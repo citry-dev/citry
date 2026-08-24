@@ -162,6 +162,13 @@ Citry includes adapters for:
 The [web-framework guide](https://citry.dev/web-frameworks/) shows the right
 startup and routing setup for each host.
 
+Want a complete project instead of an integration excerpt? Copy the
+[FastAPI starter](https://github.com/citry-dev/citry/tree/main/examples/starters/fastapi)
+or choose from the
+[standalone, Django, Flask, ASGI, and WSGI starter matrix](https://github.com/citry-dev/citry/tree/main/examples).
+Each project has its own dependencies, lockfile, tests, local Alpine behavior,
+and—except for the no-server standalone build—a working Citry Events journey.
+
 ## Use the editor and command line
 
 The free

@@ -40,6 +40,11 @@ from docs_site._internal.blog import (
     project_blog_list_for_text,
     use_blog_catalog,
 )
+from docs_site._internal.community_packages import (
+    CommunityPackageCatalog,
+    project_community_package_lists_for_text,
+    use_community_package_catalog,
+)
 
 # The custom <c-*> tags each register on import; importing them lets
 # render_content resolve <c-example>, <c-image>, <c-docstring>, <c-builtin>,
@@ -47,6 +52,7 @@ from docs_site._internal.blog import (
 from docs_site._internal.components import (  # noqa: F401
     blog,
     builtin,
+    community_packages,
     diagnostic_catalog,
     docstring,
     example_card,
@@ -78,6 +84,7 @@ from docs_site._internal.links import (
 )
 from docs_site._internal.live_code import LiveCodeContext, use_live_code_context
 from docs_site._internal.live_code_projection import project_live_code_for_text
+from docs_site._internal.paths import clean_url_to_companion_url
 from docs_site._internal.project import (
     DocsProject,
     docs_project_scope,
@@ -112,8 +119,8 @@ class RenderResult:
     # re-parsing the page.
     meta: PageMeta | None = None
     # The page body as markdown after custom <c-*> tags and --8<-- snippet
-    # includes were expanded. This is the plain-text form the llms-full.txt
-    # full-text export concatenates.
+    # includes were expanded. The build writes this as the page's Markdown
+    # companion.
     markdown_body: str = ""
 
 
@@ -236,6 +243,18 @@ def _content_rel(source_path: Path, config: DocsConfig) -> Path | None:
         return None
 
 
+def _markdown_companion_url(current_path: str, nav_tree: NavTree | None, version_prefix: str) -> str:
+    """Return the root-relative Markdown URL published beside this HTML page."""
+    clean = current_path.strip("/")
+    page_path = f"/{clean}/" if clean else "/"
+    if nav_tree is not None:
+        page_path = nav_tree.project_path(page_path, version_prefix)
+    elif version_prefix:
+        prefix = version_prefix.strip("/")
+        page_path = f"/{prefix}/{clean}/" if clean else f"/{prefix}/"
+    return clean_url_to_companion_url(page_path)
+
+
 @docs_project_scope
 def render_page(
     source: str,
@@ -249,12 +268,14 @@ def render_page(
     source_path: Path | None = None,
     run_citry_pass: bool = True,
     blog_catalog: BlogCatalog | None = None,
+    community_package_catalog: CommunityPackageCatalog | None = None,
     blog_post: BlogPost | None = None,
     is_blog_index: bool = False,
     blog_feed_url: str = "",
     version_prefix: str = "",
     source_to_public_path: Mapping[Path, str] | None = None,
     allow_citry_ui: bool = True,
+    discovery_links: bool = True,
     project: DocsProject | None = None,
 ) -> RenderResult:
     """
@@ -272,6 +293,8 @@ def render_page(
     CHANGELOG.md) renders it as literal code instead of executing it. Such a page
     relies on its source backticking tags and expressions (the changelog does):
     a bare, unbackticked ``<tag>`` would reach the markdown pass as raw HTML.
+    ``discovery_links=False`` omits links to static Markdown and ``llms.txt``
+    files, which live previews use because they do not publish those files.
     """
     if project is None:  # pragma: no cover - supplied by @docs_project_scope
         raise RuntimeError("docs project scope was not initialized")
@@ -300,6 +323,11 @@ def render_page(
         protected = protect_fences(meta.body)
         # Pass 1: render the body as a citry template, expanding the custom <c-*> tags.
         catalog_context = use_blog_catalog(blog_catalog) if blog_catalog is not None else nullcontext()
+        package_catalog_context = (
+            use_community_package_catalog(community_package_catalog)
+            if community_package_catalog is not None
+            else nullcontext()
+        )
         live_state = LiveCodeContext(
             config=config,
             source_path=source_path,
@@ -329,7 +357,7 @@ def render_page(
         }
         if version:
             render_context["version"] = version
-        with catalog_context, live_context, ui_preview_context:
+        with catalog_context, package_catalog_context, live_context, ui_preview_context:
             expanded = restore_protected_code(render_content(protected, context=render_context))
         has_live_code = live_state.has_live_code
         has_interactive_live_code = live_state.has_interactive
@@ -341,15 +369,15 @@ def render_page(
     # Resolve [text][symbol] cross-refs to reference links (skips fenced code).
     expanded, _unresolved = resolve_crossrefs_in_prose(expanded)
     # Pass 2: expand --8<-- snippets and convert the Markdown to HTML. Capture
-    # the post-snippet Markdown from that same preprocessor run for companions
-    # and llms-full.txt; running snippets twice would break escaped markers.
+    # the post-snippet Markdown from that same preprocessor run for companions;
+    # running snippets twice would break escaped markers.
     content_html, toc_tokens, expanded = _pass2_markdown_with_expanded_source(
         expanded,
         config=config,
         project=project,
     )
-    # Keep the interactive card in browser HTML, but give Markdown companions
-    # and llms-full a concise source-first view derived from the same files.
+    # Keep the interactive card in browser HTML, but give Markdown companions a
+    # concise source-first view derived from the same files.
     expanded = project_examples_for_text(expanded)
     expanded = project_live_code_for_text(
         expanded,
@@ -357,6 +385,8 @@ def render_page(
         allow_citry_ui=allow_citry_ui,
     )
     expanded = project_ui_previews_for_text(expanded, repo_root=config.repo_root)
+    if community_package_catalog is not None:
+        expanded = project_community_package_lists_for_text(expanded, community_package_catalog)
     if blog_catalog is not None:
         expanded = project_blog_list_for_text(expanded, blog_catalog)
     # Rewrite internal `.md` links (e.g. ./other.md -> ../other/) so they resolve
@@ -398,8 +428,8 @@ def render_page(
             nav_tree=nav_tree,
             version_prefix=version_prefix,
         )
-    # Markdown companions and llms-full.txt are deployed beneath the same base
-    # path as HTML. Root-relative destinations therefore need the prefix too.
+    # Markdown companions are deployed beneath the same base path as HTML.
+    # Root-relative destinations therefore need the prefix too.
     expanded = project_markdown_base_path(expanded, config.base_path)
     # The API-reference symbol headings are injected as raw HTML, so the markdown
     # TOC pass never saw them; fold them in from the rendered HTML.
@@ -444,6 +474,8 @@ def render_page(
             # earlier tiers are resolved in parse_page, which has no config).
             description=meta.description or settings.default_description,
             canonical=meta.canonical or canonical,
+            markdown_url=_markdown_companion_url(current_path, nav_tree, version_prefix) if discovery_links else "",
+            llms_url="/llms.txt" if discovery_links else "",
             noindex=meta.noindex,
             content_has_h1=content_has_h1,
             site_name=settings.name,

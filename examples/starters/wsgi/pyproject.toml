@@ -1,0 +1,18 @@
+[project]
+name = "citry-example-wsgi"
+version = "0.1.0"
+description = "A dependency-light bare WSGI starter for Citry"
+requires-python = ">=3.10,<4"
+dependencies = [
+  "citry>=0.4.3,<0.5",
+  "waitress>=3.0,<4",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9.0,<10",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

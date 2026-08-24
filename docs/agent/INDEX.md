@@ -34,6 +34,7 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | Browser CSP, nonces, Alpine's CSP build, and JavaScript-free delivery | [`docs/design/security_csp.md`](../design/security_csp.md) |
 | CSRF ownership, Events token wiring, and native forms | [`docs/design/security_csrf.md`](../design/security_csrf.md) |
 | ComponentRange identity, physical placements, matching, and range-level morph policy | [`docs/design/component_ranges.md`](../design/component_ranges.md) |
+| Static authored component dependencies and reverse references | [`docs/design/component_graph.md`](../design/component_graph.md) |
 | Internationalization: locale context, messages, formatting, direction, tooling, and Citry UI | [`docs/design/i18n.md`](../design/i18n.md) |
 
 ---

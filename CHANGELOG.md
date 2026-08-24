@@ -1,5 +1,17 @@
 # Release notes
 
+## v0.5.0
+
+### Added
+
+- Inspect one registered component or alias with
+  `citry --app module:engine inspect component --json`, retaining the versioned
+  runtime catalog envelope.
+- Inspect authored component dependencies and reverse references with
+  `Citry.inspect_component_graph()`, including exact source locations,
+  unresolved dynamic or unknown targets, partial-source problems, and
+  deterministic versioned JSON.
+
 ## v0.4.3
 
 _22 Aug 2026_

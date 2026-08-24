@@ -28,6 +28,10 @@ from citry import citry as default_citry
 from citry.contrib.asgi import asgi_app
 from docs_site._internal.blog import BlogCatalog, BlogPost, load_blog_catalog, serialize_atom_feed
 from docs_site._internal.build import configure_docs_globals
+from docs_site._internal.community_packages import (
+    COMMUNITY_PACKAGE_PATHS,
+    load_community_package_catalog,
+)
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.examples import get_example_by_slug
@@ -157,6 +161,11 @@ def create_app(
                 if blog_post
                 else md_to_url(md_path.relative_to(config.content_dir.resolve()))
             )
+        community_package_catalog = (
+            load_community_package_catalog(config.community_packages_data)
+            if page_url in COMMUNITY_PACKAGE_PATHS
+            else None
+        )
         site_base = project.site_url.rstrip("/")
         canonical = f"{site_base}/{page_url}" if site_base else ""
         # Load the nav fresh each request so edits to _nav.yml show up live.
@@ -169,10 +178,12 @@ def create_app(
             version=version,
             source_path=md_path,
             blog_catalog=catalog,
+            community_package_catalog=community_package_catalog,
             blog_post=blog_post,
             is_blog_index=catalog.index_path is not None and md_path.resolve() == catalog.index_path.resolve(),
             blog_feed_url=feed_path if catalog.posts else "",
             allow_citry_ui=True,
+            discovery_links=False,
             source_to_public_path={
                 **catalog.source_to_public_path,
                 **ui_library_source_routes(project.ui_library, repo_root=config.repo_root),
@@ -250,6 +261,7 @@ def create_app(
             blog_catalog=catalog,
             blog_feed_url=feed_path if catalog.posts else "",
             allow_citry_ui=True,
+            discovery_links=False,
             project=project,
         ).html
         return HTMLResponse(html)
@@ -292,6 +304,7 @@ def create_app(
             run_citry_pass=False,
             blog_catalog=catalog,
             blog_feed_url=feed_path if catalog.posts else "",
+            discovery_links=False,
             project=project,
         ).html
         return HTMLResponse(html)

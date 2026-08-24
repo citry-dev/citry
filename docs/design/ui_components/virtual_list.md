@@ -1,8 +1,10 @@
 # Virtual List
 
-**Status:** implementation contract accepted for the first production pass.
-The family deliberately separates browser render containment from true DOM
-windowing so server-rendered content never acquires a hidden client renderer.
+**Status (2026-08-22):** production implementation, public docs, structured
+reference, examples, quality scenario, and focused browser
+coverage shipped in `citry-ui` 0.2.0. The family deliberately separates
+browser render containment from true DOM windowing so server-rendered content
+never acquires a hidden client renderer.
 
 ## 1. Purpose and product bar
 

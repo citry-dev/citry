@@ -1,9 +1,10 @@
 # Transfer List
 
-**Status:** implementation contract accepted for the first production pass.
-The family is a form-capable, progressively enhanced pair of multi-select
-listboxes. It deliberately does not make drag and drop the only way to move or
-reorder items.
+**Status (2026-08-22):** production implementation, public docs, structured
+reference, examples, quality scenario, and focused browser
+coverage shipped in `citry-ui` 0.2.0. The family is a form-capable,
+progressively enhanced pair of multi-select listboxes. It deliberately does
+not make drag and drop the only way to move or reorder items.
 
 ## 1. Purpose and product bar
 

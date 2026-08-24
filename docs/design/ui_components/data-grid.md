@@ -1,9 +1,11 @@
 # Data Grid
 
-**Status:** implementation contract accepted for the first production pass.
-The family is an interactive, server-rendered ARIA data grid. It is separate
-from semantic `CTable` because it owns composite focus, row selection, sort
-requests, and optional fixed-height server windowing.
+**Status (2026-08-22):** production implementation, public docs, structured
+reference, examples, quality scenario, and focused browser
+coverage shipped in `citry-ui` 0.2.0. The family is an interactive,
+server-rendered ARIA data grid. It is separate from semantic `CTable` because
+it owns composite focus, row selection, sort requests, and optional
+fixed-height server windowing.
 
 ## 1. Purpose and product bar
 

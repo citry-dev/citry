@@ -1,0 +1,1 @@
+"""Project Explorer Django application."""

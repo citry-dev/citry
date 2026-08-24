@@ -1,8 +1,10 @@
 # Sidebar
 
-**Status:** implementation contract accepted for a persistent/collapsible
-Sidebar. Responsive modal navigation deliberately composes `CDrawer` rather
-than giving one DOM node conflicting landmark and modal-dialog semantics.
+**Status (2026-08-22):** production implementation, public docs, structured
+reference, examples, quality scenario, and focused browser
+coverage shipped in `citry-ui` 0.2.0. Responsive modal navigation deliberately
+composes `CDrawer` rather than giving one DOM node conflicting landmark and
+modal-dialog semantics.
 
 ## 1. Purpose and product bar
 

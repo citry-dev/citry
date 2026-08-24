@@ -631,6 +631,13 @@ product experiments:
    external packages and repeated user reports of discovery difficulty, before
    building central discovery infrastructure.
 
+A small reviewed documentation list is not the central registry tooling gated
+above. The site may project a manually approved package catalog into its
+site-scoped Community pages so early packages are discoverable without ranking,
+remote build inputs, or automatic publication. The catalog and any future
+reporting-only discovery workflow are specified in
+[`docs_community_packages.md`](docs_community_packages.md).
+
 Evidence that would lower a priority includes low reuse across two real
 applications, an API dominated by host-specific policy, unacceptable asset or
 maintenance cost, inaccessible behavior that cannot be made reliable, or an

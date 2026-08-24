@@ -48,6 +48,8 @@ def test_serve_renders_clean_url_page(tmp_path: Path) -> None:
     response = _client(tmp_path).get("/guide/intro/")
     assert response.status_code == 200
     assert "The intro." in response.text
+    assert "text/markdown" not in response.text
+    assert "describedby" not in response.text
 
 
 def test_serve_renders_ui_library_source_directly_from_catalog(tmp_path: Path) -> None:

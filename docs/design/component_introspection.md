@@ -1,7 +1,6 @@
 # Design: component introspection
 
-**Status (2026-07-22): proposed, revised after maintainer review; phases 0, 1,
-2, and 3 are implemented.** This document defines
+**Status (2026-08-23): implemented through the first consumers.** This document defines
 a core, per-engine API for inspecting registered component definitions. The
 result is a versioned value snapshot for local tooling and extension-owned
 metadata. It is not live component registration state.
@@ -51,6 +50,18 @@ The plural method returns a `ComponentCatalog`, not a bare list. The envelope
 provides the schema version, Citry version, requested extension versions, and
 deterministic JSON serialization. The singular method returns the same
 `ComponentInfo` shape used inside the catalog.
+
+The CLI exposes both forms through one versioned envelope:
+
+```console
+citry --app myproject.engine:app inspect --json
+citry --app myproject.engine:app inspect card --json
+```
+
+The optional selector accepts a registered primary name or alias
+case-insensitively. Selecting one component retains the ordinary
+`ComponentCatalog` envelope with exactly one `ComponentInfo`, including when
+the selected component is a built-in.
 
 This is core Python API. It requires no parser or Rust change.
 
@@ -479,6 +490,7 @@ class SchemaInfo:
     declared_on: str | None
     import_path: str | None
     fields: tuple[FieldInfo, ...]
+    namespace_policy: Literal["closed", "allow-extra", "unknown"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -711,6 +723,8 @@ class AssetInfo:
     ]
     resolved_path: Path | None
     searched_paths: tuple[Path, ...]
+    owner_module: str | None
+    owner_qualname: str | None
 ```
 
 The asset builder enforces this state table:
@@ -980,12 +994,12 @@ engine's configured roots after the import that should produce the engine has
 failed. A static scanner also must not claim registry completeness or emit
 unknown-component diagnostics.
 
-The static record therefore does not masquerade as `ComponentInfo`, and this
-design does not specify or version it. A later IDE/tooling round may join source
-records to a successful runtime catalog for richer editor data, or return
-static records alone after an import failure. That round must define the join
-key and ambiguity behavior before `citry inspect --json` promises one combined
-format.
+The authored dependency graph therefore does not masquerade as
+`ComponentInfo`. [`component_graph.md`](component_graph.md) defines its
+separate versioned records, partial-source contract, registry join identities,
+and deterministic JSON. A future import-free project scan still needs its own
+partially known record and confidence rules before any CLI promises combined
+runtime and static output.
 
 The `citry list` command calls with `include_builtins=True` and projects each
 record's primary name and aliases back to one merged row per component. It
@@ -995,13 +1009,16 @@ coverage. Catalog order makes component rows deterministic; additional manual
 aliases use canonical order rather than registry insertion order. Neither row
 order nor manual-alias order was part of the documented list contract.
 
-`citry inspect --json` is the deliberately narrow runtime command. `--json` is
-required, reserving bare `citry inspect` for a possible future human-readable
-format. The command calls `inspect_components()` with its API defaults and
-prints the compact canonical JSON followed by one newline. It therefore
-excludes built-ins, does not resolve assets, does not include portable default
-values, and invokes no extension inspector. Those choices can become explicit
-CLI options only in a later command-contract round.
+`citry inspect [component] --json` is the deliberately narrow runtime command.
+`--json` is required, reserving bare `citry inspect` for a possible future
+human-readable format. Without a selector, the command calls
+`inspect_components()` with its API defaults and prints the compact canonical
+JSON followed by one newline. It therefore excludes built-ins, does not resolve
+assets, does not include portable default values, and invokes no extension
+inspector. With a case-insensitive registered name or alias, the command emits
+the same envelope filtered to that exact component and permits an explicitly
+selected built-in. An unknown selector exits 2 with a usage error. Other
+options can enter only in a later command-contract round.
 
 The selected app must import successfully and normal lazy discovery must
 complete. There is no static scan or fallback after an import or discovery
@@ -1126,9 +1143,10 @@ Implemented on 2026-07-22.
 - Add a runtime-only catalog output to tooling only after the command contract
   clearly distinguishes it from the separately designed static fallback.
 
-Implemented on 2026-07-22. `citry inspect --json` is runtime-only and uses the
-core API defaults; static analysis remains a separate future record and command
-contract.
+Implemented on 2026-08-23. `citry inspect [component] --json` is runtime-only;
+the all-components form uses the core API defaults, while the singular form
+can explicitly select a built-in. The authored dependency graph is the
+separate contract in [`component_graph.md`](component_graph.md).
 
 Tailwind, Storybook, `Component.Docs`, and any Dependencies metadata are
 consumer rounds after the core contract is proven.

@@ -1,0 +1,169 @@
+name: Python example projects
+
+on:
+  push:
+    branches: ["main", "dev"]
+    paths:
+      - "examples/**"
+      - "packages/py/citry/**"
+      - "packages/py/citry_core/**"
+      - "packages/js/citry-client/**"
+      - "packages/protocol/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/py--examples--tests.yml"
+  pull_request:
+    paths:
+      - "examples/**"
+      - "packages/py/citry/**"
+      - "packages/py/citry_core/**"
+      - "packages/js/citry-client/**"
+      - "packages/protocol/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/py--examples--tests.yml"
+  schedule:
+    - cron: "30 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: examples-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  clean-copy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build candidate wheels
+        run: |
+          uv build --wheel --python "${{ matrix.python-version }}" --out-dir dist/example-wheels packages/py/citry_core
+          uv build --wheel --python "${{ matrix.python-version }}" --out-dir dist/example-wheels packages/py/citry
+
+      - name: Install qualification tools
+        run: |
+          uv venv .example-tools --python "${{ matrix.python-version }}"
+          uv pip install --python .example-tools/bin/python pytest==9.1.1
+
+      - name: Validate the catalog and archives
+        run: .example-tools/bin/python -m pytest examples/tests -q
+
+      - name: Qualify clean copies against candidate wheels
+        shell: bash
+        run: |
+          wheel_args=()
+          for wheel in dist/example-wheels/*.whl; do
+            wheel_args+=(--wheel "$wheel")
+          done
+          .example-tools/bin/python -m examples.tools.qualify \
+            --python "${{ matrix.python-version }}" \
+            "${wheel_args[@]}"
+
+      - name: Build deterministic archives
+        if: matrix.python-version == '3.14'
+        run: .example-tools/bin/python -m examples.tools.archive --output dist/examples
+
+      - name: Upload example archives
+        if: matrix.python-version == '3.14'
+        uses: actions/upload-artifact@v7
+        with:
+          name: citry-example-projects
+          path: dist/examples/
+          if-no-files-found: error
+
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ${{ fromJSON(github.event_name == 'schedule' && '["chromium", "firefox", "webkit"]' || '["chromium"]') }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build candidate wheels
+        run: |
+          uv build --wheel --python 3.14 --out-dir dist/example-wheels packages/py/citry_core
+          uv build --wheel --python 3.14 --out-dir dist/example-wheels packages/py/citry
+
+      - name: Install qualification tools and browser
+        run: |
+          uv venv .example-tools --python 3.14
+          uv pip install --python .example-tools/bin/python playwright
+          .example-tools/bin/python -m playwright install --with-deps "${{ matrix.browser }}"
+
+      - name: Run all Chromium journeys
+        if: github.event_name != 'schedule'
+        shell: bash
+        run: |
+          wheel_args=()
+          for wheel in dist/example-wheels/*.whl; do
+            wheel_args+=(--wheel "$wheel")
+          done
+          .example-tools/bin/python -m examples.tools.qualify \
+            --python 3.14 \
+            --browser "${{ matrix.browser }}" \
+            "${wheel_args[@]}"
+
+      - name: Run weekly golden cross-browser journeys
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          wheel_args=()
+          for wheel in dist/example-wheels/*.whl; do
+            wheel_args+=(--wheel "$wheel")
+          done
+          .example-tools/bin/python -m examples.tools.qualify \
+            --python 3.14 \
+            --browser "${{ matrix.browser }}" \
+            --project starter-standalone \
+            --project starter-fastapi \
+            --project demo-project-board \
+            "${wheel_args[@]}"

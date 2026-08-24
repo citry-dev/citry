@@ -28,7 +28,7 @@ def test_default_project_loads_every_manifest() -> None:
     assert project.settings.repository.owner == "citry-dev"
     assert project.settings.repository.full_name == "citry-dev/citry"
     assert project.site_url == "https://citry.dev/"
-    assert len(project.reference.categories) == 18
+    assert len(project.reference.categories) == 19
     assert [(group.id, group.label) for group in project.ui_library.groups] == [
         ("actions", "Actions"),
         ("forms-inputs", "Forms and inputs"),

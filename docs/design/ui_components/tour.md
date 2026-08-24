@@ -1,8 +1,10 @@
 # Tour
 
-**Status:** implementation contract accepted for a nonmodal, target-aware
-product Tour. Highlighted targets remain usable. Cross-page persistence and
-asynchronous wait steps are explicit deferred work.
+**Status (2026-08-22):** production implementation, public docs, structured
+reference, examples, quality scenario, and focused browser
+coverage shipped in `citry-ui` 0.2.0. The Tour is nonmodal and target-aware,
+and highlighted targets remain usable. Cross-page persistence and asynchronous
+wait steps are explicit deferred work.
 
 ## 1. Purpose and product bar
 

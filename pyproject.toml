@@ -208,6 +208,30 @@ extend-markup-names = [
     "INP001",  # examples are imported by file path, not as a package
     "S101",    # the per-example regression tests use assert
 ]
+"examples/starters/*" = [
+    "ANN",     # starter code keeps the concise signatures readers copy
+    "ARG002",  # component data hooks keep the standard kwargs/slots shape
+    "FLY002",  # straightforward joins keep the searchable data fields explicit
+    "PLC0415", # Django's executable entrypoint imports after selecting settings
+    "S101",    # project-local tests use assert
+    "T201",    # the standalone render command reports its output path
+]
+"examples/demos/*" = [
+    "ANN",     # demo component hooks keep reader-facing signatures concise
+    "ARG002",  # component data hooks keep the standard kwargs/slots shape
+    "FLY002",  # straightforward joins keep the searchable data fields explicit
+    "PLC0415", # test fixtures import app state only after setting environment
+    "S101",    # project-local tests use assert
+    "TID252",  # the independently copyable app uses normal package-relative imports
+]
+"examples/tests/*" = [
+    "ANN",  # annotations are not needed for repository contract tests
+    "S101", # pytest assertions describe the catalog and archive contracts
+]
+"examples/tools/*" = [
+    "PLC0415", # Playwright is an optional browser-gate dependency
+    "T201",    # command-line tools print qualification/archive progress
+]
 "docs_site/live_snippets/*" = [
     "ANN",     # live examples are reader-facing code; keep their hooks concise
     "ARG002",  # component data hooks keep the arguments readers see elsewhere

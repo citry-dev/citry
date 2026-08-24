@@ -216,11 +216,24 @@ Use this when a template tag does not resolve as expected, or to check that
 citry --app myproject.engine:app inspect --json
 ```
 
+Pass one registered name or alias to inspect only that component:
+
+```bash
+citry --app myproject.engine:app inspect checkout-page --json
+```
+
+Selection is case-insensitive and retains the component's canonical primary
+name in the output. An explicitly named built-in can also be inspected. An
+unknown name exits with status 2 and a concise usage error.
+
 The `--json` flag is required. The command uses the Python introspection API's
 defaults: built-ins are excluded, asset paths are not resolved on disk,
 portable field defaults are omitted, and extension inspectors do not run.
-Call [`inspect_components()`][citry.Citry.inspect_components] from Python when
-a tool needs different options.
+Those defaults describe the all-components form; selecting one built-in
+includes that built-in only. Call
+[`inspect_component()`][citry.Citry.inspect_component] or
+[`inspect_components()`][citry.Citry.inspect_components] from Python when a
+tool needs different options.
 
 The output may contain absolute paths from the developer's machine. Treat it
 as a local tooling artifact rather than sending it directly from a public HTTP

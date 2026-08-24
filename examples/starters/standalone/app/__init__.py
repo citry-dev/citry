@@ -1,0 +1,1 @@
+"""Standalone Citry example application."""

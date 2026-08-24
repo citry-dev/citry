@@ -76,7 +76,6 @@ class GitSettings:
 
 @dataclass(frozen=True, slots=True)
 class SeoSettings:
-    ai_bots: tuple[str, ...]
     priorities: tuple[tuple[str, float], ...]
 
 
@@ -179,7 +178,7 @@ def load_site_settings(path: Path) -> SiteSettings:
     require_keys(git, "git", required={"exclude_patterns", "max_authors"})
 
     seo = require_mapping(root["seo"], "seo")
-    require_keys(seo, "seo", required={"ai_bots", "priorities"})
+    require_keys(seo, "seo", required={"priorities"})
     priorities = tuple(
         _load_priority(item, index) for index, item in enumerate(require_list(seo["priorities"], "seo.priorities"))
     )
@@ -222,7 +221,6 @@ def load_site_settings(path: Path) -> SiteSettings:
             max_authors=require_int(git["max_authors"], "git.max_authors", minimum=1),
         ),
         seo=SeoSettings(
-            ai_bots=require_str_list(seo["ai_bots"], "seo.ai_bots"),
             priorities=priorities,
         ),
         inventory=InventorySettings(

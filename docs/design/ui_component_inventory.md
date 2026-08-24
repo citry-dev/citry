@@ -1,12 +1,12 @@
 # Citry UI component inventory
 
-**Status (2026-08-22): provisional Phase 8 inventory for the current
-source-development catalog. The worktree contains 77 component-family
-directories and documentation entries and 156 registered definitions,
-including compound-family declarations and private renderers.**
-The compatible `citry>=0.4.2,<0.5.0` line is public, and this catalog is being
-prepared for the `citry-ui` 0.2.0 alpha release. This document does not freeze
-the v1 public contract, package compatibility range, or later release contents.
+**Status (2026-08-23): release-aligned Phase 8 inventory for `citry-ui` 0.2.0.
+The worktree contains 77 component-family directories and documentation
+entries and 156 registered definitions, including compound-family declarations
+and private renderers.** The `citry-ui` 0.2.0 alpha release and its compatible
+`citry>=0.4.2,<0.5.0` line are public. This document records that release's
+source catalog but does not freeze the v1 public contract, package
+compatibility range, or later release contents.
 
 The dated ecosystem census remains in the
 [Phase 5 component taxonomy](ui_research/component-taxonomy.md). The
@@ -23,8 +23,8 @@ The inventory answers three questions:
 1. Which ordinary application jobs still need a first-party component?
 2. Which foundations must exist before those components can share a coherent
    API and visual language?
-3. Which work can proceed against the current workspace while release and
-   compatibility qualification wait?
+3. Which work can proceed against the current workspace while later-release
+   stabilization and compatibility qualification continue?
 
 A component family owns one cohesive user job, research package,
 specification, public guide, structured API reference, and acceptance suite.
@@ -62,9 +62,9 @@ counts establish demand for the grouped job, not identical coverage for every
 candidate component. Component-specific research must disaggregate that
 evidence before the candidate earns a batch slot.
 
-## 3. Current source-development baseline
+## 3. Citry UI 0.2.0 baseline
 
-| Family | Public boundary | Current state | Remaining release work |
+| Family | Public boundary | Current state | Remaining stabilization work |
 |---|---|---|---|
 | Button | `CButton` | Runtime, specification, structured reference, examples, and focused automation complete | Human visual, keyboard, and assistive-technology review |
 | Field and Input | `CField`, `CInput` | Runtime, native form integration, controlled editing, documentation, and focused automation complete | Human visual, autofill, password-manager, mobile, and assistive-technology review |
@@ -79,7 +79,7 @@ evidence before the candidate earns a batch slot.
 | Native Select | `CNativeSelect` | Native option/group semantics, Field capabilities, controlled ownership, documentation, and focused automation complete | Human visual, platform-select, mobile, and assistive-technology review |
 | Checkbox | `CCheckbox` | Native checked and mixed states, Field/Form ownership, documentation, and focused family automation complete | Final cross-family qualification plus human visual and assistive-technology review |
 | Alert | `CAlert` | Persistent feedback, announcement roles, registered icons, actions, documentation, and focused automation complete | Human visual, live-region, and assistive-technology review |
-| Accordion | `CAccordion`, `CAccordionItem` | Single/multiple expansion, declaration ownership, keyboard/focus behavior, documentation, focused automation, and independent closure review complete | Human visual, assistive-technology, and release qualification |
+| Accordion | `CAccordion`, `CAccordionItem` | Single/multiple expansion, declaration ownership, keyboard/focus behavior, documentation, focused automation, and independent closure review complete | Human visual and assistive-technology review |
 | Flow layout | `CCol`, `CRow` | Server-only one-dimensional layout, semantic roots, direction, wrapping, documentation, and focused automation complete | Human visual, responsive-layout, and host-CSS review |
 | Badge | `CBadge` | Static inline status, count, metadata, icons, documentation, and focused automation complete | Human visual and assistive-technology review |
 | Progress | `CProgress` | Native determinate and indeterminate task progress, documentation, and focused automation complete | Human visual, announcement-context, and assistive-technology review |

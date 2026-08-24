@@ -1,0 +1,18 @@
+[project]
+name = "citry-example-django"
+version = "0.1.0"
+description = "A complete Citry starter for Django"
+requires-python = ">=3.10,<4"
+dependencies = [
+  "citry>=0.4.3,<0.5",
+  "django>=5.2,<7",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9.0,<10",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -171,6 +171,8 @@ class DocPage(Component):
         title: str = ""
         description: str = ""
         canonical: str = ""
+        markdown_url: str = ""
+        llms_url: str = ""
         noindex: bool = False
         # Whether the content already has an <h1> (else the title becomes one).
         content_has_h1: bool = False
@@ -321,6 +323,8 @@ class DocPage(Component):
             "title": title,
             "description": kwargs.description,
             "canonical": kwargs.canonical,
+            "markdown_url": kwargs.markdown_url,
+            "llms_url": kwargs.llms_url,
             "robots": "noindex,follow" if kwargs.noindex else "index,follow",
             "version": kwargs.version,
             "site_name": site_name,
@@ -407,12 +411,17 @@ class DocPage(Component):
               c-content="google_site_verification"
             >
           </c-if>
-          <link
-            rel="alternate"
-            type="text/markdown"
-            href="/llms.txt"
-            title="llms.txt"
-          >
+          <c-if cond="markdown_url">
+            <link
+              rel="alternate"
+              type="text/markdown"
+              c-href="markdown_url"
+              title="Markdown version"
+            >
+          </c-if>
+          <c-if cond="llms_url">
+            <link rel="describedby" c-href="llms_url">
+          </c-if>
           <c-if cond="blog_feed_url">
             <link
               rel="alternate"

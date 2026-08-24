@@ -202,6 +202,8 @@ areas:
     scope: site
     items:
       - { title: People, path: /community/people/ }
+      - { title: Extensions, path: /community/extensions/ }
+      - { title: UI libraries, path: /community/ui-libraries/ }
       - { title: Getting help, path: /community/help/ }
       - { title: Contributing, path: /community/contributing/ }
       - { title: Code of conduct, path: /community/code-of-conduct/ }
