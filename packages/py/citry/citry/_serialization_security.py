@@ -129,8 +129,6 @@ class _ScriptSecurityMaterializer:
             return
         if not isinstance(dependency, (Script, Style)):
             raise self._structured_dependency_error(dependency)
-        if isinstance(dependency, Style) and dependency.url is not None:
-            return
         _validate_nonce_mapping(dependency.attrs, self._nonce, type(dependency).__name__)
 
     def render(self, dependency: Dependency) -> str:
@@ -151,8 +149,6 @@ class _ScriptSecurityMaterializer:
             if self._nonce is None and not self._collect_integrity and self._csp_mode == "off":
                 return str(dependency.render())
             rendered = self._materialize(dependency)
-            if rendered.tag_name == "link":
-                return rendered.html()
             return self._trusted_html(rendered)
         if not isinstance(dependency, Script):
             if self._csp_mode == "warn":
@@ -164,7 +160,7 @@ class _ScriptSecurityMaterializer:
         return self._trusted_html(rendered)
 
     def render_style(self, dependency: Dependency) -> str:
-        """Render one stylesheet, applying and protecting an inline-style nonce."""
+        """Render one stylesheet, applying and protecting a stylesheet nonce."""
         if not isinstance(dependency, Style):
             if self._csp_mode == "warn":
                 self._record_opaque_warning(dependency)
@@ -218,7 +214,7 @@ class _ScriptSecurityMaterializer:
         return rendered.descriptor()
 
     def style_descriptor(self, dependency: Dependency) -> dict[str, str | dict[str, str | bool]]:
-        """Render one stylesheet descriptor, applying an inline-style nonce when supplied."""
+        """Render one stylesheet descriptor, applying the response nonce when supplied."""
         if self._compatibility_only:
             if not isinstance(dependency, Style) or type(dependency).render_json is not Dependency.render_json:
                 self._record_opaque_warning(dependency)
@@ -423,8 +419,8 @@ class _ScriptSecurityMaterializer:
         if tag_name not in ("style", "link"):
             raise self._structured_dependency_error(dependency, produced=tag_name)
         attrs = _copy_exact_attrs(raw_attrs, "Style")
+        _apply_nonce(attrs, self._nonce, "Style")
         if tag_name == "style":
-            _apply_nonce(attrs, self._nonce, "Style")
             self._has_inline_style = True
         style_tag: Literal["style", "link"] = "style" if tag_name == "style" else "link"
         return _RenderedDependency(

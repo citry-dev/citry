@@ -117,6 +117,7 @@ areas:
         section_style: true
         items:
           - { title: Web frameworks, path: /web-frameworks/, needs_review: true }
+          - { title: Use Citry with HTMX, path: /guides/htmx/ }
           - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
           - { title: Hot reload, path: /guides/dev-server/, needs_review: true }
           - { title: Migrate from Component.View, path: /guides/migrate-from-component-view/, needs_review: true }

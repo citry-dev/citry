@@ -1,0 +1,22 @@
+[project]
+name = "citry-demo-htmx"
+version = "0.1.0"
+description = "HTMX examples rendered with FastAPI and Citry"
+requires-python = ">=3.10,<4"
+dependencies = [
+  "citry>=0.4.3,<0.5",
+  "fastapi>=0.141,<1",
+  "pydantic>=2.12,<3",
+  "python-multipart>=0.0.20,<1",
+  "uvicorn>=0.38,<1",
+]
+
+[dependency-groups]
+dev = [
+  "httpx2>=2.10,<3",
+  "pytest>=9.0,<10",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -1,1 +1,1 @@
-"""Django project configuration."""
+"""Configure Django for the Project Explorer starter."""

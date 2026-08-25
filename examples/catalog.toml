@@ -88,3 +88,16 @@ page_path = "/"
 citry_prefix = "/citry"
 profile = "demo-project-board-v1"
 docs = ["/examples/", "/events/"]
+
+[[projects]]
+id = "demo-htmx"
+kind = "demo"
+path = "demos/htmx"
+host = "fastapi"
+python = ">=3.10,<4"
+test = ["uv", "run", "pytest"]
+serve = ["uv", "run", "uvicorn", "app.main:web_app", "--host", "127.0.0.1", "--port", "{port}"]
+page_path = "/"
+citry_prefix = "/citry"
+profile = "demo-htmx-v1"
+docs = ["/guides/htmx/", "/advanced/html-fragments/"]

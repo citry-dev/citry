@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,11 @@ pytestmark = pytest.mark.e2e
 _CITRY_UI_TABS = (
     Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
 )
+_RUNTIME_PATH = Path(__file__).parents[2] / "static" / "playground" / "runtime.json"
+_RUNTIME = json.loads(_RUNTIME_PATH.read_text(encoding="utf-8"))
+_CITRY_VERSION = _RUNTIME["citry"]["version"]
+_PUBLISHED_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {_RUNTIME['citry']['ui_version']}"
+_LOCAL_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {version('citry-ui')}"
 
 
 def _set_source(page: Any, source: str) -> None:
@@ -164,7 +171,7 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.3 · Citry UI 0.2.0")
+    expect(page.locator("#citry-playground-runtime")).to_have_text(_LOCAL_RUNTIME_LABEL)
 
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')
@@ -185,7 +192,7 @@ def test_published_runtime_runs_citry_ui_twice(page: Any, docs_site_url: str) ->
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.3 · Citry UI 0.2.0")
+    expect(page.locator("#citry-playground-runtime")).to_have_text(_PUBLISHED_RUNTIME_LABEL)
 
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')

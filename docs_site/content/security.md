@@ -170,11 +170,11 @@ least 128 random bits before encoding.
 
 Citry adds the value after dependency hooks have run. Every structured
 [`Script`][citry.ext.dependencies.Script], including external scripts and inert
-JSON manifests, receives it. Every structured inline
-[`Style`][citry.ext.dependencies.Style] receives it; external stylesheet links
-do not. A matching explicit nonce is accepted, while a different or malformed
-one is an error. The original dependency objects are not mutated, so one render
-can be serialized for separate responses with separate nonces.
+JSON manifests, receives it. Every structured
+[`Style`][citry.ext.dependencies.Style], including external stylesheet links,
+receives it. A matching explicit nonce is accepted, while a different or
+malformed one is an error. The original dependency objects are not mutated, so
+one render can be serialized for separate responses with separate nonces.
 
 Raw `<script>` and `<style>` elements written directly in template HTML are not
 automatically trusted or nonced. Move trusted code to `Component.js`,
@@ -182,9 +182,10 @@ automatically trusted or nonced. Move trusted code to `Component.js`,
 elements after all render hooks have run.
 
 The browser manager records the nonce that authorized its own script tag. When
-a later fragment creates a structured script or inline style, the manager adds
-that document nonce if the descriptor omits it and rejects a different value
-before inserting the dependency batch. Off and warning fragments may load the
+a later fragment creates a structured script, inline style, or stylesheet
+link, the manager adds that document nonce if the descriptor omits it and
+rejects a different value before inserting the dependency batch. Off and
+warning fragments may load the
 standard manager through their preloader. Strict fragments contain only inert
 markup and manifests and require a strict Citry base document with an existing
 CSP manager. A present manager rejects nonce or runtime-variant mismatches

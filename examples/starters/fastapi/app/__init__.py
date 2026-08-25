@@ -1,1 +1,1 @@
-"""FastAPI Citry example application."""
+"""Run the Project Explorer with FastAPI and Citry."""

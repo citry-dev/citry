@@ -1,4 +1,4 @@
-"""Select a verified package artifact built for an exact main commit."""
+"""Select a successful exact-commit workflow run and its artifact when required."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ ARTIFACT_NAME: Final = "verified-citry-core-distributions"
 
 
 class QualificationSelectionError(RuntimeError):
-    """A matching successful qualification artifact cannot be selected safely."""
+    """A matching successful workflow run cannot be selected safely."""
 
 
 def _request_json(url: str, *, token: str) -> dict[str, Any]:
@@ -49,8 +49,9 @@ def select_run(
     repository: str,
     commit: str,
     branch: str = "main",
+    event: str = "workflow_dispatch",
 ) -> dict[str, Any]:
-    """Choose the newest successful manual qualification for one main commit."""
+    """Choose the newest successful workflow run for one main commit."""
     raw_runs = payload.get("workflow_runs")
     if not isinstance(raw_runs, list):
         raise QualificationSelectionError("workflow-runs response has no workflow_runs list")
@@ -61,7 +62,7 @@ def select_run(
         head_repository = raw.get("head_repository")
         head_name = head_repository.get("full_name") if isinstance(head_repository, dict) else None
         if (
-            raw.get("event") == "workflow_dispatch"
+            raw.get("event") == event
             and raw.get("status") == "completed"
             and raw.get("conclusion") == "success"
             and raw.get("head_sha") == commit
@@ -70,9 +71,8 @@ def select_run(
         ):
             matches.append(raw)
     if not matches:
-        raise QualificationSelectionError(
-            f"no successful manual qualification exists for {repository}@{commit} on {branch}"
-        )
+        run_kind = "manual qualification" if event == "workflow_dispatch" else f"{event} workflow run"
+        raise QualificationSelectionError(f"no successful {run_kind} exists for {repository}@{commit} on {branch}")
     matches.sort(
         key=lambda run: (
             int(run.get("run_number", 0)),
@@ -130,9 +130,10 @@ def select_qualification(
     commit: str,
     workflow: str,
     token: str,
-    artifact_name: str = ARTIFACT_NAME,
+    artifact_name: str | None = ARTIFACT_NAME,
+    event: str = "workflow_dispatch",
 ) -> dict[str, str]:
-    """Find the run and immutable artifact that a tag workflow may promote."""
+    """Find an exact-commit workflow run and optional immutable artifact."""
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
         raise QualificationSelectionError(f"expected a full commit SHA, found {commit!r}")
     workflow_id = urllib.parse.quote(workflow, safe="")
@@ -140,15 +141,26 @@ def select_qualification(
     query = urllib.parse.urlencode(
         {
             "branch": "main",
-            "event": "workflow_dispatch",
+            "event": event,
             "head_sha": commit,
             "per_page": 100,
             "status": "success",
         }
     )
     runs_url = f"{api_root}/actions/workflows/{workflow_id}/runs?{query}"
-    run = select_run(_request_json(runs_url, token=token), repository=repository, commit=commit)
+    run = select_run(
+        _request_json(runs_url, token=token),
+        repository=repository,
+        commit=commit,
+        event=event,
+    )
     run_id = int(run["id"])
+    if artifact_name is None:
+        return {
+            "run_id": str(run_id),
+            "run_url": str(run["html_url"]),
+            "head_sha": commit,
+        }
     artifacts_url = f"{api_root}/actions/runs/{run_id}/artifacts?per_page=100"
     artifact = select_artifact(
         _request_json(artifacts_url, token=token),
@@ -174,12 +186,14 @@ def _write_github_output(path: Path, values: Mapping[str, str]) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Select one reusable qualification artifact and expose its identity."""
+    """Select one exact-commit workflow run and expose its identity."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--workflow", default="py--citry-core--publish.yml")
     parser.add_argument("--artifact-name", default=ARTIFACT_NAME)
+    parser.add_argument("--event", choices=("push", "workflow_dispatch"), default="workflow_dispatch")
+    parser.add_argument("--no-artifact", action="store_true")
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args(argv)
     token = os.environ.get("GH_TOKEN", "")
@@ -191,7 +205,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             commit=args.commit,
             workflow=args.workflow,
             token=token,
-            artifact_name=args.artifact_name,
+            artifact_name=None if args.no_artifact else args.artifact_name,
+            event=args.event,
         )
     except QualificationSelectionError as error:
         parser.exit(1, f"qualification selection failed: {error}\n")

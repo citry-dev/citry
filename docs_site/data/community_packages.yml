@@ -6,12 +6,11 @@ packages:
       - extension
     summary: Compose Django's template engine with Citry so each can render the other's template syntax.
     ownership: community
-    published: false
+    published: true
     citry_requirement: ">=0.4.3"
     source_url: https://github.com/joeyjurjens/citry-django
     maintainer: "@joeyjurjens"
     maintainer_url: https://github.com/joeyjurjens
-    notice: "Preview: the repository describes this package as a proof of concept. Its metadata declares MIT, but the repository does not include a license file."
 
   - distribution: citry-ui
     name: Citry UI

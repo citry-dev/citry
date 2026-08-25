@@ -62,6 +62,10 @@ claim that a mechanism "is enough" or "is not needed" is a hypothesis until an e
 has tried to break it. (Trivial or conversational tasks are exempt; a design, a
 recommendation, or a non-trivial change is not.)
 
+When substantive work creates or changes prose, the independent reviewer must review it
+in a distinct pass and report the result before delivery, as CLAUDE.md Mechanism 6
+requires.
+
 ---
 
 ## Domain-specific patterns

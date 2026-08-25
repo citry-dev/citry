@@ -88,10 +88,17 @@ def test_client_runtime_bundle_budget():
     # revision registry and collision lifecycle while shortening both canonical
     # and mirrored marker parsers. The measured baseline is 757,148 raw /
     # 157,712 gzip bytes.
+    # Transactional stylesheet staging lets a fragment safely reintroduce a
+    # class after its final earlier instance retires. The measured baseline is
+    # 768,907 raw / 160,158 gzip bytes.
+    # Preparing every fragment dependency before DOM/ownership commit adds the
+    # adoption token, rollback path, CSS-instance preflight, and scheduler
+    # boundary. Strict-CSP stylesheet links also carry the response nonce. The
+    # measured baseline is 771,813 raw / 160,674 gzip bytes.
     # These are deliberate validation and identity features, not incidental
     # bundle drift.
-    assert len(payload) <= 758_500
-    assert len(gzip.compress(payload, mtime=0)) <= 158_500
+    assert len(payload) <= 773_000
+    assert len(gzip.compress(payload, mtime=0)) <= 162_000
 
 
 def test_csp_events_runtime_bundle_budget():
@@ -136,8 +143,10 @@ def test_325_instance_client_payload_budget():
     # Phase 8 runtime identity and preflight move it to 1,431,406 raw / 185,931
     # gzip bytes. I18n phase 5's framework-manifest transaction moves the
     # measured document to 1,441,181 raw / 187,232 gzip bytes.
+    # Transactional stylesheet reintroduction moves the compressed document
+    # baseline to 190,353 bytes while the raw payload remains below its cap.
     assert sizes.document_raw <= 1_442_500
-    assert sizes.document_gzip <= 188_000
+    assert sizes.document_gzip <= 191_000
 
 
 def test_450_instance_large_graph_regression_budget():

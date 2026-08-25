@@ -518,7 +518,10 @@ class TestCssLifecycleEmission:
         # The class marker is how the client-side manager's cleanup finds the
         # sheet when the class's last instance leaves the page
         # (dependencies.md 8.4).
-        assert f'<style data-citry-css-class="{Card.class_id}">.card {{ color: teal; }}</style>' in html
+        assert (
+            f'<style data-citry-css-class="{Card.class_id}" '
+            f'data-citry-css-url="{script_url(Card, "css")}">.card {{ color: teal; }}</style>'
+        ) in html
 
     def test_fragment_css_descriptor_carries_the_class_marker(self):
         c = _mounted_citry()

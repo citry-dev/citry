@@ -1228,18 +1228,36 @@ Currently, releases are managed manually:
    distribution gate. Citry Core, Citry, citry-lsp, citry-ui, and
    pygments-citry retain those checked artifacts. The VS Code extension does
    the same for its VSIX; the tag promotes that run's exact bytes.
-8. **Create and push the annotated tag** at that exact qualified commit, for
-   example `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` followed
-   by `git push origin citry-core@1.3.0`. Use the matching package-specific tag
-   for another artifact.
-9. **Verify and close out the release from public bytes.** Check the registry
+8. **For a Citry release, publish the qualified package before locking the
+   examples to that version.** Push the annotated `citry@publish-X.Y.Z` tag at
+   the qualified package commit. That tag publishes the retained pair to PyPI
+   without creating the final GitHub Release or documentation snapshot. Once
+   PyPI is public, update every root example manifest and README, regenerate every
+   example lock from the public index, and promote and browser-test the complete
+   playground tuple. Commit only those release-coupled surfaces, manually run
+   the examples workflow in public-release mode so every clean copy qualifies
+   without an overlay, and wait for the exact-commit docs browser gate. Commit
+   only each catalog project's `README.md`, `pyproject.toml`, and `uv.lock`, plus
+   `docs_site/static/playground/runtime.json`, in this second stage. The final
+   workflow derives that exact allowlist from the staging commit's catalog and
+   rejects every other path before running final-checkout tooling. It then
+   re-verifies the staged artifacts against the final checkout and public PyPI
+   inventory. In particular, do not change example source, tests, tools, or the
+   root `README.md`; that README is included in Citry's distribution through
+   `packages/py/citry/README.md`.
+9. **Create and push the annotated final tag** at that exact surface-qualified
+   commit, for example
+   `git tag -a citry@0.4.4 -m "Release citry@0.4.4"` followed by
+   `git push origin citry@0.4.4`. Other packages use their matching tag directly
+   after step 7.
+10. **Verify and close out the release from public bytes.** Check the registry
    version and GitHub Release; install the exact public dependency chain with
    no workspace resolution on the oldest and newest supported Python; exercise
    imports and entry points; and record any consciously accepted gap. For the
    VS Code extension, install both registry VSIX files and start the public
-   LSP. For Citry, verify the versioned docs snapshot and, once immutable wheel
-   URLs exist, promote and browser-test the complete playground tuple. Finish
-   with the same classified version/pin sweep used during preparation.
+   LSP. For Citry, verify the versioned docs snapshot and the already-promoted
+   playground tuple. Finish with the same classified version/pin sweep used
+   during preparation.
 
 Pushing the tag triggers the artifact's publish workflow and verifies that the
 tag matches the package version. Each Python package tag promotes exact bytes
@@ -1614,9 +1632,9 @@ Each published Python package has its own tag-triggered workflow:
 `py--citry-core--publish.yml`, `py--citry--publish.yml`,
 `py--citry-lsp--publish.yml`, `py--citry-ui--publish.yml`, or
 `py--pygments-citry--publish.yml`. Each uses qualify-then-promote: a manual
-run builds, tests, and retains the distributions for one exact `main` commit;
-the `<package>@<version>` tag can publish only those qualified bytes and then
-creates the matching GitHub Release.
+run builds, tests, and retains the distributions for one exact `main` commit.
+For packages other than Citry, the version tag publishes those qualified bytes
+and creates the matching GitHub Release. Citry uses the two-tag process below.
 
 The VS Code extension follows the same boundary in
 `vscode--citry--publish.yml`: manual dispatch qualifies one VSIX, while a
@@ -1684,17 +1702,22 @@ qualified bytes without compiling them again. The GitHub Release includes
 `qualification-provenance.json`, which records the qualification run, commit,
 and artifact digest.
 
-The tag run fails before entering Trusted Publishing when no exact
-qualification exists, its artifact expired, its digest differs, the tag commit
-is absent from `main`, or any file differs from the recorded inventory. Run a
-fresh manual qualification for that exact commit; do not substitute artifacts
-from another commit. Release-critical third-party actions are pinned to
-reviewed commits.
+For a single-tag package, the tag run fails before entering Trusted Publishing
+when no exact qualification exists, its artifact expired, its digest differs,
+the tag commit is absent from `main`, or any file differs from the recorded
+inventory. Run a fresh manual qualification for that exact commit; do not
+substitute artifacts from another commit. Release-critical third-party actions
+are pinned to reviewed commits.
 
-The version must be absent from both PyPI and GitHub Releases before publishing.
-The workflow never skips existing PyPI files or overwrites release assets: a
-partial publication requires deliberate hash reconciliation and manual
-recovery, not an automatic rerun that could associate different bytes.
+The version must be absent from both PyPI and GitHub Releases before its first
+publication. Citry's explicit staging path encounters its own already-public
+pair at the final tag, but accepts it only when the complete filename and
+SHA-256 inventory matches the retained staging qualification exactly and those
+artifacts verify against the final checkout. No workflow overwrites release
+assets or accepts merely matching version metadata. If an upload exposes only
+part of the closed pair, stop and reconcile the public hashes before a
+deliberate manual recovery; an automated retry must not skip the existing file
+blindly.
 
 The permanent browser build tuple lives in
 `packages/py/citry_core/pyodide-build.json`. Its Pyodide and Python versions
@@ -1705,20 +1728,32 @@ together.
 
 ### Citry distribution qualification
 
-Run `py--citry--publish.yml` manually on the exact `main` commit that will
-receive the Citry tag. The workflow builds the one universal wheel and one
+Run `py--citry--publish.yml` manually on the exact `main` package commit. The
+workflow builds the one universal wheel and one
 source distribution, requires that closed pair and its package/metadata/
 license/entry-point/`RECORD` inventories, rebuilds the sdist outside the
 checkout, and install-smokes both wheels on CPython 3.10 through 3.14. Its
 `verified-citry-distributions` bundle and `release-inventory.json` are retained
 for 14 days.
 
-Pushing `citry@<version>` at that commit selects the successful manual run by
-repository, `main` branch, and full commit SHA. The tag run checks the GitHub
-artifact digest, safely extracts and re-verifies the pair against the tagged
-checkout, requires the commit to remain on `main`, and fails closed if the
-PyPI version or GitHub Release already exists. It never rebuilds, skips an
-existing PyPI file, or overwrites a release asset.
+Pushing `citry@publish-<version>` at that commit selects the successful manual
+run by repository, `main` branch, and full commit SHA, checks the GitHub artifact
+digest, safely extracts and re-verifies the pair against the tagged checkout,
+requires the commit to remain on `main`, and publishes the pair to PyPI without
+creating a GitHub Release. This staging tag lets the examples resolve the new
+Citry release from PyPI before the final repository tag fixes their URLs.
+
+After those surfaces are regenerated from PyPI and committed without changing
+package inputs, run the examples workflow with `public_release` enabled and
+wait for the exact-commit docs browser workflow. Pushing `citry@<version>` then
+selects the retained qualification named by `citry@publish-<version>`, verifies
+it against the final checkout, requires the public-index locks, playground
+tuple, and both exact-commit surface gates, and compares the complete public
+PyPI filename/SHA-256 inventory before creating the GitHub Release. A final tag
+cannot publish an absent version or bypass the staging tag. Neither path
+rebuilds promoted files or overwrites a release asset. The docs-release workflow
+also waits for that final GitHub Release before it commits or deploys a versioned
+snapshot.
 
 ### citry-lsp distribution qualification
 

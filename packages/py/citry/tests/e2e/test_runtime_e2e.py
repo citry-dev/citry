@@ -37,8 +37,9 @@ behavior surface:
   removal and for an in-place ``data-cid`` swap; a class-level
   ``Component.css`` sheet (tagged ``data-citry-css-class``) is dropped when the
   class's last instance leaves, deferred so a same-class re-render in place
-  keeps the sheet; and a callback that synchronously triggers a nested flush
-  does not re-run the in-flight call.
+  keeps the sheet; replacement sheets survive the full manifest asset
+  transaction and overlapping same-class transactions; and a callback that
+  synchronously triggers a nested flush does not re-run the in-flight call.
 - The full fragment pipeline: fresh data and elements after a re-render,
   per-instance calls for sibling instances, and the pre-loader bootstrapping
   the runtime on a page that never had it.
@@ -55,6 +56,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from typing import Any
 
 import pytest
@@ -1738,6 +1740,635 @@ def test_collected_component_css_url_can_be_loaded_again(page: Any, serve_live: 
         "reloaded": True,
         "secondColor": "rgb(7, 8, 9)",
     }
+
+
+def test_collected_inline_component_css_clears_its_fragment_url(page: Any, serve_live: Any) -> None:
+    # A document inlines Component.css but marks its fragment URL as loaded.
+    # When the manager removes the inline style, it must also clear that URL,
+    # or a later fragment will skip its link and reintroduce the component
+    # unstyled.
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+
+    result = page.evaluate(
+        """
+        async () => {
+          const m = Citry.manager;
+          const url = "data:text/css,.citry-inline-reload%7Bcolor%3Argb(11%2C12%2C13)%7D";
+          const descriptor = {
+            tag: "link",
+            attrs: {
+              rel: "stylesheet",
+              href: url,
+              "data-citry-css-class": "InlineReloadable",
+            },
+          };
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="InlineReloadable" data-citry-css-url="' + url + '">' +
+              '.citry-inline-reload{color:rgb(11,12,13)}' +
+            '</style>',
+          );
+          m.markScriptLoaded("css", url);
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="inline-one" class="citry-inline-reload" data-cid-IR1>one</div>',
+          );
+          m.registerComponent("InlineReloadable", () => {});
+          m.callComponent("InlineReloadable", "IR1", null);
+          const firstColor = getComputedStyle(document.getElementById("inline-one")).color;
+
+          document.getElementById("inline-one").remove();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const afterCollection = {
+            styles: document.querySelectorAll('[data-citry-css-class="InlineReloadable"]').length,
+            loaded: m.isScriptLoaded("css", url),
+          };
+
+          await m.loadCss(descriptor);
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="inline-two" class="citry-inline-reload" data-cid-IR2>two</div>',
+          );
+          m.callComponent("InlineReloadable", "IR2", null);
+          return {
+            firstColor,
+            afterCollection,
+            reloadedLinks: document.querySelectorAll(
+              'link[data-citry-css-class="InlineReloadable"]',
+            ).length,
+            secondColor: getComputedStyle(document.getElementById("inline-two")).color,
+          };
+        }
+        """
+    )
+    assert result == {
+        "firstColor": "rgb(11, 12, 13)",
+        "afterCollection": {"styles": 0, "loaded": False},
+        "reloadedLinks": 1,
+        "secondColor": "rgb(11, 12, 13)",
+    }
+
+
+def test_component_css_gc_preserves_a_replacement_sheet_while_it_loads(page: Any, serve_live: Any) -> None:
+    # A fragment does not register its replacement instance until its CSS has
+    # loaded. If the old last instance disappears in the same turn, the
+    # manager's deferred cleanup must keep the replacement link alive while
+    # that wait is in flight, then let the newly registered instance cancel it.
+    url = "https://citry.test/replacement.css"
+
+    def serve_delayed_css(route: Any) -> None:
+        time.sleep(0.2)
+        route.fulfill(content_type="text/css", body=".citry-race{color:rgb(21,22,23)}")
+
+    page.route(url, serve_delayed_css)
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+
+    result = page.evaluate(
+        """
+        async (url) => {
+          const m = Citry.manager;
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="Race">.citry-race{color:rgb(1,2,3)}</style>',
+          );
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="race-old" class="citry-race" data-cid-R1>old</div>',
+          );
+          m.registerComponent("Race", () => {});
+          m.callComponent("Race", "R1", null);
+
+          document.getElementById("race-old").remove();
+          await m.loadCss({
+            tag: "link",
+            attrs: {
+              rel: "stylesheet",
+              href: url,
+              "data-citry-css-class": "Race",
+            },
+          });
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="race-new" class="citry-race" data-cid-R2>new</div>',
+          );
+          m.callComponent("Race", "R2", null);
+          await new Promise((resolve) => setTimeout(resolve, 250));
+
+          return {
+            sheets: document.querySelectorAll('[data-citry-css-class="Race"]').length,
+            loaded: m.isScriptLoaded("css", url),
+            color: getComputedStyle(document.getElementById("race-new")).color,
+          };
+        }
+        """,
+        url,
+    )
+    assert result == {"sheets": 1, "loaded": True, "color": "rgb(21, 22, 23)"}
+
+
+def test_component_css_gc_waits_for_the_replacement_manifest_transaction(page: Any, serve_live: Any) -> None:
+    # Loading the stylesheet is only the first part of a fragment's asset
+    # transaction. A following script can keep the replacement instance staged
+    # for another task, and the manager must keep its stylesheet until the
+    # complete manifest succeeds or fails.
+    css_url = "https://citry.test/transaction.css"
+    js_url = "https://citry.test/transaction.js"
+
+    def serve_delayed_css(route: Any) -> None:
+        time.sleep(0.1)
+        route.fulfill(content_type="text/css", body=".citry-transaction{color:rgb(31,32,33)}")
+
+    def serve_delayed_js(route: Any) -> None:
+        time.sleep(0.2)
+        route.fulfill(content_type="text/javascript", body="window.__raceScriptLoaded = true;")
+
+    page.route(css_url, serve_delayed_css)
+    page.route(js_url, serve_delayed_js)
+    manifest = {
+        "fetch": {
+            "css": [
+                _b64(
+                    json.dumps(
+                        {
+                            "tag": "link",
+                            "attrs": {
+                                "rel": "stylesheet",
+                                "href": css_url,
+                                "data-citry-css-class": "TransactionRace",
+                            },
+                        }
+                    )
+                )
+            ],
+            "js": [_b64(json.dumps({"tag": "script", "attrs": {"src": js_url}}))],
+        },
+        "calls": [[_b64("TransactionRace"), _b64("TR2"), None, "init"]],
+    }
+
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+    page.evaluate(
+        """
+        (manifest) => {
+          const m = Citry.manager;
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="TransactionRace">' +
+              '.citry-transaction{color:rgb(1,2,3)}' +
+            '</style>',
+          );
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="transaction-old" class="citry-transaction" data-cid-TR1>old</div>',
+          );
+          m.registerComponent("TransactionRace", (ctx) => {
+            if (ctx.id === "TR2") window.__raceActivated = true;
+          });
+          m.callComponent("TransactionRace", "TR1", null);
+
+          document.getElementById("transaction-old").remove();
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="transaction-new" class="citry-transaction" data-cid-TR2>new</div>',
+          );
+          m._loadComponentScripts(manifest);
+        }
+        """,
+        manifest,
+    )
+    page.wait_for_function("window.__raceActivated === true")
+    page.wait_for_timeout(250)
+
+    result = page.evaluate(
+        """
+        ([cssUrl, jsUrl]) => ({
+          sheets: document.querySelectorAll('[data-citry-css-class="TransactionRace"]').length,
+          cssLoaded: Citry.manager.isScriptLoaded("css", cssUrl),
+          jsLoaded: Citry.manager.isScriptLoaded("js", jsUrl),
+          color: getComputedStyle(document.getElementById("transaction-new")).color,
+        })
+        """,
+        [css_url, js_url],
+    )
+    assert result == {
+        "sheets": 1,
+        "cssLoaded": True,
+        "jsLoaded": True,
+        "color": "rgb(31, 32, 33)",
+    }
+
+
+def test_component_css_gc_retires_stale_rules_after_a_fast_replacement(page: Any, serve_live: Any) -> None:
+    # A cached or data-URL stylesheet can settle before the first deferred GC
+    # check. The manifest still owns that exact replacement element, so after
+    # activation Citry must keep it and remove the old sheet; otherwise rules
+    # deleted from the new Component.css continue leaking from the old one.
+    css_url = "data:text/css,.citry-fast%7Bcolor%3Argb(41%2C42%2C43)%7D"
+    manifest = {
+        "fetch": {
+            "css": [
+                _b64(
+                    json.dumps(
+                        {
+                            "tag": "link",
+                            "attrs": {
+                                "rel": "stylesheet",
+                                "href": css_url,
+                                "data-citry-css-class": "FastRace",
+                            },
+                        }
+                    )
+                )
+            ]
+        },
+        "calls": [[_b64("FastRace"), _b64("FR2"), None, "init"]],
+    }
+
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+    page.evaluate(
+        """
+        (manifest) => {
+          const m = Citry.manager;
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="FastRace">' +
+              '.citry-fast{color:rgb(1,2,3);background:red}' +
+            '</style>',
+          );
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="fast-old" class="citry-fast" data-cid-FR1>old</div>',
+          );
+          m.registerComponent("FastRace", (ctx) => {
+            if (ctx.id === "FR2") window.__fastRaceActivated = true;
+          });
+          m.callComponent("FastRace", "FR1", null);
+
+          document.getElementById("fast-old").remove();
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="fast-new" class="citry-fast" data-cid-FR2>new</div>',
+          );
+          m._loadComponentScripts(manifest);
+        }
+        """,
+        manifest,
+    )
+    page.wait_for_function("window.__fastRaceActivated === true")
+    page.wait_for_timeout(50)
+
+    result = page.evaluate(
+        """
+        () => {
+          const style = getComputedStyle(document.getElementById("fast-new"));
+          return {
+            sheets: document.querySelectorAll('[data-citry-css-class="FastRace"]').length,
+            color: style.color,
+            background: style.backgroundColor,
+          };
+        }
+        """
+    )
+    assert result == {
+        "sheets": 1,
+        "color": "rgb(41, 42, 43)",
+        "background": "rgba(0, 0, 0, 0)",
+    }
+
+
+def test_concurrent_same_class_manifests_preserve_each_others_staged_css(page: Any, serve_live: Any) -> None:
+    # Two overlapping fragments can carry different content-hash URLs for the
+    # same class. Activation of the first must not collect the second link
+    # while it is still loading; the later successful transaction leaves it as
+    # the only remaining class sheet.
+    first_url = "https://citry.test/concurrent-first.css"
+    second_url = "https://citry.test/concurrent-second.css"
+
+    def serve_first_css(route: Any) -> None:
+        time.sleep(0.1)
+        route.fulfill(content_type="text/css", body=".citry-concurrent{color:rgb(51,52,53)}")
+
+    def serve_second_css(route: Any) -> None:
+        time.sleep(0.4)
+        route.fulfill(content_type="text/css", body=".citry-concurrent{color:rgb(61,62,63)}")
+
+    page.route(first_url, serve_first_css)
+    page.route(second_url, serve_second_css)
+
+    def manifest(url: str, component_id: str) -> dict[str, Any]:
+        return {
+            "fetch": {
+                "css": [
+                    _b64(
+                        json.dumps(
+                            {
+                                "tag": "link",
+                                "attrs": {
+                                    "rel": "stylesheet",
+                                    "href": url,
+                                    "data-citry-css-class": "ConcurrentRace",
+                                },
+                            }
+                        )
+                    )
+                ]
+            },
+            "calls": [[_b64("ConcurrentRace"), _b64(component_id), None, "init"]],
+        }
+
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+    page.evaluate(
+        """
+        ([firstManifest, secondManifest]) => {
+          const m = Citry.manager;
+          window.__concurrentRaceCalls = [];
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="ConcurrentRace">' +
+              '.citry-concurrent{color:rgb(1,2,3)}' +
+            '</style>',
+          );
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="concurrent-old" class="citry-concurrent" data-cid-CR1>old</div>' +
+            '<div id="concurrent-first" class="citry-concurrent" data-cid-CR2>first</div>' +
+            '<div id="concurrent-second" class="citry-concurrent" data-cid-CR3>second</div>',
+          );
+          m.registerComponent("ConcurrentRace", (ctx) => {
+            if (ctx.id !== "CR1") window.__concurrentRaceCalls.push(ctx.id);
+          });
+          m.callComponent("ConcurrentRace", "CR1", null);
+          document.getElementById("concurrent-old").remove();
+          m._loadComponentScripts(firstManifest);
+          m._loadComponentScripts(secondManifest);
+        }
+        """,
+        [manifest(first_url, "CR2"), manifest(second_url, "CR3")],
+    )
+    page.wait_for_function("window.__concurrentRaceCalls.length === 2")
+    page.wait_for_timeout(100)
+
+    result = page.evaluate(
+        """
+        () => ({
+          calls: window.__concurrentRaceCalls,
+          sheets: document.querySelectorAll('[data-citry-css-class="ConcurrentRace"]').length,
+          color: getComputedStyle(document.getElementById("concurrent-second")).color,
+        })
+        """
+    )
+    assert result == {
+        "calls": ["CR2", "CR3"],
+        "sheets": 1,
+        "color": "rgb(61, 62, 63)",
+    }
+
+
+def test_failed_css_creator_preserves_a_deduped_sibling_transaction(page: Any, serve_live: Any) -> None:
+    # Concurrent manifests can share one in-flight CSS promise. If the
+    # transaction that created the link later fails in JavaScript, it must not
+    # remove that shared link from a same-URL sibling that is still staged.
+    css_url = "https://citry.test/shared-transaction.css"
+    bad_js_url = "https://citry.test/shared-transaction-bad.js"
+    good_js_url = "https://citry.test/shared-transaction-good.js"
+
+    def serve_shared_css(route: Any) -> None:
+        time.sleep(0.1)
+        route.fulfill(content_type="text/css", body=".citry-shared{color:rgb(71,72,73)}")
+
+    def fail_script(route: Any) -> None:
+        time.sleep(0.05)
+        route.abort("failed")
+
+    def serve_good_script(route: Any) -> None:
+        time.sleep(0.35)
+        route.fulfill(content_type="text/javascript", body="window.__sharedGoodScript = true;")
+
+    page.route(css_url, serve_shared_css)
+    page.route(bad_js_url, fail_script)
+    page.route(good_js_url, serve_good_script)
+
+    css_descriptor = _b64(
+        json.dumps(
+            {
+                "tag": "link",
+                "attrs": {
+                    "rel": "stylesheet",
+                    "href": css_url,
+                    "data-citry-css-class": "SharedRace",
+                },
+            }
+        )
+    )
+
+    def manifest(script_url: str, component_id: str) -> dict[str, Any]:
+        return {
+            "fetch": {
+                "css": [css_descriptor],
+                "js": [_b64(json.dumps({"tag": "script", "attrs": {"src": script_url}}))],
+            },
+            "calls": [[_b64("SharedRace"), _b64(component_id), None, "init"]],
+        }
+
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+    page.evaluate(
+        """
+        ([badManifest, goodManifest]) => {
+          const m = Citry.manager;
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="SharedRace">.citry-shared{color:rgb(1,2,3)}</style>',
+          );
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="shared-old" class="citry-shared" data-cid-SR1>old</div>' +
+            '<div class="citry-shared" data-cid-SR2>failed arrival</div>' +
+            '<div id="shared-good" class="citry-shared" data-cid-SR3>good arrival</div>',
+          );
+          m.registerComponent("SharedRace", (ctx) => {
+            if (ctx.id === "SR3") window.__sharedRaceActivated = true;
+          });
+          m.callComponent("SharedRace", "SR1", null);
+          document.getElementById("shared-old").remove();
+          m._loadComponentScripts(badManifest);
+          m._loadComponentScripts(goodManifest);
+        }
+        """,
+        [manifest(bad_js_url, "SR2"), manifest(good_js_url, "SR3")],
+    )
+    page.wait_for_function("window.__sharedRaceActivated === true")
+    page.wait_for_timeout(100)
+
+    result = page.evaluate(
+        """
+        (cssUrl) => ({
+          sheets: document.querySelectorAll('[data-citry-css-class="SharedRace"]').length,
+          loaded: Citry.manager.isScriptLoaded("css", cssUrl),
+          color: getComputedStyle(document.getElementById("shared-good")).color,
+        })
+        """,
+        css_url,
+    )
+    assert result == {
+        "sheets": 1,
+        "loaded": True,
+        "color": "rgb(71, 72, 73)",
+    }
+
+
+def test_late_creator_failure_preserves_css_adopted_by_a_live_sibling(page: Any, serve_live: Any) -> None:
+    # The deduped sibling may finish loading its own assets and activate before
+    # the transaction that created their shared link fails. Failure cleanup
+    # must recognize that the shared sheet has already been adopted by a live
+    # same-class transaction, even though that sibling is no longer staged.
+    css_url = "data:text/css,.citry-adopted%7Bcolor%3Argb(81%2C82%2C83)%7D"
+    bad_js_url = "https://citry.test/adopted-transaction-bad.js"
+
+    def fail_script_late(route: Any) -> None:
+        time.sleep(0.3)
+        route.abort("failed")
+
+    page.route(bad_js_url, fail_script_late)
+    css_descriptor = _b64(
+        json.dumps(
+            {
+                "tag": "link",
+                "attrs": {
+                    "rel": "stylesheet",
+                    "href": css_url,
+                    "data-citry-css-class": "AdoptedRace",
+                },
+            }
+        )
+    )
+    creator_manifest = {
+        "fetch": {
+            "css": [css_descriptor],
+            "js": [_b64(json.dumps({"tag": "script", "attrs": {"src": bad_js_url}}))],
+        },
+        "calls": [[_b64("AdoptedRace"), _b64("AR2"), None, "init"]],
+    }
+    sibling_manifest = {
+        "fetch": {
+            "css": [css_descriptor],
+            "js": [
+                _b64(
+                    json.dumps(
+                        {
+                            "tag": "script",
+                            "attrs": {},
+                            "content": "window.__adoptedSiblingScript = true;",
+                        }
+                    )
+                )
+            ],
+        },
+        "calls": [[_b64("AdoptedRace"), _b64("AR3"), None, "init"]],
+    }
+
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+    page.evaluate(
+        """
+        ([creatorManifest, siblingManifest]) => {
+          const m = Citry.manager;
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="AdoptedRace">.citry-adopted{color:rgb(1,2,3)}</style>',
+          );
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="adopted-old" class="citry-adopted" data-cid-AR1>old</div>' +
+            '<div class="citry-adopted" data-cid-AR2>failed creator</div>' +
+            '<div id="adopted-good" class="citry-adopted" data-cid-AR3>live sibling</div>',
+          );
+          m.registerComponent("AdoptedRace", (ctx) => {
+            if (ctx.id === "AR3") window.__adoptedRaceActivated = true;
+          });
+          m.callComponent("AdoptedRace", "AR1", null);
+          document.getElementById("adopted-old").remove();
+          m._loadComponentScripts(creatorManifest);
+          m._loadComponentScripts(siblingManifest);
+        }
+        """,
+        [creator_manifest, sibling_manifest],
+    )
+    page.wait_for_function("window.__adoptedRaceActivated === true")
+    page.wait_for_timeout(500)
+
+    result = page.evaluate(
+        """
+        (cssUrl) => ({
+          sheets: document.querySelectorAll('[data-citry-css-class="AdoptedRace"]').length,
+          loaded: Citry.manager.isScriptLoaded("css", cssUrl),
+          color: getComputedStyle(document.getElementById("adopted-good")).color,
+        })
+        """,
+        css_url,
+    )
+    assert result == {
+        "sheets": 1,
+        "loaded": True,
+        "color": "rgb(81, 82, 83)",
+    }
+
+
+def test_malformed_css_instances_fail_before_callbacks_or_component_css(page: Any, serve_live: Any) -> None:
+    # Malformed CSS-instance data must fail preflight before callbacks run or a
+    # class stylesheet is staged.
+    manifest = {
+        "fetch": {
+            "css": [
+                _b64(
+                    json.dumps(
+                        {
+                            "tag": "style",
+                            "attrs": {"data-citry-css-class": "MalformedRace"},
+                            "content": ".malformed-race{color:red}",
+                        }
+                    )
+                )
+            ]
+        },
+        "calls": [[_b64("MalformedRace"), _b64("MR1"), None, "init"]],
+        "cssInstances": [None],
+    }
+    base = _serve_runtime_page(serve_live)
+    page.goto(base + "/")
+
+    result = page.evaluate(
+        """
+        (manifest) => {
+          window.__malformedRaceCalls = 0;
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div class="malformed-race" data-cid-MR1>candidate</div>',
+          );
+          Citry.manager.registerComponent("MalformedRace", () => {
+            window.__malformedRaceCalls += 1;
+          });
+          let failed = false;
+          try {
+            Citry.manager._loadComponentScripts(manifest);
+          } catch (error) {
+            failed = error instanceof TypeError;
+          }
+          return {
+            failed,
+            calls: window.__malformedRaceCalls,
+            sheets: document.querySelectorAll('[data-citry-css-class="MalformedRace"]').length,
+          };
+        }
+        """,
+        manifest,
+    )
+    assert result == {"failed": True, "calls": 0, "sheets": 0}
 
 
 def test_component_css_survives_a_same_class_rerender_in_place(page: Any, serve_live: Any) -> None:

@@ -15,9 +15,11 @@ independently copyable application with its own `pyproject.toml`, lockfile,
 server command, and tests, use the
 [complete starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}.
 The collection includes standalone rendering, FastAPI, Django, Flask, bare
-ASGI, and bare WSGI, plus the larger Project Board demo. Every web starter
-shows the same Alpine and server Events behavior so the framework wiring is
-easy to compare.
+ASGI, and bare WSGI, plus the larger Project Board and HTMX integration demos.
+Every web starter shows the same Alpine and server Events behavior so the
+framework wiring is easy to compare. The HTMX demo instead shows how an
+existing application can keep using HTMX for requests and page updates while
+Citry renders the HTML, CSS, and JavaScript returned by each route.
 
 ## Try an example
 

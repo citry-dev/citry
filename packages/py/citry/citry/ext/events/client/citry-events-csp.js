@@ -8836,7 +8836,6 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             scheduleAnchorSweep();
             return;
           }
-          ownership._applyAdoptionPlan(ownershipPlan);
           if (parsed.dependencyTag && dependencyManifest) {
             try {
               dependencyPreparation = await ownership._prepareDependency(ownershipTransaction, dependencyManifest);
@@ -8847,17 +8846,18 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             if (selfRender && !epochAllowsApply(run, run.anchor)) {
               ownership._rollbackDependency(
                 dependencyPreparation,
-                new Error("the incoming render became stale while its framework manifests prepared")
+                new Error("the incoming render became stale while its dependency assets prepared")
               );
               dependencyPreparation = null;
               ownership._abortAdoption(
                 ownershipTransaction,
-                new Error("the incoming render became stale while its framework manifests prepared")
+                new Error("the incoming render became stale while its dependency assets prepared")
               );
               dropStaleEpoch(run, "a self-render");
               return;
             }
           }
+          ownership._applyAdoptionPlan(ownershipPlan);
         }
         const acceptedIncomingIds = ownershipPlan?.acceptedIncomingRenderIds ?? null;
         const frameworkManager = globalThis.Citry?.manager;

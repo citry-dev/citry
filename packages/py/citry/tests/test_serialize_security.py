@@ -545,7 +545,7 @@ class TestCspNonce:
         with pytest.raises(ValueError, match="Invalid csp_nonce"):
             Card().render().serialize(csp_nonce=nonce)
 
-    def test_nonces_structured_scripts_and_inline_styles_but_not_raw_markup_or_links(self):
+    def test_nonces_structured_scripts_and_stylesheets_but_not_raw_markup(self):
         nonce = "requestNonce123=="
         c = Citry()
 
@@ -566,7 +566,7 @@ class TestCspNonce:
         assert f'<script nonce="{nonce}">' in result.html
         assert f'src="https://cdn.example.test/chart.js" nonce="{nonce}"' in result.html
         assert re.search(rf'<style\b[^>]*nonce="{re.escape(nonce)}"', result.html)
-        assert '<link rel="stylesheet" href="https://cdn.example.test/chart.css"/>' in result.html
+        assert f'<link rel="stylesheet" href="https://cdn.example.test/chart.css" nonce="{nonce}"/>' in result.html
         assert result.security.scripts == ()
         assert result.security.csp_script_hashes == ()
 
@@ -716,6 +716,25 @@ class TestCspNonce:
         with pytest.raises(RuntimeError, match="on_dependencies"):
             Card().render().serialize_result(deps_strategy="simple", csp_nonce="requestNonce")
 
+    def test_later_string_hook_cannot_edit_a_nonced_stylesheet_link(self):
+        class EditStylesheet(Extension):
+            name = "edit_stylesheet"
+
+            def on_serialize(self, ctx):
+                return ctx.html.replace('nonce="requestNonce"', 'nonce="staleNonce"')
+
+        c = Citry(extensions=[EditStylesheet])
+
+        class Card(Component):
+            citry = c
+            template = "<p>card</p>"
+
+            class Dependencies:
+                css = [Style(url="https://cdn.example.test/card.css")]
+
+        with pytest.raises(RuntimeError, match="on_dependencies"):
+            Card().render().serialize_result(deps_strategy="simple", csp_nonce="requestNonce")
+
     def test_nonced_style_is_materialized_once(self):
         class StatefulStyle(Style):
             calls = 0
@@ -771,7 +790,7 @@ class TestCspNonce:
         inline_style = next(descriptor for descriptor in css_descriptors if descriptor["tag"] == "style")
         external_link = next(descriptor for descriptor in css_descriptors if descriptor["tag"] == "link")
         assert inline_style["attrs"]["nonce"] == nonce
-        assert "nonce" not in external_link["attrs"]
+        assert external_link["attrs"]["nonce"] == nonce
 
     def test_nonce_only_rejects_opaque_dependency_output(self):
         c = Citry()

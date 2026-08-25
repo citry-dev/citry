@@ -12,37 +12,37 @@ class Project:
 PROJECTS = (
     Project(
         name="Atlas",
-        summary="Turn field research into a searchable knowledge base.",
+        summary="Organize field notes and make them easy to search.",
         status="In review",
         language="Python",
     ),
     Project(
         name="Beacon",
-        summary="Track service health and make incident handoffs calmer.",
+        summary="Track service health and hand off incidents between teams.",
         status="Active",
         language="TypeScript",
     ),
     Project(
         name="Canopy",
-        summary="Give community gardens one shared seasonal plan.",
+        summary="Plan each season across a network of community gardens.",
         status="Planning",
         language="Python",
     ),
     Project(
         name="Drift",
-        summary="Compare design revisions without losing decisions.",
+        summary="Compare design revisions and keep decisions with the work.",
         status="Active",
         language="Rust",
     ),
     Project(
         name="Ember",
-        summary="Coordinate small grants from application to outcome.",
+        summary="Manage small grants from application through reporting.",
         status="In review",
         language="Python",
     ),
     Project(
         name="Fathom",
-        summary="Explain product metrics in language teams can act on.",
+        summary="Turn product metrics into explanations teams can use.",
         status="Planning",
         language="SQL",
     ),
@@ -50,7 +50,7 @@ PROJECTS = (
 
 
 def find_projects(query: str = "") -> tuple[Project, ...]:
-    """Return deterministic project records matching a user query."""
+    """Return sample projects whose visible fields contain the query."""
     normalized = query.strip().casefold()
     if not normalized:
         return PROJECTS

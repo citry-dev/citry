@@ -16,6 +16,7 @@ _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publi
 _CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
 _CITRY_LSP_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-lsp--publish.yml"
 _CITRY_UI_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-ui--publish.yml"
+_EXAMPLES_TEST_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--examples--tests.yml"
 _PYTHON_TEST_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--tests.yml"
 _ROOT_CARGO = REPO_ROOT / "Cargo.toml"
 _CORE_BINDING_CARGO = REPO_ROOT / "crates" / "citry_core_py" / "Cargo.toml"
@@ -24,6 +25,7 @@ _CORE_PYPROJECT = REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml
 _PLAYGROUND_RUNTIME = REPO_ROOT / "docs_site" / "static" / "playground" / "runtime.json"
 _PYODIDE_BUILDER = REPO_ROOT / "scripts" / "build_citry_core_pyodide_wheel.py"
 _DISTRIBUTION_VERIFIER = REPO_ROOT / "scripts" / "verify_citry_core_distribution.py"
+_DOCS_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--docs-release.yml"
 _DOCS_RUST_WORKFLOWS = tuple(
     REPO_ROOT / ".github" / "workflows" / name
     for name in (
@@ -48,6 +50,7 @@ _PYPI_ACTION = "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73
 _UV_ACTION = "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78"
 _SCCACHE_ACTION = "mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad"
 _RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+_PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
 
 
 def check() -> list[str]:
@@ -58,6 +61,7 @@ def check() -> list[str]:
         _CITRY_PUBLISH_WORKFLOW,
         _CITRY_LSP_PUBLISH_WORKFLOW,
         _CITRY_UI_PUBLISH_WORKFLOW,
+        _EXAMPLES_TEST_WORKFLOW,
         _PYTHON_TEST_WORKFLOW,
         _ROOT_CARGO,
         _CORE_BINDING_CARGO,
@@ -167,6 +171,32 @@ def check() -> list[str]:
             if workflow.count(setting) != rust_caches:
                 errors.append(f"every Rust cache in {label} must set {setting!r}")
 
+    for workflow_path in (
+        _EXAMPLES_TEST_WORKFLOW,
+        _DOCS_RELEASE_WORKFLOW.parent / "repo--docs-check.yml",
+        _DOCS_RELEASE_WORKFLOW,
+    ):
+        workflow = workflow_path.read_text(encoding="utf-8")
+        label = workflow_path.relative_to(REPO_ROOT)
+        uv_actions = len(re.findall(r"uses:\s+astral-sh/setup-uv@", workflow))
+        if workflow.count(f"uses: {_UV_ACTION}") != uv_actions:
+            errors.append(f"every uv setup in release-evidence workflow {label} must use the reviewed commit")
+        if workflow.count('version: "0.10.12"') != uv_actions:
+            errors.append(f"every uv setup in release-evidence workflow {label} must pin uv 0.10.12")
+        pnpm_actions = len(re.findall(r"uses:\s+pnpm/action-setup@", workflow))
+        if workflow.count(f"uses: {_PNPM_ACTION}") != pnpm_actions:
+            errors.append(f"every pnpm setup in release-evidence workflow {label} must use the reviewed commit")
+
+    examples_workflow = _EXAMPLES_TEST_WORKFLOW.read_text(encoding="utf-8")
+    examples_rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", examples_workflow))
+    if examples_workflow.count(f"uses: {_RUST_ACTION}") != examples_rust_actions:
+        errors.append("every examples evidence Rust setup must use the reviewed immutable action commit")
+    if examples_workflow.count('toolchain: "1.95.0"') != examples_rust_actions:
+        errors.append("every examples evidence Rust setup must pin the workspace MSRV")
+    examples_rust_caches = len(re.findall(r"uses:\s+Swatinem/rust-cache@", examples_workflow))
+    if examples_workflow.count(f"uses: {_RUST_CACHE_ACTION}") != examples_rust_caches:
+        errors.append("every examples evidence Rust cache must use the reviewed immutable action commit")
+
     pyodide: dict[str, object] = json.loads(_PYODIDE_CONFIG.read_text(encoding="utf-8"))
     if pyodide.get("rust") != f"{minimum}.0":
         errors.append(f"Pyodide Rust pin {pyodide.get('rust')!r} does not match Cargo minimum {minimum!r}")
@@ -267,8 +297,8 @@ def check() -> list[str]:
             errors.append(f"citry-core release immutability preflight is missing {marker!r}")
 
     citry_publish = _CITRY_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    if citry_publish.count(release_guard) != 2:
-        errors.append("citry publish selection and release jobs must both reject workflow_dispatch refs")
+    if citry_publish.count(release_guard) != 3:
+        errors.append("citry package, surface, and release jobs must reject workflow_dispatch refs")
     if citry_publish.count(f"uses: {_PYPI_ACTION}") != 1:
         errors.append("citry Trusted Publishing must use the reviewed immutable action commit")
     if citry_publish.count(f"uses: {_UV_ACTION}") != len(re.findall(r"uses:\s+astral-sh/setup-uv@", citry_publish)):
@@ -277,18 +307,52 @@ def check() -> list[str]:
         errors.append("citry release retries must fail closed instead of replacing or skipping artifacts")
     for marker in (
         "select-qualification:",
+        "select-release-surfaces:",
+        "citry@publish-*",
+        "promotion_kind=staged",
+        "Require a surface-only final commit",
+        'git diff --name-only --no-renames -z "$STAGE_SHA" HEAD',
+        'git show "$STAGE_SHA:examples/catalog.toml"',
+        'for name in ("README.md", "pyproject.toml", "uv.lock"):',
+        'grep -Fqx -- "$path" "$allowed_paths"',
+        "needs: [verify-version, select-qualification]",
         "--workflow py--citry--publish.yml",
         "--artifact-name verified-citry-distributions",
-        "needs: [verify-version, select-qualification]",
+        "--artifact-name citry-example-projects-public",
+        "--workflow repo--docs-check.yml",
+        "--event push",
+        "--no-artifact",
+        "examples.tools.release_gate",
+        "needs: [verify-version, select-qualification, select-release-surfaces]",
         "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
         "--promote-archive qualification.zip",
         "retention-days: 14",
-        "Require a new PyPI version and GitHub Release",
+        "Verify public artifacts and final-release preconditions",
+        "final Citry release requires its staged public PyPI pair",
+        "public PyPI artifacts differ from the exact qualified release pair",
+        "if: steps.public-state.outputs.publish == 'true'",
+        "if: needs.verify-version.outputs.promotion_kind == 'release'",
+        "release-surface-provenance.json",
         "https://pypi.org/pypi/citry/${CITRY_VERSION}/json",
         "releases/tags/$GITHUB_REF_NAME",
     ):
         if marker not in citry_publish:
             errors.append(f"citry release immutability preflight is missing {marker!r}")
+    if "examples/*|docs_site/static/playground/runtime.json" in citry_publish:
+        errors.append("Citry's final-stage allowlist must not admit arbitrary example files")
+
+    docs_release = _DOCS_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    release_gate = "Require the completed Citry GitHub Release"
+    snapshot = "Build & commit the version snapshot"
+    for marker in (
+        release_gate,
+        'gh api "repos/$GITHUB_REPOSITORY/releases/tags/$REF_NAME"',
+        snapshot,
+    ):
+        if marker not in docs_release:
+            errors.append(f"Citry docs release gate is missing {marker!r}")
+    if docs_release.find(release_gate) > docs_release.find(snapshot):
+        errors.append("Citry docs must require the final GitHub Release before committing its version snapshot")
 
     citry_lsp_publish = _CITRY_LSP_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     if citry_lsp_publish.count(release_guard) != 2:

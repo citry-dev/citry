@@ -146,6 +146,7 @@ def test_worker_revalidates_the_coupled_runtime_files() -> None:
 def test_runtime_manifest_pins_the_complete_published_tuple() -> None:
     runtime = json.loads(_RUNTIME.read_text(encoding="utf-8"))
     packages = {package["name"]: package for package in runtime["packages"]}
+    citry_version = runtime["citry"]["version"]
 
     assert runtime["pyodide"] == {
         "version": "314.0.3",
@@ -154,7 +155,7 @@ def test_runtime_manifest_pins_the_complete_published_tuple() -> None:
         "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs",
     }
     assert runtime["citry"] == {
-        "version": "0.4.3",
+        "version": citry_version,
         "core_version": "1.6.0",
         "ui_version": "0.2.0",
     }
@@ -168,8 +169,8 @@ def test_runtime_manifest_pins_the_complete_published_tuple() -> None:
             "citry_core-1.6.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
         ),
     }
-    assert packages["citry"]["version"] == "0.4.3"
-    assert packages["citry"]["url"].endswith("/citry-0.4.3-py3-none-any.whl")
+    assert packages["citry"]["version"] == citry_version
+    assert packages["citry"]["url"].endswith(f"/citry-{citry_version}-py3-none-any.whl")
     assert packages["citry-ui"]["version"] == "0.2.0"
     assert packages["citry-ui"]["url"].endswith("/citry_ui-0.2.0-py3-none-any.whl")
 

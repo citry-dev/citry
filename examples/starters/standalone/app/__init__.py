@@ -1,1 +1,1 @@
-"""Standalone Citry example application."""
+"""Render the Project Explorer without a web server."""

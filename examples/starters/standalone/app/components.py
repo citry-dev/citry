@@ -25,18 +25,21 @@ class PageShell(Component):
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta
             name="description"
-            content="A standalone Project Explorer built with Citry"
+            content="Render an interactive Citry page without a web server"
           />
           <title>{{ title }}</title>
           <c-css />
         </head>
         <body>
+          <a class="skip-link" href="#main-content">Skip to content</a>
           <header class="site-header">
-            <a class="brand" href="#main-content" aria-label="Project Explorer home">
-              <span class="brand__mark" aria-hidden="true">C</span>
-              <span>Project Explorer</span>
-            </a>
-            <span class="mode-pill">Standalone document</span>
+            <div class="site-header__inner">
+              <a class="brand" href="./index.html">
+                <span class="brand__name">Citry</span>
+              </a>
+              <span class="site-title">Project Explorer</span>
+              <span class="mode-label">Standalone document</span>
+            </div>
           </header>
           <main id="main-content" class="page-frame">
             <c-slot name="header" />
@@ -50,116 +53,183 @@ class PageShell(Component):
     css = """
       :root {
         color-scheme: light;
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
-        color: #16231d;
-        background: #f4f1e8;
+        --page-gutter: 1.5rem;
+        --color-page: oklch(96.5% 0.005 250);
+        --color-surface: oklch(94.5% 0.006 250);
+        --color-input: oklch(99% 0.002 250);
+        --color-text: oklch(25% 0.01 250);
+        --color-muted: oklch(40% 0.01 250);
+        --color-faint: oklch(50% 0.01 250);
+        --color-border: oklch(88% 0.005 250);
+        --color-border-subtle: oklch(92% 0.005 250);
+        --color-input-border: oklch(65% 0.01 250);
+        --color-accent: oklch(55% 0.13 195);
+        --color-accent-hover: oklch(48% 0.13 195);
+        --color-accent-ink: oklch(46% 0.13 195);
+        --color-accent-soft: oklch(55% 0.13 195 / 10%);
+        --color-link: oklch(52% 0.15 245);
+        --color-link-hover: oklch(48% 0.15 245);
+        --color-link-soft: oklch(55% 0.15 245 / 10%);
+        --color-primary: oklch(48% 0.13 195);
+        --color-primary-ink: #fff;
+        --color-danger: oklch(50% 0.18 25);
+        --color-focus: oklch(55% 0.13 195);
+        color: var(--color-muted);
+        background: var(--color-page);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         font-synthesis: none;
       }
 
-      * { box-sizing: border-box; }
+      @media (min-width: 48rem) {
+        :root { --page-gutter: 2rem; }
+      }
+
+      @media (min-width: 80rem) {
+        :root { --page-gutter: 3rem; }
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+
+      html {
+        min-width: 20rem;
+        font-size: 90%;
+        scroll-padding-top: 5rem;
+      }
 
       [x-cloak] { display: none !important; }
 
       body {
-        min-width: 20rem;
         min-height: 100vh;
         margin: 0;
-        background:
-          radial-gradient(circle at 10% 0%, rgb(255 255 255 / 0.9), transparent 28rem),
-          #f4f1e8;
+        color: var(--color-muted);
+        background: var(--color-page);
+        font-size: 1rem;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
       button, input { font: inherit; }
 
       button:focus-visible, input:focus-visible, a:focus-visible {
-        outline: 3px solid #cf5c36;
-        outline-offset: 3px;
+        outline: 2px solid var(--color-focus);
+        outline-offset: 2px;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 30;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.45rem 0.7rem;
+        border-radius: 0.375rem;
+        color: var(--color-primary-ink);
+        background: var(--color-primary);
+        font-weight: 650;
+        transform: translateY(-170%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
       }
 
       .site-header {
+        position: fixed;
+        z-index: 20;
+        top: 0;
+        right: 0;
+        left: 0;
+        height: 4rem;
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-page);
+      }
+
+      .site-header__inner {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        min-height: 4.5rem;
-        padding: 0.85rem clamp(1rem, 5vw, 4rem);
-        color: #f7f4ec;
-        background: #163c32;
+        gap: 0.6rem;
+        width: min(80rem, 100%);
+        height: 100%;
+        margin-inline: auto;
+        padding-inline: var(--page-gutter);
       }
 
       .brand {
         display: inline-flex;
         align-items: center;
-        gap: 0.7rem;
-        color: inherit;
-        font-weight: 750;
-        letter-spacing: -0.02em;
+        color: var(--color-text);
         text-decoration: none;
       }
 
-      .brand__mark {
-        display: grid;
-        width: 2.1rem;
-        height: 2.1rem;
-        place-items: center;
-        border: 1px solid rgb(255 255 255 / 0.35);
-        border-radius: 0.65rem;
-        color: #163c32;
-        background: #f1bb69;
+      .brand__name {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
       }
 
-      .mode-pill {
-        padding: 0.38rem 0.7rem;
-        border: 1px solid rgb(255 255 255 / 0.25);
-        border-radius: 999px;
-        font-size: 0.78rem;
+      .site-title {
+        margin-left: 0.3rem;
+        padding-left: 0.9rem;
+        border-left: 1px solid var(--color-border);
+        color: var(--color-muted);
+        font-size: 0.88rem;
+      }
+
+      .mode-label {
+        margin-left: auto;
+        color: var(--color-accent-ink);
+        font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+        font-size: 0.65rem;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
       .page-frame {
-        width: min(72rem, calc(100% - 2rem));
-        margin: 0 auto;
-        padding: clamp(2.5rem, 7vw, 6rem) 0;
+        width: min(68rem, calc(100% - (2 * var(--page-gutter))));
+        margin-inline: auto;
+        padding: 6.5rem 0 4rem;
       }
 
       .hero {
         display: grid;
-        max-width: 50rem;
-        gap: 1rem;
-        margin-bottom: 2.2rem;
+        max-width: 45rem;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
       }
 
       .eyebrow {
-        margin: 0;
-        color: #a04426;
-        font-size: 0.78rem;
-        font-weight: 800;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
+        margin: 0 0 0.15rem;
+        color: var(--color-muted);
       }
 
       h1 {
-        max-width: 13ch;
         margin: 0;
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: clamp(2.8rem, 8vw, 5.7rem);
-        font-weight: 500;
-        letter-spacing: -0.055em;
-        line-height: 0.94;
+        color: var(--color-text);
+        font-size: 2.25rem;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.3;
       }
 
       .hero__intro {
         max-width: 43rem;
         margin: 0;
-        color: #526159;
-        font-size: clamp(1rem, 2vw, 1.2rem);
-        line-height: 1.65;
+        color: var(--color-muted);
+        font-size: 1.05rem;
       }
 
       @media (max-width: 35rem) {
-        .site-header { align-items: flex-start; }
-        .mode-pill { display: none; }
+        .site-title { display: none; }
+
+        .mode-label {
+          max-width: 10rem;
+          text-align: right;
+        }
+
+        .page-frame { padding-top: 6rem; }
+
+        h1 { font-size: 2rem; }
       }
     """
 
@@ -190,7 +260,7 @@ class ProjectCard(Component):
           <span class="project-card__status">{{ status }}</span>
         </div>
         <div>
-          <h2>{{ name }}</h2>
+          <h3>{{ name }}</h3>
           <p>{{ summary }}</p>
         </div>
         <footer>
@@ -203,14 +273,13 @@ class ProjectCard(Component):
     css = """
       .project-card {
         display: grid;
-        min-height: 16rem;
-        gap: 1.7rem;
+        min-height: 13rem;
+        gap: 1.25rem;
         align-content: space-between;
-        padding: 1.35rem;
-        border: 1px solid #d9d4c8;
-        border-radius: 1rem;
-        background: rgb(255 255 255 / 0.76);
-        box-shadow: 0 0.7rem 2rem rgb(34 49 42 / 0.06);
+        padding: 1.2rem;
+        border: 1px solid var(--color-border);
+        border-radius: 0.5rem;
+        background: var(--color-surface);
       }
 
       .project-card__topline, .project-card footer {
@@ -222,40 +291,40 @@ class ProjectCard(Component):
 
       .project-card__initial {
         display: grid;
-        width: 2.7rem;
-        height: 2.7rem;
+        width: 2.4rem;
+        height: 2.4rem;
         place-items: center;
-        border-radius: 0.75rem;
-        color: #f9f6ed;
-        background: #1f5948;
-        font-weight: 800;
-      }
-
-      .project-card__status {
-        padding: 0.3rem 0.6rem;
-        border-radius: 999px;
-        color: #81401f;
-        background: #f6dfbd;
-        font-size: 0.75rem;
+        border-radius: 0.375rem;
+        color: var(--color-primary-ink);
+        background: var(--color-primary);
         font-weight: 750;
       }
 
-      .project-card h2 {
+      .project-card__status {
+        padding: 0.22rem 0.5rem;
+        border-radius: 999px;
+        color: var(--color-accent-ink);
+        background: var(--color-accent-soft);
+        font-size: 0.75rem;
+        font-weight: 650;
+      }
+
+      .project-card h3 {
         margin: 0 0 0.55rem;
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: 1.7rem;
-        font-weight: 500;
+        color: var(--color-text);
+        font-size: 1.2rem;
+        font-weight: 700;
       }
 
       .project-card p {
         margin: 0;
-        color: #5c685f;
+        color: var(--color-muted);
         line-height: 1.55;
       }
 
       .project-card footer {
         justify-content: flex-start;
-        color: #69766d;
+        color: var(--color-faint);
         font-size: 0.82rem;
       }
 
@@ -263,7 +332,7 @@ class ProjectCard(Component):
         width: 0.55rem;
         height: 0.55rem;
         border-radius: 50%;
-        background: #cf5c36;
+        background: var(--color-link);
       }
     """
 
@@ -291,7 +360,7 @@ class ProjectExplorer(Component):
         <div class="explorer__toolbar">
           <div>
             <h2 id="project-list-heading">Current projects</h2>
-            <p>{{ result_count }} projects supplied by Python</p>
+            <p>{{ result_count }} projects rendered from Python</p>
           </div>
           <button
             class="help-button"
@@ -301,16 +370,16 @@ class ProjectExplorer(Component):
             aria-controls="explorer-help"
           >
             <span aria-hidden="true">?</span>
-            <span x-text="tipsOpen ? 'Hide how it works' : 'Show how it works'">
-              Show how it works
+            <span x-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
+              How this page works
             </span>
           </button>
         </div>
 
         <aside id="explorer-help" class="explorer__help" x-cloak x-show="tipsOpen">
-          <strong>This toggle stays in the browser.</strong>
-          Alpine owns <code>tipsOpen</code>, so showing this panel does not
-          rerun Python or require a web server.
+          <strong>Opening this panel does not call Python.</strong>
+          Alpine stores whether the panel is open in your browser, so the page
+          stays interactive after Python finishes rendering it.
         </aside>
 
         <div class="project-grid">
@@ -325,6 +394,8 @@ class ProjectExplorer(Component):
       .explorer {
         display: grid;
         gap: 1.25rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--color-border-subtle);
       }
 
       .explorer__toolbar {
@@ -332,30 +403,38 @@ class ProjectExplorer(Component):
         align-items: end;
         justify-content: space-between;
         gap: 1rem;
-        padding-bottom: 1rem;
-        border-bottom: 1px solid #d4cec0;
       }
 
       .explorer__toolbar h2 {
         margin: 0 0 0.25rem;
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: clamp(1.6rem, 4vw, 2.2rem);
-        font-weight: 500;
+        color: var(--color-text);
+        font-size: 1.5rem;
+        font-weight: 700;
       }
 
-      .explorer__toolbar p { margin: 0; color: #647168; }
+      .explorer__toolbar p {
+        margin: 0;
+        color: var(--color-faint);
+      }
 
       .help-button {
         display: inline-flex;
         align-items: center;
         gap: 0.55rem;
-        min-height: 2.7rem;
-        padding: 0.55rem 0.8rem;
-        border: 1px solid #b9b3a6;
-        border-radius: 0.7rem;
-        color: #263b31;
+        min-height: 2.6rem;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--color-border);
+        border-radius: 0.375rem;
+        color: var(--color-link);
         background: transparent;
+        font-weight: 650;
         cursor: pointer;
+      }
+
+      .help-button:hover {
+        border-color: var(--color-link);
+        color: var(--color-link-hover);
+        background: var(--color-link-soft);
       }
 
       .help-button > span:first-child {
@@ -364,20 +443,22 @@ class ProjectExplorer(Component):
         height: 1.45rem;
         place-items: center;
         border-radius: 50%;
-        color: #fff;
-        background: #cf5c36;
+        color: var(--color-primary-ink);
+        background: var(--color-link);
         font-weight: 800;
       }
 
       .explorer__help {
         padding: 1rem 1.15rem;
-        border-left: 0.3rem solid #cf5c36;
-        color: #4d5a52;
-        background: #fffbf2;
+        border: 1px solid var(--color-border);
+        border-left: 0.25rem solid var(--color-link);
+        border-radius: 0.5rem;
+        color: var(--color-muted);
+        background: var(--color-link-soft);
         line-height: 1.55;
       }
 
-      .explorer__help strong { color: #263b31; }
+      .explorer__help strong { color: var(--color-text); }
 
       .project-grid {
         display: grid;
@@ -409,11 +490,10 @@ class ProjectPage(Component):
         <c-fill name="header">
           <section class="hero">
             <p class="eyebrow">Citry standalone starter</p>
-            <h1>Useful pages start with ordinary Python data.</h1>
+            <h1>Render an interactive page without a web server.</h1>
             <p class="hero__intro">
-              This self-contained document passes rich records through a
-              component tree, collects CSS and JavaScript once, and adds local
-              Alpine behavior without a web framework.
+              Python renders the project cards and bundles the page's CSS and
+              JavaScript. Alpine opens the help panel after you open the file.
             </p>
           </section>
         </c-fill>

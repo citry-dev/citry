@@ -563,13 +563,18 @@ to be inserted into an already-loaded page (HTMX swap, Unpoly, Turbo,
 A component fragment may also carry inert ownership, Events, i18n, or other
 framework manifests beside the exec manifest. Events parses this complete
 package once. The ownership/morph planner first produces an unpublished set of
-accepted incoming render IDs. Registered framework-manifest handlers then run
-asynchronous `prepare` hooks against that owner filter; only after every prepare
-succeeds does Events insert the fragment, commit the handlers, and release
-component activation. Rollback runs in reverse order and leaves the old live
-region unchanged when preparation fails. A handler therefore may load and
-validate data before incoming Alpine directives or `$component` callbacks can
-observe the fragment.
+accepted incoming render IDs. Core dependency preparation preflights CSS-only
+instance records, loads all accepted stylesheets and sequential scripts, and
+stages the graph calls while the candidate fragment remains detached.
+Registered framework-manifest handlers also run asynchronous `prepare` hooks
+against that owner filter. Only after every preparation succeeds does Events
+insert the fragment, commit the handlers, and release component activation.
+Rollback runs in reverse order. If an accepted `fetch` CSS or JavaScript asset
+fails to load, Citry does not insert the candidate fragment or replace its
+ownership graph, and it removes styles introduced solely by that transaction.
+Those prepared dependencies do not begin network requests after the fragment
+is inserted. Arbitrary `beforeManifest` descriptors retain their existing
+post-insertion commit semantics.
 
 A page rendered with `document` strategy emits a mark-as-loaded manifest, so
 a later fragment referencing the same component fetches nothing. Each manifest
@@ -669,10 +674,14 @@ concept.
 - **`Component.css` cleanup on the last instance of a class.** A
   class-level `Component.css` sheet is tagged
   `data-citry-css-class="<class>"` at emission (7, and the serializer note
-  below). The manager removes that sheet when the last live instance of the
-  class leaves the DOM, so a class that is gone from the page stops carrying
-  its stylesheet. The per-render CSS-variables sheets (`data-ccss-<hash>`,
-  5.2) are left in place for now; reclaiming them is out of scope here.
+  below). A document's inline sheet also stores its equivalent fragment URL in
+  `data-citry-css-url`. When the manager removes the sheet, it uses that
+  attribute to clear the URL that the document manifest marked as loaded. The
+  manager removes that sheet when the last live instance of the class leaves
+  the DOM, so a class that is gone from the page stops carrying its stylesheet
+  and a later fragment can fetch it again. The per-render CSS-variables sheets
+  (`data-ccss-<hash>`, 5.2) are left in place for now; reclaiming them is out of
+  scope here.
 
   **This cleanup must be deferred to a later task, not run the instant an
   instance retires.** A component that re-renders in place first retires its
@@ -682,23 +691,34 @@ concept.
   the check inline would drop the class's sheet on every such re-render.
   Deferring the check to a later task and re-counting the live instances then
   lets the arriving same-class render cancel it; a genuine last-instance
-  departure still collects the sheet. Collection clears the stylesheet's
-  loaded marker, so a later instance can fetch and apply the URL again.
+  departure still collects the sheet. While a replacement manifest loads its
+  assets, the manager removes stale same-class sheets but keeps each incoming
+  link through the stylesheet request, later scripts, and extension setup. It
+  registers the manifest's instances before releasing those links and checking
+  again. When same-class manifests overlap, each keeps the others' links until
+  they finish. A successful manifest can then remove the prior render's sheet
+  without deleting a still-loading sibling's sheet. If any stylesheet, script,
+  or extension setup fails, the manager removes only sheets introduced solely
+  by that manifest. It keeps a sheet shared with another pending manifest or a
+  live instance. Once no instance or pending manifest remains, the manager
+  removes every class sheet and clears each URL from its loaded set, so a later
+  instance can fetch it again.
 - **Re-entrant flush safety.** When the manager flushes queued calls it
   snapshots and clears the pending list before iterating it, so a callback
   or context decorator that synchronously triggers another flush cannot
   re-run a call that is still in flight. This keeps a nested flush from
   firing a cleanup twice or recursing without bound.
 
-Two matching additions belong to the serializer that emits the manifests
+Three matching additions belong to the serializer that emits the manifests
 (7), not to this runtime: tagging each `Component.css` sheet with
-`data-citry-css-class="<class>"` so the cleanup can find it, and emitting a
-small instance-to-class presence record for instances that carry CSS but no
-`$component` JS, so the manager can still count a class's live instances
-when nothing else registers them. The record's shape, pinned by the WP4
-amendment that consumes it: a top-level `cssInstances` key holding a list
-of `[classId, componentId]` pairs, each element base64-armored like the
-`calls` entries.
+`data-citry-css-class="<class>"` so the cleanup can find it; recording the
+equivalent fragment URL on a document's inline sheet as
+`data-citry-css-url="<url>"`; and emitting a small instance-to-class presence
+record for instances that carry CSS but no `$component` JS, so the manager can
+still count a class's live instances when nothing else registers them. The
+record's shape, pinned by the WP4 amendment that consumes it: a top-level
+`cssInstances` key holding a list of `[classId, componentId]` pairs, each
+element base64-armored like the `calls` entries.
 
 ---
 

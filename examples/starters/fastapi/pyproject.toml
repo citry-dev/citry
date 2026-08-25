@@ -1,7 +1,7 @@
 [project]
 name = "citry-example-fastapi"
 version = "0.1.0"
-description = "A complete Citry starter for FastAPI"
+description = "Run the Citry Project Explorer with FastAPI"
 requires-python = ">=3.10,<4"
 dependencies = [
   "citry>=0.4.3,<0.5",

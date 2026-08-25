@@ -1,6 +1,6 @@
 # Design: documentation for Community packages
 
-**Status (2026-08-23): Implemented for manual curation. Automated discovery is
+**Status (2026-08-25): Implemented for manual curation. Automated discovery is
 designed but not implemented.**
 
 This document defines the package directories published by the Citry
@@ -106,11 +106,9 @@ YAML keys, and duplicate normalized distributions fail validation. The catalog
 may be empty so an honest empty state remains representable.
 
 The initial entries are Citry UI, the first-party UI library, and Citry Django,
-an independently maintained extension preview. Citry Django is not published
-on PyPI. Its package metadata declares MIT, while its repository does not yet
-contain a license file. Its structured notice presents both facts in the HTML
-card and Markdown projection. The directory therefore presents it as a
-source-only preview and does not imply that Citry has audited it.
+an independently maintained extension published on PyPI. Citry Django's
+repository includes an MIT license. The directory identifies its independent
+ownership and does not imply that Citry has audited it.
 
 ## Data flow and publication lifecycle
 

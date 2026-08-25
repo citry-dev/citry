@@ -137,6 +137,19 @@
   // Class ids with a deferred Component.css collection already queued, so a
   // burst of retirements queues one re-check per class, not many.
   var cssGcPending = new Set();
+  // classId -> stylesheet elements protected by an arriving same-class
+  // render. Fragment callbacks wait for their stylesheets before registering
+  // their instances, so collection may observe these links while the class
+  // still appears empty.
+  var cssGcProtected = new Map();
+  // classId -> dependency transactions that are still loading or preparing
+  // assets. Keeping each transaction lets one same-class arrival protect
+  // links used by another overlapping arrival.
+  var stagedCssTransactions = new Map();
+  // classId -> stylesheet elements adopted by the latest successful
+  // transaction. A later failing transaction must not remove a shared link
+  // that an already-live sibling now owns.
+  var activeClassCss = new Map();
   // revision -> fully validated, decoded ownership graph. A revision is
   // committed only after every logical reference and physical comment cap
   // passes validation.
@@ -4021,7 +4034,6 @@
   var reconcileComponentLifecycles = function () {
     lifecycleReconcileScheduled = false;
     if (rangeMorphDepth > 0 || ownershipAdoptionDepth > 0) {
-      scheduleLifecycleReconcile();
       return;
     }
     reconcilePhysicalRangeGroups();
@@ -6163,6 +6175,7 @@
     transaction.status = "aborted";
     state.adoption.status = "aborted";
     failOwnershipManifest(transaction.revision, failure);
+    scheduleLifecycleReconcile();
   };
 
   var discardOwnershipAdoption = function (transaction) {
@@ -6181,6 +6194,7 @@
     ownershipAdoptionDepth = Math.max(0, ownershipAdoptionDepth - 1);
     transaction.status = "discarded";
     state.adoption.status = "discarded";
+    scheduleLifecycleReconcile();
     scheduleOwnershipPrune();
   };
 
@@ -6334,10 +6348,17 @@
     };
   };
 
+  var descriptorUsesNonce = function (descriptor) {
+    var tag = descriptor.tag.toLowerCase();
+    if (tag === "script" || tag === "style") return true;
+    if (tag !== "link") return false;
+    var rel = descriptor.attrs && descriptor.attrs.rel;
+    return typeof rel === "string" && rel.toLowerCase().split(/\s+/).indexOf("stylesheet") !== -1;
+  };
+
   var validateDescriptorNonce = function (descriptor) {
     if (!documentNonce) return;
-    var tag = descriptor.tag.toLowerCase();
-    if (tag !== "script" && tag !== "style") return;
+    if (!descriptorUsesNonce(descriptor)) return;
     var declared = descriptorNonce(descriptor);
     if (declared.present && (typeof declared.value !== "string" || declared.value !== documentNonce)) {
       throw new TypeError("[Citry] dependency descriptor nonce differs from the loaded document nonce.");
@@ -6352,7 +6373,7 @@
       if (value === true) el.setAttribute(name, "");
       else if (value !== false && value != null) el.setAttribute(name, String(value));
     });
-    if (documentNonce && (descriptor.tag.toLowerCase() === "script" || descriptor.tag.toLowerCase() === "style")) {
+    if (documentNonce && descriptorUsesNonce(descriptor)) {
       el.setAttribute("nonce", documentNonce);
     }
     if (descriptor.content) el.textContent = descriptor.content;
@@ -6429,11 +6450,12 @@
   };
 
   // Append a <link rel="stylesheet"> (or inline <style>) descriptor to <head>.
-  var loadCss = function (descriptor) {
+  var loadCss = function (descriptor, cssTransaction) {
     var url = descriptor.attrs && descriptor.attrs.href;
     if (url && loadingCss.has(url)) return loadingCss.get(url).promise;
     if (url && isScriptLoaded("css", url)) return Promise.resolve();
     var el = createElement(descriptor);
+    recordCssTransactionElement(cssTransaction, descriptor, el);
     if (!url) {
       document.head.appendChild(el);
       return Promise.resolve();
@@ -6450,12 +6472,14 @@
     el.onload = function () {
       if (loadingCss.get(url) !== entry) return;
       loadingCss.delete(url);
+      resumeClassCssGc(el);
       resolveLoad();
     };
     el.onerror = function (event) {
       if (loadingCss.get(url) !== entry) return;
       loadingCss.delete(url);
       loaded.css.delete(url);
+      resumeClassCssGc(el);
       rejectLoad(event);
     };
     document.head.appendChild(el);
@@ -7190,13 +7214,174 @@
     return n;
   };
 
+  // Links for one class whose network request has not settled yet. These are
+  // part of an arriving render even though that render cannot register its
+  // component instances until Promise.all(styles) resolves.
+  var loadingClassCssElements = function (classId) {
+    var elements = new Set();
+    loadingCss.forEach(function (entry) {
+      if (entry.element.getAttribute("data-citry-css-class") === classId) {
+        elements.add(entry.element);
+      }
+    });
+    return elements;
+  };
+
+  // Hold collection for every class stylesheet carried by one dependency
+  // manifest. The token makes release idempotent because graph transactions
+  // can report an asset failure through more than one cleanup boundary.
+  var stageCssTransaction = function (styleDescriptors) {
+    var classIds = new Set();
+    var urlsByClass = new Map();
+    styleDescriptors.forEach(function (descriptor) {
+      var classId = descriptor.attrs && descriptor.attrs["data-citry-css-class"];
+      if (!classId) return;
+      classIds.add(classId);
+      var url = descriptor.attrs.href || descriptor.attrs["data-citry-css-url"];
+      if (url) {
+        var urls = urlsByClass.get(classId);
+        if (!urls) urlsByClass.set(classId, (urls = new Set()));
+        urls.add(url);
+      }
+    });
+    var transaction = {
+      classIds: classIds,
+      urlsByClass: urlsByClass,
+      elementsByClass: new Map(),
+      released: false,
+    };
+    classIds.forEach(function (classId) {
+      var transactions = stagedCssTransactions.get(classId);
+      if (!transactions) stagedCssTransactions.set(classId, (transactions = new Set()));
+      transactions.add(transaction);
+    });
+    return transaction;
+  };
+
+  var recordCssTransactionClassElement = function (transaction, classId, el) {
+    var elements = transaction.elementsByClass.get(classId);
+    if (!elements) transaction.elementsByClass.set(classId, (elements = new Set()));
+    elements.add(el);
+  };
+
+  var recordCssTransactionElement = function (transaction, descriptor, el) {
+    if (!transaction) return;
+    var classId = descriptor.attrs && descriptor.attrs["data-citry-css-class"];
+    if (!classId) return;
+    recordCssTransactionClassElement(transaction, classId, el);
+  };
+
+  var cssElementsForTransactionClass = function (transaction, classId) {
+    var elements = new Set();
+    (transaction.elementsByClass.get(classId) || []).forEach(function (el) {
+      if (el.isConnected) elements.add(el);
+    });
+    var urls = transaction.urlsByClass.get(classId);
+    if (urls) {
+      document.querySelectorAll('[data-citry-css-class="' + classId + '"]').forEach(function (el) {
+        var url = el.getAttribute("href") || el.getAttribute("data-citry-css-url");
+        if (url && urls.has(url)) elements.add(el);
+      });
+    }
+    return elements;
+  };
+
+  // When a manifest activates, keep the exact links it used (or an existing
+  // same-URL document style that satisfied dedupe) and remove older
+  // same-class sheets. Also keep links from sibling manifests that are still
+  // loading.
+  var protectActivatedCssTransaction = function (transaction) {
+    transaction.classIds.forEach(function (classId) {
+      var protectedElements = cssElementsForTransactionClass(transaction, classId);
+      if (protectedElements.size > 0) activeClassCss.set(classId, new Set(protectedElements));
+      var staged = stagedCssTransactions.get(classId);
+      if (staged) {
+        staged.forEach(function (other) {
+          cssElementsForTransactionClass(other, classId).forEach(function (el) {
+            protectedElements.add(el);
+          });
+        });
+      }
+      if (protectedElements.size === 0) return;
+      removeClassCss(classId, protectedElements);
+      if (cssGcPending.has(classId)) cssGcProtected.set(classId, protectedElements);
+    });
+  };
+
+  // A failed transaction owns no live instances. Remove only the elements it
+  // introduced; every other same-class sheet may still serve an older live
+  // render or another staged transaction.
+  var discardFailedCssTransaction = function (transaction) {
+    transaction.classIds.forEach(function (classId) {
+      var failedElements = new Set();
+      (transaction.elementsByClass.get(classId) || []).forEach(function (el) {
+        if (el.isConnected) failedElements.add(el);
+      });
+      (activeClassCss.get(classId) || []).forEach(function (el) {
+        failedElements.delete(el);
+      });
+      var staged = stagedCssTransactions.get(classId);
+      if (staged) {
+        staged.forEach(function (other) {
+          if (other === transaction) return;
+          cssElementsForTransactionClass(other, classId).forEach(function (el) {
+            if (failedElements.has(el)) {
+              // The creator failed, but this deduped sibling still owns the
+              // shared request. Transfer explicit ownership so the final
+              // sibling can remove the element if every transaction fails.
+              recordCssTransactionClassElement(other, classId, el);
+            }
+            failedElements.delete(el);
+          });
+        });
+      }
+      if (failedElements.size === 0) return;
+      var protectedElements = new Set();
+      document.querySelectorAll('[data-citry-css-class="' + classId + '"]').forEach(function (el) {
+        if (!failedElements.has(el)) protectedElements.add(el);
+      });
+      removeClassCss(classId, protectedElements);
+    });
+  };
+
+  var finishCssTransaction = function (transaction, activated) {
+    if (!transaction || transaction.released) return;
+    transaction.released = true;
+    if (activated) protectActivatedCssTransaction(transaction);
+    else discardFailedCssTransaction(transaction);
+    transaction.classIds.forEach(function (classId) {
+      var transactions = stagedCssTransactions.get(classId);
+      if (transactions) {
+        transactions.delete(transaction);
+        if (transactions.size === 0) stagedCssTransactions.delete(classId);
+      }
+      if (cssGcPending.has(classId)) {
+        setTimeout(function () {
+          runScheduledCssGc(classId);
+        }, 0);
+      }
+    });
+  };
+
   // Remove a class-level Component.css sheet, the one the server tags with
   // data-citry-css-class. A sheet whose class has no live instance left has
-  // nothing to style, so it is dropped.
-  var removeClassCss = function (classId) {
+  // nothing to style, so it is dropped. An arriving render can protect its
+  // own links while stale sheets for the same class are retired.
+  var removeClassCss = function (classId, protectedElements) {
+    var protectedUrls = new Set();
+    if (protectedElements) {
+      protectedElements.forEach(function (el) {
+        var url = el.getAttribute("href") || el.getAttribute("data-citry-css-url");
+        if (url) protectedUrls.add(url);
+      });
+    }
     document.querySelectorAll('[data-citry-css-class="' + classId + '"]').forEach(function (el) {
-      var url = el.getAttribute("href");
-      if (url) {
+      if (protectedElements && protectedElements.has(el)) return;
+      // A fragment sheet carries its URL as href. A document sheet is inline,
+      // but the server records the equivalent fragment URL on the style so
+      // removing either form can clear the same page-lifetime loaded marker.
+      var url = el.getAttribute("href") || el.getAttribute("data-citry-css-url");
+      if (url && !protectedUrls.has(url)) {
         loaded.css.delete(url);
         var loading = loadingCss.get(url);
         if (loading && loading.element === el) {
@@ -7206,6 +7391,62 @@
       }
       el.remove();
     });
+  };
+
+  // Re-run a pending class collection after one of its replacement links
+  // settles. Promise continuations run before this later task, giving the
+  // fragment time to register the instances that the stylesheet belongs to.
+  var resumeClassCssGc = function (el) {
+    var classId = el.getAttribute("data-citry-css-class");
+    if (!classId || !cssGcPending.has(classId)) return;
+    setTimeout(function () {
+      runScheduledCssGc(classId);
+    }, 0);
+  };
+
+  var runScheduledCssGc = function (classId) {
+    if (!cssGcPending.has(classId)) return;
+
+    var protectedElements = cssGcProtected.get(classId);
+    if (classLiveCount(classId) > 0) {
+      // If collection already identified replacement sheets, retire any stale
+      // same-class sheets while keeping the ones used by the live arrival.
+      if (protectedElements) removeClassCss(classId, protectedElements);
+      cssGcPending.delete(classId);
+      cssGcProtected.delete(classId);
+      return;
+    }
+
+    var loadingElements = loadingClassCssElements(classId);
+    if (loadingElements.size > 0) {
+      if (!protectedElements) {
+        protectedElements = new Set();
+        cssGcProtected.set(classId, protectedElements);
+      }
+      loadingElements.forEach(function (el) {
+        protectedElements.add(el);
+      });
+    }
+
+    // A fragment loads CSS before its JavaScript and extension setup finish.
+    // Keep the replacement sheets until all of that work either succeeds or
+    // fails.
+    if (stagedCssTransactions.has(classId)) {
+      if (protectedElements) removeClassCss(classId, protectedElements);
+      return;
+    }
+
+    if (loadingElements.size > 0) {
+      // The old sheet is stale, but these links belong to a replacement whose
+      // instances cannot become live until the stylesheet requests settle.
+      removeClassCss(classId, protectedElements);
+      return;
+    }
+
+    cssGcPending.delete(classId);
+    cssGcProtected.delete(classId);
+    activeClassCss.delete(classId);
+    removeClassCss(classId);
   };
 
   // Collect a class's Component.css, but on a later task, not now. A component
@@ -7223,8 +7464,7 @@
     if (cssGcPending.has(classId)) return;
     cssGcPending.add(classId);
     setTimeout(function () {
-      cssGcPending.delete(classId);
-      if (classLiveCount(classId) === 0) removeClassCss(classId);
+      runScheduledCssGc(classId);
     }, 0);
   };
 
@@ -7567,7 +7807,23 @@
     return { styles: styleDescriptors, scripts: scriptDescriptors };
   };
 
-  var prepareComponentAssets = function (manifest, preflight) {
+  var preflightCssInstances = function (manifest) {
+    var entries = manifest.cssInstances == null ? [] : manifest.cssInstances;
+    if (!Array.isArray(entries)) {
+      throw new TypeError("[Citry] dependency manifest field 'cssInstances' must be an array.");
+    }
+    return entries.map(function (entry) {
+      if (!Array.isArray(entry) || entry.length !== 2) {
+        throw new TypeError("[Citry] a CSS-only component instance must be a two-item tuple.");
+      }
+      if (typeof entry[0] !== "string" || typeof entry[1] !== "string") {
+        throw new TypeError("[Citry] CSS-only component instance fields must be base64 strings.");
+      }
+      return [fromBase64(entry[0]), fromBase64(entry[1])];
+    });
+  };
+
+  var prepareComponentAssets = function (manifest, preflight, cssTransaction) {
     preflight = preflight || preflightComponentAssets(manifest);
 
     var markLoaded = manifest.markLoaded || {};
@@ -7581,7 +7837,7 @@
     var hasAsyncAssets = false;
     var styles = preflight.styles.map(function (descriptor) {
       if (descriptor.attrs && descriptor.attrs.href) hasAsyncAssets = true;
-      return loadCss(descriptor);
+      return loadCss(descriptor, cssTransaction);
     });
     var scripts = preflight.scripts.map(function (descriptor) {
       if (descriptor.attrs && descriptor.attrs.src) hasAsyncAssets = true;
@@ -7594,7 +7850,7 @@
     };
   };
 
-  var applyStagedManifest = function (manifest, calls) {
+  var applyStagedManifest = function (calls, cssInstances) {
     calls.forEach(function (call) {
       if (!call.revision) pendingCalls.push(call);
       else {
@@ -7609,21 +7865,36 @@
     // a class made only of such instances is still counted as live for the
     // Component.css cleanup. Shape (the contract WP10 emits): a `cssInstances`
     // list of [classId, componentId] pairs, base64-armored like `calls`.
-    (manifest.cssInstances || []).forEach(function (entry) {
-      trackCssInstance(fromBase64(entry[0]), fromBase64(entry[1]));
+    cssInstances.forEach(function (entry) {
+      trackCssInstance(entry[0], entry[1]);
     });
   };
 
   var applyComponentScripts = function (manifest) {
     var preflight = preflightComponentAssets(manifest);
+    var cssInstances = preflightCssInstances(manifest);
     var calls = stageManifestCalls(manifest, null);
-    var assets = prepareComponentAssets(manifest, preflight);
+    var cssTransaction = stageCssTransaction(preflight.styles);
+    var assets;
+    try {
+      assets = prepareComponentAssets(manifest, preflight, cssTransaction);
+    } catch (err) {
+      finishCssTransaction(cssTransaction, false);
+      throw err;
+    }
     // Preserve the graph-independent inline-manifest contract: inline styles
     // and scripts execute, and their callbacks flush, before this private
     // manager call returns. URL assets necessarily use the asynchronous path.
     if (!assets.hasAsyncAssets) {
-      assets.scripts.forEach(loadJs);
-      applyStagedManifest(manifest, calls);
+      try {
+        assets.scripts.forEach(loadJs);
+        applyStagedManifest(calls, cssInstances);
+      } catch (err) {
+        cancelStagedCalls(calls, err);
+        finishCssTransaction(cssTransaction, false);
+        throw err;
+      }
+      finishCssTransaction(cssTransaction, true);
       return Promise.resolve();
     }
     var chain = Promise.all(assets.styles);
@@ -7632,17 +7903,35 @@
     });
     return chain.then(
       function () {
-        applyStagedManifest(manifest, calls);
+        try {
+          applyStagedManifest(calls, cssInstances);
+        } catch (err) {
+          cancelStagedCalls(calls, err);
+          finishCssTransaction(cssTransaction, false);
+          throw err;
+        }
+        finishCssTransaction(cssTransaction, true);
       },
       function (err) {
-        cancelStagedCalls(calls, err);
+        try {
+          cancelStagedCalls(calls, err);
+        } finally {
+          finishCssTransaction(cssTransaction, false);
+        }
         throw err;
       }
     );
   };
 
-  var applyGraphComponentScripts = function (manifest, calls) {
-    var assets = prepareComponentAssets(manifest);
+  var prepareGraphComponentAssets = function (manifest, calls, preflight, cssTransaction, cssInstances) {
+    var assets;
+    try {
+      assets = prepareComponentAssets(manifest, preflight, cssTransaction);
+    } catch (err) {
+      cancelStagedCalls(calls, err);
+      finishCssTransaction(cssTransaction, false);
+      throw err;
+    }
     var hasAssets = assets.styles.length || assets.scripts.length;
     var releaseStart = hasAssets ? alpineApi._holdStart() : function () {};
     var chain = Promise.all(assets.styles);
@@ -7652,16 +7941,46 @@
     return chain.then(
       function () {
         releaseStart();
-        return whenGraphEventsReady(manifest.graph);
+        return {
+          manifest: manifest,
+          calls: calls,
+          cssInstances: cssInstances,
+          cssTransaction: cssTransaction,
+        };
       },
       function (err) {
         releaseStart();
         cancelStagedCalls(calls, err);
+        finishCssTransaction(cssTransaction, false);
         throw err;
       }
-    ).then(function () {
-      applyStagedManifest(manifest, calls);
-    });
+    );
+  };
+
+  var activatePreparedGraphComponentScripts = function (prepared) {
+    return whenGraphEventsReady(prepared.manifest.graph).then(
+      function () {
+        try {
+          applyStagedManifest(prepared.calls, prepared.cssInstances);
+        } catch (err) {
+          cancelStagedCalls(prepared.calls, err);
+          finishCssTransaction(prepared.cssTransaction, false);
+          throw err;
+        }
+        finishCssTransaction(prepared.cssTransaction, true);
+      },
+      function (err) {
+        cancelStagedCalls(prepared.calls, err);
+        finishCssTransaction(prepared.cssTransaction, false);
+        throw err;
+      }
+    );
+  };
+
+  var applyGraphComponentScripts = function (manifest, calls, preflight, cssTransaction, cssInstances) {
+    return prepareGraphComponentAssets(manifest, calls, preflight, cssTransaction, cssInstances).then(
+      activatePreparedGraphComponentScripts
+    );
   };
 
   var preflightAdoptionDependency = function (manifest, revision) {
@@ -7897,21 +8216,68 @@
     if (!transaction || transaction.status !== "prepared" || manifest.graph !== transaction.revision) {
       return Promise.reject(new TypeError("[Citry] dependency preparation requires a prepared matching graph."));
     }
-    var acceptedManifest = acceptedDependencyManifest(transaction, manifest);
-    return prepareBeforeManifest(acceptedManifest.beforeManifest).then(function (framework) {
-      return {
-        acceptedManifest: acceptedManifest,
-        framework: framework,
-        manifest: manifest,
-        revision: transaction.revision,
-        status: "prepared",
-      };
-    });
+    var acceptedManifest;
+    var assetPreflight;
+    var cssInstances;
+    var cssTransaction;
+    try {
+      acceptedManifest = acceptedDependencyManifest(transaction, manifest);
+      assetPreflight = preflightComponentAssets(acceptedManifest);
+      cssInstances = preflightCssInstances(acceptedManifest);
+      cssTransaction = stageCssTransaction(assetPreflight.styles);
+    } catch (error) {
+      finishCssTransaction(cssTransaction, false);
+      return Promise.reject(error);
+    }
+    return prepareBeforeManifest(acceptedManifest.beforeManifest).then(
+      function (framework) {
+        return prepareGraphComponentAssets(
+          acceptedManifest,
+          [],
+          assetPreflight,
+          cssTransaction,
+          cssInstances
+        ).then(
+          function (assets) {
+            try {
+              // Loading assets mutates the live head/body. Do that before
+              // staging calls for the detached candidate: a mutation sweep
+              // cannot reconcile a provisional call whose roots are not in
+              // the document yet. Staging here still installs every per-root
+              // Alpine hold before the preparation promise permits insertion.
+              assets.calls = stageManifestCalls(acceptedManifest, transaction.revision);
+            } catch (error) {
+              cancelStagedCalls(assets.calls, error);
+              finishCssTransaction(cssTransaction, false);
+              throw error;
+            }
+            return {
+              acceptedManifest: acceptedManifest,
+              assets: assets,
+              framework: framework,
+              manifest: manifest,
+              revision: transaction.revision,
+              status: "prepared",
+            };
+          },
+          function (error) {
+            rollbackBeforeManifest(framework, error);
+            throw error;
+          }
+        );
+      },
+      function (error) {
+        finishCssTransaction(cssTransaction, false);
+        throw error;
+      }
+    );
   };
 
   var rollbackAdoptionDependency = function (prepared, error) {
     if (!prepared || prepared.status !== "prepared") return;
     rollbackBeforeManifest(prepared.framework, error);
+    cancelStagedCalls(prepared.assets.calls);
+    finishCssTransaction(prepared.assets.cssTransaction, false);
     prepared.status = "rolled-back";
   };
 
@@ -7922,38 +8288,37 @@
     if (consumedGraphDependencies.has(transaction.revision)) {
       return Promise.reject(new TypeError("[Citry] dependency manifest repeats ownership graph " + transaction.revision + "."));
     }
+    if (
+      !prepared ||
+      prepared.status !== "prepared" ||
+      prepared.revision !== transaction.revision ||
+      prepared.manifest !== manifest
+    ) {
+      return Promise.reject(new TypeError("[Citry] dependency adoption requires its prepared assets."));
+    }
     if (tag) {
       processedDependencyTags.add(tag);
       tag.dataset.citryProcessed = "";
     }
     consumedGraphDependencies.add(transaction.revision);
-    var acceptedManifest;
-    if (prepared != null) {
-      if (
-        prepared.status !== "prepared" ||
-        prepared.revision !== transaction.revision ||
-        prepared.manifest !== manifest
-      ) {
-        return Promise.reject(new TypeError("[Citry] dependency adoption received a stale preparation."));
-      }
-      acceptedManifest = prepared.acceptedManifest;
-      try {
-        commitBeforeManifest(prepared.framework, tag);
-        prepared.status = "committed";
-      } catch (error) {
-        prepared.status = "rolled-back";
-        return Promise.reject(error);
-      }
-    } else {
-      acceptedManifest = acceptedDependencyManifest(transaction, manifest);
+    try {
+      commitBeforeManifest(prepared.framework, tag);
+      prepared.status = "committed";
+    } catch (error) {
+      cancelStagedCalls(prepared.assets.calls, error);
+      finishCssTransaction(prepared.assets.cssTransaction, false);
+      prepared.status = "rolled-back";
+      return Promise.reject(error);
     }
-    var calls = stageManifestCalls(acceptedManifest, transaction.revision);
-    var frameworkReady = prepared == null
-      ? prepareAndActivateBeforeManifest(acceptedManifest.beforeManifest, tag)
-      : Promise.resolve();
-    return frameworkReady.then(function () {
-      return applyGraphComponentScripts(acceptedManifest, calls);
-    });
+    return activatePreparedGraphComponentScripts(prepared.assets).then(
+      function () {
+        prepared.status = "activated";
+      },
+      function (error) {
+        prepared.status = "failed";
+        throw error;
+      }
+    );
   };
 
   var beginGraphEvents = function (revision) {
@@ -8034,9 +8399,16 @@
       // Activate and hold every callback branch in this observer turn. The
       // actual assets and Events adoption may settle in later tasks.
       var calls;
+      var assetPreflight;
+      var cssInstances;
+      var cssTransaction;
       try {
+        assetPreflight = preflightComponentAssets(acceptedManifest);
+        cssInstances = preflightCssInstances(acceptedManifest);
+        cssTransaction = stageCssTransaction(assetPreflight.styles);
         calls = stageManifestCalls(acceptedManifest, manifest.graph);
       } catch (err) {
+        finishCssTransaction(cssTransaction, false);
         console.error("[Citry] discarded graph-linked dependency manifest:", err);
         return;
       }
@@ -8050,10 +8422,11 @@
           ? prepareAndActivateBeforeManifest(acceptedManifest.beforeManifest, null)
           : Promise.resolve();
         frameworkReady.then(function () {
-          return applyGraphComponentScripts(acceptedManifest, calls);
+          return applyGraphComponentScripts(acceptedManifest, calls, assetPreflight, cssTransaction, cssInstances);
         }).then(
           function () {},
           function (err) {
+            finishCssTransaction(cssTransaction, false);
             cancelStagedCalls(calls, err);
             console.error("[Citry] discarded graph-linked dependency manifest:", err);
           }

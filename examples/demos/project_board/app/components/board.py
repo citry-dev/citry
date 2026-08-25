@@ -62,14 +62,14 @@ class TaskCard(Component):
         background: #fff;
         box-shadow: 0 0.5rem 1.4rem rgb(41 48 43 / 0.06);
       }
-      .task-card--done { opacity: 0.68; }
+      .task-card--done { background: #f3f4f0; }
       .task-card--done h3 { text-decoration: line-through; }
       .task-card__meta {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 0.6rem;
-        color: #727a74;
+        color: #59615b;
         font-size: 0.74rem;
       }
       .task-card h3 { margin: 0; font-size: 0.98rem; line-height: 1.4; }
@@ -146,13 +146,13 @@ class Lane(Component):
         font-weight: 800;
       }
       .lane__tasks { display: grid; gap: 0.75rem; }
-      .lane__footer { color: #7a817c; font-size: 0.72rem; text-align: center; }
+      .lane__footer { color: #5c635e; font-size: 0.72rem; text-align: center; }
       .lane-empty {
         margin: 0;
         padding: 1.4rem 0.5rem;
         border: 1px dashed #c2c4bc;
         border-radius: 0.7rem;
-        color: #7a817c;
+        color: #5c635e;
         text-align: center;
       }
     """
@@ -425,7 +425,7 @@ class ProjectBoard(Component):
         background: #fff8ef;
         line-height: 1.55;
       }
-      .board-stats { display: flex; flex-wrap: wrap; gap: 0.55rem 1.2rem; color: #687069; font-size: 0.82rem; }
+      .board-stats { display: flex; flex-wrap: wrap; gap: 0.55rem 1.2rem; color: #59615b; font-size: 0.82rem; }
       .board-stats strong { color: #29352e; }
       .event-error, .field-error { min-height: 1rem; margin: 0; color: #a83a2b; font-size: 0.78rem; }
       .board-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }

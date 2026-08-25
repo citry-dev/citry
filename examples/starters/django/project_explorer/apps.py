@@ -6,7 +6,7 @@ class ProjectExplorerConfig(AppConfig):
     name = "project_explorer"
 
     def ready(self) -> None:
-        # Import all components before freezing startup-time registration.
+        # Import the components here so Citry registers them before initialization.
         from . import components  # noqa: F401
         from .citry_app import citry_app
 

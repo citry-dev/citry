@@ -1046,6 +1046,10 @@ def test_build_projects_base_path_in_markdown_outputs(tmp_path: Path) -> None:
         assert 'src="/citry/static/image.png"' in text
         assert "[Literal](/guide/)" in text
 
+    html = (out / "index.html").read_text(encoding="utf-8")
+    assert 'href="/citry/index.md"' in html
+    assert 'rel="describedby" href="/citry/llms.txt"' in html
+
 
 def test_build_publishes_blog_at_stable_routes_with_feed_and_companions(tmp_path: Path) -> None:
     config, content, out = _config(tmp_path)

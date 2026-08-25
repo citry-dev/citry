@@ -1,10 +1,10 @@
 # Design: standalone example projects
 
-**Status (2026-08-23): accepted and implemented.** This document defines how
+**Status (2026-08-24): accepted and implemented.** This document defines how
 Citry owns, structures, tests, publishes, and retires complete example projects
 under the repository-root `examples/` directory. The initial starter roster,
-Project Board demo, qualification tooling, archives, discovery links, and CI
-workflow implement this contract.
+Project Board and HTMX demos, qualification tooling, archives, discovery links,
+and CI workflow implement this contract.
 
 The repository already has a separate docs-site example system under
 `docs_site/examples/`. That system remains independent. Its examples are
@@ -50,6 +50,7 @@ examples/
     wsgi/
   demos/
     project_board/
+    htmx/
 ```
 
 There are two project kinds:
@@ -143,11 +144,16 @@ journeys. They must remain runnable and tested, but compactness and host parity
 are not their goals. A demo chooses one reference host unless demonstrating
 host portability is part of that demo's stated purpose.
 
-The first planned demo is `project_board`, inspired by the large project-page
+The first demo is `project_board`, inspired by the large project-page
 benchmark. It should use FastAPI as its initial reference host because the
 repository already has a complete FastAPI tutorial and real adapter coverage.
 Additional launchers are added only when they teach something the starters do
 not already prove.
+
+The `htmx` demo proves interoperability with an established browser-side
+request and swap library. It also uses FastAPI, but it does not teach FastAPI
+setup. It shows existing HTMX users how Citry-rendered fragments fit into their
+current endpoints without replacing HTMX with Citry Events.
 
 ## 4. Repository ownership and catalog
 
@@ -168,9 +174,11 @@ will require:
 versus demos, presents the host/capability matrix, gives the shortest command
 for each project, and links to the framework and security documentation.
 
-`examples/tests/` owns repository-level catalog, clean-copy, process, and
-browser qualification. Code under it is maintenance tooling and is never a
-runtime dependency of a project.
+`examples/tools/` owns the repository-level catalog loader, clean-copy and
+browser qualification runner, deterministic archive builder, and
+release-surface validator. GitHub CI invokes this tooling directly, but it is
+never a runtime dependency of an example project. `examples/tests/` owns the
+tests for that maintenance tooling.
 
 ### 4.2 Catalog
 
@@ -508,7 +516,57 @@ The adaptation must:
   application; and
 - pass the browser-readiness gate below before it is linked as a public demo.
 
-### 7.2 Demo freedom and limits
+### 7.2 HTMX patterns
+
+`examples/demos/htmx/` reimplements the examples from the MIT-licensed
+`iwanalabs/django-htmx-components` project with FastAPI and Citry. It credits
+the original project and preserves its license notice. The new version keeps
+its sample data in memory and includes tests for its routes and browser
+behavior.
+
+The demo teaches three patterns in one small contacts application:
+
+- filter contacts as the user types, without letting a slow response replace
+  newer results;
+- replace one contact row with its form, show server-side validation errors,
+  and save the changes in that same row; and
+- update the list of teams when the user chooses a department.
+
+The code keeps each tool's job easy to see:
+
+- FastAPI reads requests and updates the application data;
+- HTMX sends requests and replaces parts of the page; and
+- Citry renders each response and supplies its CSS and JavaScript.
+
+The page loads the bundled HTMX file and Citry's browser script from the local
+`/citry` mount. HTMX replaces the contents of plain `<div>` elements that
+remain on the page. Each contact row keeps one of these wrappers so its Edit,
+Save, and Cancel actions update only that row. Each HTMX route has its own URL
+and serializes each component with `deps_strategy="fragment"` before returning
+that output unchanged.
+
+HTMX 2.0.8 and newer can ask Chromium to parse a response in a way that removes
+HTML comments. Citry uses comments to mark where components start and end, so
+the demo includes an HTMX extension that protects those comments while HTMX
+parses and inserts the response. The extension recognizes only comments that
+match Citry's client-graph v1 marker format and raises an error unless the
+response uses `innerHTML` on a wrapper that stays on the page. The demo does
+not use `hx-select`, out-of-band swaps, other swap styles, or direct insertion
+into `<tbody>` and `<select>`.
+
+This demo deliberately does not use Citry Events. Its README and public guide
+tell people who are starting a new Citry application to try Events first. This
+setup is for existing HTMX applications and teams that want to introduce Citry
+one component at a time.
+
+Browser tests use the same HTMX file that the demo serves. They exercise
+search, editing and validation, and the department/team picker. They also
+confirm that a newer search cancels an older one, the edit form's CSS loads
+when the form opens, remains through validation, and is removed after Cancel
+or Save. The page sends no Citry Events requests, and the browser reports no
+unexpected errors.
+
+### 7.3 Demo freedom and limits
 
 A demo can add SQLite, `citry-ui`, i18n, uploads, or another integration when
 that capability is part of its declared story. Such additions must be local,

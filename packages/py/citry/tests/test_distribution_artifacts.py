@@ -125,8 +125,9 @@ def test_wheel_verifier_rejects_payload_outside_the_closed_package(monkeypatch, 
 def test_staged_bundle_requires_the_recorded_bytes(monkeypatch, tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    wheel = bundle / "citry-0.4.3-py3-none-any.whl"
-    sdist = bundle / "citry-0.4.3.tar.gz"
+    version = distribution_verifier.package_version()
+    wheel = bundle / f"citry-{version}-py3-none-any.whl"
+    sdist = bundle / f"citry-{version}.tar.gz"
     wheel.write_bytes(b"wheel")
     sdist.write_bytes(b"sdist")
     report = distribution_verifier._release_report(wheel, sdist)

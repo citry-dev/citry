@@ -1,1 +1,1 @@
-"""Bare WSGI Citry example application."""
+"""Run the Project Explorer directly on WSGI with Citry."""

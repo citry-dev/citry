@@ -10,17 +10,17 @@ class Project:
 
 
 PROJECTS = (
-    Project("Atlas", "Turn field research into a searchable knowledge base.", "In review", "Python"),
-    Project("Beacon", "Track service health and make incident handoffs calmer.", "Active", "TypeScript"),
-    Project("Canopy", "Give community gardens one shared seasonal plan.", "Planning", "Python"),
-    Project("Drift", "Compare design revisions without losing decisions.", "Active", "Rust"),
-    Project("Ember", "Coordinate small grants from application to outcome.", "In review", "Python"),
-    Project("Fathom", "Explain product metrics in language teams can act on.", "Planning", "SQL"),
+    Project("Atlas", "Organize field notes and make them easy to search.", "In review", "Python"),
+    Project("Beacon", "Track service health and hand off incidents between teams.", "Active", "TypeScript"),
+    Project("Canopy", "Plan each season across a network of community gardens.", "Planning", "Python"),
+    Project("Drift", "Compare design revisions and keep decisions with the work.", "Active", "Rust"),
+    Project("Ember", "Manage small grants from application through reporting.", "In review", "Python"),
+    Project("Fathom", "Turn product metrics into explanations teams can use.", "Planning", "SQL"),
 )
 
 
 def find_projects(query: str = "") -> tuple[Project, ...]:
-    """Stand in for an authorized database query with deterministic data."""
+    """Return sample projects whose visible fields contain the query."""
     normalized = query.strip().casefold()
     if not normalized:
         return PROJECTS

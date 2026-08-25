@@ -1,6 +1,8 @@
 # Release notes
 
-## v0.5.0
+## v0.4.4
+
+_26 Aug 2026_
 
 ### Added
 
@@ -11,6 +13,15 @@
   `Citry.inspect_component_graph()`, including exact source locations,
   unresolved dynamic or unknown targets, partial-source problems, and
   deterministic versioned JSON.
+
+### Fixed
+
+- A component reintroduced by a fragment regains its class stylesheet after
+  all earlier instances leave the page.
+- Strict-CSP fragment stylesheets receive the loaded document's nonce.
+- A fragment whose accepted CSS or JavaScript fails to load no longer replaces
+  the live region or its ownership graph, and Citry removes styles introduced
+  only by that failed transaction.
 
 ## v0.4.3
 

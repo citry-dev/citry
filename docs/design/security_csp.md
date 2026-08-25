@@ -117,7 +117,8 @@ Citry CSP release should make this scope explicit:
 - `security_csp="strict"` guarantees that Citry's own script runtime and compatible
   Alpine expressions do not require `unsafe-eval` or `unsafe-inline` in
   `script-src`;
-- Citry also propagates a supplied nonce to inline style elements it emits;
+- Citry also propagates a supplied nonce to structured style elements and
+  stylesheet links it emits;
 - it does not claim that arbitrary style attributes, fonts, images,
   connections, frames, or third-party assets satisfy the host's full policy.
 
@@ -406,8 +407,8 @@ Citry then:
 1. validates that the value is a non-empty CSP base64 value, while leaving
    entropy and freshness to the host;
 2. applies it after extensions have contributed dependencies;
-3. adds it to every structured Citry dependency script and inline style
-   element, including core and extension output;
+3. adds it to every structured Citry dependency script, style element, and
+   stylesheet link, including core and extension output;
 4. records it in the document manager for later dependency creation; and
 5. rejects a dependency that already carries a different nonce.
 
@@ -415,7 +416,8 @@ An identical explicit dependency nonce is accepted. Silently replacing a
 different nonce could conceal stale request state, so it is an error. Without
 a response nonce, explicit dependency nonces remain untouched.
 
-The same value may be placed on script and style elements. The host decides
+The same value may be placed on script elements, style elements, and
+stylesheet links. The host decides
 whether `script-src`, `style-src`, or both include it. Inert
 `type="application/json"` data blocks do not execute, but consistently
 annotating all Citry-owned script elements avoids special cases in final tag
@@ -482,8 +484,8 @@ In strict mode:
 - the base document installs the CSP-compatible Citry runtime and records its
   nonce;
 - a fragment carries inert manifests and markup, not today's inline preloader;
-- the existing manager creates any needed script or style elements with the
-  document nonce; and
+- the existing manager creates any needed script, style, or stylesheet-link
+  elements with the document nonce; and
 - ordinary CSP-compatible Alpine attributes initialize through the existing
   Alpine mutation lifecycle.
 
@@ -499,12 +501,12 @@ Phase 5 implements the nonce transport used by the strict contract.
 The document manager captures the nonce from its own authorizing script tag.
 It validates a whole dependency batch before insertion, rejects a descriptor
 that carries a different nonce, and supplies the recorded value to dynamically
-created `<script>` and `<style>` elements that omit it. A fragment serialized
-with `csp_nonce` also stamps the same value onto its structured top-level tags
-and descriptors. Off and warning fragment preloaders receive the nonce and
-forward it to a dynamically loaded standard manager. Phase 8 removes that
-preloader in strict mode and records the required CSP runtime variant in the
-inert fragment manifest instead.
+created `<script>`, `<style>`, and stylesheet `<link>` elements that omit it. A
+fragment serialized with `csp_nonce` also stamps the same value onto its
+structured top-level tags and descriptors. Off and warning fragment preloaders
+receive the nonce and forward it to a dynamically loaded standard manager.
+Phase 8 removes that preloader in strict mode and records the required CSP
+runtime variant in the inert fragment manifest instead.
 
 ### 6.3 Optional script hashes and Subresource Integrity
 

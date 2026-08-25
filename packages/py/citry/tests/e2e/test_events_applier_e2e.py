@@ -69,6 +69,7 @@ import pytest
 pytest.importorskip("pytest_playwright")
 
 from citry import Citry, Component
+from citry.ext.dependencies.routes import script_url
 from citry.ext.events import actions
 
 pytestmark = pytest.mark.e2e
@@ -129,6 +130,302 @@ def _goto(page: Any, serve_live: Any, citry: Citry, html: str) -> list[str]:
     page.wait_for_function(READY)
     page.evaluate(_SETUP_LOGS)
     return messages
+
+
+def test_events_adoption_holds_component_css_through_a_trailing_script(page: Any, serve_live: Any) -> None:
+    # Events prepares graph-linked dependency assets through
+    # ownership._prepareDependency, then activates them through
+    # ownership._applyDependency.
+    # Retire a manually tracked Card immediately before adoption, then hold a
+    # trailing script. The manager must keep the deduped Card sheet until the
+    # incoming graph makes the replacement live.
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Card(Component):
+        citry = c
+        css = ".adoption-card { display: grid; color: rgb(91, 92, 93); }"
+        template = '<div class="adoption-card">{{ label }}</div>'
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"]}
+
+    class HostState:
+        tick: int = 0
+        _public = ("tick",)
+
+    class Host(Component):
+        citry = c
+        State = HostState
+
+        class Events:
+            def refresh(self, state):
+                return None
+
+        template = """
+          <section class="adoption-host">
+            <c-if cond="show"><c-card c-label="label" /></c-if>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"], "show": kwargs["show"]}
+
+    class Page(Component):
+        citry = c
+        template = (
+            "<html><head><title>CSS adoption</title></head>"
+            '<body><c-host c-label="\'old\'" c-show="False" /></body></html>'
+        )
+
+    delayed_js_url = "https://citry.test/adoption-delay.js"
+    held_routes: list[Any] = []
+    page.route(delayed_js_url, lambda route: held_routes.append(route))
+    messages = _goto(page, serve_live, c, str(Page()))
+    fresh = _fragment(Host(label="new", show=True))
+    card_css_url = script_url(Card, "css")
+
+    page.evaluate(
+        """
+        async ([html, delayedJsUrl, cardClass, cardCssUrl]) => {
+          const incoming = document.createElement("template");
+          incoming.innerHTML = html;
+          const dependencyTag = incoming.content.querySelector(
+            'script[data-citry]:not([data-citry-events])',
+          );
+          const dependency = JSON.parse(dependencyTag.textContent);
+          const encode = (value) => btoa(unescape(encodeURIComponent(value)));
+          dependency.fetch.js.push([
+            encode(JSON.stringify({ tag: "script", attrs: { src: delayedJsUrl } })),
+            null,
+          ]);
+          dependencyTag.textContent = JSON.stringify(dependency);
+
+          const internal = Citry.events._internal;
+          const oldId = document.querySelector(".adoption-host").getAttribute("data-cid");
+          const anchor = internal.getAnchor(oldId);
+          const manager = Citry.manager;
+          const style = document.createElement("style");
+          style.setAttribute("data-citry-css-class", cardClass);
+          style.setAttribute("data-citry-css-url", cardCssUrl);
+          style.textContent = ".adoption-card { display: grid; color: rgb(91, 92, 93); }";
+          document.head.appendChild(style);
+          manager.markScriptLoaded("css", cardCssUrl);
+          manager.registerComponent(cardClass, () => {});
+          const controlClass = "AdoptionControl";
+          document.head.insertAdjacentHTML(
+            "beforeend",
+            '<style data-citry-css-class="' + controlClass + '">.adoption-control{}</style>',
+          );
+          manager.registerComponent(controlClass, () => {});
+          const retiring = document.createElement("div");
+          retiring.setAttribute("data-cid-cssgcold", "");
+          document.body.appendChild(retiring);
+          manager.callComponent(cardClass, "cssgcold", null);
+          const control = document.createElement("div");
+          control.setAttribute("data-cid-controlgcold", "");
+          document.body.appendChild(control);
+          manager.callComponent(controlClass, "controlgcold", null);
+          retiring.remove();
+          control.remove();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          window.__adoptionApply = internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 1,
+              actions: [{
+                action: "render",
+                target: "render:" + oldId,
+                swap: "morph",
+                html: incoming.innerHTML,
+              }],
+            },
+            { anchor, instance: oldId, event: "refresh" },
+          );
+
+        }
+        """,
+        [fresh, delayed_js_url, Card.class_id, card_css_url],
+    )
+    for _ in range(100):
+        if held_routes:
+            break
+        page.wait_for_timeout(10)
+    assert len(held_routes) == 1
+    page.wait_for_timeout(50)
+    assert page.locator(f'[data-citry-css-class="{Card.class_id}"]').count() == 1
+    assert page.locator('[data-citry-css-class="AdoptionControl"]').count() == 0
+
+    held_routes[0].fulfill(
+        content_type="text/javascript",
+        body="window.__adoptionDelayLoaded = true;",
+    )
+    result = page.evaluate(
+        """
+        async (cardClass) => {
+          await window.__adoptionApply;
+          const card = document.querySelector(".adoption-card");
+          const style = getComputedStyle(card);
+          return {
+            text: card.textContent,
+            display: style.display,
+            color: style.color,
+            sheets: document.querySelectorAll(
+              '[data-citry-css-class="' + cardClass + '"]',
+            ).length,
+            delayed: window.__adoptionDelayLoaded === true,
+          };
+        }
+        """,
+        Card.class_id,
+    )
+    assert result == {
+        "text": "new",
+        "display": "grid",
+        "color": "rgb(91, 92, 93)",
+        "sheets": 1,
+        "delayed": True,
+    }
+    assert _citry_errors(messages) == []
+
+
+def test_failed_events_adoption_preserves_live_region_and_discards_staged_css(page: Any, serve_live: Any) -> None:
+    # If a trailing asset fails after Component.css loads, Events must preserve
+    # the old live region and ownership graph, then remove the staged sheet and
+    # clear its loaded URL.
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Card(Component):
+        citry = c
+        css = ".failed-adoption-card { display: grid; }"
+        template = '<div class="failed-adoption-card">{{ label }}</div>'
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"]}
+
+    class HostState:
+        tick: int = 0
+        _public = ("tick",)
+
+    class Host(Component):
+        citry = c
+        State = HostState
+
+        class Events:
+            def refresh(self, state):
+                return None
+
+        template = """
+          <section class="failed-adoption-host">
+            <c-if cond="show"><c-card c-label="label" /></c-if>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"], "show": kwargs["show"]}
+
+    class Page(Component):
+        citry = c
+        template = (
+            "<html><head><title>Failed CSS adoption</title></head>"
+            '<body><c-host c-label="\'old\'" c-show="False" /></body></html>'
+        )
+
+    delayed_js_url = "https://citry.test/failed-adoption-delay.js"
+    held_routes: list[Any] = []
+    page.route(delayed_js_url, lambda route: held_routes.append(route))
+    _goto(page, serve_live, c, str(Page()))
+    fresh = _fragment(Host(label="new", show=True))
+    card_css_url = script_url(Card, "css")
+
+    page.evaluate(
+        """
+        ([html, delayedJsUrl]) => {
+          const incoming = document.createElement("template");
+          incoming.innerHTML = html;
+          const dependencyTag = incoming.content.querySelector(
+            'script[data-citry]:not([data-citry-events])',
+          );
+          const dependency = JSON.parse(dependencyTag.textContent);
+          const encode = (value) => btoa(unescape(encodeURIComponent(value)));
+          dependency.fetch.js.push([
+            encode(JSON.stringify({ tag: "script", attrs: { src: delayedJsUrl } })),
+            null,
+          ]);
+          dependencyTag.textContent = JSON.stringify(dependency);
+
+          const internal = Citry.events._internal;
+          const oldId = document.querySelector(".failed-adoption-host").getAttribute("data-cid");
+          window.__failedAdoptionOld = {
+            anchor: internal.getAnchor(oldId),
+            id: oldId,
+            revisions: Citry.manager.ownership.revisions().slice().sort(),
+          };
+          window.__failedAdoption = internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 1,
+              actions: [{
+                action: "render",
+                target: "render:" + oldId,
+                swap: "morph",
+                html: incoming.innerHTML,
+              }],
+            },
+            {
+              anchor: internal.getAnchor(oldId),
+              instance: oldId,
+              event: "refresh",
+            },
+          ).then(
+            () => ({ resolved: true }),
+            (error) => ({ resolved: false, message: String(error) }),
+          );
+        }
+        """,
+        [fresh, delayed_js_url],
+    )
+    for _ in range(100):
+        if held_routes:
+            break
+        page.wait_for_timeout(10)
+    assert len(held_routes) == 1
+    assert page.locator(f'[data-citry-css-class="{Card.class_id}"]').count() == 1
+    assert page.evaluate("url => Citry.manager.isScriptLoaded('css', url)", card_css_url)
+    assert page.locator(".failed-adoption-card").count() == 0
+
+    held_routes[0].abort("failed")
+    result = page.evaluate(
+        """
+        async ([cardClass, cardCssUrl]) => {
+          const outcome = await window.__failedAdoption;
+          const prior = window.__failedAdoptionOld;
+          const host = document.querySelector(".failed-adoption-host");
+          return {
+            outcome,
+            cards: document.querySelectorAll(".failed-adoption-card").length,
+            hostId: host?.getAttribute("data-cid") || null,
+            sameAnchor: Citry.events._internal.getAnchor(prior.id) === prior.anchor,
+            revisions: Citry.manager.ownership.revisions().slice().sort(),
+            priorRevisions: prior.revisions,
+            sheets: document.querySelectorAll(
+              '[data-citry-css-class="' + cardClass + '"]',
+            ).length,
+            loaded: Citry.manager.isScriptLoaded("css", cardCssUrl),
+          };
+        }
+        """,
+        [Card.class_id, card_css_url],
+    )
+    assert not result["outcome"]["resolved"]
+    assert result["cards"] == 0
+    assert result["hostId"] is not None
+    assert result["hostId"] == page.evaluate("window.__failedAdoptionOld.id")
+    assert result["sameAnchor"] is True
+    assert result["revisions"] == result["priorRevisions"]
+    assert result["sheets"] == 0
+    assert result["loaded"] is False
 
 
 # ----- the WP5 protocol-test replay -----

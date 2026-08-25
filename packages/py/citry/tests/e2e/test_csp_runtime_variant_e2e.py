@@ -36,6 +36,11 @@ def test_runtime_variant_keeps_evaluators_ownership_morph_events_and_fragments(
         count: int = 1
         _public = ("count",)
 
+    class FreshCard(Component):
+        citry = app
+        css = ".strict-card { color: rgb(1, 2, 3); }"
+        template = '<p class="strict-card">fresh stylesheet</p>'
+
     class Counter(Component):
         citry = app
         State = CounterState
@@ -53,8 +58,12 @@ def test_runtime_variant_keeps_evaluators_ownership_morph_events_and_fragments(
               <button class="local" @click="localCount++">increment locally</button>
               <output class="local-value" x-text="localCount">1</output>
             </div>
+            <c-if cond="show_card"><c-fresh-card /></c-if>
           </section>
         """
+
+        def template_data(self, kwargs, slots):
+            return {"show_card": kwargs["show_card"]}
 
         class Events:
             def save(self, state: CounterState) -> None:
@@ -62,10 +71,10 @@ def test_runtime_variant_keeps_evaluators_ownership_morph_events_and_fragments(
 
     class Page(Component):
         citry = app
-        template = "<html><body><c-counter /></body></html>"
+        template = '<html><body><c-counter c-show_card="False" /></body></html>'
 
     initial = Page().render().serialize(csp_nonce=nonce)
-    fresh = Counter(count=7).render().serialize(deps_strategy="fragment", csp_nonce=nonce)
+    fresh = Counter(count=7, show_card=True).render().serialize(deps_strategy="fragment", csp_nonce=nonce)
     base = serve_live(app, initial, "")
 
     if runtime == "csp":
@@ -85,7 +94,8 @@ def test_runtime_variant_keeps_evaluators_ownership_morph_events_and_fragments(
             response = route.fetch()
             headers = dict(response.headers)
             headers["content-security-policy"] = (
-                f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; connect-src 'self'"
+                f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
+                "connect-src 'self'; img-src 'self'"
             )
             route.fulfill(response=response, headers=headers)
 
@@ -94,9 +104,9 @@ def test_runtime_variant_keeps_evaluators_ownership_morph_events_and_fragments(
     page.wait_for_function(_READY)
     page.wait_for_function("document.querySelector('.counter')?.dataset.callbackReady === 'true'")
 
-    result = page.evaluate(
+    page.evaluate(
         """
-        async (html) => {
+        ([html, cardClass, nonce]) => {
           const root = document.querySelector(".counter");
           const oldId = root.getAttribute("data-cid");
           const internal = Citry.events._internal;
@@ -117,34 +127,68 @@ def test_runtime_variant_keeps_evaluators_ownership_morph_events_and_fragments(
             rawArrow = { accepted: false };
           }
           anchor.epoch = 1;
-          await internal.applyResult(
-            {
-              ok: true,
-              sendSequence: 1,
-              actions: [{ action: "render", target: "render:" + oldId, swap: "morph", html }],
-            },
-            { anchor, instance: oldId, event: "save" },
-          );
+          window.__variantContext = {
+            anchor,
+            cardClass,
+            nonce,
+            normalValue,
+            oldId,
+            oldOwned,
+            rawArrow,
+            rawValue,
+            normalArrow: { errors: evaluatorErrors.length, value: normalArrowValue },
+          };
+          window.__variantOutcome = null;
+          setTimeout(() => {
+            internal.applyResult(
+              {
+                ok: true,
+                sendSequence: 1,
+                actions: [{ action: "render", target: "render:" + oldId, swap: "morph", html }],
+              },
+              { anchor, instance: oldId, event: "save" },
+            ).then(
+              () => { window.__variantOutcome = { ok: true }; },
+              (error) => { window.__variantOutcome = { ok: false, error: String(error) }; },
+            );
+          }, 0);
+          return null;
+        }
+        """,
+        [fresh, FreshCard.class_id, nonce],
+    )
+    page.wait_for_function("() => window.__variantOutcome !== null", timeout=10_000)
+    assert page.evaluate("window.__variantOutcome") == {"ok": True}
+    result = page.evaluate(
+        """
+        () => {
+          const context = window.__variantContext;
+          const internal = Citry.events._internal;
           const freshRoot = document.querySelector(".counter");
           const freshId = freshRoot.getAttribute("data-cid");
           const freshRevision = Citry.manager.ownership.revisions().find(
             (candidate) => Citry.manager.ownership.forRender(candidate, freshId),
           );
+          const card = document.querySelector(".strict-card");
+          const cardSheet = document.querySelector(
+            'link[data-citry-css-class="' + context.cardClass + '"]',
+          );
           return {
-            normalValue,
-            rawValue,
-            normalArrow: { errors: evaluatorErrors.length, value: normalArrowValue },
-            rawArrow,
-            oldOwned,
-            idChanged: freshId !== oldId,
-            oldRetired: internal.getAnchor(oldId) === null,
-            sameAnchor: internal.getAnchor(freshId) === anchor,
+            normalValue: context.normalValue,
+            rawValue: context.rawValue,
+            normalArrow: context.normalArrow,
+            rawArrow: context.rawArrow,
+            oldOwned: context.oldOwned,
+            idChanged: freshId !== context.oldId,
+            oldRetired: internal.getAnchor(context.oldId) === null,
+            sameAnchor: internal.getAnchor(freshId) === context.anchor,
             freshOwned: !!Citry.manager.ownership.forRender(freshRevision, freshId),
             count: internal.getAnchor(freshId).values.count,
+            cardColor: getComputedStyle(card).color,
+            cardNonce: cardSheet?.nonce || null,
           };
         }
-        """,
-        fresh,
+        """
     )
 
     expected = {
@@ -158,6 +202,8 @@ def test_runtime_variant_keeps_evaluators_ownership_morph_events_and_fragments(
         "sameAnchor": True,
         "freshOwned": True,
         "count": 7,
+        "cardColor": "rgb(1, 2, 3)",
+        "cardNonce": nonce,
     }
     if runtime == "standard":
         expected["normalArrow"]["value"] = 3

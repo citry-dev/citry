@@ -1,7 +1,7 @@
 [project]
 name = "citry-example-flask"
 version = "0.1.0"
-description = "A complete Citry starter for Flask"
+description = "Run the Citry Project Explorer with Flask"
 requires-python = ">=3.10,<4"
 dependencies = [
   "citry>=0.4.3,<0.5",

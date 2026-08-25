@@ -1,8 +1,11 @@
 # Qualify and publish the pure-Python citry package.
 #
 # A manual run builds and tests one artifact pair for an exact main commit.
-# Pushing citry@<version> at that commit promotes those same bytes; tag and
-# manual-dispatch runs cannot publish freshly rebuilt or already-published files.
+# Pushing citry@publish-<version> at that commit may stage those exact bytes on
+# PyPI so release-coupled examples can lock from the public index. The final
+# citry@<version> tag promotes the exact staged package qualification after
+# allowing only release-surface changes, verifies PyPI byte-for-byte, and
+# creates the GitHub Release.
 name: Publish citry to PyPI
 
 on:
@@ -23,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.package-version.outputs.version }}
+      promotion_kind: ${{ steps.package-version.outputs.promotion_kind }}
     steps:
       - uses: actions/checkout@v7
       - name: Verify tag matches pyproject version
@@ -30,10 +34,24 @@ jobs:
         run: |
           pkg_version=$(grep -m1 '^version' "$PROJECT_DIR/pyproject.toml" | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          echo "promotion_kind=qualification" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
             exit 0
           fi
-          tag_version="${GITHUB_REF_NAME#citry@}"
+          case "$GITHUB_REF_NAME" in
+            citry@publish-*)
+              tag_version="${GITHUB_REF_NAME#citry@publish-}"
+              echo "promotion_kind=staged" >> "$GITHUB_OUTPUT"
+              ;;
+            citry@*)
+              tag_version="${GITHUB_REF_NAME#citry@}"
+              echo "promotion_kind=release" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::unsupported Citry tag '$GITHUB_REF_NAME'"
+              exit 1
+              ;;
+          esac
           echo "tag version: $tag_version, pyproject version: $pkg_version"
           if [ "$tag_version" != "$pkg_version" ]; then
             echo "::error::tag '$tag_version' does not match $PROJECT_DIR/pyproject.toml version '$pkg_version'"
@@ -126,7 +144,7 @@ jobs:
           retention-days: 14
 
   select-qualification:
-    name: Select the exact main-commit qualification
+    name: Select the staged package qualification
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
     needs: verify-version
     runs-on: ubuntu-latest
@@ -139,11 +157,60 @@ jobs:
       artifact_id: ${{ steps.select.outputs.artifact_id }}
       artifact_digest: ${{ steps.select.outputs.artifact_digest }}
       head_sha: ${{ steps.select.outputs.head_sha }}
+      stage_tag: ${{ steps.commit.outputs.stage_tag }}
     steps:
       - uses: actions/checkout@v7
-      - name: Record the peeled tag commit
+        with:
+          fetch-depth: 0
+      - name: Resolve the package qualification commit
         id: commit
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        env:
+          CITRY_PROMOTION_KIND: ${{ needs.verify-version.outputs.promotion_kind }}
+          CITRY_VERSION: ${{ needs.verify-version.outputs.version }}
+        run: |
+          if [ "$CITRY_PROMOTION_KIND" = "release" ]; then
+            stage_tag="citry@publish-${CITRY_VERSION}"
+            git fetch --no-tags origin "refs/tags/${stage_tag}:refs/tags/${stage_tag}"
+            sha=$(git rev-parse "refs/tags/${stage_tag}^{commit}")
+            git merge-base --is-ancestor "$sha" HEAD
+          else
+            stage_tag="$GITHUB_REF_NAME"
+            sha=$(git rev-parse HEAD)
+          fi
+          echo "stage_tag=$stage_tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Require a surface-only final commit
+        if: needs.verify-version.outputs.promotion_kind == 'release'
+        env:
+          STAGE_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          catalog=$(mktemp)
+          allowed_paths=$(mktemp)
+          git show "$STAGE_SHA:examples/catalog.toml" > "$catalog"
+          python - "$catalog" "$allowed_paths" <<'PY'
+          import sys
+          import tomllib
+          from pathlib import PurePosixPath
+
+          with open(sys.argv[1], "rb") as stream:
+              catalog = tomllib.load(stream)
+          with open(sys.argv[2], "w", encoding="utf-8") as stream:
+              for project in catalog["projects"]:
+                  root = PurePosixPath("examples", project["path"])
+                  if root.is_absolute() or ".." in root.parts:
+                      raise SystemExit(f"unsafe example path in staged catalog: {root}")
+                  for name in ("README.md", "pyproject.toml", "uv.lock"):
+                      print(root / name, file=stream)
+          PY
+          unexpected=0
+          while IFS= read -r -d '' path; do
+            if [ "$path" != "docs_site/static/playground/runtime.json" ] \
+              && ! grep -Fqx -- "$path" "$allowed_paths"; then
+              printf '::error::final-stage change is outside the release-surface allowlist: %q\n' "$path"
+              unexpected=1
+            fi
+          done < <(git diff --name-only --no-renames -z "$STAGE_SHA" HEAD)
+          test "$unexpected" -eq 0
       - name: Find a successful qualification for this commit
         id: select
         env:
@@ -156,14 +223,66 @@ jobs:
           --artifact-name verified-citry-distributions
           --github-output "$GITHUB_OUTPUT"
 
+  select-release-surfaces:
+    name: Require public examples and playground evidence
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: [verify-version, select-qualification]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      examples_run_url: ${{ steps.examples.outputs.run_url }}
+      docs_run_url: ${{ steps.docs.outputs.run_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        if: needs.verify-version.outputs.promotion_kind == 'release'
+        with:
+          python-version: "3.14"
+      - name: Validate every release-coupled version and public artifact
+        if: needs.verify-version.outputs.promotion_kind == 'release'
+        env:
+          CITRY_VERSION: ${{ needs.verify-version.outputs.version }}
+        run: |
+          curl --fail --location --silent --show-error \
+            "https://pypi.org/pypi/citry/${CITRY_VERSION}/json" --output pypi.json
+          python -m examples.tools.release_gate --pypi-json pypi.json
+      - name: Find the exact public-index example qualification
+        if: needs.verify-version.outputs.promotion_kind == 'release'
+        id: examples
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/select_citry_core_qualification.py
+          --repository "$GITHUB_REPOSITORY"
+          --commit "$(git rev-parse HEAD)"
+          --workflow py--examples--tests.yml
+          --artifact-name citry-example-projects-public
+          --github-output "$GITHUB_OUTPUT"
+      - name: Find the exact playground browser qualification
+        if: needs.verify-version.outputs.promotion_kind == 'release'
+        id: docs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/select_citry_core_qualification.py
+          --repository "$GITHUB_REPOSITORY"
+          --commit "$(git rev-parse HEAD)"
+          --workflow repo--docs-check.yml
+          --event push
+          --no-artifact
+          --github-output "$GITHUB_OUTPUT"
+
   release:
     name: Promote qualified bytes and release
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
-    needs: [verify-version, select-qualification]
+    needs: [verify-version, select-qualification, select-release-surfaces]
     runs-on: ubuntu-latest
     environment: pypi
     env:
       CITRY_VERSION: ${{ needs.verify-version.outputs.version }}
+      CITRY_PROMOTION_KIND: ${{ needs.verify-version.outputs.promotion_kind }}
     permissions:
       actions: read
       attestations: write
@@ -173,10 +292,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Require the qualified commit to remain on main
+      - name: Require the staged and tagged commits to remain on main
         run: |
-          test "$(git rev-parse HEAD)" = "${{ needs.select-qualification.outputs.head_sha }}"
+          qualified_sha='${{ needs.select-qualification.outputs.head_sha }}'
+          if [ "$CITRY_PROMOTION_KIND" = "staged" ]; then
+            test "$(git rev-parse HEAD)" = "$qualified_sha"
+          fi
           git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$qualified_sha" origin/main
           git merge-base --is-ancestor HEAD origin/main
       - name: Download the immutable qualification archive
         env:
@@ -203,17 +326,57 @@ jobs:
             --arg head_sha '${{ needs.select-qualification.outputs.head_sha }}' \
             '{run_id: $run_id, run_url: $run_url, artifact_digest: $artifact_digest, head_sha: $head_sha}' \
             > verified/qualification-provenance.json
+          jq -n \
+            --arg promotion_kind "$CITRY_PROMOTION_KIND" \
+            --arg stage_tag '${{ needs.select-qualification.outputs.stage_tag }}' \
+            --arg stage_sha '${{ needs.select-qualification.outputs.head_sha }}' \
+            --arg final_sha "$(git rev-parse HEAD)" \
+            --arg examples_run_url '${{ needs.select-release-surfaces.outputs.examples_run_url }}' \
+            --arg docs_run_url '${{ needs.select-release-surfaces.outputs.docs_run_url }}' \
+            '{promotion_kind: $promotion_kind, stage_tag: $stage_tag, stage_sha: $stage_sha, final_sha: $final_sha, examples_run_url: $examples_run_url, docs_run_url: $docs_run_url}' \
+            > verified/release-surface-provenance.json
           mkdir dist
           cp verified/*.whl verified/*.tar.gz dist/
-      - name: Require a new PyPI version and GitHub Release
+      - name: Verify public artifacts and final-release preconditions
+        id: public-state
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pypi_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+          pypi_json=$(mktemp)
+          pypi_status=$(curl --silent --show-error --output "$pypi_json" --write-out '%{http_code}' \
             "https://pypi.org/pypi/citry/${CITRY_VERSION}/json")
-          if [ "$pypi_status" != "404" ]; then
-            echo "::error::expected PyPI version ${CITRY_VERSION} to be absent; HTTP ${pypi_status}"
-            exit 1
+          case "$pypi_status" in
+            404)
+              if [ "$CITRY_PROMOTION_KIND" = "release" ]; then
+                echo "::error::final Citry release requires its staged public PyPI pair"
+                exit 1
+              fi
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            200)
+              python - "$pypi_json" verified/release-inventory.json <<'PY'
+          import json
+          import sys
+
+          public = json.load(open(sys.argv[1], encoding="utf-8"))
+          inventory = json.load(open(sys.argv[2], encoding="utf-8"))
+          expected = {item["name"]: item["sha256"] for item in inventory["artifacts"]}
+          actual = {item["filename"]: item["digests"]["sha256"] for item in public["urls"]}
+          if actual != expected:
+              raise SystemExit(
+                  "public PyPI artifacts differ from the exact qualified release pair: "
+                  f"expected={expected!r}, actual={actual!r}"
+              )
+          PY
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::could not determine PyPI state for Citry ${CITRY_VERSION}; HTTP ${pypi_status}"
+              exit 1
+              ;;
+          esac
+          if [ "$CITRY_PROMOTION_KIND" != "release" ]; then
+            exit 0
           fi
           release_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             --header "Accept: application/vnd.github+json" \
@@ -238,14 +401,41 @@ jobs:
             dist/*
             verified/release-inventory.json
             verified/qualification-provenance.json
+            verified/release-surface-provenance.json
       - name: Publish to PyPI
+        if: steps.public-state.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+      - name: Verify the published PyPI pair
+        if: steps.public-state.outputs.publish == 'true'
+        run: |
+          for attempt in {1..60}; do
+            status=$(curl --silent --show-error --output pypi-published.json --write-out '%{http_code}' \
+              "https://pypi.org/pypi/citry/${CITRY_VERSION}/json")
+            if [ "$status" = "200" ] && python - pypi-published.json verified/release-inventory.json <<'PY'
+          import json
+          import sys
+
+          public = json.load(open(sys.argv[1], encoding="utf-8"))
+          inventory = json.load(open(sys.argv[2], encoding="utf-8"))
+          expected = {item["name"]: item["sha256"] for item in inventory["artifacts"]}
+          actual = {item["filename"]: item["digests"]["sha256"] for item in public["urls"]}
+          raise SystemExit(0 if actual == expected else 1)
+          PY
+            then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::PyPI did not expose the complete qualified Citry pair"
+          exit 1
       - name: Create the GitHub Release
+        if: needs.verify-version.outputs.promotion_kind == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
           dist/* verified/release-inventory.json verified/qualification-provenance.json
+          verified/release-surface-provenance.json
           --repo "$GITHUB_REPOSITORY"
           --title "$GITHUB_REF_NAME"
           --generate-notes

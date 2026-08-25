@@ -1,7 +1,7 @@
 [project]
 name = "citry-example-wsgi"
 version = "0.1.0"
-description = "A dependency-light bare WSGI starter for Citry"
+description = "Run the Citry Project Explorer directly on WSGI"
 requires-python = ">=3.10,<4"
 dependencies = [
   "citry>=0.4.3,<0.5",

@@ -597,9 +597,14 @@ def _resolve_records(
                         mark_js = script_url(comp_cls, "js")
                 comp_css = get_component_script("css", comp_cls)
                 if comp_css is not None:
-                    styles.append(replace(comp_css, attrs={**comp_css.attrs, **css_class_attr}))
                     if mounted:
+                        # A document inlines this sheet but tells the runtime
+                        # that its fragment URL is loaded. Store the URL on the
+                        # style so the runtime can clear both when it removes
+                        # the sheet.
                         mark_css = script_url(comp_cls, "css")
+                        css_class_attr["data-citry-css-url"] = mark_css
+                    styles.append(replace(comp_css, attrs={**comp_css.attrs, **css_class_attr}))
 
             cached = (
                 scripts,

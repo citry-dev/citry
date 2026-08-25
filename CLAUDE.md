@@ -211,6 +211,15 @@ run it at **high or greater** effort. Fold its findings back before delivery.
   satisfied only by an independent reviewer.
 - **A found-nothing review is trustworthy only when an independent agent ran
   it.** Your own "looks good" is not evidence.
+- **Substantive prose gets its own review pass.** When substantive work creates
+  or changes any kind of text covered by the House style below, the independent
+  reviewer must review that prose separately against those rules. Give the
+  reviewer every changed file and draft that contains prose. Include untracked
+  files and any text that will be delivered or posted directly. The reviewer
+  must list everything it checked, then quote each problem with a proposed
+  replacement or state explicitly that it found none. A general technical
+  review does not satisfy this rule unless it reports the prose pass separately.
+  Trivial typo-only changes are exempt.
 - **Prove uncertain behavior, do not assert it.** A claim that some mechanism
   "is enough" or "is not needed" is a hypothesis until a harness or a walked
   edge case (the teleport-out-of-subtree case, the empty input, the concurrent
