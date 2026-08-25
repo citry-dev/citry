@@ -20,7 +20,7 @@ wheels = [
 
 [[package]]
 name = "citry"
-version = "0.4.3"
+version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "citry-core" },
@@ -30,9 +30,9 @@ dependencies = [
     { name = "tzdata" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/56/4d/529ea0f3d100c2cb130f2a52ae49faccc51cc126d2e357e89c9099d16787/citry-0.4.3.tar.gz", hash = "sha256:7d6ab31bd4297385c0eecb412c7fd67340ebd524ac3469af17eb52cef3db8f9e", size = 1576975, upload-time = "2026-08-22T21:25:08.817Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/f8/851de5a9cbafc90a28a1732b23783b49307ddf0609abfb8cd96f05bfa131/citry-0.4.4.tar.gz", hash = "sha256:65912b31f194569f9f6e30cc4fe590cc2df2be3d9cabdcfa53cfe50d266d265e", size = 1597984, upload-time = "2026-08-25T23:39:05.468Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/d7/e86ef59d46b4d5fa2129f704b47ad687034199f74d3619f02199236f9e6b/citry-0.4.3-py3-none-any.whl", hash = "sha256:df42be239ee580eb4ad4f151fca959ed79a3207ae839d88e99af6952cf9ae523", size = 1023539, upload-time = "2026-08-22T21:25:06.674Z" },
+    { url = "https://files.pythonhosted.org/packages/79/4d/2fefac59805cdd4e84b6aee07d7f97036be90cfbd283125eff60266ef1a8/citry-0.4.4-py3-none-any.whl", hash = "sha256:ed228b63fc212eb67c4f68ec8aba6beec4640775a8880cfe867b3f7bb00d7a7f", size = 1040803, upload-time = "2026-08-25T23:39:03.25Z" },
 ]
 
 [[package]]
@@ -95,7 +95,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "citry", specifier = ">=0.4.3,<0.5" },
+    { name = "citry", specifier = ">=0.4.4,<0.5" },
     { name = "django", specifier = ">=5.2,<7" },
 ]
 

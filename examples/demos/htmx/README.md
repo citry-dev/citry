@@ -38,6 +38,8 @@ Open <http://127.0.0.1:8000/>.
 HTMX 2.0.10 is checked into `app/static/`, so the application does not contact
 a CDN or any other external service while it runs.
 
+The locked project uses Citry 0.4.4.
+
 ## Test it
 
 ```console

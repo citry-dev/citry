@@ -31,6 +31,8 @@ before the same `uv run` command.
 
 Open <http://127.0.0.1:8000/>.
 
+The locked project uses Citry 0.4.4.
+
 ## Test it
 
 ```console

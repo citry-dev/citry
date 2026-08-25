@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Run the Citry Project Explorer directly on WSGI"
 requires-python = ">=3.10,<4"
 dependencies = [
-  "citry>=0.4.3,<0.5",
+  "citry>=0.4.4,<0.5",
   "waitress>=3.0,<4",
 ]
 
