@@ -1,4 +1,4 @@
-"""Validate the version-locked example and playground surfaces for a Citry tag."""
+"""Validate version-locked example and playground surfaces for a Citry tag."""
 
 from __future__ import annotations
 

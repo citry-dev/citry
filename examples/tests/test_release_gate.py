@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from examples.tools.release_gate import validate_release_surfaces
+from examples._internal.release_gate import validate_release_surfaces
 
 
 def _write_fixture(root: Path, *, example_version: str = "0.4.4") -> dict:

@@ -228,7 +228,7 @@ extend-markup-names = [
     "ANN",  # annotations are not needed for repository contract tests
     "S101", # pytest assertions describe the catalog and archive contracts
 ]
-"examples/tools/*" = [
+"examples/_internal/*" = [
     "PLC0415", # Playwright is an optional browser-gate dependency
     "T201",    # command-line tools print qualification/archive progress
 ]

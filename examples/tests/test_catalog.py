@@ -3,8 +3,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI leg
     import tomli as tomllib
 
-from examples.tools.catalog import EXAMPLES_ROOT, load_catalog
-from examples.tools.qualify import interpolate, project_environment
+from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
+from examples._internal.qualify import interpolate, project_environment
 
 
 def project_python(project) -> str:

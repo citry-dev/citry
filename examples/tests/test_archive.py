@@ -1,8 +1,8 @@
 import tarfile
 from hashlib import sha256
 
-from examples.tools.archive import build_archive
-from examples.tools.catalog import load_catalog
+from examples._internal.archive import build_archive
+from examples._internal.catalog import load_catalog
 
 
 def test_archive_is_deterministic_and_contains_only_project_inventory(tmp_path) -> None:

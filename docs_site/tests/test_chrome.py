@@ -412,10 +412,23 @@ def _render_with_seo(current_path: str) -> str:
 def test_head_has_structured_data_and_card_meta() -> None:
     html = _render_with_seo("concepts/components/")
     # BreadcrumbList JSON-LD follows the same declared hierarchy as the UI.
-    assert '"@type": "BreadcrumbList"' in html
-    assert '"position": 1, "name": "Docs"' in html
-    assert '"position": 2, "name": "Concepts"' in html
-    assert '"item": "https://x.test/citry/"' in html
+    document = lxml_html.document_fromstring(html)
+    blocks = [json.loads(node.text) for node in document.xpath('//script[@type="application/ld+json"]')]
+    breadcrumb_data = next(block for block in blocks if block["@type"] == "BreadcrumbList")
+    assert breadcrumb_data["itemListElement"] == [
+        {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Docs",
+            "item": "https://x.test/citry/",
+        },
+        {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Components",
+            "item": "https://x.test/citry/concepts/components/",
+        },
+    ]
     # TechArticle JSON-LD on the content page.
     assert '"@type": "TechArticle"' in html
     assert '"headline": "Components"' in html
@@ -451,6 +464,14 @@ def test_home_page_has_no_breadcrumb_structured_data() -> None:
     html = _render_with_seo("")
     assert "BreadcrumbList" not in html
     assert "TechArticle" not in html
+
+
+def test_top_level_page_has_no_single_item_breadcrumb_structured_data() -> None:
+    html = _render_with_seo("examples/")
+    document = lxml_html.document_fromstring(html)
+    blocks = [json.loads(node.text) for node in document.xpath('//script[@type="application/ld+json"]')]
+
+    assert not any(block["@type"] == "BreadcrumbList" for block in blocks)
 
 
 def test_structured_data_escapes_hostile_title() -> None:

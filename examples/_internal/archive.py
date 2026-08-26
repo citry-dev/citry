@@ -1,3 +1,5 @@
+"""Build deterministic archives of Citry's standalone example projects."""
+
 from __future__ import annotations
 
 import argparse

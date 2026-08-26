@@ -699,9 +699,11 @@ change, or another `scope: site` page, uses this same workflow. It rebuilds the
 root site and root-owned Pagefind, sitemap, LLM, feed, redirect, and social-card
 outputs, then mounts copies of the existing committed snapshots. Assembly may
 adjust those deployed copies for canonical/robots policy, the configured
-Pagefind path, and a deployment base path; it never modifies or regenerates the
-committed source snapshots. GitHub Pages replaces the artifact atomically, so
-there is no separate partial-upload path to maintain.
+Pagefind path, and a deployment base path. It also removes legacy breadcrumb
+items that have no URL, so historical pages remain eligible for breadcrumb
+results. It never modifies or regenerates the committed source snapshots.
+GitHub Pages replaces the artifact atomically, so there is no separate
+partial-upload path to maintain.
 Any future site-scoped source outside `docs_site/**` must be added to both the
 docs-check and docs-deploy workflow path filters.
 

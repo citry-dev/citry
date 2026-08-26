@@ -9,8 +9,10 @@ from docs_site._internal._vendor.mike_versions import Versions
 from docs_site._internal.assemble import (
     _enable_root_version_picker,
     _noindex_old_versions,
+    _rewrite_breadcrumb_jsonld,
     _rewrite_canonical,
     _rewrite_meta_robots,
+    _rewrite_mounted_breadcrumbs,
     _rewrite_mounted_pagefind_path,
     assemble_site,
 )
@@ -208,6 +210,42 @@ def test_mounted_pagefind_rewrite_accepts_minified_and_quoted_attributes(tmp_pat
     assert "/documented/pagefind.js" in untouched_source
     assert "/unrelated/pagefind.js" in untouched_source
     assert "/script/pagefind.js" in untouched_source
+
+
+def test_mounted_breadcrumb_rewrite_removes_url_less_items(tmp_path: Path) -> None:
+    page = tmp_path / "1.0.0" / "concepts" / "components" / "index.html"
+    page.parent.mkdir(parents=True)
+    article = (
+        '<script type="application/ld+json">'
+        '{"@context":"https://schema.org","@type":"TechArticle","headline":"Components"}'
+        "</script>"
+    )
+    breadcrumb = (
+        "<script type=application/ld+json>\n"
+        '{"@context":"https://schema.org","@type":"BreadcrumbList",'
+        '"itemListElement":['
+        '{"@type":"ListItem","position":1,"name":"Docs","item":"https://x.test/v/1/"},'
+        '{"@type":"ListItem","position":2,"name":"Concepts"},'
+        '{"@type":"ListItem","position":3,"name":"Components",'
+        '"item":"https://x.test/v/1/concepts/components/"}]}'
+        "\n</script>"
+    )
+    page.write_text(article + breadcrumb, encoding="utf-8")
+
+    assert _rewrite_mounted_breadcrumbs(tmp_path) == 1
+    rewritten = page.read_text(encoding="utf-8")
+    assert article in rewritten
+    assert '"name": "Concepts"' not in rewritten
+    assert '"position": 2, "name": "Components"' in rewritten
+    assert _rewrite_breadcrumb_jsonld(rewritten) == rewritten
+
+    single = (
+        '<script type="application/ld+json">'
+        '{"@context":"https://schema.org","@type":"BreadcrumbList",'
+        '"itemListElement":[{"@type":"ListItem","position":1,"name":"Components"}]}'
+        "</script>"
+    )
+    assert _rewrite_breadcrumb_jsonld(single) == ""
 
 
 def test_noindex_rewrites_only_real_meta_and_link_tags() -> None:

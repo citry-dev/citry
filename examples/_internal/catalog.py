@@ -1,3 +1,5 @@
+"""Load and validate the standalone example-project catalog."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

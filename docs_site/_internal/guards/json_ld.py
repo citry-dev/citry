@@ -109,3 +109,48 @@ def _check_block(block: str, *, source: str) -> Iterator[GuardResult]:
                 message=f"{type_name} JSON-LD is missing recommended field {key!r}",
                 source=source,
             )
+
+    if type_name == "BreadcrumbList":
+        yield from _check_breadcrumb_items(data.get("itemListElement"), source=source)
+
+
+def _check_breadcrumb_items(value: object, *, source: str) -> Iterator[GuardResult]:
+    if not isinstance(value, list):
+        yield GuardResult.error(
+            guard="json_ld",
+            message="BreadcrumbList itemListElement must be a list",
+            source=source,
+        )
+        return
+
+    if len(value) < 2:
+        yield GuardResult.error(
+            guard="json_ld",
+            message="BreadcrumbList must contain at least two items",
+            source=source,
+        )
+
+    last = len(value) - 1
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, dict):
+            yield GuardResult.error(
+                guard="json_ld",
+                message=f"Breadcrumb item {index} is not an object",
+                source=source,
+            )
+            continue
+        required = ("position", "name") if index - 1 == last else ("position", "name", "item")
+        for key in required:
+            if item.get(key) in (None, ""):
+                yield GuardResult.error(
+                    guard="json_ld",
+                    message=f"Breadcrumb item {index} is missing required field {key!r}",
+                    source=source,
+                )
+        position = item.get("position")
+        if position not in (None, "") and (type(position) is not int or position != index):
+            yield GuardResult.error(
+                guard="json_ld",
+                message=f"Breadcrumb item {index} has position {position!r}; expected {index}",
+                source=source,
+            )

@@ -12,7 +12,9 @@ class HighPriorityBadge(Component):
     class Slots:
         pass
 
-    template = '<span class="priority priority--high">High priority</span>'
+    template = """
+      <span class="priority priority--high">High priority</span>
+    """
 
 
 class StandardPriorityBadge(Component):
@@ -24,11 +26,13 @@ class StandardPriorityBadge(Component):
     class Slots:
         pass
 
-    template = '<span class="priority">Standard</span>'
+    template = """
+      <span class="priority">Standard</span>
+    """
 
 
 class BadgeStyles(Component):
-    """Collect the shared stylesheet once without wrapping badge markup."""
+    """Provide the CSS shared by both priority badges."""
 
     citry = citry_app
 
@@ -47,10 +51,14 @@ class BadgeStyles(Component):
         min-height: 1.55rem;
         padding: 0.18rem 0.48rem;
         border-radius: 999px;
-        color: #58625b;
-        background: #eceee9;
+        color: var(--color-faint);
+        background: var(--color-border-subtle);
         font-size: 0.68rem;
-        font-weight: 750;
+        font-weight: 650;
       }
-      .priority--high { color: #9b3e22; background: #ffe2d5; }
+
+      .priority--high {
+        color: var(--color-accent-ink);
+        background: var(--color-accent-soft);
+      }
     """

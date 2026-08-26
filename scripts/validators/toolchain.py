@@ -322,7 +322,7 @@ def check() -> list[str]:
         "--workflow repo--docs-check.yml",
         "--event push",
         "--no-artifact",
-        "examples.tools.release_gate",
+        "examples._internal.release_gate",
         "needs: [verify-version, select-qualification, select-release-surfaces]",
         "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
         "--promote-archive qualification.zip",

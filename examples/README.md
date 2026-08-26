@@ -43,8 +43,9 @@ private data or write operations.
 
 ## Explore a larger demo
 
-- [Project Board](demos/project_board/) adapts the visual and component ideas
-  from Citry's large benchmark into a maintainable browser application.
+- [Project Board](demos/project_board/) lets you search, add, move, and
+  complete tasks while showing how components, Alpine, and Citry Events work
+  together in a larger application.
 - The [HTMX demo](demos/htmx/) lets you search contacts as you type, edit and
   validate a contact in place, and update the team list after choosing a
   department. FastAPI handles the routes, HTMX sends requests and updates the

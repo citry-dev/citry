@@ -99,19 +99,19 @@ jobs:
           for wheel in dist/example-wheels/*.whl; do
             wheel_args+=(--wheel "$wheel")
           done
-          .example-tools/bin/python -m examples.tools.qualify \
+          .example-tools/bin/python -m examples._internal.qualify \
             --python "${{ matrix.python-version }}" \
             "${wheel_args[@]}"
 
       - name: Qualify clean copies from public-index locks
         if: github.event_name == 'workflow_dispatch' && inputs.public_release
         run: >-
-          .example-tools/bin/python -m examples.tools.qualify
+          .example-tools/bin/python -m examples._internal.qualify
           --python "${{ matrix.python-version }}"
 
       - name: Build deterministic archives
         if: matrix.python-version == '3.14'
-        run: .example-tools/bin/python -m examples.tools.archive --output dist/examples
+        run: .example-tools/bin/python -m examples._internal.archive --output dist/examples
 
       - name: Upload example archives
         if: matrix.python-version == '3.14' && !inputs.public_release
@@ -186,7 +186,7 @@ jobs:
           for wheel in dist/example-wheels/*.whl; do
             wheel_args+=(--wheel "$wheel")
           done
-          .example-tools/bin/python -m examples.tools.qualify \
+          .example-tools/bin/python -m examples._internal.qualify \
             --python 3.14 \
             --browser "${{ matrix.browser }}" \
             "${wheel_args[@]}"
@@ -194,7 +194,7 @@ jobs:
       - name: Run all Chromium journeys from public-index locks
         if: github.event_name == 'workflow_dispatch' && inputs.public_release
         run: >-
-          .example-tools/bin/python -m examples.tools.qualify
+          .example-tools/bin/python -m examples._internal.qualify
           --python 3.14
           --browser "${{ matrix.browser }}"
 
@@ -206,7 +206,7 @@ jobs:
           for wheel in dist/example-wheels/*.whl; do
             wheel_args+=(--wheel "$wheel")
           done
-          .example-tools/bin/python -m examples.tools.qualify \
+          .example-tools/bin/python -m examples._internal.qualify \
             --python 3.14 \
             --browser "${{ matrix.browser }}" \
             --project starter-standalone \

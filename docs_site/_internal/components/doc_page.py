@@ -1590,10 +1590,13 @@ def _build_breadcrumb_jsonld(
     site_root = site_url.rstrip("/")
     items: list[dict[str, Any]] = []
     last = len(breadcrumbs) - 1
-    for index, crumb in enumerate(breadcrumbs):
+    linked_crumbs = [(index, crumb) for index, crumb in enumerate(breadcrumbs) if crumb.path or index == last]
+    if len(linked_crumbs) < 2:
+        return ""
+    for position, (index, crumb) in enumerate(linked_crumbs, start=1):
         item: dict[str, Any] = {
             "@type": "ListItem",
-            "position": index + 1,
+            "position": position,
             "name": crumb.label,
         }
         if index == last:

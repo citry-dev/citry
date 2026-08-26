@@ -1,7 +1,7 @@
 [project]
 name = "citry-demo-project-board"
 version = "0.1.0"
-description = "A browser-complete project board demo for Citry"
+description = "Run the Citry Project Board with FastAPI and Citry Events"
 requires-python = ">=3.10,<4"
 dependencies = [
   "citry>=0.4.4,<0.5",

@@ -1,3 +1,5 @@
+"""Run the Citry Project Board with FastAPI."""
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 

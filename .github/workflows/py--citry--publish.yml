@@ -247,7 +247,7 @@ jobs:
         run: |
           curl --fail --location --silent --show-error \
             "https://pypi.org/pypi/citry/${CITRY_VERSION}/json" --output pypi.json
-          python -m examples.tools.release_gate --pypi-json pypi.json
+          python -m examples._internal.release_gate --pypi-json pypi.json
       - name: Find the exact public-index example qualification
         if: needs.verify-version.outputs.promotion_kind == 'release'
         id: examples

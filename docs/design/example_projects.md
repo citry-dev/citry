@@ -1,10 +1,10 @@
 # Design: standalone example projects
 
 **Status (2026-08-24): accepted and implemented.** This document defines how
-Citry owns, structures, tests, publishes, and retires complete example projects
+Citry owns, structures, tests, surfaces, and retires complete example projects
 under the repository-root `examples/` directory. The initial starter roster,
-Project Board and HTMX demos, qualification tooling, archives, discovery links,
-and CI workflow implement this contract.
+Project Board and HTMX demos, qualification tooling, CI archives, discovery
+links, and CI workflow implement this contract.
 
 The repository already has a separate docs-site example system under
 `docs_site/examples/`. That system remains independent. Its examples are
@@ -40,6 +40,7 @@ examples/
   AGENTS.md
   README.md
   catalog.toml
+  _internal/
   tests/
   starters/
     standalone/
@@ -72,14 +73,13 @@ Root `examples/` and `docs_site/examples/` are deliberately separate:
 
 - neither imports from, generates, or synchronizes source into the other;
 - neither claims that files with similar teaching goals must be identical;
-- docs pages may link to a root project, matching release tag, or downloadable
-  release archive; and
+- docs pages may link to a root project at the matching release tag; and
 - changing one surface requires changing the other only when a link, command,
   or explicit compatibility claim is affected.
 
-There is no `citry init` command in this design. Copying a release-specific
-project is the onboarding mechanism until the starter layouts have stabilized
-through real use and releases.
+There is no `citry init` command in this design. Copying a project from its
+release tag is the onboarding mechanism until the starter layouts have
+stabilized through real use and releases.
 
 ## 2. Goals and non-goals
 
@@ -137,18 +137,18 @@ drift where it matters.
 
 ### 3.2 Demos
 
-A demo answers: "What does Citry look like in a substantial application?"
+A demo is a larger application that shows how Citry features work together in
+a realistic interface.
 
 Demos may contain more components, assets, routes, persistence, and browser
 journeys. They must remain runnable and tested, but compactness and host parity
 are not their goals. A demo chooses one reference host unless demonstrating
 host portability is part of that demo's stated purpose.
 
-The first demo is `project_board`, inspired by the large project-page
-benchmark. It should use FastAPI as its initial reference host because the
-repository already has a complete FastAPI tutorial and real adapter coverage.
-Additional launchers are added only when they teach something the starters do
-not already prove.
+The first demo, `project_board`, adapts the large project-page benchmark. It
+uses FastAPI because Citry already documents FastAPI setup and tests its
+adapter against a real application. Add another launcher only when it teaches
+something the starters do not already prove.
 
 The `htmx` demo proves interoperability with an established browser-side
 request and swap library. It also uses FastAPI, but it does not teach FastAPI
@@ -174,11 +174,14 @@ will require:
 versus demos, presents the host/capability matrix, gives the shortest command
 for each project, and links to the framework and security documentation.
 
-`examples/tools/` owns the repository-level catalog loader, clean-copy and
+`examples/_internal/` owns the repository-level catalog loader, clean-copy and
 browser qualification runner, deterministic archive builder, and
 release-surface validator. GitHub CI invokes this tooling directly, but it is
-never a runtime dependency of an example project. `examples/tests/` owns the
-tests for that maintenance tooling.
+never a runtime dependency of an example project. The generated archives are
+short-lived GitHub Actions artifacts used for qualification and release
+evidence; they are not attached to Citry's GitHub Release or published as a
+separate examples distribution. `examples/tests/` owns the tests for this
+maintenance tooling.
 
 ### 4.2 Catalog
 
@@ -489,32 +492,35 @@ user contract adequately.
 
 ### 7.1 Project Board
 
-`examples/demos/project_board/` is a new application inspired by the large
-benchmark page. "Inspired" permits copying and adapting useful component
-shapes, deterministic data, and visual structure. It does not mean importing
-the benchmark module, preserving its one-file layout, or requiring byte or
-component parity.
+`examples/demos/project_board/` adapts the component structure, fixture data,
+and layout from `packages/py/citry/tests/test_benchmark_citry.py` into a
+complete application. The demo owns its modules, data, interactions, and
+output independently from the benchmark.
 
-The benchmark remains self-contained because its harness reads and slices
-source to measure startup, import, first-render, and warm-render boundaries.
-The demo must not become part of those measured imports without an explicit
-benchmark redesign and re-baseline.
+The benchmark must stay self-contained because its harness extracts exact
+source sections before timing them. Keep demo imports out of the benchmark
+unless the benchmark is redesigned and measured again.
+
+The Project Board uses plain local CSS so readers can copy it without another
+UI dependency.
 
 The adaptation must:
 
-- record source provenance and preserve applicable attribution and license
+- credit the benchmark source and keep any required attribution and license
   notices;
 - split components and data into maintainable modules;
-- replace fake request, bookmark, and CSRF objects with real application
-  behavior or remove the affected controls;
-- provide complete local CSS, JavaScript, icons, and routes;
-- fix incomplete Alpine registrations and JavaScript handlers;
+- keep only controls backed by real application behavior;
+- serve every CSS, JavaScript, and icon asset locally and implement every
+  route the page uses;
+- register and implement every Alpine or JavaScript behavior the page uses;
 - use deterministic time and fixture data;
 - implement or clearly disable every visible form, link, and action;
+- let people drag cards with a pointing device and provide a labeled column
+  menu for keyboard and touchscreen use;
 - exercise Events, forms, State, actions, Alpine expressions, slots,
-  provide/inject, dependencies, and dynamic composition where they serve the
-  application; and
-- pass the browser-readiness gate below before it is linked as a public demo.
+  provide/inject, dependencies, and dynamic components only where they
+  support a real interaction; and
+- pass the browser checks in section 8.5 before public docs link to the demo.
 
 ### 7.2 HTMX patterns
 
@@ -713,7 +719,7 @@ If framework support constraints differ by Python version, the catalog and CI
 matrix state the supported intersection explicitly. A dependency resolver
 skip is not counted as a passing starter.
 
-## 9. Discovery, downloads, and versioning
+## 9. Discovery, archives, and versioning
 
 ### 9.1 Discovery layers
 
@@ -724,7 +730,7 @@ Root projects are surfaced through:
 3. links from the substantive Web frameworks documentation;
 4. code-first docs pages that link to the relevant standalone project where
    useful; and
-5. release-specific source and download links.
+5. release-specific source links.
 
 The root README should lead with FastAPI and link to the matrix rather than
 embedding six full setup recipes. The docs Web frameworks guide continues to
@@ -734,27 +740,24 @@ troubleshooting. Root project READMEs own exact project commands and file maps.
 ### 9.2 Version-correct links
 
 The `main` branch examples target the current repository and may require an
-unreleased Citry change. Released documentation must link to either:
+unreleased Citry change. Released documentation links to the example directory
+at the matching Citry release tag. It must not link a released docs snapshot to
+the example on GitHub `main` or to a short-lived CI artifact.
 
-- the example directory at the matching Citry release tag; or
-- a deterministic archive built from that tag.
-
-It must not link a released docs snapshot to the example on GitHub `main`.
-
-Archive construction copies only the selected project inventory, preserves
-text bytes and executable bits where intentional, excludes caches and generated
-output, uses deterministic ordering and timestamps, and publishes a checksum.
-Extracting an archive yields the same tree exercised by clean-copy
-qualification. The docs site may link to that artifact; it does not ingest the
-project as a docs-site example.
+The qualification workflow also builds deterministic archives. Archive
+construction copies only the selected project inventory, preserves text bytes
+and executable bits where intentional, excludes caches and generated output,
+uses deterministic ordering and timestamps, and emits a checksum. Extracting
+an archive yields the same tree exercised by clean-copy qualification. These
+archives are GitHub Actions evidence, not stable reader downloads. Publishing
+them permanently would require a separate release and retention decision.
 
 ### 9.3 Compatibility updates
 
 When a Citry release changes a public contract used by an example, the same
 release work updates and qualifies the affected projects. A tagged example is
-immutable historical guidance. Fixes for an old release use a patch tag or a
-clearly versioned replacement artifact rather than rewriting a published
-archive.
+immutable historical guidance. Fixes for an old release use a patch tag rather
+than rewriting published source history.
 
 Generated GitHub Template repositories may be added later as read-only mirrors
 for discoverability. The monorepo remains canonical, mirrors identify their
@@ -798,7 +801,7 @@ an occasional release cleanup.
 
 A starter is retired only when Citry drops the host integration or replaces it
 with a documented successor. Remove it from current discovery and the catalog,
-but leave release tags and archives intact.
+but leave release tags intact.
 
 A demo can retire when its maintenance cost no longer proves a useful Citry
 job. Retirement records the reason and preserves source history. A broken,
@@ -814,9 +817,10 @@ unqualified demo must not remain linked as if supported.
    actual server startup.
 4. Add bare ASGI and WSGI after the shared runner proves prefix routing,
    lifespan/startup, and serving commands.
-5. Add README/docs discovery and deterministic release archives when the first
+5. Add README/docs discovery and deterministic CI archives when the first
    starters pass clean-copy qualification.
-6. Adapt the benchmark-inspired Project Board into a browser-complete demo.
+6. Adapt the benchmark-inspired Project Board and make every visible browser
+   interaction work.
 7. Reconsider `citry init` only after starter layouts and dependency choices
    have survived releases and user feedback.
 
@@ -862,8 +866,8 @@ server transport.
 
 Rejected for the initial delivery. A generator would freeze file inventories,
 packaging, versioning, overwrite, and migration contracts before the examples
-have validated those choices. Release-tagged copies and archives provide the
-onboarding value first.
+have validated those choices. Release-tagged copies provide the onboarding
+value first.
 
 ## 13. Falsifiability and open decisions
 
@@ -879,19 +883,7 @@ This design should be revisited if evidence shows that:
 - local `file://` document activation cannot support the standalone Alpine
   promise;
 - a project's host dependency no longer supports Citry's full Python range;
-- release-specific archives cannot be made reproducible from tagged source;
+- CI archives cannot be made reproducible from tagged source;
   or
-- users repeatedly need to initialize these projects in ways copy/download
-  cannot serve, providing evidence to design `citry init`.
-
-Implementation must still decide:
-
-- the exact catalog TOML spelling and archive filename convention;
-- whether the first project packages use a flat or `src/` layout where the
-  host has no strong convention;
-- the bounded server-start timeout from measured CI startup data; and
-- whether the project-board demo uses plain local CSS or Citry UI as part of
-  its explicit product story.
-
-Those decisions do not change the ownership, starter behavior, Events,
-standalone, or qualification contracts settled here.
+- users repeatedly need to initialize these projects in ways that copying
+  tagged source cannot serve, providing evidence to design `citry init`.

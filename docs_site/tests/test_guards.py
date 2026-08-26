@@ -528,6 +528,78 @@ def test_json_ld_flags_malformed_block(tmp_path: Path) -> None:
     assert "Malformed JSON-LD" in errors[0].message
 
 
+def test_json_ld_flags_breadcrumb_item_without_url(tmp_path: Path) -> None:
+    build = tmp_path / "site"
+    build.mkdir()
+    body = (
+        '<script type="application/ld+json">'
+        '{"@context":"https://schema.org","@type":"BreadcrumbList",'
+        '"itemListElement":['
+        '{"@type":"ListItem","position":1,"name":"Docs"},'
+        '{"@type":"ListItem","position":2,"name":"Components"}]}'
+        "</script>"
+    )
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+
+    errors = [r for r in json_ld.check(_index_ctx(tmp_path, build)) if r.severity is Severity.ERROR]
+
+    assert len(errors) == 1
+    assert "Breadcrumb item 1 is missing required field 'item'" in errors[0].message
+
+
+def test_json_ld_flags_single_breadcrumb_item(tmp_path: Path) -> None:
+    build = tmp_path / "site"
+    build.mkdir()
+    body = (
+        '<script type="application/ld+json">'
+        '{"@context":"https://schema.org","@type":"BreadcrumbList",'
+        '"itemListElement":[{"@type":"ListItem","position":1,"name":"Components"}]}'
+        "</script>"
+    )
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+
+    errors = [r for r in json_ld.check(_index_ctx(tmp_path, build)) if r.severity is Severity.ERROR]
+
+    assert len(errors) == 1
+    assert "BreadcrumbList must contain at least two items" in errors[0].message
+
+
+def test_json_ld_flags_breadcrumb_items_with_the_wrong_shape(tmp_path: Path) -> None:
+    build = tmp_path / "site"
+    build.mkdir()
+    body = (
+        '<script type="application/ld+json">'
+        '{"@context":"https://schema.org","@type":"BreadcrumbList",'
+        '"itemListElement":{"position":1,"name":"Components"}}'
+        "</script>"
+    )
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+
+    errors = [r for r in json_ld.check(_index_ctx(tmp_path, build)) if r.severity is Severity.ERROR]
+
+    assert len(errors) == 1
+    assert "BreadcrumbList itemListElement must be a list" in errors[0].message
+
+
+def test_json_ld_flags_out_of_sequence_breadcrumb_positions(tmp_path: Path) -> None:
+    build = tmp_path / "site"
+    build.mkdir()
+    body = (
+        '<script type="application/ld+json">'
+        '{"@context":"https://schema.org","@type":"BreadcrumbList",'
+        '"itemListElement":['
+        '{"@type":"ListItem","position":1,"name":"Docs","item":"https://x.test/"},'
+        '{"@type":"ListItem","position":3,"name":"Components"}]}'
+        "</script>"
+    )
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+
+    errors = [r for r in json_ld.check(_index_ctx(tmp_path, build)) if r.severity is Severity.ERROR]
+
+    assert len(errors) == 1
+    assert "Breadcrumb item 2 has position 3; expected 2" in errors[0].message
+
+
 def test_json_ld_requires_blogposting_on_blog_post_pages(tmp_path: Path) -> None:
     build = tmp_path / "site" / "blog" / "post"
     build.mkdir(parents=True)

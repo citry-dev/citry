@@ -1,3 +1,5 @@
+"""Qualify Citry example projects in clean copies and real browsers."""
+
 from __future__ import annotations
 
 import argparse
@@ -32,7 +34,7 @@ AXE_PATH = Path(__file__).resolve().parents[2] / "node_modules" / "axe-core" / "
 
 PAGE_SENTINELS = {
     "starter-web-v1": b"Project Explorer",
-    "demo-project-board-v1": b"Launch workspace",
+    "demo-project-board-v1": b"Plan the product launch.",
     "demo-htmx-v1": b"HTMX + Citry patterns",
 }
 
@@ -72,9 +74,9 @@ def project_environment() -> dict[str, str]:
             "CITRY_SECRET": TEST_SECRET,
             "DJANGO_SECRET_KEY": TEST_SECRET,
             "PYTHONUNBUFFERED": "1",
-            # install_project() may replace the locked Citry package with
+            # install_project() may replace the locked Citry packages with
             # editable sources or candidate wheels. UV_NO_SYNC keeps later
-            # `uv run` commands from restoring the lock.
+            # `uv run` commands from reinstalling the versions in uv.lock.
             "UV_NO_SYNC": "1",
         }
     )
@@ -241,10 +243,11 @@ def running_server(
         log.close()
 
 
-def _browser_problems(page: Any) -> tuple[list[str], list[str], list[str]]:
+def _browser_problems(page: Any) -> tuple[list[str], list[str], list[str], list[str]]:
     console_errors: list[str] = []
     page_errors: list[str] = []
     failed_requests: list[str] = []
+    http_errors: list[str] = []
 
     def on_console(message: Any) -> None:
         if message.type == "error" and "Failed to load resource" not in message.text:
@@ -253,7 +256,11 @@ def _browser_problems(page: Any) -> tuple[list[str], list[str], list[str]]:
     page.on("console", on_console)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
     page.on("requestfailed", lambda request: failed_requests.append(request.url))
-    return console_errors, page_errors, failed_requests
+    page.on(
+        "response",
+        lambda response: http_errors.append(f"{response.status} {response.url}") if response.status >= 400 else None,
+    )
+    return console_errors, page_errors, failed_requests, http_errors
 
 
 def assert_starter_visual_contract(page: Any) -> None:
@@ -296,13 +303,53 @@ def assert_starter_visual_contract(page: Any) -> None:
         raise AssertionError(f"The starter overflows its mobile viewport: {viewport!r}")
 
 
+def assert_project_board_visual_contract(page: Any) -> None:
+    styles = page.evaluate(
+        """() => {
+          const root = getComputedStyle(document.documentElement);
+          return {
+            colorScheme: root.colorScheme,
+            pageColor: root.getPropertyValue("--color-page").trim(),
+            backgroundImage: getComputedStyle(document.body).backgroundImage,
+            headerPosition: getComputedStyle(document.querySelector(".site-header")).position,
+            headingFont: getComputedStyle(document.querySelector("h1")).fontFamily,
+            cardShadow: getComputedStyle(document.querySelector(".task-card")).boxShadow,
+          };
+        }"""
+    )
+    expected = {
+        "colorScheme": "light",
+        "pageColor": "oklch(96.5% 0.005 250)",
+        "backgroundImage": "none",
+        "headerPosition": "fixed",
+        "cardShadow": "none",
+    }
+    differences = {key: styles[key] for key, value in expected.items() if styles[key] != value}
+    if differences:
+        raise AssertionError(f"The Project Board does not match Citry's visual contract: {differences!r}")
+    if "system-ui" not in styles["headingFont"]:
+        raise AssertionError(
+            f"The Project Board heading does not use the Citry system font stack: {styles['headingFont']!r}"
+        )
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    viewport = page.evaluate(
+        """() => ({
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        })"""
+    )
+    if viewport["scrollWidth"] > viewport["clientWidth"]:
+        raise AssertionError(f"The Project Board overflows its mobile viewport: {viewport!r}")
+
+
 def browser_starter(project: ExampleProject, base_url: str, browser_name: str) -> None:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:
         browser = getattr(playwright, browser_name).launch()
         page = browser.new_page()
-        console_errors, page_errors, failed_requests = _browser_problems(page)
+        console_errors, page_errors, failed_requests, http_errors = _browser_problems(page)
         event_requests = []
         page.on(
             "request",
@@ -376,9 +423,11 @@ def browser_starter(project: ExampleProject, base_url: str, browser_name: str) -
             raise AssertionError("Reload left the starter in its loading state")
         if len(event_requests) != 3:
             raise AssertionError(f"Reload unexpectedly sent another Event request: {event_requests}")
-        if console_errors or page_errors or failed_requests:
+        if console_errors or page_errors or failed_requests or http_errors:
             raise AssertionError(
-                f"Browser errors: console={console_errors}, page={page_errors}, requests={failed_requests}"
+                "Browser errors: "
+                f"console={console_errors}, page={page_errors}, "
+                f"requests={failed_requests}, HTTP={http_errors}"
             )
         assert_starter_visual_contract(page)
         browser.close()
@@ -390,7 +439,7 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
     with sync_playwright() as playwright:
         browser = getattr(playwright, browser_name).launch()
         page = browser.new_page()
-        console_errors, page_errors, failed_requests = _browser_problems(page)
+        console_errors, page_errors, failed_requests, http_errors = _browser_problems(page)
         page.goto(base_url + "/", wait_until="networkidle")
         page.wait_for_function("window.Alpine && window.Citry && Citry.events")
         accessibility_findings = axe_high_impact_findings(page)
@@ -399,36 +448,129 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
                 f"Axe found serious or critical accessibility problems on the Project Board: {accessibility_findings}"
             )
 
-        page.get_by_role("button", name="How this works").click()
-        page.get_by_text("Filters call Python because they change server data.").wait_for()
+        board_grid = page.locator(".board-grid")
+        page.set_viewport_size({"width": 601, "height": 900})
+        wide_column_count = board_grid.evaluate(
+            "element => getComputedStyle(element).gridTemplateColumns.trim().split(/\\s+/).length"
+        )
+        if wide_column_count != 3:
+            raise AssertionError(
+                f"At 601px wide, the board grid should have three columns, but it has {wide_column_count}."
+            )
+        page.set_viewport_size({"width": 600, "height": 900})
+        narrow_column_count = board_grid.evaluate(
+            "element => getComputedStyle(element).gridTemplateColumns.trim().split(/\\s+/).length"
+        )
+        if narrow_column_count != 1:
+            raise AssertionError(
+                f"At 600px wide, the board grid should have one column, but it has {narrow_column_count}."
+            )
+        page.set_viewport_size({"width": 1280, "height": 720})
 
-        search = page.get_by_role("searchbox", name="Search board")
+        page.get_by_role("button", name="How this page works").click()
+        page.get_by_text("You can open this explanation and dismiss notices").wait_for()
+
+        backlog = page.get_by_role("region", name="Backlog column")
+        progress = page.get_by_role("region", name="In progress column")
+        review = page.get_by_role("region", name="Review column")
+        keyboard_card = review.locator("article.task-card", has_text="Review keyboard navigation")
+        move_menu = keyboard_card.get_by_label("Move Review keyboard navigation to column")
+        move_menu.focus()
+        move_menu.select_option("progress")
+        moved_keyboard_card = progress.locator("article.task-card", has_text="Review keyboard navigation")
+        moved_keyboard_card.wait_for()
+        page.get_by_text("Moved “Review keyboard navigation” to In progress.").wait_for()
+        moved_menu = moved_keyboard_card.get_by_label("Move Review keyboard navigation to column")
+        if not moved_menu.evaluate("element => element === document.activeElement"):
+            raise AssertionError("Moving a task with its column menu did not return focus to that menu")
+        moved_menu.select_option("review")
+        returned_keyboard_card = review.locator("article.task-card", has_text="Review keyboard navigation")
+        returned_keyboard_card.wait_for()
+        page.get_by_text("Moved “Review keyboard navigation” to Review.").wait_for()
+        returned_menu = returned_keyboard_card.get_by_label("Move Review keyboard navigation to column")
+        if not returned_menu.evaluate("element => element === document.activeElement"):
+            raise AssertionError("Moving a task repeatedly did not restore focus to its column menu")
+        returned_keyboard_card.get_by_role("button", name="Mark complete").click()
+        returned_keyboard_card.wait_for(state="detached")
+        page.get_by_text("Completed “Review keyboard navigation”.").wait_for()
+        completed_filter = page.get_by_role("checkbox", name="Show completed")
+        completed_filter.check()
+        completed_keyboard_card = review.locator("article.task-card", has_text="Review keyboard navigation")
+        completed_keyboard_card.wait_for()
+        completed_keyboard_card.get_by_role("button", name="Reopen task").click()
+        completed_keyboard_card.get_by_role("button", name="Mark complete").wait_for()
+        completed_filter.uncheck()
+
+        search = page.get_by_role("searchbox", name="Search tasks")
         search.fill("keyboard")
+        page.get_by_text("1 task shown", exact=True).wait_for()
         page.get_by_role("heading", name="Review keyboard navigation").wait_for()
         search.fill("")
         page.get_by_role("heading", name="Map the onboarding journey").wait_for()
 
+        onboarding = backlog.locator("article.task-card", has_text="Map the onboarding journey")
+        onboarding.drag_to(review.locator(".lane__tasks"))
+        moved_onboarding = review.locator("article.task-card", has_text="Map the onboarding journey")
+        moved_onboarding.wait_for()
+        page.get_by_text("Moved “Map the onboarding journey” to Review.").wait_for()
+
         title = page.get_by_role("textbox", name="Task title")
         title.fill("x")
-        page.get_by_role("button", name="Add task").click()
-        page.get_by_text("Use at least four characters.").wait_for()
+        with page.expect_response(
+            lambda response: response.status == 422
+            and "/ext/events/" in response.url
+            and response.url.endswith("/add")
+        ) as invalid_response_info:
+            page.get_by_role("button", name="Add task").click()
+        page.get_by_text("Enter 4 to 80 characters.").wait_for()
+        expected_validation_response = f"422 {invalid_response_info.value.url}"
+        if expected_validation_response in http_errors:
+            http_errors.remove(expected_validation_response)
         if title.input_value() != "x":
             raise AssertionError("Validation failure did not preserve the typed title")
+        if title.get_attribute("aria-invalid") != "true":
+            raise AssertionError("The invalid task title is not exposed to assistive technology")
+        if title.get_attribute("aria-describedby") != "task-title-error":
+            raise AssertionError("The task title does not identify its validation message")
+        validation_findings = axe_high_impact_findings(page)
+        if validation_findings:
+            raise AssertionError(
+                f"Axe found serious or critical accessibility problems after task validation: {validation_findings}"
+            )
 
         title.fill("Plan release notes")
-        page.get_by_label("Lane").select_option("review")
+        page.locator(".composer__form select[name='lane']").select_option("review")
         page.get_by_label("Priority").select_option("high")
         page.get_by_role("button", name="Add task").click()
         card = page.locator("article.task-card", has_text="Plan release notes")
         card.wait_for()
         page.get_by_text("Added “Plan release notes”.").wait_for()
-        card.get_by_role("button", name="Mark complete").click()
-        card.wait_for(state="detached")
+        page.get_by_role("button", name="Dismiss notification").click()
+        page.locator(".toast").wait_for(state="hidden")
 
-        if console_errors or page_errors or failed_requests:
+        card.get_by_role("button", name="Mark complete").dblclick()
+        card.wait_for(state="detached")
+        page.get_by_text("Completed “Plan release notes”.").wait_for()
+        if not page.locator(".board-stats").evaluate("element => element === document.activeElement"):
+            raise AssertionError("Completing a hidden task did not move focus to the board summary")
+
+        page.get_by_role("checkbox", name="Show completed").check()
+        completed_card = page.locator("article.task-card", has_text="Plan release notes")
+        completed_card.wait_for()
+        completed_card.get_by_role("button", name="Reopen task").wait_for()
+        updated_findings = axe_high_impact_findings(page)
+        if updated_findings:
             raise AssertionError(
-                f"Browser errors: console={console_errors}, page={page_errors}, requests={failed_requests}"
+                f"Axe found serious or critical accessibility problems after board updates: {updated_findings}"
             )
+
+        if console_errors or page_errors or failed_requests or http_errors:
+            raise AssertionError(
+                "Browser errors: "
+                f"console={console_errors}, page={page_errors}, "
+                f"requests={failed_requests}, HTTP={http_errors}"
+            )
+        assert_project_board_visual_contract(page)
         browser.close()
 
 
@@ -438,7 +580,7 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
     with sync_playwright() as playwright:
         browser = getattr(playwright, browser_name).launch()
         page = browser.new_page()
-        console_errors, page_errors, failed_requests = _browser_problems(page)
+        console_errors, page_errors, failed_requests, http_errors = _browser_problems(page)
         fragment_requests: list[str] = []
         event_requests: list[str] = []
 
@@ -619,9 +761,11 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
             raise AssertionError(f"The browser did not send these HTMX requests: {missing_paths}")
         if event_requests:
             raise AssertionError(f"The browser sent Citry Events requests during the HTMX demo: {event_requests}")
-        if console_errors or page_errors or failed_requests:
+        if console_errors or page_errors or failed_requests or http_errors:
             raise AssertionError(
-                f"Browser errors: console={console_errors}, page={page_errors}, requests={failed_requests}"
+                "Browser errors: "
+                f"console={console_errors}, page={page_errors}, "
+                f"requests={failed_requests}, HTTP={http_errors}"
             )
         browser.close()
 
@@ -635,7 +779,7 @@ def browser_standalone(project_dir: Path, browser_name: str) -> None:
     with sync_playwright() as playwright:
         browser = getattr(playwright, browser_name).launch()
         page = browser.new_page()
-        console_errors, page_errors, failed_requests = _browser_problems(page)
+        console_errors, page_errors, failed_requests, http_errors = _browser_problems(page)
         network_requests = []
         page.on(
             "request",
@@ -653,11 +797,11 @@ def browser_standalone(project_dir: Path, browser_name: str) -> None:
             )
         page.get_by_role("button", name="How this page works").click()
         page.get_by_text("Opening this panel does not call Python.").wait_for()
-        if network_requests or console_errors or page_errors or failed_requests:
+        if network_requests or console_errors or page_errors or failed_requests or http_errors:
             raise AssertionError(
                 "Standalone browser problems: "
                 f"network={network_requests}, console={console_errors}, "
-                f"page={page_errors}, requests={failed_requests}"
+                f"page={page_errors}, requests={failed_requests}, HTTP={http_errors}"
             )
         assert_starter_visual_contract(page)
         browser.close()

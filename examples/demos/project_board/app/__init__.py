@@ -1,1 +1,1 @@
-"""Project Board demo application."""
+"""Build and serve the Citry Project Board demo."""

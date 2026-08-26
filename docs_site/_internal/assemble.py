@@ -20,6 +20,7 @@ derive it from their own URL and are left alone).
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ from docs_site._internal.build import _is_unsafe_output, _replace_output_directo
 from docs_site._internal.html_rewrite import (
     StartTag,
     append_attribute,
+    parse_start_tags,
     rewrite_attribute_values,
     rewrite_start_tags,
 )
@@ -64,6 +66,8 @@ class AssembleOutcome:
     pagefind_pages: int = 0
     # Mounted snapshot pages rewritten for a project-Pages deployment prefix.
     mounted_base_path_pages: int = 0
+    # Mounted snapshot pages whose legacy URL-less breadcrumb items were removed.
+    breadcrumb_pages: int = 0
     # Old-version HTML pages rewritten to noindex + a canonical to the current release.
     noindexed_pages: int = 0
 
@@ -108,6 +112,7 @@ def assemble_site(
         # index, then point the root pages' picker at the manifest.
         if config.base_path:
             outcome.mounted_base_path_pages = apply_base_path(dest_v, config.base_path)
+        outcome.breadcrumb_pages = _rewrite_mounted_breadcrumbs(dest_v)
         outcome.noindexed_pages = _noindex_old_versions(site_dir, dest_v, site_url=project.site_url)
         outcome.pagefind_pages = _rewrite_mounted_pagefind_path(
             dest_v,
@@ -196,6 +201,61 @@ def _rewrite_mounted_pagefind_path(root: Path, pagefind_path: str) -> int:
         html_path.write_text(rewritten, encoding="utf-8")
         changed += 1
     return changed
+
+
+def _rewrite_mounted_breadcrumbs(root: Path) -> int:
+    """Remove URL-less ListItems from copied snapshots' BreadcrumbList data."""
+    changed = 0
+    for html_path in root.rglob("*.html"):
+        source = html_path.read_text(encoding="utf-8")
+        rewritten = _rewrite_breadcrumb_jsonld(source)
+        if rewritten == source:
+            continue
+        html_path.write_text(rewritten, encoding="utf-8")
+        changed += 1
+    return changed
+
+
+def _rewrite_breadcrumb_jsonld(html: str) -> str:
+    """Remove non-page crumbs while preserving every other part of the HTML."""
+    rewritten = html
+    folded = html.casefold()
+    for tag in reversed(parse_start_tags(html)):
+        attrs = dict(tag.attrs)
+        if tag.name != "script" or (attrs.get("type") or "").casefold() != "application/ld+json":
+            continue
+        close_start = folded.find("</script", tag.end)
+        if close_start < 0:
+            continue
+        block = html[tag.end : close_start]
+        try:
+            data = json.loads(block)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(data, dict) or data.get("@type") != "BreadcrumbList":
+            continue
+        items = data.get("itemListElement")
+        if not isinstance(items, list):
+            continue
+        last = len(items) - 1
+        linked = [
+            item for index, item in enumerate(items) if isinstance(item, dict) and (item.get("item") or index == last)
+        ]
+        if len(linked) == len(items) and len(linked) >= 2:
+            continue
+        if len(linked) < 2:
+            close_end = folded.find(">", close_start)
+            if close_end >= 0:
+                rewritten = rewritten[: tag.start] + rewritten[close_end + 1 :]
+            continue
+        for position, item in enumerate(linked, start=1):
+            item["position"] = position
+        data["itemListElement"] = linked
+        leading = block[: len(block) - len(block.lstrip())]
+        trailing = block[len(block.rstrip()) :]
+        replacement = f"{leading}{json.dumps(data, ensure_ascii=True)}{trailing}"
+        rewritten = rewritten[: tag.end] + replacement + rewritten[close_start:]
+    return rewritten
 
 
 def _rewrite_meta_robots(html: str) -> str:

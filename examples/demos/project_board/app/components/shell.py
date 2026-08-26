@@ -24,24 +24,24 @@ class AppShell(Component):
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta
             name="description"
-            content="A complete project board demo built with Citry"
+            content="Search, add, move, and complete tasks in a Citry project board"
           />
+          <link rel="icon" href="data:," />
           <title>{{ title }}</title>
           <c-css />
         </head>
         <body>
-          <header class="topbar">
-            <a class="brand" href="#main-content">
-              <span class="brand__mark" aria-hidden="true">C</span>
-              <span>Northstar</span>
-            </a>
-            <div class="topbar__project">
-              <span>Product</span>
-              <strong>Launch workspace</strong>
+          <a class="skip-link" href="#main-content">Skip to content</a>
+          <header class="site-header">
+            <div class="site-header__inner">
+              <a class="brand" href="/">
+                <span class="brand__name">Citry</span>
+              </a>
+              <span class="site-title">Project Board</span>
+              <span class="mode-label">Interactive demo</span>
             </div>
-            <span class="avatar" title="Signed in as You" aria-label="Signed in as You">Y</span>
           </header>
-          <main id="main-content">
+          <main id="main-content" class="page-frame">
             <c-slot name="header" />
             <c-slot />
           </main>
@@ -53,56 +53,173 @@ class AppShell(Component):
     css = """
       :root {
         color-scheme: light;
+        --page-gutter: 1.5rem;
+        --color-page: oklch(96.5% 0.005 250);
+        --color-surface: oklch(94.5% 0.006 250);
+        --color-input: oklch(99% 0.002 250);
+        --color-text: oklch(25% 0.01 250);
+        --color-muted: oklch(40% 0.01 250);
+        --color-faint: oklch(50% 0.01 250);
+        --color-border: oklch(88% 0.005 250);
+        --color-border-subtle: oklch(92% 0.005 250);
+        --color-input-border: oklch(65% 0.01 250);
+        --color-accent: oklch(55% 0.13 195);
+        --color-accent-hover: oklch(48% 0.13 195);
+        --color-accent-ink: oklch(46% 0.13 195);
+        --color-accent-soft: oklch(55% 0.13 195 / 10%);
+        --color-primary: oklch(48% 0.13 195);
+        --color-primary-ink: #fff;
+        --color-danger: oklch(50% 0.18 25);
+        --color-focus: oklch(55% 0.13 195);
+        color: var(--color-muted);
+        background: var(--color-page);
         font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
-        color: #20231f;
-        background: #e9e8e1;
+          system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         font-synthesis: none;
       }
-      * { box-sizing: border-box; }
-      [x-cloak] { display: none !important; }
-      body { min-width: 20rem; min-height: 100vh; margin: 0; }
-      button, input, select { font: inherit; }
-      button, select { cursor: pointer; }
-      button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
-        outline: 3px solid #f58f5b;
-        outline-offset: 3px;
+
+      @media (min-width: 48rem) {
+        :root {
+          --page-gutter: 2rem;
+        }
       }
-      .topbar {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
+
+      @media (min-width: 80rem) {
+        :root {
+          --page-gutter: 3rem;
+        }
+      }
+
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 20rem;
+        font-size: 90%;
+        scroll-padding-top: 5rem;
+      }
+
+      [x-cloak] {
+        display: none !important;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--color-muted);
+        background: var(--color-page);
+        font-size: 1rem;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      button, input, select {
+        font: inherit;
+      }
+
+      button, select {
+        cursor: pointer;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      a:focus-visible,
+      [draggable="true"]:focus-visible,
+      .board-stats:focus-visible {
+        outline: 2px solid var(--color-focus);
+        outline-offset: 2px;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 30;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.45rem 0.7rem;
+        border-radius: 0.375rem;
+        color: var(--color-primary-ink);
+        background: var(--color-primary);
+        font-weight: 650;
+        transform: translateY(-170%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .site-header {
+        position: fixed;
+        z-index: 20;
+        top: 0;
+        right: 0;
+        left: 0;
+        height: 4rem;
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-page);
+      }
+
+      .site-header__inner {
+        display: flex;
         align-items: center;
-        gap: 1rem;
-        min-height: 4.75rem;
-        padding: 0.75rem clamp(1rem, 3vw, 2.5rem);
-        color: #f5f5f0;
-        background: #202a25;
+        gap: 0.6rem;
+        width: min(86rem, 100%);
+        height: 100%;
+        margin-inline: auto;
+        padding-inline: var(--page-gutter);
       }
+
       .brand {
         display: inline-flex;
         align-items: center;
-        gap: 0.65rem;
-        width: max-content;
-        color: inherit;
-        font-weight: 800;
+        color: var(--color-text);
         text-decoration: none;
       }
-      .brand__mark, .avatar {
-        display: grid;
-        width: 2.2rem;
-        height: 2.2rem;
-        place-items: center;
-        border-radius: 0.7rem;
-        color: #202a25;
-        background: #ffbf70;
-        font-weight: 900;
+
+      .brand__name {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
       }
-      .topbar__project { display: grid; gap: 0.1rem; text-align: center; }
-      .topbar__project span { color: #aeb8b1; font-size: 0.72rem; text-transform: uppercase; }
-      .avatar { justify-self: end; border-radius: 50%; background: #c9d7ce; }
-      @media (max-width: 42rem) {
-        .topbar { grid-template-columns: 1fr auto; }
-        .topbar__project { display: none; }
+
+      .site-title {
+        margin-left: 0.3rem;
+        padding-left: 0.9rem;
+        border-left: 1px solid var(--color-border);
+        color: var(--color-muted);
+        font-size: 0.88rem;
+      }
+
+      .mode-label {
+        margin-left: auto;
+        color: var(--color-accent-ink);
+        font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+        font-size: 0.65rem;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .page-frame {
+        width: min(86rem, calc(100% - (2 * var(--page-gutter))));
+        margin-inline: auto;
+        padding: 6.5rem 0 4rem;
+      }
+
+      @media (max-width: 35rem) {
+        .site-title {
+          display: none;
+        }
+
+        .mode-label {
+          max-width: 10rem;
+          text-align: right;
+        }
+
+        .page-frame {
+          padding-top: 6rem;
+        }
       }
     """
