@@ -1,0 +1,13 @@
+<!-- Citry mark, wide framing. Takes its colour from the surrounding CSS, so the
+     site's existing teal tokens keep driving it. The frame carries one unit of
+     air past the artwork on every side; cut any tighter and the round caps and
+     the outer curve of the C each lose a sliver to antialiasing. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0.5 13.5 83 73"
+     role="img" aria-label="Citry">
+  <g fill="none" stroke="currentColor" stroke-linecap="round">
+    <path d="M 47.2 32.4 A 15 15 0 1 1 62 50 A 15 15 0 1 1 47.2 67.6" stroke-width="11"/>
+  </g>
+  <g fill="none" stroke="currentColor">
+    <path d="M 48.9 28.7 A 26 26 0 1 0 48.9 71.3" stroke-width="13"/>
+  </g>
+</svg>
