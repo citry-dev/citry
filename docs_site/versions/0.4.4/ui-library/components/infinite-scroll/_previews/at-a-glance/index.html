@@ -1,0 +1,98 @@
+<!--citry:g1:0739118a:0:i:1:s--><!doctype html><html data-cid-crrxakp5y lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Load another result page</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CInfiniteScroll_0e9d34 data-citry-css-url=/citry/cache/CInfiniteScroll_0e9d34.ef14837c2d88.css>@layer citry-ui.theme{:where([data-citry-ui-part=infinite-scroll]){--_cui-infinite-scroll-gap:var(--cui-infinite-scroll-gap,.875rem);--_cui-infinite-scroll-border:var(--cui-infinite-scroll-action-border,1px solid light-dark(#d6d3d1,#57534e));--_cui-infinite-scroll-surface:var(--cui-infinite-scroll-action-surface,Canvas);--_cui-infinite-scroll-radius:var(--cui-infinite-scroll-action-radius,.625rem);--_cui-infinite-scroll-focus:var(--cui-infinite-scroll-focus,Highlight);--_cui-infinite-scroll-muted:var(--cui-infinite-scroll-muted,color-mix(in srgb, CanvasText 68%, Canvas));justify-items:stretch;gap:var(--_cui-infinite-scroll-gap);color:canvastext;min-inline-size:0;display:grid}:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=content]){min-inline-size:0}:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=status]){min-block-size:1.5em;color:var(--_cui-infinite-scroll-muted);text-align:center}:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=action]){border:var(--_cui-infinite-scroll-border);border-radius:var(--_cui-infinite-scroll-radius);background:var(--_cui-infinite-scroll-surface);min-block-size:2.75rem;color:inherit;font:inherit;cursor:pointer;justify-self:center;padding-inline:1rem;font-weight:650}:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=action]:focus-visible){outline:.1875rem solid var(--_cui-infinite-scroll-focus);outline-offset:.125rem}:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=action]:disabled){opacity:.55;cursor:not-allowed}:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=sentinel]){justify-self:center;block-size:1px;inline-size:1px;display:block}@media (prefers-reduced-motion:reduce){:where([data-citry-ui-part=infinite-scroll] *){transition:none!important}}@media (forced-colors:active){:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=action]){border-color:buttontext}}@media print{:where([data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=action],[data-citry-ui-part=infinite-scroll]>[data-citry-ui-part=sentinel]){display:none!important}}}</style></head><body><main><!--citry:g1:0739118a:0:i:2:s--><section data-cid=crrxakp5z data-cid-crrxakp5z data-citry-root x-data><form @submit.prevent><!--citry:g1:0739118a:0:i:3:s--><div aria-label="Activity feed" class=cui-infinite-scroll data-cid=crrxakp60 data-cid-crrxakp60 data-citry-root data-citry-ui-part=infinite-scroll id=cui-infinite-scroll-crrxakp60 role=region><div aria-busy=false data-citry-ui-part=content><!--citry:g1:0739118a:0:r:1:s--><ol><li>Created the project</li><li>Invited the design team</li><li>Published the brief</li><template x-for="activity in moreActivities" :key=activity.id><li x-text=activity.label></li></template></ol><!--citry:g1:0739118a:0:r:1:e--></div><div aria-atomic=true aria-live=polite data-citry-ui-part=status role=status><span hidden>Loading more results</span><span hidden>More results could not be loaded</span><span hidden>No more results</span></div><button data-citry-infinite-scroll-action data-citry-ui-part=action formnovalidate name=feed_action value=load-more><span>Load more</span> <span hidden>Try again</span></button><span aria-hidden=true data-citry-infinite-scroll-sentinel data-citry-ui-part=sentinel></span></div><!--citry:g1:0739118a:0:i:3:e--></form><output x-text="`Loaded ${3 + moreActivities.length} activities`" aria-live=polite>Loaded 3 activities</output></section><!--citry:g1:0739118a:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"InfiniteScrollAtAGlance_8b0e38","className":"InfiniteScrollAtAGlance"},{"classId":"CInfiniteScroll_0e9d34","className":"CInfiniteScroll"}],"componentExecutionOrderConstraints":[{"childRenderId":"crrxakp60","invocationId":2,"parentRenderId":"crrxakp5z"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"crrxakp5y","transparent":false},{"classId":"InfiniteScrollAtAGlance_8b0e38","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"crrxakp5z","transparent":false},{"classId":"CInfiniteScroll_0e9d34","instanceId":3,"invocationId":2,"parentRenderId":"crrxakp5z","renderId":"crrxakp60","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"InfiniteScrollAtAGlance_8b0e38","ownerRenderId":"crrxakp5z","policy":"template","receiverClassId":"CInfiniteScroll_0e9d34","receiverRenderId":"crrxakp60","slotName":"default","sourceInvocationId":2}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{loading, hasMore, onLoadMore: loadNextPage}","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"InfiniteScrollAtAGlance_8b0e38","sourceRenderId":"crrxakp5z","tagName":"cinfinitescroll","targetClassId":"CInfiniteScroll_0e9d34","targetRenderId":"crrxakp60"}],"slotRegions":[{"fillId":1,"ownerRenderId":"crrxakp5z","parentRegionId":null,"receiverRenderId":"crrxakp60","regionId":1,"resultOwnerRenderId":"crrxakp5z","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakp60"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"0739118a061ab1bedf761c1dd4bbafe76fce1182e7a432690595c19f7ed7d7ad"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0luZmluaXRlU2Nyb2xsQXRBR2xhbmNlXzhiMGUzOC5jOTI1OTY3ZGI0MzAuanM=", "L2NpdHJ5L2NhY2hlL0NJbmZpbml0ZVNjcm9sbF8wZTlkMzQuNjEzYWYwMWMzYmNlLmpz", "L2NpdHJ5L2NhY2hlL0NJbmZpbml0ZVNjcm9sbF8wZTlkMzQuZDgwNDVlMGJjMzIyNzBiZjg1YzgwMjVkNTlkZDgwY2EuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NJbmZpbml0ZVNjcm9sbF8wZTlkMzQuZWYxNDgzN2MyZDg4LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["SW5maW5pdGVTY3JvbGxBdEFHbGFuY2VfOGIwZTM4", "Y3JyeGFrcDV6", null, "init"], ["Q0luZmluaXRlU2Nyb2xsXzBlOWQzNA==", "Y3JyeGFrcDYw", "ZDgwNDVlMGJjMzIyNzBiZjg1YzgwMjVkNTlkZDgwY2E=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrcDV5"]], "graph": "0739118a061ab1bedf761c1dd4bbafe76fce1182e7a432690595c19f7ed7d7ad", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("InfiniteScrollAtAGlance_8b0e38", ({ scope }) => {
+  const pages = [
+    [
+      { id: 4, label: 'Received legal approval' },
+      { id: 5, label: 'Scheduled the launch' },
+    ],
+    [
+      { id: 6, label: 'Opened early access' },
+      { id: 7, label: 'Collected the first responses' },
+    ],
+  ];
+  scope.moreActivities = [];
+  scope.loading = false;
+  scope.hasMore = true;
+  let page = 0;
+  scope.loadNextPage = detail => {
+    // This static preview handles the named action locally. A server page
+    // lets the submit continue and returns the next keyed result page.
+    detail.sourceEvent?.preventDefault();
+    if (scope.loading || !scope.hasMore) return;
+    scope.loading = true;
+    return new Promise(resolve => setTimeout(() => {
+      scope.moreActivities.push(...pages[page]);
+      page += 1;
+      scope.hasMore = page < pages.length;
+      scope.loading = false;
+      resolve();
+    }, 220));
+  };
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponent("CInfiniteScroll_0e9d34", {props:{hasMore:{},loading:{},error:{},disabled:{},auto:{},onLoadMore:{}},init:({els:e,data:o,props:r,effect:t})=>{const i=e[0];if(!(i instanceof HTMLElement))throw new Error("[citry-ui] CInfiniteScroll settled anatomy is invalid.");const n=i.querySelector(':scope > [data-citry-ui-part="content"]'),a=i.querySelector(':scope > [data-citry-ui-part="status"]'),d=i.querySelector(":scope > [data-citry-infinite-scroll-action]"),l=i.querySelector(":scope > [data-citry-infinite-scroll-sentinel]");if(!(n&&a&&d instanceof HTMLButtonElement&&l))throw new Error("[citry-ui] CInfiniteScroll required parts are missing.");const s=[...a.children],c=d.children[0],u=d.children[1],g=new Set;let h={hasMore:o.has_more,loading:o.loading,error:o.error,disabled:o.disabled,auto:o.auto},b=null,f=!1,M=null,y=JSON.stringify([h.hasMore,h.loading,h.error]);const p=(e,o)=>{g.has(e)||(g.add(e),console.error(`[citry-ui] CInfiniteScroll ${e} received invalid client value.`,o,i))},L=()=>{f=!1},v=(e,o)=>{if(!(f||h.disabled||h.loading||!h.hasMore||!b||h.error&&"retry"!==e)){f=!0;try{const r=b({reason:e,sourceEvent:o});r&&"function"==typeof r.then&&Promise.resolve(r).catch(e=>{console.error("[citry-ui] CInfiniteScroll onLoadMore promise failed.",e,i)}).finally(L)}catch(e){L(),console.error("[citry-ui] CInfiniteScroll onLoadMore callback failed.",e,i)}}},m=e=>v(h.error?"retry":"button",e);d.addEventListener("click",m);const S=new MutationObserver(L);return S.observe(n,{childList:!0,subtree:!0}),i.setAttribute("data-citry-infinite-scroll-initialized",""),t(()=>{const e={hasMore:r.hasMore,loading:r.loading,error:r.error,disabled:r.disabled,auto:r.auto,onLoadMore:r.onLoadMore};for(const r of["hasMore","loading","error","disabled","auto"])void 0!==e[r]&&"boolean"!=typeof e[r]?p(r,e[r]):(g.delete(r),h[r]="boolean"==typeof e[r]?e[r]:o[{hasMore:"has_more",loading:"loading",error:"error",disabled:"disabled",auto:"auto"}[r]]);null==e.onLoadMore?(b=null,g.delete("onLoadMore")):"function"==typeof e.onLoadMore?(b=e.onLoadMore,g.delete("onLoadMore")):p("onLoadMore",e.onLoadMore),(()=>{n.setAttribute("aria-busy",String(h.loading)),i.toggleAttribute("data-loading",h.loading),i.toggleAttribute("data-error",h.error&&!h.loading),i.toggleAttribute("data-end",!h.hasMore&&!h.loading&&!h.error),i.toggleAttribute("data-disabled",h.disabled),i.toggleAttribute("data-auto",h.auto),d.hidden=!h.hasMore||h.loading,d.disabled=h.disabled,c.hidden=h.error,u.hidden=!h.error,s[0].hidden=!h.loading,s[1].hidden=!h.error||h.loading,s[2].hidden=h.hasMore||h.loading||h.error;const e=JSON.stringify([h.hasMore,h.loading,h.error]);e!==y&&(f=!1,y=e),M&&(M.disconnect(),M=null),h.auto&&b&&!h.disabled&&!h.loading&&!h.error&&h.hasMore&&"IntersectionObserver"in window&&(M=new IntersectionObserver(e=>{e.some(e=>e.isIntersecting)&&v("intersection",null)},{root:null,rootMargin:o.root_margin,threshold:o.threshold}),M.observe(l))})()}),()=>{d.removeEventListener("click",m),M&&M.disconnect(),S.disconnect(),i.removeAttribute("data-citry-infinite-scroll-initialized")}}});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CInfiniteScroll_0e9d34", "d8045e0bc32270bf85c8025d59dd80ca", atob("eyJoYXNfbW9yZSI6dHJ1ZSwibG9hZGluZyI6ZmFsc2UsImVycm9yIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJhdXRvIjpmYWxzZSwicm9vdF9tYXJnaW4iOiIwcHggMHB4IDI0MHB4IDBweCIsInRocmVzaG9sZCI6MC4wfQ=="));
+})();</script></body></html><!--citry:g1:0739118a:0:i:1:e-->

@@ -1,0 +1,273 @@
+<!--citry:g1:1bd562f3:0:i:1:s--><!doctype html><html data-cid-crrxakoql lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compose Avatar with badges and groups</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=AvatarComposition_276663 data-citry-css-url=/citry/cache/AvatarComposition_276663.6d1b13a347ad.css>:where(.avatar-party) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+:where(.avatar-party__member) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(.avatar-party__group) {
+  display: flex;
+  padding-inline-start: 0.5rem;
+}
+
+:where(.avatar-party__group [data-citry-ui-part="avatar"]) {
+  margin-inline-start: -0.5rem;
+  border-color: Canvas;
+  border-width: 2px;
+}</style><style data-citry-css-class=CAvatar_516550 data-citry-css-url=/citry/cache/CAvatar_516550.c630c74d991f.css>@layer citry-ui.theme{:where([data-citry-ui-part=avatar]){--_cui-avatar-size:var(--cui-avatar-size,2.5rem);--_cui-avatar-background:var(--cui-avatar-background,light-dark(#e7e5e4,#44403c));--_cui-avatar-foreground:var(--cui-avatar-foreground,light-dark(#44403c,#fafaf9));--_cui-avatar-border-color:var(--cui-avatar-border-color,transparent);--_cui-avatar-border-width:var(--cui-avatar-border-width,1px);--_cui-avatar-radius:var(--cui-avatar-radius,50%);--_cui-avatar-font-size:var(--cui-avatar-font-size,.875rem);--_cui-avatar-font-weight:var(--cui-avatar-font-weight,700);--_cui-avatar-image-fit:var(--cui-avatar-image-fit,cover);--_cui-avatar-image-position:var(--cui-avatar-image-position,center);box-sizing:border-box;inline-size:var(--_cui-avatar-size);block-size:var(--_cui-avatar-size);border:var(--_cui-avatar-border-width) solid var(--_cui-avatar-border-color);border-radius:var(--_cui-avatar-radius);background:var(--_cui-avatar-background);color:var(--_cui-avatar-foreground);font-size:var(--_cui-avatar-font-size);font-weight:var(--_cui-avatar-font-weight);text-align:center;vertical-align:middle;isolation:isolate;flex:none;place-items:center;line-height:1;display:inline-grid;position:relative;overflow:hidden}:where([data-citry-ui-part=avatar][data-size=sm]){--_cui-avatar-size:var(--cui-avatar-size,2rem);--_cui-avatar-font-size:var(--cui-avatar-font-size,.75rem)}:where([data-citry-ui-part=avatar][data-size=lg]){--_cui-avatar-size:var(--cui-avatar-size,3rem);--_cui-avatar-font-size:var(--cui-avatar-font-size,1rem)}:where([data-citry-ui-part=avatar][data-shape=rounded]){--_cui-avatar-radius:var(--cui-avatar-radius,.625rem)}:where([data-citry-ui-part=avatar][data-shape=square]){--_cui-avatar-radius:var(--cui-avatar-radius,0)}:where([data-citry-ui-part=avatar][data-variant=solid]){--_cui-avatar-background:var(--cui-avatar-background,light-dark(#44403c,#d6d3d1));--_cui-avatar-foreground:var(--cui-avatar-foreground,light-dark(#fff,#1c1917))}:where([data-citry-ui-part=avatar][data-variant=outline]){--_cui-avatar-background:var(--cui-avatar-background,transparent);--_cui-avatar-border-color:var(--cui-avatar-border-color,currentColor)}:where([data-citry-ui-part=fallback]){z-index:0;overflow-wrap:anywhere;user-select:none;place-items:center;min-inline-size:0;padding:.125em;display:grid;position:absolute;inset:0;overflow:hidden}:where([data-citry-ui-part=image]){z-index:1;object-fit:var(--_cui-avatar-image-fit);object-position:var(--_cui-avatar-image-position);block-size:100%;inline-size:100%;display:block;position:absolute;inset:0}:where([data-citry-ui-part=image][hidden]){display:none!important}:where(.cui-avatar__placeholder){pointer-events:none;block-size:65%;inline-size:65%}@media (forced-colors:active){:where([data-citry-ui-part=avatar]){border-color:canvastext}}@media print{:where([data-citry-ui-part=avatar]){print-color-adjust:exact}}}</style><style data-citry-css-class=CBadge_20b1a5 data-citry-css-url=/citry/cache/CBadge_20b1a5.1909bf4598ec.css>@layer citry-ui.theme{:where([data-citry-ui-part=badge]){--_cui-badge-background:var(--cui-badge-background,light-dark(#e7e5e4,#44403c));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#292524,#fafaf9));--_cui-badge-border-color:var(--cui-badge-border-color,transparent);--_cui-badge-radius:var(--cui-badge-radius,.375rem);--_cui-badge-min-height:var(--cui-badge-min-height,1.5rem);--_cui-badge-padding-inline:var(--cui-badge-padding-inline,.5rem);--_cui-badge-gap:var(--cui-badge-gap,.25rem);--_cui-badge-font-size:var(--cui-badge-font-size,.75rem);--_cui-badge-font-weight:var(--cui-badge-font-weight,650);box-sizing:border-box;max-inline-size:100%;min-block-size:var(--_cui-badge-min-height);justify-content:center;align-items:center;gap:var(--_cui-badge-gap);padding-block:.125rem;padding-inline:var(--_cui-badge-padding-inline);border:1px solid var(--_cui-badge-border-color);border-radius:var(--_cui-badge-radius);background:var(--_cui-badge-background);color:var(--_cui-badge-foreground);font-size:var(--_cui-badge-font-size);font-weight:var(--_cui-badge-font-weight);text-align:center;vertical-align:middle;overflow-wrap:anywhere;line-height:1.2;display:inline-flex}:where([data-citry-ui-part=badge][data-intent=primary]){--_cui-badge-background:var(--cui-badge-background,light-dark(#dbeafe,#1e3a5f));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#1e3a8a,#dbeafe))}:where([data-citry-ui-part=badge][data-intent=success]){--_cui-badge-background:var(--cui-badge-background,light-dark(#dcfce7,#163f2a));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#14532d,#dcfce7))}:where([data-citry-ui-part=badge][data-intent=warn]){--_cui-badge-background:var(--cui-badge-background,light-dark(#fef3c7,#4b3514));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#78350f,#fef3c7))}:where([data-citry-ui-part=badge][data-intent=danger]){--_cui-badge-background:var(--cui-badge-background,light-dark(#fee2e2,#531e24));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#7f1d1d,#fee2e2))}:where([data-citry-ui-part=badge][data-variant=solid]){--_cui-badge-background:var(--cui-badge-background,light-dark(#44403c,#d6d3d1));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#fff,#1c1917));--_cui-badge-border-color:var(--cui-badge-border-color,transparent)}:where([data-citry-ui-part=badge][data-variant=solid][data-intent=primary]){--_cui-badge-background:var(--cui-badge-background,light-dark(#1d4ed8,#60a5fa));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#fff,#172554))}:where([data-citry-ui-part=badge][data-variant=solid][data-intent=success]){--_cui-badge-background:var(--cui-badge-background,light-dark(#15803d,#4ade80));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#fff,#052e16))}:where([data-citry-ui-part=badge][data-variant=solid][data-intent=warn]){--_cui-badge-background:var(--cui-badge-background,light-dark(#b45309,#fbbf24));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#fff,#422006))}:where([data-citry-ui-part=badge][data-variant=solid][data-intent=danger]){--_cui-badge-background:var(--cui-badge-background,light-dark(#b91c1c,#f87171));--_cui-badge-foreground:var(--cui-badge-foreground,light-dark(#fff,#450a0a))}:where([data-citry-ui-part=badge][data-variant=outline]){--_cui-badge-background:var(--cui-badge-background,transparent);--_cui-badge-border-color:var(--cui-badge-border-color,currentColor)}:where([data-citry-ui-part=badge][data-size=sm]){--_cui-badge-min-height:var(--cui-badge-min-height,1.25rem);--_cui-badge-padding-inline:var(--cui-badge-padding-inline,.375rem);--_cui-badge-gap:var(--cui-badge-gap,.1875rem);--_cui-badge-font-size:var(--cui-badge-font-size,.6875rem)}:where([data-citry-ui-part=badge][data-size=lg]){--_cui-badge-min-height:var(--cui-badge-min-height,1.75rem);--_cui-badge-padding-inline:var(--cui-badge-padding-inline,.625rem);--_cui-badge-gap:var(--cui-badge-gap,.3125rem);--_cui-badge-font-size:var(--cui-badge-font-size,.8125rem)}:where([data-citry-ui-part=badge][data-shape=pill]){--_cui-badge-radius:var(--cui-badge-radius,999px)}:where([data-citry-ui-part=start],[data-citry-ui-part=end]){color:inherit;flex:none;align-items:center;display:inline-flex}:where([data-citry-ui-part=start]>svg,[data-citry-ui-part=end]>svg){block-size:1em;inline-size:1em}:where([data-citry-ui-part=label]){overflow-wrap:anywhere;min-inline-size:0}@media (forced-colors:active){:where([data-citry-ui-part=badge]){--_cui-badge-background:var(--cui-badge-background,Canvas);--_cui-badge-foreground:var(--cui-badge-foreground,CanvasText);--_cui-badge-border-color:var(--cui-badge-border-color,CanvasText)}}@media print{:where([data-citry-ui-part=badge]){--_cui-badge-background:var(--cui-badge-background,transparent);--_cui-badge-foreground:var(--cui-badge-foreground,CanvasText);--_cui-badge-border-color:var(--cui-badge-border-color,currentColor)}}}</style></head><body><main><!--citry:g1:1bd562f3:0:i:2:s--><div class=avatar-party data-cid-crrxakoqm><div class=avatar-party__member><!--citry:g1:1bd562f3:0:i:3:s--><span aria-label="Mira Vale" class=cui-avatar data-cid=crrxakoqn data-cid-crrxakoqn data-citry-root data-citry-ui-part=avatar data-shape=circle data-size=md data-status=fallback data-variant=soft role=img> <span aria-hidden=true class=cui-avatar__fallback data-citry-ui-part=fallback> <!--citry:g1:1bd562f3:0:r:1:s-->MV<!--citry:g1:1bd562f3:0:r:1:e--> </span> </span><!--citry:g1:1bd562f3:0:i:3:e--><!--citry:g1:1bd562f3:0:i:4:s--><span class=cui-badge data-cid-crrxakoqo data-citry-ui-part=badge data-intent=success data-shape=pill data-size=md data-variant=soft> <span class=cui-badge__label data-citry-ui-part=label> <!--citry:g1:1bd562f3:0:r:2:s-->Ready<!--citry:g1:1bd562f3:0:r:2:e--> </span> </span><!--citry:g1:1bd562f3:0:i:4:e--></div><div aria-label="Moonfen expedition party" class=avatar-party__group><!--citry:g1:1bd562f3:0:i:5:s--><span aria-label="Orrin Moss" class=cui-avatar data-cid=crrxakoqp data-cid-crrxakoqp data-citry-root data-citry-ui-part=avatar data-shape=circle data-size=md data-status=fallback data-variant=soft role=img> <span aria-hidden=true class=cui-avatar__fallback data-citry-ui-part=fallback> <!--citry:g1:1bd562f3:0:r:3:s-->OM<!--citry:g1:1bd562f3:0:r:3:e--> </span> </span><!--citry:g1:1bd562f3:0:i:5:e--><!--citry:g1:1bd562f3:0:i:6:s--><span aria-label="Sable Reed" class=cui-avatar data-cid=crrxakoqq data-cid-crrxakoqq data-citry-root data-citry-ui-part=avatar data-shape=circle data-size=md data-status=fallback data-variant=solid role=img> <span aria-hidden=true class=cui-avatar__fallback data-citry-ui-part=fallback> <!--citry:g1:1bd562f3:0:r:4:s-->SR<!--citry:g1:1bd562f3:0:r:4:e--> </span> </span><!--citry:g1:1bd562f3:0:i:6:e--><!--citry:g1:1bd562f3:0:i:7:s--><span aria-label="Tarin Wisp" class=cui-avatar data-cid=crrxakoqr data-cid-crrxakoqr data-citry-root data-citry-ui-part=avatar data-shape=circle data-size=md data-status=fallback data-variant=outline role=img> <span aria-hidden=true class=cui-avatar__fallback data-citry-ui-part=fallback> <!--citry:g1:1bd562f3:0:r:5:s-->TW<!--citry:g1:1bd562f3:0:r:5:e--> </span> </span><!--citry:g1:1bd562f3:0:i:7:e--></div></div><!--citry:g1:1bd562f3:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"AvatarComposition_276663","className":"AvatarComposition"},{"classId":"CAvatar_516550","className":"CAvatar"},{"classId":"CBadge_20b1a5","className":"CBadge"}],"componentExecutionOrderConstraints":[{"childRenderId":"crrxakoqn","invocationId":2,"parentRenderId":"crrxakoqm"},{"childRenderId":"crrxakoqo","invocationId":3,"parentRenderId":"crrxakoqm"},{"childRenderId":"crrxakoqp","invocationId":4,"parentRenderId":"crrxakoqm"},{"childRenderId":"crrxakoqq","invocationId":5,"parentRenderId":"crrxakoqm"},{"childRenderId":"crrxakoqr","invocationId":6,"parentRenderId":"crrxakoqm"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"crrxakoql","transparent":false},{"classId":"AvatarComposition_276663","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"crrxakoqm","transparent":false},{"classId":"CAvatar_516550","instanceId":3,"invocationId":2,"parentRenderId":"crrxakoqm","renderId":"crrxakoqn","transparent":false},{"classId":"CBadge_20b1a5","instanceId":4,"invocationId":3,"parentRenderId":"crrxakoqm","renderId":"crrxakoqo","transparent":false},{"classId":"CAvatar_516550","instanceId":5,"invocationId":4,"parentRenderId":"crrxakoqm","renderId":"crrxakoqp","transparent":false},{"classId":"CAvatar_516550","instanceId":6,"invocationId":5,"parentRenderId":"crrxakoqm","renderId":"crrxakoqq","transparent":false},{"classId":"CAvatar_516550","instanceId":7,"invocationId":6,"parentRenderId":"crrxakoqm","renderId":"crrxakoqr","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"AvatarComposition_276663","ownerRenderId":"crrxakoqm","policy":"template","receiverClassId":"CAvatar_516550","receiverRenderId":"crrxakoqn","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"AvatarComposition_276663","ownerRenderId":"crrxakoqm","policy":"template","receiverClassId":"CBadge_20b1a5","receiverRenderId":"crrxakoqo","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"AvatarComposition_276663","ownerRenderId":"crrxakoqm","policy":"template","receiverClassId":"CAvatar_516550","receiverRenderId":"crrxakoqp","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"AvatarComposition_276663","ownerRenderId":"crrxakoqm","policy":"template","receiverClassId":"CAvatar_516550","receiverRenderId":"crrxakoqq","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"AvatarComposition_276663","ownerRenderId":"crrxakoqm","policy":"template","receiverClassId":"CAvatar_516550","receiverRenderId":"crrxakoqr","slotName":"default","sourceInvocationId":6}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"AvatarComposition_276663","sourceRenderId":"crrxakoqm","tagName":"cavatar","targetClassId":"CAvatar_516550","targetRenderId":"crrxakoqn"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"AvatarComposition_276663","sourceRenderId":"crrxakoqm","tagName":"cbadge","targetClassId":"CBadge_20b1a5","targetRenderId":"crrxakoqo"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"AvatarComposition_276663","sourceRenderId":"crrxakoqm","tagName":"cavatar","targetClassId":"CAvatar_516550","targetRenderId":"crrxakoqp"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"AvatarComposition_276663","sourceRenderId":"crrxakoqm","tagName":"cavatar","targetClassId":"CAvatar_516550","targetRenderId":"crrxakoqq"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"AvatarComposition_276663","sourceRenderId":"crrxakoqm","tagName":"cavatar","targetClassId":"CAvatar_516550","targetRenderId":"crrxakoqr"}],"slotRegions":[{"fillId":1,"ownerRenderId":"crrxakoqm","parentRegionId":null,"receiverRenderId":"crrxakoqn","regionId":1,"resultOwnerRenderId":"crrxakoqm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakoqn"},{"fillId":2,"ownerRenderId":"crrxakoqm","parentRegionId":null,"receiverRenderId":"crrxakoqo","regionId":2,"resultOwnerRenderId":"crrxakoqm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakoqo"},{"fillId":3,"ownerRenderId":"crrxakoqm","parentRegionId":null,"receiverRenderId":"crrxakoqp","regionId":3,"resultOwnerRenderId":"crrxakoqm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakoqp"},{"fillId":4,"ownerRenderId":"crrxakoqm","parentRegionId":null,"receiverRenderId":"crrxakoqq","regionId":4,"resultOwnerRenderId":"crrxakoqm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakoqq"},{"fillId":5,"ownerRenderId":"crrxakoqm","parentRegionId":null,"receiverRenderId":"crrxakoqr","regionId":5,"resultOwnerRenderId":"crrxakoqm","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakoqr"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"1bd562f34f0c4671a3e769e3213d26afe95d6c97710e2a5c3b9b0412b83352ef"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLmRkYThjNGY4ZTc4YS5qcw==", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLmU1ZTEwMmVhYWQzNTI0N2I0YzE4N2I0MTk1ODc3ODM2Lmpz", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLjA0YzIzNWJhMmI2MmE0MGNhMTNmZDBiOTYyMjViOGEwLmpz", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLjE1ODcxZWI1YjA4Zjc4NmFiZWFmNjNhODM3ZmFlZmQ0Lmpz", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLjliMGEwMDcyMDc0ZTJkM2E1YTAxMTRhZTUzMWYyMGMzLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0F2YXRhckNvbXBvc2l0aW9uXzI3NjY2My42ZDFiMTNhMzQ3YWQuY3Nz", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLmM2MzBjNzRkOTkxZi5jc3M=", "L2NpdHJ5L2NhY2hlL0NCYWRnZV8yMGIxYTUuMTkwOWJmNDU5OGVjLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0F2YXRhcl81MTY1NTA=", "Y3JyeGFrb3Fu", "ZTVlMTAyZWFhZDM1MjQ3YjRjMTg3YjQxOTU4Nzc4MzY=", "init"], ["Q0F2YXRhcl81MTY1NTA=", "Y3JyeGFrb3Fw", "MDRjMjM1YmEyYjYyYTQwY2ExM2ZkMGI5NjIyNWI4YTA=", "init"], ["Q0F2YXRhcl81MTY1NTA=", "Y3JyeGFrb3Fx", "MTU4NzFlYjViMDhmNzg2YWJlYWY2M2E4MzdmYWVmZDQ=", "init"], ["Q0F2YXRhcl81MTY1NTA=", "Y3JyeGFrb3Fy", "OWIwYTAwNzIwNzRlMmQzYTVhMDExNGFlNTMxZjIwYzM=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrb3Fs"], ["QXZhdGFyQ29tcG9zaXRpb25fMjc2NjYz", "Y3JyeGFrb3Ft"], ["Q0JhZGdlXzIwYjFhNQ==", "Y3JyeGFrb3Fv"]], "graph": "1bd562f34f0c4671a3e769e3213d26afe95d6c97710e2a5c3b9b0412b83352ef", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CAvatar_516550", {
+  props: {
+    src: {},
+    alt: {},
+    variant: {},
+    size: {},
+    shape: {},
+    onStatusChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const root = els[0];
+    let image = root.querySelector('[data-citry-ui-part="image"]');
+    if (!(image instanceof HTMLImageElement)) {
+      image = document.createElement("img");
+      for (const [name, value] of Object.entries(data.imgAttrs)) {
+        image.setAttribute(name, value);
+      }
+      image.classList.add("cui-avatar__image");
+      image.dataset.citryUiPart = "image";
+      image.alt = "";
+      image.hidden = true;
+      root.append(image);
+    }
+    const allowedValues = {
+      variant: ["soft", "solid", "outline"],
+      size: ["sm", "md", "lg"],
+      shape: ["circle", "rounded", "square"],
+    };
+    const invalidEpisodes = new Set();
+    let currentSource = data.src;
+    let currentStatus = root.dataset.status;
+    let sourceGeneration = 0;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CAvatar ${name} received invalid client value `
+          + `${describeValue(value)}; using the server-rendered fallback.`,
+        root,
+      );
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveText = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "string" && !value.includes("\u0000")) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveSource = () => {
+      const value = props.src === undefined ? data.src : props.src;
+      if (value === null || (typeof value === "string" && value && !value.includes("\u0000"))) {
+        invalidEpisodes.delete("src");
+        return value;
+      }
+      reportInvalid("src", value);
+      return data.src;
+    };
+    const notifyStatus = (status, source) => {
+      const callback = props.onStatusChange;
+      if (callback === undefined || callback === null) {
+        invalidEpisodes.delete("onStatusChange");
+        return;
+      }
+      if (typeof callback !== "function") {
+        reportInvalid("onStatusChange", callback);
+        return;
+      }
+      invalidEpisodes.delete("onStatusChange");
+      callback({status, src: source});
+    };
+    const setStatus = (status, source, notify = true) => {
+      if (currentStatus === status && root.dataset.status === status) {
+        return;
+      }
+      currentStatus = status;
+      root.dataset.status = status;
+      if (notify) {
+        notifyStatus(status, source);
+      }
+    };
+    const settleCurrentImage = (generation) => {
+      if (generation !== sourceGeneration || currentSource === null) {
+        return;
+      }
+      if (!image.complete) {
+        return;
+      }
+      if (image.naturalWidth > 0) {
+        image.hidden = false;
+        setStatus("loaded", currentSource);
+      } else {
+        image.hidden = true;
+        setStatus("error", currentSource);
+      }
+    };
+    const onLoad = () => {
+      if (currentSource === null) {
+        return;
+      }
+      image.hidden = false;
+      setStatus("loaded", currentSource);
+    };
+    const onError = () => {
+      if (currentSource === null) {
+        return;
+      }
+      image.hidden = true;
+      setStatus("error", currentSource);
+    };
+
+    image.addEventListener("load", onLoad);
+    image.addEventListener("error", onError);
+
+    effect(() => {
+      const source = resolveSource();
+      const alt = resolveText("alt");
+      const variant = resolveChoice("variant");
+      const size = resolveChoice("size");
+      const shape = resolveChoice("shape");
+
+      root.dataset.variant = variant;
+      root.dataset.size = size;
+      root.dataset.shape = shape;
+      if (alt) {
+        root.setAttribute("role", "img");
+        root.setAttribute("aria-label", alt);
+      } else {
+        root.removeAttribute("role");
+        root.removeAttribute("aria-label");
+      }
+
+      if (source !== currentSource) {
+        currentSource = source;
+        sourceGeneration += 1;
+        if (source === null) {
+          image.removeAttribute("src");
+          image.hidden = true;
+          setStatus("fallback", null);
+        } else {
+          image.hidden = false;
+          image.setAttribute("src", source);
+          setStatus("loading", source);
+          const generation = sourceGeneration;
+          queueMicrotask(() => settleCurrentImage(generation));
+        }
+      } else {
+        settleCurrentImage(sourceGeneration);
+      }
+    });
+
+    root.dataset.citryAvatarInitialized = "";
+    return () => {
+      sourceGeneration += 1;
+      image.removeEventListener("load", onLoad);
+      image.removeEventListener("error", onError);
+      delete root.dataset.citryAvatarInitialized;
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CAvatar_516550", "e5e102eaad35247b4c187b4195877836", atob("eyJzcmMiOm51bGwsImFsdCI6Ik1pcmEgVmFsZSIsInZhcmlhbnQiOiJzb2Z0Iiwic2l6ZSI6Im1kIiwic2hhcGUiOiJjaXJjbGUiLCJpbWdBdHRycyI6e319"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CAvatar_516550", "04c235ba2b62a40ca13fd0b96225b8a0", atob("eyJzcmMiOm51bGwsImFsdCI6Ik9ycmluIE1vc3MiLCJ2YXJpYW50Ijoic29mdCIsInNpemUiOiJtZCIsInNoYXBlIjoiY2lyY2xlIiwiaW1nQXR0cnMiOnt9fQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CAvatar_516550", "15871eb5b08f786abeaf63a837faefd4", atob("eyJzcmMiOm51bGwsImFsdCI6IlNhYmxlIFJlZWQiLCJ2YXJpYW50Ijoic29saWQiLCJzaXplIjoibWQiLCJzaGFwZSI6ImNpcmNsZSIsImltZ0F0dHJzIjp7fX0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CAvatar_516550", "9b0a0072074e2d3a5a0114ae531f20c3", atob("eyJzcmMiOm51bGwsImFsdCI6IlRhcmluIFdpc3AiLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCIsInNoYXBlIjoiY2lyY2xlIiwiaW1nQXR0cnMiOnt9fQ=="));
+})();</script></body></html><!--citry:g1:1bd562f3:0:i:1:e-->

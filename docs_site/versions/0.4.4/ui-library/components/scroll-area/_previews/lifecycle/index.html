@@ -1,0 +1,230 @@
+<!--citry:g1:05cffcd1:0:i:1:s--><!doctype html><html data-cid-crrxakomg lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Retained-root morph and replacement scope</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=ScrollAreaLifecycle_a0680f data-citry-css-url=/citry/cache/ScrollAreaLifecycle_a0680f.506d4908f9aa.css>:where(.scroll-area-lifecycle) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 40rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.scroll-area-lifecycle__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.scroll-area-lifecycle p) {
+  margin: 0;
+}
+
+:where(.scroll-area-lifecycle__content) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(16rem, 1fr));
+  gap: 1rem;
+  inline-size: 42rem;
+  min-block-size: 24rem;
+  padding: 1rem;
+}
+
+:where(.scroll-area-lifecycle__content p) {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, Highlight 10%, Canvas);
+}</style><style data-citry-css-class=CScrollArea_a799e7 data-citry-css-url=/citry/cache/CScrollArea_a799e7.620192e5d1a7.css>@layer citry-ui.theme{:where([data-citry-ui-part=scroll-area]){--_cui-scroll-area-max-block-size:var(--cui-scroll-area-max-block-size,20rem);--_cui-scroll-area-background:var(--cui-scroll-area-background,Canvas);--_cui-scroll-area-foreground:var(--cui-scroll-area-foreground,CanvasText);--_cui-scroll-area-border-color:var(--cui-scroll-area-border-color,color-mix(in srgb, currentColor 24%, transparent));--_cui-scroll-area-border-width:var(--cui-scroll-area-border-width,1px);--_cui-scroll-area-radius:var(--cui-scroll-area-radius,.75rem);--_cui-scroll-area-padding:var(--cui-scroll-area-padding,0px);--_cui-scroll-area-scrollbar-color:var(--cui-scroll-area-scrollbar-color,auto);--_cui-scroll-area-focus-color:var(--cui-scroll-area-focus-color,#2563eb);--_cui-scroll-area-scroll-padding:var(--cui-scroll-area-scroll-padding,0px);box-sizing:border-box;inline-size:100%;min-inline-size:0;max-block-size:var(--_cui-scroll-area-max-block-size);padding:var(--_cui-scroll-area-padding);border:var(--_cui-scroll-area-border-width) solid var(--_cui-scroll-area-border-color);border-radius:var(--_cui-scroll-area-radius);color:var(--_cui-scroll-area-foreground);background:var(--_cui-scroll-area-background);scrollbar-color:var(--_cui-scroll-area-scrollbar-color);scroll-padding:var(--_cui-scroll-area-scroll-padding);forced-color-adjust:auto;display:block;scroll-behavior:auto!important}:where([data-citry-ui-part=scroll-area][data-axis=block]){overflow-block:auto;overflow-inline:hidden}:where([data-citry-ui-part=scroll-area][data-axis=inline]){overflow-block:hidden;overflow-inline:auto;max-block-size:none}:where([data-citry-ui-part=scroll-area][data-axis=both]){overflow:auto}:where([data-citry-ui-part=scroll-area][data-scrollbar-width=auto]){scrollbar-width:auto}:where([data-citry-ui-part=scroll-area][data-scrollbar-width=thin]){scrollbar-width:thin}:where([data-citry-ui-part=scroll-area][data-scrollbar-gutter=auto]){scrollbar-gutter:auto}:where([data-citry-ui-part=scroll-area][data-scrollbar-gutter=stable]){scrollbar-gutter:stable}:where([data-citry-ui-part=scroll-area][data-scrollbar-gutter=stable-both-edges]){scrollbar-gutter:stable both-edges}:where([data-citry-ui-part=scroll-area][data-axis=block][data-overscroll=contain]){overscroll-behavior-block:contain}:where([data-citry-ui-part=scroll-area][data-axis=block][data-overscroll=none]){overscroll-behavior-block:none}:where([data-citry-ui-part=scroll-area][data-axis=inline][data-overscroll=contain]){overscroll-behavior-inline:contain}:where([data-citry-ui-part=scroll-area][data-axis=inline][data-overscroll=none]){overscroll-behavior-inline:none}:where([data-citry-ui-part=scroll-area][data-axis=both][data-overscroll=contain]){overscroll-behavior:contain}:where([data-citry-ui-part=scroll-area][data-axis=both][data-overscroll=none]){overscroll-behavior:none}:where([data-citry-ui-part=scroll-area]:focus-visible){outline:3px solid var(--_cui-scroll-area-focus-color);outline-offset:2px}@media (forced-colors:active){:where([data-citry-ui-part=scroll-area]){scrollbar-color:auto;border-color:canvastext}:where([data-citry-ui-part=scroll-area]:focus-visible){outline-color:highlight}}@media print{:where([data-citry-ui-part=scroll-area]){border:0;block-size:auto!important;max-block-size:none!important;overflow:visible!important}}}</style></head><body><main><!--citry:g1:05cffcd1:0:i:2:s--><section x-data="{mounted:true,lastOffset:0,direction:'ltr'}" class=scroll-area-lifecycle data-cid=crrxakomh data-cid-crrxakomh data-citry-root><div class=scroll-area-lifecycle__controls><button data-cev-on="W3siYXJncyI6bnVsbCwiY2lkIjoiU2Nyb2xsQXJlYUxpZmVjeWNsZV9hMDY4MGYiLCJkZWJvdW5jZSI6bnVsbCwiZXZlbnQiOiJjbGljayIsImhhbmRsZXIiOiJyZWZyZXNoIiwia2V5IjpudWxsLCJvbmNlIjpmYWxzZSwicHJldmVudCI6ZmFsc2UsInNlbGYiOmZhbHNlLCJzdG9wIjpmYWxzZSwidGhyb3R0bGUiOm51bGx9XQ==" type=button>Retained-root server morph</button><button data-cev-on="W3siYXJncyI6bnVsbCwiY2lkIjoiU2Nyb2xsQXJlYUxpZmVjeWNsZV9hMDY4MGYiLCJkZWJvdW5jZSI6bnVsbCwiZXZlbnQiOiJjbGljayIsImhhbmRsZXIiOiJyZXBsYWNlIiwia2V5IjpudWxsLCJvbmNlIjpmYWxzZSwicHJldmVudCI6ZmFsc2UsInNlbGYiOmZhbHNlLCJzdG9wIjpmYWxzZSwidGhyb3R0bGUiOm51bGx9XQ==" type=button>Replace the root</button><button @click="mounted=!mounted" type=button>Remove or restore locally</button><button @click="direction=direction === 'ltr' ? 'rtl' : 'ltr'" type=button>Flip direction</button><button @click="
+        const area=$root.querySelector('#scroll-area-lifecycle-target');
+        if (area) {
+          area.setAttribute('tabindex','-1');
+          area.setAttribute('role','button');
+          area.dataset.axis='invalid';
+        }
+      " type=button>Damage then repair owned attributes</button><button @click="
+        const area=$root.querySelector('#scroll-area-lifecycle-target');
+        if (area) area.style.writingMode =
+          area.style.writingMode === 'vertical-rl'
+            ? 'horizontal-tb'
+            : 'vertical-rl';
+      " type=button>Toggle unsupported writing mode</button></div><p>Server step: <output>0</output></p><template x-if=mounted><div :dir=direction><!--citry:g1:05cffcd1:0:i:3:s--><div aria-label="Lifecycle audit records" style="--cui-scroll-area-max-block-size: 12rem; scroll-behavior: auto !important;" class=cui-scroll-area data-axis=both data-cid=crrxakomi data-cid-crrxakomi data-citry-root data-citry-ui-part=scroll-area data-overscroll=auto data-scrollbar-gutter=auto data-scrollbar-width=auto id=scroll-area-lifecycle-target role=region tabindex=0><!--citry:g1:05cffcd1:0:r:1:s--><div class=scroll-area-lifecycle__content><p>Server generation 0</p><p>Scroll before using a server action.</p><p>A retained root preserves its logical position and focus.</p><p>A replacement root starts with native browser position.</p><p>Removal cancels pending callback and observer work.</p><p>Restoration creates a fresh local instance.</p><p>Nested content focus is never redirected.</p><p>The viewport remains useful without JavaScript.</p></div><!--citry:g1:05cffcd1:0:r:1:e--></div><!--citry:g1:05cffcd1:0:i:3:e--></div></template><output x-text="`Last user scroll offset ${lastOffset}`">Last user scroll offset 0</output></section><!--citry:g1:05cffcd1:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ScrollAreaLifecycle_a0680f","className":"ScrollAreaLifecycle"},{"classId":"CScrollArea_a799e7","className":"CScrollArea"}],"componentExecutionOrderConstraints":[{"childRenderId":"crrxakomi","invocationId":2,"parentRenderId":"crrxakomh"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"crrxakomg","transparent":false},{"classId":"ScrollAreaLifecycle_a0680f","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"crrxakomh","transparent":false},{"classId":"CScrollArea_a799e7","instanceId":3,"invocationId":2,"parentRenderId":"crrxakomh","renderId":"crrxakomi","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ScrollAreaLifecycle_a0680f","ownerRenderId":"crrxakomh","policy":"template","receiverClassId":"CScrollArea_a799e7","receiverRenderId":"crrxakomi","slotName":"default","sourceInvocationId":2}],"graphId":0,"nestedComponents":[{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{\n          onScrollChange:(detail)=>\n            lastOffset=Math.round(detail.blockOffset),\n        }","type":"props"},"source":"direct"}],"invocationId":2,"locationId":null,"morphKey":"scroll-area-lifecycle-0","morphMode":null,"parentRegionId":null,"sourceClassId":"ScrollAreaLifecycle_a0680f","sourceRenderId":"crrxakomh","tagName":"cscrollarea","targetClassId":"CScrollArea_a799e7","targetRenderId":"crrxakomi"}],"slotRegions":[{"fillId":1,"ownerRenderId":"crrxakomh","parentRegionId":null,"receiverRenderId":"crrxakomi","regionId":1,"resultOwnerRenderId":"crrxakomh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakomi"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"05cffcd11611fb8622f4c604b549caff181df674bf3382a60060508259efb5dc"}</script><script data-citry-events type=application/json>{"clientGraphRevision":"05cffcd11611fb8622f4c604b549caff181df674bf3382a60060508259efb5dc","componentClasses":[{"componentClassId":"ScrollAreaLifecycle_a0680f","eventHandlers":{"refresh":{"httpMethod":"POST"},"replace":{"httpMethod":"POST"}}}],"componentInstances":[{"componentClassId":"ScrollAreaLifecycle_a0680f","publicState":{},"renderId":"crrxakomh","stateToken":null}],"protocol":"citry-events/1"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTY3JvbGxBcmVhX2E3OTllNy4yYzQwMTNlYWM0NzYuanM=", "L2NpdHJ5L2NhY2hlL0NTY3JvbGxBcmVhX2E3OTllNy4yMTI0NjAwOGI5M2RkYTZkNGJmNmRmYTMzMjRiMTJjYS5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1Njcm9sbEFyZWFMaWZlY3ljbGVfYTA2ODBmLjUwNmQ0OTA4ZjlhYS5jc3M=", "L2NpdHJ5L2NhY2hlL0NTY3JvbGxBcmVhX2E3OTllNy42MjAxOTJlNWQxYTcuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q1Njcm9sbEFyZWFfYTc5OWU3", "Y3JyeGFrb21p", "MjEyNDYwMDhiOTNkZGE2ZDRiZjZkZmEzMzI0YjEyY2E=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrb21n"], ["U2Nyb2xsQXJlYUxpZmVjeWNsZV9hMDY4MGY=", "Y3JyeGFrb21o"]], "graph": "05cffcd11611fb8622f4c604b549caff181df674bf3382a60060508259efb5dc", "alpineRuntime": "standard"}</script><script>/* Citry events bootstrap stub: queues Citry.events calls until the events runtime arrives. */
+(function () {
+  var C = (globalThis.Citry = globalThis.Citry || {});
+  if (C.events) return;
+  var q = [];
+  var listen = function (kind, args) {
+    var entry = { kind: kind, args: args, off: null, dead: false };
+    q.push(entry);
+    return function () { entry.dead = true; if (entry.off) entry.off(); };
+  };
+  C.events = {
+    _stubQueue: q,
+    _decoratorHooked: false,
+    send: function () {
+      var args = [].slice.call(arguments);
+      return new Promise(function (resolve, reject) {
+        q.push({ kind: "send", args: args, resolve: resolve, reject: reject });
+      });
+    },
+    on: function () { return listen("on", [].slice.call(arguments)); },
+    configure: function (opts) { q.push({ kind: "configure", args: [opts] }); },
+    registerTransport: function () { q.push({ kind: "registerTransport", args: [].slice.call(arguments) }); },
+    applyActions: function () {
+      var args = [].slice.call(arguments);
+      return new Promise(function (resolve, reject) {
+        q.push({ kind: "applyActions", args: args, resolve: resolve, reject: reject });
+      });
+    },
+    _onFor: function (id, name, fn) { return listen("onEvent", [id, name, fn]); },
+    _decorate: function (ctx) {
+      ctx.state = null;
+      ctx.loading = function (name) {
+        return C.events._stubQueue ? false : C.events._loadingFor(ctx.id, name);
+      };
+      ctx.error = function (name) {
+        return C.events._stubQueue ? null : C.events._errorFor(ctx.id, name);
+      };
+      ctx.sendEvent = function (name, args, opts) { return C.events.send(ctx.id, name, args, opts); };
+      ctx.onEvent = function (name, fn) { return C.events._onFor(ctx.id, name, fn); };
+    },
+  };
+  if (C.manager && C.manager.decorateContext) {
+    C.manager.decorateContext(function (ctx, control) { C.events._decorate(ctx, control); });
+    C.events._decoratorHooked = true;
+  }
+})();</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      (()=>{const r=Symbol.for("citry-ui:scroll-geometry"),i=globalThis[r];
+      if(i!==void 0){if(i.generation!==1)throw new Error(
+      "[citry-ui] incompatible scroll geometry runtime; reload the page.");
+      return}const l=(o,n)=>Math.max(0,o-n),t=(o,n)=>Math.min(Math.max(Number.isFinite(o)?o:0,0),n),
+      c=(o,n,e)=>t(e?-o:o,n),m=(o,n,e)=>{const a=t(o,n);return e?-a:a};
+      globalThis[r]={generation:1,maximum:l,clamp:t,horizontalFromRaw:c,horizontalToRaw:m}})();
+    
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CScrollArea_a799e7", {props:{axis:{},scrollbarWidth:{},scrollbarGutter:{},overscroll:{},onScrollChange:{}},init:({els:Y,data:n,props:j,effect:Z})=>{const t=Y[0],
+c=globalThis[Symbol.for("citry-ui:scroll-geometry")];
+if(c?.generation!==1)throw new Error("[citry-ui] CScrollArea scroll geometry dependency did not load.");
+const q=Symbol.for("citry-ui:scroll-area-handoff"),z=t[q]??null,h=z?.kind==="scroll-area"&&z.rootId===n.rootId,o=h?z:{kind:"scroll-area",rootId:n.rootId},
+E=Symbol(),ce="data-citry-scroll-area-initialized";
+o.owner=E,t[q]=o,t.removeAttribute(ce);
+const ye=e=>(e.startsWith("data-citry-")&&e!=="data-citry-ui-part"&&e!==ce)||e.startsWith("data-cid")||e.startsWith("data-cev"),
+be=()=>[...t.attributes].filter(e=>ye(e.name)),he=Object.fromEntries(be().map(e=>[e.name,e.value])),ge=()=>{const e=be();
+return e.length===Object.keys(he).length&&e.every(e=>he[e.name]===e.value)};
+let T=!0,x=0,I=null,v=null,y=null,O=0,s=null,p=!0,g=null,k=[],G=!0,d=h?o.direction:getComputedStyle(t).direction,a=h?o.configuration:null;
+const u=new Set,L=h?o.resolvers:{},b=h&&o.cache?o.cache:{inline:0,block:Math.max(0,t.scrollTop)};
+o.resolvers=L,o.cache=b;
+const m=()=>T&&o.owner===E,S=(e,r)=>{u.has(e)||(u.add(e),console.error(`[citry-ui] CScrollArea ${e} received invalid client value.`,r,t))},W=(e,r)=>{const l=L[e]??{last:n[e]};
+L[e]=l;
+const i=j[e];
+return i==null?(l.last=n[e],u.delete(e),l.last):r.includes(i)?(l.last=i,u.delete(e),i):(S(e,i),l.last)},_=()=>{const e=j.onScrollChange;
+return e==null?(u.delete("onScrollChange"),o.lastCallback=null,null):typeof e=="function"?(u.delete("onScrollChange"),o.lastCallback=e,e):(S("onScrollChange",
+e),o.lastCallback??null)},R=()=>c.maximum(t.scrollWidth,t.clientWidth),N=()=>c.maximum(t.scrollHeight,t.clientHeight),A=()=>({inline:c.horizontalFromRaw(t.scrollLeft,
+R(),d==="rtl"),block:c.clamp(t.scrollTop,N())}),M=e=>({inline:a?.axis==="block"?0:c.clamp(e.inline,R()),block:a?.axis==="inline"?0:c.clamp(e.block,N())}),
+F=(e,r)=>Math.abs(e.inline-r.inline)<=1&&Math.abs(e.block-r.block)<=1,f=()=>{y=null,O=++x},ee=()=>{const e=s;
+if(v=null,!m())return;
+p&&oe(),s===e&&(s=null);
+const r=y,l=O;
+if(y=null,r&&l===x&&I&&t.hasAttribute("data-citry-scroll-area-initialized")){const i=M(A());
+Object.assign(b,i),I(Object.freeze({inlineOffset:i.inline,blockOffset:i.block,source:r}))}(s||p||y)&&w()},w=()=>{v===null&&(v=requestAnimationFrame(ee))},P=(e,r=!0)=>{if(!m()||!t.isConnected)return;
+r&&f();
+const l=M(e),i=A();
+Object.assign(b,l),!F(i,l)&&(s={...l,revision:x},t.scrollLeft=c.horizontalToRaw(l.inline,R(),d==="rtl"),t.scrollTop=l.block,w())},D=e=>{if(!m())return;
+const r=getComputedStyle(t);
+if(r.direction!==d||r.writingMode!=="horizontal-tb"||!t.hasAttribute("data-citry-scroll-area-initialized")){p=!0,w();
+return}const l=M(A());
+if(Object.assign(b,l),s){const i=s;
+if(s=null,i.revision===x&&F(l,i))return}y=e,O=x,F(l,A())||P(l,!1),w()},H=e=>e==="id"?n.rootId:e==="role"?n.role:e==="aria-label"?n.ariaLabel:e==="aria-labelledby"?n.ariaLabelledby:e==="tabindex"?"0":e==="data-citry-ui-part"?"scroll-area":e==="data-axis"?a.axis:e==="data-scrollbar-width"?a.scrollbarWidth:e==="data-scrollbar-gutter"?a.scrollbarGutter:a.overscroll,
+V="id role aria-label aria-labelledby tabindex data-citry-ui-part data-axis data-scrollbar-width data-scrollbar-gutter data-overscroll".split(" "),K="aria-hidden aria-modal aria-orientation contenteditable hidden inert is name popover slot".split(" "),
+B="aria-describedby aria-details aria-keyshortcuts aria-label aria-labelledby".split(" "),te=/^(?:@|x-on:)(?:blur|focus|pointer(?:cancel|down|enter|leave|move|up)|scroll(?:end)?|touch(?:cancel|end|move|start)|wheel)(?:\.(?!(?:away|document|outside|window)(?:\.|$))[^.]+)*$/,
+J=e=>e.startsWith("@")||e.startsWith("x-on:")?!te.test(e):e.startsWith("x-")||e.startsWith(":")||e.startsWith(".")||["$c-props","c-bind","c-props"].includes(e)||e.startsWith("on"),
+re=()=>t.getRootNode().querySelectorAll(`#${CSS.escape(n.rootId)}`).length===1,Q=()=>V.every(e=>t.getAttribute(e)===H(e))&&K.every(e=>!t.hasAttribute(e))&&[...t.attributes].every(e=>!e.name.startsWith("aria-")||B.includes(e.name))&&[...t.attributes].every(e=>!J(e.name))&&ge()&&t.style.getPropertyValue("scroll-behavior").trim()==="auto"&&t.style.getPropertyPriority("scroll-behavior")==="important",
+U=()=>{const e=[];
+let r=t.parentNode;
+for(;
+r;
+)e.push(r),r=r instanceof ShadowRoot?r.host:r.parentNode;
+return e},$=()=>{g.disconnect(),k=U(),g.observe(t,{attributes:!0}),k.forEach(e=>{const r={childList:!0};
+e instanceof Element&&(r.attributes=!0,r.attributeFilter=["dir","class","style"]),g.observe(e,r)}),o.observedAncestors=k.length},X=e=>{g.disconnect(),
+e(),m()&&t.isConnected&&$()},le=()=>X(()=>{V.forEach(e=>{const r=H(e);
+r==null?t.removeAttribute(e):t.setAttribute(e,r)}),K.forEach(e=>t.removeAttribute(e)),[...t.attributes].forEach(e=>{e.name.startsWith("aria-")&&!B.includes(e.name)&&t.removeAttribute(e.name),
+(J(e.name)||ye(e.name)&&!Object.hasOwn(he,e.name))&&t.removeAttribute(e.name)}),Object.entries(he).forEach(([e,r])=>t.setAttribute(e,r)),t.style.setProperty("scroll-behavior","auto","important")}),C=e=>t.toggleAttribute(ce,
+e&&m()),oe=()=>{if(p=!1,!m()||!t.isConnected)return;
+const e=U();
+if((e.length!==k.length||e.some((i,ne)=>i!==k[ne]))&&$(),Q()?u.delete("attributes"):(C(!1),S("attributes",be()),le(),u.delete("attributes")),!re()){C(!1),S("id",n.rootId),f();
+return}u.delete("id");
+const r=getComputedStyle(t);
+if(r.writingMode!=="horizontal-tb"){C(!1),S("writingMode",r.writingMode),f();
+return}u.delete("writingMode");
+const l=r.direction;
+l!==d&&(d=l,f()),P(b,!1),C(!0),o.direction=d},de=()=>{if(!T)return;
+T=!1,g.disconnect(),t.removeEventListener("scroll",D),v!==null&&cancelAnimationFrame(v),v=null,y=null,s=null,o.owner===E&&(o.direction=d,o.observedAncestors=0,
+t.removeAttribute(ce),o.owner=null)},se=e=>e.forEach(e=>e.addedNodes.forEach(e=>{if(!(e instanceof Element))return;
+[e,...e.querySelectorAll(`[${ce}]`)].forEach(e=>{const r=e[q];
+e.hasAttribute(ce)&&!(r?.kind==="scroll-area"&&r.owner)&&e.removeAttribute(ce)})})),ie=e=>{se(e);
+if(m()){if(!t.isConnected){de();
+return}Q()||(C(!1),f()),p=!0,w()}};
+return g=new MutationObserver(ie),$(),t.addEventListener("scroll",D,{passive:!0}),Z(()=>{const e={axis:W("axis",["block","inline","both"]),scrollbarWidth:W("scrollbarWidth",
+["auto","thin"]),scrollbarGutter:W("scrollbarGutter",["auto","stable","stable-both-edges"]),overscroll:W("overscroll",["auto","contain","none"])};
+I=_(),f(),a=e,o.configuration=a,G&&!h&&Object.assign(b,M(A())),G=!1,X(()=>{Object.assign(t.dataset,e),t.style.setProperty("scroll-behavior","auto","important")}),
+P(b),p=!0,w()}),de}});
+
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CScrollArea_a799e7", "21246008b93dda6d4bf6dfa3324b12ca", atob("eyJyb290SWQiOiJzY3JvbGwtYXJlYS1saWZlY3ljbGUtdGFyZ2V0Iiwicm9sZSI6InJlZ2lvbiIsImFyaWFMYWJlbCI6IkxpZmVjeWNsZSBhdWRpdCByZWNvcmRzIiwiYXJpYUxhYmVsbGVkYnkiOm51bGwsImF4aXMiOiJib3RoIiwic2Nyb2xsYmFyV2lkdGgiOiJhdXRvIiwic2Nyb2xsYmFyR3V0dGVyIjoiYXV0byIsIm92ZXJzY3JvbGwiOiJhdXRvIn0="));
+})();</script></body></html><!--citry:g1:05cffcd1:0:i:1:e-->

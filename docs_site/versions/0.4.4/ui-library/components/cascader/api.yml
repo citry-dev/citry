@@ -1,0 +1,158 @@
+schema_version: 1
+family: cascader
+components: [CCascader, CCascaderOption]
+
+inputs:
+  - id: ccascader-server-inputs
+    component: CCascader
+    channel: server
+    entries:
+      - {id: value, name: value, type: 'Sequence[str]', default: {kind: literal, value: '()'}, effect: Supplies the accepted continuous root-to-Option path.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets root and related popup IDs.}
+      - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Gives the trigger an explicit accessible name.}
+      - {id: aria-labelledby, name: aria_labelledby, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the trigger with external labeling elements.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Emits one hidden input per accepted path segment.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates hidden inputs with an external form.}
+      - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose an option}, effect: Supplies empty trigger text or overrides its catalog message.}
+      - {id: separator, name: separator, type: str, default: {kind: literal, value: ' / '}, effect: Joins application Option labels in the trigger.}
+      - {id: change-on-select, name: change_on_select, type: bool, default: {kind: literal, value: false}, effect: Allows branches as complete selected paths.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Supplies initial uncontrolled popup state.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables selection and form output.}
+      - {id: size, name: size, type: {display: CCascaderSize, interfaces: [CCascaderSize]}, default: {kind: literal, value: md}, effect: Selects trigger height.}
+      - {id: variant, name: variant, type: {display: CCascaderVariant, interfaces: [CCascaderVariant]}, default: {kind: literal, value: outline}, effect: Selects trigger presentation.}
+      - {id: empty-label, name: empty_label, type: str, default: {kind: literal, value: No options}, effect: Overrides empty-hierarchy text.}
+      - {id: selected-label, name: selected_label, type: str, default: {kind: literal, value: 'Selected {path}'}, effect: Overrides selected-path announcement and must retain path.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes.}
+  - id: ccascader-client-inputs
+    component: CCascader
+    channel: client
+    entries:
+      - {id: value, name: value, type: 'string[]', omitted: Uncontrolled server path., effect: Controls the accepted path.}
+      - {id: open, name: open, type: boolean, omitted: Uncontrolled server open state., effect: Controls popup visibility.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables interaction and form inputs.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No component callback runs., effect: Receives selection requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No component callback runs., effect: Receives popup requests.}
+  - id: ccascader-option-server-inputs
+    component: CCascaderOption
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies globally unique stable Option identity.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies visible plain application-localized text.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Prevents opening or selecting this path.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds Option classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds Option styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed Option attributes.}
+
+slots:
+  - id: ccascader-slots
+    component: CCascader
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CCascaderDefaultSlotData]}, fallback: Empty hierarchy status; accepts root Option declarations only.}
+  - id: ccascader-option-slots
+    component: CCascaderOption
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{parent_value, level}', interfaces: [CCascaderOptionDefaultSlotData]}, fallback: Leaf Option; accepts child Option declarations only.}
+
+events:
+  - id: ccascader-events
+    component: CCascader
+    entries:
+      - {id: value-change, name: onValueChange, signature: {display: '(value: string[], detail: CCascaderValueChangeDetail) => void', interfaces: [CCascaderValueChangeDetail]}, trigger: An allowed Option is activated., detail: {display: '{value, labels, previousValue, controlled, source, option, sourceEvent}', interfaces: [CCascaderValueChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CCascaderOpenChangeDetail) => void', interfaces: [CCascaderOpenChangeDetail]}, trigger: The popup is requested open or closed., detail: {display: '{open, reason, sourceEvent}', interfaces: [CCascaderOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
+
+methods: []
+
+css:
+  - id: ccascader-css
+    component: CCascader
+    entries:
+      - {id: width, name: --cui-cascader-width, type: length, purpose: Trigger inline size., default: 18rem}
+      - {id: column, name: --cui-cascader-column-width, type: length, purpose: Preferred width of one hierarchy column before measured-fit stacking., default: 11rem}
+      - {id: height, name: --cui-cascader-max-height, type: length, purpose: Maximum column height., default: 18rem}
+      - {id: border, name: --cui-cascader-border, type: complete border, purpose: Trigger popup and column boundaries., default: Adaptive 1px neutral}
+      - {id: surface, name: --cui-cascader-surface, type: color, purpose: Trigger and popup surface., default: Canvas}
+      - {id: active, name: --cui-cascader-active-surface, type: color, purpose: Active branch and selected Option., default: Adaptive indigo}
+      - {id: radius, name: --cui-cascader-radius, type: length, purpose: Trigger and popup corners., default: 0.625rem}
+      - {id: shadow, name: --cui-cascader-shadow, type: shadow, purpose: Popup elevation., default: Soft elevation}
+      - {id: focus, name: --cui-cascader-focus, type: color, purpose: Trigger and Option focus., default: Highlight}
+
+attributes:
+  - id: ccascader-attributes
+    component: CCascader
+    entries:
+      - {id: data-open, name: data-open, element: Root, type: present | absent, meaning: Reflects effective popup visibility.}
+      - {id: data-disabled, name: data-disabled, element: Root and Option, type: present | absent, meaning: Reflects unavailable interaction.}
+      - {id: data-size, name: data-size, element: Root, type: {display: CCascaderSize, interfaces: [CCascaderSize]}, meaning: Reflects presentation size.}
+      - {id: data-variant, name: data-variant, element: Root, type: {display: CCascaderVariant, interfaces: [CCascaderVariant]}, meaning: Reflects presentation variant.}
+      - {id: data-active, name: data-active, element: Option, type: present | absent, meaning: Marks the branch whose child column is visible.}
+      - {id: data-selected, name: data-selected, element: Option, type: present | absent, meaning: Marks the accepted path endpoint.}
+      - {id: data-value, name: data-value, element: Option, type: string, meaning: Exposes stable Option identity.}
+      - {id: data-level, name: data-level, element: Option, type: positive integer string, meaning: Exposes one-based hierarchy depth.}
+      - {id: aria-level, name: aria-level, element: Option, type: positive integer string, meaning: Preserves hierarchy depth while visual columns are siblings.}
+      - {id: aria-posinset, name: aria-posinset, element: Option, type: positive integer string, meaning: Exposes the Option position in its logical group.}
+      - {id: aria-setsize, name: aria-setsize, element: Option, type: positive integer string, meaning: Exposes the number of Options in its logical group.}
+      - {id: aria-owns, name: aria-owns, element: Branch Option, type: ID reference, meaning: Owns the sibling visual group that contains its children.}
+
+selectors:
+  - id: ccascader-selectors
+    component: CCascader
+    entries:
+      - {id: root, selector: '[data-citry-ui-part="cascader"]', element: Root, purpose: State and theme destination.}
+      - {id: trigger, selector: '[data-citry-ui-part="trigger"]', element: Native button, purpose: Accepted value and popup control.}
+      - {id: value, selector: '[data-citry-ui-part="value"]', element: Span, purpose: Selected path or placeholder.}
+      - {id: indicator, selector: '[data-citry-ui-part="indicator"]', element: Decorative span, purpose: Indicates popup disclosure.}
+      - {id: popup, selector: '[data-citry-ui-part="popup"]', element: Popup div, purpose: Responsive visual-column container.}
+      - {id: tree, selector: '[data-citry-ui-part="tree"]', element: Root tree, purpose: Composite keyboard owner.}
+      - {id: group, selector: '[data-citry-ui-part="group"]', element: Logically owned sibling group, purpose: One child column.}
+      - {id: option, selector: '[data-citry-ui-part="option"]', element: Treeitem, purpose: Focus branch and selection unit.}
+      - {id: option-row, selector: '[data-citry-ui-part="option-row"]', element: Div, purpose: Visible Option surface.}
+      - {id: option-label, selector: '[data-citry-ui-part="option-label"]', element: Span, purpose: Application Option label.}
+      - {id: option-indicator, selector: '[data-citry-ui-part="option-indicator"]', element: Decorative span, purpose: Indicates children in the current inline direction.}
+      - {id: empty, selector: '[data-citry-ui-part="empty"]', element: Paragraph, purpose: Empty-hierarchy status.}
+      - {id: inputs, selector: '[data-citry-ui-part="inputs"]', element: Hidden span, purpose: Native ordered path controls.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Polite status, purpose: Selection announcement.}
+
+interfaces:
+  - id: ccascader-aliases
+    kind: aliases
+    entries:
+      - {id: size, name: CCascaderSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: variant, name: CCascaderVariant, definition: 'Literal["outline", "soft", "plain"]'}
+      - {id: source, name: CCascaderChangeSource, definition: 'Literal["pointer", "keyboard", "reset"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: ccascader-default-slot, kind: record, name: CCascaderDefaultSlotData, entries: []}
+  - id: ccascader-option-slot
+    kind: record
+    name: CCascaderOptionDefaultSlotData
+    entries:
+      - {id: parent, name: parent_value, type: str, meaning: Parent Option value.}
+      - {id: level, name: level, type: int, meaning: One-based parent level.}
+  - id: ccascader-value-detail
+    kind: record
+    name: CCascaderValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'list[str]', meaning: Requested path.}
+      - {id: labels, name: labels, type: 'list[str]', meaning: Application labels for that path.}
+      - {id: previous, name: previousValue, type: 'list[str]', meaning: Previously accepted path.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether value was supplied as a client prop.}
+      - {id: source, name: source, type: {display: CCascaderChangeSource, interfaces: [CCascaderChangeSource]}, meaning: Request interaction source.}
+      - {id: option, name: option, type: object, meaning: Requested treeitem element.}
+      - {id: source-event, name: sourceEvent, type: object, meaning: Native source Event.}
+  - id: ccascader-open-detail
+    kind: record
+    name: CCascaderOpenChangeDetail
+    entries:
+      - {id: open, name: open, type: bool, meaning: Requested popup visibility.}
+      - {id: reason, name: reason, type: str, meaning: Trigger selection escape tab or outside.}
+      - {id: source-event, name: sourceEvent, type: object, meaning: Native source Event.}
+
+translations:
+  - id: ccascader-translations
+    component: CCascader
+    entries:
+      - {id: placeholder, key: citry-ui-cascader-placeholder, purpose: Labels an empty trigger., variables: None., override: '`placeholder`', updates: Runtime `i18n.bind()` while the accepted path is empty.}
+      - {id: empty, key: citry-ui-cascader-empty, purpose: Labels an empty hierarchy., variables: None., override: '`empty_label`', updates: Stable `$c-tr` text.}
+      - {id: selected, key: citry-ui-cascader-selected, purpose: Announces an accepted path., variables: 'path: str', override: '`selected_label` with `{path}`', updates: Browser one-shot `i18n.tr()` with a server-localized fallback pattern.}

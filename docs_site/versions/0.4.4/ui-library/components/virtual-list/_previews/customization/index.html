@@ -1,0 +1,74 @@
+<!doctype html><html data-cid-crrxakpsv lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Customize Virtual List</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=VirtualListCustomization_df84e6 data-citry-css-url=/citry/cache/VirtualListCustomization_df84e6.68ed528cbbdb.css>:where(.environment-list) {
+  --cui-virtual-list-border: 2px solid #7c3aed;
+  --cui-virtual-list-radius: 1rem;
+  --cui-virtual-list-background: light-dark(#faf5ff, #2e1065);
+  --cui-virtual-list-item-background: light-dark(#fff, #1e1b4b);
+}
+:where(.environment-list [data-citry-ui-part="item"]) {
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:1rem;
+  padding:0.875rem 1rem;
+  margin:0.5rem;
+  border-radius:0.625rem;
+}
+:where(.environment-list [data-citry-ui-part="item"] span) { color:GrayText; }</style><style data-citry-css-class=CVirtualList_9ef869 data-citry-css-url=/citry/cache/CVirtualList_9ef869.cf7f50f6a83b.css>@layer citry-ui.theme{:where([data-citry-ui-part=virtual-list]){--_cui-virtual-list-viewport-size:var(--cui-virtual-list-viewport-size,25rem);--_cui-virtual-list-item-size:var(--cui-virtual-list-item-size,3rem);--_cui-virtual-list-border:var(--cui-virtual-list-border,1px solid light-dark(#d6d3d1,#57534e));--_cui-virtual-list-radius:var(--cui-virtual-list-radius,.625rem);--_cui-virtual-list-background:var(--cui-virtual-list-background,Canvas);--_cui-virtual-list-item-background:var(--cui-virtual-list-item-background,transparent);box-sizing:border-box;block-size:var(--_cui-virtual-list-viewport-size);overscroll-behavior-block:contain;scrollbar-gutter:stable;border:var(--_cui-virtual-list-border);border-radius:var(--_cui-virtual-list-radius);background:var(--_cui-virtual-list-background);color:canvastext;max-inline-size:100%;display:block;overflow:auto}:where([data-citry-ui-part=virtual-list]:focus-visible){outline-offset:.125rem;outline:.1875rem solid highlight}:where([data-citry-ui-part=virtual-list]>[data-citry-ui-part=track]){box-sizing:border-box;min-inline-size:0;display:block}:where([data-citry-ui-part=virtual-list]>[data-citry-ui-part=track]>[data-citry-ui-part=item]){box-sizing:border-box;background:var(--_cui-virtual-list-item-background);min-inline-size:0}:where([data-citry-ui-part=virtual-list][data-strategy=content-visibility]>[data-citry-ui-part=track]>[data-citry-ui-part=item]){content-visibility:auto;contain-intrinsic-block-size:auto var(--_cui-virtual-list-item-size)}:where([data-citry-ui-part=virtual-list][data-strategy=window]>[data-citry-ui-part=track]>[data-citry-ui-part=item]){overflow:hidden;block-size:var(--_cui-virtual-list-item-size)!important;min-block-size:var(--_cui-virtual-list-item-size)!important;max-block-size:var(--_cui-virtual-list-item-size)!important}:where([data-citry-ui-part=virtual-list] [data-citry-ui-part=spacer]){box-sizing:border-box;pointer-events:none;min-block-size:0;inline-size:100%}@media (forced-colors:active){:where([data-citry-ui-part=virtual-list]){border-color:canvastext}}@media print{:where([data-citry-ui-part=virtual-list][data-strategy=content-visibility]){border-color:currentColor;block-size:auto;overflow:visible}:where([data-citry-ui-part=virtual-list][data-strategy=content-visibility]>[data-citry-ui-part=track]>[data-citry-ui-part=item]){content-visibility:visible}}}</style></head><body><main><div aria-label="Pinned environments" class="cui-virtual-list environment-list" style="--cui-virtual-list-viewport-size: 260px; --cui-virtual-list-item-size: 48px;" data-cid-crrxakpsw data-cid-crrxakpsx data-citry-ui-part=virtual-list data-strategy=content-visibility role=list tabindex=0><div class=cui-virtual-list__track data-citry-ui-part=track><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-0 data-citry-ui-part=item data-index=0 data-item-key=environment-0 role=listitem><strong>Service 1</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-1 data-citry-ui-part=item data-index=1 data-item-key=environment-1 role=listitem><strong>Service 2</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-2 data-citry-ui-part=item data-index=2 data-item-key=environment-2 role=listitem><strong>Service 3</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-3 data-citry-ui-part=item data-index=3 data-item-key=environment-3 role=listitem><strong>Service 4</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-4 data-citry-ui-part=item data-index=4 data-item-key=environment-4 role=listitem><strong>Service 5</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-5 data-citry-ui-part=item data-index=5 data-item-key=environment-5 role=listitem><strong>Service 6</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-6 data-citry-ui-part=item data-index=6 data-item-key=environment-6 role=listitem><strong>Service 7</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-7 data-citry-ui-part=item data-index=7 data-item-key=environment-7 role=listitem><strong>Service 8</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-8 data-citry-ui-part=item data-index=8 data-item-key=environment-8 role=listitem><strong>Service 9</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-9 data-citry-ui-part=item data-index=9 data-item-key=environment-9 role=listitem><strong>Service 10</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-10 data-citry-ui-part=item data-index=10 data-item-key=environment-10 role=listitem><strong>Service 11</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-11 data-citry-ui-part=item data-index=11 data-item-key=environment-11 role=listitem><strong>Service 12</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-12 data-citry-ui-part=item data-index=12 data-item-key=environment-12 role=listitem><strong>Service 13</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-13 data-citry-ui-part=item data-index=13 data-item-key=environment-13 role=listitem><strong>Service 14</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-14 data-citry-ui-part=item data-index=14 data-item-key=environment-14 role=listitem><strong>Service 15</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-15 data-citry-ui-part=item data-index=15 data-item-key=environment-15 role=listitem><strong>Service 16</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-16 data-citry-ui-part=item data-index=16 data-item-key=environment-16 role=listitem><strong>Service 17</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-17 data-citry-ui-part=item data-index=17 data-item-key=environment-17 role=listitem><strong>Service 18</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-18 data-citry-ui-part=item data-index=18 data-item-key=environment-18 role=listitem><strong>Service 19</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-19 data-citry-ui-part=item data-index=19 data-item-key=environment-19 role=listitem><strong>Service 20</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-20 data-citry-ui-part=item data-index=20 data-item-key=environment-20 role=listitem><strong>Service 21</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-21 data-citry-ui-part=item data-index=21 data-item-key=environment-21 role=listitem><strong>Service 22</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-22 data-citry-ui-part=item data-index=22 data-item-key=environment-22 role=listitem><strong>Service 23</strong><span>eu-central</span></div><div class=cui-virtual-list__item data-citry-key=:virtual-list-item-environment-23 data-citry-ui-part=item data-index=23 data-item-key=environment-23 role=listitem><strong>Service 24</strong><span>eu-central</span></div></div></div></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1ZpcnR1YWxMaXN0Q3VzdG9taXphdGlvbl9kZjg0ZTYuNjhlZDUyOGNiYmRiLmNzcw==", "L2NpdHJ5L2NhY2hlL0NWaXJ0dWFsTGlzdF85ZWY4NjkuY2Y3ZjUwZjZhODNiLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrcHN2"], ["VmlydHVhbExpc3RDdXN0b21pemF0aW9uX2RmODRlNg==", "Y3JyeGFrcHN3"], ["Q1ZpcnR1YWxMaXN0XzllZjg2OQ==", "Y3JyeGFrcHN4"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

@@ -1,0 +1,168 @@
+<!--citry:g1:e93a8e5e:0:i:1:s--><!doctype html><html data-cid-crrxakqms lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Customize Spinner with public CSS</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=SpinnerCustomization_1d7c04 data-citry-css-url=/citry/cache/SpinnerCustomization_1d7c04.8eaa1765cefd.css>:where(.spinner-custom > div) {
+  display: grid;
+  place-items: center;
+  min-inline-size: 5rem;
+  min-block-size: 5rem;
+  border-radius: 0.75rem;
+  background: light-dark(#f5f4ff, #17172a);
+}
+
+:where(.spinner-custom__violet) {
+  --cui-spinner-color: #7c3aed;
+  --cui-spinner-track-color: #ddd6fe;
+  --cui-spinner-size: 2rem;
+}
+
+:where(.spinner-custom__solar) {
+  --cui-spinner-color: #c2410c;
+  --cui-spinner-track-color: #fed7aa;
+  --cui-spinner-thickness: 0.24rem;
+}
+
+:where(.spinner-custom__ice) {
+  --cui-spinner-color: #0891b2;
+  --cui-spinner-track-color: #a5f3fc;
+  --cui-spinner-duration: 1.2s;
+}</style><style data-citry-css-class=CSpinner_c40717 data-citry-css-url=/citry/cache/CSpinner_c40717.3dfd3fffa0fc.css>@layer citry-ui.theme{:where([data-citry-ui-part=spinner]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#1d4ed8,#60a5fa));--_cui-spinner-track-color:var(--cui-spinner-track-color,color-mix(in srgb, currentColor 20%, transparent));--_cui-spinner-size:var(--cui-spinner-size,1.25rem);--_cui-spinner-thickness:var(--cui-spinner-thickness,.16rem);--_cui-spinner-duration:var(--cui-spinner-duration,.75s);box-sizing:border-box;inline-size:var(--_cui-spinner-size);block-size:var(--_cui-spinner-size);border:var(--_cui-spinner-thickness) solid var(--_cui-spinner-track-color);border-block-start-color:var(--_cui-spinner-color);color:var(--_cui-spinner-color);vertical-align:-.125em;animation:cui-spinner-rotate var(--_cui-spinner-duration) linear infinite;border-radius:50%;flex:none;display:inline-block}:where([data-citry-ui-part=spinner][data-intent=neutral]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#57534e,#d6d3d1))}:where([data-citry-ui-part=spinner][data-intent=success]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#15803d,#4ade80))}:where([data-citry-ui-part=spinner][data-intent=warn]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#b45309,#fbbf24))}:where([data-citry-ui-part=spinner][data-intent=danger]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#b91c1c,#f87171))}:where([data-citry-ui-part=spinner][data-size=sm]){--_cui-spinner-size:var(--cui-spinner-size,1rem);--_cui-spinner-thickness:var(--cui-spinner-thickness,.125rem)}:where([data-citry-ui-part=spinner][data-size=lg]){--_cui-spinner-size:var(--cui-spinner-size,1.75rem);--_cui-spinner-thickness:var(--cui-spinner-thickness,.2rem)}@keyframes cui-spinner-rotate{to{transform:rotate(1turn)}}@media (prefers-reduced-motion:reduce){:where([data-citry-ui-part=spinner]){border-inline-end-color:var(--_cui-spinner-color);animation:none}}@media (forced-colors:active){:where([data-citry-ui-part=spinner]){--_cui-spinner-color:var(--cui-spinner-color,CanvasText);--_cui-spinner-track-color:var(--cui-spinner-track-color,GrayText);forced-color-adjust:auto}}@media print{:where([data-citry-ui-part=spinner]){border-inline-end-color:var(--_cui-spinner-color);animation:none}}}</style><style data-citry-css-class=CRow_c22819 data-citry-css-url=/citry/cache/CRow_c22819.90c474d9fad1.css>@layer citry-ui.theme{:where([data-citry-ui-part=row]){--_cui-row-gap:var(--cui-row-gap,.5rem);justify-content:flex-start;align-items:center;gap:var(--_cui-row-gap);flex-flow:row;min-inline-size:0;display:flex}:where([data-citry-ui-part=row][data-wrap]){flex-wrap:wrap}:where([data-citry-ui-part=row][data-gap="0"]){--_cui-row-gap:var(--cui-row-gap,0)}:where([data-citry-ui-part=row][data-gap=xs]){--_cui-row-gap:var(--cui-row-gap,.25rem)}:where([data-citry-ui-part=row][data-gap=md]){--_cui-row-gap:var(--cui-row-gap,.75rem)}:where([data-citry-ui-part=row][data-gap=lg]){--_cui-row-gap:var(--cui-row-gap,1rem)}:where([data-citry-ui-part=row][data-gap=xl]){--_cui-row-gap:var(--cui-row-gap,1.5rem)}:where([data-citry-ui-part=row][data-align=start]){align-items:flex-start}:where([data-citry-ui-part=row][data-align=end]){align-items:flex-end}:where([data-citry-ui-part=row][data-align=stretch]){align-items:stretch}:where([data-citry-ui-part=row][data-align=baseline]){align-items:baseline}:where([data-citry-ui-part=row][data-justify=center]){justify-content:center}:where([data-citry-ui-part=row][data-justify=end]){justify-content:flex-end}:where([data-citry-ui-part=row][data-justify=between]){justify-content:space-between}:where([data-citry-ui-part=row][data-justify=around]){justify-content:space-around}:where([data-citry-ui-part=row][data-justify=evenly]){justify-content:space-evenly}:where([data-citry-ui-part=row][data-reverse]){flex-direction:row-reverse}:where([data-citry-ui-part=row]>*){min-inline-size:0}}</style></head><body><main><!--citry:g1:e93a8e5e:0:i:2:s--><!--citry:g1:e93a8e5e:0:i:3:s--><!--citry:g1:e93a8e5e:0:i:4:s--><div class="cui-row spinner-custom" data-align=center data-cid-crrxakqmt data-cid-crrxakqmu data-citry-ui-part=row data-gap=lg data-justify=start data-wrap><!--citry:g1:e93a8e5e:0:r:1:s--><!--citry:g1:e93a8e5e:0:r:2:s--><div class=spinner-custom__violet><!--citry:g1:e93a8e5e:0:i:5:s--><span aria-label="Violet observatory task" class=cui-spinner data-cid=crrxakqmw data-cid-crrxakqmw data-citry-root data-citry-ui-part=spinner data-intent=primary data-size=md role=progressbar></span><!--citry:g1:e93a8e5e:0:i:5:e--></div><div class=spinner-custom__solar><!--citry:g1:e93a8e5e:0:i:6:s--><span aria-label="Solar observatory task" class=cui-spinner data-cid=crrxakqmx data-cid-crrxakqmx data-citry-root data-citry-ui-part=spinner data-intent=primary data-size=md role=progressbar></span><!--citry:g1:e93a8e5e:0:i:6:e--></div><div class=spinner-custom__ice><!--citry:g1:e93a8e5e:0:i:7:s--><span aria-label="Ice observatory task" class=cui-spinner data-cid=crrxakqmy data-cid-crrxakqmy data-citry-root data-citry-ui-part=spinner data-intent=primary data-size=md role=progressbar></span><!--citry:g1:e93a8e5e:0:i:7:e--></div><!--citry:g1:e93a8e5e:0:r:2:e--><!--citry:g1:e93a8e5e:0:r:1:e--></div><!--citry:g1:e93a8e5e:0:i:4:e--><!--citry:g1:e93a8e5e:0:i:3:e--><!--citry:g1:e93a8e5e:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"SpinnerCustomization_1d7c04","className":"SpinnerCustomization"},{"classId":"CRow_c22819","className":"CRow"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CSpinner_c40717","className":"CSpinner"}],"componentExecutionOrderConstraints":[{"childRenderId":"crrxakqmu","invocationId":2,"parentRenderId":"crrxakqmt"},{"childRenderId":"crrxakqmw","invocationId":4,"parentRenderId":"crrxakqmt"},{"childRenderId":"crrxakqmx","invocationId":5,"parentRenderId":"crrxakqmt"},{"childRenderId":"crrxakqmy","invocationId":6,"parentRenderId":"crrxakqmt"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"crrxakqms","transparent":false},{"classId":"SpinnerCustomization_1d7c04","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"crrxakqmt","transparent":false},{"classId":"CRow_c22819","instanceId":3,"invocationId":2,"parentRenderId":"crrxakqmt","renderId":"crrxakqmu","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":3,"parentRenderId":"crrxakqmu","renderId":"crrxakqmv","transparent":true},{"classId":"CSpinner_c40717","instanceId":5,"invocationId":4,"parentRenderId":"crrxakqmt","renderId":"crrxakqmw","transparent":false},{"classId":"CSpinner_c40717","instanceId":6,"invocationId":5,"parentRenderId":"crrxakqmt","renderId":"crrxakqmx","transparent":false},{"classId":"CSpinner_c40717","instanceId":7,"invocationId":6,"parentRenderId":"crrxakqmt","renderId":"crrxakqmy","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"SpinnerCustomization_1d7c04","ownerRenderId":"crrxakqmt","policy":"template","receiverClassId":"CRow_c22819","receiverRenderId":"crrxakqmu","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CRow_c22819","ownerRenderId":"crrxakqmu","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"crrxakqmv","slotName":"default","sourceInvocationId":3}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"SpinnerCustomization_1d7c04","sourceRenderId":"crrxakqmt","tagName":"crow","targetClassId":"CRow_c22819","targetRenderId":"crrxakqmu"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CRow_c22819","sourceRenderId":"crrxakqmu","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"crrxakqmv"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"SpinnerCustomization_1d7c04","sourceRenderId":"crrxakqmt","tagName":"cspinner","targetClassId":"CSpinner_c40717","targetRenderId":"crrxakqmw"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"SpinnerCustomization_1d7c04","sourceRenderId":"crrxakqmt","tagName":"cspinner","targetClassId":"CSpinner_c40717","targetRenderId":"crrxakqmx"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"SpinnerCustomization_1d7c04","sourceRenderId":"crrxakqmt","tagName":"cspinner","targetClassId":"CSpinner_c40717","targetRenderId":"crrxakqmy"}],"slotRegions":[{"fillId":2,"ownerRenderId":"crrxakqmu","parentRegionId":null,"receiverRenderId":"crrxakqmv","regionId":1,"resultOwnerRenderId":"crrxakqmu","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakqmv"},{"fillId":1,"ownerRenderId":"crrxakqmt","parentRegionId":1,"receiverRenderId":"crrxakqmu","regionId":2,"resultOwnerRenderId":"crrxakqmt","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakqmu"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"e93a8e5ea0b5ff90daaad01786ad7c8cf9185a0505c745e38df9e03834fe1c4d"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy45OTZmZGIyM2M4ZTQuanM=", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy44NjU0NjdmMzQ1MzMzYjQ5ZDcyZDRlYTk3M2ZlZGEwZC5qcw==", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy41ODNmY2RhYThmMTExNTE0NjRhNGQ4NDljNjI3ZjY3MS5qcw==", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy5mOWE0ZmFjOTk5YmJkYmMzZDhmYmE0NTNmYTViODA4Ny5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1NwaW5uZXJDdXN0b21pemF0aW9uXzFkN2MwNC44ZWFhMTc2NWNlZmQuY3Nz", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy4zZGZkM2ZmZmEwZmMuY3Nz", "L2NpdHJ5L2NhY2hlL0NSb3dfYzIyODE5LjkwYzQ3NGQ5ZmFkMS5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1NwaW5uZXJfYzQwNzE3", "Y3JyeGFrcW13", "ODY1NDY3ZjM0NTMzM2I0OWQ3MmQ0ZWE5NzNmZWRhMGQ=", "init"], ["Q1NwaW5uZXJfYzQwNzE3", "Y3JyeGFrcW14", "NTgzZmNkYWE4ZjExMTUxNDY0YTRkODQ5YzYyN2Y2NzE=", "init"], ["Q1NwaW5uZXJfYzQwNzE3", "Y3JyeGFrcW15", "ZjlhNGZhYzk5OWJiZGJjM2Q4ZmJhNDUzZmE1YjgwODc=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrcW1z"], ["U3Bpbm5lckN1c3RvbWl6YXRpb25fMWQ3YzA0", "Y3JyeGFrcW10"], ["Q1Jvd19jMjI4MTk=", "Y3JyeGFrcW11"]], "graph": "e93a8e5ea0b5ff90daaad01786ad7c8cf9185a0505c745e38df9e03834fe1c4d", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CSpinner_c40717", {
+  props: {
+    label: {},
+    intent: {},
+    size: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const spinner = els[0];
+    const allowedValues = {
+      intent: ["neutral", "primary", "success", "warn", "danger"],
+      size: ["sm", "md", "lg"],
+    };
+    const invalidEpisodes = new Set();
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CSpinner ${name} received invalid client value ${describeValue(value)}; `
+          + "using the server-rendered fallback.",
+        spinner,
+      );
+    };
+    const sourceValue = (name) => props[name] === undefined ? data[name] : props[name];
+    const resolveChoice = (name) => {
+      const value = sourceValue(name);
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveLabel = () => {
+      const value = sourceValue("label");
+      if (typeof value === "string" && value.length > 0) {
+        invalidEpisodes.delete("label");
+        return value;
+      }
+      reportInvalid("label", value);
+      return data.label;
+    };
+    const setAttribute = (name, value) => {
+      if (spinner.getAttribute(name) !== value) {
+        spinner.setAttribute(name, value);
+      }
+    };
+    const setData = (name, value) => {
+      if (spinner.dataset[name] !== value) {
+        spinner.dataset[name] = value;
+      }
+    };
+
+    effect(() => {
+      setAttribute("aria-label", resolveLabel());
+      setData("intent", resolveChoice("intent"));
+      setData("size", resolveChoice("size"));
+    });
+
+    spinner.setAttribute("data-citry-spinner-initialized", "");
+    return () => {
+      spinner.removeAttribute("data-citry-spinner-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSpinner_c40717", "865467f345333b49d72d4ea973feda0d", atob("eyJsYWJlbCI6IlZpb2xldCBvYnNlcnZhdG9yeSB0YXNrIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCJ9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSpinner_c40717", "583fcdaa8f11151464a4d849c627f671", atob("eyJsYWJlbCI6IlNvbGFyIG9ic2VydmF0b3J5IHRhc2siLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6Im1kIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSpinner_c40717", "f9a4fac999bbdbc3d8fba453fa5b8087", atob("eyJsYWJlbCI6IkljZSBvYnNlcnZhdG9yeSB0YXNrIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCJ9"));
+})();</script></body></html><!--citry:g1:e93a8e5e:0:i:1:e-->

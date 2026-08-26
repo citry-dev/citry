@@ -1,0 +1,468 @@
+<!--citry:g1:13bc4164:0:i:1:s--><!doctype html><html data-cid-crrxakmvg lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compare Checkbox variants and sizes</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CheckboxVariantsAndSizes_c82755 data-citry-css-url=/citry/cache/CheckboxVariantsAndSizes_c82755.f9ac4eff2b15.css>:where(.checkbox-matrix) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 52rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-matrix article) {
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid light-dark(#c3d5c0, #405743);
+  border-radius: 0.875rem;
+  background: Canvas;
+}
+
+:where(.checkbox-matrix h3) {
+  margin: 0 0 0.2rem;
+}</style><style data-citry-css-class=CCheckbox_05d638 data-citry-css-url=/citry/cache/CCheckbox_05d638.791a86a4e464.css>@layer citry-ui.theme{:where(.cui-checkbox){--_cui-checkbox-background:var(--cui-checkbox-background,Canvas);--_cui-checkbox-foreground:var(--cui-checkbox-foreground,CanvasText);--_cui-checkbox-border-color:var(--cui-checkbox-border-color,color-mix(in srgb, CanvasText 42%, transparent));--_cui-checkbox-hover-border-color:var(--cui-checkbox-hover-border-color,color-mix(in srgb, CanvasText 72%, transparent));--_cui-checkbox-active-color:var(--cui-checkbox-active-color,light-dark(#2563eb,#60a5fa));--_cui-checkbox-indicator-color:var(--cui-checkbox-indicator-color,light-dark(#fff,#0b1220));--_cui-checkbox-focus-color:var(--cui-checkbox-focus-color,Highlight);--_cui-checkbox-invalid-color:var(--cui-checkbox-invalid-color,light-dark(#b42318,#f97066));--_cui-checkbox-disabled-opacity:var(--cui-checkbox-disabled-opacity,.55);--_cui-checkbox-control-size:var(--cui-checkbox-control-size,1.125rem);--_cui-checkbox-radius:var(--cui-checkbox-radius,.3rem);--_cui-checkbox-gap:var(--cui-checkbox-gap,.625rem);--_cui-checkbox-description-color:var(--cui-checkbox-description-color,color-mix(in srgb, CanvasText 68%, transparent));--_cui-checkbox-description-gap:var(--cui-checkbox-description-gap,.2rem);align-items:flex-start;gap:var(--_cui-checkbox-gap);min-inline-size:0;color:var(--_cui-checkbox-foreground);vertical-align:middle;font-family:ui-sans-serif,system-ui,sans-serif;font-size:1rem;line-height:1.4;display:inline-flex}:where(.cui-checkbox[data-label-pos=start]){flex-direction:row-reverse}:where(.cui-checkbox[data-size=sm]){--_cui-checkbox-control-size:var(--cui-checkbox-control-size,1rem);--_cui-checkbox-gap:var(--cui-checkbox-gap,.5rem);font-size:.875rem}:where(.cui-checkbox[data-size=lg]){--_cui-checkbox-control-size:var(--cui-checkbox-control-size,1.25rem);--_cui-checkbox-gap:var(--cui-checkbox-gap,.75rem);font-size:1.0625rem}:where(.cui-checkbox__input){appearance:none;box-sizing:border-box;inline-size:var(--_cui-checkbox-control-size);block-size:var(--_cui-checkbox-control-size);border:1px solid var(--_cui-checkbox-border-color);border-radius:var(--_cui-checkbox-radius);background:var(--_cui-checkbox-background);color:var(--_cui-checkbox-indicator-color);cursor:pointer;font:inherit;flex:none;place-content:center;margin:.15em 0 0;transition:border-color .12s,background-color .12s;display:grid}:where(.cui-checkbox__input):after{content:"";box-sizing:border-box;opacity:0;display:block}:where(.cui-checkbox__input:checked){border-color:var(--_cui-checkbox-active-color);background:var(--_cui-checkbox-active-color)}:where(.cui-checkbox__input:checked):after{opacity:1;border:.13em solid;border-width:0 .13em .13em 0;block-size:.62em;inline-size:.32em;transform:translateY(-.04em)rotate(45deg)}:where(.cui-checkbox__input:indeterminate){border-color:var(--_cui-checkbox-active-color);background:var(--_cui-checkbox-active-color)}:where(.cui-checkbox__input:indeterminate):after{opacity:1;background:currentColor;border-radius:999px;block-size:.13em;inline-size:.58em}:where(.cui-checkbox[data-variant=outline] .cui-checkbox__input:checked),:where(.cui-checkbox[data-variant=outline] .cui-checkbox__input:indeterminate){--_cui-checkbox-indicator-color:var(--cui-checkbox-indicator-color,var(--_cui-checkbox-active-color));background:var(--_cui-checkbox-background);color:var(--_cui-checkbox-indicator-color)}:where(.cui-checkbox__input:focus-visible){border-color:var(--_cui-checkbox-focus-color);outline:.1875rem solid color-mix(in srgb, var(--_cui-checkbox-focus-color) 38%, transparent);outline-offset:.125rem}@media (hover:hover){:where(.cui-checkbox:not([data-disabled]) .cui-checkbox__input:hover){border-color:var(--_cui-checkbox-hover-border-color)}}:where(.cui-checkbox[data-invalid] .cui-checkbox__input){border-color:var(--_cui-checkbox-invalid-color)}:where(.cui-checkbox__body){gap:var(--_cui-checkbox-description-gap);min-inline-size:0;display:grid}:where(.cui-checkbox [data-citry-ui-part=label]){min-inline-size:0;color:inherit;cursor:pointer;overflow-wrap:anywhere}:where(.cui-checkbox[data-disabled]),:where(.cui-checkbox:has(>.cui-checkbox__input:disabled)){opacity:var(--_cui-checkbox-disabled-opacity)}:where(.cui-checkbox[data-disabled] .cui-checkbox__input),:where(.cui-checkbox[data-disabled] [data-citry-ui-part=label]),:where(.cui-checkbox>.cui-checkbox__input:disabled),:where(.cui-checkbox:has(>.cui-checkbox__input:disabled) [data-citry-ui-part=label]){cursor:not-allowed}:where(.cui-checkbox [data-citry-ui-part=description]){min-inline-size:0;color:var(--_cui-checkbox-description-color);overflow-wrap:anywhere;font-size:.875em}@media (prefers-reduced-motion:reduce){:where(.cui-checkbox__input){transition:none}}@media (forced-colors:active){:where(.cui-checkbox__input){forced-color-adjust:auto;border-color:buttontext}:where(.cui-checkbox[data-invalid] .cui-checkbox__input){border-color:mark}}@media print{:where(.cui-checkbox__input){print-color-adjust:exact}}}</style></head><body><main><!--citry:g1:13bc4164:0:i:2:s--><section aria-label="Checkbox variants and sizes" class=checkbox-matrix data-cid-crrxakmvh><article><h3>Solid</h3><!--citry:g1:13bc4164:0:i:3:s--><span class=cui-checkbox data-cid=crrxakmvi data-cid-crrxakmvi data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=sm data-variant=solid> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvi type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvi><!--citry:g1:13bc4164:0:r:1:s--> sm preserved specimen <!--citry:g1:13bc4164:0:r:1:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:3:e--><!--citry:g1:13bc4164:0:i:4:s--><span class=cui-checkbox data-cid=crrxakmvj data-cid-crrxakmvj data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=solid> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvj type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvj><!--citry:g1:13bc4164:0:r:2:s--> md preserved specimen <!--citry:g1:13bc4164:0:r:2:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:4:e--><!--citry:g1:13bc4164:0:i:5:s--><span class=cui-checkbox data-cid=crrxakmvk data-cid-crrxakmvk data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=lg data-variant=solid> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvk type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvk><!--citry:g1:13bc4164:0:r:3:s--> lg preserved specimen <!--citry:g1:13bc4164:0:r:3:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:5:e--><!--citry:g1:13bc4164:0:i:6:s--><span class=cui-checkbox data-cid=crrxakmvl data-cid-crrxakmvl data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=solid> <input class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvl type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvl><!--citry:g1:13bc4164:0:r:4:s--> Partly cataloged collection <!--citry:g1:13bc4164:0:r:4:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:6:e--><!--citry:g1:13bc4164:0:i:7:s--><span class=cui-checkbox data-cid=crrxakmvm data-cid-crrxakmvm data-citry-root data-citry-ui-part=checkbox data-disabled data-label-pos=end data-size=md data-variant=solid> <input checked class=cui-checkbox__input data-citry-ui-part=input disabled id=cui-checkbox-crrxakmvm type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvm><!--citry:g1:13bc4164:0:r:5:s--> Locked archive record <!--citry:g1:13bc4164:0:r:5:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:7:e--><!--citry:g1:13bc4164:0:i:8:s--><span class=cui-checkbox data-cid=crrxakmvn data-cid-crrxakmvn data-citry-root data-citry-ui-part=checkbox data-invalid data-label-pos=end data-size=md data-variant=solid> <input aria-invalid=true class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvn type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvn><!--citry:g1:13bc4164:0:r:6:s--> Provenance needs review <!--citry:g1:13bc4164:0:r:6:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:8:e--></article><article><h3>Outline</h3><!--citry:g1:13bc4164:0:i:9:s--><span class=cui-checkbox data-cid=crrxakmvo data-cid-crrxakmvo data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=sm data-variant=outline> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvo type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvo><!--citry:g1:13bc4164:0:r:7:s--> sm preserved specimen <!--citry:g1:13bc4164:0:r:7:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:9:e--><!--citry:g1:13bc4164:0:i:10:s--><span class=cui-checkbox data-cid=crrxakmvp data-cid-crrxakmvp data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=outline> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvp type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvp><!--citry:g1:13bc4164:0:r:8:s--> md preserved specimen <!--citry:g1:13bc4164:0:r:8:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:10:e--><!--citry:g1:13bc4164:0:i:11:s--><span class=cui-checkbox data-cid=crrxakmvq data-cid-crrxakmvq data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=lg data-variant=outline> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvq type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvq><!--citry:g1:13bc4164:0:r:9:s--> lg preserved specimen <!--citry:g1:13bc4164:0:r:9:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:11:e--><!--citry:g1:13bc4164:0:i:12:s--><span class=cui-checkbox data-cid=crrxakmvr data-cid-crrxakmvr data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=outline> <input class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvr type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvr><!--citry:g1:13bc4164:0:r:10:s--> Partly cataloged collection <!--citry:g1:13bc4164:0:r:10:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:12:e--><!--citry:g1:13bc4164:0:i:13:s--><span class=cui-checkbox data-cid=crrxakmvs data-cid-crrxakmvs data-citry-root data-citry-ui-part=checkbox data-disabled data-label-pos=end data-size=md data-variant=outline> <input checked class=cui-checkbox__input data-citry-ui-part=input disabled id=cui-checkbox-crrxakmvs type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvs><!--citry:g1:13bc4164:0:r:11:s--> Locked archive record <!--citry:g1:13bc4164:0:r:11:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:13:e--><!--citry:g1:13bc4164:0:i:14:s--><span class=cui-checkbox data-cid=crrxakmvt data-cid-crrxakmvt data-citry-root data-citry-ui-part=checkbox data-invalid data-label-pos=end data-size=md data-variant=outline> <input aria-invalid=true class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-crrxakmvt type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-crrxakmvt><!--citry:g1:13bc4164:0:r:12:s--> Provenance needs review <!--citry:g1:13bc4164:0:r:12:e--></label> </span> </span><!--citry:g1:13bc4164:0:i:14:e--></article></section><!--citry:g1:13bc4164:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"CheckboxVariantsAndSizes_c82755","className":"CheckboxVariantsAndSizes"},{"classId":"CCheckbox_05d638","className":"CCheckbox"}],"componentExecutionOrderConstraints":[{"childRenderId":"crrxakmvi","invocationId":2,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvj","invocationId":3,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvk","invocationId":4,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvl","invocationId":5,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvm","invocationId":6,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvn","invocationId":7,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvo","invocationId":8,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvp","invocationId":9,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvq","invocationId":10,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvr","invocationId":11,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvs","invocationId":12,"parentRenderId":"crrxakmvh"},{"childRenderId":"crrxakmvt","invocationId":13,"parentRenderId":"crrxakmvh"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"crrxakmvg","transparent":false},{"classId":"CheckboxVariantsAndSizes_c82755","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"crrxakmvh","transparent":false},{"classId":"CCheckbox_05d638","instanceId":3,"invocationId":2,"parentRenderId":"crrxakmvh","renderId":"crrxakmvi","transparent":false},{"classId":"CCheckbox_05d638","instanceId":4,"invocationId":3,"parentRenderId":"crrxakmvh","renderId":"crrxakmvj","transparent":false},{"classId":"CCheckbox_05d638","instanceId":5,"invocationId":4,"parentRenderId":"crrxakmvh","renderId":"crrxakmvk","transparent":false},{"classId":"CCheckbox_05d638","instanceId":6,"invocationId":5,"parentRenderId":"crrxakmvh","renderId":"crrxakmvl","transparent":false},{"classId":"CCheckbox_05d638","instanceId":7,"invocationId":6,"parentRenderId":"crrxakmvh","renderId":"crrxakmvm","transparent":false},{"classId":"CCheckbox_05d638","instanceId":8,"invocationId":7,"parentRenderId":"crrxakmvh","renderId":"crrxakmvn","transparent":false},{"classId":"CCheckbox_05d638","instanceId":9,"invocationId":8,"parentRenderId":"crrxakmvh","renderId":"crrxakmvo","transparent":false},{"classId":"CCheckbox_05d638","instanceId":10,"invocationId":9,"parentRenderId":"crrxakmvh","renderId":"crrxakmvp","transparent":false},{"classId":"CCheckbox_05d638","instanceId":11,"invocationId":10,"parentRenderId":"crrxakmvh","renderId":"crrxakmvq","transparent":false},{"classId":"CCheckbox_05d638","instanceId":12,"invocationId":11,"parentRenderId":"crrxakmvh","renderId":"crrxakmvr","transparent":false},{"classId":"CCheckbox_05d638","instanceId":13,"invocationId":12,"parentRenderId":"crrxakmvh","renderId":"crrxakmvs","transparent":false},{"classId":"CCheckbox_05d638","instanceId":14,"invocationId":13,"parentRenderId":"crrxakmvh","renderId":"crrxakmvt","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvi","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvj","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvk","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvl","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvm","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":6,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvn","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvo","slotName":"default","sourceInvocationId":8},{"fallbackLocationId":null,"fillId":8,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvp","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":9,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvq","slotName":"default","sourceInvocationId":10},{"fallbackLocationId":null,"fillId":10,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvr","slotName":"default","sourceInvocationId":11},{"fallbackLocationId":null,"fillId":11,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvs","slotName":"default","sourceInvocationId":12},{"fallbackLocationId":null,"fillId":12,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxVariantsAndSizes_c82755","ownerRenderId":"crrxakmvh","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"crrxakmvt","slotName":"default","sourceInvocationId":13}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvi"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvj"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvk"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvl"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvm"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvn"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvo"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvp"},{"clientBindings":[],"invocationId":10,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvq"},{"clientBindings":[],"invocationId":11,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvr"},{"clientBindings":[],"invocationId":12,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvs"},{"clientBindings":[],"invocationId":13,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxVariantsAndSizes_c82755","sourceRenderId":"crrxakmvh","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"crrxakmvt"}],"slotRegions":[{"fillId":1,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvi","regionId":1,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvi"},{"fillId":2,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvj","regionId":2,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvj"},{"fillId":3,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvk","regionId":3,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvk"},{"fillId":4,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvl","regionId":4,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvl"},{"fillId":5,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvm","regionId":5,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvm"},{"fillId":6,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvn","regionId":6,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvn"},{"fillId":7,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvo","regionId":7,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvo"},{"fillId":8,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvp","regionId":8,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvp"},{"fillId":9,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvq","regionId":9,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvq"},{"fillId":10,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvr","regionId":10,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvr"},{"fillId":11,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvs","regionId":11,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvs"},{"fillId":12,"ownerRenderId":"crrxakmvh","parentRegionId":null,"receiverRenderId":"crrxakmvt","regionId":12,"resultOwnerRenderId":"crrxakmvh","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakmvt"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"13bc4164420c42ec5c02c32e8286a66b0ae98bc5f4d162292545cc64ca223514"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguODg0MTQ5NmJhZTdkLmpz", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguZWUyZGFhMDA1OGRkYzY1ZWI3Zjc4NTdhZDdjMjljNmQuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguYzI4OGQyNDk3ZGU3YjIyNTMxOTQ5ZDgxOWViMDc3ZDUuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguYjkyMzUzMDlkZmVkZjIzY2I4NDI4ZGY2ZWI0ZWMzYzMuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguYzM1NmM4ZGY4MTdlOGQ2YzEyMmUzMTc2NzZhZWJmMTYuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguYTFkNGMzNzJlZDBmZTFlM2U5M2VkMmZhMjk0MGZmNTYuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguYWZmYmI3Y2E4OTg3OTY5NjY4MDRkNTRjZDdiMWFkNzQuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguOGZjODhkMDRjODY4YjQyYjc1YmNlZDg1NWJiMzg3YjEuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguNzhhYjc1Y2RmNjUzZGY4NmVlMDBiMDU5YmU1NzI3OTYuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguYTQzNmVjYTk1MzkyZDAxNDk2OTdlZGYzYjg4YmM4NDAuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguY2MzNjVhYThiNmRmOTdhY2QzNDVkYTM4Mzg3ODQ5YTEuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguMmI3OGY5YWU5ODY0OWI4NTQ1NjkyZGRjMTM3YmE4ZGIuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguZWMzYTExOTk0MDlmNzg4MzU5NjlhNmYzOGExYTc0ZTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NoZWNrYm94VmFyaWFudHNBbmRTaXplc19jODI3NTUuZjlhYzRlZmYyYjE1LmNzcw==", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguNzkxYTg2YTRlNDY0LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZp", "ZWUyZGFhMDA1OGRkYzY1ZWI3Zjc4NTdhZDdjMjljNmQ=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZq", "YzI4OGQyNDk3ZGU3YjIyNTMxOTQ5ZDgxOWViMDc3ZDU=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZr", "YjkyMzUzMDlkZmVkZjIzY2I4NDI4ZGY2ZWI0ZWMzYzM=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZs", "YzM1NmM4ZGY4MTdlOGQ2YzEyMmUzMTc2NzZhZWJmMTY=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZt", "YTFkNGMzNzJlZDBmZTFlM2U5M2VkMmZhMjk0MGZmNTY=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZu", "YWZmYmI3Y2E4OTg3OTY5NjY4MDRkNTRjZDdiMWFkNzQ=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZv", "OGZjODhkMDRjODY4YjQyYjc1YmNlZDg1NWJiMzg3YjE=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZw", "NzhhYjc1Y2RmNjUzZGY4NmVlMDBiMDU5YmU1NzI3OTY=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZx", "YTQzNmVjYTk1MzkyZDAxNDk2OTdlZGYzYjg4YmM4NDA=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZy", "Y2MzNjVhYThiNmRmOTdhY2QzNDVkYTM4Mzg3ODQ5YTE=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZz", "MmI3OGY5YWU5ODY0OWI4NTQ1NjkyZGRjMTM3YmE4ZGI=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3JyeGFrbXZ0", "ZWMzYTExOTk0MDlmNzg4MzU5NjlhNmYzOGExYTc0ZTI=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrbXZn"], ["Q2hlY2tib3hWYXJpYW50c0FuZFNpemVzX2M4Mjc1NQ==", "Y3JyeGFrbXZo"]], "graph": "13bc4164420c42ec5c02c32e8286a66b0ae98bc5f4d162292545cc64ca223514", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CCheckbox_05d638", {
+  props: {
+    checked: {},
+    indeterminate: {},
+    value: {},
+    required: {},
+    disabled: {},
+    invalid: {},
+    variant: {},
+    size: {},
+    label_pos: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const root = els[0];
+    const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
+    if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
+      throw new Error("[citry-ui] CCheckbox requires one direct native checkbox input.");
+    }
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const handoffKey = Symbol.for("citry-ui:checkbox-handoff");
+    const allowedValues = {
+      variant: ["solid", "outline"],
+      size: ["sm", "md", "lg"],
+      label_pos: ["start", "end"],
+    };
+    const invalidEpisodes = new Map();
+    const resetTimers = new Set();
+    let nativeInvalid = false;
+    let controlledChecked = false;
+    let controlledCheckedValue = false;
+    let controlledIndeterminate = false;
+    let controlledIndeterminateValue = false;
+    let activationPending = false;
+    let reconcileTimer = null;
+
+    const handoff = root[handoffKey];
+    delete root[handoffKey];
+    // Correlated rerenders replace the initializer but may retain this root.
+    // Restore browser-owned current state after HTML updates reset defaults.
+    if (handoff) {
+      input.checked = Boolean(handoff.checked);
+      input.indeterminate = Boolean(handoff.indeterminate);
+    } else {
+      input.indeterminate = data.indeterminate;
+    }
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CCheckbox ${name} received invalid client value ${describedValue}; `
+          + "using the documented fallback.",
+        root,
+      );
+    };
+    const reportFieldOwned = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `field:${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CCheckbox ${name} is controlled by its enclosing CField; `
+          + `ignoring client value ${describedValue}.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const canonicalizeValue = (value) => {
+      if (typeof value !== "string" || value.includes("\0")) {
+        return null;
+      }
+      return value.replace(/\r\n?/g, "\n");
+    };
+    const resolveValue = () => {
+      if (props.value === undefined) {
+        invalidEpisodes.delete("value");
+        return data.value;
+      }
+      const canonical = canonicalizeValue(props.value);
+      if (canonical === null) {
+        reportInvalid("value", props.value);
+        return data.value;
+      }
+      invalidEpisodes.delete("value");
+      return canonical;
+    };
+    const idrefs = (...values) => {
+      const result = [];
+      values.forEach((value) => {
+        if (typeof value !== "string") {
+          return;
+        }
+        value.split(/\s+/).filter(Boolean).forEach((token) => {
+          if (!result.includes(token)) {
+            result.push(token);
+          }
+        });
+      });
+      return result.join(" ") || null;
+    };
+    const syncRelationships = (invalid) => {
+      const describedBy = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        data.hasDescription ? data.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const errorMessage = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (describedBy) {
+        input.setAttribute("aria-describedby", describedBy);
+      } else {
+        input.removeAttribute("aria-describedby");
+      }
+      if (errorMessage) {
+        input.setAttribute("aria-errormessage", errorMessage);
+      } else {
+        input.removeAttribute("aria-errormessage");
+      }
+    };
+    const syncNativeMirrors = () => {
+      root.toggleAttribute("data-checked", input.checked);
+      root.toggleAttribute("data-indeterminate", input.indeterminate);
+    };
+    const applyState = () => {
+      let required;
+      let disabled;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "invalid"].forEach((name) => {
+          if (props[name] !== undefined) {
+            reportFieldOwned(name, props[name]);
+          } else {
+            invalidEpisodes.delete(name);
+          }
+        });
+        required = field.required;
+        disabled = field.disabled;
+        externalInvalid = field.invalid;
+      } else {
+        required = resolveBoolean("required", data.required);
+        disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+        externalInvalid = resolveBoolean("invalid", data.invalid);
+      }
+      const invalid = externalInvalid || nativeInvalid;
+      const variant = resolveChoice("variant", data.variant);
+      const size = resolveChoice("size", data.size);
+      const labelPos = resolveChoice("label_pos", data.labelPos);
+      const value = resolveValue();
+
+      input.required = required;
+      input.disabled = disabled;
+      if (input.value !== value) {
+        input.value = value;
+      }
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", input.matches(":disabled"));
+      root.toggleAttribute("data-invalid", invalid);
+      root.dataset.variant = variant;
+      root.dataset.size = size;
+      root.dataset.labelPos = labelPos;
+      if (invalid) {
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
+      syncRelationships(invalid);
+      syncNativeMirrors();
+    };
+    const clearNativeInvalidWhenValid = () => {
+      if (!nativeInvalid || !input.validity.valid) {
+        return;
+      }
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+      applyState();
+    };
+    const applyControlledBoolean = (name, property) => {
+      const value = props[name];
+      const controlledName = name === "checked" ? "controlledChecked" : "controlledIndeterminate";
+      if (value === undefined) {
+        invalidEpisodes.delete(name);
+        if (controlledName === "controlledChecked") {
+          controlledChecked = false;
+        } else {
+          controlledIndeterminate = false;
+        }
+        return;
+      }
+      if (typeof value !== "boolean") {
+        reportInvalid(name, value);
+        const isControlled = controlledName === "controlledChecked"
+          ? controlledChecked
+          : controlledIndeterminate;
+        const retained = controlledName === "controlledChecked"
+          ? controlledCheckedValue
+          : controlledIndeterminateValue;
+        if (isControlled && !activationPending && input[property] !== retained) {
+          input[property] = retained;
+        }
+        return;
+      }
+      invalidEpisodes.delete(name);
+      if (controlledName === "controlledChecked") {
+        controlledChecked = true;
+        controlledCheckedValue = value;
+      } else {
+        controlledIndeterminate = true;
+        controlledIndeterminateValue = value;
+      }
+      if (!activationPending && input[property] !== value) {
+        input[property] = value;
+      }
+    };
+    const applyLatestControlled = () => {
+      applyControlledBoolean("checked", "checked");
+      applyControlledBoolean("indeterminate", "indeterminate");
+      syncNativeMirrors();
+    };
+    const scheduleReconcile = () => {
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      reconcileTimer = setTimeout(() => {
+        reconcileTimer = null;
+        activationPending = false;
+        applyLatestControlled();
+        clearNativeInvalidWhenValid();
+        applyState();
+      }, 0);
+    };
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const onInput = () => {
+      // A microtask can run between native input and change. Keep the
+      // browser-produced state visible to both consumer handlers.
+      activationPending = true;
+      syncNativeMirrors();
+      scheduleReconcile();
+      if (!controlledChecked) {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onChange = () => {
+      if (!activationPending) {
+        activationPending = true;
+        scheduleReconcile();
+      }
+      syncNativeMirrors();
+      if (!controlledChecked) {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onReset = (event) => {
+      const resetTimer = setTimeout(() => {
+        resetTimers.delete(resetTimer);
+        if (event.defaultPrevented) {
+          return;
+        }
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        activationPending = false;
+        applyLatestControlled();
+        applyState();
+      }, 0);
+      resetTimers.add(resetTimer);
+    };
+    const unregisterCapabilities = field?.registerCapabilities({
+      required: true,
+      readonly: false,
+    });
+    const nativeForm = input.form;
+    const ancestorFieldsets = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLFieldSetElement) {
+        ancestorFieldsets.push(ancestor);
+      }
+    }
+    // Native fieldset disabledness does not change input.disabled. Watch
+    // only the resolved ancestor fieldsets so the public mirror follows
+    // the browser's effective :disabled state.
+    const fieldsetObserver = ancestorFieldsets.length > 0
+      ? new MutationObserver(() => applyState())
+      : null;
+    ancestorFieldsets.forEach(fieldset => fieldsetObserver.observe(fieldset, {
+      attributes: true,
+      attributeFilter: ["disabled"],
+    }));
+
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onChange);
+    nativeForm?.addEventListener("reset", onReset);
+    effect(() => {
+      applyState();
+      applyLatestControlled();
+      if (!activationPending) {
+        clearNativeInvalidWhenValid();
+      }
+    });
+    root.setAttribute("data-citry-checkbox-initialized", "");
+
+    return () => {
+      root[handoffKey] = {
+        checked: input.checked,
+        indeterminate: input.indeterminate,
+      };
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onChange);
+      nativeForm?.removeEventListener("reset", onReset);
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      resetTimers.forEach((resetTimer) => clearTimeout(resetTimer));
+      resetTimers.clear();
+      fieldsetObserver?.disconnect();
+      unregisterCapabilities?.();
+      if (nativeInvalid) {
+        field?.setNativeInvalid(false);
+      }
+      root.removeAttribute("data-citry-checkbox-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "ee2daa0058ddc65eb7f7857ad7c29c6d", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6InNtIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNycnhha212aS1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "c288d2497de7b22531949d819eb077d5", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNycnhha212ai1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "b9235309dfedf23cb8428df6eb4ec3c3", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6ImxnIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNycnhha212ay1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "c356c8df817e8d6c122e317676aebf16", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsImluZGV0ZXJtaW5hdGUiOnRydWUsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNycnhha212bC1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "a1d4c372ed0fe1e3e93ed2fa2940ff56", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOnRydWUsImludmFsaWQiOmZhbHNlLCJ2YXJpYW50Ijoic29saWQiLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktY2hlY2tib3gtY3JyeGFrbXZtLWRlc2NyaXB0aW9uIiwiaGFzRGVzY3JpcHRpb24iOmZhbHNlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "affbb7ca898796966804d54cd7b1ad74", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsImluZGV0ZXJtaW5hdGUiOmZhbHNlLCJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwiaW52YWxpZCI6dHJ1ZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNycnhha212bi1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "8fc88d04c868b42b75bced855bb387b1", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoic20iLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktY2hlY2tib3gtY3JyeGFrbXZvLWRlc2NyaXB0aW9uIiwiaGFzRGVzY3JpcHRpb24iOmZhbHNlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "78ab75cdf653df86ee00b059be572796", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktY2hlY2tib3gtY3JyeGFrbXZwLWRlc2NyaXB0aW9uIiwiaGFzRGVzY3JpcHRpb24iOmZhbHNlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "a436eca95392d0149697edf3b88bc840", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibGciLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktY2hlY2tib3gtY3JyeGFrbXZxLWRlc2NyaXB0aW9uIiwiaGFzRGVzY3JpcHRpb24iOmZhbHNlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "cc365aa8b6df97acd345da38387849a1", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsImluZGV0ZXJtaW5hdGUiOnRydWUsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktY2hlY2tib3gtY3JyeGFrbXZyLWRlc2NyaXB0aW9uIiwiaGFzRGVzY3JpcHRpb24iOmZhbHNlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "2b78f9ae98649b8545692ddc137ba8db", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOnRydWUsImludmFsaWQiOmZhbHNlLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCIsImxhYmVsUG9zIjoiZW5kIiwiZGVzY3JpcHRpb25JZCI6ImN1aS1jaGVja2JveC1jcnJ4YWttdnMtZGVzY3JpcHRpb24iLCJoYXNEZXNjcmlwdGlvbiI6ZmFsc2UsImV4dGVybmFsRGVzY3JpYmVkQnkiOm51bGwsImV4dGVybmFsRXJyb3JNZXNzYWdlIjpudWxsfQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "ec3a1199409f78835969a6f38a1a74e2", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsImluZGV0ZXJtaW5hdGUiOmZhbHNlLCJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwiaW52YWxpZCI6dHJ1ZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktY2hlY2tib3gtY3JyeGFrbXZ0LWRlc2NyaXB0aW9uIiwiaGFzRGVzY3JpcHRpb24iOmZhbHNlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script></body></html><!--citry:g1:13bc4164:0:i:1:e-->

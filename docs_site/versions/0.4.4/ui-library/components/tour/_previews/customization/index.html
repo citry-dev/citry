@@ -1,0 +1,612 @@
+<!--citry:g1:0f5671cf:0:i:1:s--><!doctype html><html data-cid-crrxakrux lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Customize Tour</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=TourCustomization_1e1d12 data-citry-css-url=/citry/cache/TourCustomization_1e1d12.11696da29695.css>:where(.ocean-tour) {
+  --cui-tour-background: light-dark(#eff8ff, #102a43);
+  --cui-tour-border-color: light-dark(#84caff, #2e90fa);
+  --cui-tour-backdrop-color: rgb(2 32 71 / 62%);
+  --cui-tour-radius: 1.25rem;
+}</style><style data-citry-css-class=CIcon_8e5345 data-citry-css-url=/citry/cache/CIcon_8e5345.b00e6c3eb991.css>@layer citry-ui.theme{:where(.cui-icon){--_cui-icon-size:var(--cui-icon-size,1em);--_cui-icon-stroke-width:var(--cui-icon-stroke-width,2);inline-size:var(--_cui-icon-size);block-size:var(--_cui-icon-size);color:inherit;stroke-width:var(--_cui-icon-stroke-width);vertical-align:-.125em;pointer-events:none;user-select:none;flex:none;display:inline-block;overflow:visible}:where(.cui-icon[data-size=sm]){--_cui-icon-size:var(--cui-icon-size,.875em)}:where(.cui-icon[data-size=lg]){--_cui-icon-size:var(--cui-icon-size,1.25em)}:where(.cui-icon--logical:dir(rtl)>.cui-icon__glyph){transform-origin:50%;transform:scaleX(-1)}}</style><style data-citry-css-class=CTour_1aa9a7 data-citry-css-url=/citry/cache/CTour_1aa9a7.001d5745c327.css>@layer citry-ui.theme{:where([data-citry-ui-part=tour]){--_cui-tour-width:var(--cui-tour-width,26rem);--_cui-tour-background:var(--cui-tour-background,light-dark(#fff,#1c1917));--_cui-tour-foreground:var(--cui-tour-foreground,CanvasText);--_cui-tour-muted-color:var(--cui-tour-muted-color,light-dark(#475467,#d0d5dd));--_cui-tour-border-color:var(--cui-tour-border-color,light-dark(#d6d3d1,#57534e));--_cui-tour-shadow:var(--cui-tour-shadow,0 1rem 3rem #00000047);--_cui-tour-radius:var(--cui-tour-radius,.875rem);--_cui-tour-padding:var(--cui-tour-padding,1.25rem);--_cui-tour-gap:var(--cui-tour-gap,1rem);--_cui-tour-offset:var(--cui-tour-offset,.75rem);--_cui-tour-spotlight-padding:var(--cui-tour-spotlight-padding,.5rem);--_cui-tour-spotlight-radius:var(--cui-tour-spotlight-radius,.625rem);--_cui-tour-backdrop-color:var(--cui-tour-backdrop-color,#00000094);--_cui-tour-focus-color:var(--cui-tour-focus-color,Highlight);font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.5}:where([data-citry-ui-part=tour]>[data-citry-ui-part=dialog]){box-sizing:border-box;z-index:1100;block-size:100dvb;max-block-size:none;inline-size:100dvi;max-inline-size:none;color:var(--_cui-tour-foreground);font:inherit;pointer-events:none;background:0 0;border:0;margin:0;padding:0;position:fixed;inset:0;overflow:visible}:where([data-citry-ui-part=tour] [data-citry-ui-part=spotlight]){z-index:0;border-radius:var(--_cui-tour-spotlight-radius);box-shadow:0 0 0 100vmax var(--_cui-tour-backdrop-color);pointer-events:none;position:fixed}:where([data-citry-ui-part=tour] [data-citry-ui-part=spotlight][data-mode=backdrop]){background:var(--_cui-tour-backdrop-color);block-size:100dvb;inline-size:100dvi;box-shadow:none;border-radius:0;inset:0}:where([data-citry-ui-part=tour] [data-citry-ui-part=spotlight][data-mode=target]){background:0 0}:where([data-citry-ui-part=tour] [data-citry-ui-part=surface]){z-index:1;box-sizing:border-box;inline-size:min(var(--_cui-tour-width), calc(100dvi - 1rem));border:1px solid var(--_cui-tour-border-color);border-radius:var(--_cui-tour-radius);background:var(--_cui-tour-background);max-block-size:calc(100dvb - 1rem);box-shadow:var(--_cui-tour-shadow);pointer-events:auto;position:fixed;inset:50% auto auto 50%;overflow:auto;translate:-50% -50%;container-type:inline-size}:where([data-citry-ui-part=tour] [data-citry-ui-part=close]){z-index:2;block-size:2.25rem;min-block-size:2.25rem;inline-size:2.25rem;color:var(--_cui-tour-muted-color);border-radius:999px;place-items:center;padding:0;display:grid;position:absolute;inset-block-start:.5rem;inset-inline-end:.5rem}:where([data-citry-ui-part=tour][data-targeted] [data-citry-ui-part=surface]){inset:auto;translate:none}:where([data-citry-ui-part=tour] [data-citry-ui-part=panel]){gap:var(--_cui-tour-gap);padding:calc(var(--_cui-tour-padding) * 1.15);display:grid}:where([data-citry-ui-part=tour] [data-citry-ui-part=panel][hidden]){display:none}:where([data-citry-ui-part=tour] [data-citry-ui-part=header],[data-citry-ui-part=tour] [data-citry-ui-part=footer],[data-citry-ui-part=tour] [data-citry-ui-part=actions]){align-items:center;gap:.625rem;display:flex}:where([data-citry-ui-part=tour] [data-citry-ui-part=header]),:where([data-citry-ui-part=tour] [data-citry-ui-part=footer]){justify-content:space-between}:where([data-citry-ui-part=tour] [data-citry-ui-part=actions]){flex-wrap:wrap;justify-content:flex-end}:where([data-citry-ui-part=tour] [data-citry-ui-part=title]){margin:0;padding-inline-end:2rem;font-size:1.2rem;font-weight:700;line-height:1.3}:where([data-citry-ui-part=tour] [data-citry-ui-part=description]){color:color-mix(in srgb, currentcolor 78%, transparent);overflow-wrap:anywhere}:where([data-citry-ui-part=tour] [data-citry-ui-part=description]>:first-child){margin-block-start:0}:where([data-citry-ui-part=tour] [data-citry-ui-part=description]>:last-child){margin-block-end:0}:where([data-citry-ui-part=tour] [data-citry-ui-part=media]){border-radius:calc(var(--_cui-tour-radius) * .65);overflow:hidden}:where([data-citry-ui-part=tour] [data-citry-ui-part=media]>:where(img,video,svg)){block-size:auto;inline-size:100%;display:block}:where([data-citry-ui-part=tour] [data-citry-ui-part=progress]){color:var(--_cui-tour-muted-color);font-size:.875rem}:where([data-citry-ui-part=tour] [data-citry-ui-part=progress-group]){gap:.4rem;display:grid}:where([data-citry-ui-part=tour] [data-citry-ui-part=steps]){gap:.35rem;display:flex}:where([data-citry-ui-part=tour] [data-citry-ui-part=step-dot]){background:color-mix(in srgb, currentcolor 22%, transparent);border-radius:999px;block-size:.45rem;inline-size:.45rem}:where([data-citry-ui-part=tour] [data-citry-ui-part=step-dot][data-current]){background:light-dark(#175cd3,#84adff);inline-size:1rem}:where([data-citry-ui-part=tour] [data-citry-ui-part=arrow]){border:solid var(--_cui-tour-border-color);background:var(--_cui-tour-background);border-width:1px 0 0 1px;block-size:.75rem;inline-size:.75rem;position:absolute;rotate:45deg}:where([data-citry-ui-part=tour] [data-placement^=bottom] [data-citry-ui-part=arrow]){inset-block-start:-.4375rem;inset-inline-start:calc(var(--_cui-tour-arrow-inline,50%) - .375rem)}:where([data-citry-ui-part=tour] [data-placement^=top] [data-citry-ui-part=arrow]){inset-block-end:-.4375rem;inset-inline-start:calc(var(--_cui-tour-arrow-inline,50%) - .375rem);rotate:225deg}:where([data-citry-ui-part=tour] [data-placement=left] [data-citry-ui-part=arrow]){inset-block-start:calc(var(--_cui-tour-arrow-block,50%) - .375rem);inset-inline-end:-.4375rem;rotate:135deg}:where([data-citry-ui-part=tour] [data-placement=right] [data-citry-ui-part=arrow]){inset-block-start:calc(var(--_cui-tour-arrow-block,50%) - .375rem);inset-inline-start:-.4375rem;rotate:-45deg}:where([data-citry-ui-part=tour] button){border:1px solid var(--_cui-tour-border-color);min-block-size:2.75rem;color:inherit;font:inherit;cursor:pointer;background:0 0;border-radius:.5rem;padding:.5rem .75rem;font-weight:600}:where([data-citry-ui-part=tour] button:hover){background:color-mix(in srgb, currentcolor 7%, transparent)}:where([data-citry-ui-part=tour] [data-citry-tour-action=skip]){min-block-size:2.25rem;color:var(--_cui-tour-muted-color);border-color:#0000;padding-inline:.25rem;font-weight:500}:where([data-citry-ui-part=tour] [data-citry-tour-action=next],[data-citry-ui-part=tour] [data-citry-tour-action=finish]){color:light-dark(#fff,#172b4d);background:light-dark(#175cd3,#84adff);border-color:#0000}:where([data-citry-ui-part=tour] [data-citry-tour-action=next]:hover,[data-citry-ui-part=tour] [data-citry-tour-action=finish]:hover){background:light-dark(#1849a9,#b2ccff)}:where([data-citry-ui-part=tour] button:focus-visible),:where([data-citry-ui-part=tour] [data-citry-ui-part=title]:focus-visible){outline:.1875rem solid var(--_cui-tour-focus-color);outline-offset:.125rem}:where([data-citry-ui-part=tour][data-size=sm]){--_cui-tour-width:var(--cui-tour-width,20rem)}:where([data-citry-ui-part=tour][data-size=lg]){--_cui-tour-width:var(--cui-tour-width,30rem)}@container (width<=22rem){:where([data-citry-ui-part=tour] [data-citry-ui-part=footer]){flex-direction:column;align-items:stretch}:where([data-citry-ui-part=tour] [data-citry-ui-part=progress-group]){grid-template-columns:auto 1fr;align-items:center}:where([data-citry-ui-part=tour] [data-citry-ui-part=actions]){inline-size:100%}:where([data-citry-ui-part=tour] [data-citry-tour-action=skip]){margin-inline-end:auto}}@media (prefers-reduced-motion:reduce){:where([data-citry-ui-part=tour] *){scroll-behavior:auto!important;transition-duration:0s!important}}@media (forced-colors:active){:where([data-citry-ui-part=tour] [data-citry-ui-part=surface]),:where([data-citry-ui-part=tour] button){border-color:canvastext}}@media print{:where([data-citry-ui-part=tour]){display:none!important}}}</style></head><body><main><!--citry:g1:0f5671cf:0:i:2:s--><!--citry:g1:0f5671cf:0:i:3:s--><!--citry:g1:0f5671cf:0:i:4:s--><!--citry:g1:0f5671cf:0:r:1:s--><!--citry:g1:0f5671cf:0:r:2:s--><!--citry:g1:0f5671cf:0:i:5:s--><!--citry:g1:0f5671cf:0:i:5:e--><!--citry:g1:0f5671cf:0:r:2:e--><!--citry:g1:0f5671cf:0:r:1:e--><!--citry:g1:0f5671cf:0:i:4:e--><div class="cui-tour ocean-tour" data-active=0 data-cid=crrxakruz data-cid-crrxakruy data-cid-crrxakruz data-citry-root data-citry-tour-host data-citry-ui-part=tour data-size=md data-value=theme id=cui-tour-crrxakruz><!--citry:g1:0f5671cf:0:r:3:s--><!--citry:g1:0f5671cf:0:i:6:s--><!--citry:g1:0f5671cf:0:i:7:s--><button aria-controls=cui-tour-crrxakruz-dialog aria-expanded=false aria-haspopup=dialog class=cui-button data-cid=crrxakrv3 data-cid-crrxakrv3 data-citry-root data-citry-tour-trigger data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=md data-variant=solid type=button><!--citry:g1:0f5671cf:0:r:5:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:0f5671cf:0:r:6:s--> <span class=cui-button__spinner></span> <!--citry:g1:0f5671cf:0:r:6:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:0f5671cf:0:r:7:s-->Open custom tour<!--citry:g1:0f5671cf:0:r:7:e--> </span><!--citry:g1:0f5671cf:0:r:5:e--></button><!--citry:g1:0f5671cf:0:i:7:e--><!--citry:g1:0f5671cf:0:i:6:e--><!--citry:g1:0f5671cf:0:r:3:e--><dialog aria-labelledby=cui-tour-crrxakruz-title-0 aria-modal=false class=cui-tour__dialog data-citry-tour-dialog data-citry-ui-part=dialog id=cui-tour-crrxakruz-dialog><div aria-hidden=true class=cui-tour__spotlight data-citry-ui-part=spotlight hidden></div><div class=cui-tour__surface data-citry-ui-part=surface data-placement=center data-size=md><button aria-label="Close tour" data-citry-tour-action=close data-citry-ui-part=close type=button><!--citry:g1:0f5671cf:0:r:4:s--><!--citry:g1:0f5671cf:0:i:8:s--> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-icon data-cid-crrxakrv5 data-citry-ui-part=icon data-name=close data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></g></svg> <!--citry:g1:0f5671cf:0:i:8:e--><!--citry:g1:0f5671cf:0:r:4:e--></button><section class=cui-tour__panel data-citry-key=:tour-step-theme data-citry-tour-panel data-citry-ui-part=panel data-current data-describe=false data-index=0 data-placement=bottom data-value=theme><header data-citry-ui-part=header><h2 data-citry-ui-part=title id=cui-tour-crrxakruz-title-0 tabindex=-1><!--citry:g1:0f5671cf:0:r:8:s-->Ocean theme<!--citry:g1:0f5671cf:0:r:8:e--></h2></header><div data-citry-ui-part=description id=cui-tour-crrxakruz-description-0><!--citry:g1:0f5671cf:0:r:9:s-->Variables customize the stable Tour anatomy.<!--citry:g1:0f5671cf:0:r:9:e--></div><span aria-hidden=true data-citry-ui-part=arrow hidden></span><footer data-citry-ui-part=footer><div data-citry-ui-part=progress-group><span aria-live=polite data-citry-ui-part=progress>Step ⁨1⁩ of ⁨1⁩</span><span aria-hidden=true data-citry-ui-part=steps> <span data-citry-ui-part=step-dot data-current></span> </span></div><div data-citry-ui-part=actions><button data-citry-tour-action=skip type=button>Skip tour</button><button data-citry-tour-action=previous hidden type=button>Previous</button><button data-citry-tour-action=next hidden type=button>Next</button><button data-citry-tour-action=finish type=button>Finish</button></div></footer></section></div></dialog></div><!--citry:g1:0f5671cf:0:i:3:e--><!--citry:g1:0f5671cf:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"TourCustomization_1e1d12","className":"TourCustomization"},{"classId":"CTour_1aa9a7","className":"CTour"},{"classId":"CInternalTourDeclarations_1e8939","className":"CInternalTourDeclarations"},{"classId":"CTourStep_376db2","className":"CTourStep"},{"classId":"CButton_353146","className":"CButton"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CIcon_8e5345","className":"CIcon"}],"componentExecutionOrderConstraints":[{"childRenderId":"crrxakruz","invocationId":2,"parentRenderId":"crrxakruy"},{"childRenderId":"crrxakrv1","invocationId":5,"parentRenderId":"crrxakruy"},{"childRenderId":"crrxakrv3","invocationId":6,"parentRenderId":"crrxakruy"},{"childRenderId":"crrxakrv5","invocationId":7,"parentRenderId":"crrxakruy"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"crrxakrux","transparent":false},{"classId":"TourCustomization_1e1d12","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"crrxakruy","transparent":false},{"classId":"CTour_1aa9a7","instanceId":3,"invocationId":2,"parentRenderId":"crrxakruy","renderId":"crrxakruz","transparent":false},{"classId":"CInternalTourDeclarations_1e8939","instanceId":4,"invocationId":3,"parentRenderId":"crrxakruz","renderId":"crrxakrv0","transparent":true},{"classId":"CTourStep_376db2","instanceId":5,"invocationId":5,"parentRenderId":"crrxakruy","renderId":"crrxakrv1","transparent":false},{"classId":"CButton_353146","instanceId":6,"invocationId":6,"parentRenderId":"crrxakruy","renderId":"crrxakrv3","transparent":false},{"classId":"DynamicElement_29900a","instanceId":7,"invocationId":9,"parentRenderId":"crrxakrv3","renderId":"crrxakrv4","transparent":true},{"classId":"CIcon_8e5345","instanceId":8,"invocationId":7,"parentRenderId":"crrxakruy","renderId":"crrxakrv5","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"TourCustomization_1e1d12","ownerRenderId":"crrxakruy","policy":"template","receiverClassId":"CTour_1aa9a7","receiverRenderId":"crrxakruz","slotName":"activator","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"TourCustomization_1e1d12","ownerRenderId":"crrxakruy","policy":"template","receiverClassId":"CTour_1aa9a7","receiverRenderId":"crrxakruz","slotName":"close","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"TourCustomization_1e1d12","ownerRenderId":"crrxakruy","policy":"template","receiverClassId":"CTour_1aa9a7","receiverRenderId":"crrxakruz","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"CTour_1aa9a7","ownerRenderId":"crrxakruz","policy":"template","receiverClassId":"CInternalTourDeclarations_1e8939","receiverRenderId":"crrxakrv0","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":7,"kind":"named","locationId":null,"ownerClassId":"TourCustomization_1e1d12","ownerRenderId":"crrxakruy","policy":"template","receiverClassId":"CTourStep_376db2","receiverRenderId":"crrxakrv1","slotName":"title","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":8,"kind":"named","locationId":null,"ownerClassId":"TourCustomization_1e1d12","ownerRenderId":"crrxakruy","policy":"template","receiverClassId":"CTourStep_376db2","receiverRenderId":"crrxakrv1","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":9,"kind":"implicit","locationId":null,"ownerClassId":"TourCustomization_1e1d12","ownerRenderId":"crrxakruy","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"crrxakrv3","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":10,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"crrxakrv3","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"crrxakrv4","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":12,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"crrxakrv3","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"crrxakrv3","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"TourCustomization_1e1d12","sourceRenderId":"crrxakruy","tagName":"ctour","targetClassId":"CTour_1aa9a7","targetRenderId":"crrxakruz"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CTour_1aa9a7","sourceRenderId":"crrxakruz","tagName":"cinternaltourdeclarations","targetClassId":"CInternalTourDeclarations_1e8939","targetRenderId":"crrxakrv0"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"TourCustomization_1e1d12","sourceRenderId":"crrxakruy","tagName":"ctourstep","targetClassId":"CTourStep_376db2","targetRenderId":"crrxakrv1"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":3,"sourceClassId":"TourCustomization_1e1d12","sourceRenderId":"crrxakruy","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"crrxakrv3"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":4,"sourceClassId":"TourCustomization_1e1d12","sourceRenderId":"crrxakruy","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"crrxakrv5"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":3,"sourceClassId":"CButton_353146","sourceRenderId":"crrxakrv3","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"crrxakrv4"}],"slotRegions":[{"fillId":4,"ownerRenderId":"crrxakruz","parentRegionId":null,"receiverRenderId":"crrxakrv0","regionId":1,"resultOwnerRenderId":"crrxakruz","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakrv0"},{"fillId":3,"ownerRenderId":"crrxakruy","parentRegionId":1,"receiverRenderId":"crrxakruz","regionId":2,"resultOwnerRenderId":"crrxakruy","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakruz"},{"fillId":1,"ownerRenderId":"crrxakruy","parentRegionId":null,"receiverRenderId":"crrxakruz","regionId":3,"resultOwnerRenderId":"crrxakruy","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakruz"},{"fillId":2,"ownerRenderId":"crrxakruy","parentRegionId":null,"receiverRenderId":"crrxakruz","regionId":4,"resultOwnerRenderId":"crrxakruy","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakruz"},{"fillId":10,"ownerRenderId":"crrxakrv3","parentRegionId":3,"receiverRenderId":"crrxakrv4","regionId":5,"resultOwnerRenderId":"crrxakrv3","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakruy"},{"fillId":12,"ownerRenderId":"crrxakrv3","parentRegionId":5,"receiverRenderId":"crrxakrv3","regionId":6,"resultOwnerRenderId":"crrxakrv3","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakrv3"},{"fillId":9,"ownerRenderId":"crrxakruy","parentRegionId":5,"receiverRenderId":"crrxakrv3","regionId":7,"resultOwnerRenderId":"crrxakruy","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakrv3"},{"fillId":7,"ownerRenderId":"crrxakruy","parentRegionId":null,"receiverRenderId":"crrxakrv1","regionId":8,"resultOwnerRenderId":"crrxakruy","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakrv1"},{"fillId":8,"ownerRenderId":"crrxakruy","parentRegionId":null,"receiverRenderId":"crrxakrv1","regionId":9,"resultOwnerRenderId":"crrxakruy","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"crrxakrv1"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"0f5671cf47e28aad7a6da4e4be53e8da23505dfb9f9767e47d63292aff5b243d"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjU4OTg1ZWE3YjJhYzkxNjcwNTgyYWRhOTNjMGNkMDlkLmpz", "L2NpdHJ5L2NhY2hlL0NUb3VyXzFhYTlhNy4zYjQzYjlkNjI5NTEuanM=", "L2NpdHJ5L2NhY2hlL0NUb3VyXzFhYTlhNy5iM2U5YTE3M2NkMDE2NTExYTA4NGU1NjU4NTI1YzMxZS5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1RvdXJDdXN0b21pemF0aW9uXzFlMWQxMi4xMTY5NmRhMjk2OTUuY3Nz", "L2NpdHJ5L2NhY2hlL0NJY29uXzhlNTM0NS5iMDBlNmMzZWI5OTEuY3Nz", "L2NpdHJ5L2NhY2hlL0NUb3VyXzFhYTlhNy4wMDFkNTc0NWMzMjcuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y3JyeGFrcnYz", "NTg5ODVlYTdiMmFjOTE2NzA1ODJhZGE5M2MwY2QwOWQ=", "init"], ["Q1RvdXJfMWFhOWE3", "Y3JyeGFrcnV6", "YjNlOWExNzNjZDAxNjUxMWEwODRlNTY1ODUyNWMzMWU=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrcnV4"], ["VG91ckN1c3RvbWl6YXRpb25fMWUxZDEy", "Y3JyeGFrcnV5"], ["Q0ljb25fOGU1MzQ1", "Y3JyeGFrcnY1"]], "graph": "0f5671cf47e28aad7a6da4e4be53e8da23505dfb9f9767e47d63292aff5b243d", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "58985ea7b2ac91670582ada93c0cd09d", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJtZCIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponent("CTour_1aa9a7", {props:{open:{},active:{},dismissible:{},closeOnEscape:{},closeOnOutside:{},skippable:{},scroll:{},missingTarget:{},size:{},onOpenChange:{},onActiveChange:{}},init:({els:e,data:t,props:i,effect:n})=>{const r=e[0],o=r?.querySelector(":scope > [data-citry-tour-dialog]"),s=o?.querySelector(':scope > [data-citry-ui-part="surface"]'),l=o?.querySelector(':scope > [data-citry-ui-part="spotlight"]'),a=[...s?.querySelectorAll(":scope > [data-citry-tour-panel]")??[]];if(!(r instanceof HTMLElement&&o instanceof HTMLDialogElement&&s instanceof HTMLElement&&l instanceof HTMLElement&&0!==a.length))throw new Error("[citry-ui] CTour requires its owned anatomy.");const c=new Map,u=Symbol.for("citry-ui:tour-handoff"),d=r[u],p="tour"===d?.kind?d:{kind:"tour",restoreFocus:null};r[u]=p;let m=Boolean(t.open),g=t.active,h=!1,b=!1,v=o.open,y=t.active,f=null,w=null,k=null,E=null,S=null,x=0,M=!1,O=!0,A=!1,z={dismissible:t.dismissible,closeOnEscape:t.closeOnEscape,closeOnOutside:t.closeOnOutside,skippable:t.skippable,scroll:t.scroll,missingTarget:t.missingTarget,size:t.size};const L=(e,t)=>{let i;try{i=JSON.stringify(t)??String(t)}catch{i=String(t)}const n=`${typeof t}:${i}`;c.get(e)!==n&&(c.set(e,n),console.error(`[citry-ui] CTour ${e} received invalid client value ${i}.`,r))},T=e=>{const n=void 0===i[e]?t[e]:i[e];return"boolean"==typeof n?(c.delete(e),n):(L(e,n),t[e])},C=(e,n)=>{const r=void 0===i[e]?t[e]:i[e];return n.includes(r)?(c.delete(e),r):(L(e,r),t[e])},I=e=>{const t=i[e];return null==t||"function"==typeof t?(c.delete(e),t??null):(L(e,t),null)},W=e=>{const t=a[e]?.dataset.targetId;return t?r.ownerDocument.getElementById(t):null},q=e=>!a[e]?.dataset.targetId||W(e)?.isConnected,D=(e,t=1)=>{if(!Number.isInteger(e)||e<0||e>=a.length)return null;if(q(e))return e;if("close"===z.missingTarget)return null;for(let i=e+t;i>=0&&i<a.length;i+=t)if(q(i))return i;return null},F=e=>{for(const t of[...r.querySelectorAll("[data-citry-tour-trigger]")].filter(e=>e.closest("[data-citry-tour-host]")===r))t.setAttribute("aria-expanded",String(e))},$=(e,t,i)=>f?.(e,{reason:t,active:y,value:a[y].dataset.value,controlled:h,source:i}),P=e=>queueMicrotask(()=>{v&&y===e&&a[e].querySelector('[data-citry-ui-part="title"]')?.focus({preventScroll:!0})}),H=()=>{M&&(M=!1,globalThis.removeEventListener("resize",V),r.ownerDocument.removeEventListener("scroll",V,!0),E?.disconnect(),S?.disconnect(),E=null,S=null,x&&cancelAnimationFrame(x),x=0)},B=(e,t,i)=>Math.max(t,Math.min(e,i)),N=(e,t)=>{const i=e.trim(),n=Number.parseFloat(i);return Number.isFinite(n)?i.endsWith("rem")?n*Number.parseFloat(getComputedStyle(r.ownerDocument.documentElement).fontSize):i.endsWith("em")?n*Number.parseFloat(getComputedStyle(r).fontSize):i.endsWith("dvi")||i.endsWith("vw")?n*innerWidth/100:i.endsWith("dvb")||i.endsWith("vh")?n*innerHeight/100:n:t},_=()=>{if(x=0,!v)return;const e=a[y];k=W(y);const t=Boolean(e.dataset.targetId&&k?.isConnected);if(r.toggleAttribute("data-targeted",t),!t){l.hidden=!1,l.dataset.mode="backdrop";for(const e of["inset-inline-start","inset-block-start","inline-size","block-size"])l.style.removeProperty(e);return s.style.removeProperty("inset-inline-start"),s.style.removeProperty("inset-block-start"),s.style.removeProperty("--_cui-tour-arrow-inline"),s.style.removeProperty("--_cui-tour-arrow-block"),void(s.dataset.placement="center")}l.hidden=!1,l.dataset.mode="target";const i=k.getBoundingClientRect(),n=getComputedStyle(r),o=N(n.getPropertyValue("--_cui-tour-spotlight-padding"),8),c=N(n.getPropertyValue("--_cui-tour-offset"),12),u={left:i.left-o,top:i.top-o,right:i.right+o,bottom:i.bottom+o};l.style.insetInlineStart=`${u.left}px`,l.style.insetBlockStart=`${u.top}px`,l.style.inlineSize=u.right-u.left+"px",l.style.blockSize=u.bottom-u.top+"px";const d=s.getBoundingClientRect(),p="rtl"===n.direction,m=e.dataset.placement,g="inline-start"===m?p?"right":"left":"inline-end"===m?p?"left":"right":m,h=g.startsWith("top")?g.replace("top","bottom"):g.startsWith("bottom")?g.replace("bottom","top"):"left"===g?"right":"right"===g?"left":"bottom",b=[...new Set([g,h,"bottom","top","right","left"])].map((e,t)=>{const n=(e=>{let t=i.left+(i.width-d.width)/2,n=i.bottom+c+o;return e.startsWith("top")&&(n=i.top-d.height-c-o),"left"===e&&(t=i.left-d.width-c-o,n=i.top+(i.height-d.height)/2),"right"===e&&(t=i.right+c+o,n=i.top+(i.height-d.height)/2),e.endsWith("-start")&&(t=p?i.right-d.width:i.left),e.endsWith("-end")&&(t=p?i.left:i.right-d.width),{x:t,y:n}})(e),r=B(n.x,8,Math.max(8,innerWidth-d.width-8)),s=B(n.y,8,Math.max(8,innerHeight-d.height-8)),l=Math.abs(r-n.x)+Math.abs(s-n.y),a=((e,t,i,n,r)=>Math.max(0,Math.min(e+i,r.right)-Math.max(e,r.left))*Math.max(0,Math.min(t+n,r.bottom)-Math.max(t,r.top)))(r,s,d.width,d.height,u);return{placement:e,x:r,y:s,score:1e6*a+100*l+t}}),f=b.reduce((e,t)=>t.score<e.score?t:e);s.style.insetInlineStart=`${f.x}px`,s.style.insetBlockStart=`${f.y}px`,s.dataset.placement=f.placement,s.style.setProperty("--_cui-tour-arrow-inline",`${B(i.left+i.width/2-f.x,18,Math.max(18,d.width-18))}px`),s.style.setProperty("--_cui-tour-arrow-block",`${B(i.top+i.height/2-f.y,18,Math.max(18,d.height-18))}px`)};function V(){x||(x=requestAnimationFrame(_))}const R=()=>{H(),v&&(M=!0,globalThis.addEventListener("resize",V),r.ownerDocument.addEventListener("scroll",V,!0),k=W(y),k&&"ResizeObserver"in globalThis&&(E=new ResizeObserver(V),E.observe(k)),S=new MutationObserver(()=>{if(a[y].dataset.targetId&&!W(y)?.isConnected){const e=D(y+1,1)??D(y-1,-1);null===e?G(!1,"missing-target",k):K(e,"missing-target",k)}}),S.observe(r.ownerDocument.documentElement,{subtree:!0,childList:!0}),V())},J=(e,t=null)=>{const i=y;y=e;const n=a[e];return a.forEach((t,i)=>{const n=i===e;t.hidden=!n,t.toggleAttribute("data-current",n),t.inert=!n}),r.dataset.active=String(e),r.dataset.value=n.dataset.value,o.setAttribute("aria-labelledby",n.dataset.titleId),"true"===n.dataset.describe?o.setAttribute("aria-describedby",n.dataset.descriptionId):o.removeAttribute("aria-describedby"),v&&"none"!==z.scroll&&W(e)?.scrollIntoView({behavior:z.scroll,block:"nearest",inline:"nearest"}),v&&(R(),P(e)),i},j=(e,t=null)=>{if(e)return!v&&t instanceof HTMLElement&&(p.restoreFocus=t),o.open||o.show(),v=!0,r.toggleAttribute("data-open",!0),o.toggleAttribute("data-open",!0),F(!0),"none"!==z.scroll&&W(y)?.scrollIntoView({behavior:z.scroll,block:"nearest",inline:"nearest"}),R(),void P(y);if(!v&&!o.open)return;v=!1,r.removeAttribute("data-open"),o.removeAttribute("data-open"),F(!1),H(),o.open&&(A=!0,o.close());const i=p.restoreFocus;p.restoreFocus=null,i?.isConnected&&queueMicrotask(()=>i.focus({preventScroll:!0}))},G=(e,t,i)=>{if(e!==v){if(e){i instanceof HTMLElement&&(p.restoreFocus=i);const e=D(y,1);if(null===e)return void $(!1,"missing-target",i);e!==y&&J(e,i)}h||(m=e,j(e,i)),$(e,t,i)}},K=(e,t,i)=>{const n=D(e,e>=y?1:-1);if(null===n)return void G(!1,"missing-target",i);if(n===y)return;const r=y;b||(g=n,J(n,i)),((e,t,i,n)=>{w?.(e,{previousActive:t,value:a[e].dataset.value,previousValue:a[t].dataset.value,reason:i,controlled:b,source:n})})(n,r,t,i)},Q=e=>{const t=e.target.closest?.("[data-citry-tour-trigger]");if(t&&t.closest("[data-citry-tour-host]")===r)return void G(!0,"activator",t);const i=e.target.closest?.("[data-citry-tour-action]");if(!i||!o.contains(i))return;const n=i.dataset.citryTourAction;"previous"===n?K(y-1,"previous",i):"next"===n?K(y+1,"next",i):"finish"===n?G(!1,"finish",i):"skip"===n&&z.skippable?G(!1,"skip",i):"close"===n&&z.dismissible&&G(!1,"close",i)},U=e=>{v&&!e.defaultPrevented&&"Escape"===e.key&&z.dismissible&&z.closeOnEscape&&(e.preventDefault(),G(!1,"escape",e.target))},X=e=>{v&&z.dismissible&&z.closeOnOutside&&!s.contains(e.target)&&G(!1,"outside",e.target)},Y=e=>{A?A=!1:v&&(v=!1,m=!1,r.removeAttribute("data-open"),o.removeAttribute("data-open"),F(!1),H(),$(!1,"native",e.target))};return r.addEventListener("click",Q),r.ownerDocument.addEventListener("keydown",U,!0),r.ownerDocument.addEventListener("pointerdown",X,!0),o.addEventListener("close",Y),n(()=>{z={dismissible:T("dismissible"),closeOnEscape:T("closeOnEscape"),closeOnOutside:T("closeOnOutside"),skippable:T("skippable"),scroll:C("scroll",["auto","smooth","none"]),missingTarget:C("missingTarget",["skip","close"]),size:C("size",["sm","md","lg"])},f=I("onOpenChange"),w=I("onActiveChange");const e=i.active;let t=g;null==e?(b=!1,c.delete("active")):Number.isInteger(e)&&e>=0&&e<a.length?(b=!0,t=e,c.delete("active")):(b=!1,L("active",e));const n=D(t,t>=y?1:-1);null!==n&&n!==y&&J(n);const o=i.open;let l=m;null==o?(h=!1,c.delete("open")):"boolean"==typeof o?(h=!0,l=o,c.delete("open")):(h=!1,L("open",o)),r.dataset.size=z.size,s.dataset.size=z.size,s.querySelector('[data-citry-tour-action="close"]').hidden=!z.dismissible;for(const e of a){const t=e.querySelector('[data-citry-tour-action="skip"]');t&&(t.hidden=!z.skippable)}l&&null===D(y,1)?v&&G(!1,"missing-target",null):(l!==v||O)&&j(l),O=!1}),r.setAttribute("data-citry-tour-initialized",""),()=>{r.removeEventListener("click",Q),r.ownerDocument.removeEventListener("keydown",U,!0),r.ownerDocument.removeEventListener("pointerdown",X,!0),o.removeEventListener("close",Y),H(),r.removeAttribute("data-citry-tour-initialized")}}});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CTour_1aa9a7", "b3e9a173cd016511a084e5658525c31e", atob("eyJvcGVuIjpmYWxzZSwiYWN0aXZlIjowLCJkaXNtaXNzaWJsZSI6dHJ1ZSwiY2xvc2VPbkVzY2FwZSI6dHJ1ZSwiY2xvc2VPbk91dHNpZGUiOmZhbHNlLCJza2lwcGFibGUiOnRydWUsInNjcm9sbCI6ImF1dG8iLCJtaXNzaW5nVGFyZ2V0Ijoic2tpcCIsInNpemUiOiJtZCJ9"));
+})();</script></body></html><!--citry:g1:0f5671cf:0:i:1:e-->

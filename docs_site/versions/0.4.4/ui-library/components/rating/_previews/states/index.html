@@ -1,0 +1,333 @@
+<!--citry:g1:203ccd41:0:i:1:s--><!doctype html><html data-cid-crrxaknu5 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compare Rating states and styling</title><style>@layer citry-ui.theme {
+        :where(.cui-form-control__native--enhanced, .cui-form-control__status) {
+          position: absolute !important;
+          inline-size: 1px !important;
+          block-size: 1px !important;
+          padding: 0 !important;
+          margin: -1px !important;
+          overflow: hidden !important;
+          clip-path: inset(50%) !important;
+          white-space: nowrap !important;
+          border: 0 !important;
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=RatingStates_eb4e1c data-citry-css-url=/citry/cache/RatingStates_eb4e1c.c2d061138cc6.css>:where(.rating-state-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1.5rem;align-items:start}
+:where(.rating-brand){--cui-rating-fill-color:#059669;--cui-rating-hover-color:#10b981;--cui-rating-gap:.4rem}</style><style data-citry-css-class=CRating_b89f9c data-citry-css-url=/citry/cache/CRating_b89f9c.29bdd63f418b.css>@layer citry-ui.theme{:where(.cui-rating){--_cui-rating-empty-color:var(--cui-rating-empty-color,color-mix(in srgb, CanvasText 24%, transparent));--_cui-rating-fill-color:var(--cui-rating-fill-color,light-dark(#b45309,#fbbf24));--_cui-rating-hover-color:var(--cui-rating-hover-color,light-dark(#d97706,#fcd34d));--_cui-rating-focus-color:var(--cui-rating-focus-color,Highlight);--_cui-rating-gap:var(--cui-rating-gap,.25rem);--_cui-rating-symbol-size:var(--cui-rating-symbol-size,1.5rem);--_cui-rating-control-size:var(--cui-rating-control-size,2.75rem);--_cui-rating-disabled-opacity:var(--cui-rating-disabled-opacity,.52);color:canvastext;isolation:isolate;display:inline-grid;position:relative}:where(.cui-rating[data-size=sm]){--_cui-rating-symbol-size:var(--cui-rating-symbol-size,1.125rem)}:where(.cui-rating[data-size=lg]){--_cui-rating-symbol-size:var(--cui-rating-symbol-size,2rem)}:where(.cui-rating [data-citry-ui-part=visual]){min-block-size:var(--_cui-rating-control-size);pointer-events:none;user-select:none;align-items:center;display:inline-grid;position:relative}:where(.cui-rating [data-citry-ui-part=empty],.cui-rating [data-citry-ui-part=fill-symbols]){gap:var(--_cui-rating-gap);inline-size:max-content;display:flex}:where(.cui-rating [data-citry-ui-part=empty]){color:var(--_cui-rating-empty-color)}:where(.cui-rating [data-citry-ui-part=fill]){inline-size:var(--_cui-rating-ratio);color:var(--_cui-rating-fill-color);white-space:nowrap;position:absolute;inset-inline-start:0;overflow:hidden}:where(.cui-rating[data-hovering] [data-citry-ui-part=fill]){color:var(--_cui-rating-hover-color)}:where(.cui-rating[data-variant=subtle] [data-citry-ui-part=fill]){opacity:.72}:where(.cui-rating [data-citry-ui-part=symbol]){inline-size:var(--_cui-rating-symbol-size);block-size:var(--_cui-rating-symbol-size);font-size:var(--_cui-rating-symbol-size);place-items:center;line-height:1;display:inline-grid}:where(.cui-rating [data-citry-ui-part=choices]){position:absolute;inset:0}:where(.cui-rating [data-citry-ui-part=choice]){cursor:pointer;min-inline-size:1px;position:absolute;inset-block:0}:where(.cui-rating [data-citry-ui-part=input]){clip-path:inset(50%);white-space:nowrap;border:0;block-size:1px;inline-size:1px;margin:-1px;position:absolute;overflow:hidden}:where(.cui-rating:has([data-citry-ui-part=input]:focus-visible),.cui-rating[tabindex="0"]:focus-visible){outline:2px solid var(--_cui-rating-focus-color);outline-offset:3px;border-radius:.25rem}:where(.cui-rating[data-disabled]){opacity:var(--_cui-rating-disabled-opacity)}:where(.cui-rating[data-disabled] [data-citry-ui-part=choice],.cui-rating[data-readonly] [data-citry-ui-part=choice]){cursor:default}:where(.cui-rating__visually-hidden){clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;block-size:1px!important;inline-size:1px!important;margin:-1px!important;padding:0!important;position:absolute!important;overflow:hidden!important}@media (pointer:coarse){:where(.cui-rating){--_cui-rating-control-size:max(2.75rem, var(--cui-rating-control-size,2.75rem))}}@media (forced-colors:active){:where(.cui-rating){--_cui-rating-empty-color:GrayText;--_cui-rating-fill-color:Highlight;--_cui-rating-hover-color:Highlight}}}</style></head><body><main><!--citry:g1:203ccd41:0:i:2:s--><section class=rating-state-grid data-cid-crrxaknu6><!--citry:g1:203ccd41:0:i:3:s--><div aria-label="Small subtle rating" style="--_cui-rating-ratio: 40.0%;" class=cui-rating data-cid=crrxaknu7 data-cid-crrxaknu7 data-citry-root data-citry-ui-part=rating data-size=sm data-variant=subtle id=cui-rating-crrxaknu7-root role=radiogroup><span aria-hidden=true data-citry-ui-part=visual> <span data-citry-ui-part=empty> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> <span data-citry-ui-part=fill> <span data-citry-ui-part=fill-symbols> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> </span> </span><span data-citry-ui-part=choices> <label style="inset-inline-start: 0.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=1><input data-citry-ui-part=input id=cui-rating-crrxaknu7 type=radio value=1> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨1⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 20.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=2><input checked data-citry-ui-part=input id=cui-rating-crrxaknu7-2 type=radio value=2> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨2⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 40.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=3><input data-citry-ui-part=input id=cui-rating-crrxaknu7-3 type=radio value=3> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨3⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 60.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=4><input data-citry-ui-part=input id=cui-rating-crrxaknu7-4 type=radio value=4> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨4⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 80.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=5><input data-citry-ui-part=input id=cui-rating-crrxaknu7-5 type=radio value=5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨5⁩ out of ⁨5⁩</span></label> </span><input data-citry-ui-part=readonly-transport disabled id=cui-rating-crrxaknu7-transport type=hidden value=2></div><!--citry:g1:203ccd41:0:i:3:e--><!--citry:g1:203ccd41:0:i:4:s--><div aria-label="Default rating" style="--_cui-rating-ratio: 60.0%;" class=cui-rating data-cid=crrxaknu8 data-cid-crrxaknu8 data-citry-root data-citry-ui-part=rating data-size=md data-variant=solid id=cui-rating-crrxaknu8-root role=radiogroup><span aria-hidden=true data-citry-ui-part=visual> <span data-citry-ui-part=empty> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> <span data-citry-ui-part=fill> <span data-citry-ui-part=fill-symbols> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> </span> </span><span data-citry-ui-part=choices> <label style="inset-inline-start: 0.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=1><input data-citry-ui-part=input id=cui-rating-crrxaknu8 type=radio value=1> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨1⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 20.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=2><input data-citry-ui-part=input id=cui-rating-crrxaknu8-2 type=radio value=2> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨2⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 40.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=3><input checked data-citry-ui-part=input id=cui-rating-crrxaknu8-3 type=radio value=3> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨3⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 60.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=4><input data-citry-ui-part=input id=cui-rating-crrxaknu8-4 type=radio value=4> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨4⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 80.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=5><input data-citry-ui-part=input id=cui-rating-crrxaknu8-5 type=radio value=5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨5⁩ out of ⁨5⁩</span></label> </span><input data-citry-ui-part=readonly-transport disabled id=cui-rating-crrxaknu8-transport type=hidden value=3></div><!--citry:g1:203ccd41:0:i:4:e--><!--citry:g1:203ccd41:0:i:5:s--><div aria-label="Large readonly rating" style="--_cui-rating-ratio: 90.0%;" aria-describedby=cui-rating-crrxaknu9-readonly-value aria-readonly=true class=cui-rating data-cid=crrxaknu9 data-cid-crrxaknu9 data-citry-root data-citry-ui-part=rating data-readonly data-size=lg data-variant=solid id=cui-rating-crrxaknu9-root role=radiogroup tabindex=0><span aria-hidden=true data-citry-ui-part=visual> <span data-citry-ui-part=empty> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> <span data-citry-ui-part=fill> <span data-citry-ui-part=fill-symbols> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> </span> </span><span aria-hidden=true data-citry-ui-part=choices> <label style="inset-inline-start: 0.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=0.5><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9 type=radio value=0.5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨0.5⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 10.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=1><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-2 type=radio value=1> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨1⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 20.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=1.5><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-3 type=radio value=1.5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨1.5⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 30.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=2><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-4 type=radio value=2> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨2⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 40.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=2.5><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-5 type=radio value=2.5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨2.5⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 50.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=3><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-6 type=radio value=3> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨3⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 60.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=3.5><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-7 type=radio value=3.5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨3.5⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 70.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=4><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-8 type=radio value=4> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨4⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 80.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=4.5><input checked data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-9 type=radio value=4.5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨4.5⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 90.0%; inline-size: 10.0%;" data-citry-ui-part=choice data-value=5><input data-citry-ui-part=input disabled id=cui-rating-crrxaknu9-10 type=radio value=5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨5⁩ out of ⁨5⁩</span></label> </span><span class=cui-rating__visually-hidden data-citry-ui-part=readonly-value id=cui-rating-crrxaknu9-readonly-value>⁨4.5⁩ out of ⁨5⁩</span><input data-citry-ui-part=readonly-transport disabled id=cui-rating-crrxaknu9-transport type=hidden value=4.5></div><!--citry:g1:203ccd41:0:i:5:e--><!--citry:g1:203ccd41:0:i:6:s--><div aria-label="Disabled rating" style="--_cui-rating-ratio: 20.0%;" aria-disabled=true class=cui-rating data-cid=crrxaknua data-cid-crrxaknua data-citry-root data-citry-ui-part=rating data-disabled data-size=md data-variant=solid id=cui-rating-crrxaknua-root role=radiogroup><span aria-hidden=true data-citry-ui-part=visual> <span data-citry-ui-part=empty> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> <span data-citry-ui-part=fill> <span data-citry-ui-part=fill-symbols> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> </span> </span><span data-citry-ui-part=choices> <label style="inset-inline-start: 0.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=1><input checked data-citry-ui-part=input disabled id=cui-rating-crrxaknua type=radio value=1> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨1⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 20.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=2><input data-citry-ui-part=input disabled id=cui-rating-crrxaknua-2 type=radio value=2> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨2⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 40.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=3><input data-citry-ui-part=input disabled id=cui-rating-crrxaknua-3 type=radio value=3> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨3⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 60.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=4><input data-citry-ui-part=input disabled id=cui-rating-crrxaknua-4 type=radio value=4> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨4⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 80.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=5><input data-citry-ui-part=input disabled id=cui-rating-crrxaknua-5 type=radio value=5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨5⁩ out of ⁨5⁩</span></label> </span><input data-citry-ui-part=readonly-transport disabled id=cui-rating-crrxaknua-transport type=hidden value=1></div><!--citry:g1:203ccd41:0:i:6:e--><div dir=rtl><!--citry:g1:203ccd41:0:i:7:s--><div aria-label="RTL rating" style="--_cui-rating-ratio: 80.0%;" class=cui-rating data-cid=crrxaknub data-cid-crrxaknub data-citry-root data-citry-ui-part=rating data-size=md data-variant=solid id=cui-rating-crrxaknub-root role=radiogroup><span aria-hidden=true data-citry-ui-part=visual> <span data-citry-ui-part=empty> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> <span data-citry-ui-part=fill> <span data-citry-ui-part=fill-symbols> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> </span> </span><span data-citry-ui-part=choices> <label style="inset-inline-start: 0.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=1><input data-citry-ui-part=input id=cui-rating-crrxaknub type=radio value=1> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨1⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 20.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=2><input data-citry-ui-part=input id=cui-rating-crrxaknub-2 type=radio value=2> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨2⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 40.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=3><input data-citry-ui-part=input id=cui-rating-crrxaknub-3 type=radio value=3> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨3⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 60.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=4><input checked data-citry-ui-part=input id=cui-rating-crrxaknub-4 type=radio value=4> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨4⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 80.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=5><input data-citry-ui-part=input id=cui-rating-crrxaknub-5 type=radio value=5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨5⁩ out of ⁨5⁩</span></label> </span><input data-citry-ui-part=readonly-transport disabled id=cui-rating-crrxaknub-transport type=hidden value=4></div><!--citry:g1:203ccd41:0:i:7:e--></div><!--citry:g1:203ccd41:0:i:8:s--><div aria-label="Brand rating" class="cui-rating rating-brand" style="--_cui-rating-ratio: 100%;" data-cid=crrxaknuc data-cid-crrxaknuc data-citry-root data-citry-ui-part=rating data-size=md data-variant=solid id=cui-rating-crrxaknuc-root role=radiogroup><span aria-hidden=true data-citry-ui-part=visual> <span data-citry-ui-part=empty> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> <span data-citry-ui-part=fill> <span data-citry-ui-part=fill-symbols> <span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span><span data-citry-ui-part=symbol>★</span> </span> </span> </span><span data-citry-ui-part=choices> <label style="inset-inline-start: 0.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=1><input data-citry-ui-part=input id=cui-rating-crrxaknuc type=radio value=1> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨1⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 20.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=2><input data-citry-ui-part=input id=cui-rating-crrxaknuc-2 type=radio value=2> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨2⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 40.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=3><input data-citry-ui-part=input id=cui-rating-crrxaknuc-3 type=radio value=3> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨3⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 60.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=4><input data-citry-ui-part=input id=cui-rating-crrxaknuc-4 type=radio value=4> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨4⁩ out of ⁨5⁩</span></label><label style="inset-inline-start: 80.0%; inline-size: 20.0%;" data-citry-ui-part=choice data-value=5><input checked data-citry-ui-part=input id=cui-rating-crrxaknuc-5 type=radio value=5> <span class=cui-rating__visually-hidden data-citry-ui-part=choice-label>⁨5⁩ out of ⁨5⁩</span></label> </span><input data-citry-ui-part=readonly-transport disabled id=cui-rating-crrxaknuc-transport type=hidden value=5></div><!--citry:g1:203ccd41:0:i:8:e--></section><!--citry:g1:203ccd41:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"RatingStates_eb4e1c","className":"RatingStates"},{"classId":"CRating_b89f9c","className":"CRating"}],"componentExecutionOrderConstraints":[{"childRenderId":"crrxaknu7","invocationId":2,"parentRenderId":"crrxaknu6"},{"childRenderId":"crrxaknu8","invocationId":3,"parentRenderId":"crrxaknu6"},{"childRenderId":"crrxaknu9","invocationId":4,"parentRenderId":"crrxaknu6"},{"childRenderId":"crrxaknua","invocationId":5,"parentRenderId":"crrxaknu6"},{"childRenderId":"crrxaknub","invocationId":6,"parentRenderId":"crrxaknu6"},{"childRenderId":"crrxaknuc","invocationId":7,"parentRenderId":"crrxaknu6"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"crrxaknu5","transparent":false},{"classId":"RatingStates_eb4e1c","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"crrxaknu6","transparent":false},{"classId":"CRating_b89f9c","instanceId":3,"invocationId":2,"parentRenderId":"crrxaknu6","renderId":"crrxaknu7","transparent":false},{"classId":"CRating_b89f9c","instanceId":4,"invocationId":3,"parentRenderId":"crrxaknu6","renderId":"crrxaknu8","transparent":false},{"classId":"CRating_b89f9c","instanceId":5,"invocationId":4,"parentRenderId":"crrxaknu6","renderId":"crrxaknu9","transparent":false},{"classId":"CRating_b89f9c","instanceId":6,"invocationId":5,"parentRenderId":"crrxaknu6","renderId":"crrxaknua","transparent":false},{"classId":"CRating_b89f9c","instanceId":7,"invocationId":6,"parentRenderId":"crrxaknu6","renderId":"crrxaknub","transparent":false},{"classId":"CRating_b89f9c","instanceId":8,"invocationId":7,"parentRenderId":"crrxaknu6","renderId":"crrxaknuc","transparent":false}],"fills":[],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"RatingStates_eb4e1c","sourceRenderId":"crrxaknu6","tagName":"crating","targetClassId":"CRating_b89f9c","targetRenderId":"crrxaknu7"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"RatingStates_eb4e1c","sourceRenderId":"crrxaknu6","tagName":"crating","targetClassId":"CRating_b89f9c","targetRenderId":"crrxaknu8"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"RatingStates_eb4e1c","sourceRenderId":"crrxaknu6","tagName":"crating","targetClassId":"CRating_b89f9c","targetRenderId":"crrxaknu9"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"RatingStates_eb4e1c","sourceRenderId":"crrxaknu6","tagName":"crating","targetClassId":"CRating_b89f9c","targetRenderId":"crrxaknua"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"RatingStates_eb4e1c","sourceRenderId":"crrxaknu6","tagName":"crating","targetClassId":"CRating_b89f9c","targetRenderId":"crrxaknub"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"RatingStates_eb4e1c","sourceRenderId":"crrxaknu6","tagName":"crating","targetClassId":"CRating_b89f9c","targetRenderId":"crrxaknuc"}],"slotRegions":[],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"203ccd41158f474a5bb129bbc71744c9d87de484ebd2c7ee482ec009a16861c7"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjQ1NWE5ODMyMmUxZi5qcw==", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjQ5ZTMyOGRmNzBhM2U3MjY4NGFiOTM3Y2YwYzE2NWM3Lmpz", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjdjMDExMTk2MGI4NzNmMDgxYzJlMDA4NmQ1NzIyMTc1Lmpz", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjVjZDk5ZDcyYTgxODJiOTJhN2YyYzQ5NWJlYjJlM2Q1Lmpz", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjU0YzFjOTYwN2ZiZDhlNjlkZmIxZDgzMmQ3NTc0MmE4Lmpz", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjNkYTE5NWRiMTJjZTdkMTUwMjZiNTU2NDMzZjRiZWMzLmpz", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjJiYjRjNmQ0ZjMyNTg4OTZiYzdkYzM1YmYzOGU5ZTU4Lmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1JhdGluZ1N0YXRlc19lYjRlMWMuYzJkMDYxMTM4Y2M2LmNzcw==", "L2NpdHJ5L2NhY2hlL0NSYXRpbmdfYjg5ZjljLjI5YmRkNjNmNDE4Yi5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1JhdGluZ19iODlmOWM=", "Y3JyeGFrbnU3", "NDllMzI4ZGY3MGEzZTcyNjg0YWI5MzdjZjBjMTY1Yzc=", "init"], ["Q1JhdGluZ19iODlmOWM=", "Y3JyeGFrbnU4", "N2MwMTExOTYwYjg3M2YwODFjMmUwMDg2ZDU3MjIxNzU=", "init"], ["Q1JhdGluZ19iODlmOWM=", "Y3JyeGFrbnU5", "NWNkOTlkNzJhODE4MmI5MmE3ZjJjNDk1YmViMmUzZDU=", "init"], ["Q1JhdGluZ19iODlmOWM=", "Y3JyeGFrbnVh", "NTRjMWM5NjA3ZmJkOGU2OWRmYjFkODMyZDc1NzQyYTg=", "init"], ["Q1JhdGluZ19iODlmOWM=", "Y3JyeGFrbnVi", "M2RhMTk1ZGIxMmNlN2QxNTAyNmI1NTY0MzNmNGJlYzM=", "init"], ["Q1JhdGluZ19iODlmOWM=", "Y3JyeGFrbnVj", "MmJiNGM2ZDRmMzI1ODg5NmJjN2RjMzViZjM4ZTllNTg=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3JyeGFrbnU1"], ["UmF0aW5nU3RhdGVzX2ViNGUxYw==", "Y3JyeGFrbnU2"]], "graph": "203ccd41158f474a5bb129bbc71744c9d87de484ebd2c7ee482ec009a16861c7", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      (()=>{
+        const key=Symbol.for('citry-ui:form-control-runtime'),prior=globalThis[key];
+        if(prior){if(prior.generation!==1)throw new Error('[citry-ui] cannot replace an incompatible form-control runtime; reload the page.');return}
+        const resetKey=Symbol.for('citry-ui:form-control-reset-registry');
+        const attr=(element,name,value)=>value==null||value===''?element.removeAttribute(name):element.setAttribute(name,String(value));
+        const attrs=(elements,values)=>[...elements].forEach(element=>Object.entries(values).forEach(([name,value])=>attr(element,name,value)));
+        const states=(element,values)=>Object.entries(values).forEach(([name,value])=>element.toggleAttribute(`data-${name}`,Boolean(value)));
+        const idrefs=(...items)=>{const out=[];items.filter(item=>typeof item==='string').forEach(item=>item.split(/\s+/).filter(Boolean).forEach(token=>{if(!out.includes(token))out.push(token)}));return out.join(' ')||null};
+        const relationships=(elements,field,values,invalid)=>{const described=idrefs(field?.hasDescription?field.descriptionId:null,invalid&&field?.hasError?field.errorId:null,values.describedby),error=invalid?idrefs(field?.hasError?field.errorId:null,values.errormessage):null,owned={'aria-describedby':described,'aria-errormessage':error,'aria-invalid':invalid?'true':null};if('label' in values)Object.assign(owned,{'aria-label':values.label,'aria-labelledby':field?.labelId??values.labelledby});attrs(elements,owned);const state={};for(const name of ['required','disabled','readonly'])if(name in values)state[`aria-${name}`]=values[name]?'true':null;attrs(values.control?[values.control]:elements,state)};
+        const trim=value=>value.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g,'');
+        const canonical=(value,delimiters=[],strict=false)=>{if(typeof value!=='string'||!value.length||value.includes('\0'))return null;const normalized=value.replace(/\r\n?/g,'\n');if(!strict)return normalized;const trimmed=trim(normalized);return trimmed===value&&trimmed&&!trimmed.includes('\n')&&!delimiters.some(delimiter=>trimmed.includes(delimiter))?trimmed:null};
+        const stringList=(current,candidates,normalize,maximum=null)=>{const seen=new Set(current),values=[];for(const candidate of candidates){if(candidate==='')return{reason:'empty',candidate};const value=normalize(candidate);if(value===null)return{reason:'invalid-value',candidate};if(seen.has(value)){return{reason:'duplicate',candidate}}seen.add(value);values.push(value)}return maximum!==null&&current.length+values.length>maximum?{reason:'maximum',candidate:values.at(-1)??null}:{values}};
+        const split=(text,delimiters)=>{const normalized=text.replace(/\r\n?/g,'\n'),separators=new Set([...delimiters,'\n']);let fragments=[''];for(const character of normalized)separators.has(character)?fragments.push(''):fragments[fragments.length-1]+=character;return{candidates:fragments.slice(0,-1).map(trim),draft:separators.has(normalized.at(-1))?'':fragments.at(-1)}};
+        const format=(template,key,value)=>template.replaceAll(`{${key}}`,String(value));
+        const same=(left,right)=>left.length===right.length&&left.every((value,index)=>value===right[index]);
+        const commit=select=>{select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}))};
+        const resolver=(root,props,owner)=>{
+          const episodes=new Map(),retained=new Map();
+          const describe=value=>{try{return JSON.stringify(value)??String(value)}catch{return String(value)}};
+          const report=(name,value,suffix='using the previous valid value or server fallback')=>{const fingerprint=`${typeof value}:${describe(value)}`;if(episodes.get(name)===fingerprint)return;episodes.set(name,fingerprint);console.error(`[citry-ui] ${owner} ${name} received invalid client value ${describe(value)}; ${suffix}.`,root)};
+          const clear=name=>episodes.delete(name);
+          const callback=name=>{const value=props[name];if(value==null){clear(name);return null}if(typeof value==='function'){clear(name);return value}report(name,value,'ignoring it');return null};
+          const release=(name,fallback)=>{retained.delete(name);clear(name);return fallback};
+          const boolean=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='boolean'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const string=(name,fallback)=>{const value=props[name];if(value==null)return release(name,fallback);if(typeof value==='string'){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const choice=(name,fallback,allowed)=>{const value=props[name];if(value==null)return release(name,fallback);if(allowed.includes(value)){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          const maximum=(name,fallback)=>{const value=props[name];if(value===undefined)return release(name,fallback);if(value===null){retained.set(name,null);clear(name);return null}if(Number.isInteger(value)&&value>0){retained.set(name,value);clear(name);return value}report(name,value);return retained.has(name)?retained.get(name):fallback};
+          return{describe,report,clear,callback,boolean,string,choice,maximum};
+        };
+        const fieldsetDisabled=element=>{for(let node=element.parentElement;node;node=node.parentElement){if(!(node instanceof HTMLFieldSetElement)||!node.disabled)continue;const legend=[...node.children].find(child=>child instanceof HTMLLegendElement);if(!legend?.contains(element))return true}return false};
+        const syncOptions=(select,values,rebuild=false)=>{if(rebuild)select.replaceChildren(...values.map(value=>{const option=select.ownerDocument.createElement('option');option.value=value;option.textContent=value;option.defaultSelected=true;option.selected=true;return option}));else{const selected=new Set(values);[...select.options].forEach(option=>option.selected=selected.has(option.value))}};
+        const syncHidden=(container,values,name,form,enabled)=>{container.replaceChildren();if(!enabled||!name)return;values.forEach(value=>{const input=container.ownerDocument.createElement('input');input.type='hidden';input.name=name;input.value=value;if(form)input.setAttribute('form',form);container.append(input)})};
+        const syncTransport=(select,hidden,values,settings)=>{syncOptions(select,values,settings.rebuild);const readonly=settings.readonly&&!settings.disabled;select.name=readonly?'':settings.name??'';select.disabled=settings.disabled||settings.readonly;select.required=settings.required&&!settings.readonly&&!settings.disabled;if(settings.form)select.setAttribute('form',settings.form);else select.removeAttribute('form');syncHidden(hidden,values,settings.name,settings.form,readonly)};
+        const renderTokens=(container,values,settings)=>container.replaceChildren(...values.map(value=>{const token=container.ownerDocument.createElement('span');token.className=settings.className;token.dataset.citryUiPart=settings.part;token.dataset.value=value;if(settings.active?.(value))token.toggleAttribute('data-highlighted',true);const text=settings.label?.(value)??value;if(settings.labelPart){const label=container.ownerDocument.createElement('span');label.dataset.citryUiPart=settings.labelPart;label.textContent=text;token.append(label)}else token.textContent=text;if(settings.removeLabel){const remove=container.ownerDocument.createElement('button');remove.type='button';remove.tabIndex=-1;remove.disabled=Boolean(settings.removeDisabled);remove.dataset.citryUiPart='remove';remove.dataset.value=value;remove.textContent='\u00d7';remove.setAttribute('aria-label',settings.removeLabel(value));token.append(remove)}return token}));
+        const disableRemovals=(container,disabled)=>container.querySelectorAll(':scope > [data-citry-ui-part="tag"] > [data-citry-ui-part="remove"]').forEach(remove=>remove.disabled=disabled);
+        const blockedTransition=apply=>{let prior;return current=>{const next=`${Number(current.disabled)}:${Number(current.readonly)}`;if(prior!==undefined&&next!==prior)apply();prior=next}};
+        const highlight=(container,selector,value)=>container.querySelectorAll(selector).forEach(item=>item.toggleAttribute('data-highlighted',item.dataset.value===value));
+        const focus=element=>element.focus({preventScroll:true});
+        const status=(root,element)=>{let generation=0;return{announce:text=>{const token=++generation;element.textContent='';queueMicrotask(()=>{if(token===generation&&root.isConnected)element.textContent=text})},invalidate:()=>++generation}};
+        const listeners=()=>{const entries=[];return{add:(target,type,listener,options)=>{target.addEventListener(type,listener,options);entries.push([target,type,listener,options])},stop:()=>entries.splice(0).forEach(([target,type,listener,options])=>target.removeEventListener(type,listener,options))}};
+        const enhanceNative=(native,visible,settings,enabled=true)=>{if(settings.publicId){native.id=enabled?settings.nativeId:settings.publicId;visible.id=enabled?settings.publicId:settings.visibleId}attr(native,'aria-hidden',enabled?'true':null);if(enabled)native.tabIndex=-1;else native.removeAttribute('tabindex');if(settings.className)native.classList.toggle(settings.className,enabled)};
+        const ownership=(root,key)=>{const retained=root[key]??null,state=retained??{},owner=Symbol();root[key]=state;state.owner=owner;return{retained,state,owns:()=>state.owner===owner}};
+        const tokenHandoff=(root,key,server,editor,name)=>{const handle=ownership(root,key),retained=handle.retained,[structure,value,draft,full,serverValues,serverDraft]=server,sameStructure=retained?.s===structure,sameValue=retained?.v===value,sameDraft=retained?.d===draft,prior=Array.isArray(retained?.V)?retained.V:[],values=sameValue?[...prior]:[...serverValues],input=sameDraft&&typeof retained?.I==='string'?retained.I:serverDraft,valueBaseline=sameValue&&Array.isArray(retained?.B)?[...retained.B]:[...serverValues],draftBaseline=sameDraft&&typeof retained?.J==='string'?retained.J:serverDraft,index=prior.indexOf(retained?.A),active=values.includes(retained?.A)?retained.A:values[index]??values[index-1]??null,composing=Boolean(sameDraft&&retained?.C);if(composing&&retained.E!==editor)throw new Error(`[citry-ui] ${name} cannot replace its editor during composition.`);return[handle,sameStructure,sameValue,sameDraft,values,input,valueBaseline,draftBaseline,active,composing,sameDraft?retained?.S:null,Boolean(sameDraft&&retained?.E===editor&&retained?.F),Boolean(sameStructure&&retained?.X),sameStructure&&typeof retained?.T==='string'?retained.T:null]};
+        const restoreTokenHandoff=(handoff,editor,status,owned)=>{const[,sameStructure,,sameDraft,,draft,,,,composing,selection,focused,,,]=handoff;owned(()=>{if(sameStructure&&handoff[13]!==null)status.textContent=handoff[13];if(sameDraft&&!composing&&Array.isArray(selection)){const start=Math.min(selection[0]??draft.length,draft.length),end=Math.min(selection[1]??start,draft.length);try{editor.setSelectionRange(start,end)}catch{}}});if(focused&&!editor.disabled)focus(editor)};
+        const saveTokenHandoff=(handoff,server,editor,current)=>{const handle=handoff[0];if(!handle.owns())return false;const [structure,value,draft,full]=server,[values,valueBaseline,input,draftBaseline,active,composing,invalid,status]=current;Object.assign(handle.state,{s:structure,v:value,d:draft,z:full,V:[...values],B:[...valueBaseline],I:input,J:draftBaseline,A:active,C:composing,E:editor,S:[editor.selectionStart??input.length,editor.selectionEnd??editor.selectionStart??input.length],F:editor.matches(':focus'),X:invalid,T:status});return true};
+        const exactAnatomy=entries=>entries.every(([parent,selector,node])=>parent.querySelectorAll(`:scope > ${selector}`).length===1&&parent.querySelector(`:scope > ${selector}`)===node);
+        const sanitizeFormControl=(root,input)=>{['id','role','part','hidden','inert','popover','contenteditable','tabindex','name','form','type','value','required','disabled','readonly','aria-label','aria-labelledby','aria-describedby','aria-errormessage','aria-invalid','aria-required','aria-disabled','aria-readonly'].forEach(name=>root.removeAttribute(name));input.type='text';['name','form','required','role','tabindex','hidden','inert','popover'].forEach(name=>input.removeAttribute(name))};
+        const mutations=root=>{let observer=null,timer=null;const observe=()=>observer?.observe(root,{subtree:true,childList:true,attributes:true});return{owned:fn=>{observer?.disconnect();try{fn()}finally{observe()}},start:reconcile=>{observer=new MutationObserver(()=>{if(timer!==null)clearTimeout(timer);timer=setTimeout(()=>{timer=null;reconcile()},0)});observe()},stop:()=>{observer?.disconnect();if(timer!==null)clearTimeout(timer);timer=null}}};
+        const watchFieldset=(root,control,apply)=>{let observer,scope;const observe=()=>{const next=root.getRootNode();if(next===scope)return;observer?.disconnect();scope=next;observer=new MutationObserver(records=>{const relevant=records.some(record=>record.type==='attributes'?record.target instanceof HTMLFieldSetElement&&record.target.contains(root):[...record.addedNodes,...record.removedNodes].some(node=>node===root||node.contains?.(root)||(node instanceof HTMLLegendElement&&record.target.contains(root))));if(!relevant)return;if(root.getRootNode()!==scope)observe();apply()});observer.observe(next instanceof Document?next.documentElement:next,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']})};observe();return()=>observer?.disconnect()};
+        const registerReset=(root,proxy,entry)=>{let unregister=()=>{};const register=()=>{const scope=root.getRootNode();let registry=scope[resetKey];if(!registry){const entries=new Map(),timers=new Set(),handler=event=>{const form=event.target,current=[...entries.entries()].filter(([control])=>control.form===form).map(([control,item])=>[control,item,++item.sequence]),timer=setTimeout(()=>{timers.delete(timer);if(event.defaultPrevented)return;current.filter(([control,item,sequence])=>entries.get(control)===item&&item.sequence===sequence&&control.isConnected&&control.form===form).forEach(([,item])=>{item.invalidate?.();item.reset(event)})},0);timers.add(timer)},observer=new MutationObserver(()=>entries.forEach(item=>item.refresh()));scope.addEventListener('reset',handler,true);observer.observe(scope instanceof Document?scope.documentElement:scope,{subtree:true,childList:true});registry={entries,timers,handler,observer};scope[resetKey]=registry}const item={...entry,sequence:0,refresh:()=>{if(root.isConnected&&root.getRootNode()!==scope){unregister();unregister=register()}}};registry.entries.set(proxy,item);return()=>{if(registry.entries.get(proxy)!==item)return;registry.entries.delete(proxy);if(!registry.entries.size&&scope[resetKey]===registry){scope.removeEventListener('reset',registry.handler,true);registry.observer.disconnect();registry.timers.forEach(clearTimeout);registry.timers.clear();delete scope[resetKey]}}};unregister=register();return()=>unregister()};
+        const deepActive=document=>{let active=document.activeElement;while(active?.shadowRoot?.activeElement)active=active.shadowRoot.activeElement;return active};
+        const composedParent=node=>node?.assignedSlot??node?.parentNode??(node?.getRootNode() instanceof ShadowRoot?node.getRootNode().host:null);
+        const invalidFocus=(root,editor,current)=>{const document=root.ownerDocument,snapshot=deepActive(document);let node=root,dialog=null;while(node){if(node instanceof HTMLDialogElement&&node.open){dialog=node;break}node=composedParent(node)}requestAnimationFrame(()=>{if(!current()||!root.isConnected)return;const active=deepActive(document);if(active!==snapshot&&!root.contains(active))return;if(editor.isConnected&&!editor.disabled&&editor.getClientRects().length&&!editor.closest('[inert]')){editor.focus({preventScroll:true});if(deepActive(document)===editor)return}const target=dialog?.isConnected&&dialog.open&&dialog.getClientRects().length?dialog:document.body;if(!target?.isConnected)return;const temporary=!target.hasAttribute('tabindex');if(temporary)target.tabIndex=-1;target.focus({preventScroll:true});if(temporary)queueMicrotask(()=>target.removeAttribute('tabindex'))})};
+        globalThis[key]={generation:1,attr,attrs,states,idrefs,relationships,trim,canonical,stringList,split,format,same,commit,resolver,fieldsetDisabled,syncOptions,syncHidden,syncTransport,renderTokens,disableRemovals,blockedTransition,highlight,focus,status,listeners,enhanceNative,ownership,tokenHandoff,restoreTokenHandoff,saveTokenHandoff,exactAnatomy,sanitizeFormControl,mutations,watchFieldset,registerReset,invalidFocus};
+      })();
+    
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CRating_b89f9c", {
+  props: { value: {}, required: {}, disabled: {}, readonly: {}, invalid: {}, allowClear: {}, variant: {}, size: {}, onValueChange: {}, onHoverChange: {} },
+  init: ({ els, data, props, effect, inject, i18n }) => {
+    const root = els[0];
+    const choices = root.querySelector(':scope > [data-citry-ui-part="choices"]');
+    const inputs = Array.from(choices?.querySelectorAll(':scope > [data-citry-ui-part="choice"] > [data-citry-ui-part="input"]') ?? []);
+    const labels = Array.from(choices?.querySelectorAll(':scope > [data-citry-ui-part="choice"]') ?? []);
+    const choiceLabels = Array.from(choices?.querySelectorAll(':scope > [data-citry-ui-part="choice"] > [data-citry-ui-part="choice-label"]') ?? []);
+    const transport = root.querySelector(':scope > [data-citry-ui-part="readonly-transport"]');
+    const readonlyValue = root.querySelector(':scope > [data-citry-ui-part="readonly-value"]');
+    if (!(choices instanceof HTMLElement) || !(transport instanceof HTMLInputElement) || inputs.length !== data.values.length || inputs.some(input => !(input instanceof HTMLInputElement)) || labels.length !== inputs.length || choiceLabels.length !== inputs.length) throw new Error('[citry-ui] CRating settled anatomy is invalid.');
+    const field = inject(Symbol.for('citry-ui:field'), null);
+    const form = inject(Symbol.for('citry-ui:form'), null);
+    const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
+    if (runtime?.generation !== 1) throw new Error('[citry-ui] CRating form-control runtime is unavailable.');
+    const resolver = runtime.resolver(root, props, 'CRating');
+    const listeners = runtime.listeners();
+    const mutations = runtime.mutations(root);
+    const owned = mutations.owned;
+    let current = data.value;
+    let committed = current;
+    let initialValue = data.initialValue;
+    let controlled = false;
+    let hovered = null;
+    let configuration = null;
+    let interactionSource = 'pointer';
+    let bindings = [];
+
+    const canonical = raw => {
+      if (raw === null || raw === '0') return null;
+      if (typeof raw !== 'string' || !data.values.includes(raw)) return undefined;
+      return raw;
+    };
+    const resolveConfiguration = () => ({
+      required: field ? field.required : resolver.boolean('required', data.required),
+      disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(inputs[0]),
+      readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
+      invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
+      allowClear: resolver.boolean('allowClear', data.allowClear),
+      variant: resolver.choice('variant', data.variant, ['solid', 'subtle']),
+      size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+    });
+    const ratio = value => `${value === null ? 0 : Number(value) / Number(data.max) * 100}%`;
+    const formatLabel = value => {
+      const formattedValue = i18n ? i18n.format.number(value, { format: 'citry-ui-rating' }) : value;
+      const formattedMax = i18n ? i18n.format.number(data.max, { format: 'citry-ui-rating' }) : data.max;
+      return data.valueLabel.replaceAll('{value}', formattedValue).replaceAll('{max}', formattedMax);
+    };
+    const syncLabels = () => {
+      bindings.forEach(binding => binding.dispose());
+      bindings = [];
+      inputs.forEach((input, index) => {
+        if (i18n && data.catalogValueLabel) bindings.push(i18n.bind({
+          message: 'citry-ui-rating-value',
+          values: () => ({ value: i18n.format.number(input.value, { format: 'citry-ui-rating' }), max: i18n.format.number(data.max, { format: 'citry-ui-rating' }) }),
+          onChange: text => {
+            choiceLabels[index].textContent = text;
+            if (readonlyValue && input.value === current) readonlyValue.textContent = text;
+          },
+        }));
+        else choiceLabels[index].textContent = formatLabel(input.value);
+      });
+    };
+    const syncRelationships = () => runtime.relationships(inputs, field, { describedby: data.describedby, errormessage: data.errormessage }, configuration.invalid);
+    const apply = () => owned(() => {
+      root.style.setProperty('--_cui-rating-ratio', ratio(hovered ?? current));
+      root.style.setProperty('--_cui-rating-committed-ratio', ratio(current));
+      root.toggleAttribute('data-hovering', hovered !== null);
+      root.toggleAttribute('data-disabled', configuration.disabled);
+      root.toggleAttribute('data-readonly', configuration.readonly);
+      root.toggleAttribute('data-required', configuration.required);
+      root.toggleAttribute('data-invalid', configuration.invalid);
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.setAttribute('aria-disabled', configuration.disabled ? 'true' : 'false');
+      root.setAttribute('aria-readonly', configuration.readonly ? 'true' : 'false');
+      root.setAttribute('aria-invalid', configuration.invalid ? 'true' : 'false');
+      if (configuration.readonly && !configuration.disabled) root.tabIndex = 0; else root.removeAttribute('tabindex');
+      choices.setAttribute('aria-hidden', configuration.readonly ? 'true' : 'false');
+      inputs.forEach((input, index) => {
+        input.checked = input.value === current;
+        input.defaultChecked = input.value === initialValue;
+        input.name = configuration.disabled || configuration.readonly ? '' : (data.name ?? '');
+        input.disabled = configuration.disabled || configuration.readonly;
+        input.required = configuration.required && !configuration.disabled && !configuration.readonly;
+        labels[index].toggleAttribute('data-checked', input.value === current);
+        labels[index].toggleAttribute('data-highlighted', hovered !== null && Number(input.value) <= Number(hovered));
+      });
+      transport.value = current ?? '';
+      transport.name = configuration.disabled || !configuration.readonly || current === null ? '' : (data.name ?? '');
+      transport.disabled = configuration.disabled || !configuration.readonly || current === null || !data.name;
+      if (readonlyValue) {
+        const index = inputs.findIndex(input => input.value === current);
+        readonlyValue.textContent = current === null ? '' : (choiceLabels[index]?.textContent ?? formatLabel(current));
+      }
+      syncRelationships();
+    });
+    const detail = (value, previousValue, source, event) => ({ value, previousValue, controlled, source, sourceEvent: event });
+    const notifyHover = (next, event) => {
+      if (next === hovered) return;
+      const previousValue = hovered;
+      hovered = next;
+      resolver.callback('onHoverChange')?.(next, { value: next, previousValue, sourceEvent: event });
+      apply();
+    };
+    const request = (next, source, event, nativeAlreadyChanged = false) => {
+      if (next === current) return false;
+      const previousValue = current;
+      if (!controlled) { current = next; committed = next; }
+      resolver.callback('onValueChange')?.(next, detail(next, previousValue, source, event));
+      apply();
+      if (!controlled && !nativeAlreadyChanged) {
+        const eventInput = inputs.find(input => input.value === next) ?? inputs.find(input => input.value === previousValue) ?? inputs[0];
+        eventInput.dispatchEvent(new Event('input', { bubbles: true }));
+        eventInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return true;
+    };
+    inputs.forEach(input => {
+      listeners.add(input, 'pointerdown', () => { interactionSource = 'pointer'; });
+      listeners.add(input, 'keydown', event => {
+        interactionSource = 'keyboard';
+        if (configuration.disabled || configuration.readonly) return;
+        if (event.key === 'Home' || event.key === 'End') {
+          event.preventDefault();
+          const target = event.key === 'Home' ? inputs[0] : inputs.at(-1);
+          target.focus({ preventScroll: true });
+          request(target.value, 'keyboard', event);
+        }
+      });
+      listeners.add(input, 'click', event => {
+        if (configuration.disabled || configuration.readonly) { event.preventDefault(); apply(); return; }
+        if (configuration.allowClear && input.value === current) {
+          event.preventDefault();
+          request(null, interactionSource, event);
+          setTimeout(() => { if (root.isConnected) apply(); }, 0);
+        }
+      });
+      listeners.add(input, 'change', event => {
+        if (!input.checked || configuration.disabled || configuration.readonly) return;
+        request(input.value, interactionSource, event, true);
+      });
+    });
+    labels.forEach(label => {
+      listeners.add(label, 'pointerenter', event => { if (!configuration.disabled && !configuration.readonly) notifyHover(label.dataset.value ?? null, event); });
+    });
+    listeners.add(choices, 'pointerleave', event => notifyHover(null, event));
+    const reset = runtime.registerReset(root, inputs[0], {
+      reset: event => {
+        hovered = null;
+        if (controlled) resolver.callback('onValueChange')?.(initialValue, detail(initialValue, current, 'reset', event));
+        else { current = initialValue; committed = initialValue; apply(); }
+      },
+      invalidate: () => {},
+    });
+    const stopFieldset = runtime.watchFieldset(root, inputs[0], () => { configuration = resolveConfiguration(); apply(); });
+    effect(() => {
+      configuration = resolveConfiguration();
+      const requested = props.value;
+      if (requested === undefined) {
+        if (controlled) { controlled = false; current = committed; }
+        resolver.clear('value');
+      } else {
+        const normalized = canonical(requested);
+        if (normalized === undefined) resolver.report('value', requested);
+        else { resolver.clear('value'); controlled = true; current = normalized; }
+      }
+      if (configuration.disabled || configuration.readonly) hovered = null;
+      apply();
+    });
+    if (data.fieldLabelId) {
+      const fieldLabel = root.ownerDocument.getElementById(data.fieldLabelId);
+      if (fieldLabel) listeners.add(fieldLabel, 'click', event => queueMicrotask(() => {
+        if (!event.defaultPrevented && root.isConnected && !configuration.disabled) (configuration.readonly ? root : inputs.find(input => input.checked) ?? inputs[0]).focus({ preventScroll: true });
+      }));
+    }
+    syncLabels();
+    mutations.start(() => apply());
+    root.setAttribute('data-citry-rating-initialized', '');
+    apply();
+    return () => {
+      bindings.forEach(binding => binding.dispose());
+      listeners.stop(); mutations.stop(); stopFieldset(); reset();
+      root.removeAttribute('data-citry-rating-initialized');
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CRating_b89f9c", "49e328df70a3e72684ab937cf0c165c7", atob("eyJpZCI6ImN1aS1yYXRpbmctY3JyeGFrbnU3Iiwicm9vdElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTctcm9vdCIsInRyYW5zcG9ydElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTctdHJhbnNwb3J0IiwicmVhZG9ubHlWYWx1ZUlkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTctcmVhZG9ubHktdmFsdWUiLCJuYW1lIjpudWxsLCJmb3JtIjpudWxsLCJ2YWx1ZSI6IjIiLCJpbml0aWFsVmFsdWUiOiIyIiwibWF4IjoiNSIsInByZWNpc2lvbiI6IjEiLCJ2YWx1ZXMiOlsiMSIsIjIiLCIzIiwiNCIsIjUiXSwiY2F0YWxvZ1ZhbHVlTGFiZWwiOnRydWUsInZhbHVlTGFiZWwiOiJ7dmFsdWV9IG91dCBvZiB7bWF4fSIsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5Ijp0cnVlLCJyZXF1aXJlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJhbGxvd0NsZWFyIjpmYWxzZSwidmFyaWFudCI6InN1YnRsZSIsInNpemUiOiJzbSIsImdyb3VwTGFiZWwiOiJTbWFsbCBzdWJ0bGUgcmF0aW5nIiwiZ3JvdXBMYWJlbGxlZGJ5IjpudWxsLCJkZXNjcmliZWRieSI6bnVsbCwiZXJyb3JtZXNzYWdlIjpudWxsLCJmaWVsZExhYmVsSWQiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CRating_b89f9c", "7c0111960b873f081c2e0086d5722175", atob("eyJpZCI6ImN1aS1yYXRpbmctY3JyeGFrbnU4Iiwicm9vdElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTgtcm9vdCIsInRyYW5zcG9ydElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTgtdHJhbnNwb3J0IiwicmVhZG9ubHlWYWx1ZUlkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTgtcmVhZG9ubHktdmFsdWUiLCJuYW1lIjpudWxsLCJmb3JtIjpudWxsLCJ2YWx1ZSI6IjMiLCJpbml0aWFsVmFsdWUiOiIzIiwibWF4IjoiNSIsInByZWNpc2lvbiI6IjEiLCJ2YWx1ZXMiOlsiMSIsIjIiLCIzIiwiNCIsIjUiXSwiY2F0YWxvZ1ZhbHVlTGFiZWwiOnRydWUsInZhbHVlTGFiZWwiOiJ7dmFsdWV9IG91dCBvZiB7bWF4fSIsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5Ijp0cnVlLCJyZXF1aXJlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJhbGxvd0NsZWFyIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwiZ3JvdXBMYWJlbCI6IkRlZmF1bHQgcmF0aW5nIiwiZ3JvdXBMYWJlbGxlZGJ5IjpudWxsLCJkZXNjcmliZWRieSI6bnVsbCwiZXJyb3JtZXNzYWdlIjpudWxsLCJmaWVsZExhYmVsSWQiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CRating_b89f9c", "5cd99d72a8182b92a7f2c495beb2e3d5", atob("eyJpZCI6ImN1aS1yYXRpbmctY3JyeGFrbnU5Iiwicm9vdElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTktcm9vdCIsInRyYW5zcG9ydElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTktdHJhbnNwb3J0IiwicmVhZG9ubHlWYWx1ZUlkIjoiY3VpLXJhdGluZy1jcnJ4YWtudTktcmVhZG9ubHktdmFsdWUiLCJuYW1lIjpudWxsLCJmb3JtIjpudWxsLCJ2YWx1ZSI6IjQuNSIsImluaXRpYWxWYWx1ZSI6IjQuNSIsIm1heCI6IjUiLCJwcmVjaXNpb24iOiIwLjUiLCJ2YWx1ZXMiOlsiMC41IiwiMSIsIjEuNSIsIjIiLCIyLjUiLCIzIiwiMy41IiwiNCIsIjQuNSIsIjUiXSwiY2F0YWxvZ1ZhbHVlTGFiZWwiOnRydWUsInZhbHVlTGFiZWwiOiJ7dmFsdWV9IG91dCBvZiB7bWF4fSIsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOnRydWUsImluaGVyaXRzUmVhZG9ubHkiOmZhbHNlLCJyZXF1aXJlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJhbGxvd0NsZWFyIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6ImxnIiwiZ3JvdXBMYWJlbCI6IkxhcmdlIHJlYWRvbmx5IHJhdGluZyIsImdyb3VwTGFiZWxsZWRieSI6bnVsbCwiZGVzY3JpYmVkYnkiOm51bGwsImVycm9ybWVzc2FnZSI6bnVsbCwiZmllbGRMYWJlbElkIjpudWxsfQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CRating_b89f9c", "54c1c9607fbd8e69dfb1d832d75742a8", atob("eyJpZCI6ImN1aS1yYXRpbmctY3JyeGFrbnVhIiwicm9vdElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWEtcm9vdCIsInRyYW5zcG9ydElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWEtdHJhbnNwb3J0IiwicmVhZG9ubHlWYWx1ZUlkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWEtcmVhZG9ubHktdmFsdWUiLCJuYW1lIjpudWxsLCJmb3JtIjpudWxsLCJ2YWx1ZSI6IjEiLCJpbml0aWFsVmFsdWUiOiIxIiwibWF4IjoiNSIsInByZWNpc2lvbiI6IjEiLCJ2YWx1ZXMiOlsiMSIsIjIiLCIzIiwiNCIsIjUiXSwiY2F0YWxvZ1ZhbHVlTGFiZWwiOnRydWUsInZhbHVlTGFiZWwiOiJ7dmFsdWV9IG91dCBvZiB7bWF4fSIsImRpc2FibGVkIjp0cnVlLCJyZWFkb25seSI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOnRydWUsInJlcXVpcmVkIjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsImFsbG93Q2xlYXIiOmZhbHNlLCJ2YXJpYW50Ijoic29saWQiLCJzaXplIjoibWQiLCJncm91cExhYmVsIjoiRGlzYWJsZWQgcmF0aW5nIiwiZ3JvdXBMYWJlbGxlZGJ5IjpudWxsLCJkZXNjcmliZWRieSI6bnVsbCwiZXJyb3JtZXNzYWdlIjpudWxsLCJmaWVsZExhYmVsSWQiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CRating_b89f9c", "3da195db12ce7d15026b556433f4bec3", atob("eyJpZCI6ImN1aS1yYXRpbmctY3JyeGFrbnViIiwicm9vdElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWItcm9vdCIsInRyYW5zcG9ydElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWItdHJhbnNwb3J0IiwicmVhZG9ubHlWYWx1ZUlkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWItcmVhZG9ubHktdmFsdWUiLCJuYW1lIjpudWxsLCJmb3JtIjpudWxsLCJ2YWx1ZSI6IjQiLCJpbml0aWFsVmFsdWUiOiI0IiwibWF4IjoiNSIsInByZWNpc2lvbiI6IjEiLCJ2YWx1ZXMiOlsiMSIsIjIiLCIzIiwiNCIsIjUiXSwiY2F0YWxvZ1ZhbHVlTGFiZWwiOnRydWUsInZhbHVlTGFiZWwiOiJ7dmFsdWV9IG91dCBvZiB7bWF4fSIsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5Ijp0cnVlLCJyZXF1aXJlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJhbGxvd0NsZWFyIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwiZ3JvdXBMYWJlbCI6IlJUTCByYXRpbmciLCJncm91cExhYmVsbGVkYnkiOm51bGwsImRlc2NyaWJlZGJ5IjpudWxsLCJlcnJvcm1lc3NhZ2UiOm51bGwsImZpZWxkTGFiZWxJZCI6bnVsbH0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CRating_b89f9c", "2bb4c6d4f3258896bc7dc35bf38e9e58", atob("eyJpZCI6ImN1aS1yYXRpbmctY3JyeGFrbnVjIiwicm9vdElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWMtcm9vdCIsInRyYW5zcG9ydElkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWMtdHJhbnNwb3J0IiwicmVhZG9ubHlWYWx1ZUlkIjoiY3VpLXJhdGluZy1jcnJ4YWtudWMtcmVhZG9ubHktdmFsdWUiLCJuYW1lIjpudWxsLCJmb3JtIjpudWxsLCJ2YWx1ZSI6IjUiLCJpbml0aWFsVmFsdWUiOiI1IiwibWF4IjoiNSIsInByZWNpc2lvbiI6IjEiLCJ2YWx1ZXMiOlsiMSIsIjIiLCIzIiwiNCIsIjUiXSwiY2F0YWxvZ1ZhbHVlTGFiZWwiOnRydWUsInZhbHVlTGFiZWwiOiJ7dmFsdWV9IG91dCBvZiB7bWF4fSIsImRpc2FibGVkIjpmYWxzZSwicmVhZG9ubHkiOmZhbHNlLCJpbmhlcml0c1JlYWRvbmx5Ijp0cnVlLCJyZXF1aXJlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJhbGxvd0NsZWFyIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwiZ3JvdXBMYWJlbCI6IkJyYW5kIHJhdGluZyIsImdyb3VwTGFiZWxsZWRieSI6bnVsbCwiZGVzY3JpYmVkYnkiOm51bGwsImVycm9ybWVzc2FnZSI6bnVsbCwiZmllbGRMYWJlbElkIjpudWxsfQ=="));
+})();</script></body></html><!--citry:g1:203ccd41:0:i:1:e-->
