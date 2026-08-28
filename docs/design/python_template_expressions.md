@@ -30,7 +30,7 @@ implementation never parses them back into a type system.
 
 ## Analyzer boundary
 
-Citry runs the published `ty==0.0.71` language server as one child process per
+Citry runs the published `ty==0.0.73` language server as one child process per
 Citry workspace. It communicates through the documented Language Server
 Protocol surface and converts the returned completion, hover, definition,
 signature, and diagnostic records into Citry-owned results.

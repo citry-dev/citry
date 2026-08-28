@@ -95,10 +95,12 @@ def test_client_runtime_bundle_budget():
     # adoption token, rollback path, CSS-instance preflight, and scheduler
     # boundary. Strict-CSP stylesheet links also carry the response nonce. The
     # measured baseline is 771,813 raw / 160,674 gzip bytes.
+    # Alpine and morph 3.16.2 move the combined runtime baseline to 790,251 raw
+    # / 164,820 gzip bytes.
     # These are deliberate validation and identity features, not incidental
     # bundle drift.
-    assert len(payload) <= 773_000
-    assert len(gzip.compress(payload, mtime=0)) <= 162_000
+    assert len(payload) <= 792_000
+    assert len(gzip.compress(payload, mtime=0)) <= 166_000
 
 
 def test_csp_events_runtime_bundle_budget():
@@ -110,8 +112,9 @@ def test_csp_events_runtime_bundle_budget():
     # ownership, and morph runtime is identical to the standard build. The
     # phase-7 baseline was 387,046 raw / 77,715 gzip bytes. I18n phase 5's
     # fragment transaction moves it to 390,324 raw / 78,515 gzip bytes.
-    assert len(payload) <= 391_000
-    assert len(gzip.compress(payload, mtime=0)) <= 79_000
+    # Alpine and morph 3.16.2 move it to 408,782 raw / 82,201 gzip bytes.
+    assert len(payload) <= 410_000
+    assert len(gzip.compress(payload, mtime=0)) <= 83_000
 
 
 def test_i18n_runtime_bundle_budget():
@@ -145,8 +148,10 @@ def test_325_instance_client_payload_budget():
     # measured document to 1,441,181 raw / 187,232 gzip bytes.
     # Transactional stylesheet reintroduction moves the compressed document
     # baseline to 190,353 bytes while the raw payload remains below its cap.
+    # Alpine and morph 3.16.2 move the current measured document to 1,404,282
+    # raw / 195,022 gzip bytes.
     assert sizes.document_raw <= 1_442_500
-    assert sizes.document_gzip <= 191_000
+    assert sizes.document_gzip <= 197_000
 
 
 def test_450_instance_large_graph_regression_budget():

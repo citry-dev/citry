@@ -15,12 +15,12 @@
     "smoke": "uv run --project .. --group storybook python smoke.py"
   },
   "devDependencies": {
-    "@storybook/addon-a11y": "10.5.7",
-    "@storybook/addon-docs": "10.5.7",
-    "@storybook/html-vite": "10.5.7",
-    "@storybook/server-webpack5": "10.5.7",
+    "@storybook/addon-a11y": "10.5.9",
+    "@storybook/addon-docs": "10.5.9",
+    "@storybook/html-vite": "10.5.9",
+    "@storybook/server-webpack5": "10.5.9",
     "httpxy": "0.5.5",
-    "storybook": "10.5.7",
-    "vite": "8.2.1"
+    "storybook": "10.5.9",
+    "vite": "8.2.2"
   }
 }

@@ -149,13 +149,13 @@
       "constant": "CSP_INCOMPATIBLE_BROWSER_CODE",
       "title": "Browser code is incompatible with strict CSP",
       "summary": "An Alpine or Citry browser expression uses a host or source form unsupported by the pinned Alpine CSP evaluator.",
-      "when": "The selected Citry application configures CSP warning or strict mode and a source-classifiable browser expression is incompatible with Alpine CSP 3.16.1.",
+      "when": "The selected Citry application configures CSP warning or strict mode and a source-classifiable browser expression is incompatible with Alpine CSP 3.16.2.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
       "surfaces": ["check", "lsp"],
       "parameters": { "detail": "The unsupported directive, host, token, or operation." },
       "messages": {
-        "default": "Alpine CSP 3.16.1 cannot evaluate {detail} here. Move complex logic to Component.js and call a scope method from the template."
+        "default": "Alpine CSP 3.16.2 cannot evaluate {detail} here. Move complex logic to Component.js and call a scope method from the template."
       },
       "examples": [
         {

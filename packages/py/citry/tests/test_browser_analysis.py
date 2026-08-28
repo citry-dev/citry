@@ -175,7 +175,7 @@ def test_case_variant_dynamic_element_uses_the_rendered_html_evaluator_context()
 
 def test_alpine_csp_classifier_matches_the_pinned_expression_corpus():
     fixture = json.loads(
-        (Path(__file__).parents[3] / "js/citry-client/test/fixtures/alpine-csp-3.16.1.json").read_text(
+        (Path(__file__).parents[3] / "js/citry-client/test/fixtures/alpine-csp-3.16.2.json").read_text(
             encoding="utf-8"
         )
     )

@@ -46,9 +46,9 @@ done without them.
 
 ## What this project is
 
-Citry is a fast, simple, and smart frontend framework for Python that brings
-the best of Vue, React, Django, and Jinja: an HTML component engine with
-Vue/React-like `<c-*>` tag syntax. The core logic lives in **Rust crates**
+Citry is a fully typed frontend framework for Python with server events and
+Alpine.js, inspired by Vue and Livewire. Its HTML component engine uses
+Vue-like `<c-*>` tag syntax. The core logic lives in **Rust crates**
 under [`crates/`](crates/) and is exposed to host languages through thin
 bindings.
 **Python is live** (via PyO3/maturin, shipped as the `citry_core` package);

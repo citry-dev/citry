@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-const ALPINE_VERSION = "3.16.1";
+const ALPINE_VERSION = "3.16.2";
 const FOR_EXPRESSION = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/;
 
 function installDomStubs() {
@@ -79,7 +79,7 @@ function runCase(generateRuntimeFunction, testCase) {
 }
 
 export async function runCspContract({ caseIds = null } = {}) {
-  const fixtureUrl = new URL("./fixtures/alpine-csp-3.16.1.json", import.meta.url);
+  const fixtureUrl = new URL("./fixtures/alpine-csp-3.16.2.json", import.meta.url);
   const fixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
   if (fixture.alpineVersion !== ALPINE_VERSION) {
     throw new Error(`CSP corpus ${fixture.alpineVersion} does not match ${ALPINE_VERSION}.`);

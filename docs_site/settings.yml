@@ -9,8 +9,8 @@ site:
   public_url: https://citry.dev/ # Absolute HTTP(S) URL ending in /.
   language: en # Non-empty HTML language string.
   default_description: >- # Non-empty fallback description string.
-    Citry is a fast, simple, and smart frontend framework for Python that
-    brings the best of Vue, React, Django, Jinja, and LiveWire.
+    Citry is a fully typed frontend framework for Python with server events
+    and Alpine.js, inspired by Vue and Livewire.
 
 repository:
   owner: citry-dev # GitHub owner name, not an owner/repository path.

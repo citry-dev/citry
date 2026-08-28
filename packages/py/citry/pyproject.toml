@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 name = "citry"
 version = "0.4.4"
 requires-python = ">=3.10, <4.0"
-description = "Fast, simple, and smart frontend framework for Python that brings the best of Vue, React, Django, Jinja, and LiveWire"
+description = "Fully typed frontend framework for Python with server events and Alpine.js, inspired by Vue and Livewire"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
 # package dir, so the link makes the root README local to this package.
 readme = "README.md"
@@ -73,7 +73,7 @@ dependencies = [
 # have. citry.reload imports only `watchfiles.watch`, and watchdog's
 # `FileSystemEventHandler` and `Observer`, which every release in range provides.
 [project.optional-dependencies]
-analysis-ty = ["ty==0.0.71"]       # Python expression types for analysis tooling
+analysis-ty = ["ty==0.0.73"]       # Python expression types for analysis tooling
 watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
 watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
 

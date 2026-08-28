@@ -1,14 +1,16 @@
 ---
 title: Citry documentation
-description: Learn to build HTML-first components in Python, add browser behavior, and call Python without maintaining a separate frontend application.
+description: Learn to build fully typed web interfaces in Python with reusable components, server events, and Alpine.js browser behavior.
 ---
 
 # Build with Citry
 
 Welcome to Citry documentation!
 
-Citry is the complete frontend stack for Python.
-From server-rendered HTML to browser behavior and back to a Python handler, one component holds all of it. No second application, no separate build.
+Citry is a fully typed frontend framework for Python with server events and
+Alpine.js. One component holds its server-rendered HTML, browser behavior, CSS,
+translations, and Python event handlers. No second frontend application or
+separate build. It is inspired by Vue and Livewire.
 
 New to Citry? [Install Citry](/getting-started/installation/), then
 [build your first component](/getting-started/your-first-component/). The

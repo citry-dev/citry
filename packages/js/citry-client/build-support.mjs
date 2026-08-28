@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-export const ALPINE_VERSION = "3.16.1";
+export const ALPINE_VERSION = "3.16.2";
 export const GENERATED_BANNER =
-  "/* Citry events client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles AlpineJS 3.16.1 + @alpinejs/morph 3.16.1 (MIT). */";
+  "/* Citry events client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles AlpineJS 3.16.2 + @alpinejs/morph 3.16.2 (MIT). */";
 export const CSP_GENERATED_BANNER =
-  "/* Citry events CSP client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles @alpinejs/csp 3.16.1 + @alpinejs/morph 3.16.1 (MIT). */";
+  "/* Citry events CSP client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles @alpinejs/csp 3.16.2 + @alpinejs/morph 3.16.2 (MIT). */";
 export const I18N_GENERATED_BANNER =
   "/* Citry i18n client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-i18n.ts (pnpm run build there). Bundles @fluent/bundle 0.19.1 (Apache-2.0). */";
 

@@ -1,7 +1,7 @@
 # Design: Content Security Policy and JavaScript delivery
 
 **Status (2026-08-12): complete through phase 11 and promoted.** Alpine core
-and morph are upgraded to 3.16.1, and `@alpinejs/csp` is pinned at the same
+and morph are upgraded to 3.16.2, and `@alpinejs/csp` is pinned at the same
 version. Typed security settings, serialization overrides, and the immutable
 `serialize_result()` contract are implemented. Structured scripts now produce
 exact SHA-384 metadata, Citry-owned external scripts receive verified SRI, and
@@ -129,7 +129,7 @@ point to a component source location before deployment.
 
 ## 3. Current Citry state
 
-Citry pins Alpine 3.16.1, `@alpinejs/morph` 3.16.1, and `@alpinejs/csp` 3.16.1.
+Citry pins Alpine 3.16.2, `@alpinejs/morph` 3.16.2, and `@alpinejs/csp` 3.16.2.
 Two committed Events artifacts are built from one TypeScript source. The
 default artifact resolves `alpinejs/src/index`; the CSP artifact aliases that
 exact entry to `@alpinejs/csp/src/index`. Both retain Citry's directive and
@@ -333,7 +333,7 @@ actionable refactor. For example:
 
 ```text
 citry.csp.incompatible-browser-code
-Alpine CSP 3.16.1 cannot evaluate arrow functions here. Move the logic to
+Alpine CSP 3.16.2 cannot evaluate arrow functions here. Move the logic to
 Component.js and call a scope method, for example @click="openLater".
 ```
 
@@ -947,7 +947,7 @@ made practical under that model.
    explicit-nonce conflict handling before dependency insertion.
 6. **Complete (2026-08-12).** Build the version-pinned CSP compatibility
    checker in two bounded parts:
-   1. run the development-only executable spike against the real Alpine 3.16.1
+   1. run the development-only executable spike against the real Alpine 3.16.2
       parser, evaluator, and the few directive-level browser canaries, then
       retain its reconciled corpus as release conformance data;
    2. implement the production portable classifier, add its stable diagnostic
@@ -984,7 +984,7 @@ made practical under that model.
    payload, while embedded HTML execution contexts and manager manifests are
    included in forbid-mode validation.
 10. **Complete (revised 2026-08-13).** Check every Citry UI production
-    component definition against the pinned Alpine 3.16.1 subset in CI. The
+    component definition against the pinned Alpine 3.16.2 subset in CI. The
     check discovers every public and private `LibraryComponent` in production
     modules, requires each one to belong to the installed library manifest,
     and runs the same compatibility analysis used by `citry check` over that
@@ -999,7 +999,7 @@ made practical under that model.
 Phases 2 and 3 establish the stable configuration and result contracts. Phase 4
 implements `security_script_integrity="citry"`, and phase 5 implements the
 request-scoped `csp_nonce` transport. Phase 6.1 retained the executable Alpine
-3.16.1 corpus, and phase 6.2 added the production checker, stable diagnostic,
+3.16.2 corpus, and phase 6.2 added the production checker, stable diagnostic,
 and configured-mode transport through `citry check` and the LSP. Phase 6 can
 report the selected future policy
 through check and IDE tooling, but it does not by itself make strict runtime
@@ -1045,6 +1045,7 @@ focused on the policy boundaries.
 - [Alpine 3.15.12 CSP evaluator](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/csp/src/evaluator.js)
 - [Alpine 3.15.12 CSP parser and interpreter](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/csp/src/parser.js)
 - [Alpine 3.16.1 release](https://github.com/alpinejs/alpine/releases/tag/v3.16.1)
+- [Alpine 3.16.2 release](https://github.com/alpinejs/alpine/releases/tag/v3.16.2)
 - [MDN CSP guide](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP)
 - [MDN `script-src`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src)
 - [MDN `style-src-attr`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src-attr)

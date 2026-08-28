@@ -2,9 +2,9 @@
  * Citry's events client runtime (served at `ext/events/runtime.js`).
  *
  * This file is the shared source for two committed esbuild iife outputs:
- * `citry-events.js` embeds standard AlpineJS 3.16.1 and
+ * `citry-events.js` embeds standard AlpineJS 3.16.2 and
  * `citry-events-csp.js` aliases Alpine's entry to the matching CSP build.
- * Both embed `@alpinejs/morph` 3.16.1 as the reactivity layer (design:
+ * Both embed `@alpinejs/morph` 3.16.2 as the reactivity layer (design:
  * docs/design/events.md section 5, decision 14.1.10, and
  * docs/design/security_csp.md phase 7).
  *

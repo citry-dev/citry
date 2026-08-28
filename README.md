@@ -2,7 +2,7 @@
      outside the repository and cannot resolve a repo-relative path. -->
 <img src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/citry-wordmark.png" alt="Citry" width="170">
 
-# Citry - Refreshingly simple UI
+# Citry: a fully typed frontend framework for Python
 
 [![PyPI - Version](https://img.shields.io/pypi/v/citry)](https://pypi.org/project/citry/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/citry)](https://pypi.org/project/citry/)
@@ -11,13 +11,14 @@
 [![Docs](https://img.shields.io/badge/docs-citry.dev-8a2be2)](https://citry.dev/)
 [![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/NaQ8QPyHtD)
 
-Citry is a frontend framework for Python. One component can own its HTML,
-browser behavior, CSS, translations, and Python event handlers, so you can
-build an interactive interface without maintaining a separate frontend
-application.
+Citry is a fully typed frontend framework for Python with server events and
+Alpine.js. One component can own its HTML, browser behavior, CSS, translations,
+and Python event handlers, so you can build an interactive interface without
+maintaining a separate frontend application. It is inspired by Vue and
+Livewire.
 
-It feels familiar if you know HTML and Vue or React, and it works with
-FastAPI, Django, Flask, Starlette, ASGI, and WSGI applications.
+Citry works with FastAPI, Django, Flask, Starlette, ASGI, and WSGI
+applications.
 
 **Citry 0.4 is the public beta.** It supports Python 3.10 through 3.14.
 

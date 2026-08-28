@@ -86,7 +86,7 @@ def build_cli(citry: Citry, *, check_selection: CheckAppSelection | None = None)
     )
     return grouping_command(
         "citry",
-        "Fast, simple, and smart frontend framework for Python.",
+        "Fully typed frontend framework for Python with server events and Alpine.js, inspired by Vue and Livewire.",
         (
             build_check_command(check_selection),
             FormatCommand,

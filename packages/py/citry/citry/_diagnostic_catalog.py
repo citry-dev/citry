@@ -275,7 +275,7 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                                        'source': '<button @click="items.map(item => '
                                                                  'item.id)">Save</button>',
                                                        'title': 'Move an arrow function into Component.js'}],
-                                         'messages': {'default': 'Alpine CSP 3.16.1 cannot evaluate {detail} here. '
+                                         'messages': {'default': 'Alpine CSP 3.16.2 cannot evaluate {detail} here. '
                                                                  'Move complex logic to Component.js and call a scope '
                                                                  'method from the template.'},
                                          'parameters': {'detail': 'The unsupported directive, host, token, or '
@@ -286,7 +286,7 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                          'title': 'Browser code is incompatible with strict CSP',
                                          'when': 'The selected Citry application configures CSP warning or strict mode '
                                                  'and a source-classifiable browser expression is incompatible with '
-                                                 'Alpine CSP 3.16.1.'},
+                                                 'Alpine CSP 3.16.2.'},
  'citry.format.cancelled': {'code': 'citry.format.cancelled',
                             'constant': 'FORMAT_CANCELLED',
                             'defaultSeverity': 'information',

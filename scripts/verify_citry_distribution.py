@@ -44,7 +44,7 @@ EXPECTED_REQUIRES_DIST: Final = {
     "typing-extensions>=4.10",
     'tomli>=2.0; python_version < "3.11"',
     "tzdata>=2026.3",
-    'ty==0.0.71; extra == "analysis-ty"',
+    'ty==0.0.73; extra == "analysis-ty"',
     'watchfiles>=1.0; extra == "watcher-watchfiles"',
     'watchdog>=4.0; extra == "watcher-watchdog"',
 }

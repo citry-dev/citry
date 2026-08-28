@@ -1,5 +1,5 @@
 """
-Pinned static compatibility model for Alpine CSP 3.16.1 expressions.
+Pinned static compatibility model for Alpine CSP 3.16.2 expressions.
 
 The tokenizer and recursive-descent grammar mirror the small parser shipped by
 ``@alpinejs/csp``. This module classifies authored source only. It never runs
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from citry._browser_expressions import BrowserExpression
 
-ALPINE_CSP_COMPATIBILITY_VERSION = "3.16.1"
+ALPINE_CSP_COMPATIBILITY_VERSION = "3.16.2"
 
 _DANGEROUS_PROPERTIES = frozenset(
     {
@@ -124,7 +124,7 @@ class _CspError(Exception):
 
 
 def classify_alpine_csp(expression: BrowserExpression) -> AlpineCspClassification:
-    """Classify one extracted browser host against Alpine CSP 3.16.1."""
+    """Classify one extracted browser host against Alpine CSP 3.16.2."""
     attribute = expression.canonical_attribute
     base_attribute = attribute.split(".", 1)[0]
     attribute_start = expression.attribute_start_index
