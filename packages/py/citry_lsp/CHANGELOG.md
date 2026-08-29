@@ -23,7 +23,8 @@ All notable changes to `citry-lsp` are documented here.
   from LSP stdio and owning startup, communication, and reaping in one bounded
   background transaction with cancellation-safe cleanup.
 - Keep analyzer shadows inside the edited workspace when installed component
-  source and the project occupy different Windows drives.
+  source and the project occupy different Windows drives, and place local i18n
+  declarations before their queries so Windows resolves formatter members.
 - Recognize the Windows `ty` cache layout when filtering unsafe Python runtime
   members from template completions.
 

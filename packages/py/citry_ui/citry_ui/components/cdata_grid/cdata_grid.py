@@ -808,7 +808,7 @@ class CDataGrid(LibraryComponent):
               </c-for>
             </colgroup>
             <thead role="rowgroup" data-citry-ui-part="header">
-              <tr role="row" aria-rowindex="1" data-citry-ui-part="header-row">
+              <tr aria-rowindex="1" data-citry-ui-part="header-row">
                 <c-for each="resolved in columns">
                   <th
                     c-bind="resolved.header_attrs"
@@ -825,7 +825,6 @@ class CDataGrid(LibraryComponent):
                       else None
                     )"
                     c-aria-colindex="resolved.index + 1"
-                    role="columnheader"
                     tabindex="-1"
                     data-citry-ui-part="header-cell"
                   >
@@ -862,7 +861,6 @@ class CDataGrid(LibraryComponent):
                       'true' if resolved_row.selected else 'false'
                     ) if selection != 'none' else None"
                     c-aria-rowindex="resolved_row.logical_index + 2"
-                    role="row"
                     data-citry-ui-part="row"
                   >
                     <c-for each="resolved_cell in resolved_row.cells">
@@ -877,7 +875,6 @@ class CDataGrid(LibraryComponent):
                         c-data-editable="True if resolved_cell.editable else None"
                         c-data-editor="resolved_cell.column.editor if resolved_cell.editable else None"
                         c-aria-colindex="resolved_cell.column_index + 1"
-                        role="gridcell"
                         c-tabindex="0 if resolved_row.supplied_index == 0 and resolved_cell.column_index == 0 else -1"
                         data-citry-ui-part="cell"
                       >
@@ -897,8 +894,8 @@ class CDataGrid(LibraryComponent):
                 <tr c-if="has_after" aria-hidden="true" role="presentation" data-citry-ui-part="spacer-row">
                   <td c-colspan="column_count" c-style="{'height': f'{after_size}px'}"></td>
                 </tr>
-                <tr c-if="state_output == 'empty'" role="row" aria-rowindex="2" data-citry-ui-part="state-row">
-                  <td c-colspan="column_count" role="gridcell" data-citry-ui-part="empty">
+                <tr c-if="state_output == 'empty'" aria-rowindex="2" data-citry-ui-part="state-row">
+                  <td c-colspan="column_count" data-citry-ui-part="empty">
                     <c-slot name="empty">
                       <div role="status" aria-live="polite">
                         <span c-bind="eb">{{ tr('citry-ui-data-grid-empty') if ec else el }}</span>
@@ -907,8 +904,8 @@ class CDataGrid(LibraryComponent):
                   </td>
                 </tr>
               </c-if>
-              <tr c-if="state == 'loading'" role="row" aria-rowindex="2" data-citry-ui-part="state-row">
-                <td c-colspan="column_count" role="gridcell" data-citry-ui-part="loading">
+              <tr c-if="state == 'loading'" aria-rowindex="2" data-citry-ui-part="state-row">
+                <td c-colspan="column_count" data-citry-ui-part="loading">
                   <c-slot name="loading">
                     <div role="status" aria-live="polite">
                       <span c-bind="lb">{{ tr('citry-ui-data-grid-loading') if lc else ll }}</span>
@@ -916,8 +913,8 @@ class CDataGrid(LibraryComponent):
                   </c-slot>
                 </td>
               </tr>
-              <tr c-if="state == 'error'" role="row" aria-rowindex="2" data-citry-ui-part="state-row">
-                <td c-colspan="column_count" role="gridcell" data-citry-ui-part="error">
+              <tr c-if="state == 'error'" aria-rowindex="2" data-citry-ui-part="state-row">
+                <td c-colspan="column_count" data-citry-ui-part="error">
                   <c-slot name="error">
                     <div role="status" aria-live="polite">
                       <span c-bind="xb">{{ tr('citry-ui-data-grid-error') if xc else xl }}</span>

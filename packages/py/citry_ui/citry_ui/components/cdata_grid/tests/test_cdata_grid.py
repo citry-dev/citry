@@ -93,8 +93,11 @@ def test_complete_grid_has_native_table_positions_and_one_server_tab_stop():
     assert 'aria-label="People"' in html
     assert 'aria-rowcount="3"' in html
     assert 'aria-colcount="2"' in html
-    assert html.count('role="columnheader"') == 2
-    assert html.count('role="gridcell"') == 4
+    assert len(re.findall(r'<th\b[^>]*data-citry-ui-part="header-cell"', html)) == 2
+    assert len(re.findall(r'<td\b[^>]*data-citry-ui-part="cell"', html)) == 4
+    assert 'role="columnheader"' not in html
+    assert 'role="gridcell"' not in html
+    assert 'role="row"' not in html
     assert 'aria-rowindex="2"' in html
     assert 'aria-rowindex="3"' in html
     assert html.count('tabindex="0"') == 1

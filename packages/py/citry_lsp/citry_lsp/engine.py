@@ -3505,7 +3505,7 @@ def _i18n_template_analysis_contract(
     if not any(root.name in {"fmt", "tr"} for root in roots):
         return roots, ""
 
-    formatter_type = "__citry_lsp_i18n_formatter_type"
+    formatter_type = "CitryLspI18nFormatterType"
     while formatter_type in source:
         formatter_type += "_"
     rewritten = tuple(
@@ -3540,11 +3540,72 @@ class {formatter_type}:
     return rewritten, preamble
 
 
-def _append_shadow_preamble(document: ShadowPythonDocument, preamble: str) -> ShadowPythonDocument:
-    """Append analysis-only declarations without moving authored source maps."""
+def _insert_shadow_preamble(document: ShadowPythonDocument, preamble: str) -> ShadowPythonDocument:
+    """Place analysis declarations before queries and shift exact source maps."""
     if not preamble:
         return document
-    return replace(document, source=f"{document.source.rstrip()}\n\n{preamble.rstrip()}\n")
+    try:
+        module = ast.parse(document.source)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return replace(document, source=f"{document.source}\n{preamble.rstrip()}\n")
+
+    prefix_end_line = 0
+    for index, statement in enumerate(module.body):
+        is_docstring = (
+            index == 0
+            and isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Constant)
+            and isinstance(statement.value.value, str)
+        )
+        if is_docstring or (isinstance(statement, ast.ImportFrom) and statement.module == "__future__"):
+            prefix_end_line = statement.end_lineno or statement.lineno
+            continue
+        break
+    insertion = sum(len(line) for line in document.source.splitlines(keepends=True)[:prefix_end_line])
+    if any(copied.shadow_start < insertion for copied in document.copies):
+        return replace(document, source=f"{document.source}\n{preamble.rstrip()}\n")
+
+    inserted = f"\n{preamble.rstrip()}\n" if insertion else f"{preamble.rstrip()}\n\n"
+    width = len(inserted)
+    shifted_copies = tuple(
+        replace(
+            copied,
+            shadow_start=copied.shadow_start + width,
+            shadow_end=copied.shadow_end + width,
+        )
+        for copied in document.copies
+    )
+    shifted_source_copies = []
+    for copied in document.source_copies:
+        if copied.shadow_end <= insertion:
+            shifted_source_copies.append(copied)
+        elif copied.shadow_start >= insertion:
+            shifted_source_copies.append(
+                replace(
+                    copied,
+                    shadow_start=copied.shadow_start + width,
+                    shadow_end=copied.shadow_end + width,
+                )
+            )
+        else:
+            source_split = copied.source_start + insertion - copied.shadow_start
+            shifted_source_copies.extend(
+                (
+                    replace(copied, shadow_end=insertion, source_end=source_split),
+                    replace(
+                        copied,
+                        shadow_start=insertion + width,
+                        shadow_end=copied.shadow_end + width,
+                        source_start=source_split,
+                    ),
+                )
+            )
+    return replace(
+        document,
+        source=f"{document.source[:insertion]}{inserted}{document.source[insertion:]}",
+        copies=shifted_copies,
+        source_copies=tuple(shifted_source_copies),
+    )
 
 
 def _build_expression_shadows(
@@ -3576,7 +3637,7 @@ def _build_expression_shadows(
             )
         if shadow is None:
             return ()
-        shadow = _append_shadow_preamble(shadow, consumer.analysis_preamble)
+        shadow = _insert_shadow_preamble(shadow, consumer.analysis_preamble)
         shadows.append(
             ExpressionShadow(
                 identity=consumer.identity,

@@ -941,6 +941,19 @@ class Page(Component):
     document = DocumentState(app_file.as_uri(), "python", source, 1)
     document.update(source, 1, project)
     documents = {document.uri: document}
+    shadows = expression_shadows(
+        document,
+        _position(source, "fmt.cur", len("fmt.cur")),
+        project,
+        documents,
+    )
+    assert len(shadows) == 1
+    shadow_source = shadows[0].document.source
+    assert shadow_source.index("class CitryLspI18nFormatterType:") < shadow_source.index(
+        "def __citry_analyze_template("
+    )
+    copied = shadows[0].document.copies[0]
+    assert shadow_source[copied.shadow_start : copied.shadow_end] == "fmt.cur "
     analyzer = TyAnalyzer(tmp_path)
     try:
         items = await semantic_completions(
