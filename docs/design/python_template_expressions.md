@@ -37,9 +37,10 @@ signature, and diagnostic records into Citry-owned results.
 
 The executable must come from the selected interpreter's scripts directory and
 its installed package version must match the exact supported version. Citry
-does not select an arbitrary executable from `PATH`. The `citry` package owns
-the exact optional `analysis-ty` dependency, and `citry-lsp` requests that
-extra so editor installations always include it. Ordinary Citry runtime
+does not select an arbitrary executable from `PATH`. The `citry-lsp` package
+owns the exact `ty` dependency because it owns the analyzer process and must be
+independently installable from public package metadata. `citry[analysis-ty]`
+remains available to other analysis tooling. Ordinary Citry runtime
 installations and `citry_core` wheels do not carry the analyzer.
 
 Citry also passes the running interpreter's `sys.prefix` as ty's explicit

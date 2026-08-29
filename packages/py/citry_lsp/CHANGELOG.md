@@ -10,6 +10,11 @@ All notable changes to `citry-lsp` are documented here.
   the file on registry reload, and report missing or malformed files without
   changing the language server or type analyzer environment.
 
+### Changed
+
+- Pin the supported `ty` analyzer directly so a clean `citry-lsp` install does
+  not depend on optional-extra metadata from a separate Citry release.
+
 ## [0.1.1] - 2026-08-20
 
 ### Fixed

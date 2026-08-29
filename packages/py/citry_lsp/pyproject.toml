@@ -29,7 +29,12 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["citry[analysis-ty]>=0.4.1,<0.5", "pygls==2.1.1", "python-dotenv>=1.2.3,<2"]
+dependencies = [
+    "citry>=0.4.1,<0.5",
+    "pygls==2.1.1",
+    "python-dotenv>=1.2.3,<2",
+    "ty==0.0.73",
+]
 
 [project.scripts]
 citry-lsp = "citry_lsp.__main__:main"

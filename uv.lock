@@ -366,9 +366,10 @@ name = "citry-lsp"
 version = "0.1.2"
 source = { editable = "packages/py/citry_lsp" }
 dependencies = [
-    { name = "citry", extra = ["analysis-ty"] },
+    { name = "citry" },
     { name = "pygls" },
     { name = "python-dotenv" },
+    { name = "ty" },
 ]
 
 [package.dev-dependencies]
@@ -379,9 +380,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "citry", extras = ["analysis-ty"], editable = "packages/py/citry" },
+    { name = "citry", editable = "packages/py/citry" },
     { name = "pygls", specifier = "==2.1.1" },
     { name = "python-dotenv", specifier = ">=1.2.3,<2" },
+    { name = "ty", specifier = "==0.0.73" },
 ]
 
 [package.metadata.requires-dev]

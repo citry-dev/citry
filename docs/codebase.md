@@ -577,8 +577,9 @@ room to grow. Three categories exist so far:
 
 - `analysis-<backend>`: an analysis backend used by editor or static-analysis
   tooling. `citry[analysis-ty]` installs the pinned `ty` type checker so Citry
-  can resolve Python expression types; `citry-lsp` requests this extra for
-  diagnostics and completions. Ordinary runtime users do not need it.
+  can resolve Python expression types. `citry-lsp` pins the same backend
+  directly because it owns the analyzer process and releases independently of
+  Citry. Ordinary runtime users do not need it.
 
 - `watcher-<backend>`: a file-watcher backend for hot reload, e.g.
   `citry[watcher-watchfiles]`, `citry[watcher-watchdog]`. See
@@ -1767,7 +1768,8 @@ public binary dependencies on CPython 3.10 through 3.14.
 The installed-wheel smoke imports every shipped module, verifies Citry 0.4.2+,
 `pygls` 2.1.1, and `ty` 0.0.73, checks `citry-lsp --help`, and starts the stdio
 server with closed input. This proves that a clean install resolves the public
-`citry[analysis-ty]` dependency without reading another workspace package.
+Citry and direct analyzer dependencies without reading another workspace
+package.
 
 The manual run retains `verified-citry-lsp-distributions` and its exact byte
 inventory for 14 days. Pushing the matching tag at that same commit selects the
