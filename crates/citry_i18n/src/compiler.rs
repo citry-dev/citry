@@ -4667,6 +4667,22 @@ impl I18nRuntime {
             .map_err(|error| Failure::new("I18N_INTERNAL_JSON", error.to_string()))
     }
 
+    /// Resolve the fields needed by host-language plain-text facades.
+    pub fn resolve_parts(
+        &self,
+        active_locale: &str,
+        message_id: &str,
+        args_json: &str,
+        attribute: Option<&str>,
+    ) -> Result<(String, String, bool), Failure> {
+        let resolved = self.resolve(active_locale, message_id, args_json, attribute)?;
+        Ok((
+            resolved.text,
+            resolved.selected_locale.to_owned(),
+            resolved.used_fallback,
+        ))
+    }
+
     fn resolve<'a>(
         &'a self,
         active_locale: &'a str,
@@ -5317,6 +5333,10 @@ mod tests {
         assert_eq!(resolved["selected_locale"], "cs-CZ");
         assert_eq!(resolved["owner_source_locale"], "en-US");
         assert_eq!(resolved["used_fallback"], true);
+        assert_eq!(
+            runtime.resolve_parts("pl-PL", "hello", "{}", None).unwrap(),
+            ("Česky".to_owned(), "cs-CZ".to_owned(), true)
+        );
     }
 
     #[test]

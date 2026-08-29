@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -187,7 +187,7 @@ def test_field_and_form_own_relationships_and_state() -> None:
     [
         ({"value": "2026-8-19"}, ValueError, "canonical YYYY-MM-DD"),
         ({"value": "2025-02-29"}, ValueError, "real calendar date"),
-        ({"value": datetime(2026, 8, 19, tzinfo=UTC)}, TypeError, "exact date"),
+        ({"value": datetime(2026, 8, 19, tzinfo=timezone.utc)}, TypeError, "exact date"),
         ({"min": "2026-09-01", "max": "2026-08-31"}, ValueError, "cannot be later"),
         ({"value": "2026-07-31", "min": "2026-08-01"}, ValueError, "earlier than min"),
         ({"value": "2026-09-01", "max": "2026-08-31"}, ValueError, "later than max"),

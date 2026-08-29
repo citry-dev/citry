@@ -212,6 +212,20 @@ impl PyCompiledCatalog {
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
+    #[pyo3(signature = (locale, message_id, args_json="{}", attribute=None))]
+    fn _resolve(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        message_id: &str,
+        args_json: &str,
+        attribute: Option<&str>,
+    ) -> PyResult<(String, String, bool)> {
+        self.catalog
+            .resolve_parts(locale, message_id, args_json, attribute)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
     #[pyo3(signature = (locale, message_id, args_json, slot_names_json, attribute=None))]
     fn resolve_rich_json(
         &self,

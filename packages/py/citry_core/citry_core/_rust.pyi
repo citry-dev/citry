@@ -59,6 +59,13 @@ class i18n:
             args_json: str = "{}",
             attribute: str | None = None,
         ) -> str: ...
+        def _resolve(
+            self,
+            locale: str,
+            message_id: str,
+            args_json: str = "{}",
+            attribute: str | None = None,
+        ) -> tuple[str, str, bool]: ...
         def resolve_rich_json(
             self,
             locale: str,

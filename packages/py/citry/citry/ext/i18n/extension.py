@@ -1868,13 +1868,16 @@ class I18nExtension(Extension):
         context must still carry the current catalog revision.
         """
         self._validate_call(message_id, attr)
-        self._load_project_sources()
         context = self.context if context is None else context
-        args_json = json.dumps(
-            {name: self._tag_value(name, value) for name, value in sorted(values.items())},
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
+        args_json = (
+            json.dumps(
+                {name: self._tag_value(name, value) for name, value in sorted(values.items())},
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            if values
+            else "{}"
         )
         with self._catalog_lock:
             if context.catalog_revision != self._catalog_revision:
@@ -1886,7 +1889,7 @@ class I18nExtension(Extension):
             if catalog is None:
                 raise ValueError(f"Unknown i18n message ID {message_id!r}.")
             try:
-                raw = catalog.resolve_json(context.locale, message_id, args_json, attr)
+                text, selected_locale, used_fallback = catalog._resolve(context.locale, message_id, args_json, attr)
             except I18nCompileError as error:
                 if error.code == "I18N_OUTPUT_MISSING":
                     if attr is None:
@@ -1894,17 +1897,14 @@ class I18nExtension(Extension):
                     output = f"{message_id}.{attr}"
                     raise ValueError(f"Unknown i18n message output {output!r}.") from error
                 raise
-        resolved = json.loads(raw)
-        selected_locale = resolved["selected_locale"]
         selected_direction = direction_for(selected_locale)
-        text = resolved["text"]
         if selected_direction != context.direction:
             text = _isolate_bidi_paragraphs(text, direction=selected_direction)
         return LocalizedText(
             text=text,
             locale=selected_locale,
             direction=selected_direction,
-            used_fallback=resolved["used_fallback"],
+            used_fallback=used_fallback,
         )
 
     def resolve_rich(

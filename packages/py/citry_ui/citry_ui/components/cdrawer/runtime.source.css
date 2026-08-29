@@ -34,7 +34,7 @@
     box-shadow: var(--_cui-drawer-shadow);
   }
 
-  :where(.cui-drawer::backdrop) { background: var(--_cui-drawer-backdrop); }
+  :where(.cui-drawer)::backdrop { background: var(--_cui-drawer-backdrop); }
   :where(.cui-drawer[data-size="sm"]) { --_cui-drawer-extent: var(--cui-drawer-extent, 20rem); }
   :where(.cui-drawer[data-size="lg"]) { --_cui-drawer-extent: var(--cui-drawer-extent, 40rem); }
 

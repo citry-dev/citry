@@ -37,7 +37,7 @@ If the status is `syntax only` unexpectedly:
 4. If the interpreter is wrong, select the intended Python environment or set
    `citry.python` to its executable. Then run **Citry: Restart Language Server**.
 
-Registry discovery has a five-second startup limit and runs in a child process. An
+Registry discovery has a 15-second startup limit and runs in a child process. An
 import exception, `SystemExit`, process crash, startup timeout, unsupported
 Citry version, or catalog mismatch therefore degrades that workspace to syntax
 only without breaking the editor's language-server connection. Fix the first

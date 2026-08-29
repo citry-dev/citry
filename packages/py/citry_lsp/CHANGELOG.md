@@ -14,6 +14,13 @@ All notable changes to `citry-lsp` are documented here.
 
 - Pin the supported `ty` analyzer directly so a clean `citry-lsp` install does
   not depend on optional-extra metadata from a separate Citry release.
+- Allow 15 seconds for isolated app discovery so cold Windows environments do
+  not degrade to syntax-only analysis while keeping the editor event loop free.
+
+### Fixed
+
+- Recognize the Windows `ty` cache layout when filtering unsafe Python runtime
+  members from template completions.
 
 ## [0.1.1] - 2026-08-20
 

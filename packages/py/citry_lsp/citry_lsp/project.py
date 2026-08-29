@@ -23,7 +23,7 @@ from citry_lsp.protocol import (
 if TYPE_CHECKING:
     from citry_lsp.catalog import ComponentRecord
 
-WORKER_TIMEOUT_SECONDS = 5.0
+WORKER_TIMEOUT_SECONDS = 15.0
 _SOURCE_ANALYSIS_VERSION = 1
 _I18N_ANALYSIS_VERSION = 2
 

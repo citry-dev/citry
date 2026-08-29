@@ -14,7 +14,7 @@ import uuid
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, NoReturn
 
 from lsprotocol import types
@@ -821,13 +821,26 @@ def _typeshed_classes(path: str) -> tuple[tuple[int, int, str], ...]:
 
 def _typeshed_class_at(uri: str, line: int) -> str | None:
     """Resolve a ty-vendored typeshed location to its enclosing class."""
-    if "/ty/vendored/typeshed/" not in uri or "/stdlib/" not in uri:
-        return None
     path = file_uri_path(uri)
-    if path is None:
+    if path is None or not _is_ty_vendored_stdlib_path(path):
         return None
     candidates = [item for item in _typeshed_classes(str(path)) if item[0] <= line <= item[1]]
     return min(candidates, key=lambda item: item[1] - item[0])[2] if candidates else None
+
+
+def _is_ty_vendored_stdlib_path(path: PurePath) -> bool:
+    """Recognize ty's platform-specific cached typeshed layout."""
+    parts = tuple(part.casefold() for part in path.parts)
+    roots = (("ty", "vendored", "typeshed"), ("ty", "cache", "vendored", "typeshed"))
+    for root in roots:
+        width = len(root)
+        for index in range(len(parts) - width):
+            if parts[index : index + width] != root:
+                continue
+            # The pinned typeshed commit separates the cache root from stdlib.
+            if index + width + 1 < len(parts) and parts[index + width + 1] == "stdlib":
+                return True
+    return False
 
 
 def _field(value: object, name: str, default: Any = None) -> Any:

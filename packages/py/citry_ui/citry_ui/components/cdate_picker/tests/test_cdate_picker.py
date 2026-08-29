@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -158,7 +158,7 @@ def test_exact_dates_and_datetime_rejection() -> None:
     with pytest.raises(TypeError, match="exact date"):
         _render(
             '<c-CDatePicker c-value="value" />',
-            {"value": datetime(2024, 2, 29, tzinfo=UTC)},
+            {"value": datetime(2024, 2, 29, tzinfo=timezone.utc)},
         )
 
 

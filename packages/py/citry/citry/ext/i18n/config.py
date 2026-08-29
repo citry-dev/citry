@@ -46,6 +46,8 @@ class I18n(ExtensionConfig):
         self._usage_state: I18nUsageCollector | None = None
         self._bindings_state: I18nBindingCollector | None = None
         self._translation_capture: Any = None
+        self._extension_state: I18nExtension | None = None
+        self._context_state: LocaleContext | None = None
 
     @property
     def _usage(self) -> I18nUsageCollector:
@@ -82,11 +84,19 @@ class I18n(ExtensionConfig):
     @property
     def context(self) -> LocaleContext:
         """Return the explicit locale context provided to this component tree."""
-        return self._extension.context_for_component(self.component)
+        context = self._context_state
+        if context is None:
+            context = self._extension.context_for_component(self.component)
+            self._context_state = context
+        return context
 
     @property
     def _extension(self) -> I18nExtension:
-        return cast("I18nExtension", self.component.citry.extensions.get_extension("i18n"))
+        extension = self._extension_state
+        if extension is None:
+            extension = cast("I18nExtension", self.component.citry.extensions.get_extension("i18n"))
+            self._extension_state = extension
+        return extension
 
     def tr(self, message_id: str, *, attr: str | None = None, **values: object) -> str:
         """Resolve one message or attribute to plain text."""
@@ -105,7 +115,7 @@ class I18n(ExtensionConfig):
         resolved = self._extension.resolve(
             message_id,
             attr=attr,
-            context=self._extension.context_for_component(self.component),
+            context=self.context,
             **values,
         )
         self._usage.record_message(message_id, attr)

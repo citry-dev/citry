@@ -95,6 +95,7 @@ def test_catalog_compiler_returns_checked_runtime_and_resolution_metadata() -> N
     args = json.dumps({"name": {"type": "str", "value": "Ada"}})
     assert catalog.schema_version == 1
     assert catalog.format("en-US", "hello", args) == "Hello \u2068Ada\u2069"
+    assert catalog._resolve("en-US", "hello", args) == ("Hello \u2068Ada\u2069", "en-US", False)
     resolved = json.loads(catalog.resolve_json("en-US", "hello", args))
     assert resolved == {
         "text": "Hello \u2068Ada\u2069",

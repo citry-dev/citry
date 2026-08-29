@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import venv
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -18,6 +19,7 @@ from citry_lsp.type_analysis import (
     TyDocument,
     TyUnavailableError,
     _bounded_client_request,
+    _is_ty_vendored_stdlib_path,
     _safe_completion_item,
     _stop_client,
     offset_at_position,
@@ -45,6 +47,28 @@ def test_utf16_positions_round_trip_without_splitting_astral_characters() -> Non
     assert position == types.Position(1, 11)
     assert offset_at_position(source, position) == offset
     assert offset_at_position(source, types.Position(1, 1)) is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        PurePosixPath("/Users/dev/.cache/ty/vendored/typeshed/revision/stdlib/builtins.pyi"),
+        PureWindowsPath("C:/Users/dev/AppData/Local/ty/cache/vendored/typeshed/revision/stdlib/builtins.pyi"),
+    ],
+)
+def test_ty_vendored_stdlib_path_accepts_platform_cache_layouts(path: PurePath) -> None:
+    assert _is_ty_vendored_stdlib_path(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        PurePosixPath("/workspace/ty/vendored/typeshed/revision/stubs/package.pyi"),
+        PureWindowsPath("C:/cache/other/vendored/typeshed/revision/stdlib/builtins.pyi"),
+    ],
+)
+def test_ty_vendored_stdlib_path_rejects_unowned_stub_locations(path: PurePath) -> None:
+    assert not _is_ty_vendored_stdlib_path(path)
 
 
 def test_ty_cleanup_escalation_fits_inside_the_editor_server_stop_bound() -> None:
