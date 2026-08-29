@@ -23,14 +23,17 @@ async def test_cancelled_async_project_load_kills_and_reaps_its_worker(tmp_path,
     communicate_started = threading.Event()
     reaped = threading.Event()
     killed = threading.Event()
+    worker_call: dict[str, object] = {}
 
     class Process:
         returncode = None
         calls = 0
         killed = False
 
-        def communicate(self):
+        def communicate(self, timeout=None):
             self.calls += 1
+            worker_call["communicate_thread"] = threading.get_ident()
+            worker_call["timeout"] = timeout
             communicate_started.set()
             killed.wait()
             self.returncode = -9
@@ -44,7 +47,12 @@ async def test_cancelled_async_project_load_kills_and_reaps_its_worker(tmp_path,
 
     process = Process()
 
-    monkeypatch.setattr(project_module.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    def popen(*_args, **kwargs):
+        worker_call["popen_thread"] = threading.get_ident()
+        worker_call["kwargs"] = kwargs
+        return process
+
+    monkeypatch.setattr(project_module.subprocess, "Popen", popen)
     loading = asyncio.create_task(load_project_async(tmp_path, "app:app"))
     assert await asyncio.to_thread(communicate_started.wait, 1)
 
@@ -54,6 +62,12 @@ async def test_cancelled_async_project_load_kills_and_reaps_its_worker(tmp_path,
         await loading
     assert process.killed
     assert reaped.is_set()
+    assert worker_call["popen_thread"] == worker_call["communicate_thread"]
+    assert worker_call["timeout"] == project_module.WORKER_TIMEOUT_SECONDS
+    kwargs = worker_call["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["stdin"] == subprocess.DEVNULL
+    assert kwargs["close_fds"] is True
 
 
 @pytest.mark.asyncio

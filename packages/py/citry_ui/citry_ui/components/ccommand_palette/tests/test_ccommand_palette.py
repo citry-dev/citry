@@ -154,7 +154,7 @@ def test_smallest_palette_renders_complete_disabled_server_anatomy() -> None:
     html = _render(_basic())
 
     assert "data-citry-command-palette-initialized" not in html
-    assert "data-citry-command-palette-host" in html
+    assert '<div class="cui-command-palette-host" data-citry-command-palette-host' in html
     assert '<dialog class="cui-command-palette"' in html
     assert 'data-citry-ui-part="command-palette"' in html
     assert '<search data-citry-ui-part="command-palette-search">' in html

@@ -765,7 +765,7 @@ class CCommandPalette(LibraryComponent):
             raise ValueError("CCommandPalette visual slots cannot contain interactive content.")
 
     template = """
-      <span
+      <div
         class="cui-command-palette-host"
         data-citry-command-palette-host
       >
@@ -1036,7 +1036,7 @@ class CCommandPalette(LibraryComponent):
             </div>
           </section>
         </dialog>
-      </span>
+      </div>
     """
 
     js = r"""

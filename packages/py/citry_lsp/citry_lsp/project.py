@@ -6,6 +6,7 @@ import asyncio
 import json
 import subprocess
 import sys
+import threading
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,7 +24,7 @@ from citry_lsp.protocol import (
 if TYPE_CHECKING:
     from citry_lsp.catalog import ComponentRecord
 
-WORKER_TIMEOUT_SECONDS = 30.0
+WORKER_TIMEOUT_SECONDS = 15.0
 _SOURCE_ANALYSIS_VERSION = 1
 _I18N_ANALYSIS_VERSION = 2
 
@@ -794,27 +795,27 @@ async def load_project_async(
         return _failure(
             workspace, app, _environment_file_failure(environment_file, exc), environment_file=environment_file
         )
-    process = await _start_project_worker(workspace, app, environment)
-    communicating = asyncio.create_task(asyncio.to_thread(process.communicate))
+    worker = _ProjectWorkerCall(workspace, app, environment, timeout)
+    executing = asyncio.create_task(asyncio.to_thread(worker.execute))
     try:
-        stdout, stderr = await asyncio.wait_for(asyncio.shield(communicating), timeout)
-    except asyncio.TimeoutError:
-        await _reap_project_worker(process, communicating)
+        result = await asyncio.shield(executing)
+    except asyncio.CancelledError:
+        worker.cancel()
+        await _finish_project_worker_cancellation_safe(executing)
+        raise
+    if result.timed_out:
         return _failure(
             workspace,
             app,
             f"App discovery exceeded the {timeout:g}s startup limit.",
             environment_file=environment_file,
         )
-    except asyncio.CancelledError:
-        await _reap_project_worker_cancellation_safe(process, communicating)
-        raise
     return _project_from_worker_output(
         workspace,
         app,
-        process.returncode,
-        stdout.decode(errors="replace"),
-        stderr.decode(errors="replace"),
+        result.returncode,
+        result.stdout.decode(errors="replace"),
+        result.stderr.decode(errors="replace"),
         environment_file=environment_file,
     )
 
@@ -952,82 +953,96 @@ def _project_from_worker_output(
     )
 
 
-async def _start_project_worker(
-    workspace: Path,
-    app: str,
-    environment: dict[str, str] | None,
-) -> subprocess.Popen[bytes]:
-    """Start the portable worker without blocking or losing ownership on cancellation."""
-    starting = asyncio.create_task(
-        asyncio.to_thread(
-            subprocess.Popen,
+@dataclass(frozen=True, slots=True)
+class _ProjectWorkerResult:
+    returncode: int | None
+    stdout: bytes
+    stderr: bytes
+    timed_out: bool = False
+
+
+class _ProjectWorkerCall:
+    """Own one worker subprocess entirely within one background thread."""
+
+    def __init__(
+        self,
+        workspace: Path,
+        app: str,
+        environment: dict[str, str] | None,
+        timeout: float,
+    ) -> None:
+        self._workspace = workspace
+        self._app = app
+        self._environment = environment
+        self._timeout = timeout
+        self._lock = threading.Lock()
+        self._process: subprocess.Popen[bytes] | None = None
+        self._cancelled = False
+
+    def execute(self) -> _ProjectWorkerResult:
+        """Start, communicate with, and reap the worker in this calling thread."""
+        process = subprocess.Popen(
             [
                 sys.executable,
                 "-m",
                 "citry_lsp.app_worker",
                 "--app",
-                app,
+                self._app,
                 "--workspace",
-                str(workspace),
+                str(self._workspace),
             ],
-            cwd=workspace,
-            env=environment,
+            cwd=self._workspace,
+            env=self._environment,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            close_fds=True,
         )
-    )
-    cancellation: asyncio.CancelledError | None = None
-    try:
-        return await asyncio.shield(starting)
-    except asyncio.CancelledError as exc:
-        cancellation = exc
-    while not starting.done():
+        with self._lock:
+            self._process = process
+            if self._cancelled:
+                self._kill_locked(process)
+        timed_out = False
         try:
-            await asyncio.shield(starting)
-        except asyncio.CancelledError as exc:
-            cancellation = exc
-    try:
-        process = starting.result()
-    except (OSError, ValueError, subprocess.SubprocessError):
-        if cancellation is None:
-            raise RuntimeError("project worker startup lost its cancellation state") from None
-        raise cancellation from None
-    communicating = asyncio.create_task(asyncio.to_thread(process.communicate))
-    try:
-        await _reap_project_worker_cancellation_safe(process, communicating)
-    except asyncio.CancelledError as exc:
-        cancellation = exc
-    if cancellation is None:
-        raise RuntimeError("project worker cleanup lost its cancellation state")
-    raise cancellation
+            try:
+                stdout, stderr = process.communicate(timeout=self._timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                with self._lock:
+                    self._kill_locked(process)
+                stdout, stderr = process.communicate()
+            return _ProjectWorkerResult(process.returncode, stdout, stderr, timed_out)
+        finally:
+            with self._lock:
+                self._process = None
+
+    def cancel(self) -> None:
+        """Request termination before or during the worker transaction."""
+        with self._lock:
+            self._cancelled = True
+            if self._process is not None:
+                self._kill_locked(self._process)
+
+    @staticmethod
+    def _kill_locked(process: subprocess.Popen[bytes]) -> None:
+        if process.returncode is None:
+            with suppress(ProcessLookupError, PermissionError):
+                process.kill()
 
 
-async def _reap_project_worker(
-    process: subprocess.Popen[bytes],
-    communicating: asyncio.Task[tuple[bytes, bytes]],
+async def _finish_project_worker_cancellation_safe(
+    executing: asyncio.Task[_ProjectWorkerResult],
 ) -> None:
-    """Terminate and reap a threaded, disposable app-discovery worker."""
-    if process.returncode is None:
-        with suppress(ProcessLookupError, PermissionError):
-            process.kill()
-    await asyncio.shield(communicating)
-
-
-async def _reap_project_worker_cancellation_safe(
-    process: subprocess.Popen[bytes],
-    communicating: asyncio.Task[tuple[bytes, bytes]],
-) -> None:
-    """Finish worker ownership cleanup even under repeated cancellation."""
-    reaping = asyncio.create_task(_reap_project_worker(process, communicating))
-    cancellation: asyncio.CancelledError | None = None
-    while not reaping.done():
+    """Wait for thread-owned worker cleanup despite repeated cancellation."""
+    while not executing.done():
         try:
-            await asyncio.shield(reaping)
-        except asyncio.CancelledError as exc:
-            cancellation = exc
-    await reaping
-    if cancellation is not None:
-        raise cancellation
+            await asyncio.shield(executing)
+        except asyncio.CancelledError:
+            continue
+    # Retrieve any exception so the abandoned task cannot emit a warning. The
+    # caller's cancellation remains the authoritative outcome.
+    with suppress(Exception):
+        executing.result()
 
 
 def _failure(
