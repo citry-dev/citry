@@ -19,6 +19,7 @@ from citry_lsp.type_analysis import (
     TyDocument,
     TyUnavailableError,
     _bounded_client_request,
+    _different_filesystem_roots,
     _is_ty_vendored_stdlib_path,
     _safe_completion_item,
     _stop_client,
@@ -398,6 +399,17 @@ def test_virtual_document_is_a_deterministic_python_sibling(tmp_path: Path) -> N
     assert first.startswith(source_file.parent.resolve().as_uri())
     assert first.rsplit("/", 1)[-1].startswith("__citry_")
     assert first.endswith(".py")
+
+
+def test_analyzer_recognizes_a_cross_drive_editable_environment() -> None:
+    assert _different_filesystem_roots(
+        PureWindowsPath("C:/workspace"),
+        PureWindowsPath("D:/checkout"),
+    )
+    assert not _different_filesystem_roots(
+        PureWindowsPath("C:/workspace"),
+        PureWindowsPath("C:/checkout"),
+    )
 
 
 @pytest.mark.asyncio
@@ -805,7 +817,7 @@ async def test_cancelled_startup_still_terminates_the_spawned_child(
             raise RuntimeError("reader already closed")
 
     client = Client()
-    monkeypatch.setattr(type_analysis, "_configured_client", lambda _python_prefix: client)
+    monkeypatch.setattr(type_analysis, "_configured_client", lambda _workspace, _python_prefix: client)
     analyzer = TyAnalyzer(tmp_path)
     monkeypatch.setattr(analyzer, "_validated_executable", lambda: tmp_path / "python")
     starting = asyncio.create_task(analyzer._ready_client())
@@ -883,7 +895,7 @@ async def test_repeated_cancelled_startups_never_accumulate_owned_children(
         async def stop(self) -> None:
             raise RuntimeError("reader already closed")
 
-    monkeypatch.setattr(type_analysis, "_configured_client", lambda _python_prefix: Client())
+    monkeypatch.setattr(type_analysis, "_configured_client", lambda _workspace, _python_prefix: Client())
     analyzer = TyAnalyzer(tmp_path)
     monkeypatch.setattr(analyzer, "_validated_executable", lambda: tmp_path / "ty")
 

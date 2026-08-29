@@ -218,9 +218,9 @@ def compile_catalog_package(name: str) -> tuple[Path, Path, Path]:
     compiled_root = root / "_compiled"
     compiled_root.mkdir(exist_ok=True)
     server_path = compiled_root / "server.json"
-    server_path.write_text(artifact_text + "\n", encoding="utf-8")
+    server_path.write_text(artifact_text + "\n", encoding="utf-8", newline="\n")
     link_path = compiled_root / "link.json"
-    link_path.write_text(link_text + "\n", encoding="utf-8")
+    link_path.write_text(link_text + "\n", encoding="utf-8", newline="\n")
     manifest = {
         "schema_version": 1,
         "owner": package.owner,
@@ -245,6 +245,7 @@ def compile_catalog_package(name: str) -> tuple[Path, Path, Path]:
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     _load_catalog_package(name, precedence=0, mode="production")
     return manifest_path, server_path, link_path

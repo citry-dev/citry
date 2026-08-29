@@ -794,23 +794,12 @@ async def load_project_async(
         return _failure(
             workspace, app, _environment_file_failure(environment_file, exc), environment_file=environment_file
         )
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-m",
-        "citry_lsp.app_worker",
-        "--app",
-        app,
-        "--workspace",
-        str(workspace),
-        cwd=workspace,
-        env=environment,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    process = await _start_project_worker(workspace, app, environment)
+    communicating = asyncio.create_task(asyncio.to_thread(process.communicate))
     try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
+        stdout, stderr = await asyncio.wait_for(asyncio.shield(communicating), timeout)
     except asyncio.TimeoutError:
-        await _reap_project_worker(process)
+        await _reap_project_worker(process, communicating)
         return _failure(
             workspace,
             app,
@@ -818,7 +807,7 @@ async def load_project_async(
             environment_file=environment_file,
         )
     except asyncio.CancelledError:
-        await _reap_project_worker_cancellation_safe(process)
+        await _reap_project_worker_cancellation_safe(process, communicating)
         raise
     return _project_from_worker_output(
         workspace,
@@ -963,20 +952,73 @@ def _project_from_worker_output(
     )
 
 
-async def _reap_project_worker(process: asyncio.subprocess.Process) -> None:
-    """Terminate and reap a disposable app-discovery worker."""
+async def _start_project_worker(
+    workspace: Path,
+    app: str,
+    environment: dict[str, str] | None,
+) -> subprocess.Popen[bytes]:
+    """Start the portable worker without blocking or losing ownership on cancellation."""
+    starting = asyncio.create_task(
+        asyncio.to_thread(
+            subprocess.Popen,
+            [
+                sys.executable,
+                "-m",
+                "citry_lsp.app_worker",
+                "--app",
+                app,
+                "--workspace",
+                str(workspace),
+            ],
+            cwd=workspace,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    )
+    cancellation: asyncio.CancelledError | None = None
+    try:
+        return await asyncio.shield(starting)
+    except asyncio.CancelledError as exc:
+        cancellation = exc
+    while not starting.done():
+        try:
+            await asyncio.shield(starting)
+        except asyncio.CancelledError as exc:
+            cancellation = exc
+    try:
+        process = starting.result()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        if cancellation is None:
+            raise RuntimeError("project worker startup lost its cancellation state") from None
+        raise cancellation from None
+    communicating = asyncio.create_task(asyncio.to_thread(process.communicate))
+    try:
+        await _reap_project_worker_cancellation_safe(process, communicating)
+    except asyncio.CancelledError as exc:
+        cancellation = exc
+    if cancellation is None:
+        raise RuntimeError("project worker cleanup lost its cancellation state")
+    raise cancellation
+
+
+async def _reap_project_worker(
+    process: subprocess.Popen[bytes],
+    communicating: asyncio.Task[tuple[bytes, bytes]],
+) -> None:
+    """Terminate and reap a threaded, disposable app-discovery worker."""
     if process.returncode is None:
         with suppress(ProcessLookupError, PermissionError):
             process.kill()
-    try:
-        await process.communicate()
-    except (BrokenPipeError, ConnectionResetError, ProcessLookupError):
-        await process.wait()
+    await asyncio.shield(communicating)
 
 
-async def _reap_project_worker_cancellation_safe(process: asyncio.subprocess.Process) -> None:
+async def _reap_project_worker_cancellation_safe(
+    process: subprocess.Popen[bytes],
+    communicating: asyncio.Task[tuple[bytes, bytes]],
+) -> None:
     """Finish worker ownership cleanup even under repeated cancellation."""
-    reaping = asyncio.create_task(_reap_project_worker(process))
+    reaping = asyncio.create_task(_reap_project_worker(process, communicating))
     cancellation: asyncio.CancelledError | None = None
     while not reaping.done():
         try:

@@ -423,7 +423,7 @@ class TyAnalyzer:
             self._active_requests.add(operation)
         try:
             executable = await asyncio.to_thread(self._validated_executable)
-            client = _configured_client(self._python_prefix)
+            client = _configured_client(self.workspace, self._python_prefix)
             await client.start_io(str(executable), "server", cwd=self.workspace)
             params = _initialize_params(self.workspace, self._python_prefix)
             await _bounded_client_request(client, types.INITIALIZE, params, _REQUEST_TIMEOUT_SECONDS)
@@ -653,9 +653,10 @@ def offset_at_position(source: str, position: types.Position) -> int | None:
     return prefix + len(line) if units == position.character else None
 
 
-def _configured_client(python_prefix: Path) -> JsonRPCClient:
+def _configured_client(workspace: Path, python_prefix: Path) -> JsonRPCClient:
     client = JsonRPCClient()
     workspace_options = _ty_workspace_options(python_prefix)
+    analysis_folders = _analysis_workspace_folders(workspace, python_prefix)
 
     @client.feature("workspace/configuration")
     def configuration(*args: object) -> list[dict[str, object]]:
@@ -672,8 +673,8 @@ def _configured_client(python_prefix: Path) -> JsonRPCClient:
         return None
 
     @client.feature("workspace/workspaceFolders")
-    def workspace_folders(*_args: object) -> list[object]:
-        return []
+    def workspace_folders(*_args: object) -> list[types.WorkspaceFolder]:
+        return list(analysis_folders)
 
     @client.feature(types.TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS)
     def ignore_push_diagnostics(*_args: object) -> None:
@@ -714,9 +715,33 @@ def _initialize_params(workspace: Path, python_prefix: Path) -> types.Initialize
         ),
         process_id=os.getpid(),
         root_uri=workspace_uri,
-        workspace_folders=[types.WorkspaceFolder(workspace_uri, workspace.name or "workspace")],
+        workspace_folders=list(_analysis_workspace_folders(workspace, python_prefix)),
         initialization_options=_ty_workspace_options(python_prefix),
     )
+
+
+def _analysis_workspace_folders(workspace: Path, python_prefix: Path) -> tuple[types.WorkspaceFolder, ...]:
+    """Keep virtual documents on every drive inside a ty workspace."""
+    workspace = workspace.resolve()
+    python_prefix = python_prefix.resolve()
+    # An editable virtual environment normally lives directly under the
+    # source checkout. Its parent therefore covers both the selected Python
+    # environment and analyzer shadows built beside installed package source.
+    # A system interpreter has no pyvenv.cfg, so its prefix is the narrower
+    # root that contains site-packages.
+    environment_root = python_prefix.parent if (python_prefix / "pyvenv.cfg").is_file() else python_prefix
+    paths = [workspace]
+    if _different_filesystem_roots(workspace, environment_root):
+        paths.append(environment_root)
+    return tuple(
+        types.WorkspaceFolder(path.as_uri(), path.name or path.anchor or f"workspace-{index}")
+        for index, path in enumerate(paths)
+    )
+
+
+def _different_filesystem_roots(first: PurePath, second: PurePath) -> bool:
+    """Return whether two paths occupy distinct Windows drives or shares."""
+    return bool(first.drive or second.drive) and first.drive.casefold() != second.drive.casefold()
 
 
 def _ty_workspace_options(python_prefix: Path) -> dict[str, object]:

@@ -489,8 +489,12 @@ def test_compile_command_writes_checked_manifest_and_server_artifact(tmp_path, m
     development = Citry(mode="development", extensions_defaults=config)
 
     assert run(CompileI18nCommand, [], citry=development) == 0
-    manifest = json.loads((tmp_path / name / "_compiled" / "manifest.json").read_text(encoding="utf8"))
-    artifact = json.loads((tmp_path / name / "_compiled" / "server.json").read_text(encoding="utf8"))
+    compiled = tmp_path / name / "_compiled"
+    manifest = json.loads((compiled / "manifest.json").read_text(encoding="utf8"))
+    artifact = json.loads((compiled / "server.json").read_text(encoding="utf8"))
+    assert all(
+        b"\r" not in (compiled / filename).read_bytes() for filename in ("manifest.json", "server.json", "link.json")
+    )
     assert manifest["artifacts"]["server.json"]["sha256"]
     assert manifest["artifacts"]["link.json"]["sha256"]
     assert artifact["schema_version"] == 1

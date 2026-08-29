@@ -19,6 +19,10 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Fixed
 
+- Keep isolated app discovery responsive on Windows by using the same bounded
+  subprocess transport on every platform, with cancellation-safe cleanup.
+- Add the selected editable checkout as a `ty` workspace when its Python
+  environment and the edited project occupy different Windows drives.
 - Recognize the Windows `ty` cache layout when filtering unsafe Python runtime
   members from template completions.
 

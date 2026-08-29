@@ -1438,7 +1438,7 @@ async def test_stdio_diagnostics_and_completion(lsp_client: LanguageClient, tmp_
     assert uri in lsp_client.diagnostics
     assert lsp_client.diagnostics[uri][0].code == "citry.parse.syntax"
     status = await lsp_client.protocol.send_request_async("citry/status")
-    assert status.mode == "registry"
+    assert status.mode == "registry", status.message
     assert status.protocol_version == PROTOCOL_VERSION
     completion = await lsp_client.text_document_completion_async(
         types.CompletionParams(

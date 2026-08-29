@@ -14,6 +14,12 @@
 # subtree on LF so a Windows checkout verifies the same product bytes.
 packages/py/** text=auto eol=lf
 
+# Canonical protocol sources are compared byte-for-byte with embedded copies
+# under packages/py. Keep both sides of that contract on LF in Windows
+# checkouts; otherwise Git translates only the canonical side to CRLF and the
+# synchronization check reports every embedded Python module as stale.
+packages/protocol/** text=auto eol=lf
+
 # The template formatter's corpus is byte-exact test data. Each case pins the
 # formatter's output down to the newline it detected, so translating the input
 # on checkout changes the answer the test is checking. CRLF behavior is covered

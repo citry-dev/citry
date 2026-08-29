@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import subprocess
+import threading
 from textwrap import dedent
 
 import pytest
@@ -19,20 +20,19 @@ from citry_lsp.project import SourceAnalysisIndex, load_project, load_project_as
 
 @pytest.mark.asyncio
 async def test_cancelled_async_project_load_kills_and_reaps_its_worker(tmp_path, monkeypatch):
-    communicate_started = asyncio.Event()
-    reaped = asyncio.Event()
-    never = asyncio.Event()
+    communicate_started = threading.Event()
+    reaped = threading.Event()
+    killed = threading.Event()
 
     class Process:
         returncode = None
         calls = 0
         killed = False
 
-        async def communicate(self):
+        def communicate(self):
             self.calls += 1
-            if self.calls == 1:
-                communicate_started.set()
-                await never.wait()
+            communicate_started.set()
+            killed.wait()
             self.returncode = -9
             reaped.set()
             return b"", b""
@@ -40,19 +40,13 @@ async def test_cancelled_async_project_load_kills_and_reaps_its_worker(tmp_path,
         def kill(self):
             self.killed = True
             self.returncode = -9
-
-        async def wait(self):
-            reaped.set()
-            return self.returncode
+            killed.set()
 
     process = Process()
 
-    async def create_process(*_args, **_kwargs):
-        return process
-
-    monkeypatch.setattr(project_module.asyncio, "create_subprocess_exec", create_process)
+    monkeypatch.setattr(project_module.subprocess, "Popen", lambda *_args, **_kwargs: process)
     loading = asyncio.create_task(load_project_async(tmp_path, "app:app"))
-    await communicate_started.wait()
+    assert await asyncio.to_thread(communicate_started.wait, 1)
 
     loading.cancel()
 
