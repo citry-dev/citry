@@ -615,9 +615,9 @@ class CInternalTransferList(LibraryComponent):
               <option
                 c-if="item['in_target'] and item['declaration'].disabled"
                 c-value="item['declaration'].value"
+                c-label="item['declaration'].label"
                 selected
                 hidden
-                aria-hidden="true"
                 data-citry-transfer-disabled-value-proxy
               ></option>
               <option
@@ -630,12 +630,12 @@ class CInternalTransferList(LibraryComponent):
         </label>
         <span hidden data-citry-transfer-list-transport></span>
         <div hidden data-citry-ui-part="control">
-          <section data-citry-transfer-pane="available" data-citry-ui-part="pane">
+          <div data-citry-transfer-pane="available" data-citry-ui-part="pane">
             <header data-citry-ui-part="pane-header">
-              <h3 c-id="available_title_id" data-citry-ui-part="pane-title">
+              <div c-id="available_title_id" data-citry-ui-part="pane-title">
                 <span c-$c-tr:citry-ui-transfer-list-available="True if catalog['available'] else None"
                 >{{ tr('citry-ui-transfer-list-available') if catalog['available'] else labels['available'] }}</span>
-              </h3>
+              </div>
               <span data-citry-ui-part="count">{{ count_available }}</span>
             </header>
             <div
@@ -654,7 +654,7 @@ class CInternalTransferList(LibraryComponent):
               c-$c-tr:citry-ui-transfer-list-available-empty="True if catalog['available_empty'] else None"
               data-citry-ui-part="empty"
             >{{ tr('citry-ui-transfer-list-available-empty') if ae_catalog else ae_label }}</p>
-          </section>
+          </div>
           <div
             c-aria-label="
               tr('citry-ui-transfer-list-transfer-controls')
@@ -681,12 +681,12 @@ class CInternalTransferList(LibraryComponent):
               c-$c-tr:citry-ui-transfer-list-remove-all="True if catalog['remove_all'] else None"
             >{{ tr('citry-ui-transfer-list-remove-all') if catalog['remove_all'] else labels['remove_all'] }}</button>
           </div>
-          <section data-citry-transfer-pane="chosen" data-citry-ui-part="pane">
+          <div data-citry-transfer-pane="chosen" data-citry-ui-part="pane">
             <header data-citry-ui-part="pane-header">
-              <h3 c-id="chosen_title_id" data-citry-ui-part="pane-title">
+              <div c-id="chosen_title_id" data-citry-ui-part="pane-title">
                 <span c-$c-tr:citry-ui-transfer-list-chosen="True if catalog['chosen'] else None"
                 >{{ tr('citry-ui-transfer-list-chosen') if catalog['chosen'] else labels['chosen'] }}</span>
-              </h3>
+              </div>
               <span data-citry-ui-part="count">{{ count_chosen }}</span>
             </header>
             <div
@@ -729,7 +729,7 @@ class CInternalTransferList(LibraryComponent):
                 c-$c-tr:citry-ui-transfer-list-move-bottom="True if catalog['move_bottom'] else None"
               >{{ tr('citry-ui-transfer-list-move-bottom') if catalog_move_bottom else move_bottom_label }}</button>
             </div>
-          </section>
+          </div>
         </div>
         <div aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></div>
       </div>

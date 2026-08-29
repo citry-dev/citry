@@ -104,9 +104,8 @@ def test_value_controls_initial_panes_native_order_and_selected_state():
     option_values = re.findall(r'<option[^>]+value="([^"]+)"', select.group(1))
     assert option_values == ["b", "c", "a"]
     assert len(re.findall(r"<option[^>]+selected", select.group(1))) == 2
-    chosen = re.search(r'data-citry-transfer-pane="chosen".*?</section>', html, re.DOTALL)
-    assert chosen is not None
-    assert re.findall(r'data-value="([^"]+)"', chosen.group(0)) == ["c", "a"]
+    chosen = html[html.index('data-citry-transfer-pane="chosen"') :]
+    assert re.findall(r'data-value="([^"]+)"', chosen) == ["c", "a"]
 
 
 def test_item_slot_data_and_rich_content_are_lazy_and_ordered():
@@ -138,6 +137,7 @@ def test_chosen_disabled_item_keeps_an_ordered_native_form_value_proxy():
     selected_values = re.findall(r'<option[^>]+value="([^"]+)"[^>]+selected', select.group(1))
     assert selected_values == ["locked", "locked", "open"]
     assert "data-citry-transfer-disabled-value-proxy" in select.group(1)
+    assert re.search(r'<option[^>]+value="locked"[^>]+label="Locked"[^>]+hidden', select.group(1))
     assert re.search(r'<option[^>]+value="locked"[^>]+disabled', select.group(1))
 
 
