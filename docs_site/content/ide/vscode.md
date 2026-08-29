@@ -107,7 +107,7 @@ Server Status**. Citry's environment adapter does not print parsed values.
 For Django, include settings needed before importing the selected target. The
 language server imports that module directly and does not run `manage.py`:
 
-```dotenv
+```ini
 DJANGO_SETTINGS_MODULE=myproject.settings
 DJANGO_SECRET_KEY=editor-development-secret
 ```
