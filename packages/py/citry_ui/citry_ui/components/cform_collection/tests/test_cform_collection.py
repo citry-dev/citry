@@ -73,6 +73,8 @@ def test_one_outer_form_native_actions_and_arbitrary_field_names() -> None:
     assert html.count("<form") == 1
     assert "<fieldset" in html
     assert "<legend" in html
+    assert "<h3" not in html
+    assert 'role="group"' in html
     assert 'name="contacts[a][email]"' in html
     assert 'name="custom-flat-name"' in html
     assert html.count('name="contact_action"') == 7

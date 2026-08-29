@@ -304,7 +304,6 @@ $component({
         const sample = addDays(monday, weekday - 1);
         const cell = document.createElement('th');
         cell.scope = 'col';
-        cell.setAttribute('role', 'columnheader');
         cell.setAttribute('data-citry-ui-part', 'weekday');
         const abbreviation = document.createElement('abbr');
         abbreviation.textContent = formatDate(sample, PROFILE.weekday);
@@ -320,12 +319,10 @@ $component({
       const rows = [];
       for (let rowIndex = 0; rowIndex < count / 7; rowIndex += 1) {
         const row = document.createElement('tr');
-        row.setAttribute('role', 'row');
         row.setAttribute('data-citry-ui-part', 'week');
         for (let column = 0; column < 7; column += 1) {
           const value = addDays(bounds.start, rowIndex * 7 + column - shift);
           const cell = document.createElement('td');
-          cell.setAttribute('role', 'gridcell');
           cell.setAttribute('data-citry-ui-part', 'day');
           if (value === null) { cell.setAttribute('aria-disabled', 'true'); row.append(cell); continue; }
           const outside = value < bounds.start || value > bounds.end;
@@ -451,17 +448,17 @@ $component({
       setRangePresentation(event.detail);
     });
     listeners.add(body, 'click', event => {
-      const cell = event.target.closest?.('[role="gridcell"][data-date]');
+      const cell = event.target.closest?.('[data-citry-ui-part="day"][data-date]');
       if (!(cell instanceof HTMLTableCellElement) || !body.contains(cell)) return;
       focused = cell.dataset.date;
       if (!requestValue(cell.dataset.date, 'pointer', event)) render(true);
     });
     listeners.add(body, 'focusin', event => {
-      const cell = event.target.closest?.('[role="gridcell"][data-date]');
+      const cell = event.target.closest?.('[data-citry-ui-part="day"][data-date]');
       if (cell instanceof HTMLTableCellElement && !hardDisabled(cell.dataset.date)) focused = cell.dataset.date;
     });
     listeners.add(body, 'keydown', event => {
-      const cell = event.target.closest?.('[role="gridcell"][data-date]');
+      const cell = event.target.closest?.('[data-citry-ui-part="day"][data-date]');
       if (!(cell instanceof HTMLTableCellElement)) return;
       const value = cell.dataset.date;
       let handled = true;
@@ -559,7 +556,6 @@ $component({
       owned(() => {
         root.removeAttribute('data-enhanced');
         root.removeAttribute('data-citry-calendar-initialized');
-        weekdayRow.replaceChildren();
         body.replaceChildren();
       });
     };

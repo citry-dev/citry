@@ -85,15 +85,15 @@ class FormCollectionClientActions(Component):
           item.dataset.citryFormCollectionItem = '';
           item.dataset.citryUiPart = 'item';
 
-          const group = document.createElement('section');
+          const group = document.createElement('div');
           group.setAttribute('role', 'group');
           group.setAttribute('aria-labelledby', labelId);
           const header = document.createElement('header');
           header.dataset.citryUiPart = 'item-header';
-          const heading = document.createElement('h3');
-          heading.id = labelId;
-          heading.dataset.citryUiPart = 'item-label';
-          heading.textContent = label;
+          const itemLabel = document.createElement('div');
+          itemLabel.id = labelId;
+          itemLabel.dataset.citryUiPart = 'item-label';
+          itemLabel.textContent = label;
           const actions = document.createElement('div');
           actions.dataset.citryUiPart = 'item-actions';
           actions.append(
@@ -101,7 +101,7 @@ class FormCollectionClientActions(Component):
             makeAction('move-down', '↓', label),
             makeAction('remove', '\u00d7', label),
           );
-          header.append(heading, actions);
+          header.append(itemLabel, actions);
 
           const content = document.createElement('div');
           content.dataset.citryUiPart = 'item-content';

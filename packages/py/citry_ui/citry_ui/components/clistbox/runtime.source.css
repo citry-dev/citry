@@ -107,7 +107,7 @@
     transform: scale(0.75);
     transition: opacity 100ms ease-out, transform 100ms ease-out;
   }
-  :where(.cui-listbox__indicator::before) { content: "✓"; }
+  :where(.cui-listbox__indicator)::before { content: "✓"; }
   :where(.cui-listbox__option[data-selected] > .cui-listbox__indicator) {
     opacity: 1;
     transform: none;

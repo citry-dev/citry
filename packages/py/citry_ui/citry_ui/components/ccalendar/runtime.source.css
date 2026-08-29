@@ -107,7 +107,7 @@
     text-align: center;
   }
   :where(.cui-calendar__grid abbr) { text-decoration: none; }
-  :where(.cui-calendar__grid td[role="gridcell"]) {
+  :where(.cui-calendar__grid td[data-citry-ui-part="day"]) {
     box-sizing: border-box;
     inline-size: var(--_cui-calendar-cell-size);
     block-size: var(--_cui-calendar-cell-size);

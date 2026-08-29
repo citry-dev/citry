@@ -49,7 +49,7 @@
     pointer-events: none;
     forced-color-adjust: none;
   }
-  :where(.cui-pin-input[data-citry-pin-input-initialized] > [data-citry-ui-part="input"]::selection) {
+  :where(.cui-pin-input[data-citry-pin-input-initialized] > [data-citry-ui-part="input"])::selection {
     background: transparent;
     color: transparent;
   }

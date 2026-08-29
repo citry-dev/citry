@@ -69,7 +69,7 @@ def test_expand_select_unselect_and_form_output(page: Any) -> None:
     root.locator('[data-citry-tree-grid-row][data-row-key="root"] [data-citry-tree-grid-expander]').click()
     assert root.locator('[data-citry-tree-grid-row][data-row-key="first"]').is_hidden()
     root.locator('[data-citry-tree-grid-row][data-row-key="root"] [data-citry-tree-grid-expander]').click()
-    cell = root.locator('[data-citry-tree-grid-row][data-row-key="first"] [role="gridcell"]').first
+    cell = root.locator('[data-citry-tree-grid-row][data-row-key="first"] [data-citry-ui-part="cell"]').first
     cell.focus()
     cell.press("Shift+Space")
     assert page.evaluate("Alpine.store('t').selected.at(-1)") == [[], False]
@@ -83,7 +83,7 @@ def test_expand_select_unselect_and_form_output(page: Any) -> None:
 def test_cell_navigation_activation_environment_axe_and_cleanup(page: Any) -> None:
     errors = _load(page)
     root = page.locator("#grid")
-    first = root.locator('[data-citry-tree-grid-row][data-row-key="root"] [role="gridcell"]').first
+    first = root.locator('[data-citry-tree-grid-row][data-row-key="root"] [data-citry-ui-part="cell"]').first
     first.focus()
     first.press("ArrowDown")
     assert page.evaluate("document.activeElement.closest('[data-citry-tree-grid-row]').dataset.rowKey") == "first"

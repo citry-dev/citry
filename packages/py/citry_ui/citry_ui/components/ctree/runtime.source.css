@@ -84,7 +84,7 @@
   :where([dir="rtl"] .cui-tree__item[aria-expanded="true"] > .cui-tree__row > .cui-tree__indicator) {
     transform: rotate(-90deg);
   }
-  :where(.cui-tree__indicator::before) { content: ">"; font-weight: 700; }
+  :where(.cui-tree__indicator)::before { content: ">"; font-weight: 700; }
   :where(.cui-tree__label) { min-inline-size: 0; overflow-wrap: anywhere; }
   :where(.cui-tree__group) {
     display: grid;

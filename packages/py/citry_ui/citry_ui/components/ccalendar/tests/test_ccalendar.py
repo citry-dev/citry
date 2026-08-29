@@ -125,6 +125,11 @@ def test_native_fallback_renders_canonical_form_contract_and_source_messages() -
     assert 'aria-label="Calendar"' in control
     assert 'aria-label="Previous month"' in html
     assert 'aria-label="Next month"' in html
+    weekday_row = re.search(r'data-citry-ui-part="weekday-row">(.*?)</tr>', html, re.DOTALL)
+    assert weekday_row is not None
+    assert weekday_row.group(1).count("<th") == 7
+    for role in ("row", "columnheader", "gridcell"):
+        assert f'role="{role}"' not in html
 
 
 def test_python_date_and_empty_value_are_canonical() -> None:

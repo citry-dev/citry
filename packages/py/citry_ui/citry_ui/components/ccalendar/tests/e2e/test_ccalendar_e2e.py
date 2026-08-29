@@ -173,9 +173,9 @@ def test_grid_keyboard_unavailable_selection_formdata_and_reset(page: Any, serve
     errors = _open(page, _app(), serve_citry_ui_live)
     root = page.locator("#arrival-calendar")
     assert root.locator('[data-citry-ui-part="heading"]').text_content() == "August 2026"
-    assert root.locator('[role="gridcell"][data-date]').count() == 42
+    assert root.locator('[data-citry-ui-part="day"][data-date]').count() == 42
     assert root.locator('[data-citry-ui-part="weekday"]').count() == 7
-    assert root.locator('[role="gridcell"][tabindex="0"]').count() == 1
+    assert root.locator('[data-citry-ui-part="day"][tabindex="0"]').count() == 1
     assert root.locator('[data-date="2026-08-19"]').get_attribute("aria-selected") == "true"
     assert root.locator('[data-date="2026-08-20"]').get_attribute("aria-disabled") == "true"
 
@@ -236,8 +236,8 @@ def test_required_invalid_focus_boundaries_and_cleanup_surface(page: Any, serve_
     assert page.evaluate("document.activeElement?.getAttribute('data-citry-ui-part')") == "day"
     assert page.locator("#lower-boundary-calendar [data-citry-ui-part=previous]").is_disabled()
     assert page.locator("#upper-boundary-calendar [data-citry-ui-part=next]").is_disabled()
-    assert page.locator("#lower-boundary-calendar [role=gridcell]").count() == 42
-    assert page.locator("#upper-boundary-calendar [role=gridcell]").count() == 42
+    assert page.locator('#lower-boundary-calendar [data-citry-ui-part="day"]').count() == 42
+    assert page.locator('#upper-boundary-calendar [data-citry-ui-part="day"]').count() == 42
     assert errors == []
 
 

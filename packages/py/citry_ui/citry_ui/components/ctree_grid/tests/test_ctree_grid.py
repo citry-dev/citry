@@ -62,6 +62,8 @@ def test_schema_registration_hierarchy_and_native_selection() -> None:
     assert 'aria-level="2"' in html
     assert 'aria-expanded="true"' in html
     assert 'aria-selected="true"' in html
+    for role in ("rowgroup", "row", "columnheader", "gridcell"):
+        assert f'role="{role}"' not in html
     assert re.search(r'<input[^>]+name="chosen"[^>]+value="child"', html)
 
 

@@ -554,9 +554,9 @@ class CInternalFormCollectionItem(LibraryComponent):
     template = """
       <li class="cui-form-collection__item" #c-key="morph_key" c-bind="attrs" c-id="item_id"
         c-data-label="label" data-citry-form-collection-item data-citry-ui-part="item">
-        <section role="group" c-aria-labelledby="label_id">
+        <div role="group" c-aria-labelledby="label_id">
           <header data-citry-ui-part="item-header">
-            <h3 c-id="label_id" data-citry-ui-part="item-label">{{ label }}</h3>
+            <div c-id="label_id" data-citry-ui-part="item-label">{{ label }}</div>
             <div data-citry-ui-part="item-actions">
             <button c-if="show_reorder" c-type="button_type" c-name="action_name" c-value="move_up_value"
               c-disabled="up_disabled" c-formnovalidate="formnovalidate"
@@ -576,7 +576,7 @@ class CInternalFormCollectionItem(LibraryComponent):
             </div>
           </header>
           <div data-citry-ui-part="item-content">{{ content }}</div>
-        </section>
+        </div>
       </li>
     """
 

@@ -430,7 +430,11 @@ class CCalendar(LibraryComponent):
           c-aria-readonly="'true' if readonly else None"
           data-citry-ui-part="grid"
         >
-          <thead><tr data-citry-ui-part="weekday-row"></tr></thead>
+          <thead>
+            <tr data-citry-ui-part="weekday-row">
+              <c-for each="_ in (0, 1, 2, 3, 4, 5, 6)"><th scope="col" aria-hidden="true">&#160;</th></c-for>
+            </tr>
+          </thead>
           <tbody></tbody>
         </table>
         <input
