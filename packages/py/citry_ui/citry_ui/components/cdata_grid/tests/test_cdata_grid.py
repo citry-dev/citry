@@ -98,6 +98,8 @@ def test_complete_grid_has_native_table_positions_and_one_server_tab_stop():
     assert 'role="columnheader"' not in html
     assert 'role="gridcell"' not in html
     assert 'role="row"' not in html
+    assert 'role="rowgroup"' not in html
+    assert 'role="presentation"' not in html
     assert 'aria-rowindex="2"' in html
     assert 'aria-rowindex="3"' in html
     assert html.count('tabindex="0"') == 1

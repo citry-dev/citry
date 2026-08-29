@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 from lsprotocol import types
 
 from citry_lsp.engine import (
+    _I18N_CALL_SIGNATURES,
+    _I18N_OPERATION_SIGNATURES,
     DocumentState,
     ExpressionShadow,
     ExpressionShadowGroup,
@@ -59,6 +61,9 @@ async def semantic_completions(
     ranges = expression_completion_ranges(document, position)
     if not shadows or ranges is None:
         return ()
+    direct = _i18n_formatter_completions(shadows[0], ranges)
+    if direct is not None:
+        return direct
     if _has_external_unsaved_python(shadows, open_documents):
         return ()
     insert_range, replace_range = ranges
@@ -333,6 +338,9 @@ async def semantic_signature_help(
     )
     if not shadows:
         return None
+    direct = _i18n_formatter_signature_help(shadows[0])
+    if direct is not None:
+        return direct
     if _has_external_unsaved_python(shadows, open_documents):
         return None
     synchronized = _python_documents(open_documents)
@@ -372,6 +380,85 @@ async def semantic_signature_help(
     active_parameters = {answer.active_parameter for answer in answers}
     active_parameter = active_parameters.pop() if len(active_parameters) == 1 else None
     return types.SignatureHelp(signatures, active_signature, active_parameter)
+
+
+def _i18n_formatter_completions(
+    shadow: ExpressionShadow,
+    ranges: tuple[types.Range, types.Range],
+) -> tuple[types.CompletionItem, ...] | None:
+    """Complete Citry's finite formatter API without querying user-code analysis."""
+    if "fmt" not in shadow.query.free_names:
+        return None
+    match = re.search(
+        r"(?<![\w.])fmt\.(?P<prefix>[^\W\d]\w*)?\Z",
+        shadow.query.source[: shadow.cursor_offset],
+    )
+    if match is None:
+        return None
+    prefix = match.group("prefix") or ""
+    insert_range, replace_range = ranges
+    return tuple(
+        types.CompletionItem(
+            label=operation,
+            kind=types.CompletionItemKind.Method,
+            detail=signature,
+            documentation=types.MarkupContent(
+                types.MarkupKind.Markdown,
+                "Locale-aware Citry i18n format operation.",
+            ),
+            filter_text=operation,
+            text_edit=types.InsertReplaceEdit(operation, insert_range, replace_range),
+        )
+        for (namespace, operation), signature in sorted(_I18N_OPERATION_SIGNATURES.items())
+        if namespace == "format" and operation.startswith(prefix)
+    )
+
+
+def _i18n_formatter_signature_help(shadow: ExpressionShadow) -> types.SignatureHelp | None:
+    """Describe a simple open ``fmt`` call from Citry's canonical API table."""
+    if "fmt" not in shadow.query.free_names:
+        return None
+    prefix = shadow.query.source[: shadow.cursor_offset].rstrip()
+    matches = list(
+        re.finditer(
+            r"(?<![\w.])fmt\.(?P<operation>[^\W\d]\w*)\((?P<arguments>[^()]*)\Z",
+            prefix,
+            flags=re.DOTALL,
+        )
+    )
+    if not matches:
+        return None
+    match = matches[-1]
+    operation = match.group("operation")
+    key = ("format", operation)
+    signature = _I18N_OPERATION_SIGNATURES.get(key)
+    call_shape = _I18N_CALL_SIGNATURES.get(key)
+    if signature is None or call_shape is None:
+        return None
+    arguments = match.group("arguments")
+    parameters = (*call_shape[0], *call_shape[1], *call_shape[2])
+    active_parameter: int | None = None
+    if parameters:
+        current_argument = arguments.rsplit(",", 1)[-1].strip()
+        keyword = re.match(r"(?P<name>[^\W\d]\w*)\s*=", current_argument)
+        if keyword is not None and keyword.group("name") in parameters:
+            active_parameter = parameters.index(keyword.group("name"))
+        else:
+            active_parameter = min(arguments.count(","), len(parameters) - 1)
+    return types.SignatureHelp(
+        signatures=(
+            types.SignatureInformation(
+                label=signature,
+                documentation=types.MarkupContent(
+                    types.MarkupKind.Markdown,
+                    "Locale-aware Citry i18n format operation.",
+                ),
+                parameters=tuple(types.ParameterInformation(label=name) for name in parameters),
+            ),
+        ),
+        active_signature=0,
+        active_parameter=active_parameter,
+    )
 
 
 async def semantic_diagnostics(

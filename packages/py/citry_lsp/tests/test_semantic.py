@@ -75,6 +75,16 @@ class _CountingDiagnosticsAnalyzer:
         return tuple(findings)
 
 
+class _NeverCalledI18nAnalyzer:
+    """Prove Citry's finite formatter API does not require a Ty round trip."""
+
+    async def completion(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Citry formatter completion must bypass Ty")
+
+    async def signature_help(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Citry formatter signature help must bypass Ty")
+
+
 def _position(source: str, marker: str, offset: int = 0) -> types.Position:
     index = source.index(marker) + offset
     before = source[:index]
@@ -954,25 +964,22 @@ class Page(Component):
     )
     copied = shadows[0].document.copies[0]
     assert shadow_source[copied.shadow_start : copied.shadow_end] == "fmt.cur "
-    analyzer = TyAnalyzer(tmp_path)
-    try:
-        items = await semantic_completions(
-            analyzer,
-            document,
-            _position(source, "fmt.cur", len("fmt.cur")),
-            project,
-            documents,
-        )
-        signatures = await semantic_signature_help(
-            analyzer,
-            document,
-            _position(source, "fmt.currency(", len("fmt.currency(")),
-            project,
-            documents,
-        )
-        diagnostics = i18n_diagnostics(document, project)
-    finally:
-        await analyzer.close()
+    analyzer = _NeverCalledI18nAnalyzer()
+    items = await semantic_completions(
+        analyzer,
+        document,
+        _position(source, "fmt.cur", len("fmt.cur")),
+        project,
+        documents,
+    )
+    signatures = await semantic_signature_help(
+        analyzer,
+        document,
+        _position(source, "fmt.currency(", len("fmt.currency(")),
+        project,
+        documents,
+    )
+    diagnostics = i18n_diagnostics(document, project)
 
     assert "currency" in {item.label for item in items}
     assert signatures is not None

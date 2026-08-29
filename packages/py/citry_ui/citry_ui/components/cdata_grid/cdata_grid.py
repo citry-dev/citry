@@ -807,7 +807,7 @@ class CDataGrid(LibraryComponent):
                 <col c-style="{'width': f'{resolved.column.width}px'}" />
               </c-for>
             </colgroup>
-            <thead role="rowgroup" data-citry-ui-part="header">
+            <thead data-citry-ui-part="header">
               <tr aria-rowindex="1" data-citry-ui-part="header-row">
                 <c-for each="resolved in columns">
                   <th
@@ -842,9 +842,9 @@ class CDataGrid(LibraryComponent):
                 </c-for>
               </tr>
             </thead>
-            <tbody role="rowgroup" data-citry-ui-part="body">
+            <tbody data-citry-ui-part="body">
               <c-if cond="state == 'ready'">
-                <tr c-if="has_before" aria-hidden="true" role="presentation" data-citry-ui-part="spacer-row">
+                <tr c-if="has_before" aria-hidden="true" data-citry-ui-part="spacer-row">
                   <td c-colspan="column_count" c-style="{'height': f'{before_size}px'}"></td>
                 </tr>
                 <c-for each="resolved_row in rows">
@@ -891,7 +891,7 @@ class CDataGrid(LibraryComponent):
                     </c-for>
                   </tr>
                 </c-for>
-                <tr c-if="has_after" aria-hidden="true" role="presentation" data-citry-ui-part="spacer-row">
+                <tr c-if="has_after" aria-hidden="true" data-citry-ui-part="spacer-row">
                   <td c-colspan="column_count" c-style="{'height': f'{after_size}px'}"></td>
                 </tr>
                 <tr c-if="state_output == 'empty'" aria-rowindex="2" data-citry-ui-part="state-row">
