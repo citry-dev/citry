@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from hashlib import sha256
 from threading import RLock
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 from weakref import ReferenceType, WeakKeyDictionary, ref
 
 from citry.extension import Extension, ExtensionCommand, StagedRenderCacheContribution, TemplateNamespaceContribution
@@ -570,14 +570,16 @@ class I18nFormatter:
             raise TypeError("I18nFormatter requires exactly one component or LocaleContext.")
         self._extension = extension
         self._component = component
-        self._explicit_context = context
+        self._context_state = context
         self._usage = usage
 
     @property
     def _context(self) -> LocaleContext:
-        if self._component is not None:
-            return self._extension.context_for_component(self._component)
-        return cast("LocaleContext", self._explicit_context)
+        context = self._context_state
+        if context is None:
+            context = self._extension.context_for_component(cast("Component", self._component))
+            self._context_state = context
+        return context
 
     def number(self, value: int | Decimal, *, format: str) -> str:  # noqa: A002
         """Format an exact integer or decimal with a named number profile."""
@@ -1850,7 +1852,7 @@ class I18nExtension(Extension):
         dependency stays explicit. Omitting `context` here uses a new default
         context and is mainly useful for tooling and simple startup checks.
         """
-        return self.resolve(message_id, attr=attr, context=context, **values).text
+        return self._resolve_parts(message_id, attr=attr, context=context, values=values)[0]
 
     def resolve(
         self,
@@ -1867,6 +1869,28 @@ class I18nExtension(Extension):
         must match that output's `@param` interface exactly. The supplied
         context must still carry the current catalog revision.
         """
+        text, selected_locale, selected_direction, used_fallback = self._resolve_parts(
+            message_id,
+            attr=attr,
+            context=context,
+            values=values,
+        )
+        return LocalizedText(
+            text=text,
+            locale=selected_locale,
+            direction=selected_direction,
+            used_fallback=used_fallback,
+        )
+
+    def _resolve_parts(
+        self,
+        message_id: str,
+        *,
+        attr: str | None,
+        context: LocaleContext | None,
+        values: Mapping[str, object],
+    ) -> tuple[str, str, Literal["ltr", "rtl"], bool]:
+        """Resolve one checked text output without allocating public metadata."""
         self._validate_call(message_id, attr)
         context = self.context if context is None else context
         args_json = (
@@ -1897,15 +1921,13 @@ class I18nExtension(Extension):
                     output = f"{message_id}.{attr}"
                     raise ValueError(f"Unknown i18n message output {output!r}.") from error
                 raise
-        selected_direction = direction_for(selected_locale)
+        # Most messages use the requested locale, whose checked direction is
+        # already carried by the context. Cross the native locale boundary
+        # again only when fallback selected another locale.
+        selected_direction = context.direction if selected_locale == context.locale else direction_for(selected_locale)
         if selected_direction != context.direction:
             text = _isolate_bidi_paragraphs(text, direction=selected_direction)
-        return LocalizedText(
-            text=text,
-            locale=selected_locale,
-            direction=selected_direction,
-            used_fallback=used_fallback,
-        )
+        return text, selected_locale, selected_direction, used_fallback
 
     def resolve_rich(
         self,
@@ -2001,6 +2023,10 @@ class I18nExtension(Extension):
     def _load_project_sources(self) -> None:
         from citry.assets import messages_declaration_owner  # noqa: PLC0415
 
+        # Registration changes invalidate this generation under the same GIL.
+        # Skip the lock on the common render path where the inventory is current.
+        if self._loaded_registry_generation == self._registry_generation:
+            return
         for _attempt in range(16):
             with self._catalog_lock:
                 generation = self._registry_generation

@@ -51,6 +51,10 @@ _CSS_ANCHOR_VALUES = {
     ),
     "min-inline-size": re.compile(r"anchor-size\(\s*width\s*\)"),
 }
+_CSS_CONTAINER_TYPE_ERROR = "CSS: “container-type”: Property “container-type” doesn't exist."
+_CSS_CONTAINER_RULE_ERROR = "CSS: Unrecognized at-rule “@container”"
+_CSS_CONTAINER_TYPE_VALUE = re.compile(r"inline-size")
+_CSS_CONTAINER_CONDITION = re.compile(r"(?:width\s*<=\s*22rem|max-width\s*:\s*22rem|inline-size\s*<\s*44rem)")
 
 
 class HtmlQualificationError(ValueError):
@@ -66,6 +70,7 @@ class HtmlReport:
     errors: int
     alpine_directives: tuple[str, ...]
     css_anchor_features: tuple[str, ...]
+    css_container_features: tuple[str, ...]
     information: int
 
 
@@ -109,11 +114,43 @@ def _known_css_anchor_feature(finding: dict[str, Any], message: str, source: str
     return feature
 
 
+def _source_at_rule_condition(finding: dict[str, Any], source: str | None, rule_name: str) -> str | None:
+    """Return one at-rule condition from Nu's reported source line."""
+    line_number = finding.get("lastLine")
+    if source is None or not isinstance(line_number, int):
+        return None
+    lines = source.splitlines()
+    if not 1 <= line_number <= len(lines):
+        return None
+    line = lines[line_number - 1]
+    rule = re.compile(rf"@{re.escape(rule_name)}\s*\((?P<condition>[^{{}}]+)\)\s*{{")
+    matches = list(rule.finditer(line))
+    if len(matches) == 1:
+        return matches[0].group("condition").strip()
+    last_column = finding.get("lastColumn")
+    if not isinstance(last_column, int):
+        return None
+    matches = [match for match in matches if match.start() + 1 <= last_column <= match.end()]
+    return matches[0].group("condition").strip() if len(matches) == 1 else None
+
+
+def _known_css_container_feature(finding: dict[str, Any], message: str, source: str | None) -> str | None:
+    """Recognize only the container-query CSS emitted by Citry UI."""
+    if message == _CSS_CONTAINER_TYPE_ERROR:
+        value = _source_declaration_value(finding, source, "container-type")
+        return "container-type" if value is not None and _CSS_CONTAINER_TYPE_VALUE.fullmatch(value) else None
+    if message == _CSS_CONTAINER_RULE_ERROR:
+        condition = _source_at_rule_condition(finding, source, "container")
+        return "@container" if condition is not None and _CSS_CONTAINER_CONDITION.fullmatch(condition) else None
+    return None
+
+
 def qualify_nu_result(result: dict[str, Any], *, scenario: str, source: str | None = None) -> HtmlReport:
-    """Reject Nu errors except its known inability to recognize Alpine directives."""
+    """Reject Nu errors except checked Alpine and browser-CSS compatibility gaps."""
     unexpected: list[dict[str, Any]] = []
     alpine_directives: set[str] = set()
     css_anchor_features: set[str] = set()
+    css_container_features: set[str] = set()
     information = 0
 
     for finding in result.get("messages", []):
@@ -135,6 +172,12 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str, source: str | No
             # report instead of hiding CSS errors wholesale.
             css_anchor_features.add(css_anchor_feature)
             continue
+        css_container_feature = _known_css_container_feature(finding, message, source)
+        if css_container_feature is not None:
+            # Citry UI exercises these container queries in browser tests. Nu
+            # still reports them, so retain the exact tolerated feature here.
+            css_container_features.add(css_container_feature)
+            continue
         unexpected.append(finding)
 
     if unexpected:
@@ -150,6 +193,7 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str, source: str | No
         errors=0,
         alpine_directives=tuple(sorted(alpine_directives)),
         css_anchor_features=tuple(sorted(css_anchor_features)),
+        css_container_features=tuple(sorted(css_container_features)),
         information=information,
     )
 

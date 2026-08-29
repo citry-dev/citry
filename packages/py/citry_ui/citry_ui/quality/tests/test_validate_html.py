@@ -25,6 +25,7 @@ def test_nu_result_records_alpine_directives_without_hiding_other_information():
     assert report.errors == 0
     assert report.alpine_directives == ("x-data", "x-text")
     assert report.css_anchor_features == ()
+    assert report.css_container_features == ()
     assert report.information == 1
 
 
@@ -151,6 +152,56 @@ def test_nu_result_uses_columns_to_check_repeated_minified_anchor_declarations()
     )
 
     assert report.css_anchor_features == ("anchor-size()", "position-area")
+
+
+def test_nu_result_records_checked_css_container_features():
+    source = "container-type: inline-size;\n@container (width <= 22rem) {"
+    report = qualify_nu_result(
+        {
+            "version": "test",
+            "messages": [
+                {
+                    "type": "error",
+                    "lastLine": 1,
+                    "message": "CSS: “container-type”: Property “container-type” doesn't exist.",
+                },
+                {
+                    "type": "error",
+                    "lastLine": 2,
+                    "message": "CSS: Unrecognized at-rule “@container”",
+                },
+            ],
+        },
+        scenario="tour.states",
+        source=source,
+    )
+
+    assert report.css_container_features == ("@container", "container-type")
+
+
+@pytest.mark.parametrize(
+    ("message", "source"),
+    [
+        (
+            "CSS: “container-type”: Property “container-type” doesn't exist.",
+            "container-type: not-a-container-type;",
+        ),
+        (
+            "CSS: Unrecognized at-rule “@container”",
+            "@container (unknown-feature: enabled) {",
+        ),
+    ],
+)
+def test_nu_result_rejects_unrecognized_css_container_syntax(message: str, source: str):
+    with pytest.raises(HtmlQualificationError, match="CSS"):
+        qualify_nu_result(
+            {
+                "version": "test",
+                "messages": [{"type": "error", "lastLine": 1, "message": message}],
+            },
+            scenario="tour.states",
+            source=source,
+        )
 
 
 @pytest.mark.parametrize(

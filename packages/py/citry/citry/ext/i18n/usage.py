@@ -41,28 +41,30 @@ class I18nUsageCollector:
     __slots__ = ("_formats", "_messages", "_parsers")
 
     def __init__(self) -> None:
-        self._messages: dict[MessageOutputUse, None] = {}
-        self._formats: dict[ProfileUse, None] = {}
-        self._parsers: dict[ProfileUse, None] = {}
+        self._messages: dict[tuple[str, str | None], None] = {}
+        self._formats: dict[tuple[str, str], None] = {}
+        self._parsers: dict[tuple[str, str], None] = {}
 
     @property
     def messages(self) -> tuple[MessageOutputUse, ...]:
-        return tuple(self._messages)
+        return tuple(MessageOutputUse(message=message, attr=attr) for message, attr in self._messages)
 
     @property
     def formats(self) -> tuple[ProfileUse, ...]:
-        return tuple(self._formats)
+        return tuple(ProfileUse(operation=operation, profile=profile) for operation, profile in self._formats)
 
     @property
     def parsers(self) -> tuple[ProfileUse, ...]:
-        return tuple(self._parsers)
+        return tuple(ProfileUse(operation=operation, profile=profile) for operation, profile in self._parsers)
 
     @property
     def empty(self) -> bool:
         return not (self._messages or self._formats or self._parsers)
 
     def record_message(self, message: str, attr: str | None) -> None:
-        self._messages[MessageOutputUse(message=message, attr=attr)] = None
+        # A render records many repeated translation calls, so retain the
+        # lightweight key and build public records only when metadata is read.
+        self._messages[(message, attr)] = None
 
     def record_profile(
         self,
@@ -71,7 +73,7 @@ class I18nUsageCollector:
         profile: str,
     ) -> None:
         target = self._formats if kind == "format" else self._parsers
-        target[ProfileUse(operation=operation, profile=profile)] = None
+        target[(operation, profile)] = None
 
 
 @dataclass(frozen=True, slots=True)

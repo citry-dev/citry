@@ -100,13 +100,14 @@ class I18n(ExtensionConfig):
 
     def tr(self, message_id: str, *, attr: str | None = None, **values: object) -> str:
         """Resolve one message or attribute to plain text."""
-        resolved = self.resolve(message_id, attr=attr, **values)
+        resolved = self._extension.tr(message_id, attr=attr, context=self.context, **values)
+        self._usage.record_message(message_id, attr)
         capture = self._translation_capture
         if capture is None:
-            return resolved.text
+            return resolved
         from .bindings import CapturedTranslationText  # noqa: PLC0415
 
-        text = CapturedTranslationText(resolved.text)
+        text = CapturedTranslationText(resolved)
         capture(message_id, attr, dict(values), text)
         return text
 
