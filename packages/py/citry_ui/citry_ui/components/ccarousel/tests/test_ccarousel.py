@@ -146,10 +146,14 @@ def test_owned_slide_attrs_fail() -> None:
 
 
 def test_css_contract_covers_native_scroll_and_environments() -> None:
-    css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
+    component_root = Path(__file__).parents[1]
+    css = (component_root / "runtime.source.css").read_text(encoding="utf8")
+    minified = (component_root / "runtime.min.css").read_text(encoding="utf8")
     assert "scroll-snap-type" in css
     assert "--cui-carousel-block-size" in css
     assert '[data-citry-ui-part="indicator"]' in css
     assert "prefers-reduced-motion: reduce" in css
     assert "forced-colors: active" in css
     assert "@media print" in css
+    assert ":where()" not in minified
+    assert "])::-webkit-scrollbar" in minified

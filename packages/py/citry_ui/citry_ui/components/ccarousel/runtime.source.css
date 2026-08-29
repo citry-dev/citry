@@ -67,7 +67,7 @@
     border-radius: var(--_cui-carousel-radius);
     cursor: grab;
   }
-  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"]::-webkit-scrollbar) {
+  :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"])::-webkit-scrollbar {
     display: none;
   }
   :where([data-citry-ui-part="carousel"] [data-citry-ui-part="viewport"][data-dragging]) {

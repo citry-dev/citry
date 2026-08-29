@@ -7,6 +7,7 @@ import io
 import re
 import tokenize
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lsprotocol import types
@@ -36,7 +37,6 @@ from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
-    from pathlib import Path
 
     from citry_lsp.project import ProjectState
 
@@ -68,7 +68,7 @@ async def semantic_completions(
     answers: list[dict[str, TyCompletion]] = []
     try:
         for shadow in shadows:
-            virtual = _virtual_document(shadow)
+            virtual = _virtual_document(shadow, Path(project.status.workspace))
             for copied in shadow.document.copies:
                 cursor = copied.shadow_start + shadow.cursor_offset
                 response_items = await analyzer.completion(
@@ -125,7 +125,7 @@ async def semantic_hover(
     mapped_ranges: list[types.Range] = []
     try:
         for shadow in shadows:
-            virtual = _virtual_document(shadow)
+            virtual = _virtual_document(shadow, Path(project.status.workspace))
             for copied in shadow.document.copies:
                 cursor = copied.shadow_start + shadow.cursor_offset
                 hint = await analyzer.hover(
@@ -173,7 +173,7 @@ async def semantic_variable_hover(
     semantic_types: list[str] = []
     try:
         for shadow in shadows:
-            virtual = _virtual_document(shadow)
+            virtual = _virtual_document(shadow, Path(project.status.workspace))
             for copied in shadow.document.copies:
                 cursor = copied.shadow_start + shadow.cursor_offset
                 hint = await analyzer.hover(
@@ -215,11 +215,14 @@ async def semantic_definition(
     synchronized = _python_documents(open_documents)
     if synchronized is None:
         return ()
-    generated_uris = {virtual_document_uri(shadow.source_file, shadow.identity) for shadow in shadows}
+    generated_uris = {
+        virtual_document_uri(shadow.source_file, shadow.identity, workspace=Path(project.status.workspace))
+        for shadow in shadows
+    }
     retained: list[types.Location] = []
     try:
         for shadow in shadows:
-            virtual = _virtual_document(shadow)
+            virtual = _virtual_document(shadow, Path(project.status.workspace))
             for copied in shadow.document.copies:
                 cursor = copied.shadow_start + shadow.cursor_offset
                 locations = await analyzer.definition(
@@ -275,11 +278,14 @@ async def semantic_type_definition(
     synchronized = _python_documents(open_documents)
     if synchronized is None:
         return ()
-    generated_uris = {virtual_document_uri(shadow.source_file, shadow.identity) for shadow in shadows}
+    generated_uris = {
+        virtual_document_uri(shadow.source_file, shadow.identity, workspace=Path(project.status.workspace))
+        for shadow in shadows
+    }
     retained: list[types.Location] = []
     try:
         for shadow in shadows:
-            virtual = _virtual_document(shadow)
+            virtual = _virtual_document(shadow, Path(project.status.workspace))
             for copied in shadow.document.copies:
                 cursor = copied.shadow_start + shadow.cursor_offset
                 locations = await analyzer.type_definition(
@@ -335,7 +341,7 @@ async def semantic_signature_help(
     answers: list[types.SignatureHelp] = []
     try:
         for shadow in shadows:
-            virtual = _virtual_document(shadow)
+            virtual = _virtual_document(shadow, Path(project.status.workspace))
             for copied in shadow.document.copies:
                 cursor = copied.shadow_start + shadow.cursor_offset
                 answer = await analyzer.signature_help(
@@ -388,7 +394,7 @@ async def semantic_diagnostics(
         return ()
     retained: list[types.Diagnostic] = []
     try:
-        for diagnostic_document in _diagnostic_documents(groups):
+        for diagnostic_document in _diagnostic_documents(groups, Path(project.status.workspace)):
             findings = await analyzer.diagnostics(
                 diagnostic_document.virtual,
                 synchronized=synchronized,
@@ -435,7 +441,10 @@ class _DiagnosticDocument:
     copies: tuple[_DiagnosticExpressionCopy, ...]
 
 
-def _diagnostic_documents(groups: tuple[ExpressionShadowGroup, ...]) -> tuple[_DiagnosticDocument, ...]:
+def _diagnostic_documents(
+    groups: tuple[ExpressionShadowGroup, ...],
+    workspace: Path,
+) -> tuple[_DiagnosticDocument, ...]:
     """Combine independent queries for one consumer into one analyzer request."""
     by_consumer: dict[tuple[str, Path, str], list[tuple[types.Position, ExpressionShadow]]] = {}
     for group in groups:
@@ -445,18 +454,19 @@ def _diagnostic_documents(groups: tuple[ExpressionShadowGroup, ...]) -> tuple[_D
 
     documents: list[_DiagnosticDocument] = []
     for entries in by_consumer.values():
-        combined = _combined_diagnostic_document(entries)
+        combined = _combined_diagnostic_document(entries, workspace)
         if combined is not None:
             documents.append(combined)
             continue
         # Any unexpected generated shape keeps the exact per-query behavior.
-        documents.extend(_single_diagnostic_document(position, shadow) for position, shadow in entries)
+        documents.extend(_single_diagnostic_document(position, shadow, workspace) for position, shadow in entries)
     return tuple(documents)
 
 
 def _single_diagnostic_document(
     position: types.Position,
     shadow: ExpressionShadow,
+    workspace: Path,
 ) -> _DiagnosticDocument:
     copies = tuple(
         _DiagnosticExpressionCopy(
@@ -468,16 +478,17 @@ def _single_diagnostic_document(
         )
         for copied in shadow.document.copies
     )
-    return _DiagnosticDocument(_virtual_document(shadow), copies)
+    return _DiagnosticDocument(_virtual_document(shadow, workspace), copies)
 
 
 def _combined_diagnostic_document(
     entries: list[tuple[types.Position, ExpressionShadow]],
+    workspace: Path,
 ) -> _DiagnosticDocument | None:
     """Merge generated query functions only when their module context is identical."""
     if len(entries) < 2:
         position, shadow = entries[0]
-        return _single_diagnostic_document(position, shadow)
+        return _single_diagnostic_document(position, shadow, workspace)
     bounds = [_generated_query_function_bounds(shadow.document.source) for _, shadow in entries]
     if any(bound is None for bound in bounds):
         return None
@@ -524,7 +535,7 @@ def _combined_diagnostic_document(
     first_shadow = entries[0][1]
     return _DiagnosticDocument(
         TyDocument(
-            virtual_document_uri(first_shadow.source_file, first_shadow.identity),
+            virtual_document_uri(first_shadow.source_file, first_shadow.identity, workspace=workspace),
             combined_source,
         ),
         tuple(copies),
@@ -595,9 +606,9 @@ def _map_diagnostic_range(
     return None
 
 
-def _virtual_document(shadow: ExpressionShadow) -> TyDocument:
+def _virtual_document(shadow: ExpressionShadow, workspace: Path) -> TyDocument:
     return TyDocument(
-        virtual_document_uri(shadow.source_file, shadow.identity),
+        virtual_document_uri(shadow.source_file, shadow.identity, workspace=workspace),
         shadow.document.source,
     )
 

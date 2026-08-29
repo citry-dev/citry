@@ -423,7 +423,7 @@ class TyAnalyzer:
             self._active_requests.add(operation)
         try:
             executable = await asyncio.to_thread(self._validated_executable)
-            client = _configured_client(self.workspace, self._python_prefix)
+            client = _configured_client(self._python_prefix)
             await client.start_io(str(executable), "server", cwd=self.workspace)
             params = _initialize_params(self.workspace, self._python_prefix)
             await _bounded_client_request(client, types.INITIALIZE, params, _REQUEST_TIMEOUT_SECONDS)
@@ -614,13 +614,20 @@ def _consume_late_response(future: asyncio.Future[Any]) -> None:
         future.result()
 
 
-def virtual_document_uri(source_file: Path, identity: str) -> str:
-    """Return a deterministic unsaved sibling URI for one component consumer."""
+def virtual_document_uri(source_file: Path, identity: str, *, workspace: Path | None = None) -> str:
+    """Return a deterministic unsaved URI that ty can resolve on the workspace filesystem."""
+    source_file = source_file.resolve()
+    parent = _virtual_document_parent(source_file, workspace.resolve() if workspace is not None else None)
     safe_identity = "".join(char if char.isalnum() else "_" for char in identity)[:48]
-    # A valid module stem lets ty assign the sibling to the source package, so
-    # copied relative imports retain their ordinary package context.
-    name = f"__citry_{source_file.stem}_{safe_identity}.py"
-    return source_file.resolve().with_name(name).as_uri()
+    # A valid module stem normally lets ty assign the sibling to the source
+    # package, so copied relative imports retain their ordinary package context.
+    # On a different Windows drive, a source marker keeps the workspace-local
+    # fallback collision-free.
+    source_marker = ""
+    if parent != source_file.parent:
+        source_marker = f"_{uuid.uuid5(uuid.NAMESPACE_URL, source_file.as_uri()).hex[:12]}"
+    name = f"__citry_{source_file.stem}{source_marker}_{safe_identity}.py"
+    return Path(parent, name).as_uri()
 
 
 def position_at_offset(source: str, offset: int) -> types.Position:
@@ -653,10 +660,9 @@ def offset_at_position(source: str, position: types.Position) -> int | None:
     return prefix + len(line) if units == position.character else None
 
 
-def _configured_client(workspace: Path, python_prefix: Path) -> JsonRPCClient:
+def _configured_client(python_prefix: Path) -> JsonRPCClient:
     client = JsonRPCClient()
     workspace_options = _ty_workspace_options(python_prefix)
-    analysis_folders = _analysis_workspace_folders(workspace, python_prefix)
 
     @client.feature("workspace/configuration")
     def configuration(*args: object) -> list[dict[str, object]]:
@@ -673,8 +679,8 @@ def _configured_client(workspace: Path, python_prefix: Path) -> JsonRPCClient:
         return None
 
     @client.feature("workspace/workspaceFolders")
-    def workspace_folders(*_args: object) -> list[types.WorkspaceFolder]:
-        return list(analysis_folders)
+    def workspace_folders(*_args: object) -> list[object]:
+        return []
 
     @client.feature(types.TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS)
     def ignore_push_diagnostics(*_args: object) -> None:
@@ -715,28 +721,16 @@ def _initialize_params(workspace: Path, python_prefix: Path) -> types.Initialize
         ),
         process_id=os.getpid(),
         root_uri=workspace_uri,
-        workspace_folders=list(_analysis_workspace_folders(workspace, python_prefix)),
+        workspace_folders=[types.WorkspaceFolder(workspace_uri, workspace.name or "workspace")],
         initialization_options=_ty_workspace_options(python_prefix),
     )
 
 
-def _analysis_workspace_folders(workspace: Path, python_prefix: Path) -> tuple[types.WorkspaceFolder, ...]:
-    """Keep virtual documents on every drive inside a ty workspace."""
-    workspace = workspace.resolve()
-    python_prefix = python_prefix.resolve()
-    # An editable virtual environment normally lives directly under the
-    # source checkout. Its parent therefore covers both the selected Python
-    # environment and analyzer shadows built beside installed package source.
-    # A system interpreter has no pyvenv.cfg, so its prefix is the narrower
-    # root that contains site-packages.
-    environment_root = python_prefix.parent if (python_prefix / "pyvenv.cfg").is_file() else python_prefix
-    paths = [workspace]
-    if _different_filesystem_roots(workspace, environment_root):
-        paths.append(environment_root)
-    return tuple(
-        types.WorkspaceFolder(path.as_uri(), path.name or path.anchor or f"workspace-{index}")
-        for index, path in enumerate(paths)
-    )
+def _virtual_document_parent(source_file: PurePath, workspace: PurePath | None) -> PurePath:
+    """Keep a cross-drive synthetic document inside ty's configured workspace."""
+    if workspace is not None and _different_filesystem_roots(source_file, workspace):
+        return workspace
+    return source_file.parent
 
 
 def _different_filesystem_roots(first: PurePath, second: PurePath) -> bool:

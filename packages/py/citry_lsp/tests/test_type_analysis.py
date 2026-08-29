@@ -23,6 +23,7 @@ from citry_lsp.type_analysis import (
     _is_ty_vendored_stdlib_path,
     _safe_completion_item,
     _stop_client,
+    _virtual_document_parent,
     offset_at_position,
     position_at_offset,
     virtual_document_uri,
@@ -410,6 +411,24 @@ def test_analyzer_recognizes_a_cross_drive_editable_environment() -> None:
         PureWindowsPath("C:/workspace"),
         PureWindowsPath("C:/checkout"),
     )
+    assert _virtual_document_parent(
+        PureWindowsPath("D:/checkout/package/component.py"),
+        PureWindowsPath("C:/workspace"),
+    ) == PureWindowsPath("C:/workspace")
+
+
+def test_cross_drive_virtual_document_moves_inside_the_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_file = tmp_path / "installed" / "component.py"
+    workspace = tmp_path / "workspace"
+    monkeypatch.setattr(type_analysis, "_different_filesystem_roots", lambda *_args: True)
+
+    uri = virtual_document_uri(source_file, "component", workspace=workspace)
+
+    assert uri.startswith(workspace.resolve().as_uri())
+    assert "component" in uri.rsplit("/", 1)[-1]
 
 
 @pytest.mark.asyncio
@@ -817,7 +836,7 @@ async def test_cancelled_startup_still_terminates_the_spawned_child(
             raise RuntimeError("reader already closed")
 
     client = Client()
-    monkeypatch.setattr(type_analysis, "_configured_client", lambda _workspace, _python_prefix: client)
+    monkeypatch.setattr(type_analysis, "_configured_client", lambda _python_prefix: client)
     analyzer = TyAnalyzer(tmp_path)
     monkeypatch.setattr(analyzer, "_validated_executable", lambda: tmp_path / "python")
     starting = asyncio.create_task(analyzer._ready_client())
@@ -895,7 +914,7 @@ async def test_repeated_cancelled_startups_never_accumulate_owned_children(
         async def stop(self) -> None:
             raise RuntimeError("reader already closed")
 
-    monkeypatch.setattr(type_analysis, "_configured_client", lambda _workspace, _python_prefix: Client())
+    monkeypatch.setattr(type_analysis, "_configured_client", lambda _python_prefix: Client())
     analyzer = TyAnalyzer(tmp_path)
     monkeypatch.setattr(analyzer, "_validated_executable", lambda: tmp_path / "ty")
 

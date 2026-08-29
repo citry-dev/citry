@@ -63,7 +63,7 @@ def _write_package(
         compiled = package / "_compiled"
         compiled.mkdir()
         server_content = '{"schema_version":1}\n'
-        (compiled / "server.json").write_text(server_content, encoding="utf8")
+        (compiled / "server.json").write_text(server_content, encoding="utf8", newline="\n")
         (compiled / "manifest.json").write_text(
             json.dumps(
                 {
@@ -80,6 +80,7 @@ def _write_package(
                 separators=(",", ":"),
             ),
             encoding="utf8",
+            newline="\n",
         )
 
 
@@ -291,11 +292,11 @@ def test_production_rejects_a_hash_valid_but_semantically_fake_server_artifact(t
     compile_catalog_package(name)
     package = tmp_path / name
     fake = '{"schema_version":1}\n'
-    (package / "_compiled" / "server.json").write_text(fake, encoding="utf8")
+    (package / "_compiled" / "server.json").write_text(fake, encoding="utf8", newline="\n")
     manifest_path = package / "_compiled" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf8"))
     manifest["artifacts"]["server.json"]["sha256"] = hashlib.sha256(fake.encode()).hexdigest()
-    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf8")
+    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf8", newline="\n")
 
     with pytest.raises(ValueError, match="does not match its checked link artifact"):
         Citry(
@@ -325,11 +326,11 @@ def test_production_rejects_a_hash_valid_but_stale_link_revision(tmp_path, monke
     link = json.loads(link_path.read_text(encoding="utf8"))
     link["revision"] = "forged"
     link_text = json.dumps(link, separators=(",", ":"), sort_keys=True) + "\n"
-    link_path.write_text(link_text, encoding="utf8")
+    link_path.write_text(link_text, encoding="utf8", newline="\n")
     manifest_path = package / "_compiled" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf8"))
     manifest["artifacts"]["link.json"]["sha256"] = hashlib.sha256(link_text.encode()).hexdigest()
-    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf8")
+    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf8", newline="\n")
 
     with pytest.raises(ValueError, match="semantic revision"):
         Citry(
@@ -359,11 +360,11 @@ def test_production_rejects_malformed_link_catalog_metadata(tmp_path, monkeypatc
     link = json.loads(link_path.read_text(encoding="utf8"))
     link["catalogs"][0]["path"] = "missing-package-prefix.ftl"
     link_text = json.dumps(link, separators=(",", ":"), sort_keys=True) + "\n"
-    link_path.write_text(link_text, encoding="utf8")
+    link_path.write_text(link_text, encoding="utf8", newline="\n")
     manifest_path = package / "_compiled" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf8"))
     manifest["artifacts"]["link.json"]["sha256"] = hashlib.sha256(link_text.encode()).hexdigest()
-    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf8")
+    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf8", newline="\n")
 
     with pytest.raises(ValueError, match="unsupported catalog metadata"):
         Citry(
