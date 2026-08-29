@@ -9,6 +9,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "citry-lsp>=0.1,<0.2",
   "pytest>=9.0,<10",
 ]
 

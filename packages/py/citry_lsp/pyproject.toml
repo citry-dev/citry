@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry-lsp"
-version = "0.1.1"
+version = "0.1.2"
 requires-python = ">=3.10, <4.0"
 description = "Language server for Citry component templates"
 readme = "README.md"
@@ -29,7 +29,7 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["citry[analysis-ty]>=0.4.1,<0.5", "pygls==2.1.1"]
+dependencies = ["citry[analysis-ty]>=0.4.1,<0.5", "pygls==2.1.1", "python-dotenv>=1.2.3,<2"]
 
 [project.scripts]
 citry-lsp = "citry_lsp.__main__:main"

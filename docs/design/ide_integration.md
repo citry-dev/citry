@@ -526,6 +526,34 @@ malformed worker responses all produce one reported syntax-only degradation.
 File changes and the explicit reload request replace the complete copied
 project generation. No project module enters the LSP stdio process.
 
+Project imports may opt into one environment file through the additive
+`initializationOptions.envFile` field (exposed by VS Code as the
+resource-scoped `citry.envFile` setting). An absent value preserves the
+Extension Host or editor process environment. A relative value resolves from
+the selected workspace; the VS Code adapter also expands
+`${workspaceFolder}` before sending an absolute remote or local path. Explicit
+file values override inherited values so different folders in one multi-root
+workspace can select different application settings.
+
+The long-lived stdio server never mutates its environment. A Citry-owned
+adapter parses the configured file into a copied mapping, validates portable
+names and subprocess-safe values, and passes that mapping only to the
+one-shot app worker. Consequently project imports and any children they start
+see the configured values, while Ty and other language-server children do
+not. The environment adapter contributes only the path to project status and
+never serializes or logs parsed values. A missing, unreadable, oversized,
+malformed, or non-UTF-8 configured file prevents app
+discovery and produces the ordinary actionable syntax-only degradation; the
+server never retries the import with inherited values alone.
+
+Every discovery generation rereads the file. VS Code watches its exact path,
+including a path outside the workspace, and feeds create, change, and delete
+events through the existing debounced watched-files reload. Other LSP clients
+may send the same standard notification or invoke `citry/reload`. This is a
+backward-compatible protocol-v1 addition: old clients omit it, while the VS
+Code client detects an old server that silently ignored a configured option
+because its status payload lacks the additive `environment_file` field.
+
 #### 3.4.1 Capability and degradation contract
 
 Tooling reports its active mode so partial facts are never presented as

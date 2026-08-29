@@ -64,6 +64,24 @@ The server imports that target in a bounded worker process. Import errors,
 invalid targets, crashes, and timeouts produce one visible status message and
 fall back to syntax-only behavior without corrupting the editor connection.
 
+Clients may also provide an optional `envFile` initialization option. Relative
+paths resolve from the workspace:
+
+```json
+{
+  "protocolVersion": 1,
+  "app": "my_project.web:app",
+  "envFile": ".env"
+}
+```
+
+File values override the environment inherited by the server and apply only
+to the isolated app-discovery worker. The stdio server and its type analyzer
+remain unchanged. Each registry reload rereads the file; missing or malformed
+configured files produce a syntax-only status instead of importing the app
+with an unintended environment. Citry's environment adapter reports the
+selected path but never serializes or logs its parsed values.
+
 Registry mode adds:
 
 - component, input, slot, and typed slot-data completion and hover;
@@ -101,7 +119,7 @@ operation. Stale or malformed client responses produce no edit.
 
 ## Compatibility
 
-The server advertises language-server version 0.1.1, Citry 0.4.x, component
+The server advertises language-server version 0.1.2, Citry 0.4.x, component
 catalog v1, and client protocol v1. It refuses incompatible client protocols or
 Citry series instead of returning results based on a contract it does not
 understand.

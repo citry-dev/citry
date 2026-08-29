@@ -250,7 +250,7 @@ def verify_vsix(path: Path, *, version: str | None = None) -> dict[str, Any]:
     _require_icon(by_name["extension/images/icon.png"])
     for member, member_payload in by_name.items():
         _require_no_local_paths(member, member_payload)
-    if b"0.1.0 - Unreleased" in by_name["extension/changelog.md"]:
+    if b" - Unreleased" in by_name["extension/changelog.md"]:
         raise DistributionVerificationError("release changelog is still marked Unreleased")
 
     return {

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { PythonExtension } from "@vscode/python-extension";
 import * as prettierBabel from "prettier/plugins/babel";
 import * as prettierEstree from "prettier/plugins/estree";
@@ -58,6 +59,7 @@ import {
 	virtualDocumentTimeoutMs,
 	withTimeout,
 } from "./providerPipeline.js";
+import { resolveWorkspacePath, sameWorkspacePath } from "./workspaceConfiguration.js";
 
 const protocolVersion = 1;
 const statusMethod = "citry/status";
@@ -80,6 +82,7 @@ interface ProjectStatus {
 	interpreter: string;
 	workspace: string;
 	app: string | null;
+	environment_file?: string | null;
 	mode: "registry" | "syntax-only" | "unavailable";
 	registry_ready: boolean;
 	citry_version: string | null;
@@ -99,6 +102,7 @@ interface ClientEntry {
 	client: LanguageClient;
 	disposables: vscode.Disposable[];
 	folder: vscode.WorkspaceFolder;
+	environmentFile: string | null;
 	python: string;
 	status?: ProjectStatus;
 }
@@ -342,7 +346,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			await restartAll();
 		}),
 		vscode.workspace.onDidChangeConfiguration(async (event) => {
-			if (event.affectsConfiguration("citry.app") || event.affectsConfiguration("citry.python")) {
+			if (
+				event.affectsConfiguration("citry.app") ||
+				event.affectsConfiguration("citry.python") ||
+				event.affectsConfiguration("citry.envFile")
+			) {
 				await restartAll();
 			}
 		}),
@@ -391,6 +399,12 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		setUnavailableStatus(errorMessage(error));
 		return;
 	}
+	const configuration = vscode.workspace.getConfiguration("citry", folder.uri);
+	const app = configuration.get<string>("app", "").trim() || null;
+	const configuredEnvironmentFile = configuration.get<string>("envFile", "").trim();
+	const environmentFile = configuredEnvironmentFile
+		? resolveWorkspacePath(configuredEnvironmentFile, folder.uri.fsPath)
+		: null;
 	try {
 		await probeLanguageServer(python, folder.uri.fsPath);
 	} catch (error) {
@@ -399,8 +413,6 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		notifyServerSetupFailure(folder, message);
 		return;
 	}
-	const configuration = vscode.workspace.getConfiguration("citry", folder.uri);
-	const app = configuration.get<string>("app", "").trim() || null;
 	const serverOptions: ServerOptions = {
 		command: python,
 		args: ["-m", "citry_lsp"],
@@ -445,6 +457,7 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		initializationOptions: {
 			protocolVersion,
 			app,
+			envFile: environmentFile,
 			standardFormatting: false,
 			embeddedFormatting: {
 				version: 1,
@@ -462,7 +475,7 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		},
 	};
 	const client = new LanguageClient(`citry-${folder.index}`, `Citry (${folder.name})`, serverOptions, clientOptions);
-	const entry: ClientEntry = { client, disposables: [], folder, python };
+	const entry: ClientEntry = { client, disposables: [], environmentFile, folder, python };
 	clients.set(key, entry);
 	entry.disposables.push(
 		client.onRequest(formatEmbeddedMethod, (params, token) => handleEmbeddedFormatting(params, token)),
@@ -478,7 +491,15 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		await client.start();
 		entry.disposables.push(new SettingMonitor(client, "citry.trace.server").start());
 		entry.status = await client.sendRequest<ProjectStatus>(statusMethod, {});
-		entry.disposables.push(...watchPythonFiles(entry));
+		if (environmentFile !== null && entry.status.environment_file === undefined) {
+			throw new Error(
+				'Configured citry.envFile is not supported by this citry-lsp installation. Upgrade it with `python -m pip install --upgrade "citry-lsp>=0.1,<0.2"`.',
+			);
+		}
+		if (entry.status.environment_file !== undefined && entry.status.environment_file !== null) {
+			entry.environmentFile = entry.status.environment_file;
+		}
+		entry.disposables.push(...watchProjectFiles(entry));
 	} catch (error) {
 		clients.delete(key);
 		await stopEntry(entry);
@@ -662,21 +683,39 @@ async function restartAllOnce(): Promise<void> {
 	updateStatusBar();
 }
 
-function watchPythonFiles(entry: ClientEntry): vscode.Disposable[] {
-	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(entry.folder, "**/*.py"));
+function watchProjectFiles(entry: ClientEntry): vscode.Disposable[] {
+	const pythonWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(entry.folder, "**/*.py"));
 	const batcher = new WatchedFileChangeBatcher<FileChangeType>((changes) => {
 		void entry.client.sendNotification(DidChangeWatchedFilesNotification.type, {
 			changes,
 		});
 	});
 	const collect = (uri: vscode.Uri, type: FileChangeType) => batcher.push(uri.toString(), type);
-	return [
-		watcher,
+	const disposables: vscode.Disposable[] = [
+		pythonWatcher,
 		{ dispose: () => batcher.dispose() },
-		watcher.onDidCreate((uri) => collect(uri, FileChangeType.Created)),
-		watcher.onDidChange((uri) => collect(uri, FileChangeType.Changed)),
-		watcher.onDidDelete((uri) => collect(uri, FileChangeType.Deleted)),
+		pythonWatcher.onDidCreate((uri) => collect(uri, FileChangeType.Created)),
+		pythonWatcher.onDidChange((uri) => collect(uri, FileChangeType.Changed)),
+		pythonWatcher.onDidDelete((uri) => collect(uri, FileChangeType.Deleted)),
 	];
+	if (entry.environmentFile === null) {
+		return disposables;
+	}
+	const environmentWatcher = vscode.workspace.createFileSystemWatcher(
+		new vscode.RelativePattern(vscode.Uri.file(path.dirname(entry.environmentFile)), "*"),
+	);
+	const collectEnvironment = (uri: vscode.Uri, type: FileChangeType) => {
+		if (entry.environmentFile !== null && sameWorkspacePath(uri.fsPath, entry.environmentFile)) {
+			collect(uri, type);
+		}
+	};
+	disposables.push(
+		environmentWatcher,
+		environmentWatcher.onDidCreate((uri) => collectEnvironment(uri, FileChangeType.Created)),
+		environmentWatcher.onDidChange((uri) => collectEnvironment(uri, FileChangeType.Changed)),
+		environmentWatcher.onDidDelete((uri) => collectEnvironment(uri, FileChangeType.Deleted)),
+	);
+	return disposables;
 }
 
 async function resolvePython(folder: vscode.WorkspaceFolder): Promise<string> {
@@ -722,6 +761,7 @@ async function showStatus(): Promise<void> {
 		`Workspace: ${status.workspace}`,
 		`Interpreter: ${status.interpreter}`,
 		`App: ${status.app ?? "not configured"}`,
+		`Environment file: ${status.environment_file ?? "not configured"}`,
 		`Mode: ${status.mode}`,
 		`Citry: ${status.citry_version ?? "unavailable"}`,
 		`Python expressions: ${status.python_expression_provider ?? "unavailable"}`,

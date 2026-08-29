@@ -61,7 +61,9 @@ card to another column or use its **Move to column** menu. Add a task, then
 mark it complete to see those updates too.
 
 The app reads `CITRY_SECRET` directly from the environment. `.env.example`
-records the variable name, but the demo does not load `.env` files.
+records the variable name, but the running demo does not load `.env` files.
+The committed VS Code setup uses that example file only for Citry's isolated
+editor discovery worker.
 
 ## Test the project
 

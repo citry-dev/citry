@@ -82,6 +82,22 @@ instance or [`ComponentLibrary`][citry.ComponentLibrary]. For example:
 }
 ```
 
+When that import needs environment variables, add a workspace-relative
+`envFile` initialization option:
+
+```json
+{
+  "protocolVersion": 1,
+  "app": "myproject.app:citry_app",
+  "envFile": ".env",
+  "standardFormatting": true
+}
+```
+
+Citry reads the file only for its isolated app-discovery worker. Restart the
+language server after editing it if the current LSP4IJ version does not send a
+watched-file notification for that path.
+
 Open a component module or standalone template after saving the definition.
 One Citry server serves both mappings for that project.
 

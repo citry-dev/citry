@@ -12,10 +12,10 @@ process for each workspace folder. Formatter commands edit definite template,
 JavaScript, and CSS sections while leaving Fluent and the selected Python
 formatter unchanged.
 
-`citry-lsp` 0.1.1 is public on PyPI. Install the extension's 0.1.0 release from
+`citry-lsp` 0.1.2 is public on PyPI. Install the extension's 0.1.1 release from
 the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry),
 [Open VSX](https://open-vsx.org/extension/citry-dev/citry), or the matching
-[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.0).
+[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.1).
 
 ## See it in action
 
@@ -46,7 +46,7 @@ Install **Citry** from the
 or [Open VSX](https://open-vsx.org/extension/citry-dev/citry). Cursor, Windsurf,
 VSCodium, and other compatible desktop forks can use the Open VSX release. The
 same qualified VSIX is attached to the
-[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.0).
+[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.1).
 
 ## Select the registry target
 
@@ -83,6 +83,33 @@ is unavailable:
 {
   "citry.python": "/path/to/project/.venv/bin/python"
 }
+```
+
+If importing the selected app needs environment variables, point
+`citry.envFile` to a dotenv file:
+
+```json
+{
+  "citry.app": "myproject.app:citry_app",
+  "citry.envFile": "${workspaceFolder}/.env"
+}
+```
+
+Relative paths resolve from the workspace folder, and file values override
+variables inherited by the Extension Host. Citry applies them only to its
+isolated app-discovery worker; it does not change the environment of the
+language server, Python extension, terminal, application server, or tests.
+Saving, creating, or deleting the file automatically reloads the component
+registry. A configured file that is missing or malformed keeps syntax-only
+features available and explains the setup failure in **Citry: Show Language
+Server Status**. Citry's environment adapter does not print parsed values.
+
+For Django, include settings needed before importing the selected target. The
+language server imports that module directly and does not run `manage.py`:
+
+```dotenv
+DJANGO_SETTINGS_MODULE=myproject.settings
+DJANGO_SECRET_KEY=editor-development-secret
 ```
 
 With no app configured, the status bar reports **syntax only**. Definite

@@ -33,6 +33,7 @@ from citry_lsp.engine import (
     template_lint_diagnostics,
     template_variable_hover,
 )
+from citry_lsp.environment import EnvironmentFileError, resolve_environment_file
 from citry_lsp.formatting import (
     EmbeddedProviderRequest,
     FormatScope,
@@ -86,6 +87,7 @@ class CitryLanguageServer(LanguageServer):
     def __init__(self) -> None:
         super().__init__("citry-lsp", SERVER_VERSION, text_document_sync_kind=types.TextDocumentSyncKind.Full)
         self.app: str | None = None
+        self.environment_file: Path | None = None
         self.completion_insert_replace = False
         self.completion_snippets = False
         self.dynamic_formatting = False
@@ -152,6 +154,19 @@ class CitryLanguageServer(LanguageServer):
         self.embedded_formatting = _embedded_formatting_capability(options)
         self.workspace_uri = _workspace_uri(params)
         self.workspace_path = _workspace_path(params)
+        environment_file = options.get("envFile")
+        if environment_file is not None and (type(environment_file) is not str or not environment_file.strip()):
+            msg = "Citry initializationOptions.envFile must be a non-empty path string or null"
+            raise JsonRpcInvalidParams(msg)
+        try:
+            self.environment_file = (
+                resolve_environment_file(self.workspace_path, environment_file)
+                if environment_file is not None
+                else None
+            )
+        except EnvironmentFileError as exc:
+            msg = f"Citry initializationOptions.envFile {exc}"
+            raise JsonRpcInvalidParams(msg) from exc
         # The child starts lazily, so configuration can replace this owner
         # without importing or starting project code in the stdio process.
         self.type_analyzer = TyAnalyzer(self.workspace_path)
@@ -171,7 +186,11 @@ class CitryLanguageServer(LanguageServer):
 
     async def load_initial_project(self) -> None:
         """Load registry facts without blocking initialization's event loop."""
-        project = await load_project_async(self.workspace_path, self.app)
+        project = await load_project_async(
+            self.workspace_path,
+            self.app,
+            environment_file=self.environment_file,
+        )
         self.project = _project_with_embedded_capability(project, self.embedded_formatting)
 
     def publish(self, document: DocumentState) -> None:
@@ -346,7 +365,13 @@ class CitryLanguageServer(LanguageServer):
                     else:
                         continue
                 target = self._reload_requested_generation
-                loading = asyncio.create_task(load_project_async(self.workspace_path, self.app))
+                loading = asyncio.create_task(
+                    load_project_async(
+                        self.workspace_path,
+                        self.app,
+                        environment_file=self.environment_file,
+                    )
+                )
                 self._reload_load_task = loading
                 try:
                     project = await loading
@@ -923,13 +948,27 @@ async def format_document(
 
 @server.feature(types.WORKSPACE_DID_CHANGE_WATCHED_FILES)
 async def watched_files(ls: CitryLanguageServer, params: types.DidChangeWatchedFilesParams) -> None:
-    """Reload registry facts when project Python files change."""
+    """Reload registry facts when project Python or environment files change."""
     # The copied catalog proves component origins, but it is not a complete
     # transitive import graph for registrations and app configuration. Keep
     # the conservative workspace-wide Python watch and make it cheap through
     # burst coalescing rather than guessing that an unlisted module is inert.
-    if ls.app is not None and any(change.uri.lower().endswith(".py") for change in params.changes):
+    if ls.app is not None and any(_project_reload_change(ls, change.uri) for change in params.changes):
         await ls.reload_project(debounce=_RELOAD_DEBOUNCE_SECONDS)
+
+
+def _project_reload_change(ls: CitryLanguageServer, uri: str) -> bool:
+    if uri.lower().endswith(".py"):
+        return True
+    if ls.environment_file is None:
+        return False
+    changed = file_uri_path(uri)
+    if changed is None:
+        return False
+    try:
+        return changed.resolve() == ls.environment_file
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 @server.feature(BROWSER_PROJECTION_METHOD)

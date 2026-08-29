@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - 2026-08-29
+
+- Configure `citry.envFile` per workspace so app discovery can load dotenv
+  values locally or over Remote SSH, refresh when that file changes, and show
+  when the selected language server needs an upgrade.
+
 ## 0.1.0 - 2026-08-19
 
 - Edit Citry components in place with highlighting for templates, Python

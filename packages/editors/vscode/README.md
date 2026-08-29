@@ -76,6 +76,21 @@ Use **Citry: Show Language Server Status** to see the active interpreter,
 application target, Citry version, and server mode. Use **Citry: Restart
 Language Server** after changing an imported registry dynamically.
 
+If importing the app requires environment variables, configure a dotenv file:
+
+```json
+{
+  "citry.app": "myproject.app:citry_app",
+  "citry.envFile": "${workspaceFolder}/.env"
+}
+```
+
+Citry resolves relative paths from the workspace, applies file values only to
+its isolated app-discovery worker, and reloads the registry when the file is
+created, changed, or deleted. The setting does not modify terminals, tests, or
+the application server. A missing or malformed configured file leaves
+syntax-only analysis available and appears in the language-server status.
+
 ## Edit components in place
 
 Citry recognizes direct `template`, `js`, `css`, and `messages` multiline
@@ -227,6 +242,8 @@ Status** and check these first:
 - `citry.python`, when set, points to an executable that can run
   `python -m citry_lsp`.
 - `citry.app`, when set, imports successfully from the workspace.
+- `citry.envFile`, when set, exists and supplies any variables required before
+  importing `citry.app`.
 - Citry 0.4.x and `citry-lsp` 0.1.x are installed together.
 
 Pylance can turn a string into an f-string when `{` is typed if

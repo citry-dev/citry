@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 from textwrap import dedent
 
@@ -130,6 +131,57 @@ def test_project_worker_captures_output_and_returns_copied_registry(tmp_path):
         "Card.Lint",
         tmp_path / "app.py",
     )
+
+
+def test_project_worker_receives_only_the_configured_discovery_environment(tmp_path, monkeypatch):
+    environment_file = tmp_path / ".env"
+    environment_file.write_text("CITRY_LSP_ENV_TEST=from-file\n", encoding="utf-8")
+    monkeypatch.setenv("CITRY_LSP_ENV_TEST", "from-parent")
+    (tmp_path / "app.py").write_text(
+        "import os\n"
+        "from citry import Citry\n"
+        "if os.environ.get('CITRY_LSP_ENV_TEST') != 'from-file':\n"
+        "    raise RuntimeError('worker did not receive configured environment')\n"
+        "engine = Citry(autodiscover=False)\n",
+        encoding="utf-8",
+    )
+
+    state = load_project(tmp_path, "app:engine", environment_file=environment_file)
+
+    assert state.status.registry_ready is True
+    assert state.status.environment_file == str(environment_file)
+    assert os.environ["CITRY_LSP_ENV_TEST"] == "from-parent"
+
+
+@pytest.mark.asyncio
+async def test_async_project_worker_receives_the_configured_discovery_environment(tmp_path):
+    environment_file = tmp_path / ".env"
+    environment_file.write_text("CITRY_LSP_ASYNC_ENV_TEST=available\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "import os\n"
+        "from citry import Citry\n"
+        "if os.environ.get('CITRY_LSP_ASYNC_ENV_TEST') != 'available':\n"
+        "    raise RuntimeError('async worker did not receive configured environment')\n"
+        "engine = Citry(autodiscover=False)\n",
+        encoding="utf-8",
+    )
+
+    state = await load_project_async(tmp_path, "app:engine", environment_file=environment_file)
+
+    assert state.status.registry_ready is True
+    assert state.status.environment_file == str(environment_file)
+
+
+def test_invalid_environment_file_degrades_without_starting_worker(tmp_path, monkeypatch):
+    environment_file = tmp_path / "missing.env"
+    monkeypatch.setattr("citry_lsp.project.subprocess.run", lambda *_args, **_kwargs: pytest.fail("started"))
+
+    state = load_project(tmp_path, "app:engine", environment_file=environment_file)
+
+    assert state.status.mode == "syntax-only"
+    assert state.status.environment_file == str(environment_file)
+    assert "Environment file" in (state.status.message or "")
+    assert "does not exist" in (state.status.message or "")
 
 
 def test_syntax_only_project_does_not_guess_a_csp_mode(tmp_path):

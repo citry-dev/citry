@@ -2,6 +2,14 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## [0.1.2] - 2026-08-29
+
+### Added
+
+- Load app-discovery environment variables from an optional `envFile`, reread
+  the file on registry reload, and report missing or malformed files without
+  changing the language server or type analyzer environment.
+
 ## [0.1.1] - 2026-08-20
 
 ### Fixed

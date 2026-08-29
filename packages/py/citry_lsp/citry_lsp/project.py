@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Literal, cast
 
 from citry import TemplateAnalysis
 from citry_lsp.catalog import CatalogIndex
+from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
     CATALOG_SCHEMA_VERSION,
     SUPPORTED_CITRY_SERIES,
@@ -716,17 +717,22 @@ class ProjectState:
         return None
 
 
-def load_project(workspace: Path, app: str | None, *, timeout: float = WORKER_TIMEOUT_SECONDS) -> ProjectState:
+def load_project(
+    workspace: Path,
+    app: str | None,
+    *,
+    environment_file: Path | None = None,
+    timeout: float = WORKER_TIMEOUT_SECONDS,
+) -> ProjectState:
     """Load registry facts through a bounded worker or select syntax-only mode."""
     workspace = workspace.resolve()
     if app is None:
-        return ProjectState(
-            ProjectStatus(
-                interpreter=sys.executable,
-                workspace=str(workspace),
-                mode="syntax-only",
-                message="No Citry app configured; registry-derived checks and editor features are disabled.",
-            )
+        return _syntax_only_project(workspace, environment_file)
+    try:
+        environment = worker_environment(environment_file)
+    except EnvironmentFileError as exc:
+        return _failure(
+            workspace, app, _environment_file_failure(environment_file, exc), environment_file=environment_file
         )
     command = [
         sys.executable,
@@ -743,17 +749,24 @@ def load_project(workspace: Path, app: str | None, *, timeout: float = WORKER_TI
             cwd=workspace,
             capture_output=True,
             check=False,
+            env=environment,
             text=True,
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        return _failure(workspace, app, f"App discovery exceeded the {timeout:g}s startup limit.")
+        return _failure(
+            workspace,
+            app,
+            f"App discovery exceeded the {timeout:g}s startup limit.",
+            environment_file=environment_file,
+        )
     return _project_from_worker_output(
         workspace,
         app,
         completed.returncode,
         completed.stdout,
         completed.stderr,
+        environment_file=environment_file,
     )
 
 
@@ -761,6 +774,7 @@ async def load_project_async(
     workspace: Path,
     app: str | None,
     *,
+    environment_file: Path | None = None,
     timeout: float = WORKER_TIMEOUT_SECONDS,
 ) -> ProjectState:
     """
@@ -773,7 +787,13 @@ async def load_project_async(
     """
     workspace = workspace.resolve()
     if app is None:
-        return _syntax_only_project(workspace)
+        return _syntax_only_project(workspace, environment_file)
+    try:
+        environment = await asyncio.to_thread(worker_environment, environment_file)
+    except EnvironmentFileError as exc:
+        return _failure(
+            workspace, app, _environment_file_failure(environment_file, exc), environment_file=environment_file
+        )
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
@@ -783,6 +803,7 @@ async def load_project_async(
         "--workspace",
         str(workspace),
         cwd=workspace,
+        env=environment,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -790,7 +811,12 @@ async def load_project_async(
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
     except asyncio.TimeoutError:
         await _reap_project_worker(process)
-        return _failure(workspace, app, f"App discovery exceeded the {timeout:g}s startup limit.")
+        return _failure(
+            workspace,
+            app,
+            f"App discovery exceeded the {timeout:g}s startup limit.",
+            environment_file=environment_file,
+        )
     except asyncio.CancelledError:
         await _reap_project_worker_cancellation_safe(process)
         raise
@@ -800,14 +826,16 @@ async def load_project_async(
         process.returncode,
         stdout.decode(errors="replace"),
         stderr.decode(errors="replace"),
+        environment_file=environment_file,
     )
 
 
-def _syntax_only_project(workspace: Path) -> ProjectState:
+def _syntax_only_project(workspace: Path, environment_file: Path | None = None) -> ProjectState:
     return ProjectState(
         ProjectStatus(
             interpreter=sys.executable,
             workspace=str(workspace),
+            environment_file=_environment_file_status(environment_file),
             mode="syntax-only",
             message="No Citry app configured; registry-derived checks and editor features are disabled.",
         )
@@ -820,6 +848,8 @@ def _project_from_worker_output(
     returncode: int | None,
     stdout: str,
     stderr: str,
+    *,
+    environment_file: Path | None = None,
 ) -> ProjectState:
     """Validate one completed worker response for sync and async callers."""
     if not stdout.strip():
@@ -827,21 +857,26 @@ def _project_from_worker_output(
         message = f"App worker exited with status {returncode} without a response."
         if detail:
             message = f"{message} {detail[:1000]}"
-        return _failure(workspace, app, message)
+        return _failure(workspace, app, message, environment_file=environment_file)
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
-        return _failure(workspace, app, f"App worker returned invalid JSON: {exc}")
+        return _failure(
+            workspace,
+            app,
+            f"App worker returned invalid JSON: {exc}",
+            environment_file=environment_file,
+        )
     if type(payload) is not dict or payload.get("ok") is not True:
         worker_detail: object = payload.get("error") if type(payload) is dict else None
         message = str(worker_detail or f"App worker exited with status {returncode}.")
-        return _failure(workspace, app, message)
+        return _failure(workspace, app, message, environment_file=environment_file)
     # The target kind changes what the copied registry can claim, so status
     # must carry that boundary even though both paths provide registry facts.
     try:
         target_message = _target_status_message(payload.get("target"))
     except (TypeError, ValueError) as exc:
-        return _failure(workspace, app, f"App worker protocol mismatch: {exc}")
+        return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     raw_catalog = payload.get("catalog")
     if type(raw_catalog) is dict:
         raw_schema_version = raw_catalog.get("schema_version")
@@ -851,6 +886,7 @@ def _project_from_worker_output(
                 workspace,
                 app,
                 f"Component catalog schema {raw_schema_version} is unsupported.",
+                environment_file=environment_file,
                 citry_version=raw_citry_version if type(raw_citry_version) is str else None,
                 catalog_schema_version=raw_schema_version,
             )
@@ -863,7 +899,7 @@ def _project_from_worker_output(
             msg = "template lint component ids do not match the component catalog"
             raise ValueError(msg)
     except (TypeError, ValueError) as exc:
-        return _failure(workspace, app, f"App worker protocol mismatch: {exc}")
+        return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     series = _version_series(catalog.citry_version)
     if series != SUPPORTED_CITRY_SERIES:
         expected = ".".join(str(part) for part in SUPPORTED_CITRY_SERIES)
@@ -871,6 +907,7 @@ def _project_from_worker_output(
             workspace,
             app,
             f"Citry {catalog.citry_version} is outside this server's supported {expected}.x series.",
+            environment_file=environment_file,
             citry_version=catalog.citry_version,
             catalog_schema_version=catalog.schema_version,
         )
@@ -879,6 +916,7 @@ def _project_from_worker_output(
             workspace,
             app,
             f"Component catalog schema {catalog.schema_version} is unsupported.",
+            environment_file=environment_file,
             citry_version=catalog.citry_version,
             catalog_schema_version=catalog.schema_version,
         )
@@ -897,7 +935,7 @@ def _project_from_worker_output(
         if type(security_csp) is not str or security_csp not in {"off", "warn", "strict"}:
             raise ValueError("engine security_csp setting is invalid")
     except (TypeError, ValueError) as exc:
-        return _failure(workspace, app, f"App worker protocol mismatch: {exc}")
+        return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     project_output = payload.get("project_output")
     # Preserve both the registry boundary and captured import output instead
     # of letting one useful status message hide the other.
@@ -910,6 +948,7 @@ def _project_from_worker_output(
             interpreter=sys.executable,
             workspace=str(workspace),
             app=app,
+            environment_file=_environment_file_status(environment_file),
             mode="registry",
             registry_ready=True,
             citry_version=catalog.citry_version,
@@ -954,6 +993,7 @@ def _failure(
     app: str,
     message: str,
     *,
+    environment_file: Path | None = None,
     citry_version: str | None = None,
     catalog_schema_version: int | None = None,
 ) -> ProjectState:
@@ -962,6 +1002,7 @@ def _failure(
             interpreter=sys.executable,
             workspace=str(workspace),
             app=app,
+            environment_file=_environment_file_status(environment_file),
             mode="syntax-only",
             registry_ready=False,
             citry_version=citry_version,
@@ -969,6 +1010,15 @@ def _failure(
             message=f"App unavailable; using syntax-only analysis. {message}",
         )
     )
+
+
+def _environment_file_status(environment_file: Path | None) -> str | None:
+    return str(environment_file) if environment_file is not None else None
+
+
+def _environment_file_failure(environment_file: Path | None, error: EnvironmentFileError) -> str:
+    path = _environment_file_status(environment_file) or "the configured path"
+    return f"Environment file {path!r} is unavailable: {error}."
 
 
 def _target_status_message(value: object) -> str | None:

@@ -40,6 +40,11 @@ packages/py/citry_core/LICENSE text eol=lf
 packages/py/citry_core/README.md text eol=lf
 packages/py/citry_core/pyproject.toml text eol=lf
 
+# The VS Code extension bundle is generated and minified. JavaScript template
+# literals inside it preserve trailing spaces as product bytes, so Git should
+# not treat those lines as source-formatting mistakes during release audits.
+packages/editors/vscode/out/extension.js text eol=lf whitespace=-blank-at-eol
+
 # This parser research fixture intentionally contains trailing ASCII spaces in
 # the `trimmed` message so the spike can measure authored-span preservation.
 docs/design/i18n_research/span_parser/fixtures/adversarial.ftl whitespace=-blank-at-eol

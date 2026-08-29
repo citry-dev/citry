@@ -49,7 +49,9 @@ Open <http://127.0.0.1:8000/>. You should see six project cards. The help
 button opens immediately, and searching for `incident` leaves only Beacon.
 
 The app reads `CITRY_SECRET` directly from the environment. `.env.example`
-records the variable name, but this starter does not load `.env` files.
+records the variable name, but the running starter does not load `.env` files.
+The committed VS Code setup uses that example file only for Citry's isolated
+editor discovery worker.
 
 ## Test the project
 

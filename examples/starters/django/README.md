@@ -50,7 +50,9 @@ button opens immediately, and searching for `incident` leaves only Beacon.
 
 The app reads `DJANGO_SECRET_KEY` directly from the environment. Citry uses
 that same value to sign Event state. `.env.example` records the variable name,
-but this starter does not load `.env` files.
+but the running starter does not load `.env` files. The committed VS Code setup
+uses that example file, including `DJANGO_SETTINGS_MODULE`, only for Citry's
+isolated editor discovery worker.
 
 ## Test the project
 

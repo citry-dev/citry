@@ -39,7 +39,10 @@ test("one extension-owned formatter routes all VS Code workspaces", async () => 
 		/async function formatAtCursor[\s\S]*?languageId === "python"[\s\S]*?kind: "position"[\s\S]*?: \{ kind: "document" \}[\s\S]*?applyCitryFormatting/,
 	);
 	assert.doesNotMatch(source, /const formatTemplatesMethod|citry\/formatTemplates/);
-	assert.match(source, /protocolVersion,\s*app,\s*standardFormatting: false,\s*embeddedFormatting:/);
+	assert.match(
+		source,
+		/protocolVersion,\s*app,\s*envFile: environmentFile,\s*standardFormatting: false,\s*embeddedFormatting:/,
+	);
 	assert.match(source, /providerSelection: "vscode-first-result"/);
 	assert.match(
 		source,
@@ -72,6 +75,23 @@ test("one extension-owned formatter routes all VS Code workspaces", async () => 
 		/prettier\.format[\s\S]*?prettierPostcss[\s\S]*?prettierBabel[\s\S]*?prettierEstree[\s\S]*?tabWidth: 2[\s\S]*?useTabs: false/,
 	);
 	assert.doesNotMatch(source, /vscode\.executeFormatDocumentProvider/);
+});
+
+test("environment-file configuration is resource-scoped and reloadable", async () => {
+	const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
+	const source = await readFile(extensionSourceUrl, "utf8");
+	const setting = manifest.contributes.configuration.properties["citry.envFile"];
+
+	assert.equal(setting.type, "string");
+	assert.equal(setting.default, "");
+	assert.equal(setting.scope, "resource");
+	assert.match(source, /event\.affectsConfiguration\("citry\.envFile"\)/);
+	assert.match(
+		source,
+		/new vscode\.RelativePattern\(vscode\.Uri\.file\(path\.dirname\(entry\.environmentFile\)\), "\*"\)/,
+	);
+	assert.match(source, /sameWorkspacePath\(uri\.fsPath, entry\.environmentFile\)/);
+	assert.match(source, /entry\.status\.environment_file === undefined/);
 });
 
 test("CSS data intelligence activates and routes CSS files through the workspace client", async () => {

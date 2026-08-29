@@ -41,6 +41,7 @@ MAX_SDIST_BYTES: Final = 1024 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     "citry[analysis-ty]<0.5,>=0.4.1",
     "pygls==2.1.1",
+    "python-dotenv<2,>=1.2.3",
 }
 
 

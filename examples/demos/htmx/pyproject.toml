@@ -13,6 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "citry-lsp>=0.1,<0.2",
   "httpx2>=2.10,<3",
   "pytest>=9.0,<10",
 ]

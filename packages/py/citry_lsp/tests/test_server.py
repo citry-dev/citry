@@ -35,6 +35,7 @@ from citry_lsp.server import (
     _format_component_assets,
     _formatting_registration_params,
     _parse_embedded_response,
+    _project_reload_change,
     _register_formatting_capability,
     _snippet_plain_text,
     _workspace_path,
@@ -111,6 +112,51 @@ def test_client_can_keep_standard_formatting_on_the_custom_route(tmp_path):
     )
 
     assert language_server.dynamic_formatting is False
+
+
+def test_environment_file_initialization_resolves_relative_to_workspace(tmp_path):
+    language_server = CitryLanguageServer()
+    language_server.configure(
+        types.InitializeParams(
+            capabilities=types.ClientCapabilities(),
+            root_uri=tmp_path.as_uri(),
+            initialization_options={
+                "protocolVersion": PROTOCOL_VERSION,
+                "app": None,
+                "envFile": ".config/citry.env",
+            },
+        )
+    )
+
+    assert language_server.environment_file == tmp_path / ".config" / "citry.env"
+
+
+@pytest.mark.parametrize("environment_file", ["", "   ", 7, False, []])
+def test_environment_file_initialization_rejects_invalid_values(tmp_path, environment_file):
+    language_server = CitryLanguageServer()
+
+    with pytest.raises(JsonRpcInvalidParams, match="envFile"):
+        language_server.configure(
+            types.InitializeParams(
+                capabilities=types.ClientCapabilities(),
+                root_uri=tmp_path.as_uri(),
+                initialization_options={
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "app": None,
+                    "envFile": environment_file,
+                },
+            )
+        )
+
+
+def test_project_reload_changes_include_only_python_and_the_configured_environment_file(tmp_path):
+    language_server = CitryLanguageServer()
+    language_server.environment_file = (tmp_path / ".env").resolve()
+
+    assert _project_reload_change(language_server, (tmp_path / "app.py").as_uri())
+    assert _project_reload_change(language_server, (tmp_path / ".env").as_uri())
+    assert not _project_reload_change(language_server, (tmp_path / ".env.local").as_uri())
+    assert not _project_reload_change(language_server, "untitled:settings")
 
 
 def test_browser_projection_request_requires_exact_current_document_identity(monkeypatch):
@@ -229,7 +275,8 @@ async def test_overlapping_reloads_apply_only_the_latest_generation(tmp_path, mo
     never = asyncio.Event()
     loads = 0
 
-    async def load(_workspace, _app):
+    async def load(_workspace, _app, *, environment_file=None):
+        assert environment_file is None
         nonlocal loads
         loads += 1
         current = loads
@@ -277,7 +324,8 @@ async def test_watched_reload_burst_coalesces_to_one_worker_load(tmp_path, monke
     language_server.protocol.notify = Mock()
     loads = 0
 
-    async def load(_workspace, _app):
+    async def load(_workspace, _app, *, environment_file=None):
+        assert environment_file is None
         nonlocal loads
         loads += 1
         return ProjectState(
@@ -364,7 +412,8 @@ async def test_shutdown_cancels_reload_and_reaps_the_existing_analyzer(tmp_path,
     load_cancelled = asyncio.Event()
     never = asyncio.Event()
 
-    async def load(_workspace, _app):
+    async def load(_workspace, _app, *, environment_file=None):
+        assert environment_file is None
         load_started.set()
         try:
             await never.wait()

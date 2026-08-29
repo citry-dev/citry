@@ -15,5 +15,6 @@ def test_archive_is_deterministic_and_contains_only_project_inventory(tmp_path) 
     with tarfile.open(first, "r:gz") as archive:
         names = archive.getnames()
     assert f"{project.id}/README.md" in names
+    assert f"{project.id}/.vscode/settings.json" in names
     assert f"{project.id}/uv.lock" in names
     assert not any(".venv" in name or "__pycache__" in name for name in names)

@@ -441,7 +441,7 @@ declares only:
 - `citry`;
 - its host framework, when any;
 - the actual development server used by its run command; and
-- project-local test dependencies in a development group.
+- project-local test and editor dependencies in a development group.
 
 It does not depend on repository packages by path. It does not duplicate the
 same dependencies into `requirements.txt`. A checked-in universal `uv.lock`

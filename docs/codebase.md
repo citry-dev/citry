@@ -1868,7 +1868,7 @@ the stated compressed and expanded size caps. `release-inventory.json`
 records the exact filename, byte size, SHA-256, and member list.
 
 The qualification then downloads VS Code 1.101.0 into a clean test profile,
-installs public `citry-lsp==0.1.1` and its public dependencies into a fresh
+installs public `citry-lsp==0.1.2` and its public dependencies into a fresh
 Python 3.14 environment, and loads the extracted qualified VSIX. It requires
 real `c-if`, `c-for`, and `c-slot` completions from the server, then formats
 deliberately untidy embedded JavaScript and CSS twice through an exact,

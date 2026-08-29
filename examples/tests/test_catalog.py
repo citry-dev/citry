@@ -1,3 +1,5 @@
+import json
+
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI leg
@@ -5,6 +7,25 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 C
 
 from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
 from examples._internal.qualify import interpolate, project_environment
+
+EXPECTED_CITRY_APPS = {
+    "demo-htmx": "app.components:citry_app",
+    "demo-project-board": "app.components.page:citry_app",
+    "starter-asgi": "app.components:citry_app",
+    "starter-django": "project_explorer.components:citry_app",
+    "starter-fastapi": "app.components:citry_app",
+    "starter-flask": "app.components:citry_app",
+    "starter-standalone": "app.components:citry_app",
+    "starter-wsgi": "app.components:citry_app",
+}
+ENVIRONMENT_EXAMPLES = {
+    "demo-project-board",
+    "starter-asgi",
+    "starter-django",
+    "starter-fastapi",
+    "starter-flask",
+    "starter-wsgi",
+}
 
 
 def project_python(project) -> str:
@@ -43,6 +64,28 @@ def test_catalog_projects_have_complete_independent_inventory() -> None:
             assert "{port}" in " ".join(project.serve)
         else:
             assert project.build is not None
+
+
+def test_catalog_projects_include_locked_citry_editor_setup() -> None:
+    assert not (EXAMPLES_ROOT / "starters" / ".vscode").exists()
+
+    for project in load_catalog():
+        settings = json.loads(project.source.joinpath(".vscode/settings.json").read_text(encoding="utf-8"))
+        expected_settings = {
+            "citry.python": "${workspaceFolder}/.venv/bin/python",
+            "citry.app": EXPECTED_CITRY_APPS[project.id],
+        }
+        if project.id in ENVIRONMENT_EXAMPLES:
+            expected_settings["citry.envFile"] = "${workspaceFolder}/.env.example"
+        assert settings == expected_settings
+
+        manifest = tomllib.loads(project.source.joinpath("pyproject.toml").read_text(encoding="utf-8"))
+        assert "citry-lsp>=0.1,<0.2" in manifest["dependency-groups"]["dev"]
+
+        lock = tomllib.loads(project.source.joinpath("uv.lock").read_text(encoding="utf-8"))
+        locked_servers = [package for package in lock["package"] if package.get("name") == "citry-lsp"]
+        assert len(locked_servers) == 1
+        assert locked_servers[0]["version"].startswith("0.1.")
 
 
 def test_profiles_lock_the_shared_starter_curriculum() -> None:

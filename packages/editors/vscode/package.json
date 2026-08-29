@@ -2,7 +2,7 @@
 	"name": "citry",
 	"displayName": "Citry",
 	"description": "Highlighting, diagnostics, editor intelligence, and formatting for Citry components",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"publisher": "citry-dev",
 	"license": "MIT",
 	"engines": {
@@ -59,7 +59,7 @@
 	"scripts": {
 		"compile": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node22 --external:vscode --minify --sourcemap --outfile=out/extension.js",
 		"lint": "biome check .",
-		"test": "esbuild src/browserRouting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/browserRouting.mjs && esbuild src/clientLifecycle.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/clientLifecycle.mjs && esbuild src/completionRetrigger.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/completionRetrigger.mjs && esbuild src/embedded.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embedded.mjs && esbuild src/embeddedFormatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embeddedFormatting.mjs && esbuild src/formatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/formatting.mjs && esbuild src/nativeHtmlAttributes.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/nativeHtmlAttributes.mjs && esbuild src/providerPipeline.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/providerPipeline.mjs && node --test",
+		"test": "esbuild src/browserRouting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/browserRouting.mjs && esbuild src/clientLifecycle.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/clientLifecycle.mjs && esbuild src/completionRetrigger.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/completionRetrigger.mjs && esbuild src/embedded.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embedded.mjs && esbuild src/embeddedFormatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embeddedFormatting.mjs && esbuild src/formatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/formatting.mjs && esbuild src/nativeHtmlAttributes.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/nativeHtmlAttributes.mjs && esbuild src/providerPipeline.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/providerPipeline.mjs && esbuild src/workspaceConfiguration.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/workspaceConfiguration.mjs && node --test",
 		"check": "pnpm run compile && pnpm run lint && pnpm run test && vsce ls --tree --no-dependencies",
 		"prepackage": "pnpm run compile && node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\"",
 		"package": "vsce package --no-dependencies --out dist/citry.vsix"
@@ -197,6 +197,12 @@
 					"default": "",
 					"scope": "resource",
 					"description": "Explicit Python executable for citry-lsp. Empty uses the Python extension's active environment."
+				},
+				"citry.envFile": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"description": "Environment file used only while Citry imports the configured app. Relative paths resolve from the workspace folder; empty inherits the Extension Host environment."
 				},
 				"citry.trace.server": {
 					"type": "string",

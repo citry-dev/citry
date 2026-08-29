@@ -16,6 +16,12 @@ mapping intentionally attaches Citry as a second language server alongside
 PyCharm's own Python support. The `*.citry-html` mapping covers standalone
 component templates.
 
+If app discovery needs environment variables, add an `envFile` string to the
+initialization options. Relative paths such as `".env"` resolve from the
+project root and affect only Citry's isolated app-discovery worker. Restart the
+language server after editing the file if LSP4IJ does not notify it about that
+path.
+
 The definition was verified with PyCharm 2026.2.0.1 and LSP4IJ 0.20.1. It
 provides Citry's standard LSP diagnostics, completion, hover, navigation,
 references, type definitions, and standalone formatting. It does not add
