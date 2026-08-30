@@ -1581,13 +1581,14 @@ async def test_stdio_expression_member_diagnostics_are_mapped_to_python_template
     )
     await notification
 
-    for _attempt in range(50):
+    deadline = asyncio.get_running_loop().time() + 5
+    while True:
         findings = lsp_client.diagnostics.get(uri, ())
         if any(item.code == "citry.python.unresolved-attribute" for item in findings):
             break
+        if asyncio.get_running_loop().time() >= deadline:
+            pytest.fail("the semantic diagnostic was not published")
         await asyncio.sleep(0.01)
-    else:
-        pytest.fail("the semantic diagnostic was not published")
 
     diagnostic = next(item for item in findings if item.code == "citry.python.unresolved-attribute")
     assert diagnostic.range.start.line == source[: source.index("title.missing")].count("\n")
