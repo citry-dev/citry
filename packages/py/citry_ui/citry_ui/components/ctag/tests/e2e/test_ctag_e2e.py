@@ -130,8 +130,9 @@ def test_controlled_selection_action_order_and_reactive_presentation(page: Any) 
     controlled = page.locator("#controlled")
     alpha = controlled.get_by_role("row", name="Alpha")
     beta = controlled.get_by_role("row", name="Beta")
+    beta_label = beta.locator('[data-citry-ui-part="tag-label"]')
 
-    beta.click()
+    beta_label.click()
     page.wait_for_function("Alpine.store('tagTest').events.length === 2")
     assert page.evaluate("Alpine.store('tagTest').events") == [
         ["value", "beta", "alpha"],
@@ -141,7 +142,7 @@ def test_controlled_selection_action_order_and_reactive_presentation(page: Any) 
     assert beta.get_attribute("aria-selected") == "false"
 
     page.evaluate("Alpine.$data(document.body).accept = true")
-    beta.click()
+    beta_label.click()
     page.wait_for_function("Alpine.store('tagTest').selected === 'beta'")
     page.wait_for_function("document.querySelector('#controlled [data-value=beta]').hasAttribute('data-selected')")
     assert beta.get_attribute("aria-selected") == "true"
