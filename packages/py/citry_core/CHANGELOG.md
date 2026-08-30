@@ -1,5 +1,16 @@
 # Release notes
 
+## Unreleased
+
+## v1.6.1
+
+_30 Aug 2026_
+
+### Fixed
+
+- Installed Citry packages can resolve plain-text Fluent messages together
+  with their selected locale and fallback status through the compiled catalog.
+
 ## v1.6.0
 
 _22 Aug 2026_
