@@ -10,6 +10,8 @@ _30 Aug 2026_
 
 - The published browser playground now loads the Citry Core 1.6.1 runtime
   required by Citry 0.4.5 and newer.
+- The Django starter's Alpine-only help button no longer schedules an unrelated
+  server refresh while the user starts searching.
 
 ## v0.4.5
 

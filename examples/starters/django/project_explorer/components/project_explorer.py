@@ -54,7 +54,6 @@ class ProjectExplorer(Component):
             @click="tipsOpen = !tipsOpen"
             :aria-expanded="tipsOpen.toString()"
             aria-controls="explorer-help"
-            @c-click.debounce.300ms="refresh"
           >
             <span aria-hidden="true">?</span>
             <span x-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
