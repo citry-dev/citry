@@ -1,0 +1,156 @@
+<!--citry:g1:605b45d1:0:i:1:s--><!doctype html><html data-cid-claataxqs lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Delay brief activity feedback</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=DelayedSpinner_377c3d data-citry-css-url=/citry/cache/DelayedSpinner_377c3d.5f655089a008.css>:where(.spinner-delayed) {
+  display: grid;
+  gap: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.spinner-delayed__status) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(.spinner-delayed p) {
+  margin: 0;
+  color: light-dark(#57566f, #c8c6df);
+  font-size: 0.78rem;
+}</style><style data-citry-css-class=CSpinner_c40717 data-citry-css-url=/citry/cache/CSpinner_c40717.3dfd3fffa0fc.css>@layer citry-ui.theme{:where([data-citry-ui-part=spinner]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#1d4ed8,#60a5fa));--_cui-spinner-track-color:var(--cui-spinner-track-color,color-mix(in srgb, currentColor 20%, transparent));--_cui-spinner-size:var(--cui-spinner-size,1.25rem);--_cui-spinner-thickness:var(--cui-spinner-thickness,.16rem);--_cui-spinner-duration:var(--cui-spinner-duration,.75s);box-sizing:border-box;inline-size:var(--_cui-spinner-size);block-size:var(--_cui-spinner-size);border:var(--_cui-spinner-thickness) solid var(--_cui-spinner-track-color);border-block-start-color:var(--_cui-spinner-color);color:var(--_cui-spinner-color);vertical-align:-.125em;animation:cui-spinner-rotate var(--_cui-spinner-duration) linear infinite;border-radius:50%;flex:none;display:inline-block}:where([data-citry-ui-part=spinner][data-intent=neutral]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#57534e,#d6d3d1))}:where([data-citry-ui-part=spinner][data-intent=success]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#15803d,#4ade80))}:where([data-citry-ui-part=spinner][data-intent=warn]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#b45309,#fbbf24))}:where([data-citry-ui-part=spinner][data-intent=danger]){--_cui-spinner-color:var(--cui-spinner-color,light-dark(#b91c1c,#f87171))}:where([data-citry-ui-part=spinner][data-size=sm]){--_cui-spinner-size:var(--cui-spinner-size,1rem);--_cui-spinner-thickness:var(--cui-spinner-thickness,.125rem)}:where([data-citry-ui-part=spinner][data-size=lg]){--_cui-spinner-size:var(--cui-spinner-size,1.75rem);--_cui-spinner-thickness:var(--cui-spinner-thickness,.2rem)}@keyframes cui-spinner-rotate{to{transform:rotate(1turn)}}@media (prefers-reduced-motion:reduce){:where([data-citry-ui-part=spinner]){border-inline-end-color:var(--_cui-spinner-color);animation:none}}@media (forced-colors:active){:where([data-citry-ui-part=spinner]){--_cui-spinner-color:var(--cui-spinner-color,CanvasText);--_cui-spinner-track-color:var(--cui-spinner-track-color,GrayText);forced-color-adjust:auto}}@media print{:where([data-citry-ui-part=spinner]){border-inline-end-color:var(--_cui-spinner-color);animation:none}}}</style></head><body><main><!--citry:g1:605b45d1:0:i:2:s--><section x-data="{visible: false}" class=spinner-delayed data-cid=claataxqt data-cid-claataxqt data-citry-root><button @click="visible = !visible" type=button>Toggle long-running observation</button><div class=spinner-delayed__status x-show=visible><!--citry:g1:605b45d1:0:i:3:s--><span aria-label="Waiting for long exposure" class=cui-spinner data-cid=claataxqu data-cid-claataxqu data-citry-root data-citry-ui-part=spinner data-intent=primary data-size=sm role=progressbar></span><!--citry:g1:605b45d1:0:i:3:e--><span>Waiting for the long exposure</span></div><p>Real applications show this only after their chosen delay.</p></section><!--citry:g1:605b45d1:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"DelayedSpinner_377c3d","className":"DelayedSpinner"},{"classId":"CSpinner_c40717","className":"CSpinner"}],"componentExecutionOrderConstraints":[{"childRenderId":"claataxqu","invocationId":2,"parentRenderId":"claataxqt"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"claataxqs","transparent":false},{"classId":"DelayedSpinner_377c3d","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"claataxqt","transparent":false},{"classId":"CSpinner_c40717","instanceId":3,"invocationId":2,"parentRenderId":"claataxqt","renderId":"claataxqu","transparent":false}],"fills":[],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"DelayedSpinner_377c3d","sourceRenderId":"claataxqt","tagName":"cspinner","targetClassId":"CSpinner_c40717","targetRenderId":"claataxqu"}],"slotRegions":[],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"605b45d12cf70dfebabac7a43569f71a48fcfcf3062c88909b72d62fe18bc974"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy45OTZmZGIyM2M4ZTQuanM=", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy4wYzI3ODcyNzJmOWRiNWVhNWQ3MzU3OTBlYTI5OWYyNC5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0RlbGF5ZWRTcGlubmVyXzM3N2MzZC41ZjY1NTA4OWEwMDguY3Nz", "L2NpdHJ5L2NhY2hlL0NTcGlubmVyX2M0MDcxNy4zZGZkM2ZmZmEwZmMuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q1NwaW5uZXJfYzQwNzE3", "Y2xhYXRheHF1", "MGMyNzg3MjcyZjlkYjVlYTVkNzM1NzkwZWEyOTlmMjQ=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2xhYXRheHFz"], ["RGVsYXllZFNwaW5uZXJfMzc3YzNk", "Y2xhYXRheHF0"]], "graph": "605b45d12cf70dfebabac7a43569f71a48fcfcf3062c88909b72d62fe18bc974", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CSpinner_c40717", {
+  props: {
+    label: {},
+    intent: {},
+    size: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const spinner = els[0];
+    const allowedValues = {
+      intent: ["neutral", "primary", "success", "warn", "danger"],
+      size: ["sm", "md", "lg"],
+    };
+    const invalidEpisodes = new Set();
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CSpinner ${name} received invalid client value ${describeValue(value)}; `
+          + "using the server-rendered fallback.",
+        spinner,
+      );
+    };
+    const sourceValue = (name) => props[name] === undefined ? data[name] : props[name];
+    const resolveChoice = (name) => {
+      const value = sourceValue(name);
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveLabel = () => {
+      const value = sourceValue("label");
+      if (typeof value === "string" && value.length > 0) {
+        invalidEpisodes.delete("label");
+        return value;
+      }
+      reportInvalid("label", value);
+      return data.label;
+    };
+    const setAttribute = (name, value) => {
+      if (spinner.getAttribute(name) !== value) {
+        spinner.setAttribute(name, value);
+      }
+    };
+    const setData = (name, value) => {
+      if (spinner.dataset[name] !== value) {
+        spinner.dataset[name] = value;
+      }
+    };
+
+    effect(() => {
+      setAttribute("aria-label", resolveLabel());
+      setData("intent", resolveChoice("intent"));
+      setData("size", resolveChoice("size"));
+    });
+
+    spinner.setAttribute("data-citry-spinner-initialized", "");
+    return () => {
+      spinner.removeAttribute("data-citry-spinner-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSpinner_c40717", "0c2787272f9db5ea5d735790ea299f24", atob("eyJsYWJlbCI6IldhaXRpbmcgZm9yIGxvbmcgZXhwb3N1cmUiLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6InNtIn0="));
+})();</script></body></html><!--citry:g1:605b45d1:0:i:1:e-->

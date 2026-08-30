@@ -1,0 +1,446 @@
+<!--citry:g1:c88a88dd:0:i:1:s--><!doctype html><html data-cid-claataufa lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Disabled file controls</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CFileInput_4f6cdb data-citry-css-url=/citry/cache/CFileInput_4f6cdb.9d02b1f41f60.css>@layer citry-ui.theme{:where(.cui-file-input,.cui-drop-target){--_cui-file-input-background:var(--cui-file-input-background,Canvas);--_cui-file-input-foreground:var(--cui-file-input-foreground,CanvasText);--_cui-file-input-border-color:var(--cui-file-input-border-color,color-mix(in srgb, CanvasText 38%, transparent));--_cui-file-input-active-color:var(--cui-file-input-active-color,Highlight);--_cui-file-input-invalid-color:var(--cui-file-input-invalid-color,light-dark(#b42318,#f97066));--_cui-file-input-radius:var(--cui-file-input-radius,.65rem);--_cui-file-input-padding:var(--cui-file-input-padding,.625rem .75rem);--_cui-file-input-min-height:var(--cui-file-input-min-height,2.75rem);box-sizing:border-box;min-inline-size:0;max-inline-size:100%;color:var(--_cui-file-input-foreground);font:inherit}:where(.cui-file-input){inline-size:100%;min-block-size:var(--_cui-file-input-min-height);border:1px solid var(--_cui-file-input-border-color);border-radius:var(--_cui-file-input-radius);background:var(--_cui-file-input-background);padding:.25rem}:where(.cui-file-input)::file-selector-button{min-block-size:calc(var(--_cui-file-input-min-height) - .5rem);border-radius:calc(var(--_cui-file-input-radius) - .2rem);background:color-mix(in srgb, CanvasText 9%, Canvas);color:inherit;font:inherit;cursor:pointer;border:0;margin-inline-end:.75rem;padding-inline:.75rem}:where(.cui-file-input[data-variant=soft],.cui-drop-target[data-variant=soft]){--_cui-file-input-background:var(--cui-file-input-background,color-mix(in srgb, CanvasText 7%, Canvas))}:where(.cui-file-input[data-variant=plain],.cui-drop-target[data-variant=plain]){border-color:#0000}:where(.cui-file-input[data-size=sm],.cui-drop-target[data-size=sm]){--_cui-file-input-min-height:var(--cui-file-input-min-height,2.25rem);--_cui-file-input-padding:var(--cui-file-input-padding,.45rem .625rem);font-size:.875rem}:where(.cui-file-input[data-size=lg],.cui-drop-target[data-size=lg]){--_cui-file-input-min-height:var(--cui-file-input-min-height,3.25rem);--_cui-file-input-padding:var(--cui-file-input-padding,.8rem 1rem);font-size:1.0625rem}:where(.cui-file-input:focus-visible,.cui-drop-target:focus-within){outline:2px solid var(--_cui-file-input-active-color);outline-offset:2px}:where(.cui-file-input[data-invalid],.cui-drop-target[data-invalid]){border-color:var(--_cui-file-input-invalid-color)}:where(.cui-file-input:disabled,.cui-drop-target[data-disabled]){cursor:not-allowed;opacity:.55}@media (forced-colors:active){:where(.cui-file-input,.cui-drop-target){border-color:canvastext}}@media print{:where(.cui-file-input){display:none}}}</style><style data-citry-css-class=CDropTarget_afd2f8 data-citry-css-url=/citry/cache/CDropTarget_afd2f8.991b75574763.css>@layer citry-ui.theme{:where(.cui-drop-target){inline-size:100%;min-block-size:max(var(--_cui-file-input-min-height), 6.5rem);padding:var(--_cui-file-input-padding);border:1px dashed var(--_cui-file-input-border-color);border-radius:var(--_cui-file-input-radius);background:var(--_cui-file-input-background);text-align:center;overflow-wrap:anywhere;cursor:pointer;place-items:center;gap:.25rem;transition:border-color .12s,background-color .12s;display:grid;position:relative;overflow:hidden}:where(.cui-drop-target[data-dragging]){border-color:var(--_cui-file-input-active-color);background:color-mix(in srgb, var(--_cui-file-input-active-color) 10%, Canvas)}:where(.cui-drop-target__input){opacity:0;block-size:100%;inline-size:100%;cursor:inherit;margin:0;position:absolute;inset:0}:where(.cui-drop-target__label){font-weight:650}:where(.cui-drop-target__content){color:color-mix(in srgb, CanvasText 70%, transparent);font-size:.9em}@media (prefers-reduced-motion:reduce){:where(.cui-drop-target){transition:none}}@media print{:where(.cui-drop-target){background:0 0;border-style:solid;min-block-size:auto}:where(.cui-drop-target__input){display:none}}}</style><style data-citry-css-class=CCol_a23ecf data-citry-css-url=/citry/cache/CCol_a23ecf.4948cd8ea240.css>@layer citry-ui.theme{:where([data-citry-ui-part=col]){--_cui-col-gap:var(--cui-col-gap,.75rem);justify-content:flex-start;align-items:stretch;gap:var(--_cui-col-gap);flex-direction:column;min-inline-size:0;display:flex}:where([data-citry-ui-part=col][data-gap="0"]){--_cui-col-gap:var(--cui-col-gap,0)}:where([data-citry-ui-part=col][data-gap=xs]){--_cui-col-gap:var(--cui-col-gap,.25rem)}:where([data-citry-ui-part=col][data-gap=sm]){--_cui-col-gap:var(--cui-col-gap,.5rem)}:where([data-citry-ui-part=col][data-gap=lg]){--_cui-col-gap:var(--cui-col-gap,1rem)}:where([data-citry-ui-part=col][data-gap=xl]){--_cui-col-gap:var(--cui-col-gap,1.5rem)}:where([data-citry-ui-part=col][data-align=start]){align-items:flex-start}:where([data-citry-ui-part=col][data-align=center]){align-items:center}:where([data-citry-ui-part=col][data-align=end]){align-items:flex-end}:where([data-citry-ui-part=col][data-align=baseline]){align-items:baseline}:where([data-citry-ui-part=col][data-justify=center]){justify-content:center}:where([data-citry-ui-part=col][data-justify=end]){justify-content:flex-end}:where([data-citry-ui-part=col][data-justify=between]){justify-content:space-between}:where([data-citry-ui-part=col][data-justify=around]){justify-content:space-around}:where([data-citry-ui-part=col][data-justify=evenly]){justify-content:space-evenly}:where([data-citry-ui-part=col][data-reverse]){flex-direction:column-reverse}:where([data-citry-ui-part=col]>*){min-inline-size:0}}</style></head><body><main><!--citry:g1:c88a88dd:0:i:2:s--><!--citry:g1:c88a88dd:0:i:3:s--><!--citry:g1:c88a88dd:0:i:4:s--><div class=cui-col data-align=stretch data-cid-claataufb data-cid-claataufc data-citry-ui-part=col data-gap=md data-justify=start><!--citry:g1:c88a88dd:0:r:1:s--><!--citry:g1:c88a88dd:0:r:2:s--><!--citry:g1:c88a88dd:0:i:5:s--><input aria-label="Disabled picker" class=cui-file-input data-cid=claataufe data-cid-claataufe data-citry-root data-citry-ui-part=file-input data-disabled data-size=md data-variant=outline disabled id=cui-file-input-claataufe type=file><!--citry:g1:c88a88dd:0:i:5:e--><fieldset disabled><legend>Archived upload</legend><!--citry:g1:c88a88dd:0:i:6:s--><label class=cui-drop-target data-cid=claatauff data-cid-claatauff data-citry-root data-citry-ui-part=drop-target data-size=md data-variant=outline><input aria-label="Archived evidence" class=cui-drop-target__input data-citry-ui-part=input id=cui-drop-target-claatauff type=file> <span class=cui-drop-target__label data-citry-ui-part=label>Archived evidence</span> <span class=cui-drop-target__content data-citry-ui-part=content><!--citry:g1:c88a88dd:0:r:3:s--> Uploads are unavailable <!--citry:g1:c88a88dd:0:r:3:e--></span></label><!--citry:g1:c88a88dd:0:i:6:e--></fieldset><!--citry:g1:c88a88dd:0:r:2:e--><!--citry:g1:c88a88dd:0:r:1:e--></div><!--citry:g1:c88a88dd:0:i:4:e--><!--citry:g1:c88a88dd:0:i:3:e--><!--citry:g1:c88a88dd:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"DisabledFiles_ae892b","className":"DisabledFiles"},{"classId":"CCol_a23ecf","className":"CCol"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CFileInput_4f6cdb","className":"CFileInput"},{"classId":"CDropTarget_afd2f8","className":"CDropTarget"}],"componentExecutionOrderConstraints":[{"childRenderId":"claataufc","invocationId":2,"parentRenderId":"claataufb"},{"childRenderId":"claataufe","invocationId":4,"parentRenderId":"claataufb"},{"childRenderId":"claatauff","invocationId":5,"parentRenderId":"claataufb"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"claataufa","transparent":false},{"classId":"DisabledFiles_ae892b","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"claataufb","transparent":false},{"classId":"CCol_a23ecf","instanceId":3,"invocationId":2,"parentRenderId":"claataufb","renderId":"claataufc","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":3,"parentRenderId":"claataufc","renderId":"claataufd","transparent":true},{"classId":"CFileInput_4f6cdb","instanceId":5,"invocationId":4,"parentRenderId":"claataufb","renderId":"claataufe","transparent":false},{"classId":"CDropTarget_afd2f8","instanceId":6,"invocationId":5,"parentRenderId":"claataufb","renderId":"claatauff","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"DisabledFiles_ae892b","ownerRenderId":"claataufb","policy":"template","receiverClassId":"CCol_a23ecf","receiverRenderId":"claataufc","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CCol_a23ecf","ownerRenderId":"claataufc","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"claataufd","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"DisabledFiles_ae892b","ownerRenderId":"claataufb","policy":"template","receiverClassId":"CDropTarget_afd2f8","receiverRenderId":"claatauff","slotName":"default","sourceInvocationId":5}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"DisabledFiles_ae892b","sourceRenderId":"claataufb","tagName":"ccol","targetClassId":"CCol_a23ecf","targetRenderId":"claataufc"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CCol_a23ecf","sourceRenderId":"claataufc","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"claataufd"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"DisabledFiles_ae892b","sourceRenderId":"claataufb","tagName":"cfileinput","targetClassId":"CFileInput_4f6cdb","targetRenderId":"claataufe"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"DisabledFiles_ae892b","sourceRenderId":"claataufb","tagName":"cdroptarget","targetClassId":"CDropTarget_afd2f8","targetRenderId":"claatauff"}],"slotRegions":[{"fillId":2,"ownerRenderId":"claataufc","parentRegionId":null,"receiverRenderId":"claataufd","regionId":1,"resultOwnerRenderId":"claataufc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"claataufd"},{"fillId":1,"ownerRenderId":"claataufb","parentRegionId":1,"receiverRenderId":"claataufc","regionId":2,"resultOwnerRenderId":"claataufb","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"claataufc"},{"fillId":5,"ownerRenderId":"claataufb","parentRegionId":2,"receiverRenderId":"claatauff","regionId":3,"resultOwnerRenderId":"claataufb","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"claataufb"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"c88a88ddd141662b8e444ced9d6122198faf8a63c106d93cefdbf7a2a84c070f"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NGaWxlSW5wdXRfNGY2Y2RiLmM2YjQ0YWNjMjgwZS5qcw==", "L2NpdHJ5L2NhY2hlL0NGaWxlSW5wdXRfNGY2Y2RiLjZmOThjYzZhY2QwZDY1NjZmMDg3MGM4YzI2YTk1Y2IxLmpz", "L2NpdHJ5L2NhY2hlL0NEcm9wVGFyZ2V0X2FmZDJmOC40NTM3MjJlNjhkNGQuanM=", "L2NpdHJ5L2NhY2hlL0NEcm9wVGFyZ2V0X2FmZDJmOC4zNmY5NjMzYjM1NDA2NmMxNzRjMDBjN2RkNGZlYmI0My5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0NGaWxlSW5wdXRfNGY2Y2RiLjlkMDJiMWY0MWY2MC5jc3M=", "L2NpdHJ5L2NhY2hlL0NEcm9wVGFyZ2V0X2FmZDJmOC45OTFiNzU1NzQ3NjMuY3Nz", "L2NpdHJ5L2NhY2hlL0NDb2xfYTIzZWNmLjQ5NDhjZDhlYTI0MC5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0ZpbGVJbnB1dF80ZjZjZGI=", "Y2xhYXRhdWZl", "NmY5OGNjNmFjZDBkNjU2NmYwODcwYzhjMjZhOTVjYjE=", "init"], ["Q0Ryb3BUYXJnZXRfYWZkMmY4", "Y2xhYXRhdWZm", "MzZmOTYzM2IzNTQwNjZjMTc0YzAwYzdkZDRmZWJiNDM=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2xhYXRhdWZh"], ["Q0NvbF9hMjNlY2Y=", "Y2xhYXRhdWZj"]], "graph": "c88a88ddd141662b8e444ced9d6122198faf8a63c106d93cefdbf7a2a84c070f", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CFileInput_4f6cdb", {
+  props: {
+    accept: {}, capture: {}, multiple: {}, required: {}, disabled: {}, invalid: {},
+    variant: {}, size: {},
+  },
+  init: ({els, data, props, effect, inject}) => {
+    const input = els[0];
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const invalidEpisodes = new Set();
+    const resetTimers = new Set();
+    let nativeInvalid = false;
+
+    const report = (name, value, message = "received invalid client value") => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CFileInput ${name} ${message}`, value, input);
+    };
+    const booleanValue = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value);
+      return fallback;
+    };
+    const choiceValue = (name, fallback, allowed) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "string" && allowed.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value);
+      return fallback;
+    };
+    const optionalString = (name, fallback, allowed = null) => {
+      if (props[name] === undefined) {
+        invalidEpisodes.delete(name);
+        return fallback;
+      }
+      const value = props[name];
+      if (typeof value === "string" && !value.includes("\0") && (!allowed || allowed.includes(value))) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value);
+      return fallback;
+    };
+    const idrefs = (...values) => {
+      const tokens = [];
+      values.forEach(value => {
+        if (typeof value !== "string") return;
+        value.split(/\s+/).filter(Boolean).forEach(token => {
+          if (!tokens.includes(token)) tokens.push(token);
+        });
+      });
+      return tokens.join(" ") || null;
+    };
+    const syncRelationships = (invalid) => {
+      const describedBy = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const errorMessage = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (describedBy) input.setAttribute("aria-describedby", describedBy);
+      else input.removeAttribute("aria-describedby");
+      if (errorMessage) input.setAttribute("aria-errormessage", errorMessage);
+      else input.removeAttribute("aria-errormessage");
+    };
+    const syncFiles = () => input.toggleAttribute("data-has-files", input.files.length > 0);
+    const applyState = () => {
+      let required;
+      let disabled;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "invalid"].forEach(name => {
+          if (props[name] !== undefined) report(name, props[name], "is owned by CField; ignoring");
+          else invalidEpisodes.delete(name);
+        });
+        required = field.required;
+        disabled = field.disabled;
+        externalInvalid = field.invalid;
+      } else {
+        required = booleanValue("required", data.required);
+        disabled = Boolean(form?.disabled) || booleanValue("disabled", data.disabled);
+        externalInvalid = booleanValue("invalid", data.invalid);
+      }
+      input.accept = optionalString("accept", data.accept) ?? "";
+      const capture = optionalString("capture", data.capture, ["user", "environment"]);
+      if (capture) input.setAttribute("capture", capture);
+      else input.removeAttribute("capture");
+      input.multiple = booleanValue("multiple", data.multiple);
+      input.required = required;
+      input.disabled = disabled;
+      const invalid = externalInvalid || nativeInvalid;
+      input.toggleAttribute("data-required", required);
+      input.toggleAttribute("data-disabled", input.matches(":disabled"));
+      input.toggleAttribute("data-invalid", invalid);
+      input.dataset.variant = choiceValue("variant", data.variant, ["outline", "soft", "plain"]);
+      input.dataset.size = choiceValue("size", data.size, ["sm", "md", "lg"]);
+      if (invalid) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+      syncRelationships(invalid);
+      syncFiles();
+    };
+    const clearNativeInvalid = () => {
+      if (!nativeInvalid || !input.validity.valid) return;
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+      applyState();
+    };
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const onInput = () => {
+      syncFiles();
+      clearNativeInvalid();
+    };
+    const onReset = (event) => {
+      const timer = setTimeout(() => {
+        resetTimers.delete(timer);
+        if (event.defaultPrevented) return;
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        applyState();
+      }, 0);
+      resetTimers.add(timer);
+    };
+    const nativeForm = input.form;
+    const fieldsets = [];
+    for (let ancestor = input.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLFieldSetElement) fieldsets.push(ancestor);
+    }
+    const fieldsetObserver = fieldsets.length
+      ? new MutationObserver(applyState)
+      : null;
+    fieldsets.forEach(fieldset => fieldsetObserver.observe(fieldset, {
+      childList: true, attributes: true, attributeFilter: ["disabled"],
+    }));
+    const unregisterCapabilities = field?.registerCapabilities({required: true, readonly: false});
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onInput);
+    nativeForm?.addEventListener("reset", onReset);
+    const stop = effect(applyState);
+    input.setAttribute("data-citry-file-input-initialized", "");
+    return () => {
+      stop?.();
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onInput);
+      nativeForm?.removeEventListener("reset", onReset);
+      resetTimers.forEach(clearTimeout);
+      resetTimers.clear();
+      fieldsetObserver?.disconnect();
+      unregisterCapabilities?.();
+      if (nativeInvalid) field?.setNativeInvalid(false);
+      input.removeAttribute("data-citry-file-input-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CFileInput_4f6cdb", "6f98cc6acd0d6566f0870c8c26a95cb1", atob("eyJhY2NlcHQiOm51bGwsImNhcHR1cmUiOm51bGwsIm11bHRpcGxlIjpmYWxzZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6dHJ1ZSwiaW52YWxpZCI6ZmFsc2UsInZhcmlhbnQiOiJvdXRsaW5lIiwic2l6ZSI6Im1kIiwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGwsImluaGVyaXRzRm9ybURpc2FibGVkIjpmYWxzZX0="));
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CDropTarget_afd2f8", {
+  props: {
+    accept: {}, capture: {}, multiple: {}, required: {}, disabled: {}, invalid: {},
+    variant: {}, size: {},
+  },
+  init: ({els, data, props, effect, inject}) => {
+    const root = els[0];
+    const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const invalidEpisodes = new Set();
+    const resetTimers = new Set();
+    let nativeInvalid = false;
+    let structureValid = false;
+    let dragDepth = 0;
+    let configuredDisabled = data.disabled;
+
+    const report = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CDropTarget ${name} received invalid value`, value, root);
+    };
+    const booleanValue = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value);
+      return fallback;
+    };
+    const choiceValue = (name, fallback, allowed) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "string" && allowed.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value);
+      return fallback;
+    };
+    const optionalString = (name, fallback, allowed = null) => {
+      if (props[name] === undefined) {
+        invalidEpisodes.delete(name);
+        return fallback;
+      }
+      const value = props[name];
+      if (typeof value === "string" && !value.includes("\0") && (!allowed || allowed.includes(value))) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      report(name, value);
+      return fallback;
+    };
+    const fileDrag = event => [...(event.dataTransfer?.types ?? [])].includes("Files");
+    const effectiveDisabled = () => !structureValid || input.matches(":disabled");
+    const clearDragging = () => {
+      dragDepth = 0;
+      root.removeAttribute("data-dragging");
+    };
+    const syncFiles = () => {
+      const hasFiles = input.files.length > 0;
+      input.toggleAttribute("data-has-files", hasFiles);
+      root.toggleAttribute("data-has-files", hasFiles);
+    };
+    const invalidStructure = () => {
+      const forbiddenSelector = 'a[href], button, input, select, textarea, label, '
+        + '[contenteditable]:not([contenteditable="false"]), [tabindex]';
+      const forbidden = [...root.querySelectorAll(forbiddenSelector)]
+        .find(element => element !== input);
+      return forbidden ? forbidden.outerHTML : null;
+    };
+    const applyState = () => {
+      input.accept = optionalString("accept", data.accept) ?? "";
+      const capture = optionalString("capture", data.capture, ["user", "environment"]);
+      if (capture) input.setAttribute("capture", capture);
+      else input.removeAttribute("capture");
+      input.multiple = booleanValue("multiple", data.multiple);
+      input.required = booleanValue("required", data.required);
+      configuredDisabled = Boolean(form?.disabled) || booleanValue("disabled", data.disabled);
+      input.disabled = configuredDisabled || !structureValid;
+      const invalid = booleanValue("invalid", data.invalid) || nativeInvalid;
+      root.toggleAttribute("data-required", input.required);
+      root.toggleAttribute("data-disabled", effectiveDisabled());
+      root.toggleAttribute("data-invalid", invalid);
+      root.dataset.variant = choiceValue("variant", data.variant, ["outline", "soft", "plain"]);
+      root.dataset.size = choiceValue("size", data.size, ["sm", "md", "lg"]);
+      if (invalid) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+      if (effectiveDisabled()) clearDragging();
+      syncFiles();
+    };
+    const reconcileStructure = () => {
+      const problem = invalidStructure();
+      structureValid = problem === null;
+      if (problem) {
+        report("structure", problem);
+        root.removeAttribute("data-citry-drop-target-initialized");
+      } else {
+        invalidEpisodes.delete("structure");
+        root.setAttribute("data-citry-drop-target-initialized", "");
+      }
+      applyState();
+    };
+    const clearNativeInvalid = () => {
+      if (!nativeInvalid || !input.validity.valid) return;
+      nativeInvalid = false;
+      applyState();
+    };
+    const onInvalid = () => {
+      nativeInvalid = true;
+      applyState();
+    };
+    const onInput = () => {
+      syncFiles();
+      clearNativeInvalid();
+    };
+    const onDragEnter = event => {
+      if (!fileDrag(event) || effectiveDisabled()) return;
+      event.preventDefault();
+      dragDepth += 1;
+      root.setAttribute("data-dragging", "");
+    };
+    const onDragOver = event => {
+      if (!fileDrag(event) || effectiveDisabled()) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    };
+    const onDragLeave = event => {
+      if (!fileDrag(event)) return;
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) root.removeAttribute("data-dragging");
+    };
+    const onDrop = event => {
+      if (!fileDrag(event) || effectiveDisabled()) return;
+      event.preventDefault();
+      clearDragging();
+      const dropped = event.dataTransfer.files;
+      if (!dropped.length) return;
+      let nextFiles = dropped;
+      if (!input.multiple && dropped.length > 1) {
+        const transfer = new DataTransfer();
+        transfer.items.add(dropped[0]);
+        nextFiles = transfer.files;
+      }
+      try {
+        input.files = nextFiles;
+      } catch (error) {
+        report("drop", error);
+        return;
+      }
+      input.dispatchEvent(new Event("input", {bubbles: true, composed: true}));
+      input.dispatchEvent(new Event("change", {bubbles: true, composed: true}));
+    };
+    const onReset = event => {
+      const timer = setTimeout(() => {
+        resetTimers.delete(timer);
+        if (event.defaultPrevented) return;
+        nativeInvalid = false;
+        clearDragging();
+        applyState();
+      }, 0);
+      resetTimers.add(timer);
+    };
+    const nativeForm = input.form;
+    const fieldsets = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLFieldSetElement) fieldsets.push(ancestor);
+    }
+    const fieldsetObserver = fieldsets.length ? new MutationObserver(applyState) : null;
+    fieldsets.forEach(fieldset => fieldsetObserver.observe(fieldset, {
+      childList: true, attributes: true, attributeFilter: ["disabled"],
+    }));
+    const observer = new MutationObserver(records => {
+      if (records.some(record => record.target !== input)) reconcileStructure();
+    });
+    observer.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["contenteditable", "href", "role", "tabindex"],
+    });
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onInput);
+    root.addEventListener("dragenter", onDragEnter);
+    root.addEventListener("dragover", onDragOver);
+    root.addEventListener("dragleave", onDragLeave);
+    root.addEventListener("drop", onDrop);
+    nativeForm?.addEventListener("reset", onReset);
+    const stop = effect(applyState);
+    reconcileStructure();
+    return () => {
+      stop?.();
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onInput);
+      root.removeEventListener("dragenter", onDragEnter);
+      root.removeEventListener("dragover", onDragOver);
+      root.removeEventListener("dragleave", onDragLeave);
+      root.removeEventListener("drop", onDrop);
+      nativeForm?.removeEventListener("reset", onReset);
+      resetTimers.forEach(clearTimeout);
+      resetTimers.clear();
+      observer.disconnect();
+      fieldsetObserver?.disconnect();
+      root.removeAttribute("data-citry-drop-target-initialized");
+      clearDragging();
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CDropTarget_afd2f8", "36f9633b354066c174c00c7dd4febb43", atob("eyJhY2NlcHQiOm51bGwsImNhcHR1cmUiOm51bGwsIm11bHRpcGxlIjpmYWxzZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJ2YXJpYW50Ijoib3V0bGluZSIsInNpemUiOiJtZCIsImhhc0Zvcm0iOmZhbHNlfQ=="));
+})();</script></body></html><!--citry:g1:c88a88dd:0:i:1:e-->

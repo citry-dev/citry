@@ -1,0 +1,74 @@
+<!doctype html><html data-cid-claatavnf lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compose semantic Dividers</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=BasicDividers_a4740b data-citry-css-url=/citry/cache/BasicDividers_a4740b.b1aebd37c6f3.css>:where(.divider-basic) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.divider-basic h2, .divider-basic p) {
+  margin: 0;
+}
+
+:where(.divider-basic h2) {
+  font-size: 1rem;
+}</style><style data-citry-css-class=CDivider_a9261f data-citry-css-url=/citry/cache/CDivider_a9261f.47c32612ec50.css>@layer citry-ui.theme{:where([data-citry-ui-part=divider]){--_cui-divider-color:var(--cui-divider-color,light-dark(#d6d3d1,#57534e));--_cui-divider-thickness:var(--cui-divider-thickness,1px);--_cui-divider-inset:var(--cui-divider-inset,1.5rem);--_cui-divider-label-gap:var(--cui-divider-label-gap,.75rem);--_cui-divider-label-color:var(--cui-divider-label-color,CanvasText);--_cui-divider-label-font-size:var(--cui-divider-label-font-size,.875rem);--_cui-divider-label-font-weight:var(--cui-divider-label-font-weight,600);--_cui-divider-min-length:var(--cui-divider-min-length,1em);box-sizing:border-box;min-inline-size:0;color:var(--_cui-divider-color);border:0;margin:0;padding:0}:where([data-citry-ui-part=divider][data-size=md]){--_cui-divider-thickness:var(--cui-divider-thickness,2px)}:where([data-citry-ui-part=divider][data-size=lg]){--_cui-divider-thickness:var(--cui-divider-thickness,4px)}:where([data-citry-ui-part=divider][data-orientation=horizontal]:not([data-labeled])){border-block-start-width:var(--_cui-divider-thickness);border-block-start-style:solid;border-block-start-color:var(--_cui-divider-color);block-size:0;inline-size:100%}:where([data-citry-ui-part=divider][data-orientation=vertical]){inline-size:0;min-block-size:var(--_cui-divider-min-length);border-inline-start-width:var(--_cui-divider-thickness);border-inline-start-style:solid;border-inline-start-color:var(--_cui-divider-color);align-self:stretch}:where([data-citry-ui-part=divider][data-variant=dashed]:not([data-labeled])){border-block-start-style:dashed}:where([data-citry-ui-part=divider][data-orientation=vertical][data-variant=dashed]){border-block-start-style:none;border-inline-start-style:dashed}:where([data-citry-ui-part=divider][data-variant=dotted]:not([data-labeled])){border-block-start-style:dotted}:where([data-citry-ui-part=divider][data-orientation=vertical][data-variant=dotted]){border-block-start-style:none;border-inline-start-style:dotted}:where([data-citry-ui-part=divider][data-orientation=horizontal][data-inset=start]){inline-size:calc(100% - var(--_cui-divider-inset));margin-inline-start:var(--_cui-divider-inset)}:where([data-citry-ui-part=divider][data-orientation=horizontal][data-inset=end]){inline-size:calc(100% - var(--_cui-divider-inset));margin-inline-end:var(--_cui-divider-inset)}:where([data-citry-ui-part=divider][data-orientation=horizontal][data-inset=both]){inline-size:calc(100% - var(--_cui-divider-inset) - var(--_cui-divider-inset));margin-inline:var(--_cui-divider-inset)}:where([data-citry-ui-part=divider][data-orientation=vertical][data-inset=start]){min-block-size:0;block-size:calc(100% - var(--_cui-divider-inset));margin-block-start:var(--_cui-divider-inset)}:where([data-citry-ui-part=divider][data-orientation=vertical][data-inset=end]){min-block-size:0;block-size:calc(100% - var(--_cui-divider-inset));margin-block-end:var(--_cui-divider-inset)}:where([data-citry-ui-part=divider][data-orientation=vertical][data-inset=both]){min-block-size:0;block-size:calc(100% - var(--_cui-divider-inset) - var(--_cui-divider-inset));margin-block:var(--_cui-divider-inset)}:where([data-citry-ui-part=divider][data-labeled]){align-items:center;gap:var(--_cui-divider-label-gap);inline-size:100%;display:flex}:where([data-citry-ui-part=divider]>[data-citry-ui-part=line]){box-sizing:border-box;border:0;border-block-start-width:var(--_cui-divider-thickness);border-block-start-style:solid;border-block-start-color:var(--_cui-divider-color);flex:1 1 0;min-inline-size:0;margin:0;padding:0}:where([data-citry-ui-part=divider][data-variant=dashed]>[data-citry-ui-part=line]){border-block-start-style:dashed}:where([data-citry-ui-part=divider][data-variant=dotted]>[data-citry-ui-part=line]){border-block-start-style:dotted}:where([data-citry-ui-part=divider]>[data-citry-ui-part=label]){min-inline-size:0;color:var(--_cui-divider-label-color);font-size:var(--_cui-divider-label-font-size);font-weight:var(--_cui-divider-label-font-weight);overflow-wrap:anywhere;line-height:1.3}:where([data-citry-ui-part=divider][data-label-pos=start]>[data-citry-ui-part=line]:first-child),:where([data-citry-ui-part=divider][data-label-pos=end]>[data-citry-ui-part=line]:last-child){flex:0 8%}@media (forced-colors:active){:where([data-citry-ui-part=divider]){--_cui-divider-color:var(--cui-divider-color,CanvasText);--_cui-divider-label-color:var(--cui-divider-label-color,CanvasText);forced-color-adjust:auto}}@media print{:where([data-citry-ui-part=divider]){--_cui-divider-color:var(--cui-divider-color,currentColor);--_cui-divider-label-color:var(--cui-divider-label-color,currentColor)}}}</style></head><body><main><section class=divider-basic data-cid-claatavng><article><h2>Orion Nebula</h2><p>A luminous stellar nursery around 1,300 light-years away.</p></article><hr class=cui-divider data-cid-claatavni data-citry-ui-part=divider data-inset=none data-orientation=horizontal data-size=sm data-variant=solid><hr class=cui-divider data-cid-claatavnh data-citry-ui-part=divider data-inset=none data-orientation=horizontal data-size=sm data-variant=dotted><article><h2>Lagoon Nebula</h2><p>Dark dust lanes cross a glowing cloud in Sagittarius.</p></article></section></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL0Jhc2ljRGl2aWRlcnNfYTQ3NDBiLmIxYWViZDM3YzZmMy5jc3M=", "L2NpdHJ5L2NhY2hlL0NEaXZpZGVyX2E5MjYxZi40N2MzMjYxMmVjNTAuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2xhYXRhdm5m"], ["QmFzaWNEaXZpZGVyc19hNDc0MGI=", "Y2xhYXRhdm5n"], ["Q0RpdmlkZXJfYTkyNjFm", "Y2xhYXRhdm5o"], ["Q0RpdmlkZXJfYTkyNjFm", "Y2xhYXRhdm5p"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

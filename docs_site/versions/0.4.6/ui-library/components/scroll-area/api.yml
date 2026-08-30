@@ -1,0 +1,107 @@
+schema_version: 1
+family: scroll-area
+
+components:
+  - CScrollArea
+
+inputs:
+  - id: cscroll-area-server-inputs
+    component: CScrollArea
+    channel: server
+    column_widths: [fit, 17rem, 11rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the native viewport ID.}
+      - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Adds a nonempty direct region name and the region role; mutually exclusive with aria_labelledby.}
+      - {id: aria-labelledby, name: aria_labelledby, type: 'str | None', default: {kind: literal, value: null}, effect: Adds a validated IDREF-list region name and the region role; mutually exclusive with aria_label.}
+      - {id: axis, name: axis, type: {display: '"block" | "inline" | "both"', interfaces: [CScrollAreaAxis]}, default: {kind: literal, value: block}, effect: Selects logical native overflow axes.}
+      - {id: scrollbar-width, name: scrollbar_width, type: {display: '"auto" | "thin"', interfaces: [CScrollAreaScrollbarWidth]}, default: {kind: literal, value: auto}, effect: Selects the standard native scrollbar width policy without hiding it.}
+      - {id: scrollbar-gutter, name: scrollbar_gutter, type: {display: '"auto" | "stable" | "stable-both-edges"', interfaces: [CScrollAreaScrollbarGutter]}, default: {kind: literal, value: auto}, effect: Selects standard native scrollbar-space reservation.}
+      - {id: overscroll, name: overscroll, type: {display: '"auto" | "contain" | "none"', interfaces: [CScrollAreaOverscroll]}, default: {kind: literal, value: auto}, effect: Selects logical overscroll policy on enabled axes.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds native viewport classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds native viewport styles and merges them with attrs before the owned scrolling policy.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive attributes and isolated-scope native listeners that may use event magics, dispatch, stores, or globals.'}
+
+  - id: cscroll-area-client-inputs
+    component: CScrollArea
+    channel: client
+    column_widths: [fit, 18rem, 15rem, auto]
+    entries:
+      - {id: axis, name: axis, type: {display: '"block" | "inline" | "both"', interfaces: [CScrollAreaAxis]}, omitted: Uses the latest server fallback; null has the same effect., effect: Controls logical overflow axes while valid.}
+      - {id: scrollbar-width, name: scrollbarWidth, type: {display: '"auto" | "thin"', interfaces: [CScrollAreaScrollbarWidth]}, omitted: Uses the latest server fallback; null has the same effect., effect: Controls standard native scrollbar width policy while valid.}
+      - {id: scrollbar-gutter, name: scrollbarGutter, type: {display: '"auto" | "stable" | "stable-both-edges"', interfaces: [CScrollAreaScrollbarGutter]}, omitted: Uses the latest server fallback; null has the same effect., effect: Controls standard native scrollbar-space reservation while valid.}
+      - {id: overscroll, name: overscroll, type: {display: '"auto" | "contain" | "none"', interfaces: [CScrollAreaOverscroll]}, omitted: Uses the latest server fallback; null has the same effect., effect: Controls logical overscroll policy while valid.}
+      - {id: on-scroll-change, name: onScrollChange, type: function, omitted: Omission or null selects no component callback., effect: Receives one event-scoped normalized snapshot for the latest native scroll event in a frame.}
+
+slots:
+  - id: cscroll-area-slots
+    component: CScrollArea
+    entries:
+      - {id: default, name: default, required: false, data: none, fallback: Renders an empty focusable native viewport.}
+
+events:
+  - id: cscroll-area-events
+    component: CScrollArea
+    entries:
+      - id: scroll-change
+        name: onScrollChange
+        signature: {display: '(detail: CScrollAreaScrollDetail) => void', interfaces: [CScrollAreaScrollDetail]}
+        trigger: One or more actual native scroll events occur on the valid initialized viewport.
+        detail: {display: '{inlineOffset, blockOffset, source}', interfaces: [CScrollAreaScrollDetail]}
+        behavior: Runs at most once per animation frame with the latest event. Return values do not cancel native scrolling; controlled state does not exist.
+
+methods: []
+
+css:
+  - id: cscroll-area-css-variables
+    component: CScrollArea
+    entries:
+      - {id: max-block-size, name: --cui-scroll-area-max-block-size, type: length or none, purpose: Maximum block size for block and both-axis viewports., default: 20rem}
+      - {id: background, name: --cui-scroll-area-background, type: color, purpose: Native viewport background., default: Canvas}
+      - {id: foreground, name: --cui-scroll-area-foreground, type: color, purpose: Inherited viewport foreground., default: CanvasText}
+      - {id: border-color, name: --cui-scroll-area-border-color, type: color, purpose: Native viewport border., default: 'color-mix(in srgb, currentColor 24%, transparent)'}
+      - {id: border-width, name: --cui-scroll-area-border-width, type: length, purpose: Native viewport border width., default: 1px}
+      - {id: radius, name: --cui-scroll-area-radius, type: length, purpose: Native viewport corner radius., default: 0.75rem}
+      - {id: padding, name: --cui-scroll-area-padding, type: length, purpose: Content inset inside the native viewport., default: 0px}
+      - {id: scrollbar-color, name: --cui-scroll-area-scrollbar-color, type: complete scrollbar-color value, purpose: Standard native thumb and track colors as one property value., default: auto}
+      - {id: focus-color, name: --cui-scroll-area-focus-color, type: color, purpose: Viewport focus-visible ring., default: '#2563eb'}
+      - {id: scroll-padding, name: --cui-scroll-area-scroll-padding, type: length, purpose: Native focus and anchor scroll padding., default: 0px}
+
+attributes:
+  - id: cscroll-area-attributes
+    component: CScrollArea
+    entries:
+      - {id: root-id, name: id, element: Native viewport div, type: supplied or generated string, meaning: Identifies the single component root and viewport.}
+      - {id: tabindex, name: tabindex, element: Native viewport div, type: '"0"', meaning: Places the viewport in sequential keyboard focus order.}
+      - {id: role, name: role, element: Native viewport div, type: 'absent | "region"', meaning: Present only when exactly one naming input is supplied.}
+      - {id: aria-label, name: aria-label, element: Native viewport div, type: string | absent, meaning: Supplies the direct region name only when aria_label is used.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Native viewport div, type: IDREF list | absent, meaning: Supplies the referenced region name only when aria_labelledby is used.}
+      - {id: data-axis, name: data-axis, element: Native viewport div, type: {display: '"block" | "inline" | "both"', interfaces: [CScrollAreaAxis]}, meaning: Mirrors the effective logical axis policy.}
+      - {id: data-scrollbar-width, name: data-scrollbar-width, element: Native viewport div, type: {display: '"auto" | "thin"', interfaces: [CScrollAreaScrollbarWidth]}, meaning: Mirrors the effective standard scrollbar width policy.}
+      - {id: data-scrollbar-gutter, name: data-scrollbar-gutter, element: Native viewport div, type: {display: '"auto" | "stable" | "stable-both-edges"', interfaces: [CScrollAreaScrollbarGutter]}, meaning: Mirrors the effective standard gutter policy.}
+      - {id: data-overscroll, name: data-overscroll, element: Native viewport div, type: {display: '"auto" | "contain" | "none"', interfaces: [CScrollAreaOverscroll]}, meaning: Mirrors the effective logical overscroll policy.}
+
+selectors:
+  - id: cscroll-area-selectors
+    component: CScrollArea
+    entries:
+      - {id: scroll-area, selector: '[data-citry-ui-part="scroll-area"]', element: Native viewport div, purpose: 'The focusable scroll viewport and class_, style, and attrs destination.'}
+
+interfaces:
+  - id: cscroll-area-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: axis, name: CScrollAreaAxis, definition: 'Literal["block", "inline", "both"]'}
+      - {id: scrollbar-width, name: CScrollAreaScrollbarWidth, definition: 'Literal["auto", "thin"]'}
+      - {id: scrollbar-gutter, name: CScrollAreaScrollbarGutter, definition: 'Literal["auto", "stable", "stable-both-edges"]'}
+      - {id: overscroll, name: CScrollAreaOverscroll, definition: 'Literal["auto", "contain", "none"]'}
+  - id: cscroll-area-scroll-detail
+    kind: record
+    name: CScrollAreaScrollDetail
+    entries:
+      - {id: inline-offset, name: inlineOffset, type: float, meaning: 'Logical horizontal distance from inline start, clamped to the current native range.'}
+      - {id: block-offset, name: blockOffset, type: float, meaning: 'Vertical distance from the top, clamped to the current native range.'}
+      - {id: source, name: source, type: Event, meaning: Latest native scroll event coalesced into this callback frame.}
+
+translations: []

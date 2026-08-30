@@ -1,0 +1,214 @@
+<!--citry:g1:dc0e22e6:0:i:1:s--><!doctype html><html data-cid-claataxmo lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Customize Progress with public CSS</title><style data-citry-css-class=UiPreviewDocument_a1dcd6 data-citry-css-url=/citry/cache/UiPreviewDocument_a1dcd6.404e2c56bdf9.css>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=ProgressCustomization_0050eb data-citry-css-url=/citry/cache/ProgressCustomization_0050eb.1ef71341386a.css>:where(.progress-themes > div) {
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+}
+
+:where(.progress-themes__coral) {
+  --cui-progress-track-color: #f8ddd6;
+  --cui-progress-range-color: #b9382f;
+  --cui-progress-height: 0.75rem;
+  background: #fff6f2;
+}
+
+:where(.progress-themes__abyss) {
+  color-scheme: dark;
+  --cui-progress-track-color: #1f3b48;
+  --cui-progress-range-color: #63d4e8;
+  --cui-progress-height: 0.75rem;
+  background: #0b1b24;
+}</style><style data-citry-css-class=CProgress_dbddf8 data-citry-css-url=/citry/cache/CProgress_dbddf8.013c9f41a36e.css>@layer citry-ui.theme{:where([data-citry-ui-part=progress]){--_cui-progress-track-color:var(--cui-progress-track-color,light-dark(#e7e5e4,#44403c));--_cui-progress-range-color:var(--cui-progress-range-color,light-dark(#1d4ed8,#60a5fa));--_cui-progress-height:var(--cui-progress-height,.625rem);--_cui-progress-radius:var(--cui-progress-radius,.25rem);box-sizing:border-box;inline-size:100%;block-size:var(--_cui-progress-height);border-radius:var(--_cui-progress-radius);appearance:none;background:var(--_cui-progress-track-color);color:var(--_cui-progress-range-color);accent-color:var(--_cui-progress-range-color);vertical-align:middle;border:0;display:block;overflow:hidden}:where([data-citry-ui-part=progress][data-intent=neutral]){--_cui-progress-range-color:var(--cui-progress-range-color,light-dark(#57534e,#d6d3d1))}:where([data-citry-ui-part=progress][data-intent=success]){--_cui-progress-range-color:var(--cui-progress-range-color,light-dark(#15803d,#4ade80))}:where([data-citry-ui-part=progress][data-intent=warn]){--_cui-progress-range-color:var(--cui-progress-range-color,light-dark(#b45309,#fbbf24))}:where([data-citry-ui-part=progress][data-intent=danger]){--_cui-progress-range-color:var(--cui-progress-range-color,light-dark(#b91c1c,#f87171))}:where([data-citry-ui-part=progress][data-size=sm]){--_cui-progress-height:var(--cui-progress-height,.375rem)}:where([data-citry-ui-part=progress][data-size=lg]){--_cui-progress-height:var(--cui-progress-height,.875rem)}:where([data-citry-ui-part=progress][data-shape=square]){--_cui-progress-radius:var(--cui-progress-radius,0)}:where([data-citry-ui-part=progress][data-shape=pill]){--_cui-progress-radius:var(--cui-progress-radius,999px)}:where([data-citry-ui-part=progress])::-webkit-progress-bar{border-radius:var(--_cui-progress-radius);background:var(--_cui-progress-track-color)}:where([data-citry-ui-part=progress])::-webkit-progress-value{border-radius:var(--_cui-progress-radius);background:var(--_cui-progress-range-color)}:where([data-citry-ui-part=progress])::-moz-progress-bar{border-radius:var(--_cui-progress-radius);background:var(--_cui-progress-range-color)}:where([data-citry-ui-part=progress]:indeterminate),:where([data-citry-ui-part=progress]:indeterminate)::-webkit-progress-bar{background-color:var(--_cui-progress-track-color);background-image:linear-gradient(100deg, transparent 20%, var(--_cui-progress-range-color) 45%, var(--_cui-progress-range-color) 55%, transparent 80%);background-size:200% 100%;animation:1.4s linear infinite cui-progress-indeterminate}@keyframes cui-progress-indeterminate{0%{background-position:100% 0}to{background-position:-100% 0}}@media (prefers-reduced-motion:reduce){:where([data-citry-ui-part=progress]:indeterminate),:where([data-citry-ui-part=progress]:indeterminate)::-webkit-progress-bar{background-image:repeating-linear-gradient(135deg, transparent 0 .35rem, var(--_cui-progress-range-color) .35rem .7rem);background-size:auto;animation:none}}@media (forced-colors:active){:where([data-citry-ui-part=progress]){--_cui-progress-track-color:var(--cui-progress-track-color,Canvas);--_cui-progress-range-color:var(--cui-progress-range-color,Highlight);forced-color-adjust:auto;border:1px solid canvastext}}@media print{:where([data-citry-ui-part=progress]:indeterminate),:where([data-citry-ui-part=progress]:indeterminate)::-webkit-progress-bar{animation:none}}}</style><style data-citry-css-class=CCol_a23ecf data-citry-css-url=/citry/cache/CCol_a23ecf.4948cd8ea240.css>@layer citry-ui.theme{:where([data-citry-ui-part=col]){--_cui-col-gap:var(--cui-col-gap,.75rem);justify-content:flex-start;align-items:stretch;gap:var(--_cui-col-gap);flex-direction:column;min-inline-size:0;display:flex}:where([data-citry-ui-part=col][data-gap="0"]){--_cui-col-gap:var(--cui-col-gap,0)}:where([data-citry-ui-part=col][data-gap=xs]){--_cui-col-gap:var(--cui-col-gap,.25rem)}:where([data-citry-ui-part=col][data-gap=sm]){--_cui-col-gap:var(--cui-col-gap,.5rem)}:where([data-citry-ui-part=col][data-gap=lg]){--_cui-col-gap:var(--cui-col-gap,1rem)}:where([data-citry-ui-part=col][data-gap=xl]){--_cui-col-gap:var(--cui-col-gap,1.5rem)}:where([data-citry-ui-part=col][data-align=start]){align-items:flex-start}:where([data-citry-ui-part=col][data-align=center]){align-items:center}:where([data-citry-ui-part=col][data-align=end]){align-items:flex-end}:where([data-citry-ui-part=col][data-align=baseline]){align-items:baseline}:where([data-citry-ui-part=col][data-justify=center]){justify-content:center}:where([data-citry-ui-part=col][data-justify=end]){justify-content:flex-end}:where([data-citry-ui-part=col][data-justify=between]){justify-content:space-between}:where([data-citry-ui-part=col][data-justify=around]){justify-content:space-around}:where([data-citry-ui-part=col][data-justify=evenly]){justify-content:space-evenly}:where([data-citry-ui-part=col][data-reverse]){flex-direction:column-reverse}:where([data-citry-ui-part=col]>*){min-inline-size:0}}</style></head><body><main><!--citry:g1:dc0e22e6:0:i:2:s--><!--citry:g1:dc0e22e6:0:i:3:s--><!--citry:g1:dc0e22e6:0:i:4:s--><div class="cui-col progress-themes" data-align=stretch data-cid-claataxmp data-cid-claataxmq data-citry-ui-part=col data-gap=md data-justify=start><!--citry:g1:dc0e22e6:0:r:1:s--><!--citry:g1:dc0e22e6:0:r:2:s--><div class=progress-themes__coral><!--citry:g1:dc0e22e6:0:i:5:s--><progress aria-label="Coral lab" class=cui-progress data-cid=claataxms data-cid-claataxms data-citry-root data-citry-ui-part=progress data-intent=primary data-shape=pill data-size=md data-state=determinate max=100.0 value=58.0>⁨Coral lab⁩: ⁨58⁩ of ⁨100⁩</progress><!--citry:g1:dc0e22e6:0:i:5:e--></div><div class=progress-themes__abyss><!--citry:g1:dc0e22e6:0:i:6:s--><progress aria-label="Abyss lab" class=cui-progress data-cid=claataxmt data-cid-claataxmt data-citry-root data-citry-ui-part=progress data-intent=primary data-shape=pill data-size=md data-state=determinate max=100.0 value=58.0>⁨Abyss lab⁩: ⁨58⁩ of ⁨100⁩</progress><!--citry:g1:dc0e22e6:0:i:6:e--></div><!--citry:g1:dc0e22e6:0:r:2:e--><!--citry:g1:dc0e22e6:0:r:1:e--></div><!--citry:g1:dc0e22e6:0:i:4:e--><!--citry:g1:dc0e22e6:0:i:3:e--><!--citry:g1:dc0e22e6:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ProgressCustomization_0050eb","className":"ProgressCustomization"},{"classId":"CCol_a23ecf","className":"CCol"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CProgress_dbddf8","className":"CProgress"}],"componentExecutionOrderConstraints":[{"childRenderId":"claataxmq","invocationId":2,"parentRenderId":"claataxmp"},{"childRenderId":"claataxms","invocationId":4,"parentRenderId":"claataxmp"},{"childRenderId":"claataxmt","invocationId":5,"parentRenderId":"claataxmp"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"claataxmo","transparent":false},{"classId":"ProgressCustomization_0050eb","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"claataxmp","transparent":false},{"classId":"CCol_a23ecf","instanceId":3,"invocationId":2,"parentRenderId":"claataxmp","renderId":"claataxmq","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":3,"parentRenderId":"claataxmq","renderId":"claataxmr","transparent":true},{"classId":"CProgress_dbddf8","instanceId":5,"invocationId":4,"parentRenderId":"claataxmp","renderId":"claataxms","transparent":false},{"classId":"CProgress_dbddf8","instanceId":6,"invocationId":5,"parentRenderId":"claataxmp","renderId":"claataxmt","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ProgressCustomization_0050eb","ownerRenderId":"claataxmp","policy":"template","receiverClassId":"CCol_a23ecf","receiverRenderId":"claataxmq","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CCol_a23ecf","ownerRenderId":"claataxmq","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"claataxmr","slotName":"default","sourceInvocationId":3}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ProgressCustomization_0050eb","sourceRenderId":"claataxmp","tagName":"ccol","targetClassId":"CCol_a23ecf","targetRenderId":"claataxmq"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CCol_a23ecf","sourceRenderId":"claataxmq","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"claataxmr"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"ProgressCustomization_0050eb","sourceRenderId":"claataxmp","tagName":"cprogress","targetClassId":"CProgress_dbddf8","targetRenderId":"claataxms"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"ProgressCustomization_0050eb","sourceRenderId":"claataxmp","tagName":"cprogress","targetClassId":"CProgress_dbddf8","targetRenderId":"claataxmt"}],"slotRegions":[{"fillId":2,"ownerRenderId":"claataxmq","parentRegionId":null,"receiverRenderId":"claataxmr","regionId":1,"resultOwnerRenderId":"claataxmq","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"claataxmr"},{"fillId":1,"ownerRenderId":"claataxmp","parentRegionId":1,"receiverRenderId":"claataxmq","regionId":2,"resultOwnerRenderId":"claataxmp","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"claataxmq"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"dc0e22e63c8f43b942825e371d11aa7b0a292997bd49e689a21825cc29f58dac"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NQcm9ncmVzc19kYmRkZjguOTBiNTQzODkyZTUwLmpz", "L2NpdHJ5L2NhY2hlL0NQcm9ncmVzc19kYmRkZjguMTE4ZDAwMzc5MzY5OTExODk4OTAwZjk0NGM2MjlmOTguanM=", "L2NpdHJ5L2NhY2hlL0NQcm9ncmVzc19kYmRkZjguYzEzZDgyNWUxY2U5MTkwN2IyNzJjMjgyODc2MzNiNzcuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi40MDRlMmM1NmJkZjkuY3Nz", "L2NpdHJ5L2NhY2hlL1Byb2dyZXNzQ3VzdG9taXphdGlvbl8wMDUwZWIuMWVmNzEzNDEzODZhLmNzcw==", "L2NpdHJ5L2NhY2hlL0NQcm9ncmVzc19kYmRkZjguMDEzYzlmNDFhMzZlLmNzcw==", "L2NpdHJ5L2NhY2hlL0NDb2xfYTIzZWNmLjQ5NDhjZDhlYTI0MC5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1Byb2dyZXNzX2RiZGRmOA==", "Y2xhYXRheG1z", "MTE4ZDAwMzc5MzY5OTExODk4OTAwZjk0NGM2MjlmOTg=", "init"], ["Q1Byb2dyZXNzX2RiZGRmOA==", "Y2xhYXRheG10", "YzEzZDgyNWUxY2U5MTkwN2IyNzJjMjgyODc2MzNiNzc=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y2xhYXRheG1v"], ["UHJvZ3Jlc3NDdXN0b21pemF0aW9uXzAwNTBlYg==", "Y2xhYXRheG1w"], ["Q0NvbF9hMjNlY2Y=", "Y2xhYXRheG1x"]], "graph": "dc0e22e63c8f43b942825e371d11aa7b0a292997bd49e689a21825cc29f58dac", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CProgress_dbddf8", {
+  props: {
+    value: {},
+    label: {},
+    valueText: {},
+    intent: {},
+    size: {},
+    shape: {},
+  },
+  init: ({ els, data, props, effect, i18n }) => {
+    const progress = els[0];
+    const allowedValues = {
+      intent: ["neutral", "primary", "success", "warn", "danger"],
+      size: ["sm", "md", "lg"],
+      shape: ["square", "rounded", "pill"],
+    };
+    const invalidEpisodes = new Set();
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CProgress ${name} received invalid client value ${describeValue(value)}; `
+          + "using the server-rendered fallback.",
+        progress,
+      );
+    };
+    const sourceValue = (name) => props[name] === undefined ? data[name] : props[name];
+    const resolveChoice = (name) => {
+      const value = sourceValue(name);
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveLabel = () => {
+      const value = sourceValue("label");
+      if (typeof value === "string" && value.length > 0) {
+        invalidEpisodes.delete("label");
+        return value;
+      }
+      reportInvalid("label", value);
+      return data.label;
+    };
+    const resolveValueText = () => {
+      const value = sourceValue("valueText");
+      if (value === null || (typeof value === "string" && value.length > 0)) {
+        invalidEpisodes.delete("valueText");
+        return value;
+      }
+      reportInvalid("valueText", value);
+      return data.valueText;
+    };
+    const resolveValue = () => {
+      const value = sourceValue("value");
+      if (
+        value === null
+        || (
+          typeof value === "number"
+          && Number.isFinite(value)
+          && value >= 0
+          && value <= data.max
+        )
+      ) {
+        invalidEpisodes.delete("value");
+        return value;
+      }
+      reportInvalid("value", value);
+      return data.value;
+    };
+    const setAttribute = (name, value) => {
+      if (value === null) {
+        progress.removeAttribute(name);
+      } else if (progress.getAttribute(name) !== String(value)) {
+        progress.setAttribute(name, String(value));
+      }
+    };
+    const setData = (name, value) => {
+      if (progress.dataset[name] !== value) {
+        progress.dataset[name] = value;
+      }
+    };
+
+    const fallbackBinding = i18n && data.catalogFallbackText
+      ? i18n.bind({
+          message: "citry-ui-progress-value-text",
+          values: () => {
+            const value = resolveValue();
+            return {
+              label: resolveLabel(),
+              value: i18n.format.number(value ?? 0, {format: "citry-ui-progress-value"}),
+              max: i18n.format.number(data.max, {format: "citry-ui-progress-value"}),
+            };
+          },
+          onChange: (text) => {
+            progress.textContent = resolveValue() === null ? resolveLabel() : text;
+          },
+        })
+      : null;
+
+    effect(() => {
+      const value = resolveValue();
+      setAttribute("value", value);
+      setAttribute("aria-label", resolveLabel());
+      setAttribute("aria-valuetext", resolveValueText());
+      setData("state", value === null ? "indeterminate" : "determinate");
+      setData("intent", resolveChoice("intent"));
+      setData("size", resolveChoice("size"));
+      setData("shape", resolveChoice("shape"));
+    });
+
+    progress.setAttribute("data-citry-progress-initialized", "");
+    return () => {
+      fallbackBinding?.dispose();
+      progress.removeAttribute("data-citry-progress-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CProgress_dbddf8", "118d00379369911898900f944c629f98", atob("eyJsYWJlbCI6IkNvcmFsIGxhYiIsInZhbHVlIjo1OC4wLCJtYXgiOjEwMC4wLCJ2YWx1ZVRleHQiOm51bGwsImludGVudCI6InByaW1hcnkiLCJzaXplIjoibWQiLCJzaGFwZSI6InBpbGwiLCJjYXRhbG9nRmFsbGJhY2tUZXh0IjpmYWxzZX0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CProgress_dbddf8", "c13d825e1ce91907b272c28287633b77", atob("eyJsYWJlbCI6IkFieXNzIGxhYiIsInZhbHVlIjo1OC4wLCJtYXgiOjEwMC4wLCJ2YWx1ZVRleHQiOm51bGwsImludGVudCI6InByaW1hcnkiLCJzaXplIjoibWQiLCJzaGFwZSI6InBpbGwiLCJjYXRhbG9nRmFsbGJhY2tUZXh0IjpmYWxzZX0="));
+})();</script></body></html><!--citry:g1:dc0e22e6:0:i:1:e-->
