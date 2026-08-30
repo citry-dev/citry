@@ -155,6 +155,8 @@ def test_smallest_palette_renders_complete_disabled_server_anatomy() -> None:
 
     assert "data-citry-command-palette-initialized" not in html
     assert '<div class="cui-command-palette-host" data-citry-command-palette-host' in html
+    assert "host instanceof HTMLDivElement" in CCommandPalette.js
+    assert "host instanceof HTMLSpanElement" not in CCommandPalette.js
     assert '<dialog class="cui-command-palette"' in html
     assert 'data-citry-ui-part="command-palette"' in html
     assert '<search data-citry-ui-part="command-palette-search">' in html

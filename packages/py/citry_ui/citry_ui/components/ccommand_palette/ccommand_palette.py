@@ -1169,7 +1169,7 @@ class CCommandPalette(LibraryComponent):
             if (host[handoffKey] === previous) delete host[handoffKey];
           };
           if (
-            !(host instanceof HTMLSpanElement)
+            !(host instanceof HTMLDivElement)
             || !(dialog instanceof HTMLDialogElement)
             || !(surface instanceof HTMLElement)
             || !(header instanceof HTMLElement)
