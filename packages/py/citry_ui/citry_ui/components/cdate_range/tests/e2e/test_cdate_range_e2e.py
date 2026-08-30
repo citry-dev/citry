@@ -233,6 +233,7 @@ def test_blocked_range_same_day_controlled_clear_open_and_invalid_focus(page: An
     page.wait_for_function("document.querySelector('#controlled-open').getAttribute('aria-expanded') === 'true'")
     page.keyboard.press("Escape")
     page.wait_for_function("document.querySelector('#controlled-open').getAttribute('aria-expanded') === 'false'")
+    page.wait_for_function("document.activeElement?.id === 'controlled-open'")
 
     page.locator("#required-submit").click()
     page.wait_for_function("document.querySelector('#required-range-root').dataset.invalid === ''")

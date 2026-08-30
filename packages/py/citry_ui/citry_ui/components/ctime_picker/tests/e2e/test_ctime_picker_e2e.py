@@ -212,6 +212,7 @@ def test_controlled_value_open_clear_and_required_invalid_focus(page: Any, serve
     page.wait_for_function("document.querySelector('#controlled-open').getAttribute('aria-expanded') === 'true'")
     page.keyboard.press("Escape")
     page.wait_for_function("document.querySelector('#controlled-open').getAttribute('aria-expanded') === 'false'")
+    page.wait_for_function("document.activeElement?.id === 'controlled-open'")
 
     page.locator("#required-submit").click()
     page.wait_for_function("document.querySelector('#required-time-root').dataset.invalid === ''")
