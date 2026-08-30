@@ -73,7 +73,7 @@ dependencies = [
 # have. citry.reload imports only `watchfiles.watch`, and watchdog's
 # `FileSystemEventHandler` and `Observer`, which every release in range provides.
 [project.optional-dependencies]
-analysis-ty = ["ty==0.0.73"]       # Python expression types for analysis tooling
+analysis-ty = ["ty==0.0.75"]       # Python expression types for analysis tooling
 watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
 watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
 
@@ -117,7 +117,7 @@ e2e = [
 # make the whole workspace unresolvable on those versions).
 benchmark = [
     "django==6.0.6; python_version >= '3.12'",
-    "django-components==0.151.1; python_version >= '3.12'",
+    "django-components==0.152.0; python_version >= '3.12'",
     "jinja2==3.1.6",
 ]
 
