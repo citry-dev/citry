@@ -6,8 +6,8 @@ The portable syntax corpus drives the aligned Pygments lexers and declarative
 VS Code highlighting, `citry check` provides parser-grade batch validation
 with an explicitly bounded static fallback, and the companion language server
 plus VS Code client provide the implemented editor intelligence. The VS Code
-extension 0.1.0 is published on Visual Studio Marketplace and Open VSX.
-`citry-lsp` 0.1.1 and `pygments-citry` 0.2.0 are published on PyPI. The
+extension 0.1.1 is published on Visual Studio Marketplace and Open VSX.
+`citry-lsp` 0.1.2 and `pygments-citry` 0.2.0 are published on PyPI. The
 original design is the synthesis of a research and design-panel process: five recon reports,
 three competing design drafts, and two adversarial judge verdicts, all in
 [`ide_research/`](ide_research/README.md) and all dated 2026-07-07. Both
