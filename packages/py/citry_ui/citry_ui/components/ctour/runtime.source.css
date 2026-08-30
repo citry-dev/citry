@@ -229,7 +229,10 @@
       grid-template-columns: auto 1fr;
       align-items: center;
     }
-    :where([data-citry-ui-part="tour"] [data-citry-ui-part="actions"]) { inline-size: 100%; }
+    :where([data-citry-ui-part="tour"] [data-citry-ui-part="actions"]) {
+      flex-wrap: nowrap;
+      inline-size: 100%;
+    }
     :where([data-citry-ui-part="tour"] [data-citry-tour-action="skip"]) {
       margin-inline-end: auto;
     }

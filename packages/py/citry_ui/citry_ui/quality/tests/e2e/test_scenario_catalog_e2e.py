@@ -165,6 +165,9 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
     if scenario_id == "tooltip.states":
         page.get_by_role("button", name="Europa").focus()
         page.wait_for_function("document.querySelector('#quality-tooltip').matches(':popover-open')")
+        page.locator("#quality-tooltip").evaluate(
+            "element => Promise.all(element.getAnimations({subtree: true}).map(animation => animation.finished))"
+        )
         return
     if scenario_id == "menu.states":
         page.get_by_role("button", name="Open archive index").click()
