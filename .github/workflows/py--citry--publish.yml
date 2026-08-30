@@ -247,7 +247,13 @@ jobs:
         run: |
           curl --fail --location --silent --show-error \
             "https://pypi.org/pypi/citry/${CITRY_VERSION}/json" --output pypi.json
-          python -m examples._internal.release_gate --pypi-json pypi.json
+          core_version=$(python -c \
+            'import json; print(json.load(open("docs_site/static/playground/runtime.json"))["citry"]["core_version"])')
+          curl --fail --location --silent --show-error \
+            "https://pypi.org/pypi/citry-core/${core_version}/json" --output core-pypi.json
+          python -m examples._internal.release_gate \
+            --pypi-json pypi.json \
+            --core-pypi-json core-pypi.json
       - name: Find the exact public-index example qualification
         if: needs.verify-version.outputs.promotion_kind == 'release'
         id: examples

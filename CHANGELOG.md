@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v0.4.6
+
+_30 Aug 2026_
+
+### Fixed
+
+- The published browser playground now loads the Citry Core 1.6.1 runtime
+  required by Citry 0.4.5 and newer.
+
 ## v0.4.5
 
 _30 Aug 2026_

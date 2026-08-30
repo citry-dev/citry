@@ -66,11 +66,13 @@ def validate_release_surfaces(
     repo_root: Path = REPO_ROOT,
     *,
     pypi_payload: dict[str, Any] | None = None,
+    core_pypi_payload: dict[str, Any] | None = None,
 ) -> list[str]:
     """Return every release-coupled version or public-artifact mismatch."""
     problems: list[str] = []
     version = _project_version(repo_root)
     public_artifacts = None if pypi_payload is None else _public_artifacts(pypi_payload)
+    core_public_artifacts = None if core_pypi_payload is None else _public_artifacts(core_pypi_payload)
     catalog = tomllib.loads((repo_root / "examples/catalog.toml").read_text(encoding="utf-8"))
 
     for entry in catalog.get("projects", []):
@@ -111,9 +113,11 @@ def validate_release_surfaces(
                 problems.append(problem)
 
     runtime = json.loads((repo_root / "docs_site/static/playground/runtime.json").read_text(encoding="utf-8"))
-    if runtime.get("citry", {}).get("version") != version:
+    runtime_citry = runtime.get("citry", {})
+    runtime_packages = runtime.get("packages", [])
+    if runtime_citry.get("version") != version:
         problems.append(f"playground: citry.version must be {version}")
-    packages = [package for package in runtime.get("packages", []) if package.get("name") == "citry"]
+    packages = [package for package in runtime_packages if package.get("name") == "citry"]
     if len(packages) != 1 or packages[0].get("version") != version:
         problems.append(f"playground: packages must contain Citry {version} exactly once")
     elif (
@@ -125,17 +129,61 @@ def validate_release_surfaces(
         )
     ) is not None:
         problems.append(problem)
+
+    build = json.loads((repo_root / "packages/py/citry_core/pyodide-build.json").read_text(encoding="utf-8"))
+    pyodide = runtime.get("pyodide", {})
+    if pyodide.get("version") != build.get("pyodide") or pyodide.get("python") != build.get("python"):
+        problems.append("playground: Pyodide and Python versions must match citry-core's browser build tuple")
+
+    core_version = runtime_citry.get("core_version")
+    core_packages = [package for package in runtime_packages if package.get("name") == "citry-core"]
+    if not isinstance(core_version, str) or len(core_packages) != 1 or core_packages[0].get("version") != core_version:
+        problems.append("playground: citry.core_version must match exactly one citry-core package")
+    else:
+        expected_core_wheel = (
+            f"citry_core-{core_version}-{build['python_tag']}-{build['abi_tag']}-{build['platform_tag']}.whl"
+        )
+        core_url = core_packages[0].get("url")
+        if not isinstance(core_url, str) or core_url.rsplit("/", 1)[-1] != expected_core_wheel:
+            problems.append("playground: citry-core wheel must match the pinned Python and PyEmscripten ABI")
+        elif (
+            problem := _artifact_problem(
+                core_packages[0],
+                owner="playground: Citry Core wheel",
+                public_artifacts=core_public_artifacts,
+                require_digest=False,
+            )
+        ) is not None:
+            problems.append(problem)
+
+    ui_version = runtime_citry.get("ui_version")
+    ui_packages = [package for package in runtime_packages if package.get("name") == "citry-ui"]
+    if not isinstance(ui_version, str) or len(ui_packages) != 1 or ui_packages[0].get("version") != ui_version:
+        problems.append("playground: citry.ui_version must match exactly one citry-ui package")
+    elif (
+        problem := _artifact_problem(
+            ui_packages[0],
+            owner="playground: Citry UI wheel",
+            public_artifacts=None,
+            require_digest=False,
+        )
+    ) is not None:
+        problems.append(problem)
     return problems
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pypi-json", type=Path)
+    parser.add_argument("--core-pypi-json", type=Path)
     args = parser.parse_args()
     payload = None
+    core_payload = None
     if args.pypi_json is not None:
         payload = json.loads(args.pypi_json.read_text(encoding="utf-8"))
-    problems = validate_release_surfaces(pypi_payload=payload)
+    if args.core_pypi_json is not None:
+        core_payload = json.loads(args.core_pypi_json.read_text(encoding="utf-8"))
+    problems = validate_release_surfaces(pypi_payload=payload, core_pypi_payload=core_payload)
     if problems:
         for problem in problems:
             print(f"release surface error: {problem}")

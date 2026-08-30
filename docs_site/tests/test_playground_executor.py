@@ -6,8 +6,10 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 _EXECUTOR = Path(__file__).parents[1] / "static" / "playground" / "executor.py"
+_PYODIDE_BUILD = Path(__file__).parents[2] / "packages" / "py" / "citry_core" / "pyodide-build.json"
 _SNIPPETS = Path(__file__).parents[1] / "live_snippets"
 _STARTER = _SNIPPETS / "welcome.py"
 _WORKER = Path(__file__).parents[1] / "static" / "playground" / "worker.js"
@@ -143,36 +145,35 @@ def test_worker_revalidates_the_coupled_runtime_files() -> None:
     assert "install_events_client_runtime" not in worker
 
 
-def test_runtime_manifest_pins_the_complete_published_tuple() -> None:
+def test_runtime_manifest_matches_its_build_and_package_contracts() -> None:
     runtime = json.loads(_RUNTIME.read_text(encoding="utf-8"))
+    build = json.loads(_PYODIDE_BUILD.read_text(encoding="utf-8"))
     packages = {package["name"]: package for package in runtime["packages"]}
-    citry_version = runtime["citry"]["version"]
 
     assert runtime["pyodide"] == {
-        "version": "314.0.3",
-        "python": "3.14.2",
-        "index_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/",
-        "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs",
-    }
-    assert runtime["citry"] == {
-        "version": citry_version,
-        "core_version": "1.6.0",
-        "ui_version": "0.2.0",
+        "version": build["pyodide"],
+        "python": build["python"],
+        "index_url": f"https://cdn.jsdelivr.net/pyodide/v{build['pyodide']}/full/",
+        "module_url": f"https://cdn.jsdelivr.net/pyodide/v{build['pyodide']}/full/pyodide.mjs",
     }
     assert len(packages) == len(runtime["packages"])
-    assert packages["citry-core"] == {
-        "name": "citry-core",
-        "version": "1.6.0",
-        "url": (
-            "https://files.pythonhosted.org/packages/bf/7a/"
-            "bd790e91a5f28f6431a2fa9a6f819188aad7b69773335562e6ce5037ae87/"
-            "citry_core-1.6.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
-        ),
+
+    citry = packages["citry"]
+    core = packages["citry-core"]
+    ui = packages["citry-ui"]
+    assert runtime["citry"] == {
+        "version": citry["version"],
+        "core_version": core["version"],
+        "ui_version": ui["version"],
     }
-    assert packages["citry"]["version"] == citry_version
-    assert packages["citry"]["url"].endswith(f"/citry-{citry_version}-py3-none-any.whl")
-    assert packages["citry-ui"]["version"] == "0.2.0"
-    assert packages["citry-ui"]["url"].endswith("/citry_ui-0.2.0-py3-none-any.whl")
+
+    for package in (citry, core, ui):
+        assert urlparse(package["url"]).hostname == "files.pythonhosted.org"
+    assert Path(urlparse(citry["url"]).path).name == f"citry-{citry['version']}-py3-none-any.whl"
+    assert Path(urlparse(core["url"]).path).name == (
+        f"citry_core-{core['version']}-{build['python_tag']}-{build['abi_tag']}-{build['platform_tag']}.whl"
+    )
+    assert Path(urlparse(ui["url"]).path).name == f"citry_ui-{ui['version']}-py3-none-any.whl"
 
 
 def test_executor_accepts_html_markup_element_render_and_starter() -> None:

@@ -323,6 +323,8 @@ def check() -> list[str]:
         "--event push",
         "--no-artifact",
         "examples._internal.release_gate",
+        "https://pypi.org/pypi/citry-core/${core_version}/json",
+        "--core-pypi-json core-pypi.json",
         "needs: [verify-version, select-qualification, select-release-surfaces]",
         "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
         "--promote-archive qualification.zip",

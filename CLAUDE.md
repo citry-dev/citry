@@ -426,6 +426,29 @@ incremental release commits. Separate these stages clearly:
 7. Apply post-release source updates, such as public lockfile refreshes, in one
    final batch.
 
+Treat release evidence as belonging to one exact dependency closure, not merely
+to a commit that once passed locally:
+
+- **Prove public dependencies before the first tag.** The exact candidate must
+  pass its distribution qualification in a clean environment that installs the
+  built candidate artifact while resolving its dependencies from their public
+  registries. A workspace build or editable install is not evidence that the
+  declared public dependency versions contain the APIs the candidate uses.
+- **Invalidate stale evidence after a late release correction.** If a package
+  version, dependency constraint, release lock, browser runtime tuple,
+  distribution verifier, or release-coupled test changes after a green gate,
+  stop before tagging. Recalculate the affected package/dependent closure and
+  rerun its focused checks plus every mandatory exact-SHA gate from the corrected
+  state. Do not cite the earlier full gate for files or dependency bytes it did
+  not test.
+- **Keep release-coupled values single-sourced.** Tests must derive versions,
+  ABI tags, and artifact filenames from the owning manifest, runtime manifest,
+  or build metadata, then validate their relationships and immutable public
+  artifacts. Do not copy the current version or wheel URL into a second test
+  literal. When public-registry evidence is required, fetch it in the release
+  workflow and pass it into a deterministic validator; unit tests use synthetic
+  registry payloads instead of network access.
+
 Keep the user informed when the actual cost diverges materially from the
 expected cost. If an unexpected problem adds more than 30 minutes, or the task
 takes more than twice the initial estimate, report what is consuming the time,
