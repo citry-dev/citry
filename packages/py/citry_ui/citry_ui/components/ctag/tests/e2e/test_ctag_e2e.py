@@ -113,6 +113,7 @@ def _load(page: Any) -> list[str]:
     page.wait_for_function(
         "document.querySelector('#controlled')?.hasAttribute('data-citry-tag-group-initialized')"
         " && document.querySelectorAll('#controlled [data-citry-tag-initialized]').length === 3"
+        " && document.querySelector('#controlled [data-value=alpha]')?.hasAttribute('data-selected')"
     )
     return errors
 

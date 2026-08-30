@@ -157,6 +157,9 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
     if scenario_id == "popover.states":
         page.get_by_role("button", name="Inspect Europa").click()
         page.wait_for_function("document.querySelector('#quality-popover').matches(':popover-open')")
+        page.locator("#quality-popover").evaluate(
+            "element => Promise.all(element.getAnimations({subtree: true}).map(animation => animation.finished))"
+        )
         return
     if scenario_id == "drawer.states":
         page.get_by_role("button", name="Edit observatory note").click()

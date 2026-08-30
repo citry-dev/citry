@@ -994,6 +994,7 @@ def test_a_replaced_poll_region_stops_polling_with_no_dead_interval_left_firing(
 
     page.clock.run_for(1000)
     _wait_requests(page, captured, 1)
+    page.wait_for_function("document.querySelector('.n').innerText === '1'")
     page.evaluate(
         """
         () => Citry.events.applyActions([

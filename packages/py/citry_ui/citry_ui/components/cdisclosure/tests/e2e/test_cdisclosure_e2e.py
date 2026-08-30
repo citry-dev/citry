@@ -599,7 +599,9 @@ def test_focus_presence_animation_rapid_reversal_and_form_continuity(disclosure_
     panel = _panel(page, "guide")
     note = page.locator("#guide-note")
     trigger.click()
-    page.wait_for_timeout(100)
+    panel.evaluate(
+        "element => Promise.all(element.getAnimations({subtree: true}).map(animation => animation.finished))"
+    )
     note.fill("edited")
     note.focus()
 
@@ -608,7 +610,7 @@ def test_focus_presence_animation_rapid_reversal_and_form_continuity(disclosure_
     assert panel.get_attribute("aria-hidden") == "true"
     assert panel.evaluate("element => element.inert && !element.hidden")
     assert trigger.evaluate("element => element === document.activeElement")
-    page.wait_for_timeout(100)
+    page.wait_for_function("document.querySelector('#guide > [data-citry-disclosure-panel]').hidden")
     assert panel.evaluate("element => element.hidden")
     assert panel.evaluate("element => element.style.blockSize === '' && element.style.overflow === ''")
 
@@ -617,7 +619,9 @@ def test_focus_presence_animation_rapid_reversal_and_form_continuity(disclosure_
     trigger.click()
     page.wait_for_timeout(20)
     trigger.click()
-    page.wait_for_timeout(100)
+    panel.evaluate(
+        "element => Promise.all(element.getAnimations({subtree: true}).map(animation => animation.finished))"
+    )
     assert trigger.get_attribute("aria-expanded") == "true"
     assert not panel.is_hidden()
     assert note.input_value() == "edited"

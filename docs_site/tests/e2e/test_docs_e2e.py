@@ -1692,6 +1692,24 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     page.goto(docs_site_url + "/ui-library/components/menu/", wait_until="networkidle")
     demos = page.locator("[data-citry-ui-demo]")
 
+    nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    nested.get_by_role("button", name="Choose a collection").click()
+    celestial_archives = nested.get_by_role("menuitem", name="Celestial archives")
+    _wait_for_focus(celestial_archives)
+    celestial_archives.press("ArrowRight")
+    constellations = nested.get_by_role("menuitem", name="Constellations")
+    _wait_for_focus(constellations)
+    constellations.press("m")
+    moon_records = nested.get_by_role("menuitem", name="Moon records")
+    _wait_for_focus(moon_records)
+    moon_records.press("ArrowRight")
+    silver_moon = nested.get_by_role("menuitem", name="Silver moon")
+    _wait_for_focus(silver_moon)
+    assert nested.locator('[role="menu"]:popover-open').count() == 3
+    silver_moon.press("Escape")
+    nested.locator('[role="menu"]:popover-open').nth(2).wait_for(state="hidden")
+    assert nested.locator('[role="menu"]:popover-open').count() == 2
+
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
     sampler.get_by_role("button", name="Open archive menu").click()
     sampler.locator('[role="menu"]:popover-open').wait_for(state="visible")
@@ -1718,19 +1736,6 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     celestial = choices.get_by_role("menuitemradio", name="Celestial")
     celestial.click()
     _wait_for_attribute(celestial, "aria-checked", "true")
-
-    nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
-    nested.get_by_role("button", name="Choose a collection").click()
-    nested.get_by_role("menuitem", name="Celestial archives").click()
-    nested.get_by_role("menuitem", name="Moon records").click()
-    assert nested.locator('[role="menu"]:popover-open').count() == 3
-    silver_moon = nested.get_by_role("menuitem", name="Silver moon")
-    page.mouse.move(0, 0)
-    silver_moon.focus()
-    _wait_for_focus(silver_moon)
-    silver_moon.press("Escape")
-    nested.locator('[role="menu"]:popover-open').nth(2).wait_for(state="hidden")
-    assert nested.locator('[role="menu"]:popover-open').count() == 2
 
     placement_demo = demos.nth(9)
     placement_controls = placement_demo.locator("[data-ui-preview-controls] form")
