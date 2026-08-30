@@ -110,8 +110,10 @@ def _load(page: Any) -> list[str]:
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.set_content(_tag_page(), wait_until="load")
-    page.wait_for_selector("#controlled[data-citry-tag-group-initialized]")
-    page.wait_for_function("document.querySelectorAll('#controlled [data-citry-tag-initialized]').length === 3")
+    page.wait_for_function(
+        "document.querySelector('#controlled')?.hasAttribute('data-citry-tag-group-initialized')"
+        " && document.querySelectorAll('#controlled [data-citry-tag-initialized]').length === 3"
+    )
     return errors
 
 

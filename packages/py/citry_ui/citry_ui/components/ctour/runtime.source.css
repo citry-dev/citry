@@ -230,6 +230,7 @@
       align-items: center;
     }
     :where([data-citry-ui-part="tour"] [data-citry-ui-part="actions"]) {
+      align-items: stretch;
       flex-wrap: nowrap;
       inline-size: 100%;
     }

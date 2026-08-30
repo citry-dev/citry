@@ -1725,6 +1725,7 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     nested.get_by_role("menuitem", name="Moon records").click()
     assert nested.locator('[role="menu"]:popover-open').count() == 3
     silver_moon = nested.get_by_role("menuitem", name="Silver moon")
+    page.mouse.move(0, 0)
     silver_moon.focus()
     _wait_for_focus(silver_moon)
     silver_moon.press("Escape")
