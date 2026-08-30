@@ -385,6 +385,53 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   ready for handoff, a pull request, or release. Subagents and reviewers report
   their focused evidence and do not start duplicate repository-wide gates unless
   they were explicitly assigned integration ownership.
+
+## Keep integration and release loops bounded
+
+Do not use CI as a slow, one-failure-at-a-time debugger. Before promoting or
+releasing a large change, map the whole operation: the commits to promote, the
+packages and versions to publish, their dependency order, the required local
+gates, the required CI checks, and the final public verification. State any
+step expected to take significant time.
+
+When CI fails:
+
+1. Inspect every failed job and read each job's complete failure output.
+2. Group failures by root cause before editing.
+3. Reproduce locally where practical.
+4. Fix the complete known failure set in one coherent pass.
+5. Run focused checks for the affected surfaces.
+6. Send the settled candidate through the required full gate.
+
+Do not create and push a new commit for each newly observed symptom when the
+remaining CI results can reveal related failures. Wait for the useful results,
+collect them, and make one corrective pass.
+
+Run expensive repository-wide checks only at meaningful stage boundaries.
+During implementation and CI repair, use focused checks. Run the full local
+gate once the integrated candidate has settled, and run the required exact-SHA
+CI gate on the final release candidate. A small follow-up should rerun the
+checks its risk requires and any mandatory final gate, but should not
+automatically repeat unrelated qualification work that already passed.
+
+Before beginning a release, prefer one clean release candidate over a chain of
+incremental release commits. Separate these stages clearly:
+
+1. Stabilize the complete source change.
+2. Pass the local integration gate.
+3. Promote the settled candidate.
+4. Pass the required exact-SHA CI checks.
+5. Publish packages in dependency order.
+6. Verify each published artifact once from a clean consumer environment.
+7. Apply post-release source updates, such as public lockfile refreshes, in one
+   final batch.
+
+Keep the user informed when the actual cost diverges materially from the
+expected cost. If an unexpected problem adds more than 30 minutes, or the task
+takes more than twice the initial estimate, report what is consuming the time,
+which work is mandatory, which work is optional, and the fastest safe path
+forward before continuing.
+
 - **Read the gate's own report, not the shell's exit code.** Two things about
     `scripts/check.py` cost a wasted run every time they are forgotten:
   - **A failing phase carries its output in its `details` field.** With

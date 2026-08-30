@@ -122,7 +122,7 @@ HTMX file you deploy, and check that:
 - the browser console and network log stay free of unexpected errors.
 
 The complete
-[HTMX patterns demo]({{ repo_url }}/tree/citry%400.4.4/examples/demos/htmx){: target="_blank" rel="noopener"}
+[HTMX patterns demo]({{ repo_url }}/tree/citry%400.4.5/examples/demos/htmx){: target="_blank" rel="noopener"}
 contains search-as-you-type, an editable contact form, and a department picker
 that refreshes the team list. It also includes FastAPI routes, a pinned HTMX
 runtime, and browser tests. See

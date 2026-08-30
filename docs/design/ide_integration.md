@@ -6,8 +6,8 @@ The portable syntax corpus drives the aligned Pygments lexers and declarative
 VS Code highlighting, `citry check` provides parser-grade batch validation
 with an explicitly bounded static fallback, and the companion language server
 plus VS Code client provide the implemented editor intelligence. The VS Code
-extension 0.1.1 is published on Visual Studio Marketplace and Open VSX.
-`citry-lsp` 0.1.2 and `pygments-citry` 0.2.0 are published on PyPI. The
+extension 0.1.2 is published on Visual Studio Marketplace and Open VSX.
+`citry-lsp` 0.1.3 and `pygments-citry` 0.2.0 are published on PyPI. The
 original design is the synthesis of a research and design-panel process: five recon reports,
 three competing design drafts, and two adversarial judge verdicts, all in
 [`ide_research/`](ide_research/README.md) and all dated 2026-07-07. Both
@@ -1681,6 +1681,19 @@ degradation contract in section 3.4.1.
     dynamic event names. `citry check` and the LSP share the same structured
     Python-to-JSON type mapping and diagnostics.
 
+    Attribute-name intelligence follows the core directives in Citry's pinned
+    Alpine release. The LSP completes and documents `x-*` directives, common
+    `@event` listeners, and common `:attribute` bindings in standalone and
+    inline templates, including nested templates. Component boundaries offer
+    only Alpine event listeners because other directives belong on the
+    component's concrete HTML roots; `<c-element>` follows its selected HTML
+    element. Exact lowercase `:c-*` State bindings remain Citry-owned and never
+    enter Alpine expression analysis. In VS Code, a same-length projection
+    also removes the leading `:` from a plain HTML element's Alpine binding so
+    the installed HTML provider can explain the underlying native attribute.
+    The projection excludes `:c-*`, component boundaries, modifiers, and
+    uncertain source ranges.
+
     In VS Code, a version-bound virtual JavaScript document delegates ordinary
     JavaScript completion, hover, and definition to the installed JavaScript
     provider. Citry adds exact `JsData` roots, component `data` and `scope`
@@ -1752,12 +1765,24 @@ degradation contract in section 3.4.1.
     copying JavaScript `for...in` semantics.
 
     Literal server-handler checks cover all equivalent spellings: `sendEvent`
-    and `$sendEvent` calls, declarative `@c-*` bindings, and the handler names
-    passed to `$loading(...)` and `$error(...)`. They share
-    `citry.browser.unknown-server-event`, completion, hover, and exact Python
-    handler navigation. `onEvent` and `$onEvent` remain open browser-event
-    listeners. Declarative handler argument expressions are analyzed in the
-    source component's Alpine scope.
+    and `$sendEvent` calls, declarative `@c-*` bindings, two-way `:c-*` State
+    bindings, and the handler names passed to `$loading(...)` and `$error(...)`.
+    They share `citry.browser.unknown-server-event`, completion, hover, and
+    exact Python handler navigation. `onEvent` and `$onEvent` remain open
+    browser-event listeners. Declarative handler argument expressions are
+    analyzed in the source component's Alpine scope.
+
+    Citry binding keys have their own parser-backed intelligence. An `@c-*`
+    base explains which open DOM event triggers the named Python handler. A
+    `:c-*` base shows the public State field's Python type and description and
+    navigates to its exact declaration. Modifier completion follows the
+    runtime's channel-specific tables: event bindings offer event flags and
+    key/timing filters, State bindings offer update-event and timing filters,
+    and `@c-poll` offers representative whole-second intervals. Modifier
+    hover explains accepted value shapes, including the unbounded whole-number
+    `ms` and `s` duration forms. Unknown modifiers receive no misleading help,
+    and missing or stale registry evidence degrades a State key to generic
+    syntax help without a Python target.
 
     Citry-owned browser APIs have first-party hover records with their
     JavaScript signature, a concise explanation, and a canonical documentation

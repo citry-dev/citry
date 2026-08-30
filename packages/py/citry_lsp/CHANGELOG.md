@@ -2,6 +2,25 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## Unreleased
+
+## [0.1.3] - 2026-08-30
+
+### Added
+
+- Complete and document core Alpine directive names and common event and
+  attribute shorthands in standalone, inline, and nested templates.
+- Complete and explain channel-specific `@c-*` and `:c-*` modifiers, link
+  State keys to their Python fields, and navigate two-way binding values to
+  their server handlers.
+
+### Fixed
+
+- Keep Citry `:c-*` State-binding handler names out of Alpine unknown-variable
+  diagnostics and browser-expression completion routing.
+- Check and complete two-way `:c-*` handler values through the same server
+  event contract as `@c-*` values.
+
 ## [0.1.2] - 2026-08-29
 
 ### Added

@@ -1,5 +1,5 @@
 {
   "citry.python": "${workspaceFolder}/.venv/bin/python",
-  "citry.app": "app.components.page:citry_app",
+  "citry.app": "app.citry_app:citry_app",
   "citry.envFile": "${workspaceFolder}/.env.example"
 }

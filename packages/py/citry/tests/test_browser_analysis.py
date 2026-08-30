@@ -123,6 +123,18 @@ def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():
     ]
 
 
+def test_browser_hosts_keep_citry_state_bindings_out_of_alpine_analysis():
+    source = '<input :c-query.debounce.300ms="refresh" /><input :C-query="ordinaryAlpineBinding" />'
+
+    expressions = browser_expressions(parse_template(source))
+
+    # Citry prefixes are case-sensitive. The exact lowercase channel belongs
+    # to Events, while the case variant remains ordinary Alpine shorthand.
+    assert [(item.attribute, item.source, item.host) for item in expressions] == [
+        (":C-query", "ordinaryAlpineBinding", "alpine")
+    ]
+
+
 def test_browser_hosts_capture_csp_element_attribute_and_evaluator_context():
     source = (
         '<main X-DATA="{ open: true }"><span X-TEXT="open"></span></main>'
@@ -272,6 +284,7 @@ def test_alpine_csp_directive_empty_rules_use_javascript_whitespace_semantics():
 def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ranges():
     source = (
         '<button @c-click="save-card" @c-blur="update(name)"></button>'
+        '<input :c-query="refresh" :c-other="refresh(args)">'
         "<c-panel c-body=\"<><button @c-click='literal(handler)'></button></>\" />"
     )
     template = parse_template(source)
@@ -284,6 +297,8 @@ def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ran
     assert [(event.name, source.encode()[event.start_index : event.end_index].decode()) for event in events] == [
         ("save-card", "save-card"),
         ("update", "update"),
+        ("refresh", "refresh"),
+        ("refresh(args)", "refresh(args)"),
         ("literal(handler)", "literal(handler)"),
     ]
 

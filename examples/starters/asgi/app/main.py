@@ -1,11 +1,10 @@
 from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
+from app.citry_app import citry_app
+from app.components.project_page import ProjectPage
+from app.data import find_projects
 from citry.contrib.asgi import asgi_app
-
-from .citry_app import citry_app
-from .components import ProjectPage
-from .data import find_projects
 
 Scope = MutableMapping[str, Any]
 Receive = Callable[[], Awaitable[MutableMapping[str, Any]]]
@@ -49,7 +48,8 @@ async def application(scope: Scope, receive: Receive, send: Send) -> None:
         return
 
     if path == "/" and scope.get("method") in {"GET", "HEAD"}:
-        body = str(ProjectPage(projects=find_projects())).encode()
+        html = str(ProjectPage(projects=find_projects()))
+        body = html.encode()
         if scope.get("method") == "HEAD":
             body = b""
         await _respond(send, 200, body, b"text/html; charset=utf-8")

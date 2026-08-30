@@ -254,3 +254,10 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --title "$GITHUB_REF_NAME"
           --generate-notes
+      - name: Start the Discord release notification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches"
+          -f event_type=citry-release-published
+          -f "client_payload[tag]=$GITHUB_REF_NAME"

@@ -155,11 +155,12 @@ function unfinishedTagHasPythonValue(tagText: string): boolean {
 	}
 	const expressionAttribute =
 		current.name === "#c-key" || current.name === "cond" || current.name === "each" || current.name.startsWith("c-");
+	const citryHandlerAttribute = current.name.startsWith("@c-") || current.name.startsWith(":c-");
 	const browserBaseName = current.name.split(".", 1)[0] ?? current.name;
 	const browserExpressionAttribute =
 		current.name === "$c-props" ||
 		current.name.startsWith("@") ||
-		current.name.startsWith(":") ||
+		(current.name.startsWith(":") && !current.name.startsWith(":c-")) ||
 		browserBaseName === "x-for" ||
 		current.name.startsWith("x-bind:") ||
 		current.name.startsWith("x-on:") ||
@@ -179,7 +180,9 @@ function unfinishedTagHasPythonValue(tagText: string): boolean {
 			"x-show",
 			"x-text",
 		]).has(browserBaseName);
-	return (expressionAttribute || browserExpressionAttribute) && pythonPrefixIsCode(current.value);
+	return (
+		(expressionAttribute || citryHandlerAttribute || browserExpressionAttribute) && pythonPrefixIsCode(current.value)
+	);
 }
 
 function unfinishedAttributeValue(tagText: string): { name: string; value: string } | undefined {

@@ -96,8 +96,16 @@ syntax-only analysis available and appears in the language-server status.
 Citry recognizes direct `template`, `js`, `css`, and `messages` multiline
 assignments inside Python components. Template data and loop/fill variables get
 completion, readable type hover, and navigation back to their Python field or
-lexical declaration. Shared and inherited templates expose only facts that are
-safe for every proven component owner.
+lexical declaration. Alpine directive names and common `@event` and
+`:attribute` shorthands complete in the same templates, with hover links to the
+Alpine documentation and native HTML help for bound attributes. Shared and
+inherited templates expose only facts that are safe for every proven component
+owner.
+
+Citry event and State bindings are linked too. Handler values in `@c-*` and
+two-way `:c-*` attributes complete, hover, and navigate to the Python Events
+method. A `:c-*` key navigates to its public `Component.State` field, while
+completion after `.` offers only modifiers accepted by that binding channel.
 
 For example, Citry carries the Python type of `results` into the template and
 then into each `result` loop variable. Hovering `result.url` shows its type,

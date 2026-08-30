@@ -1248,8 +1248,8 @@ Currently, releases are managed manually:
    `packages/py/citry/README.md`.
 9. **Create and push the annotated final tag** at that exact surface-qualified
    commit, for example
-   `git tag -a citry@0.4.4 -m "Release citry@0.4.4"` followed by
-   `git push origin citry@0.4.4`. Other packages use their matching tag directly
+   `git tag -a citry@X.Y.Z -m "Release citry@X.Y.Z"` followed by
+   `git push origin citry@X.Y.Z`. Other packages use their matching tag directly
    after step 7.
 10. **Verify and close out the release from public bytes.** Check the registry
    version and GitHub Release; install the exact public dependency chain with
@@ -1282,6 +1282,34 @@ new must likewise wait for that Citry release to reach PyPI, as must a
 `citry-ui` release that raises its minimum Citry version. The VS Code extension
 waits for its compatible public `citry-lsp`. `pygments-citry` has no
 cross-package release ordering requirement.
+
+### Discord release notifications
+
+Every package publisher creates its GitHub Release with `GITHUB_TOKEN`. GitHub
+does not start another workflow from the resulting `release` event, so the
+publisher sends a `citry-release-published` repository dispatch after the
+Release exists. [`repo--discord-release.yml`](../.github/workflows/repo--discord-release.yml)
+then reads that Release and posts its notes to the channel assigned to the tag:
+
+| Discord channel | Published tag families |
+|---|---|
+| Announcements | `citry@*`, `citry-ui@*`, `vscode-citry@*` |
+| Development | `citry-lsp@*`, `citry-core@*`, `pygments-citry@*` |
+
+The staging tag `citry@publish-*` creates no GitHub Release and sends no
+notification. Internal crates, protocol packages, and other unpublished tools
+also send none. The release-notification validator requires every workflow
+that creates a GitHub Release to own exactly one route, so add the new tag
+family to [`scripts/discord_release.py`](../scripts/discord_release.py) when a
+publisher is added.
+
+The notifier fails visibly when its assigned repository secret is absent or
+Discord rejects the webhook. Use `DISCORD_WEBHOOK_ANNOUNCEMENTS` for the main
+release channel and `DISCORD_WEBHOOK_DEVELOPMENT` for the contributor channel.
+Because notification runs separately from publication, this failure does not
+change public package bytes. Retry a missed post by manually running **Notify
+Discord on Release** with the existing GitHub Release tag; do not rerun the
+package publisher merely to resend Discord.
 
 **`citry` pins one exact `citry-core` version** (`citry-core==1.6.0`, not a
 range). The runtime node classes in `citry.nodes` read the source that
@@ -1870,7 +1898,7 @@ the stated compressed and expanded size caps. `release-inventory.json`
 records the exact filename, byte size, SHA-256, and member list.
 
 The qualification then downloads VS Code 1.101.0 into a clean test profile,
-installs public `citry-lsp==0.1.2` and its public dependencies into a fresh
+installs public `citry-lsp==0.1.3` and its public dependencies into a fresh
 Python 3.14 environment, and loads the extracted qualified VSIX. It requires
 real `c-if`, `c-for`, and `c-slot` completions from the server, then formats
 deliberately untidy embedded JavaScript and CSS twice through an exact,

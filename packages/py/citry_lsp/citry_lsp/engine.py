@@ -240,6 +240,9 @@ class _AttributeCompletionContext:
     edit_range: types.Range
     authored_attrs: frozenset[str]
     preserve_value: bool
+    authored_name: str
+    start_index: int
+    end_index: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -440,9 +443,24 @@ class _HtmlProjectionSlice:
 
 @dataclass(frozen=True, slots=True)
 class _SyntaxReference:
-    """One parser-owned tag or attribute together with its authored span."""
+    """One recognized tag or attribute together with its authored span."""
 
     spec: _SyntaxSpec
+    start_index: int
+    end_index: int
+    display_label: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _CitryBindingReference:
+    """One base name or modifier segment inside a Citry-owned binding key."""
+
+    channel: Literal["event", "state"]
+    attribute_name: str
+    base_name: str
+    part: Literal["base", "modifier"]
+    value: str
+    previous_modifier: str | None
     start_index: int
     end_index: int
 
@@ -2776,6 +2794,9 @@ def completion_result(
     event_result = _browser_event_completion_result(document, position, project, open_documents)
     if event_result is not None:
         return event_result
+    modifier_result = _citry_binding_modifier_completion_result(document, position)
+    if modifier_result is not None:
+        return modifier_result
     browser_result = _browser_data_completion_result(document, position, project, open_documents)
     if browser_result is not None:
         return browser_result
@@ -2966,6 +2987,156 @@ def completion_result(
     return CompletionResult(tuple(items), is_incomplete=True)
 
 
+def _citry_binding_reference(
+    document: DocumentState,
+    position: types.Position,
+) -> tuple[TemplateRegion, _CitryBindingReference] | None:
+    """Resolve one binding-key segment through the current template source map."""
+    region = document.region_at(position)
+    if region is None:
+        return None
+    parser_index = region.source_map.parser_index_at(_citry_position(position))
+    parsed = document.parsed.get(region.key)
+    if parser_index is None or parsed is None:
+        return None
+    reference = _citry_binding_reference_at(parsed.template, parser_index)
+    return (region, reference) if reference is not None else None
+
+
+def _citry_binding_hover(
+    document: DocumentState,
+    position: types.Position,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> types.Hover | None:
+    """Explain Citry binding bases and modifier segments at their exact ranges."""
+    resolved = _citry_binding_reference(document, position)
+    if resolved is None:
+        return None
+    region, reference = resolved
+    source = region.source_map.template_source
+    try:
+        start = parser_char_index(source, reference.start_index)
+        end = parser_char_index(source, reference.end_index)
+    except ValueError:
+        return None
+    mapped_range = _mapped_template_range(region, source, start, end)
+    if mapped_range is None:
+        return None
+
+    if reference.part == "modifier":
+        markdown = _citry_binding_modifier_markdown(reference)
+    elif reference.channel == "event":
+        markdown = _citry_event_binding_markdown(reference)
+    else:
+        markdown = _citry_state_binding_markdown(
+            document,
+            region,
+            reference,
+            project,
+            open_documents,
+        )
+    if markdown is None:
+        return None
+    return types.Hover(
+        types.MarkupContent(types.MarkupKind.Markdown, markdown),
+        range=mapped_range,
+    )
+
+
+def _citry_event_binding_markdown(reference: _CitryBindingReference) -> str:
+    """Describe one open DOM-event name without pretending the name is closed."""
+    if reference.base_name == "poll":
+        description = (
+            "Call the named Python Events handler on the interval supplied by one modifier such as `.30s`. "
+            "Citry pauses polling while the tab is hidden."
+        )
+    else:
+        description = (
+            f"Listen for the `{reference.base_name}` DOM event on this element and send the attribute's value "
+            "to the matching Python Events handler."
+        )
+    return f"### `{reference.value}`\n\n{description}\n\n[Read the Citry documentation]({_EVENT_BINDINGS_URL})"
+
+
+def _citry_state_binding_markdown(
+    document: DocumentState,
+    region: TemplateRegion,
+    reference: _CitryBindingReference,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> str:
+    """Describe a State binding and add proven Python type and origin facts."""
+    consumers = _template_consumers(document, region, project, open_documents)
+    roots = _shared_state_roots(consumers, document, project, open_documents)
+    root = next((candidate for candidate in roots or () if candidate.name == reference.base_name), None)
+    records = _shared_state_field_records(consumers, project, reference.base_name) if root is not None else ()
+    if root is None:
+        lines = [f"### `{reference.value}`"]
+    else:
+        type_displays = tuple(dict.fromkeys(record.type_display for record in records if record.type_display))
+        rendered_type = " | ".join(type_displays) if type_displays else root.wire_type.javascript
+        lines = ["```python", f"(field) {reference.base_name}: {rendered_type}", "```"]
+    lines.extend(
+        (
+            "",
+            f"`{reference.value}` connects this control to the public "
+            f"`Component.State.{reference.base_name}` field. A handler value makes the binding two-way: "
+            "Citry sends the field update and calls that handler together.",
+        )
+    )
+    origins: dict[str, str | None] = {f"{record.qualname}.{record.name}": record.description for record in records}
+    if origins:
+        lines.extend(("", "Python declarations:"))
+        for origin, description in origins.items():
+            lines.append(f"- `{origin}`")
+            if description:
+                lines.append(f"  {description}")
+    lines.extend(("", f"[Read the Citry documentation]({_EVENT_BINDINGS_URL})"))
+    return "\n".join(lines)
+
+
+def _citry_binding_modifier_markdown(reference: _CitryBindingReference) -> str | None:
+    """Explain only modifier shapes accepted by this binding's runtime channel."""
+    display = f".{reference.value}"
+    if _CITRY_TIME_SEGMENT.fullmatch(reference.value):
+        if reference.channel == "event" and reference.base_name == "poll":
+            documentation = "Use one whole number of seconds, such as `.30s`, as the polling interval."
+        elif reference.previous_modifier in {"debounce", "throttle"}:
+            documentation = (
+                "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`, "
+                f"as the `.{reference.previous_modifier}` duration."
+            )
+        else:
+            return None
+    else:
+        modifier_name = "on" if reference.value.startswith("on:") else reference.value
+        spec = _CITRY_BINDING_MODIFIERS_BY_NAME.get(modifier_name)
+        if spec is None or reference.channel not in spec.channels:
+            return None
+        documentation = spec.documentation
+    return f"### `{display}`\n\n{documentation}\n\n[Read the Citry documentation]({_EVENT_BINDINGS_URL})"
+
+
+def _citry_state_binding_origin_locations(
+    document: DocumentState,
+    position: types.Position,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[types.Location, ...]:
+    """Navigate a ``:c-*`` base name to the exact public State declaration."""
+    resolved = _citry_binding_reference(document, position)
+    if resolved is None:
+        return ()
+    region, reference = resolved
+    if reference.channel != "state" or reference.part != "base":
+        return ()
+    consumers = _template_consumers(document, region, project, open_documents)
+    roots = _shared_state_roots(consumers, document, project, open_documents)
+    root = next((candidate for candidate in roots or () if candidate.name == reference.base_name), None)
+    return root.locations if root is not None else ()
+
+
 def hover(
     document: DocumentState,
     position: types.Position,
@@ -2978,6 +3149,9 @@ def hover(
         i18n_hover = _i18n_hover(i18n_use, project)
         if i18n_hover is not None:
             return i18n_hover
+    citry_binding_hover = _citry_binding_hover(document, position, project, open_documents)
+    if citry_binding_hover is not None:
+        return citry_binding_hover
     browser_api_hover = _browser_api_hover(document, position, project)
     if browser_api_hover is not None:
         return browser_api_hover
@@ -3030,7 +3204,7 @@ def hover(
             return types.Hover(
                 types.MarkupContent(
                     types.MarkupKind.Markdown,
-                    _syntax_markdown(syntax_reference.spec),
+                    _syntax_markdown(syntax_reference.spec, syntax_reference.display_label),
                 ),
                 range=syntax_range,
             )
@@ -3266,6 +3440,14 @@ def declaration(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> types.Location | list[types.Location] | None:
     """Navigate to the authored origin of one proven template variable."""
+    state_binding_locations = _citry_state_binding_origin_locations(
+        document,
+        position,
+        project,
+        open_documents,
+    )
+    if state_binding_locations:
+        return state_binding_locations[0] if len(state_binding_locations) == 1 else list(state_binding_locations)
     component_prop_location = _browser_component_prop_origin(document, position, project, open_documents)
     if component_prop_location is not None:
         return component_prop_location
@@ -3307,6 +3489,14 @@ def definition(
         i18n_location = _i18n_definition(i18n_use, project, open_documents, document)
         if i18n_location is not None:
             return i18n_location
+    state_binding_locations = _citry_state_binding_origin_locations(
+        document,
+        position,
+        project,
+        open_documents,
+    )
+    if state_binding_locations:
+        return state_binding_locations[0] if len(state_binding_locations) == 1 else list(state_binding_locations)
     component_prop_location = _browser_component_prop_origin(document, position, project, open_documents)
     if component_prop_location is not None:
         return component_prop_location
@@ -4364,7 +4554,7 @@ _RAW_TEXT_TAG_NAMES = frozenset({"script", "style", "textarea", "title", "c-raw"
 
 @dataclass(frozen=True, slots=True)
 class _SyntaxSpec:
-    """One parser-owned spelling shared by completion and hover."""
+    """One documented spelling shared by completion and hover."""
 
     label: str
     kind: str
@@ -4377,6 +4567,17 @@ class _SyntaxSpec:
     primary_attribute: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _CitryBindingModifierSpec:
+    """One modifier that Citry's Events runtime accepts on a binding channel."""
+
+    name: str
+    channels: frozenset[Literal["event", "state"]]
+    detail: str
+    documentation: str
+    insert_text: str | None = None
+
+
 _BUILTINS_URL = "https://citry.dev/reference/builtins/"
 _CONTROL_FLOW_URL = "https://citry.dev/syntax/control-flow/"
 _DYNAMIC_ATTRIBUTES_URL = "https://citry.dev/syntax/dynamic-attributes/"
@@ -4384,6 +4585,264 @@ _SLOTS_URL = "https://citry.dev/concepts/slots/"
 _CLIENT_INTERACTIVITY_URL = "https://citry.dev/concepts/client-interactivity/"
 _DYNAMIC_COMPONENTS_URL = "https://citry.dev/advanced/dynamic-components/"
 _BROWSER_I18N_URL = "https://citry.dev/i18n/browser/"
+_EVENT_BINDINGS_URL = "https://citry.dev/events/bindings/"
+
+_CITRY_BINDING_MODIFIERS = (
+    _CitryBindingModifierSpec(
+        "prevent",
+        frozenset({"event"}),
+        "Prevent the browser's default action",
+        "Call `preventDefault()` before Citry sends the server event.",
+    ),
+    _CitryBindingModifierSpec(
+        "stop",
+        frozenset({"event"}),
+        "Stop DOM event propagation",
+        "Call `stopPropagation()` before Citry sends the server event.",
+    ),
+    _CitryBindingModifierSpec(
+        "self",
+        frozenset({"event"}),
+        "Require this element as the event target",
+        "Send only when the bound element itself is the DOM event target.",
+    ),
+    _CitryBindingModifierSpec(
+        "once",
+        frozenset({"event"}),
+        "Send at most once",
+        "Let this binding send its server event only once during the element's lifetime.",
+    ),
+    _CitryBindingModifierSpec(
+        "enter",
+        frozenset({"event", "state"}),
+        "Require the Enter key",
+        "Send only when the triggering event's key is `Enter`.",
+    ),
+    _CitryBindingModifierSpec(
+        "escape",
+        frozenset({"event", "state"}),
+        "Require the Escape key",
+        "Send only when the triggering event's key is `Escape`.",
+    ),
+    _CitryBindingModifierSpec(
+        "debounce",
+        frozenset({"event", "state"}),
+        "Wait for a quiet period",
+        "Add a duration such as `.300ms` or `.1s`. Bare `.debounce` uses 250 ms.",
+    ),
+    _CitryBindingModifierSpec(
+        "throttle",
+        frozenset({"event", "state"}),
+        "Limit how often the binding sends",
+        "Add a duration such as `.300ms` or `.1s`. Bare `.throttle` uses 250 ms.",
+    ),
+    _CitryBindingModifierSpec(
+        "lazy",
+        frozenset({"state"}),
+        "Wait for the committed control value",
+        "Use the control's committed-value event instead of its active update event.",
+    ),
+    _CitryBindingModifierSpec(
+        "on",
+        frozenset({"state"}),
+        "Choose the control's update event",
+        "Write `.on:<event>` with any nonempty DOM event name, such as `.on:keyup`.",
+        insert_text="on:${1:event}",
+    ),
+)
+_CITRY_BINDING_MODIFIERS_BY_NAME = {spec.name: spec for spec in _CITRY_BINDING_MODIFIERS}
+_CITRY_TIMING_EXAMPLES = ("100ms", "250ms", "300ms", "500ms", "1s")
+_CITRY_POLL_EXAMPLES = ("1s", "5s", "30s", "60s")
+_CITRY_TIME_SEGMENT = re.compile(r"\d+(?:ms|s)\Z")
+
+_ALPINE_SYNTAX = (
+    _SyntaxSpec(
+        "x-data",
+        "attribute",
+        "Declare Alpine state",
+        "Create the reactive Alpine scope available to this element and its descendants.",
+        "https://alpinejs.dev/directives/data",
+        insert_text='x-data="${1:{}}"',
+    ),
+    _SyntaxSpec(
+        "x-init",
+        "attribute",
+        "Initialize an Alpine element",
+        "Run this JavaScript statement when Alpine initializes the element.",
+        "https://alpinejs.dev/directives/init",
+        insert_text='x-init="${1:expression}"',
+    ),
+    _SyntaxSpec(
+        "x-show",
+        "attribute",
+        "Toggle element visibility",
+        "Show the element while this Alpine expression is truthy.",
+        "https://alpinejs.dev/directives/show",
+        insert_text='x-show="${1:expression}"',
+    ),
+    _SyntaxSpec(
+        "x-bind",
+        "attribute",
+        "Bind an HTML attribute",
+        "Keep an HTML attribute synchronized with an Alpine expression.",
+        "https://alpinejs.dev/directives/bind",
+        insert_text='x-bind:${1:attribute}="${2:expression}"',
+        repeatable=True,
+    ),
+    _SyntaxSpec(
+        "x-on",
+        "attribute",
+        "Listen for a browser event",
+        "Run this Alpine statement when the selected browser event fires.",
+        "https://alpinejs.dev/directives/on",
+        insert_text='x-on:${1:event}="${2:expression}"',
+        repeatable=True,
+    ),
+    _SyntaxSpec(
+        "x-text",
+        "attribute",
+        "Set text content",
+        "Set the element's text content from an Alpine expression.",
+        "https://alpinejs.dev/directives/text",
+        insert_text='x-text="${1:expression}"',
+    ),
+    _SyntaxSpec(
+        "x-html",
+        "attribute",
+        "Set HTML content",
+        "Set the element's inner HTML from an Alpine expression.",
+        "https://alpinejs.dev/directives/html",
+        insert_text='x-html="${1:expression}"',
+    ),
+    _SyntaxSpec(
+        "x-model",
+        "attribute",
+        "Bind a form value",
+        "Synchronize a form control's value with Alpine state.",
+        "https://alpinejs.dev/directives/model",
+        insert_text='x-model="${1:value}"',
+    ),
+    _SyntaxSpec(
+        "x-modelable",
+        "attribute",
+        "Expose a modelable value",
+        "Expose an Alpine property for a parent `x-model` binding.",
+        "https://alpinejs.dev/directives/modelable",
+        insert_text='x-modelable="${1:value}"',
+    ),
+    _SyntaxSpec(
+        "x-for",
+        "attribute",
+        "Repeat a template",
+        "Render this `<template>` once for each item in an Alpine collection.",
+        "https://alpinejs.dev/directives/for",
+        insert_text='x-for="${1:item} in ${2:items}"',
+    ),
+    _SyntaxSpec(
+        "x-transition",
+        "attribute",
+        "Animate visibility changes",
+        "Apply an Alpine transition when an element enters or leaves.",
+        "https://alpinejs.dev/directives/transition",
+        insert_text="x-transition",
+    ),
+    _SyntaxSpec(
+        "x-effect",
+        "attribute",
+        "Run a reactive effect",
+        "Rerun this statement when the Alpine values it reads change.",
+        "https://alpinejs.dev/directives/effect",
+        insert_text='x-effect="${1:expression}"',
+    ),
+    _SyntaxSpec(
+        "x-ignore",
+        "attribute",
+        "Skip Alpine initialization",
+        "Prevent Alpine from initializing this element and its descendants.",
+        "https://alpinejs.dev/directives/ignore",
+        insert_text="x-ignore",
+    ),
+    _SyntaxSpec(
+        "x-ref",
+        "attribute",
+        "Name an element reference",
+        "Expose this element through Alpine's `$refs` magic.",
+        "https://alpinejs.dev/directives/ref",
+        insert_text='x-ref="${1:name}"',
+    ),
+    _SyntaxSpec(
+        "x-cloak",
+        "attribute",
+        "Hide content until Alpine starts",
+        "Keep the element hidden until Alpine has initialized it.",
+        "https://alpinejs.dev/directives/cloak",
+        insert_text="x-cloak",
+    ),
+    _SyntaxSpec(
+        "x-teleport",
+        "attribute",
+        "Move template content",
+        "Render this `<template>` at the element selected by the expression.",
+        "https://alpinejs.dev/directives/teleport",
+        insert_text='x-teleport="${1:selector}"',
+    ),
+    _SyntaxSpec(
+        "x-id",
+        "attribute",
+        "Create scoped IDs",
+        "Declare names that Alpine's `$id` magic resolves uniquely in this scope.",
+        "https://alpinejs.dev/directives/id",
+        insert_text="x-id=\"['${1:name}']\"",
+    ),
+    _SyntaxSpec(
+        "x-if",
+        "attribute",
+        "Conditionally render a template",
+        "Render this `<template>` while the Alpine expression is truthy.",
+        "https://alpinejs.dev/directives/if",
+        insert_text='x-if="${1:expression}"',
+    ),
+)
+_ALPINE_SYNTAX_BY_LABEL = {spec.label: spec for spec in _ALPINE_SYNTAX}
+_ALPINE_TEMPLATE_ONLY = frozenset({"x-for", "x-if", "x-teleport"})
+_ALPINE_COMMON_EVENTS = ("click", "submit", "input", "change", "keydown", "keyup", "focus", "blur")
+_ALPINE_COMMON_BINDINGS = (
+    "class",
+    "style",
+    "disabled",
+    "hidden",
+    "value",
+    "checked",
+    "selected",
+    "aria-expanded",
+    "aria-controls",
+    "aria-current",
+    "aria-hidden",
+)
+_ALPINE_EVENT_COMPLETIONS = tuple(
+    _SyntaxSpec(
+        f"@{event}",
+        "attribute",
+        _ALPINE_SYNTAX_BY_LABEL["x-on"].detail,
+        _ALPINE_SYNTAX_BY_LABEL["x-on"].documentation,
+        _ALPINE_SYNTAX_BY_LABEL["x-on"].documentation_url,
+        insert_text=f'@{event}="${{1:expression}}"',
+        repeatable=True,
+    )
+    for event in _ALPINE_COMMON_EVENTS
+)
+_ALPINE_BINDING_COMPLETIONS = tuple(
+    _SyntaxSpec(
+        f":{attribute}",
+        "attribute",
+        _ALPINE_SYNTAX_BY_LABEL["x-bind"].detail,
+        _ALPINE_SYNTAX_BY_LABEL["x-bind"].documentation,
+        _ALPINE_SYNTAX_BY_LABEL["x-bind"].documentation_url,
+        insert_text=f':{attribute}="${{1:expression}}"',
+        repeatable=True,
+    )
+    for attribute in _ALPINE_COMMON_BINDINGS
+)
 
 # Keeping the authored spellings and their prose together makes a new parser
 # feature visibly incomplete until both completion and hover can describe it.
@@ -4728,6 +5187,28 @@ _STRUCTURAL_ATTRIBUTES["c-slot"] = (*_STRUCTURAL_ATTRIBUTES["c-slot"], *_GENERAL
 _DYNAMIC_TARGET_ATTRIBUTES = _syntax_specs(kind="attribute", context="dynamic-target")
 
 
+def _is_semantic_component_tag(tag_name: str, registered_component: bool = False) -> bool:
+    """Return whether Alpine syntax must cross a Citry component boundary."""
+    normalized = tag_name.lower()
+    return registered_component or (tag_name.startswith("c-") and normalized not in {*RESERVED_TAG_NAMES, "c-element"})
+
+
+def _alpine_completion_specs(tag_name: str, *, semantic_component: bool) -> tuple[_SyntaxSpec, ...]:
+    """Select Alpine spellings that are valid on this authored element."""
+    normalized = tag_name.lower()
+    if normalized in RESERVED_TAG_NAMES:
+        return ()
+    event_specs = (_ALPINE_SYNTAX_BY_LABEL["x-on"], *_ALPINE_EVENT_COMPLETIONS)
+    if semantic_component:
+        # Component boundaries relocate only Alpine event listeners. Other
+        # directives belong on the concrete HTML roots inside the component.
+        return event_specs
+    fixed = tuple(
+        spec for spec in _ALPINE_SYNTAX if spec.label not in _ALPINE_TEMPLATE_ONLY or normalized == "template"
+    )
+    return (*fixed, *_ALPINE_EVENT_COMPLETIONS, *_ALPINE_BINDING_COMPLETIONS)
+
+
 def _validate_syntax_metadata() -> None:
     """Refuse editor metadata that has drifted from the parser inventory."""
     keys = [(spec.kind, spec.context, spec.label) for spec in _CITRY_SYNTAX]
@@ -4752,9 +5233,101 @@ def _validate_syntax_metadata() -> None:
     if any(not spec.documentation_url.startswith("https://citry.dev/") for spec in _CITRY_SYNTAX):
         msg = "Citry syntax hover metadata must link to canonical citry.dev documentation."
         raise RuntimeError(msg)
+    alpine_labels = [spec.label for spec in _ALPINE_SYNTAX]
+    if len(alpine_labels) != len(set(alpine_labels)):
+        msg = "Alpine syntax metadata contains a duplicate directive name."
+        raise RuntimeError(msg)
+    if any(not spec.documentation_url.startswith("https://alpinejs.dev/directives/") for spec in _ALPINE_SYNTAX):
+        msg = "Alpine syntax hover metadata must link to canonical Alpine.js directive documentation."
+        raise RuntimeError(msg)
 
 
 _validate_syntax_metadata()
+
+
+def _citry_binding_reference_at(
+    template: Any,
+    index: int,
+    *,
+    base_index: int = 0,
+) -> _CitryBindingReference | None:
+    """Find one Citry binding-key segment from parser-proven template nodes."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node: Any = element._0
+        for attr in node.start_tag.attrs:
+            name = attr.key.content
+            if name.startswith(("@c-", ":c-")) and _token_contains(attr.key, index, base_index=base_index):
+                return _citry_binding_part_reference(
+                    name,
+                    index,
+                    base_index + attr.key.start_index,
+                )
+            if attr.kind != HtmlAttrKind.Template or attr.inner_value is None:
+                continue
+            parsed_nested = _parse_nested_template(attr.inner_value.content)
+            if parsed_nested is None:
+                continue
+            nested, nested_start = parsed_nested
+            reference = _citry_binding_reference_at(
+                nested,
+                index,
+                base_index=base_index + attr.inner_value.start_index + nested_start,
+            )
+            if reference is not None:
+                return reference
+        body = getattr(node, "body", None)
+        if body is not None:
+            reference = _citry_binding_reference_at(body, index, base_index=base_index)
+            if reference is not None:
+                return reference
+    return None
+
+
+def _citry_binding_part_reference(
+    attribute_name: str,
+    index: int,
+    attribute_start: int,
+) -> _CitryBindingReference | None:
+    """Split one binding key while retaining exact UTF-8 source ranges."""
+    channel: Literal["event", "state"] = "event" if attribute_name.startswith("@c-") else "state"
+    parts = attribute_name.split(".")
+    base = parts[0]
+    base_end = attribute_start + len(base.encode("utf-8"))
+    if attribute_start <= index < base_end:
+        return _CitryBindingReference(
+            channel,
+            attribute_name,
+            base[3:],
+            "base",
+            base,
+            None,
+            attribute_start,
+            base_end,
+        )
+
+    character_offset = len(base)
+    previous_modifier: str | None = None
+    for modifier in parts[1:]:
+        part_start = character_offset
+        part_end = part_start + 1 + len(modifier)
+        start_index = attribute_start + len(attribute_name[:part_start].encode("utf-8"))
+        end_index = attribute_start + len(attribute_name[:part_end].encode("utf-8"))
+        if start_index <= index < end_index:
+            return _CitryBindingReference(
+                channel,
+                attribute_name,
+                base[3:],
+                "modifier",
+                modifier,
+                previous_modifier,
+                start_index,
+                end_index,
+            )
+        character_offset = part_end
+        previous_modifier = modifier
+    return None
 
 
 def _syntax_reference_at(
@@ -4796,6 +5369,7 @@ def _syntax_reference_at(
                         attr_spec,
                         base_index + attr.key.start_index,
                         base_index + attr.key.end_index,
+                        attr.key.content,
                     )
             if attr.kind != HtmlAttrKind.Template or attr.inner_value is None:
                 continue
@@ -4849,7 +5423,7 @@ def _syntax_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
     if is_component:
         contexts.append("component")
     contexts.append("general")
-    return next(
+    citry_spec = next(
         (
             spec
             for context in contexts
@@ -4858,6 +5432,31 @@ def _syntax_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
         ),
         None,
     )
+    return citry_spec or _alpine_attribute_spec(tag_name, attr_name)
+
+
+def _alpine_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
+    """Resolve one core Alpine directive without claiming Citry-owned channels."""
+    if attr_name.startswith(("@c-", ":c-")):
+        return None
+    canonical = attr_name.lower()
+    spec: _SyntaxSpec | None
+    if canonical.startswith(("@", "x-on:")):
+        spec = _ALPINE_SYNTAX_BY_LABEL["x-on"]
+    elif canonical.startswith((":", "x-bind:")):
+        spec = _ALPINE_SYNTAX_BY_LABEL["x-bind"]
+    else:
+        base_name = canonical.split(".", 1)[0]
+        if base_name.startswith("x-transition:"):
+            base_name = "x-transition"
+        spec = _ALPINE_SYNTAX_BY_LABEL.get(base_name)
+    if spec is None:
+        return None
+    if _is_semantic_component_tag(tag_name) and spec.label != "x-on":
+        return None
+    if spec.label in _ALPINE_TEMPLATE_ONLY and tag_name.lower() != "template":
+        return None
+    return spec
 
 
 def _syntax_reference_from_source(source: str, cursor: int) -> _SyntaxReference | None:
@@ -4928,6 +5527,7 @@ def _syntax_attribute_reference_in_tag(
                 spec,
                 _char_to_byte(source, authored_start),
                 _char_to_byte(source, authored_end),
+                tag_text[name_start:name_end],
             )
         while index < limit and tag_text[index].isspace():
             index += 1
@@ -4952,10 +5552,14 @@ def _syntax_attribute_reference_in_tag(
     return None
 
 
-def _syntax_markdown(spec: _SyntaxSpec) -> str:
+def _syntax_markdown(spec: _SyntaxSpec, display_label: str | None = None) -> str:
     """Render one concise first-party hover with its canonical guide link."""
-    subject = f"<{spec.label}>" if spec.kind == "tag" else spec.label
-    return f"### `{subject}`\n\n{spec.documentation}\n\n[Read the Citry documentation]({spec.documentation_url})"
+    subject = f"<{spec.label}>" if spec.kind == "tag" else display_label or spec.label
+    documentation_owner = "Alpine.js" if spec.documentation_url.startswith("https://alpinejs.dev/") else "Citry"
+    return (
+        f"### `{subject}`\n\n{spec.documentation}\n\n"
+        f"[Read the {documentation_owner} documentation]({spec.documentation_url})"
+    )
 
 
 def _mapped_syntax_range(
@@ -5029,6 +5633,7 @@ def _directive_attribute_completions(
     preserve_value: bool,
 ) -> list[types.CompletionItem]:
     normalized_tag = tag_name.lower()
+    semantic_component = _is_semantic_component_tag(tag_name, registered_component)
     if normalized_tag in _STRUCTURAL_ATTRIBUTES:
         specs = _STRUCTURAL_ATTRIBUTES[normalized_tag]
     elif normalized_tag == "c-component":
@@ -5036,9 +5641,9 @@ def _directive_attribute_completions(
     elif normalized_tag == "c-element":
         specs = (*_DYNAMIC_TARGET_ATTRIBUTES, *_GENERAL_DIRECTIVES)
     else:
-        is_component = registered_component or (tag_name.startswith("c-") and normalized_tag not in RESERVED_TAG_NAMES)
-        i18n_specs = () if is_component or normalized_tag.startswith("c-") else _I18N_BINDING_DIRECTIVES
-        specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if is_component else ()), *i18n_specs)
+        i18n_specs = () if semantic_component or normalized_tag.startswith("c-") else _I18N_BINDING_DIRECTIVES
+        specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if semantic_component else ()), *i18n_specs)
+    specs = (*specs, *_alpine_completion_specs(tag_name, semantic_component=semantic_component))
 
     control_if_present = bool(authored_attrs & {"c-if", "c-elif", "c-else"})
     control_for_present = bool(authored_attrs & {"c-for", "c-empty"})
@@ -5968,9 +6573,6 @@ def _attribute_completion_context(
                 index = value_end
         attributes.append((source[name_start:name_end], name_start, name_end, assignment))
 
-    if any(start <= cursor < end or (include_end and cursor == end) for start, end, include_end in blocked):
-        return None, False
-
     active: tuple[str, int, int, int | None] | None = None
     for attribute in attributes:
         _name, start, end, assignment = attribute
@@ -5978,13 +6580,23 @@ def _attribute_completion_context(
             active = attribute
             break
 
+    # The position immediately after a complete name is also the position of
+    # its following `=`. Keep that boundary owned by the name so completion can
+    # replace a just-typed modifier without disturbing the existing value.
+    active_name_end = active is not None and cursor == active[2]
+    if not active_name_end and any(
+        start <= cursor < end or (include_end and cursor == end) for start, end, include_end in blocked
+    ):
+        return None, False
+
     if active is None:
         if cursor == 0 or not source[cursor - 1].isspace():
             return None, False
         edit_start = edit_end = cursor
         preserve_value = False
+        authored_name = ""
     else:
-        _name, edit_start, edit_end, assignment = active
+        authored_name, edit_start, edit_end, assignment = active
         preserve_value = assignment is not None
 
     authored_attrs = frozenset(
@@ -6005,7 +6617,17 @@ def _attribute_completion_context(
         return None, True
     if document.source[host_start:host_end] != source[edit_start:edit_end]:
         return None, True
-    return _AttributeCompletionContext(mapped, authored_attrs, preserve_value), True
+    return (
+        _AttributeCompletionContext(
+            mapped,
+            authored_attrs,
+            preserve_value,
+            authored_name,
+            edit_start,
+            edit_end,
+        ),
+        True,
+    )
 
 
 def _attribute_name_continues(source: str, index: int) -> bool:
@@ -7620,13 +8242,148 @@ def _browser_event_origin_locations(
     return contract.get(name, ())
 
 
+def _citry_binding_modifier_completion_result(
+    document: DocumentState,
+    position: types.Position,
+) -> CompletionResult | None:
+    """Complete only modifiers accepted by the active Citry binding channel."""
+    region = document.region_at(position)
+    if region is None:
+        return None
+    parser_index = region.source_map.parser_index_at(_citry_position(position))
+    if parser_index is None:
+        return None
+    source = region.source_map.template_source
+    cursor = parser_char_index(source, parser_index)
+    chain = _unfinished_start_tag_chain(source[:cursor])
+    if not chain:
+        return None
+    tag_start, _tag_name, _tag_text = chain[-1]
+    context, attribute_position = _attribute_completion_context(
+        document,
+        region,
+        source,
+        tag_start,
+        cursor,
+    )
+    if not attribute_position or context is None:
+        return None
+    authored_name = context.authored_name
+    if authored_name.startswith("@c-"):
+        channel: Literal["event", "state"] = "event"
+    elif authored_name.startswith(":c-"):
+        channel = "state"
+    else:
+        return None
+
+    relative_cursor = cursor - context.start_index
+    modifier_dot = authored_name.rfind(".", 3, relative_cursor)
+    if modifier_dot < 0:
+        return None
+    segment_start = modifier_dot + 1
+    next_dot = authored_name.find(".", relative_cursor)
+    segment_end = len(authored_name) if next_dot < 0 else next_dot
+    prefix = authored_name[segment_start:relative_cursor]
+    parts = authored_name.split(".")
+    current_part = authored_name[:relative_cursor].count(".")
+    previous_modifier = parts[current_part - 1] if current_part > 1 else None
+    used = {
+        "on" if value.startswith("on:") else value
+        for index, value in enumerate(parts[1:], start=1)
+        if index != current_part and value
+    }
+    edit_range = _mapped_template_range(
+        region,
+        source,
+        context.start_index + segment_start,
+        context.start_index + segment_end,
+    )
+    if edit_range is None:
+        return CompletionResult((), is_incomplete=True)
+
+    base_name = parts[0][3:]
+    candidates = _citry_binding_modifier_candidates(channel, base_name, previous_modifier, used)
+    items: list[types.CompletionItem] = []
+    for label, filter_text, new_text, detail, documentation, snippet in candidates:
+        if not filter_text.startswith(prefix):
+            continue
+        items.append(
+            types.CompletionItem(
+                label=label,
+                kind=types.CompletionItemKind.Keyword,
+                detail=detail,
+                documentation=_markdown(f"{documentation}\n\n[Read the Citry documentation]({_EVENT_BINDINGS_URL})"),
+                filter_text=filter_text,
+                insert_text_format=(types.InsertTextFormat.Snippet if snippet else types.InsertTextFormat.PlainText),
+                text_edit=types.TextEdit(edit_range, new_text),
+            )
+        )
+    return CompletionResult(tuple(items), is_incomplete=True)
+
+
+def _citry_binding_modifier_candidates(
+    channel: Literal["event", "state"],
+    base_name: str,
+    previous_modifier: str | None,
+    used: set[str],
+) -> tuple[tuple[str, str, str, str, str, bool], ...]:
+    """Build channel-aware modifier choices, including representative durations."""
+    if channel == "event" and base_name == "poll":
+        return tuple(
+            (
+                f".{duration}",
+                duration,
+                duration,
+                "Citry polling interval",
+                "Use one whole-second interval such as `.30s`.",
+                False,
+            )
+            for duration in _CITRY_POLL_EXAMPLES
+        )
+
+    candidates: list[tuple[str, str, str, str, str, bool]] = []
+    if previous_modifier in {"debounce", "throttle"}:
+        candidates.extend(
+            (
+                f".{duration}",
+                duration,
+                duration,
+                "Citry timing duration",
+                "Use a whole number followed by `ms` or `s`, such as `.300ms` or `.1s`.",
+                False,
+            )
+            for duration in _CITRY_TIMING_EXAMPLES
+        )
+    key_filter_used = bool(used & {"enter", "escape"})
+    for spec in _CITRY_BINDING_MODIFIERS:
+        if channel not in spec.channels or spec.name in used:
+            continue
+        if key_filter_used and spec.name in {"enter", "escape"}:
+            continue
+        if (spec.name == "lazy" and "on" in used) or (spec.name == "on" and "lazy" in used):
+            continue
+        label = ".on:<event>" if spec.name == "on" else f".{spec.name}"
+        filter_text = "on:" if spec.name == "on" else spec.name
+        candidates.append(
+            (
+                label,
+                filter_text,
+                spec.insert_text or spec.name,
+                spec.detail,
+                spec.documentation,
+                spec.insert_text is not None,
+            )
+        )
+    return tuple(candidates)
+
+
 def _browser_event_completion_result(
     document: DocumentState,
     position: types.Position,
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> CompletionResult | None:
-    """Complete server handlers in Citry calls and declarative event values."""
+    """Complete server handlers in Citry calls and declarative binding values."""
     call_context = _browser_event_context(document, position, project, open_documents)
     if call_context is not None:
         call_region, expression, call_index, consumers = call_context
@@ -7680,7 +8437,7 @@ def _browser_event_completion_result(
         return None
     tag_start, _tag_name, tag_text = chain[-1]
     match = re.search(
-        r"(?:^|[ \t\r\n])@c-[^\s=/>]+\s*=\s*(['\"])([^'\"()\s]*)$",
+        r"(?:^|[ \t\r\n])(?:@c-|:c-)[^\s=/>]+\s*=\s*(['\"])([^'\"()\s]*)$",
         tag_text,
     )
     if match is None:
@@ -7939,6 +8696,26 @@ def _shared_state_roots(
             if name in candidates
         }
     return tuple(common.values())
+
+
+def _shared_state_field_records(
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    name: str,
+) -> tuple[SourceStateFieldRecord, ...]:
+    """Return one public State field record from every proven template owner."""
+    if not consumers or project.source_analysis is None:
+        return ()
+    records: list[SourceStateFieldRecord] = []
+    for component in consumers:
+        fields = project.source_analysis.state_fields(component)
+        if fields is None:
+            return ()
+        field = next((candidate for candidate in fields if candidate.name == name), None)
+        if field is None:
+            return ()
+        records.append(field)
+    return tuple(records)
 
 
 def _state_field_root(

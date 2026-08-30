@@ -131,9 +131,10 @@ function scanStartTag(source, start, projected, attributes, htmlCandidates) {
       continue;
     }
     const authoredName = source.slice(attributeStart, index);
-    if (eligibleTag && authoredName.startsWith("c-") && authoredName.length > 2 && !citryDirectiveNames.has(authoredName)) {
-      const nativeName = asciiLowercase(authoredName.slice(2));
-      const projectedStart = attributeStart + 2;
+    const nativeAttribute = eligibleTag ? nativeAttributeProjection(authoredName) : void 0;
+    if (nativeAttribute !== void 0) {
+      const { nativeName, prefixLength } = nativeAttribute;
+      const projectedStart = attributeStart + prefixLength;
       for (let cursor = attributeStart; cursor < projectedStart; cursor += 1) {
         projected[cursor] = " ";
       }
@@ -181,6 +182,19 @@ function scanStartTag(source, start, projected, attributes, htmlCandidates) {
     }
   }
   return { name, end: source.length, selfClosing: false };
+}
+function nativeAttributeProjection(authoredName) {
+  if (authoredName.startsWith("c-") && authoredName.length > 2 && !citryDirectiveNames.has(authoredName)) {
+    return { nativeName: asciiLowercase(authoredName.slice(2)), prefixLength: 2 };
+  }
+  if (authoredName.startsWith(":c-")) {
+    return void 0;
+  }
+  const alpineName = authoredName.startsWith(":") ? authoredName.slice(1) : "";
+  if (!/^[A-Za-z_:][A-Za-z0-9_:-]*$/.test(alpineName)) {
+    return void 0;
+  }
+  return { nativeName: asciiLowercase(alpineName), prefixLength: 1 };
 }
 function nestedTemplateValue(value) {
   return value.startsWith("<>") && value.endsWith("</>") || /^<[A-Za-z]/.test(value);

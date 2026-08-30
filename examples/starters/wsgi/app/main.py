@@ -1,11 +1,10 @@
 from collections.abc import Iterable
 from typing import Any
 
+from app.citry_app import citry_app
+from app.components.project_page import ProjectPage
+from app.data import find_projects
 from citry.contrib.wsgi import wsgi_app
-
-from .citry_app import citry_app
-from .components import ProjectPage
-from .data import find_projects
 
 PREFIX = "/citry"
 citry_routes = wsgi_app(citry_app)
@@ -22,7 +21,8 @@ def application(environ: dict[str, Any], start_response) -> Iterable[bytes]:
         return citry_routes(mounted_environ, start_response)
 
     if path == "/" and environ.get("REQUEST_METHOD", "GET") in {"GET", "HEAD"}:
-        body = str(ProjectPage(projects=find_projects())).encode()
+        html = str(ProjectPage(projects=find_projects()))
+        body = html.encode()
         if environ.get("REQUEST_METHOD") == "HEAD":
             body = b""
         start_response("200 OK", [("Content-Type", "text/html; charset=utf-8")])

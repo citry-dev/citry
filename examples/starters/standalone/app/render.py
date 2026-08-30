@@ -1,9 +1,9 @@
 from itertools import count
 from pathlib import Path
 
-from .citry_app import citry_app
-from .components import ProjectPage
-from .data import find_projects
+from app.citry_app import citry_app
+from app.components.project_page import ProjectPage
+from app.data import find_projects
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "_build" / "index.html"
 
@@ -14,7 +14,8 @@ def render_document() -> str:
     render_ids = count(1)
     citry_app.id_generator = lambda: f"standalone-{next(render_ids)}"
     citry_app.initialize()
-    return ProjectPage(projects=find_projects()).render().serialize(deps_strategy="document")
+    page = ProjectPage(projects=find_projects())
+    return page.render().serialize(deps_strategy="document")
 
 
 def write_document(output: Path = DEFAULT_OUTPUT) -> Path:

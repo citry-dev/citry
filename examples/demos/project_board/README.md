@@ -91,12 +91,13 @@ Remove-Item -Recurse -Force `
 | File | What it does |
 |---|---|
 | `app/main.py` | Starts FastAPI, initializes Citry, serves `/`, and mounts `/citry`. |
-| `app/citry_app.py` | Creates the shared Citry instance with the signing secret. |
+| `app/citry_app.py` | Creates the shared Citry instance and configures component autodiscovery. |
 | `app/store.py` | Stores the sample tasks and adds, moves, or completes them after validation. |
-| `app/components/shell.py` | Renders the document shell and shared page styles. |
-| `app/components/page.py` | Composes the heading and project board. |
-| `app/components/board.py` | Defines the board, cards, form, filters, and Events. |
-| `app/components/badges.py` | Defines the high- and standard-priority badge components. |
+| `app/components/app_shell.py` | Renders the document shell and shared page styles. |
+| `app/components/board_page.py` | Composes the heading and project board. |
+| `app/components/project_board.py` | Defines the form, filters, Events, and board-level state. |
+| `app/components/lane.py` and `app/components/task_card.py` | Define the board columns and task cards. |
+| `app/components/*_badge.py` and `app/components/badge_styles.py` | Define the priority badges and shared styles. |
 | `tests/test_app.py` | Checks the page, task changes, and mounted Citry runtime. |
 
 ## Follow the data

@@ -6,13 +6,15 @@ import { browserProjectionCandidateAt } from "../out/tests/browserRouting.mjs";
 test("routes only browser-valued template attributes", () => {
 	const source = [
 		'template = """<c-element is="form" c-action="\'lol\'"></c-element>',
-		'<button class="plain" :disabled="busy" @c-click="save()"></button>"""',
+		'<button class="plain" :disabled="busy" @c-click="save()"></button>',
+		'<input :c-query.debounce.300ms="refresh" />"""',
 	].join("\n");
 
 	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("c-action") + 2), false);
 	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("plain") + 2), false);
 	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("busy") + 2), true);
 	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("save") + 2), true);
+	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("refresh") + 2), false);
 });
 
 test("finds Alpine expressions inside nested templates", () => {

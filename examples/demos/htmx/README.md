@@ -52,7 +52,8 @@ start the server, and run all three interactions in a real browser.
 ## File map
 
 - `app/data.py` stores the sample contacts, departments, and teams in memory.
-- `app/components.py` defines the Citry components returned by the routes.
+- `app/components/` keeps each Citry component returned by the routes in its
+  own module.
 - `app/routes.py` defines the page and fragment routes.
 - `app/main.py` creates the FastAPI application, initializes Citry, and mounts
   the static and Citry routes.

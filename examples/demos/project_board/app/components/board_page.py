@@ -1,10 +1,6 @@
+from app.citry_app import citry_app
+from app.store import LaneView
 from citry import Component
-
-from ..citry_app import citry_app
-from ..store import LaneView
-from .badges import BadgeStyles  # noqa: F401 - registers the template component
-from .board import ProjectBoard  # noqa: F401 - registers the template component
-from .shell import AppShell  # noqa: F401 - registers the template component
 
 
 class BoardPage(Component):

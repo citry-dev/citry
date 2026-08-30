@@ -1,55 +1,67 @@
-# Announces published GitHub Releases to a Discord channel. Fires for both
-# citry@* and citry-core@* releases (each publish workflow creates a Release).
-# No-op until the DISCORD_WEBHOOK_ANNOUNCEMENTS repository secret is set.
+# Posts a completed package release to its explicitly assigned Discord channel.
+# Publishers send repository_dispatch because releases created with GITHUB_TOKEN
+# do not trigger another workflow. workflow_dispatch retries one missed tag.
 name: Notify Discord on Release
 
 on:
-  release:
-    types: [published]
+  repository_dispatch:
+    types: [citry-release-published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published GitHub Release tag to notify
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     env:
-      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_ANNOUNCEMENTS }}
+      RELEASE_TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
     steps:
-      - name: Post to Discord (announcements channel)
-        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
-        env:
-          NAME: ${{ github.event.release.name || github.event.release.tag_name }}
-          URL: ${{ github.event.release.html_url }}
-          BODY: ${{ github.event.release.body }}
-          USER: ${{ github.event.release.author.login }}
-          REPO: ${{ github.repository }}
-          TS: ${{ github.event.release.published_at }}
+      - uses: actions/checkout@v7
+      - name: Select the release channel
+        id: route
         run: |
-          # Discord embed descriptions cap at 4096 chars; truncate the release
-          # notes so the webhook does not reject the payload.
-          TRUNC_SUFFIX=$'\n\n_... see the release for the full notes._'
-          MAX_BODY=4000
-          if [ ${#BODY} -gt "$MAX_BODY" ]; then
-            BODY="${BODY:0:$MAX_BODY}${TRUNC_SUFFIX}"
+          channel=$(python scripts/discord_release.py route "$RELEASE_TAG")
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - name: Read the published GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json name,tagName,url,body,author,publishedAt \
+            > release.json
+          python scripts/discord_release.py payload release.json \
+            --repository "$GITHUB_REPOSITORY" \
+            > discord-payload.json
+      - name: Post to Discord (announcements channel)
+        if: steps.route.outputs.channel == 'announcements'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_ANNOUNCEMENTS }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::DISCORD_WEBHOOK_ANNOUNCEMENTS is not configured"
+            exit 1
           fi
-          payload=$(jq -n \
-            --arg name "$NAME" \
-            --arg url "$URL" \
-            --arg body "$BODY" \
-            --arg user "$USER" \
-            --arg repo "$REPO" \
-            --arg timestamp "$TS" \
-            '{
-              "username": "GitHub Releases",
-              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-              "embeds": [
-                {
-                  "title": ("🚀 New release: " + $name),
-                  "url": $url,
-                  "description": $body,
-                  "color": 2664261,
-                  "author": {"name": $user},
-                  "footer": {"text": $repo},
-                  "timestamp": $timestamp
-                }
-              ]
-            }')
-          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK_URL" | cat
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 \
+            -X POST -H "Content-Type: application/json" \
+            --data-binary @discord-payload.json \
+            "$DISCORD_WEBHOOK_URL"
+      - name: Post to Discord (development channel)
+        if: steps.route.outputs.channel == 'development'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_DEVELOPMENT }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::DISCORD_WEBHOOK_DEVELOPMENT is not configured"
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 2 \
+            -X POST -H "Content-Type: application/json" \
+            --data-binary @discord-payload.json \
+            "$DISCORD_WEBHOOK_URL"

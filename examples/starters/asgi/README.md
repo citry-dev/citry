@@ -79,8 +79,8 @@ Remove-Item -Recurse -Force `
 | File | What it does |
 |---|---|
 | `app/main.py` | Handles ASGI lifespan, serves `/`, and delegates `/citry` to Citry. |
-| `app/citry_app.py` | Creates the shared Citry instance with the signing secret. |
-| `app/components.py` | Defines the page, search Event, Alpine state, and styles. |
+| `app/citry_app.py` | Creates the shared Citry instance and configures component autodiscovery. |
+| `app/components/` | Keeps the page shell, card, explorer, and page in separate component modules. |
 | `app/data.py` | Defines the sample projects and filters them. |
 | `tests/test_app.py` | Calls the ASGI application and checks the page, runtime, and missing routes. |
 

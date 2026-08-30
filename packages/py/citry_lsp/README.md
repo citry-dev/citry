@@ -40,7 +40,9 @@ registry-backed component knowledge.
 
 Without a project target, the server reports `syntax-only` mode. Parser
 diagnostics, Citry structural completion, lexical `c-for` and `c-fill`
-bindings, first-party hover help, and structural formatting remain available.
+bindings, Citry event/State binding keys and modifiers, Alpine directive
+completion and hover, first-party hover help, and structural formatting remain
+available.
 The server does not guess which user components exist.
 
 For component-aware features, the editor supplies a `module:attribute` target
@@ -119,7 +121,7 @@ operation. Stale or malformed client responses produce no edit.
 
 ## Compatibility
 
-The server advertises language-server version 0.1.2, Citry 0.4.x, component
+The server advertises language-server version 0.1.3, Citry 0.4.x, component
 catalog v1, and client protocol v1. It refuses incompatible client protocols or
 Citry series instead of returning results based on a contract it does not
 understand.

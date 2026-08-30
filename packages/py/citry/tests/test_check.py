@@ -1228,12 +1228,16 @@ def test_registry_check_reports_js_data_wire_and_literal_server_event_problems(t
         citry = engine
         template = (
             "<button @c-click=\"missing\" @click=\"sendEvent('missing'); $loading('missing'); $error()\"></button>"
+            '<input :c-title="missing">'
         )
         js = 'sendEvent("missing"); loading("missing"); error(); sendEvent(dynamicName); onEvent("anything", () => {})'
 
         class JsData:
             title: str
             invalid: set[str]
+
+        class State:
+            title: str = ""
 
         class Events:
             def save(self):
@@ -1242,7 +1246,7 @@ def test_registry_check_reports_js_data_wire_and_literal_server_event_problems(t
     report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
 
     assert [finding.code for finding in report.findings].count("citry.js-data.unsupported-type") == 1
-    assert [finding.code for finding in report.findings].count("citry.browser.unknown-server-event") == 5
+    assert [finding.code for finding in report.findings].count("citry.browser.unknown-server-event") == 6
     assert {finding.severity for finding in report.findings if "unsupported-type" in finding.code} == {"warning"}
 
 
@@ -1279,8 +1283,12 @@ def test_registry_check_accepts_known_send_event_and_keeps_dynamic_and_on_event_
             '<button @c-click="save" '
             "@click=\"sendEvent('save'); $loading('save'); $error(); "
             "sendEvent(name); onEvent('open', fn)\"></button>"
+            '<input :c-title="save">'
         )
         js = 'sendEvent("save"); loading("save"); error(); $sendEvent(name); $onEvent("anything", fn)'
+
+        class State:
+            title: str = ""
 
         class Events:
             def save(self):

@@ -1,5 +1,6 @@
 import pytest
-from app.components.board import AddTaskIn, ProjectBoard
+from app.components.event_inputs import AddTaskIn
+from app.components.project_board import ProjectBoard
 from app.main import web_app
 from app.store import add_task, board_snapshot, list_tasks, move_task, set_task_completed
 from fastapi.testclient import TestClient

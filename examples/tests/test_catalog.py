@@ -9,14 +9,14 @@ from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
 from examples._internal.qualify import interpolate, project_environment
 
 EXPECTED_CITRY_APPS = {
-    "demo-htmx": "app.components:citry_app",
-    "demo-project-board": "app.components.page:citry_app",
-    "starter-asgi": "app.components:citry_app",
-    "starter-django": "project_explorer.components:citry_app",
-    "starter-fastapi": "app.components:citry_app",
-    "starter-flask": "app.components:citry_app",
-    "starter-standalone": "app.components:citry_app",
-    "starter-wsgi": "app.components:citry_app",
+    "demo-htmx": "app.citry_app:citry_app",
+    "demo-project-board": "app.citry_app:citry_app",
+    "starter-asgi": "app.citry_app:citry_app",
+    "starter-django": "project_explorer.citry_app:citry_app",
+    "starter-fastapi": "app.citry_app:citry_app",
+    "starter-flask": "app.citry_app:citry_app",
+    "starter-standalone": "app.citry_app:citry_app",
+    "starter-wsgi": "app.citry_app:citry_app",
 }
 ENVIRONMENT_EXAMPLES = {
     "demo-project-board",

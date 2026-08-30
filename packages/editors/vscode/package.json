@@ -2,7 +2,7 @@
 	"name": "citry",
 	"displayName": "Citry",
 	"description": "Highlighting, diagnostics, editor intelligence, and formatting for Citry components",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"publisher": "citry-dev",
 	"license": "MIT",
 	"engines": {

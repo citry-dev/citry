@@ -7,10 +7,9 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.citry_app import citry_app
+from app.routes import router
 from citry.contrib.fastapi import mount
-
-from .citry_app import citry_app
-from .routes import router
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

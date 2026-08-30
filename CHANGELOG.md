@@ -1,5 +1,16 @@
 # Release notes
 
+## Unreleased
+
+## v0.4.5
+
+_30 Aug 2026_
+
+### Fixed
+
+- `citry check` now validates server-handler names used by two-way `:c-*`
+  State bindings as well as `@c-*` event bindings.
+
 ## v0.4.4
 
 _26 Aug 2026_

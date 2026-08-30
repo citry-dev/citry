@@ -6,11 +6,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from app.citry_app import citry_app
+from app.components.board_page import BoardPage
+from app.store import board_snapshot
 from citry.contrib.fastapi import mount
-
-from .citry_app import citry_app
-from .components import BoardPage
-from .store import board_snapshot
 
 
 @asynccontextmanager
@@ -24,7 +23,8 @@ web_app = FastAPI(lifespan=lifespan)
 
 @web_app.get("/", response_class=HTMLResponse)
 def home() -> HTMLResponse:
-    return HTMLResponse(str(BoardPage(lanes=board_snapshot())))
+    html = str(BoardPage(lanes=board_snapshot()))
+    return HTMLResponse(html)
 
 
 mount(web_app, citry_app, prefix="/citry")

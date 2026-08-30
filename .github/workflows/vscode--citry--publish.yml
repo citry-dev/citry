@@ -17,7 +17,7 @@ permissions:
 env:
   EXTENSION_DIR: packages/editors/vscode
   NODE_VERSION: "22"
-  PUBLIC_CITRY_LSP_VERSION: "0.1.2"
+  PUBLIC_CITRY_LSP_VERSION: "0.1.3"
   PRETTIER_VSCODE_VERSION: "12.4.0"
   PRETTIER_VSCODE_SHA256: "46d22a567b35ebe5bdffd7280457742cd67e65d7e1b250bb775ab2be86479a42"
 
@@ -343,3 +343,10 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --title "$GITHUB_REF_NAME"
           --generate-notes
+      - name: Start the Discord release notification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches"
+          -f event_type=citry-release-published
+          -f "client_payload[tag]=$GITHUB_REF_NAME"

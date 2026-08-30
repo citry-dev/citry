@@ -138,6 +138,15 @@ test("limits expression retriggers to Citry Python hosts and one authored charac
 	}
 });
 
+test("retriggers declarative Citry handler completion without routing values to JavaScript", () => {
+	for (const source of ['<button @c-click="r">', '<input :c-query.debounce.300ms="r">']) {
+		const offset = source.indexOf('"r') + 1;
+		assert.deepEqual(advanceExpressionCompletionRetrigger(source, "citry-html", change(offset, 0, "r")), {
+			triggerOffset: offset + 1,
+		});
+	}
+});
+
 test("scopes Python activation to the current template literal", () => {
 	for (const source of ["# {{ example\nordinary=a", '# <div c-title="example\nordinary=a']) {
 		assert.deepEqual(

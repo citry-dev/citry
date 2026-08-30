@@ -13,6 +13,7 @@ from citry import Citry, Component, ComponentLibrary, LibraryComponent, SlotInpu
 from citry_core.template_parser import CITRY_DIRECTIVE_NAMES, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES
 from citry_lsp.catalog import CatalogIndex, FieldRecord
 from citry_lsp.engine import (
+    _ALPINE_SYNTAX,
     _CITRY_SYNTAX,
     _STRUCTURAL_ATTRIBUTES,
     _STRUCTURAL_TAG_SPECS,
@@ -1050,6 +1051,7 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
         '$state.progress.toFixed()" '
         "@click=\"sendEvent('save'); $sendEvent('save'); sendEvent('missing'); "
         "$loading('missing'); $error()\"></button>"
+        '<input :c-progress.debounce.300ms="save">'
         '<template x-for="color in colors"><span x-text="color.toUpperCase()"></span></template>'
     )
     js_source = (
@@ -1354,6 +1356,17 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
         documents,
     )
     assert declarative_target == event_target
+    state_binding_target = definition(
+        template,
+        _position(
+            template_source,
+            ':c-progress.debounce.300ms="save',
+            len(':c-progress.debounce.300ms="sa'),
+        ),
+        project,
+        documents,
+    )
+    assert state_binding_target == event_target
     declarative_items = completion_items(
         template,
         _position(template_source, '@c-click="save', len('@c-click="sa')),
@@ -1371,6 +1384,135 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     )
     assert declarative_hover is not None
     assert "(server event) save" in declarative_hover.contents.value
+    state_binding_items = completion_items(
+        template,
+        _position(
+            template_source,
+            ':c-progress.debounce.300ms="save',
+            len(':c-progress.debounce.300ms="sa'),
+        ),
+        project,
+        documents,
+    )
+    assert [item.label for item in state_binding_items] == ["save"]
+    state_binding_hover = hover(
+        template,
+        _position(
+            template_source,
+            ':c-progress.debounce.300ms="save',
+            len(':c-progress.debounce.300ms="sa'),
+        ),
+        project,
+        documents,
+    )
+    assert state_binding_hover is not None
+    assert "(server event) save" in state_binding_hover.contents.value
+    state_field_target = definition(
+        template,
+        _position(template_source, ":c-progress", len(":c-pro")),
+        project,
+        documents,
+    )
+    assert state_field_target == state_target
+    state_field_hover = hover(
+        template,
+        _position(template_source, ":c-progress", len(":c-pro")),
+        project,
+        documents,
+    )
+    assert state_field_hover is not None
+    assert "(field) progress: int" in state_field_hover.contents.value
+    assert "Card.State.progress" in state_field_hover.contents.value
+    assert "connects this control" in state_field_hover.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "required", "excluded"),
+    [
+        (
+            "<button @c-click.></button>",
+            {".prevent", ".stop", ".self", ".once", ".enter", ".escape", ".debounce", ".throttle"},
+            {".lazy", ".on:<event>"},
+        ),
+        (
+            "<input :c-query.>",
+            {".lazy", ".enter", ".escape", ".debounce", ".throttle", ".on:<event>"},
+            {".prevent", ".stop", ".self", ".once"},
+        ),
+        (
+            '<button @c-poll.="refresh"></button>',
+            {".1s", ".30s"},
+            {".prevent", ".debounce", ".lazy"},
+        ),
+    ],
+)
+def test_citry_binding_modifier_completion_is_channel_aware(source, required, excluded):
+    project = _syntax_state()
+    cursor = _position(source, ".", 1)
+
+    items = completion_items(_document(source, project), cursor, project)
+
+    labels = {item.label for item in items}
+    assert required <= labels
+    assert labels.isdisjoint(excluded)
+
+
+def test_citry_binding_timing_completion_replaces_only_the_current_segment():
+    project = _syntax_state()
+    source = '<button @c-click.debounce.="save"></button>'
+    cursor = _position(source, "debounce.", len("debounce."))
+
+    items = completion_items(_document(source, project), cursor, project)
+
+    duration = next(item for item in items if item.label == ".300ms")
+    assert duration.text_edit is not None
+    assert duration.text_edit.new_text == "300ms"
+    assert duration.text_edit.range.start == duration.text_edit.range.end == cursor
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        ('<button @c-click.debounce.300ms="save"></button>', "debounce"),
+        ("<c-card c-body=\"<><button @c-click.debounce.300ms='save'></button></>\" />", "debounce"),
+        (
+            "from citry import Component\nclass Card(Component):\n"
+            '    template = """<button @c-click.debounce.300ms="save"></button>"""\n',
+            "debounce",
+        ),
+    ],
+)
+def test_citry_binding_hover_maps_modifiers_in_standalone_nested_and_inline_templates(source, marker):
+    project = _syntax_state()
+    language_id = "python" if source.startswith("from citry") else "citry-html"
+    document = _document(source, project, language_id=language_id)
+
+    modifier_hover = hover(document, _position(source, marker, 2), project)
+    duration_hover = hover(document, _position(source, "300ms", 2), project)
+
+    assert modifier_hover is not None
+    assert "`.debounce`" in modifier_hover.contents.value
+    assert ".300ms" in modifier_hover.contents.value
+    assert "250 ms" in modifier_hover.contents.value
+    assert duration_hover is not None
+    assert "whole number" in duration_hover.contents.value
+
+
+def test_citry_event_binding_hover_explains_the_dom_event_and_links_to_docs():
+    project = _syntax_state()
+    source = '<button @c-click.debounce.300ms="save"></button>'
+
+    result = hover(_document(source, project), _position(source, "@c-click", 3), project)
+
+    assert result is not None
+    assert "`@c-click`" in result.contents.value
+    assert "`click` DOM event" in result.contents.value
+    assert "https://citry.dev/events/bindings/" in result.contents.value
+
+    state_source = '<input :c-query.debounce.300ms="refresh">'
+    state_result = hover(_document(state_source, project), _position(state_source, ":c-query", 3), project)
+    assert state_result is not None
+    assert "Component.State.query" in state_result.contents.value
 
 
 def test_static_component_props_report_contract_errors_and_navigate_to_child_js(tmp_path):
@@ -2325,7 +2467,7 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
 
     plain_by_label = {item.label: item for item in plain}
     component_labels = {item.label for item in component}
-    assert set(plain_by_label) == {
+    assert {
         "c-if",
         "c-elif",
         "c-else",
@@ -2336,7 +2478,7 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
         "#c-ignore",
         "$c-tr:",
         "c-$c-tr:",
-    }
+    } <= set(plain_by_label)
     assert plain_by_label["c-for"].insert_text == 'c-for="${1:item} in ${2:items}"'
     assert plain_by_label["#c-key"].insert_text == '#c-key="${1:key}"'
     assert {"$c-props", "c-$c-props"} <= component_labels
@@ -2348,6 +2490,86 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
     assert {"c-if", "c-elif", "c-else", "c-for", "c-empty"} <= {item.label for item in slot}
     assert not {"#c-key", "#c-ignore", "$c-props", "c-$c-props"} & {item.label for item in slot}
     assert len(dynamic_component) == len({item.label for item in dynamic_component})
+
+
+def test_plain_html_attribute_completion_includes_alpine_core_and_shorthands():
+    project = _syntax_state()
+    plain_source = "<button x-"
+    component_source = "<c-unknown @"
+    element_source = '<c-element is="button" x-'
+
+    plain = completion_items(
+        _document(plain_source, project),
+        types.Position(0, len(plain_source)),
+        project,
+    )
+    component = completion_items(
+        _document(component_source, project),
+        types.Position(0, len(component_source)),
+        project,
+    )
+    element = completion_items(
+        _document(element_source, project),
+        types.Position(0, len(element_source)),
+        project,
+    )
+
+    plain_by_label = {item.label: item for item in plain}
+    assert {
+        "x-data",
+        "x-init",
+        "x-show",
+        "x-bind",
+        "x-on",
+        "x-text",
+        "x-html",
+        "x-model",
+        "x-modelable",
+        "x-transition",
+        "x-effect",
+        "x-ignore",
+        "x-ref",
+        "x-cloak",
+        "x-id",
+        "@click",
+        "@submit",
+        ":class",
+        ":aria-expanded",
+    } <= set(plain_by_label)
+    assert plain_by_label["x-text"].insert_text == 'x-text="${1:expression}"'
+    assert plain_by_label["x-cloak"].insert_text == "x-cloak"
+    assert plain_by_label["@click"].insert_text == '@click="${1:expression}"'
+    assert plain_by_label[":aria-expanded"].insert_text == ':aria-expanded="${1:expression}"'
+    component_labels = {item.label for item in component}
+    assert {"@click", "x-on"} <= component_labels
+    assert not {"x-text", ":aria-expanded"} & component_labels
+    assert {"x-text", ":aria-expanded"} <= {item.label for item in element}
+
+
+def test_template_only_alpine_completion_stays_on_template_elements():
+    project = _syntax_state()
+    div_source = "<div "
+    template_source = "<template "
+
+    div_labels = {
+        item.label
+        for item in completion_items(
+            _document(div_source, project),
+            types.Position(0, len(div_source)),
+            project,
+        )
+    }
+    template_labels = {
+        item.label
+        for item in completion_items(
+            _document(template_source, project),
+            types.Position(0, len(template_source)),
+            project,
+        )
+    }
+
+    assert not {"x-if", "x-for", "x-teleport"} & div_labels
+    assert {"x-if", "x-for", "x-teleport"} <= template_labels
 
 
 @pytest.mark.parametrize(
@@ -2693,6 +2915,88 @@ def test_syntax_hover_metadata_is_exhaustive_unique_and_parser_owned():
     assert documented_directives == CITRY_DIRECTIVE_NAMES
     assert documented_structural_attributes == STRUCTURAL_TAG_ATTRIBUTE_NAMES
     assert all(spec.documentation_url.startswith("https://citry.dev/") for spec in _CITRY_SYNTAX)
+
+
+def test_alpine_syntax_metadata_is_unique_and_links_to_upstream_directives():
+    labels = [spec.label for spec in _ALPINE_SYNTAX]
+
+    assert len(labels) == len(set(labels))
+    assert all(spec.documentation_url.startswith("https://alpinejs.dev/directives/") for spec in _ALPINE_SYNTAX)
+
+
+@pytest.mark.parametrize(
+    ("source", "attribute", "documentation_path"),
+    [
+        ('<span x-text="title"></span>', "x-text", "/directives/text"),
+        ("<span x-cloak></span>", "x-cloak", "/directives/cloak"),
+        ('<button @click="open = true"></button>', "@click", "/directives/on"),
+        ('<button x-on:click="open = true"></button>', "x-on:click", "/directives/on"),
+        ('<button :aria-expanded="open"></button>', ":aria-expanded", "/directives/bind"),
+        (
+            '<button x-bind:aria-expanded="open"></button>',
+            "x-bind:aria-expanded",
+            "/directives/bind",
+        ),
+        ("<div x-transition.opacity></div>", "x-transition.opacity", "/directives/transition"),
+        ('<input x-model.number="count" />', "x-model.number", "/directives/model"),
+    ],
+)
+def test_alpine_syntax_hover_documents_directives_and_shorthands(
+    source,
+    attribute,
+    documentation_path,
+):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, attribute, 1), project)
+
+    assert result is not None
+    assert isinstance(result.contents, types.MarkupContent)
+    assert result.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+    assert f"`{attribute}`" in result.contents.value
+    assert f"https://alpinejs.dev{documentation_path}" in result.contents.value
+
+
+def test_alpine_syntax_hover_maps_nested_and_inline_python_attribute_names():
+    project = _syntax_state()
+    nested_source = "<c-card c-body=\"<>😀<button @click='open = true'>Open</button></>\" />"
+    python_source = (
+        'from citry import Component\nclass Card(Component):\n    template = """😀<span x-cloak></span>"""\n'
+    )
+
+    nested = hover(_document(nested_source, project), _position(nested_source, "@click", 2), project)
+    inline = hover(
+        _document(python_source, project, language_id="python"),
+        _position(python_source, "x-cloak", 2),
+        project,
+    )
+
+    assert nested is not None
+    assert nested.range == types.Range(
+        _position(nested_source, "@click"),
+        _position(nested_source, "@click", len("@click")),
+    )
+    assert inline is not None
+    assert inline.range == types.Range(
+        _position(python_source, "x-cloak"),
+        _position(python_source, "x-cloak", len("x-cloak")),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        ('<c-card x-text="title"></c-card>', "x-text"),
+        ('<c-if cond="ready" x-text="title"></c-if>', "x-text"),
+    ],
+)
+def test_alpine_syntax_hover_respects_citry_owned_and_component_only_channels(source, marker):
+    project = _syntax_state()
+
+    assert hover(_document(source, project), _position(source, marker, 1), project) is None
 
 
 @pytest.mark.parametrize(

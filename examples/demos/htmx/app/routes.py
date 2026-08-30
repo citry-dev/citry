@@ -7,15 +7,17 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, ValidationError
 
-from .components import ContactDetail, ContactForm, SearchResults, TeamPicker
-from .data import DEPARTMENTS, get_contact, list_teams, search_contacts, update_contact
+from app.components.contact_detail import ContactDetail
+from app.components.contact_form import ContactForm
+from app.components.search_results import SearchResults
+from app.components.team_picker import TeamPicker
+from app.data import DEPARTMENTS, get_contact, list_teams, search_contacts, update_contact
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from app.data import ContactView
     from citry import CitryElement
-
-    from .data import ContactView
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 

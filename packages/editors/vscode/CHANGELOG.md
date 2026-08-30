@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+## 0.1.2 - 2026-08-30
+
+- Show native HTML hover information for Alpine `:attribute` bindings while
+  preserving Citry's `:c-*` State-binding channel.
+- Retrigger handler completion while typing `@c-*` and `:c-*` values, and show
+  channel-specific Citry modifier suggestions and hover help.
+
 ## 0.1.1 - 2026-08-29
 
 - Configure `citry.envFile` per workspace so app discovery can load dotenv

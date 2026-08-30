@@ -1,4 +1,4 @@
 {
   "citry.python": "${workspaceFolder}/.venv/bin/python",
-  "citry.app": "app.components:citry_app"
+  "citry.app": "app.citry_app:citry_app"
 }

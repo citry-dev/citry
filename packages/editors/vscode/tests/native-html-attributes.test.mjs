@@ -71,6 +71,45 @@ test("projects a dynamic native attribute without moving source coordinates", ()
 	]);
 });
 
+test("projects Alpine bind shorthand to its native HTML attribute", () => {
+	const source = '<button :aria-expanded="open" :disabled="busy"></button>';
+	const projected = projectNativeHtmlAttributes(source);
+	const expandedStart = source.indexOf(":aria-expanded");
+	const disabledStart = source.indexOf(":disabled");
+
+	assert.equal(projected.source, '<button  aria-expanded="open"  disabled="busy"></button>');
+	assert.equal(projected.source.length, source.length);
+	assert.deepEqual(projected.attributes, [
+		{
+			authoredName: ":aria-expanded",
+			nativeName: "aria-expanded",
+			sourceStart: expandedStart,
+			sourceEnd: expandedStart + ":aria-expanded".length,
+			projectedStart: expandedStart + 1,
+			projectedEnd: expandedStart + ":aria-expanded".length,
+		},
+		{
+			authoredName: ":disabled",
+			nativeName: "disabled",
+			sourceStart: disabledStart,
+			sourceEnd: disabledStart + ":disabled".length,
+			projectedStart: disabledStart + 1,
+			projectedEnd: disabledStart + ":disabled".length,
+		},
+	]);
+});
+
+test("keeps Citry state bindings out of Alpine native projection", () => {
+	const source = '<input :c-query.debounce.300ms="refresh" :C-query="value" />';
+	const projected = projectNativeHtmlAttributes(source);
+
+	assert.equal(projected.source, '<input :c-query.debounce.300ms="refresh"  c-query="value" />');
+	assert.deepEqual(
+		projected.attributes.map(({ authoredName, nativeName }) => [authoredName, nativeName]),
+		[[":C-query", "c-query"]],
+	);
+});
+
 test("maps every authored name position into the projected suffix interior", () => {
 	const source = '<form c-class="classes"></form>';
 	const start = source.indexOf("c-class");

@@ -198,7 +198,7 @@ class BrowserI18nBindingDirective:
 
 @dataclass(frozen=True, slots=True)
 class BrowserDeclarativeEvent:
-    """One literal handler name authored in an ``@c-*`` binding."""
+    """One literal handler name authored in an ``@c-*`` or ``:c-*`` binding."""
 
     name: str
     start_index: int
@@ -386,7 +386,7 @@ def browser_declarative_events(
     *,
     parse_nested: Callable[[str], Template] = parse_template,
 ) -> tuple[BrowserDeclarativeEvent, ...]:
-    """Extract literal server handlers from parser-proven ``@c-*`` bindings."""
+    """Extract literal server handlers from parser-proven Citry bindings."""
     found: list[BrowserDeclarativeEvent] = []
     _collect_declarative_events(
         template,
@@ -1457,9 +1457,13 @@ def _collect_declarative_events(
                         base_index=base_index + inner.start_index + nested_start,
                     )
                 continue
-            if not attr.key.content.startswith("@c-"):
+            attribute = attr.key.content
+            if attribute.startswith("@c-"):
+                resolved = _declarative_handler(inner.content, known_names)
+            elif attribute.startswith(":c-"):
+                resolved = _declarative_state_handler(inner.content)
+            else:
                 continue
-            resolved = _declarative_handler(inner.content, known_names)
             if resolved is None:
                 continue
             name, start, end = resolved
@@ -1698,6 +1702,14 @@ def _declarative_handler(source: str, known_names: frozenset[str]) -> tuple[str,
     return text, leading, trailing
 
 
+def _declarative_state_handler(source: str) -> tuple[str, int, int] | None:
+    """Keep a State binding's complete value because this channel has no argument shell."""
+    leading = len(source) - len(source.lstrip())
+    trailing = len(source.rstrip())
+    text = source[leading:trailing]
+    return (text, leading, trailing) if text else None
+
+
 def _node_browser_bindings(node: object, base_index: int) -> tuple[BrowserBinding, ...]:
     introduced: list[BrowserBinding] = []
     start_tag = getattr(node, "start_tag", None)
@@ -1834,13 +1846,18 @@ def _browser_attribute(
     *,
     citry_attribute: str | None = None,
 ) -> tuple[BrowserExpressionMode, int, int] | None:
+    authored_name = citry_attribute or name
     # Citry compiles only its exact lowercase spelling; an uppercase browser
     # spelling remains an ordinary Alpine event attribute after HTML folding.
-    if (citry_attribute or name).startswith("@c-"):
+    if authored_name.startswith("@c-"):
         opening = source.find("(")
         closing = source.rfind(")")
         if opening >= 0 and closing > opening and not source[closing + 1 :].strip():
             return "expression", opening + 1, closing
+        return None
+    # Events consumes the exact lowercase State-binding channel before the
+    # browser sees it, so its handler name is never an Alpine bind expression.
+    if authored_name.startswith(":c-"):
         return None
     if looks_like_i18n_binding(name):
         return ("expression", 0, len(source)) if source.strip() else None

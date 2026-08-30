@@ -1,9 +1,8 @@
+from app.citry_app import citry_app
 from citry import Component, SlotInput
 
-from ..citry_app import citry_app
 
-
-class AppShell(Component):
+class PageShell(Component):
     citry = citry_app
 
     class Kwargs:
@@ -22,11 +21,7 @@ class AppShell(Component):
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <meta
-            name="description"
-            content="Search, add, move, and complete tasks in a Citry project board"
-          />
-          <link rel="icon" href="data:," />
+          <meta name="description" content="Search a small project catalog with Citry" />
           <title>{{ title }}</title>
           <c-css />
         </head>
@@ -37,8 +32,8 @@ class AppShell(Component):
               <a class="brand" href="/">
                 <span class="brand__name">Citry</span>
               </a>
-              <span class="site-title">Project Board</span>
-              <span class="mode-label">Interactive demo</span>
+              <span class="site-title">Project Explorer</span>
+              <span class="mode-label">Bare ASGI starter</span>
             </div>
           </header>
           <main id="main-content" class="page-frame">
@@ -67,32 +62,28 @@ class AppShell(Component):
         --color-accent-hover: oklch(48% 0.13 195);
         --color-accent-ink: oklch(46% 0.13 195);
         --color-accent-soft: oklch(55% 0.13 195 / 10%);
+        --color-link: oklch(52% 0.15 245);
+        --color-link-hover: oklch(48% 0.15 245);
+        --color-link-soft: oklch(55% 0.15 245 / 10%);
         --color-primary: oklch(48% 0.13 195);
         --color-primary-ink: #fff;
         --color-danger: oklch(50% 0.18 25);
         --color-focus: oklch(55% 0.13 195);
         color: var(--color-muted);
         background: var(--color-page);
-        font-family:
-          system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         font-synthesis: none;
       }
 
       @media (min-width: 48rem) {
-        :root {
-          --page-gutter: 2rem;
-        }
+        :root { --page-gutter: 2rem; }
       }
 
       @media (min-width: 80rem) {
-        :root {
-          --page-gutter: 3rem;
-        }
+        :root { --page-gutter: 3rem; }
       }
 
-      *, *::before, *::after {
-        box-sizing: border-box;
-      }
+      *, *::before, *::after { box-sizing: border-box; }
 
       html {
         min-width: 20rem;
@@ -100,9 +91,7 @@ class AppShell(Component):
         scroll-padding-top: 5rem;
       }
 
-      [x-cloak] {
-        display: none !important;
-      }
+      [x-cloak] { display: none !important; }
 
       body {
         min-height: 100vh;
@@ -115,20 +104,9 @@ class AppShell(Component):
         -moz-osx-font-smoothing: grayscale;
       }
 
-      button, input, select {
-        font: inherit;
-      }
+      button, input { font: inherit; }
 
-      button, select {
-        cursor: pointer;
-      }
-
-      button:focus-visible,
-      input:focus-visible,
-      select:focus-visible,
-      a:focus-visible,
-      [draggable="true"]:focus-visible,
-      .board-stats:focus-visible {
+      button:focus-visible, input:focus-visible, a:focus-visible {
         outline: 2px solid var(--color-focus);
         outline-offset: 2px;
       }
@@ -165,7 +143,7 @@ class AppShell(Component):
         display: flex;
         align-items: center;
         gap: 0.6rem;
-        width: min(86rem, 100%);
+        width: min(80rem, 100%);
         height: 100%;
         margin-inline: auto;
         padding-inline: var(--page-gutter);
@@ -203,23 +181,49 @@ class AppShell(Component):
       }
 
       .page-frame {
-        width: min(86rem, calc(100% - (2 * var(--page-gutter))));
+        width: min(68rem, calc(100% - (2 * var(--page-gutter))));
         margin-inline: auto;
         padding: 6.5rem 0 4rem;
       }
 
+      .hero {
+        display: grid;
+        max-width: 45rem;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
+      }
+
+      .eyebrow {
+        margin: 0 0 0.15rem;
+        color: var(--color-muted);
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--color-text);
+        font-size: 2.25rem;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1.3;
+      }
+
+      .hero__intro {
+        max-width: 43rem;
+        margin: 0;
+        color: var(--color-muted);
+        font-size: 1.05rem;
+      }
+
       @media (max-width: 35rem) {
-        .site-title {
-          display: none;
-        }
+        .site-title { display: none; }
 
         .mode-label {
           max-width: 10rem;
           text-align: right;
         }
 
-        .page-frame {
-          padding-top: 6rem;
-        }
+        .page-frame { padding-top: 6rem; }
+
+        h1 { font-size: 2rem; }
       }
     """

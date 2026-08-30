@@ -81,10 +81,10 @@ Remove-Item -Recurse -Force `
 |---|---|
 | `config/settings.py` | Configures Django, the signing secret, and CSRF middleware. |
 | `config/urls.py` | Routes `/` to the page view and `/citry` to Citry. |
-| `project_explorer/apps.py` | Imports the components and initializes Citry during Django startup. |
-| `project_explorer/citry_app.py` | Creates the shared Citry instance from Django's secret. |
+| `project_explorer/apps.py` | Initializes Citry during Django startup. |
+| `project_explorer/citry_app.py` | Creates the shared Citry instance and configures component autodiscovery. |
 | `project_explorer/views.py` | Renders the page and ensures the browser receives a CSRF cookie. |
-| `project_explorer/components.py` | Defines the page, search Event, Alpine state, and styles. |
+| `project_explorer/components/` | Keeps the page shell, card, explorer, and page in separate component modules. |
 | `project_explorer/data.py` | Defines the sample projects and filters them. |
 | `tests/test_app.py` | Checks the page, Citry runtime, CSRF cookie, and missing routes. |
 

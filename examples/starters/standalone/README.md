@@ -69,8 +69,8 @@ Remove-Item -Recurse -Force `
 | File | What it does |
 |---|---|
 | `app/render.py` | Initializes Citry, renders reproducible output, and writes `_build/index.html`. |
-| `app/citry_app.py` | Creates the Citry instance without an Events signing secret. |
-| `app/components.py` | Defines the page, Alpine state, and component styles. |
+| `app/citry_app.py` | Creates the Citry instance and configures component autodiscovery. |
+| `app/components/` | Keeps the page shell, card, explorer, and page in separate component modules. |
 | `app/data.py` | Defines the sample projects shown on the page. |
 | `tests/test_standalone.py` | Checks deterministic output and confirms the document uses no external assets. |
 

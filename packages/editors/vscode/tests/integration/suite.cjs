@@ -113,7 +113,7 @@ async function run() {
 
 	const extension = vscode.extensions.getExtension("citry-dev.citry");
 	assert.ok(extension, "qualified citry-dev.citry extension is not installed");
-	assert.equal(extension.packageJSON.version, "0.1.1");
+	assert.equal(extension.packageJSON.version, "0.1.2");
 	assert.equal(path.resolve(extension.extensionPath), path.resolve(expectedExtensionPath));
 	await extension.activate();
 	assert.equal(extension.isActive, true);
