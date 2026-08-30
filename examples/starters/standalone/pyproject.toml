@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Render the Citry Project Explorer without a web server"
 requires-python = ">=3.10,<4"
 dependencies = [
-  "citry>=0.4.4,<0.5",
+  "citry>=0.4.6,<0.5",
 ]
 
 [dependency-groups]

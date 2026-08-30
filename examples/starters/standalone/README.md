@@ -24,7 +24,7 @@ a Python Event handler after the render command finishes.
 - Python 3.10 through 3.14
 - [uv](https://docs.astral.sh/uv/)
 
-The project accepts Citry 0.4.4 or newer within the 0.4.x release line. Its
+The project accepts Citry 0.4.6 or newer within the 0.4.x release line. Its
 lockfile pins the version exercised by the tests.
 
 ## Render the page
