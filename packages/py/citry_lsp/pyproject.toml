@@ -33,7 +33,7 @@ dependencies = [
     "citry>=0.4.5,<0.5",
     "pygls==2.1.1",
     "python-dotenv>=1.2.3,<2",
-    "ty==0.0.73",
+    "ty==0.0.75",
 ]
 
 [project.scripts]
