@@ -1150,11 +1150,13 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
             samples=samples,
         )
         results.append(ScalingSample("command-palette-open-instances", count, round(median_ms, 3), output_bytes))
-        median_ms, output_bytes = _measure(
-            partial(_render_scaled, command_palette_collection_element, count),
-            samples=samples,
-        )
-        results.append(ScalingSample("command-palette-commands", count, round(median_ms, 3), output_bytes))
+        # One palette supports up to 500 commands; larger instance profiles remain valid.
+        if count <= 500:
+            median_ms, output_bytes = _measure(
+                partial(_render_scaled, command_palette_collection_element, count),
+                samples=samples,
+            )
+            results.append(ScalingSample("command-palette-commands", count, round(median_ms, 3), output_bytes))
     return {
         "schema": "citry-ui-scaling-report/v1",
         "samples_per_count": samples,

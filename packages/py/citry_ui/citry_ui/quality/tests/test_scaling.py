@@ -1,5 +1,6 @@
 import pytest
 
+from citry_ui.quality import scaling
 from citry_ui.quality.scaling import scaling_report
 
 
@@ -95,3 +96,21 @@ def test_scaling_report_records_counts_without_claiming_timing_gates():
 def test_scaling_report_rejects_invalid_profiles(counts, samples):
     with pytest.raises(ValueError, match=r"samples|counts"):
         scaling_report(counts=counts, samples=samples)
+
+
+def test_scaling_report_respects_command_collection_limit(monkeypatch):
+    measure = scaling._measure
+
+    def measure_command_collection(render, *, samples):
+        # Render the real collection boundary without timing unrelated 1,000-instance fixtures.
+        if render.args[0].__name__ == "CommandPaletteCollectionScale":
+            return measure(render, samples=samples)
+        return 0.0, 1
+
+    monkeypatch.setattr(scaling, "_measure", measure_command_collection)
+    report = scaling_report(counts=(500, 501, 1000), samples=1)
+    collections = [result for result in report["results"] if result["profile"] == "command-palette-commands"]
+    assert [result["count"] for result in collections] == [500]
+    assert collections[0]["output_bytes"] > 0
+    for profile in ("command-palette-closed-instances", "command-palette-open-instances", "accordion-items"):
+        assert [result["count"] for result in report["results"] if result["profile"] == profile] == [500, 501, 1000]

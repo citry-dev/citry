@@ -82,6 +82,24 @@ def _load(page: Any) -> list[str]:
     return errors
 
 
+def _set_orientation(page: Any, orientation: str) -> None:
+    # The orientation attribute changes before resize delivery realigns the active slide.
+    page.wait_for_function(
+        """orientation => new Promise(resolve => {
+          const root = document.querySelector('#stories');
+          const viewport = root.querySelector('[data-citry-ui-part="viewport"]');
+          const observer = new ResizeObserver(() => {
+            if (root.dataset.orientation !== orientation) return;
+            observer.disconnect();
+            requestAnimationFrame(() => resolve(true));
+          });
+          observer.observe(viewport);
+          Alpine.store('carousel').orientation = orientation;
+        })""",
+        arg=orientation,
+    )
+
+
 def test_next_previous_picker_and_focus_stability(page: Any) -> None:
     errors = _load(page)
     root = page.locator("#stories")
@@ -116,14 +134,12 @@ def test_controlled_reject_accept_release_and_loop(page: Any) -> None:
 def test_native_scroll_orientation_and_drag_state(page: Any) -> None:
     errors = _load(page)
     viewport = page.locator('[data-citry-ui-part="viewport"]')
-    page.evaluate("Alpine.store('carousel').orientation = 'vertical'")
-    page.wait_for_function("document.querySelector('#stories').dataset.orientation === 'vertical'")
+    _set_orientation(page, "vertical")
     viewport.evaluate(
         "element => { element.scrollTop = element.scrollHeight; element.dispatchEvent(new Event('scroll')); }"
     )
     page.wait_for_function("document.querySelector('#stories').dataset.index === '2'")
-    page.evaluate("Alpine.store('carousel').orientation = 'horizontal'")
-    page.wait_for_function("document.querySelector('#stories').dataset.orientation === 'horizontal'")
+    _set_orientation(page, "horizontal")
     box = viewport.bounding_box()
     page.mouse.move(box["x"] + 250, box["y"] + 30)
     page.mouse.down()

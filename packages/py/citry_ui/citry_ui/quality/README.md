@@ -65,4 +65,6 @@ Scaling measurements are diagnostic on purpose. Cross-machine timing is too
 variable for a useful hard gate, while asset bytes, interaction budgets, and
 cleanup behavior already have focused thresholds. The scheduled workflow
 captures the full pairwise visual plan and the bounded scaling counts as CI
-artifacts without putting generated reports into the wheel.
+artifacts without putting generated reports into the wheel. The command-palette
+collection profile measures only counts up to its supported 500-command limit;
+instance profiles also measure the larger requested counts.
