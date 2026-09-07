@@ -1,21 +1,45 @@
 # Qualify and publish the citry-core Python package.
 #
-# A manual run builds, installs, tests, and stores one verified artifact bundle
-# for an exact main commit. Pushing citry-core@<version> at that commit promotes
-# those same bytes; a tag run never recompiles release artifacts.
+# The repository release controller qualifies one complete artifact set, then
+# sends that retained bundle back here for Trusted Publishing.
 name: Publish citry-core to PyPI
+run-name: >-
+  ${{ inputs.operation == 'promote'
+      && format('Publish citry-core for candidate {0}', inputs.candidate_id)
+      || format('Qualify citry-core for candidate {0}', inputs.candidate_id) }}
 
 on:
-  push:
-    tags:
-      - "citry-core@*"
   workflow_dispatch:
+    inputs:
+      operation:
+        required: true
+        type: choice
+        options: [qualify, promote]
+      release_commit:
+        required: true
+        type: string
+      candidate_id:
+        required: true
+        type: string
+      workspace_dependencies:
+        required: false
+        type: string
+      qualification_run_id:
+        required: false
+        type: string
+      qualification_artifact_id:
+        required: false
+        type: string
+      qualification_artifact_digest:
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 env:
   PROJECT_DIR: packages/py/citry_core
+  SOURCE_DATE_EPOCH: "315532800"
   CITRY_CORE_RUST_TOOLCHAIN: "1.95.0"
   CITRY_CORE_EMSCRIPTEN_VERSION: "5.0.3"
   MATURIN_VERSION: "1.14.1"
@@ -27,23 +51,24 @@ jobs:
       version: ${{ steps.package-version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-      - name: Verify tag matches pyproject version
+        with:
+          ref: ${{ inputs.release_commit }}
+      - name: Read the qualified package version
         id: package-version
+        env:
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+          OPERATION: ${{ inputs.operation }}
         run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          # Bind qualification's checkout to GitHub's authenticated run SHA.
+          if [ "$OPERATION" = "qualify" ]; then test "$GITHUB_SHA" = "$RELEASE_COMMIT"; fi
           pkg_version=$(grep -m1 '^version' "$PROJECT_DIR/pyproject.toml" | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
-          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
-            exit 0
-          fi
-          tag_version="${GITHUB_REF_NAME#citry-core@}"
-          echo "tag version: $tag_version, pyproject version: $pkg_version"
-          if [ "$tag_version" != "$pkg_version" ]; then
-            echo "::error::tag '$tag_version' does not match $PROJECT_DIR/pyproject.toml version '$pkg_version'"
-            exit 1
-          fi
 
   linux:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ubuntu-latest
     strategy:
@@ -53,6 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - name: Build the CPython ABI3 wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
@@ -146,7 +172,7 @@ jobs:
           if-no-files-found: error
 
   musllinux:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ubuntu-latest
     strategy:
@@ -156,6 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - name: Build the CPython ABI3 wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
@@ -188,7 +215,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: windows-latest
     strategy:
@@ -198,6 +225,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
@@ -262,7 +290,7 @@ jobs:
           if-no-files-found: error
 
   macos:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -276,6 +304,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
@@ -318,12 +347,13 @@ jobs:
           if-no-files-found: error
 
   sdist:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - uses: actions/setup-python@v7
         with:
@@ -356,7 +386,7 @@ jobs:
 
   pyemscripten-build:
     name: PyEmscripten reproducibility build ${{ matrix.copy }}
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ubuntu-latest
     strategy:
@@ -368,6 +398,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - uses: actions/setup-python@v7
         with:
@@ -440,7 +471,7 @@ jobs:
 
   pyemscripten:
     name: Compare PyEmscripten reproducibility builds
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: [verify-version, pyemscripten-build]
     runs-on: ubuntu-latest
     env:
@@ -466,7 +497,7 @@ jobs:
 
   verify-distributions:
     name: Verify complete distribution inventory
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ inputs.operation == 'qualify' }}
     needs: [linux, musllinux, windows, macos, sdist, pyemscripten]
     runs-on: ubuntu-latest
     permissions:
@@ -476,6 +507,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - uses: actions/download-artifact@v8
         with:
@@ -486,6 +518,13 @@ jobs:
           python scripts/verify_citry_core_distribution.py inventory
           --raw-dir raw-artifacts
           --output-dir verified
+      - name: Verify the predeclared playground wheel when this version is selected
+        run: >-
+          python scripts/verify_playground_release.py
+          --runtime docs_site/static/playground/runtime.json
+          --inventory verified/release-inventory.json
+          --package-name citry-core
+          --wheel-pattern '*pyemscripten*.whl'
       - name: Attest the qualified build outputs
         uses: actions/attest-build-provenance@v4
         with:
@@ -493,51 +532,58 @@ jobs:
             verified/*.whl
             verified/*.tar.gz
             verified/release-inventory.json
-      - name: Upload the only bundle a tag may promote
+      - name: Upload the only bundle the release controller may promote
         uses: actions/upload-artifact@v7
         with:
           name: verified-citry-core-distributions
           path: verified
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
   select-qualification:
-    name: Select the exact main-commit qualification
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    name: Verify the selected candidate artifact
+    if: ${{ inputs.operation == 'promote' }}
     needs: verify-version
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
     outputs:
-      run_id: ${{ steps.select.outputs.run_id }}
-      run_url: ${{ steps.select.outputs.run_url }}
-      artifact_id: ${{ steps.select.outputs.artifact_id }}
-      artifact_digest: ${{ steps.select.outputs.artifact_digest }}
-      head_sha: ${{ steps.select.outputs.head_sha }}
+      run_id: ${{ inputs.qualification_run_id }}
+      run_url: https://github.com/${{ github.repository }}/actions/runs/${{ inputs.qualification_run_id }}
+      artifact_id: ${{ inputs.qualification_artifact_id }}
+      artifact_digest: ${{ inputs.qualification_artifact_digest }}
+      head_sha: ${{ inputs.release_commit }}
     steps:
       - uses: actions/checkout@v7
-      - name: Record the peeled tag commit
-        id: commit
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Find a successful qualification for this commit
-        id: select
+        with:
+          ref: main
+      - name: Require the trusted qualification for these exact bytes
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          QUALIFICATION_ARTIFACT_ID: ${{ inputs.qualification_artifact_id }}
+          QUALIFICATION_ARTIFACT_DIGEST: ${{ inputs.qualification_artifact_digest }}
         run: >-
-          python scripts/select_citry_core_qualification.py
+          python scripts/release.py verify-qualification
           --repository "$GITHUB_REPOSITORY"
-          --commit "${{ steps.commit.outputs.sha }}"
-          --github-output "$GITHUB_OUTPUT"
+          --package citry-core
+          --commit "$RELEASE_COMMIT"
+          --run-id "$QUALIFICATION_RUN_ID"
+          --artifact-id "$QUALIFICATION_ARTIFACT_ID"
+          --artifact-digest "$QUALIFICATION_ARTIFACT_DIGEST"
 
   release:
     name: Promote qualified bytes and release
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ inputs.operation == 'promote' }}
     needs: [verify-version, select-qualification]
     runs-on: ubuntu-latest
     environment: pypi
     env:
       CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
+      RELEASE_COMMIT: ${{ inputs.release_commit }}
+      RELEASE_TAG: citry-core@${{ needs.verify-version.outputs.version }}
     permissions:
       actions: read
       attestations: write
@@ -547,6 +593,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ inputs.release_commit }}
           submodules: recursive
       - name: Require the qualified commit to remain on main
         run: |
@@ -580,31 +627,25 @@ jobs:
             > verified/qualification-provenance.json
           mkdir dist
           cp verified/*.whl verified/*.tar.gz dist/
-      - name: Require a new PyPI version and GitHub Release
+      - name: Accept only absent or byte-identical public state
+        id: public-state
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pypi_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+          pypi_status=$(curl --silent --show-error --output pypi.json --write-out '%{http_code}' \
             "https://pypi.org/pypi/citry-core/${CITRY_CORE_VERSION}/json")
-          if [ "$pypi_status" != "404" ]; then
-            echo "::error::expected PyPI version ${CITRY_CORE_VERSION} to be absent; HTTP ${pypi_status}"
-            exit 1
-          fi
+          args=(--status "$pypi_status" --inventory verified/release-inventory.json --github-output "$GITHUB_OUTPUT")
+          if [ "$pypi_status" = "200" ]; then args+=(--pypi-json pypi.json); fi
+          python scripts/pypi_release.py "${args[@]}"
           release_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer $GH_TOKEN" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME")
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")
           case "$release_status" in
-            404) ;;
-            200)
-              echo "::error::GitHub Release ${GITHUB_REF_NAME} already exists"
-              exit 1
-              ;;
-            *)
-              echo "::error::could not prove GitHub Release ${GITHUB_REF_NAME} is absent; HTTP ${release_status}"
-              exit 1
-              ;;
+            404) echo "release_exists=false" >> "$GITHUB_OUTPUT" ;;
+            200) echo "release_exists=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::could not read GitHub Release $RELEASE_TAG; HTTP $release_status"; exit 1 ;;
           esac
       - name: Attest the promotion of the qualified bytes
         uses: actions/attest-build-provenance@v4
@@ -614,20 +655,47 @@ jobs:
             verified/release-inventory.json
             verified/qualification-provenance.json
       - name: Publish to PyPI
+        if: steps.public-state.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+      - name: Verify the exact public artifact set
+        run: |
+          for attempt in $(seq 1 20); do
+            status=$(curl --silent --show-error --output pypi.json --write-out '%{http_code}' \
+              "https://pypi.org/pypi/citry-core/${CITRY_CORE_VERSION}/json")
+            if [ "$status" = "200" ] && python scripts/pypi_release.py --status "$status" \
+              --inventory verified/release-inventory.json --pypi-json pypi.json; then
+              break
+            fi
+            if [ "$attempt" = 20 ]; then exit 1; fi
+            sleep 5
+          done
+      - name: Create or verify the final annotated tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
+          else
+            git tag -a "$RELEASE_TAG" "$RELEASE_COMMIT" -m "Release $RELEASE_TAG"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
       - name: Create the GitHub Release
+        if: steps.public-state.outputs.release_exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create "$GITHUB_REF_NAME"
+          gh release create "$RELEASE_TAG"
           dist/* verified/release-inventory.json verified/qualification-provenance.json
           --repo "$GITHUB_REPOSITORY"
-          --title "$GITHUB_REF_NAME"
+          --title "$RELEASE_TAG"
+          --verify-tag
           --generate-notes
       - name: Start the Discord release notification
+        if: steps.public-state.outputs.release_exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches"
           -f event_type=citry-release-published
-          -f "client_payload[tag]=$GITHUB_REF_NAME"
+          -f "client_payload[tag]=$RELEASE_TAG"

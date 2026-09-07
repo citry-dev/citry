@@ -147,6 +147,9 @@ def test_image_quality_native_semantics_delivery_reactivity_lifecycle_guards_and
     functional_link.focus()
     assert functional_link.evaluate("element => element === document.activeElement") is True
 
+    # Initial cached images can finish before Alpine attaches native listeners.
+    initial_output = page.locator("#quality-image-reactive-output").text_content().split("|")
+    initial_loads, initial_errors = (int(value) for value in initial_output[3:])
     page.get_by_role("button", name="Broken", exact=True).click()
     page.wait_for_function("document.querySelector('#quality-image-reactive').dataset.status === 'error'")
     page.get_by_role("button", name="Rapid A then B", exact=True).click()
@@ -162,8 +165,8 @@ def test_image_quality_native_semantics_delivery_reactivity_lifecycle_guards_and
     assert status == "loaded"
     assert selected_name == "orion-640.jpg"
     assert int(callbacks) >= 4
-    assert int(native_loads) >= 2
-    assert int(native_errors) >= 1
+    assert int(native_loads) > initial_loads
+    assert int(native_errors) > initial_errors
 
     assert _axe_serious_or_critical(page) == []
 

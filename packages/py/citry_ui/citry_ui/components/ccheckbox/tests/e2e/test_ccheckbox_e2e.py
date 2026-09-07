@@ -8,6 +8,8 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 import citry_ui
 from citry import Citry, Component
 
@@ -282,15 +284,8 @@ def test_mixed_state_uses_native_property_and_accessibility_mapping(checkbox_pag
     assert native_input.evaluate("input => input.indeterminate") is True
     assert native_input.get_attribute("aria-checked") is None
     assert root.get_attribute("data-indeterminate") == ""
-    client = page.context.new_cdp_session(page)
-    nodes = client.send("Accessibility.getFullAXTree")["nodes"]
-    checkbox = next(
-        node
-        for node in nodes
-        if node.get("role", {}).get("value") == "checkbox" and node.get("name", {}).get("value") == "Track fern spores"
-    )
-    checked_property = next(prop for prop in checkbox.get("properties", []) if prop.get("name") == "checked")
-    assert checked_property["value"]["value"] == "mixed"
+    # Playwright's accessibility assertions work in every browser engine.
+    expect(page.get_by_role("checkbox", name="Track fern spores", exact=True)).to_be_checked(indeterminate=True)
     assert errors == []
 
 
@@ -299,14 +294,8 @@ def test_label_and_description_are_distinct_accessible_relationships(checkbox_pa
     native_input = page.locator("#controlled-checkbox")
 
     assert native_input.get_attribute("aria-describedby") == "controlled-checkbox-description"
-    client = page.context.new_cdp_session(page)
-    nodes = client.send("Accessibility.getFullAXTree")["nodes"]
-    checkbox = next(
-        node
-        for node in nodes
-        if node.get("role", {}).get("value") == "checkbox" and node.get("name", {}).get("value") == "Track fern spores"
-    )
-    assert checkbox["description"]["value"] == "Include greenhouse germination notes."
+    expect(native_input).to_have_accessible_name("Track fern spores")
+    expect(native_input).to_have_accessible_description("Include greenhouse germination notes.")
     assert errors == []
 
 

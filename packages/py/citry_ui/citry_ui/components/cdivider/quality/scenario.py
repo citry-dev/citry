@@ -60,7 +60,9 @@ def divider_states_component(app: Citry) -> type[Component]:
               <c-CDivider>Exceptionallylongunbrokenconstellationcatalogidentifier</c-CDivider>
             </div>
             <div dir="rtl"><c-CDivider inset="start" c-decorative="True" /></div>
-            <div style="color-scheme: dark"><c-CDivider>Nested dark sky</c-CDivider></div>
+            <div style="color-scheme: dark; background: Canvas; color: CanvasText">
+              <c-CDivider>Nested dark sky</c-CDivider>
+            </div>
             <div class="divider-quality-brand divider-quality-brand--aurora">
               <c-CDivider>Aurora brand</c-CDivider>
             </div>

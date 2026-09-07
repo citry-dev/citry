@@ -79,7 +79,13 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                 />
                 <button id="accept-open" type="button" @click="acceptOpen=true">Accept open</button>
 
-                <c-CDateRange id="blocked" min="2026-08-10" max="2026-09-15" c-unavailable_dates="('2026-08-21',)" />
+                <!-- Keep the empty calendar in August regardless of today's date. -->
+                <c-CDateRange
+                  id="blocked"
+                  min="2026-08-10"
+                  max="2026-08-31"
+                  c-unavailable_dates="('2026-08-21',)"
+                />
 
                 <form id="required-form">
                   <c-CDateRange id="required-range" start_name="start" end_name="end" min="2026-08-10" max="2026-09-15" required />

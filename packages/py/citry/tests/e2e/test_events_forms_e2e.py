@@ -87,7 +87,15 @@ READY = "window.Citry && Citry.events && Citry.events._internal && Citry.events.
 def _collect_console(page: Any) -> list[str]:
     """Start collecting console messages as ``type:text`` strings."""
     messages: list[str] = []
-    page.on("console", lambda msg: messages.append(f"{msg.type}:{msg.text}"))
+
+    def collect(message: Any) -> None:
+        # Error details are separate arguments in Firefox's console protocol.
+        details = [
+            argument.evaluate("value => value instanceof Error ? value.message : ''") for argument in message.args
+        ]
+        messages.append(f"{message.type}:{message.text} {' '.join(details)}")
+
+    page.on("console", collect)
     return messages
 
 

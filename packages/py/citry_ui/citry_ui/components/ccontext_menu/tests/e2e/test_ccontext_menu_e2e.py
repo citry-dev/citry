@@ -662,6 +662,16 @@ def test_native_preservation_shift_escape_and_transformed_point_geometry(page, b
         page.wait_for_function("document.querySelector('#basic-menu')?.matches(':popover-open')")
         page.keyboard.press("Escape")
         page.wait_for_function("!document.querySelector('#basic-menu')?.matches(':popover-open')")
+        # Native right-click selection differs across operating systems.
+        basic.evaluate(
+            """target => {
+              const range = document.createRange();
+              range.selectNodeContents(target);
+              const selection = getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }"""
+        )
         assert page.evaluate("Boolean(getSelection().toString())")
         repeated = _default_prevented(
             page,

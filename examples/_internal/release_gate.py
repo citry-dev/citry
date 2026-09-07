@@ -1,4 +1,4 @@
-"""Validate version-locked example and playground surfaces for a Citry tag."""
+"""Validate example compatibility and portable playground release coordinates."""
 
 from __future__ import annotations
 
@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
 
 try:
     import tomllib
@@ -62,13 +65,57 @@ def _artifact_problem(
     return None
 
 
+def _runtime_artifact_problem(
+    artifact: dict[str, Any],
+    *,
+    owner: str,
+    public_artifacts: dict[str, tuple[str, str]] | None,
+) -> str | None:
+    filename = artifact.get("filename")
+    digest = artifact.get("sha256")
+    if artifact.get("source") != "pypi":
+        return f"{owner} must resolve an exact PyPI artifact"
+    if not isinstance(filename, str) or not filename or "/" in filename:
+        return f"{owner} has an invalid filename"
+    if not isinstance(digest, str) or len(digest) != 64:
+        return f"{owner} has an invalid SHA-256 digest"
+    try:
+        int(digest, 16)
+    except ValueError:
+        return f"{owner} has an invalid SHA-256 digest"
+    if public_artifacts is None:
+        return None
+    public = public_artifacts.get(filename)
+    if public is None:
+        return f"{owner} names {filename!r}, which is absent from the public PyPI release"
+    if public[1] != digest:
+        return f"{owner} SHA-256 differs from the public PyPI artifact"
+    return None
+
+
+def _citry_requirement(dependencies: Any) -> tuple[Requirement | None, str | None]:
+    requirements: list[Requirement] = []
+    for raw in dependencies if isinstance(dependencies, list) else []:
+        if not isinstance(raw, str):
+            continue
+        try:
+            requirement = Requirement(raw)
+        except InvalidRequirement:
+            continue
+        if requirement.name.lower().replace("_", "-") == "citry":
+            requirements.append(requirement)
+    if len(requirements) != 1:
+        return None, "manifest must declare exactly one Citry dependency"
+    return requirements[0], None
+
+
 def validate_release_surfaces(
     repo_root: Path = REPO_ROOT,
     *,
     pypi_payload: dict[str, Any] | None = None,
     core_pypi_payload: dict[str, Any] | None = None,
 ) -> list[str]:
-    """Return every release-coupled version or public-artifact mismatch."""
+    """Return every example compatibility or playground coordinate mismatch."""
     problems: list[str] = []
     version = _project_version(repo_root)
     public_artifacts = None if pypi_payload is None else _public_artifacts(pypi_payload)
@@ -79,17 +126,9 @@ def validate_release_surfaces(
         project_id = entry.get("id", "<unknown>")
         project_root = repo_root / "examples" / entry["path"]
         manifest = tomllib.loads((project_root / "pyproject.toml").read_text(encoding="utf-8"))
-        citry_requirements = [
-            dependency
-            for dependency in manifest.get("project", {}).get("dependencies", [])
-            if isinstance(dependency, str) and dependency.startswith("citry")
-        ]
-        if len(citry_requirements) != 1 or not citry_requirements[0].startswith(f"citry>={version},"):
-            problems.append(f"{project_id}: manifest must set its minimum Citry version to {version}")
-
-        readme = (project_root / "README.md").read_text(encoding="utf-8")
-        if f"Citry {version}" not in readme:
-            problems.append(f"{project_id}: README must name Citry {version}")
+        requirement, requirement_problem = _citry_requirement(manifest.get("project", {}).get("dependencies"))
+        if requirement_problem is not None:
+            problems.append(f"{project_id}: {requirement_problem}")
 
         lock = tomllib.loads((project_root / "uv.lock").read_text(encoding="utf-8"))
         locked = [package for package in lock.get("package", []) if package.get("name") == "citry"]
@@ -97,8 +136,16 @@ def validate_release_surfaces(
             problems.append(f"{project_id}: lock must contain exactly one Citry package")
             continue
         citry = locked[0]
-        if citry.get("version") != version or citry.get("source") != {"registry": PYPI_REGISTRY}:
-            problems.append(f"{project_id}: lock must resolve Citry {version} from {PYPI_REGISTRY}")
+        locked_version = citry.get("version")
+        if citry.get("source") != {"registry": PYPI_REGISTRY}:
+            problems.append(f"{project_id}: lock must resolve Citry from {PYPI_REGISTRY}")
+        if requirement is not None:
+            try:
+                compatible = isinstance(locked_version, str) and Version(locked_version) in requirement.specifier
+            except InvalidVersion:
+                compatible = False
+            if not compatible:
+                problems.append(f"{project_id}: locked Citry {locked_version!r} does not satisfy {requirement}")
         artifacts = [citry.get("sdist"), *citry.get("wheels", [])]
         artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
         if not artifacts:
@@ -107,7 +154,9 @@ def validate_release_surfaces(
             problem = _artifact_problem(
                 artifact,
                 owner=f"{project_id}: locked Citry artifact",
-                public_artifacts=public_artifacts,
+                # An example lock may deliberately remain on an older compatible
+                # Citry release, so its own immutable PyPI coordinates are enough.
+                public_artifacts=None,
             )
             if problem is not None:
                 problems.append(problem)
@@ -121,11 +170,10 @@ def validate_release_surfaces(
     if len(packages) != 1 or packages[0].get("version") != version:
         problems.append(f"playground: packages must contain Citry {version} exactly once")
     elif (
-        problem := _artifact_problem(
+        problem := _runtime_artifact_problem(
             packages[0],
             owner="playground: Citry wheel",
             public_artifacts=public_artifacts,
-            require_digest=False,
         )
     ) is not None:
         problems.append(problem)
@@ -143,15 +191,13 @@ def validate_release_surfaces(
         expected_core_wheel = (
             f"citry_core-{core_version}-{build['python_tag']}-{build['abi_tag']}-{build['platform_tag']}.whl"
         )
-        core_url = core_packages[0].get("url")
-        if not isinstance(core_url, str) or core_url.rsplit("/", 1)[-1] != expected_core_wheel:
+        if core_packages[0].get("filename") != expected_core_wheel:
             problems.append("playground: citry-core wheel must match the pinned Python and PyEmscripten ABI")
         elif (
-            problem := _artifact_problem(
+            problem := _runtime_artifact_problem(
                 core_packages[0],
                 owner="playground: Citry Core wheel",
                 public_artifacts=core_public_artifacts,
-                require_digest=False,
             )
         ) is not None:
             problems.append(problem)
@@ -161,11 +207,10 @@ def validate_release_surfaces(
     if not isinstance(ui_version, str) or len(ui_packages) != 1 or ui_packages[0].get("version") != ui_version:
         problems.append("playground: citry.ui_version must match exactly one citry-ui package")
     elif (
-        problem := _artifact_problem(
+        problem := _runtime_artifact_problem(
             ui_packages[0],
             owner="playground: Citry UI wheel",
             public_artifacts=None,
-            require_digest=False,
         )
     ) is not None:
         problems.append(problem)
@@ -188,7 +233,7 @@ def main() -> int:
         for problem in problems:
             print(f"release surface error: {problem}")
         return 1
-    print("Citry release examples and playground match the public package.")
+    print("Citry examples remain compatible and the playground uses exact package coordinates.")
     return 0
 
 

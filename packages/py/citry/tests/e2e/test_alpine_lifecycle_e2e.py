@@ -415,7 +415,15 @@ def test_unsupported_async_parent_settles_descendant_and_independent_branch(page
         """
 
     messages: list[str] = []
-    page.on("console", lambda message: messages.append(message.text))
+
+    def collect_console(message: Any) -> None:
+        messages.append(message.text)
+        # Firefox keeps the rejection detail on the Error argument.
+        messages.extend(
+            argument.evaluate("value => value instanceof Error ? value.message : ''") for argument in message.args
+        )
+
+    page.on("console", collect_console)
     html = _mutate_dependencies(str(Page()), lambda manifest: manifest["calls"].reverse())
     base = serve_live(c, html, "")
     page.goto(base + "/")

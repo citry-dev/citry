@@ -12,28 +12,38 @@ For operating rules see [`/CLAUDE.md`](../../CLAUDE.md). For the documented
 dev/build/release conventions (some marked unverified) see
 [`docs/codebase.md`](../codebase.md).
 
-**Status (2026-06-30): PRs 1-3 implemented.** PR 1 (uv workspace + the
-lint/format/type-check gates), PR 2 (the `citry` publish workflow, the
-`citry-core@`/`citry@` tag rename with a tag==version guard, the built-wheel
-smoke test, macOS on `rust--tests`), and PR 3 (Trusted Publishing / OIDC on both
-publish workflows plus a GitHub Release per tag) are all in. Two deviations from
-the original plan: the quality-gate mechanism was switched from pre-commit to an
-explicit `python scripts/check.py` command with auto-discovered validators in
-[`scripts/validators/`](../../scripts/validators/) (see
-[`docs/codebase.md`](../codebase.md) "Checks and validators"); and GitHub Release
-notes are auto-generated rather than sliced from the CHANGELOG, because the
-CHANGELOG is date-headed, not version-headed. Before the first real release the
-maintainer configures PyPI pending publishers (repo + workflow file + environment
-`pypi`) for `citry-core` and `citry`. Deferred: stripping debug symbols from
-published wheels (the release profile keeps `debug = true` for profiling).
-Passages below that mention pre-commit hooks or `repo--tests.yml` describe the
-original plan, not what shipped.
+**Status (2026-08-30): implemented, then replaced by the repository release
+controller.** The uv workspace, checks, package-specific workflows, Trusted
+Publishing, GitHub Releases, ABI3 Core wheel set, and exact artifact
+qualification all shipped. The original phased design below remains as
+historical rationale. It is not the current operating procedure.
 
-**Current Citry Core release note (2026-08-18):** the old per-interpreter
-wheel and direct tag-build passages below are historical. Citry Core now
-qualifies an ABI3-based closed artifact set once and promotes those exact bytes
-from a tag. The current procedure is in [`docs/codebase.md`](../codebase.md#citry-core-distribution-qualification),
-and the ABI3/fat-LTO evidence and decision are in
+Current releases use two repository workflows:
+
+1. [`repo--release-candidate.yml`](../../.github/workflows/repo--release-candidate.yml)
+   plans one exact `main` commit, starts every selected package qualification
+   concurrently, and retains a candidate bundle containing exact workflow run,
+   artifact, and digest identities for 30 days.
+2. [`repo--release.yml`](../../.github/workflows/repo--release.yml) is the only
+   publication entry point. Given a successful candidate run ID, it promotes
+   dependency layers in order and packages within each layer concurrently.
+   Each worker verifies and publishes its retained bytes, then creates the
+   final annotated tag and GitHub Release.
+
+The candidate phase removes expensive builds from the maintainer's release
+window. The publish phase is retryable for the same candidate: exact existing
+registry bytes are accepted, while partial or different inventories fail
+closed. Citry's browser-runtime metadata is prepared before publication as an
+exact PyPI name, version, filename, and SHA-256 tuple. Python release builds use
+a fixed source-date epoch, and qualification checks any selected playground pin
+against the retained wheel. Examples qualify through candidate overlays and are
+no longer relocked after every Citry release.
+Documentation snapshots run after the Citry GitHub Release and do not block
+package publication.
+
+The current human procedure and package-specific qualification details are in
+[`docs/codebase.md`](../codebase.md#current-release-process). The ABI3 and
+fat-LTO evidence is in
 [`performance.md`](performance.md#9-citry-core-release-wheel-profile-and-abi-decision-2026-08-18).
 
 ---

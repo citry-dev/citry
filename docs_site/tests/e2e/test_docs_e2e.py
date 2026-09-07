@@ -713,7 +713,7 @@ def test_mobile_shows_overflow_menu(page: Any, docs_site_url: str) -> None:
     assert page.locator('.djc-sidebar__topnav a[aria-current="true"]').inner_text() == "Reference"
 
 
-def test_empty_blog_has_scoped_navigation_and_no_feed(page: Any, docs_site_url: str) -> None:
+def test_blog_has_scoped_navigation(page: Any, docs_site_url: str) -> None:
     tree = load_site_nav(config)
     blog_area = tree.areas[-1]
     assert blog_area.label == "Blog"
@@ -725,12 +725,7 @@ def test_empty_blog_has_scoped_navigation_and_no_feed(page: Any, docs_site_url: 
     assert primary.last.get_attribute("href") == "/blog/"
     assert page.locator(".djc-header__nav a.is-active").inner_text() == "Blog"
     assert page.locator("article.prose h1").count() == 1
-    assert page.locator(".blog-index__empty").inner_text() == "No Blog posts have been published yet."
     assert page.locator(".djc-header__actions > .djc-version-picker").count() == 0
-    assert page.locator('link[rel="alternate"][type="application/atom+xml"]').count() == 0
-
-    feed = page.request.get(docs_site_url + "/blog/feed.xml")
-    assert feed.status == 404
 
     page.set_viewport_size({"width": 375, "height": 800})
     page.locator(".djc-hamburger").click()

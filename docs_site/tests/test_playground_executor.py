@@ -6,7 +6,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
 
 _EXECUTOR = Path(__file__).parents[1] / "static" / "playground" / "executor.py"
 _PYODIDE_BUILD = Path(__file__).parents[2] / "packages" / "py" / "citry_core" / "pyodide-build.json"
@@ -138,7 +137,7 @@ def test_worker_revalidates_the_coupled_runtime_files() -> None:
 
     assert 'cache: "no-cache"' in worker
     assert 'cache: "force-cache"' not in worker
-    assert "new URL(packageInfo.url, import.meta.url).href" in worker
+    assert "resolvePackageUrls(runtime.packages)" in worker
     assert 'importlib.metadata.version("citry-ui")' in worker
     assert "runtime.citry.ui_version" in worker
     assert "citry-events.js" not in worker
@@ -168,12 +167,13 @@ def test_runtime_manifest_matches_its_build_and_package_contracts() -> None:
     }
 
     for package in (citry, core, ui):
-        assert urlparse(package["url"]).hostname == "files.pythonhosted.org"
-    assert Path(urlparse(citry["url"]).path).name == f"citry-{citry['version']}-py3-none-any.whl"
-    assert Path(urlparse(core["url"]).path).name == (
+        assert package["source"] == "pypi"
+        assert len(package["sha256"]) == 64
+    assert citry["filename"] == f"citry-{citry['version']}-py3-none-any.whl"
+    assert core["filename"] == (
         f"citry_core-{core['version']}-{build['python_tag']}-{build['abi_tag']}-{build['platform_tag']}.whl"
     )
-    assert Path(urlparse(ui["url"]).path).name == f"citry_ui-{ui['version']}-py3-none-any.whl"
+    assert ui["filename"] == f"citry_ui-{ui['version']}-py3-none-any.whl"
 
 
 def test_executor_accepts_html_markup_element_render_and_starter() -> None:

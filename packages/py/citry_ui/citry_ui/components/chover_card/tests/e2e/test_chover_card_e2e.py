@@ -114,13 +114,18 @@ def test_focus_escape_and_hidden_supplementary_semantics(page: Any) -> None:
 
 
 def test_hover_delay_surface_bridge_peer_and_touch_suppression(page: Any) -> None:
+    page.clock.install()
     errors = _load(page)
+    # Action latency must not consume the 60 ms opening delay under test.
+    page.clock.pause_at(page.evaluate("Date.now() / 1000") + 1)
     first_trigger = page.get_by_role("link", name="Ada Lovelace")
     first = page.locator("#ada-card")
     first_trigger.hover()
-    page.wait_for_timeout(20)
+    page.clock.run_for(20)
     assert first.evaluate("element => element.matches(':popover-open')") is False
+    page.clock.run_for(40)
     page.wait_for_function("document.querySelector('#ada-card').matches(':popover-open')")
+    page.clock.resume()
 
     first.hover()
     page.wait_for_timeout(150)

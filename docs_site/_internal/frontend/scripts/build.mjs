@@ -18,6 +18,8 @@ const entries = [
   // The analysis Worker has no package imports, so keep its runtime-relative
   // Pyodide and adapter URLs intact.
   { source: "analysis_worker.js", output: "analysis_worker.js", bundle: false },
+  // Both Workers resolve registry coordinates through this small shared module.
+  { source: "runtime_packages.js", output: "runtime_packages.js", bundle: false },
   // Keep the activator independent from CodeMirror. Bundling this dynamic
   // import without code splitting would pull the heavy runtime into every page.
   { source: "live_code.js", output: "live_code.js", bundle: false },

@@ -37,12 +37,6 @@ on:
   schedule:
     - cron: "30 5 * * 1"
   workflow_dispatch:
-    inputs:
-      public_release:
-        description: "Qualify frozen projects directly from their public-index locks"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -78,7 +72,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       - name: Build candidate wheels
-        if: github.event_name != 'workflow_dispatch' || !inputs.public_release
         run: |
           uv build --wheel --python "${{ matrix.python-version }}" --out-dir dist/example-wheels packages/py/citry_core
           uv build --wheel --python "${{ matrix.python-version }}" --out-dir dist/example-wheels packages/py/citry
@@ -92,7 +85,6 @@ jobs:
         run: .example-tools/bin/python -m pytest examples/tests -q
 
       - name: Qualify clean copies against candidate wheels
-        if: github.event_name != 'workflow_dispatch' || !inputs.public_release
         shell: bash
         run: |
           wheel_args=()
@@ -103,29 +95,15 @@ jobs:
             --python "${{ matrix.python-version }}" \
             "${wheel_args[@]}"
 
-      - name: Qualify clean copies from public-index locks
-        if: github.event_name == 'workflow_dispatch' && inputs.public_release
-        run: >-
-          .example-tools/bin/python -m examples._internal.qualify
-          --python "${{ matrix.python-version }}"
-
       - name: Build deterministic archives
         if: matrix.python-version == '3.14'
         run: .example-tools/bin/python -m examples._internal.archive --output dist/examples
 
       - name: Upload example archives
-        if: matrix.python-version == '3.14' && !inputs.public_release
+        if: matrix.python-version == '3.14'
         uses: actions/upload-artifact@v7
         with:
           name: citry-example-projects
-          path: dist/examples/
-          if-no-files-found: error
-
-      - name: Upload public-release example evidence
-        if: matrix.python-version == '3.14' && github.event_name == 'workflow_dispatch' && inputs.public_release
-        uses: actions/upload-artifact@v7
-        with:
-          name: citry-example-projects-public
           path: dist/examples/
           if-no-files-found: error
 
@@ -167,7 +145,6 @@ jobs:
         run: pnpm install --frozen-lockfile --filter citry-dev-tooling
 
       - name: Build candidate wheels
-        if: github.event_name != 'workflow_dispatch' || !inputs.public_release
         run: |
           uv build --wheel --python 3.14 --out-dir dist/example-wheels packages/py/citry_core
           uv build --wheel --python 3.14 --out-dir dist/example-wheels packages/py/citry
@@ -179,7 +156,7 @@ jobs:
           .example-tools/bin/python -m playwright install --with-deps "${{ matrix.browser }}"
 
       - name: Run all Chromium journeys
-        if: github.event_name != 'schedule' && !inputs.public_release
+        if: github.event_name != 'schedule'
         shell: bash
         run: |
           wheel_args=()
@@ -190,13 +167,6 @@ jobs:
             --python 3.14 \
             --browser "${{ matrix.browser }}" \
             "${wheel_args[@]}"
-
-      - name: Run all Chromium journeys from public-index locks
-        if: github.event_name == 'workflow_dispatch' && inputs.public_release
-        run: >-
-          .example-tools/bin/python -m examples._internal.qualify
-          --python 3.14
-          --browser "${{ matrix.browser }}"
 
       - name: Run weekly golden cross-browser journeys
         if: github.event_name == 'schedule'

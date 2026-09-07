@@ -755,12 +755,14 @@ Each new snapshot stores its accepted site-route patterns in
 root links. Reclassifying a published route is nevertheless a migration that
 requires review of redirects, canonicals, content assets, and picker behavior.
 
-Pushing a `citry@X.Y.Z` tag triggers
-[`repo--docs-release.yml`](../.github/workflows/repo--docs-release.yml). The
-workflow checks out `main` for commit-back and current-root assembly, while
-`build-tag` creates the released snapshot in a detached worktree at the exact
-tag commit. That worktree receives its own locked docs environment, including
-the tagged Citry and Citry UI workspace packages, before the snapshot build:
+After the `citry@X.Y.Z` package, tag, and GitHub Release are public, the Citry
+publisher dispatches
+[`repo--docs-release.yml`](../.github/workflows/repo--docs-release.yml) with
+that immutable tag. The workflow checks out `main` for commit-back and
+current-root assembly, while `build-tag` creates the released snapshot in a
+detached worktree at the exact tag commit. That worktree receives its own
+locked docs environment, including the tagged Citry and Citry UI workspace
+packages, before the snapshot build:
 
 ```bash
 uv run --no-sync python -m docs_site build-tag citry@X.Y.Z
@@ -775,10 +777,10 @@ still needs an explicit maintainer decision before the first real snapshot:
   the default `GITHUB_TOKEN`, which may need replacement with an approved
   GitHub App token or PAT.
 
-A manual dispatch without inputs only assembles and redeploys the existing
-version tree. For recovery after a tag-triggered build failure, dispatch from
-`main` with `release_tag=citry@X.Y.Z`; it rebuilds from that immutable tag,
-commits the snapshot to `main`, and deploys it without moving the tag.
+For recovery after a snapshot or deployment failure, dispatch the workflow
+from `main` with `release_tag=citry@X.Y.Z`. It first requires the completed
+GitHub Release, then rebuilds from that immutable tag, commits the snapshot to
+`main`, and deploys it without moving the tag.
 
 `build-all` is for bootstrap or disaster recovery, not routine releases:
 

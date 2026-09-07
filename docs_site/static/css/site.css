@@ -531,6 +531,31 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
+/* Embedded video                                                     */
+/* ------------------------------------------------------------------ */
+.youtube-video {
+  width: 100%;
+  max-width: 56rem;
+  margin: 1.5rem auto;
+}
+
+.youtube-video__frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 0.625rem;
+  background: #000;
+}
+
+.youtube-video__caption {
+  margin-top: 0.5rem;
+  color: var(--c-fg-subtle);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+/* ------------------------------------------------------------------ */
 /* pymdownx.tabbed (alternate style)                                   */
 /* ------------------------------------------------------------------ */
 .prose .tabbed-set {
@@ -1717,7 +1742,7 @@ a.djc-sidebar__label:hover {
   flex-wrap: wrap;
   gap: 0.4rem;
   margin: 1rem 0 0;
-  padding: 0;
+  padding: 0 !important;
   list-style: none;
 }
 

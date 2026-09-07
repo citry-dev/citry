@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.1] - 2026-09-07
+
+### Fixed
+
+- Avatars without an initial image source now render valid HTML and preserve
+  custom image attributes when the browser creates the image.
+- Radio groups inside a Field now associate its label with the first radio
+  without assigning the same ID to the group.
+- Corrected markup in Calendar, Command Palette, Data Grid, Tree Grid,
+  Repeatable Form Collection, and Transfer List, including native table
+  semantics and labels for hidden selected options.
+- Restored drawer backdrops, listbox checkmarks, tree expand indicators,
+  carousel scrollbar styling, and pin-input selection styling by correcting
+  their CSS selectors. Tour actions now stay together on narrow screens.
+
 ## [0.2.0] - 2026-08-22
 
 ### Added
@@ -52,5 +67,6 @@
   Citry's client runtime, and localize built-in labels through the bundled
   catalog.
 
+[0.2.1]: https://github.com/citry-dev/citry/releases/tag/citry-ui%400.2.1
 [0.2.0]: https://github.com/citry-dev/citry/releases/tag/citry-ui%400.2.0
 [0.1.0]: https://github.com/citry-dev/citry/releases/tag/citry-ui%400.1.0

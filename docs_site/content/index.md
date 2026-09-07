@@ -66,6 +66,14 @@ handler, one component holds all of it. No second application, no separate build
 <!-- TODO: Overview video how it all works (incl VSCode, UI Lib, etc)
 -->
 
+<section class="landing-section landing-section--band" id="crash-course" markdown="1">
+
+<c-youtube-video
+  video_id="d3nPqvDdNB0"
+  title="50-minute Citry and Django code-along"
+/>
+</section>
+
 <section class="landing-section" id="proof" markdown="1">
 ## One file holds the entire component end-to-end.
 

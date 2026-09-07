@@ -1,0 +1,95 @@
+name: Prepare release candidate
+run-name: Prepare release candidate from ${{ github.sha }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "CHANGELOG.md"
+      - "packages/**/CHANGELOG.md"
+      - "packages/**/pyproject.toml"
+      - "packages/editors/vscode/package.json"
+      - "docs_site/static/playground/runtime.json"
+      - "scripts/release.py"
+      - ".github/workflows/*--publish.yml"
+      - ".github/workflows/repo--release*.yml"
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Comma-separated package keys, or auto for versions without tags"
+        required: true
+        default: auto
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      package_count: ${{ steps.plan.outputs.package_count }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require candidate preparation from main
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main)"
+      - name: Build the exact release graph
+        id: plan
+        env:
+          SELECTED_PACKAGES: ${{ inputs.packages || 'auto' }}
+        run: |
+          python scripts/release.py plan \
+            --commit "$GITHUB_SHA" \
+            --packages "$SELECTED_PACKAGES" \
+            --output release-plan.json
+          echo "package_count=$(jq '.packages | length' release-plan.json)" >> "$GITHUB_OUTPUT"
+      - name: Retain the plan used by qualification
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-plan
+          path: release-plan.json
+          if-no-files-found: error
+          retention-days: 30
+
+  qualify:
+    if: needs.plan.outputs.package_count != '0'
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-plan
+      - name: Qualify every selected package concurrently
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/release.py qualify
+          --plan release-plan.json
+          --repository "$GITHUB_REPOSITORY"
+          --candidate-id "$GITHUB_RUN_ID"
+          --output release-candidate.json
+      - name: Retain the complete candidate bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-candidate
+          path: release-candidate.json
+          if-no-files-found: error
+          retention-days: 30
+
+  no-release:
+    if: needs.plan.outputs.package_count == '0'
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No package version without a final tag was found."

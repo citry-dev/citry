@@ -9,6 +9,8 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 from citry_ui.quality.accessibility import AXE_INCOMPLETE_DISPOSITIONS
 from citry_ui.quality.routes import build_scenario, render_scenario
 from citry_ui.quality.scenarios import SCENARIOS, QualityTool
@@ -455,7 +457,6 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
           ).length"""
     )
     expected_roots = page.locator('[data-citry-ui-part="split-button"]').count()
-    expected_layers = page.evaluate("globalThis[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length")
 
     submit_root = page.locator("#quality-split-submit")
     primary = submit_root.get_by_role("button", name="Save accession")
@@ -484,7 +485,12 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
     controlled_trigger = controlled.get_by_role("button", name="More controlled publication actions")
     before = controlled_trigger.get_attribute("aria-expanded")
     page.get_by_role("button", name="Toggle controlled Menu").click()
-    assert controlled_trigger.get_attribute("aria-expanded") != before
+    expect(controlled_trigger).not_to_have_attribute("aria-expanded", before)
+    # These interactions close the initially open peers; measure the layer
+    # count in the state that the following morphs must preserve.
+    expect(page.locator('[data-citry-ui-part="menu"]:popover-open')).to_have_count(1)
+    page.wait_for_function("globalThis[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length === 1")
+    expected_layers = page.evaluate("globalThis[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length")
 
     lifecycle = page.locator('[data-quality-states~="lifecycle"]')
     assert lifecycle.count() == 1

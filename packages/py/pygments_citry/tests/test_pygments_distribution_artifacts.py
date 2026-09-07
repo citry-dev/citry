@@ -180,13 +180,17 @@ def test_selector_accepts_the_pygments_qualification_name() -> None:
     )
 
 
-def test_publish_workflow_only_promotes_a_manual_main_qualification() -> None:
+def test_publish_workflow_only_promotes_the_controller_selected_candidate() -> None:
     workflow = (ROOT / ".github" / "workflows" / "py--pygments-citry--publish.yml").read_text(encoding="utf-8")
     release_job = workflow.split("\n  release:\n", maxsplit=1)[1]
 
-    assert "if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}" in release_job
-    assert "--artifact-name verified-pygments-citry-distributions" in workflow
+    assert "if: ${{ inputs.operation == 'promote' }}" in release_job
+    assert "qualification_artifact_id:" in workflow
+    assert "python scripts/release.py verify-qualification" in workflow
+    assert "--package pygments-citry" in workflow
+    assert '--artifact-digest "$QUALIFICATION_ARTIFACT_DIGEST"' in workflow
     assert "Require the qualified commit to remain on main" in release_job
-    assert "Require a new PyPI version and GitHub Release" in release_job
+    assert "Accept only absent or byte-identical public state" in release_job
+    assert "scripts/pypi_release.py" in release_job
     assert "skip-existing" not in release_job
     assert "--clobber" not in release_job

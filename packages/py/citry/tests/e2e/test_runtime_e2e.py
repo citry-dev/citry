@@ -880,7 +880,11 @@ def test_throwing_callback_does_not_break_later_classes(page: Any, serve_live: A
             """
         )
     assert log == ["survivor"]
-    assert "callback boom" in console_info.value.text
+    # Firefox's console text omits Error.message; inspect the logged object.
+    assert any(
+        argument.evaluate("value => value instanceof Error ? value.message : null") == "callback boom"
+        for argument in console_info.value.args
+    )
 
 
 def test_callback_fires_with_empty_els_when_marker_absent(page: Any, serve_live: Any) -> None:

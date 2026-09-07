@@ -16,32 +16,41 @@
     {
       "name": "citry-core",
       "version": "1.6.1",
-      "url": "https://files.pythonhosted.org/packages/e9/cd/3665fce4f684b181c06463f2b993b0e5fc10e00293ff6ee20f973b5e3c1d/citry_core-1.6.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+      "source": "pypi",
+      "filename": "citry_core-1.6.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "sha256": "52e512ca1d1f279ab25c88cda30607f563f08ba4883a468b539b7aee2322bb7e"
     },
     {
       "name": "MarkupSafe",
       "version": "3.0.3",
+      "source": "url",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
     },
     {
       "name": "typing-extensions",
       "version": "4.15.0",
+      "source": "url",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/typing_extensions-4.15.0-py3-none-any.whl"
     },
     {
       "name": "wrapt",
       "version": "2.1.2",
+      "source": "url",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
     },
     {
       "name": "citry",
       "version": "0.4.6",
-      "url": "https://files.pythonhosted.org/packages/65/d1/f9756293723535136dc4519747cb341173a3dadbc08764e18c741bd3e2c7/citry-0.4.6-py3-none-any.whl"
+      "source": "pypi",
+      "filename": "citry-0.4.6-py3-none-any.whl",
+      "sha256": "571ac6d2e5a313599e66aa863707341305cdb6f09b48e2f89ecffcda71023029"
     },
     {
       "name": "citry-ui",
       "version": "0.2.0",
-      "url": "https://files.pythonhosted.org/packages/9a/03/b5732a6c4aaef07540c597041a5b788c2c3dae44674905472ab2d7a594b9/citry_ui-0.2.0-py3-none-any.whl"
+      "source": "pypi",
+      "filename": "citry_ui-0.2.0-py3-none-any.whl",
+      "sha256": "e81f95e8c654f9c456f97896b2761ce2e2dad90aee95df5f19fb7069a72536ed"
     }
   ]
 }

@@ -386,6 +386,45 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   their focused evidence and do not start duplicate repository-wide gates unless
   they were explicitly assigned integration ownership.
 
+## Design verification for the whole delivery loop
+
+Treat the time and maintenance cost of every test, validator, generated file,
+CI job, qualification step, and release gate as part of its design. More
+verification is not automatically better. Before adding or expanding one,
+state:
+
+- the concrete user-facing contract or failure it protects;
+- the least expensive boundary that can prove that contract;
+- when it runs and how often;
+- its expected effect on the local feedback loop, ordinary CI, and the release
+  critical path;
+- which existing build output or evidence it can reuse; and
+- which independent work can run concurrently.
+
+Prefer one proof at the boundary that owns an invariant. Repeat a proof at the
+unit, integration, distribution, and release layers only when each layer can
+fail in a distinct way. Prefer representative boundary cases over an exhaustive
+cross-product when a parser, type checker, schema, or lower-level test already
+proves the general rule. Remove or combine scaffolding whose maintenance and
+runtime cost outweigh the failure it can catch.
+
+Prepare every knowable release value and generated surface in the release
+candidate before qualification, including versions, filenames, hashes, runtime
+tuples, and metadata. A source mutation after publication is exceptional: use
+it only for a value assigned by the registry that cannot be represented or
+resolved from information known before publication. Keep that work off the path
+to the final tag. Post-release checks confirm that registries and deployments
+serve the qualified bytes; they do not become the first place normal package
+correctness is proved.
+
+Before implementing a mandatory step expected to add more than one minute to
+the longest routine CI or release path, or any step that creates a publish,
+source-update, and requalification cycle, call out the cost in the plan and get
+the user's explicit agreement. A safety improvement is incomplete when it makes
+routine changes or releases disproportionately slow. Reuse work, narrow the
+proof, move it earlier, or run independent work concurrently until the wider
+workflow remains practical.
+
 ## Keep integration and release loops bounded
 
 Do not use CI as a slow, one-failure-at-a-time debugger. Before promoting or
@@ -423,17 +462,20 @@ incremental release commits. Separate these stages clearly:
 4. Pass the required exact-SHA CI checks.
 5. Publish packages in dependency order.
 6. Verify each published artifact once from a clean consumer environment.
-7. Apply post-release source updates, such as public lockfile refreshes, in one
-   final batch.
+7. Run exceptional post-release source updates in one non-blocking batch, only
+   when their values could not be prepared in the qualified candidate.
 
 Treat release evidence as belonging to one exact dependency closure, not merely
 to a commit that once passed locally:
 
-- **Prove public dependencies before the first tag.** The exact candidate must
-  pass its distribution qualification in a clean environment that installs the
-  built candidate artifact while resolving its dependencies from their public
-  registries. A workspace build or editable install is not evidence that the
-  declared public dependency versions contain the APIs the candidate uses.
+- **Prove the exact dependency closure before the first tag.** The candidate
+  must pass distribution qualification in a clean environment that installs
+  built artifacts, never workspace or editable installs. Resolve an unselected
+  dependency from its public registry. When the dependency is selected in the
+  same release, qualify against wheels built from that exact release commit so
+  independent builds can run concurrently. During promotion, publish and
+  verify the selected dependency's retained candidate bytes before starting
+  the dependent layer.
 - **Invalidate stale evidence after a late release correction.** If a package
   version, dependency constraint, release lock, browser runtime tuple,
   distribution verifier, or release-coupled test changes after a green gate,

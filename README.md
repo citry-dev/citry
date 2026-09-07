@@ -28,6 +28,16 @@ applications.
 [Install the VS Code extension](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry) ·
 [Browse Citry UI](https://citry.dev/ui-library/)
 
+## Watch the tutorial:
+
+<a href="https://www.youtube.com/watch?v=d3nPqvDdNB0">
+  <img
+    src="https://i.ytimg.com/vi/d3nPqvDdNB0/maxresdefault.jpg"
+    alt="Watch the 50-minute Citry and Django code-along on YouTube"
+    width="720"
+  >
+</a>
+
 ## Start with one component
 
 Install Citry:

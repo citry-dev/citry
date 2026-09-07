@@ -126,6 +126,7 @@ def _local_package(wheel: _Wheel) -> dict[str, str]:
     return {
         "name": wheel.name,
         "version": wheel.version,
+        "source": "url",
         "url": f"./local/{wheel.path.name}",
     }
 

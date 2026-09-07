@@ -20,6 +20,11 @@ This documentation site is built with Citry too.
 
 ## Getting started
 
+<c-youtube-video
+  video_id="d3nPqvDdNB0"
+  title="50-minute Citry and Django code-along"
+/>
+
 Walk through this end-to-end tutorial.
 You begin with reusable server-rendered HTML, then add browser behavior,
 FastAPI, Python event handlers, server-side state, forms.

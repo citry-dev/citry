@@ -24,12 +24,22 @@ def _root() -> Path:
     raise RuntimeError("Could not locate repository root.")
 
 
-def _page() -> str:
+def _page(*, include_about: bool = True) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
     class Page(Component):
         citry = app
+
+        class Kwargs:
+            pass
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, bool]:
+            return {"include_about": include_about}
+
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>NavigationMenu evidence</title><c-css /></head>
           <body x-data>
@@ -57,7 +67,7 @@ def _page() -> str:
                 <c-fill name="label">Resources</c-fill>
                 <c-fill name="default"><a href="#docs">Documentation</a></c-fill>
               </c-CNavigationMenuItem>
-              <c-CNavigationMenuLink href="#about">About</c-CNavigationMenuLink>
+              <c-CNavigationMenuLink c-if="include_about" href="#about">About</c-CNavigationMenuLink>
             </c-CNavigationMenu>
             <button id="outside" type="button">Outside</button>
             <c-js />
@@ -73,11 +83,11 @@ def _page() -> str:
     return str(Page())
 
 
-def _load(page: Any) -> list[str]:
+def _load(page: Any, *, include_about: bool = True) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    page.set_content(_page(include_about=include_about), wait_until="load")
     page.wait_for_selector("#main-nav[data-citry-navigation-menu-initialized]")
     return errors
 
@@ -151,7 +161,9 @@ def test_controlled_reject_accept_release_and_disabled_force(page: Any) -> None:
 
 def test_horizontal_panel_clamps_to_the_visual_viewport(page: Any) -> None:
     page.set_viewport_size({"width": 360, "height": 700})
-    errors = _load(page)
+    # Keep the navigation itself inside the viewport under different system fonts.
+    errors = _load(page, include_about=False)
+    assert page.evaluate("document.documentElement.scrollWidth === document.documentElement.clientWidth") is True
     page.get_by_role("button", name="Resources").dispatch_event("click")
     panel = page.locator('[data-value="resources"][data-citry-navigation-menu-panel]')
     page.wait_for_function(

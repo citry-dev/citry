@@ -51,7 +51,9 @@ def switch_states_component(app: Citry) -> type[Component]:
               <c-fill name="error">Enable the reminder.</c-fill>
             </c-CField>
             <div dir="rtl"><c-CSwitch checked label_pos="start">إضاءة المساء</c-CSwitch></div>
-            <div style="color-scheme: dark"><c-CSwitch checked>Nested dark</c-CSwitch></div>
+            <div style="color-scheme: dark; background: Canvas; color: CanvasText">
+              <c-CSwitch checked>Nested dark</c-CSwitch>
+            </div>
             <div class="switch-quality-brand switch-quality-brand--oak">
               <c-CSwitch checked>Oak brand</c-CSwitch>
             </div>

@@ -477,7 +477,7 @@ def test_checked_bindings_react_to_values_locale_and_imperative_lifecycle(
     page.evaluate("window.__citryBindingTest.reactive.dispose()")
     page.evaluate("window.__citryBindingTest.state.name = 'Five'")
     page.wait_for_timeout(100)
-    assert page.locator("#imperative").inner_text() == "Ahoj \u2068Three\u2069"
+    assert page.locator("#imperative").text_content() == "Ahoj \u2068Three\u2069"
 
 
 def test_connected_provider_fetches_locale_and_dynamic_message_partitions(

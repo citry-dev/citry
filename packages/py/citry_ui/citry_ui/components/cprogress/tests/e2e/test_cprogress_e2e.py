@@ -8,6 +8,8 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 import citry_ui
 from citry import Citry, Component
 
@@ -157,9 +159,10 @@ def test_invalid_client_values_report_once_per_episode(progress_page):
     assert sum("CProgress intent received invalid client value" in error for error in errors) == 1
 
     page.evaluate("Alpine.store('progressTest').value = 60")
-    page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('progressTest').value = -1")
-    page.wait_for_timeout(0)
+    # Wait for recovery so the next invalid value begins a new episode.
+    expect(root).to_have_attribute("value", "60")
+    with page.expect_console_message(lambda message: "CProgress value received invalid client value" in message.text):
+        page.evaluate("Alpine.store('progressTest').value = -1")
     assert sum("CProgress value received invalid client value" in error for error in errors) == 2
 
 

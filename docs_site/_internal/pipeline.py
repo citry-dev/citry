@@ -48,7 +48,8 @@ from docs_site._internal.community_packages import (
 
 # The custom <c-*> tags each register on import; importing them lets
 # render_content resolve <c-example>, <c-image>, <c-docstring>, <c-builtin>,
-# <c-include-file>, <c-people>, <c-search-modal>, and <c-version-picker> by name.
+# <c-include-file>, <c-people>, <c-search-modal>, <c-version-picker>, and
+# <c-youtube-video> by name.
 from docs_site._internal.components import (  # noqa: F401
     blog,
     builtin,
@@ -67,6 +68,7 @@ from docs_site._internal.components import (  # noqa: F401
     ui_demo,
     ui_library,
     version_picker,
+    youtube_video,
 )
 from docs_site._internal.components.doc_page import DocPage
 from docs_site._internal.crossrefs import resolve_crossrefs_in_prose

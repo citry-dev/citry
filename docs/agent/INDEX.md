@@ -150,7 +150,7 @@ to the corrected contract. Always call such test updates out explicitly.
 
 Rust crates are named `citry_*` (the exception, `python_safe_eval`, predates
 the rename and is an internal helper). Crate layout, dependency pinning,
-release tag format (`py@citry-core@x.y.z`), and CI workflow naming
+release tag format (`citry-core@x.y.z`), and CI workflow naming
 (`<lang>--<package>--<type>.yml`) are all documented in
 [`docs/codebase.md`](../codebase.md).
 

@@ -54,6 +54,7 @@ beside the error.
 | `live_code.css` | Styles inline `<c-live-code>` blocks and their activated workspace. | This file. |
 | `playground.js` | Generated bundle for the full-page playground. | [`../../_internal/frontend/src/playground.js`](../../_internal/frontend/src/playground.js) and its imports. |
 | `analysis_worker.js` | Generated Worker for the full-page editor's Citry analysis. | [`../../_internal/frontend/src/analysis_worker.js`](../../_internal/frontend/src/analysis_worker.js). |
+| `runtime_packages.js` | Resolves exact package coordinates into URLs when a Worker starts. | [`../../_internal/frontend/src/runtime_packages.js`](../../_internal/frontend/src/runtime_packages.js). |
 | `live_code.js` | Generated lightweight activator loaded on pages that contain live examples. | [`../../_internal/frontend/src/live_code.js`](../../_internal/frontend/src/live_code.js). |
 | `live_code_runtime.js` | Generated deferred bundle containing the inline editor and runtime. | [`../../_internal/frontend/src/live_code_runtime.js`](../../_internal/frontend/src/live_code_runtime.js) and its imports. |
 | `landing_composer.js` | Generated landing-only component collection and sample-board controller. | [`../../_internal/frontend/src/landing_composer.js`](../../_internal/frontend/src/landing_composer.js). |
@@ -116,7 +117,8 @@ wheel back.
 Treat `runtime.json` as one compatible tuple. When any runtime package changes:
 
 1. Pin the full Pyodide and Python versions.
-2. Pin each package version and immutable wheel URL.
+2. Pin PyPI packages by version, filename, and SHA-256. Pin CDN packages by
+   their direct URL.
 3. Confirm compiled wheels match the Pyodide Python and PyEmscripten ABI.
 4. Keep `citry.version`, `citry.core_version`, and `citry.ui_version` equal to
    their package entries.
@@ -124,8 +126,11 @@ Treat `runtime.json` as one compatible tuple. When any runtime package changes:
    rendering, scripts, Events, and interaction work together.
 
 The Worker verifies installed Python, Citry, Citry Core, and Citry UI versions
-before it accepts a run. A local runtime retains `citry.ui_version` while
-replacing the public UI wheel with the workspace build.
+before it accepts a run. For a PyPI package, it resolves the registry-assigned
+storage URL at startup and rejects any artifact whose filename or SHA-256 does
+not match `runtime.json`. This means the release candidate can contain the
+complete runtime entry before publication. A local runtime retains
+`citry.ui_version` while replacing the public UI wheel with the workspace build.
 
 ## Keep the protocols synchronized
 

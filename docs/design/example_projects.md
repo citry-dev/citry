@@ -449,6 +449,10 @@ makes the copied project reproducible while the standard metadata remains
 usable by other installers.
 
 Dependency bounds must represent the versions the example is tested against.
+The checked-in Citry lock must satisfy that project's own declared range; it
+does not have to equal the newest Citry manifest version in the monorepo.
+Release candidates are overlaid into clean copies so an unreleased package can
+be qualified without rewriting committed locks.
 Automated dependency updates are accepted only when the project-local,
 clean-copy, host, and browser tests all pass. One bulk lock refresh without
 running the host matrix is not sufficient evidence.
@@ -754,10 +758,12 @@ them permanently would require a separate release and retention decision.
 
 ### 9.3 Compatibility updates
 
-When a Citry release changes a public contract used by an example, the same
-release work updates and qualifies the affected projects. A tagged example is
-immutable historical guidance. Fixes for an old release use a patch tag rather
-than rewriting published source history.
+The exact-commit examples CI workflow qualifies all cataloged projects through
+built-wheel overlays alongside release-candidate preparation. Change an
+example's declared Citry minimum and committed lock only when the project adopts
+a public contract that requires that version. A tagged example is immutable
+historical guidance. Fixes for an old release use a patch tag rather than
+rewriting published source history.
 
 Generated GitHub Template repositories may be added later as read-only mirrors
 for discoverability. The monorepo remains canonical, mirrors identify their

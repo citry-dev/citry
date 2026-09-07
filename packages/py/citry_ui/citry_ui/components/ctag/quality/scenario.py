@@ -56,7 +56,7 @@ def tag_states_component(app: Citry) -> type[Component]:
                 <c-CTag value="start">Start</c-CTag><c-CTag value="end">End</c-CTag>
               </c-CTagGroup>
             </div>
-            <div style="color-scheme: dark" data-quality-state="nested-dark">
+            <div style="color-scheme: dark; background: Canvas; color: CanvasText" data-quality-state="nested-dark">
               <c-CTagGroup label="Dark topics" selection_mode="single" value="moon">
                 <c-CTag value="moon">Moon</c-CTag><c-CTag value="stars">Stars</c-CTag>
               </c-CTagGroup>

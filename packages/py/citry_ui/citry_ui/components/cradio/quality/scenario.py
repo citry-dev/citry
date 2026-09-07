@@ -93,7 +93,7 @@ def radio_states_component(app: Citry) -> type[Component]:
                 </c-fill>
               </c-CRadioGroup>
             </div>
-            <div style="color-scheme: dark">
+            <div style="color-scheme: dark; background: Canvas; color: CanvasText">
               <c-CRadioGroup name="quality-dark" value="night">
                 <c-fill name="label">Nested dark</c-fill>
                 <c-fill name="default"><c-CRadio value="night">Night garden</c-CRadio></c-fill>

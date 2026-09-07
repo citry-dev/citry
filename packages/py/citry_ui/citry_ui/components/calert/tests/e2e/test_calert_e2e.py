@@ -8,6 +8,8 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 import citry_ui
 from citry import Citry, Component
 
@@ -168,9 +170,10 @@ def test_client_inputs_update_every_public_surface_and_deduplicate_invalid_episo
     assert sum("CAlert intent received invalid client value" in error for error in errors) == 1
 
     page.evaluate("Alpine.store('alertTest').intent = 'success'")
-    page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('alertTest').intent = null")
-    page.wait_for_timeout(0)
+    # The valid effect must clear the previous episode before invalidating again.
+    expect(root).to_have_attribute("data-intent", "success")
+    with page.expect_console_message(lambda message: "CAlert intent received invalid client value" in message.text):
+        page.evaluate("Alpine.store('alertTest').intent = null")
     assert sum("CAlert intent received invalid client value" in error for error in errors) == 2
 
 

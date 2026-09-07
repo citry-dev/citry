@@ -88,9 +88,12 @@ def test_root_group_tracks_dynamic_roots_without_resetting_timing_or_els(page: A
         template = "<html><body><c-parent /></body></html>"
 
     base = serve_live(c, str(Page()), "")
+    # Keep driver round trips from consuming the throttle window.
+    page.clock.install(time="2024-01-01T00:00:00Z")
     page.goto(base + "/")
     page.wait_for_function("window.__a6DynamicEls?.length === 2")
-    page.locator(".dynamic-root-a").click()
+    page.clock.pause_at("2024-01-01T01:00:00Z")
+    page.locator(".dynamic-root-a").dispatch_event("click")
 
     page.evaluate(
         """
@@ -104,12 +107,11 @@ def test_root_group_tracks_dynamic_roots_without_resetting_timing_or_els(page: A
         }
         """
     )
-    page.wait_for_function(
-        "window.__a6DynamicEls?.length === 2 && window.__a6DynamicEls[1].className === 'dynamic-root-c'"
-    )
-    page.locator(".dynamic-root-c").click()
-    page.wait_for_timeout(120)
-    page.locator(".dynamic-root-c").click()
+    page.clock.run_for(16)
+    page.locator(".dynamic-root-c").dispatch_event("click")
+    assert page.evaluate("window.__a6DynamicHits") == ["dynamic-root-a"]
+    page.clock.run_for(120)
+    page.locator(".dynamic-root-c").dispatch_event("click")
 
     assert page.evaluate("window.__a6DynamicEls === window.__a6ElsIdentity") is True
     assert page.evaluate("window.__a6DynamicEls.map((el) => el.className)") == [

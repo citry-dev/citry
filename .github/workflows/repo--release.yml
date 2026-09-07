@@ -1,0 +1,45 @@
+name: Release qualified packages
+run-name: Release candidate ${{ inputs.candidate_run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Successful Prepare release candidate workflow run ID"
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: repository-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Require the controller workflow from main
+        run: test "$GITHUB_REF" = "refs/heads/main"
+      - name: Download the exact candidate bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: release-candidate
+          path: candidate
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+      - name: Publish dependency layers from qualified bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: >-
+          python scripts/release.py publish
+          --candidate candidate/release-candidate.json
+          --repository "$GITHUB_REPOSITORY"
+          --publication-id "$GITHUB_RUN_ID"
+          --candidate-run-id "$CANDIDATE_RUN_ID"

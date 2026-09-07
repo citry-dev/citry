@@ -16,6 +16,8 @@ _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publi
 _CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
 _CITRY_LSP_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-lsp--publish.yml"
 _CITRY_UI_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-ui--publish.yml"
+_PYGMENTS_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--pygments-citry--publish.yml"
+_VSCODE_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "vscode--citry--publish.yml"
 _EXAMPLES_TEST_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--examples--tests.yml"
 _PYTHON_TEST_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--tests.yml"
 _ROOT_CARGO = REPO_ROOT / "Cargo.toml"
@@ -25,7 +27,10 @@ _CORE_PYPROJECT = REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml
 _PLAYGROUND_RUNTIME = REPO_ROOT / "docs_site" / "static" / "playground" / "runtime.json"
 _PYODIDE_BUILDER = REPO_ROOT / "scripts" / "build_citry_core_pyodide_wheel.py"
 _DISTRIBUTION_VERIFIER = REPO_ROOT / "scripts" / "verify_citry_core_distribution.py"
+_PLAYGROUND_RELEASE_VERIFIER = REPO_ROOT / "scripts" / "verify_playground_release.py"
 _DOCS_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--docs-release.yml"
+_RELEASE_CANDIDATE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--release-candidate.yml"
+_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "repo--release.yml"
 _DOCS_RUST_WORKFLOWS = tuple(
     REPO_ROOT / ".github" / "workflows" / name
     for name in (
@@ -61,6 +66,8 @@ def check() -> list[str]:
         _CITRY_PUBLISH_WORKFLOW,
         _CITRY_LSP_PUBLISH_WORKFLOW,
         _CITRY_UI_PUBLISH_WORKFLOW,
+        _PYGMENTS_PUBLISH_WORKFLOW,
+        _VSCODE_PUBLISH_WORKFLOW,
         _EXAMPLES_TEST_WORKFLOW,
         _PYTHON_TEST_WORKFLOW,
         _ROOT_CARGO,
@@ -70,6 +77,9 @@ def check() -> list[str]:
         _PLAYGROUND_RUNTIME,
         _PYODIDE_BUILDER,
         _DISTRIBUTION_VERIFIER,
+        _PLAYGROUND_RELEASE_VERIFIER,
+        _RELEASE_CANDIDATE_WORKFLOW,
+        _RELEASE_WORKFLOW,
         *_DOCS_RUST_WORKFLOWS,
     )
     missing = [f"{path} not found" for path in required if not path.exists()]
@@ -212,6 +222,8 @@ def check() -> list[str]:
                 )
 
     publish = _PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    if publish.count('SOURCE_DATE_EPOCH: "315532800"') != 1:
+        errors.append("citry-core qualification must normalize release archive timestamps")
     expected_env = {
         "CITRY_CORE_RUST_TOOLCHAIN": f"{minimum}.0",
         "CITRY_CORE_EMSCRIPTEN_VERSION": str(pyodide.get("emscripten")),
@@ -231,9 +243,8 @@ def check() -> list[str]:
     for text, pin_label in workflow_pins.items():
         if text not in publish:
             errors.append(f"citry-core publish workflow does not use the configured {pin_label} pin")
-    release_guard = "if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}"
-    if release_guard not in publish:
-        errors.append("citry-core release job must reject every workflow_dispatch ref, including tags")
+    if "  push:\n    tags:" in publish:
+        errors.append("package publishers must not accept release tags as an entry point")
     action_count = publish.count(f"uses: {_MATURIN_ACTION}")
     if action_count != len(re.findall(r"uses:\s+PyO3/maturin-action@", publish)):
         errors.append("every citry-core Maturin action must use the reviewed immutable commit")
@@ -282,68 +293,86 @@ def check() -> list[str]:
     if "skip-existing" in publish or "--clobber" in publish:
         errors.append("citry-core release retries must fail closed instead of replacing or skipping artifacts")
     for marker in (
-        "select-qualification:",
-        "scripts/select_citry_core_qualification.py",
-        "needs: [verify-version, select-qualification]",
+        "operation:",
+        "if: ${{ inputs.operation == 'promote' }}",
+        "verified-citry-core-distributions",
         "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
         "verify_citry_core_distribution.py promote",
-        "retention-days: 14",
+        "retention-days: 30",
         "PyEmscripten reproducibility build ${{ matrix.copy }}",
-        "Require a new PyPI version and GitHub Release",
-        "https://pypi.org/pypi/citry-core/${CITRY_CORE_VERSION}/json",
-        "releases/tags/$GITHUB_REF_NAME",
+        "scripts/pypi_release.py",
+        "scripts/verify_playground_release.py",
+        "if: steps.public-state.outputs.publish == 'true'",
+        "RELEASE_TAG: citry-core@${{ needs.verify-version.outputs.version }}",
     ):
         if marker not in publish:
-            errors.append(f"citry-core release immutability preflight is missing {marker!r}")
+            errors.append(f"citry-core controller release contract is missing {marker!r}")
 
-    citry_publish = _CITRY_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    if citry_publish.count(release_guard) != 3:
-        errors.append("citry package, surface, and release jobs must reject workflow_dispatch refs")
-    if citry_publish.count(f"uses: {_PYPI_ACTION}") != 1:
-        errors.append("citry Trusted Publishing must use the reviewed immutable action commit")
-    if citry_publish.count(f"uses: {_UV_ACTION}") != len(re.findall(r"uses:\s+astral-sh/setup-uv@", citry_publish)):
-        errors.append("every citry publish uv action must use the reviewed immutable commit")
-    if "skip-existing" in citry_publish or "--clobber" in citry_publish:
-        errors.append("citry release retries must fail closed instead of replacing or skipping artifacts")
+    publish_workflows = {
+        "citry": _CITRY_PUBLISH_WORKFLOW.read_text(encoding="utf-8"),
+        "citry-lsp": _CITRY_LSP_PUBLISH_WORKFLOW.read_text(encoding="utf-8"),
+        "citry-ui": _CITRY_UI_PUBLISH_WORKFLOW.read_text(encoding="utf-8"),
+    }
+    for package, workflow in publish_workflows.items():
+        if workflow.count('SOURCE_DATE_EPOCH: "315532800"') != 1:
+            errors.append(f"{package} qualification must normalize release archive timestamps")
+        if "  push:\n    tags:" in workflow:
+            errors.append(f"{package} publisher must not accept release tags as an entry point")
+        if workflow.count(f"uses: {_PYPI_ACTION}") != 1:
+            errors.append(f"{package} Trusted Publishing must use the reviewed immutable action commit")
+        if workflow.count(f"uses: {_UV_ACTION}") != len(re.findall(r"uses:\s+astral-sh/setup-uv@", workflow)):
+            errors.append(f"every {package} publish uv action must use the reviewed immutable commit")
+        for marker in (
+            "operation:",
+            "if: ${{ inputs.operation == 'qualify' }}",
+            "if: ${{ inputs.operation == 'promote' }}",
+            "qualification_artifact_digest:",
+            "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
+            "--promote-archive qualification.zip",
+            "retention-days: 30",
+            "scripts/pypi_release.py",
+            "if: steps.public-state.outputs.publish == 'true'",
+            "Create or verify the final annotated tag",
+        ):
+            if marker not in workflow:
+                errors.append(f"{package} controller release contract is missing {marker!r}")
+
+    for package, workflow_path in (
+        ("pygments-citry", _PYGMENTS_PUBLISH_WORKFLOW),
+        ("vscode-citry", _VSCODE_PUBLISH_WORKFLOW),
+    ):
+        workflow = workflow_path.read_text(encoding="utf-8")
+        if package == "pygments-citry" and workflow.count('SOURCE_DATE_EPOCH: "315532800"') != 1:
+            errors.append("pygments-citry qualification must normalize release archive timestamps")
+        if "  push:\n    tags:" in workflow:
+            errors.append(f"{package} publisher must not accept release tags as an entry point")
+        for marker in (
+            "operation:",
+            "if: ${{ inputs.operation == 'qualify' }}",
+            "if: ${{ inputs.operation == 'promote' }}",
+            "qualification_artifact_digest:",
+            "retention-days: 30",
+            "Create or verify the final annotated tag",
+        ):
+            if marker not in workflow:
+                errors.append(f"{package} controller release contract is missing {marker!r}")
+
+    citry_publish = publish_workflows["citry"]
     for marker in (
-        "select-qualification:",
-        "select-release-surfaces:",
-        "citry@publish-*",
-        "promotion_kind=staged",
-        "Require a surface-only final commit",
-        'git diff --name-only --no-renames -z "$STAGE_SHA" HEAD',
-        'git show "$STAGE_SHA:examples/catalog.toml"',
-        'for name in ("README.md", "pyproject.toml", "uv.lock"):',
-        'grep -Fqx -- "$path" "$allowed_paths"',
-        "needs: [verify-version, select-qualification]",
-        "--workflow py--citry--publish.yml",
-        "--artifact-name verified-citry-distributions",
-        "--artifact-name citry-example-projects-public",
-        "--workflow repo--docs-check.yml",
-        "--event push",
-        "--no-artifact",
-        "examples._internal.release_gate",
-        "https://pypi.org/pypi/citry-core/${core_version}/json",
-        "--core-pypi-json core-pypi.json",
-        "needs: [verify-version, select-qualification, select-release-surfaces]",
-        "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
-        "--promote-archive qualification.zip",
-        "retention-days: 14",
-        "Verify public artifacts and final-release preconditions",
-        "final Citry release requires its staged public PyPI pair",
-        "public PyPI artifacts differ from the exact qualified release pair",
-        "if: steps.public-state.outputs.publish == 'true'",
-        "if: needs.verify-version.outputs.promotion_kind == 'release'",
-        "release-surface-provenance.json",
-        "https://pypi.org/pypi/citry/${CITRY_VERSION}/json",
-        "releases/tags/$GITHUB_REF_NAME",
+        "candidate-citry-core-wheel",
+        "contains(inputs.workspace_dependencies, 'citry-core')",
+        "RELEASE_TAG: citry@${{ needs.verify-version.outputs.version }}",
+        "gh workflow run repo--docs-release.yml",
+        "scripts/verify_playground_release.py",
     ):
         if marker not in citry_publish:
-            errors.append(f"citry release immutability preflight is missing {marker!r}")
-    if "examples/*|docs_site/static/playground/runtime.json" in citry_publish:
-        errors.append("Citry's final-stage allowlist must not admit arbitrary example files")
+            errors.append(f"citry candidate dependency or closeout contract is missing {marker!r}")
+    if "scripts/verify_playground_release.py" not in publish_workflows["citry-ui"]:
+        errors.append("citry-ui qualification must verify its selected playground wheel")
 
     docs_release = _DOCS_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    if "  push:\n    tags:" in docs_release:
+        errors.append("Citry docs release must be dispatched by the Citry publisher, not by a manually pushed tag")
     release_gate = "Require the completed Citry GitHub Release"
     snapshot = "Build & commit the version snapshot"
     for marker in (
@@ -356,55 +385,20 @@ def check() -> list[str]:
     if docs_release.find(release_gate) > docs_release.find(snapshot):
         errors.append("Citry docs must require the final GitHub Release before committing its version snapshot")
 
-    citry_lsp_publish = _CITRY_LSP_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    if citry_lsp_publish.count(release_guard) != 2:
-        errors.append("citry-lsp publish selection and release jobs must both reject workflow_dispatch refs")
-    if citry_lsp_publish.count(f"uses: {_PYPI_ACTION}") != 1:
-        errors.append("citry-lsp Trusted Publishing must use the reviewed immutable action commit")
-    if citry_lsp_publish.count(f"uses: {_UV_ACTION}") != len(
-        re.findall(r"uses:\s+astral-sh/setup-uv@", citry_lsp_publish)
-    ):
-        errors.append("every citry-lsp publish uv action must use the reviewed immutable commit")
-    if "skip-existing" in citry_lsp_publish or "--clobber" in citry_lsp_publish:
-        errors.append("citry-lsp release retries must fail closed instead of replacing or skipping artifacts")
+    candidate_workflow = _RELEASE_CANDIDATE_WORKFLOW.read_text(encoding="utf-8")
+    release_workflow = _RELEASE_WORKFLOW.read_text(encoding="utf-8")
     for marker in (
-        "select-qualification:",
-        "--workflow py--citry-lsp--publish.yml",
-        "--artifact-name verified-citry-lsp-distributions",
-        "needs: [verify-version, select-qualification]",
-        "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
-        "--promote-archive qualification.zip",
-        "retention-days: 14",
-        "Require a new PyPI version and GitHub Release",
-        "https://pypi.org/pypi/citry-lsp/${CITRY_LSP_VERSION}/json",
-        "releases/tags/$GITHUB_REF_NAME",
+        "python scripts/release.py plan",
+        "python scripts/release.py qualify",
+        "name: release-candidate",
     ):
-        if marker not in citry_lsp_publish:
-            errors.append(f"citry-lsp release immutability preflight is missing {marker!r}")
-
-    citry_ui_publish = _CITRY_UI_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    if citry_ui_publish.count(release_guard) != 2:
-        errors.append("citry-ui publish selection and release jobs must both reject workflow_dispatch refs")
-    if citry_ui_publish.count(f"uses: {_PYPI_ACTION}") != 1:
-        errors.append("citry-ui Trusted Publishing must use the reviewed immutable action commit")
-    if citry_ui_publish.count(f"uses: {_UV_ACTION}") != len(
-        re.findall(r"uses:\s+astral-sh/setup-uv@", citry_ui_publish)
-    ):
-        errors.append("every citry-ui publish uv action must use the reviewed immutable commit")
-    if "skip-existing" in citry_ui_publish or "--clobber" in citry_ui_publish:
-        errors.append("citry-ui release retries must fail closed instead of replacing or skipping artifacts")
+        if marker not in candidate_workflow:
+            errors.append(f"release candidate workflow is missing {marker!r}")
     for marker in (
-        "select-qualification:",
-        "--workflow py--citry-ui--publish.yml",
-        "--artifact-name verified-citry-ui-distributions",
-        "needs: [verify-version, select-qualification]",
-        "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
-        "--promote-archive qualification.zip",
-        "retention-days: 14",
-        "Require a new PyPI version and GitHub Release",
-        "https://pypi.org/pypi/citry-ui/${CITRY_UI_VERSION}/json",
-        "releases/tags/$GITHUB_REF_NAME",
+        "candidate_run_id:",
+        "name: release-candidate",
+        "python scripts/release.py publish",
     ):
-        if marker not in citry_ui_publish:
-            errors.append(f"citry-ui release immutability preflight is missing {marker!r}")
+        if marker not in release_workflow:
+            errors.append(f"mandatory release workflow is missing {marker!r}")
     return errors

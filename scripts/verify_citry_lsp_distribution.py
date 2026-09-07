@@ -580,8 +580,8 @@ def _venv_python(root: Path) -> Path:
     return root / "bin" / "python"
 
 
-def smoke_wheel(wheel: Path, *, cwd: Path) -> None:
-    """Install one wheel with public binary dependencies and start the server."""
+def smoke_wheel(wheel: Path, *, cwd: Path, dependency_wheels: Sequence[Path] = ()) -> None:
+    """Install one wheel with its selected or public dependencies and start the server."""
     with tempfile.TemporaryDirectory(prefix="citry-lsp-install-") as temporary:
         root = Path(temporary)
         environment = root / "venv"
@@ -597,6 +597,7 @@ def smoke_wheel(wheel: Path, *, cwd: Path) -> None:
                 "--no-config",
                 "--only-binary",
                 ":all:",
+                *(str(path) for path in dependency_wheels),
                 str(wheel),
             ],
             cwd=root,
@@ -642,7 +643,12 @@ def verify_artifacts(source_wheel: Path, sdist: Path, rebuilt_wheel: Path) -> di
     }
 
 
-def verify_dist_directory(dist_dir: Path, *, smoke: bool) -> tuple[Path, Path, dict[str, Any]]:
+def verify_dist_directory(
+    dist_dir: Path,
+    *,
+    smoke: bool,
+    dependency_wheels: Sequence[Path] = (),
+) -> tuple[Path, Path, dict[str, Any]]:
     """Verify one raw wheel/sdist pair and rebuild the sdist outside the checkout."""
     # Every later subprocess runs outside the checkout, so retain absolute
     # artifact paths even when the CLI receives the conventional relative
@@ -656,7 +662,7 @@ def verify_dist_directory(dist_dir: Path, *, smoke: bool) -> tuple[Path, Path, d
         rebuilt_wheel = _build_sdist_wheel(sdist, root / "wheel", cwd=root)
         report = verify_artifacts(wheel, sdist, rebuilt_wheel)
         if smoke:
-            smoke_wheel(wheel, cwd=root)
+            smoke_wheel(wheel, cwd=root, dependency_wheels=dependency_wheels)
     return wheel, sdist, report
 
 
@@ -665,6 +671,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dist-dir", type=Path)
     parser.add_argument("--stage-output-dir", type=Path)
+    parser.add_argument("--dependency-wheel-dir", type=Path)
     parser.add_argument("--skip-install-smoke", action="store_true")
     parser.add_argument("--promote-archive", type=Path)
     parser.add_argument("--artifact-digest")
@@ -682,9 +689,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             if args.dist_dir is None:
                 parser.error("qualification requires --dist-dir")
+            dependency_wheels = (
+                sorted(args.dependency_wheel_dir.resolve().glob("*.whl"))
+                if args.dependency_wheel_dir is not None
+                else []
+            )
+            if args.dependency_wheel_dir is not None and not dependency_wheels:
+                parser.error("--dependency-wheel-dir must contain at least one wheel")
             wheel, sdist, report = verify_dist_directory(
                 args.dist_dir,
                 smoke=not args.skip_install_smoke,
+                dependency_wheels=dependency_wheels,
             )
             if args.stage_output_dir is not None:
                 report["release"] = stage_qualification(wheel, sdist, args.stage_output_dir)

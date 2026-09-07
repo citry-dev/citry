@@ -1,3 +1,5 @@
+import { resolvePackageUrls } from "./runtime_packages.js";
+
 // The Worker keeps Pyodide and the rendered module's Citry instance off the UI
 // thread. The parent identifies every message by Worker generation and run ID.
 const MAX_RESULT_BYTES = 2 * 1024 * 1024;
@@ -43,10 +45,7 @@ async function initialize(data) {
     pyodide = await loadPyodide({ indexURL: runtime.pyodide.index_url });
 
     send({ type: "phase", phase: `Installing Citry ${runtime.citry.version}` });
-    // URLs may be public CDN wheels or local authoring-server wheels.
-    await pyodide.loadPackage(
-      runtime.packages.map((packageInfo) => new URL(packageInfo.url, import.meta.url).href),
-    );
+    await pyodide.loadPackage(await resolvePackageUrls(runtime.packages));
     // executor.py installs the stable functions used by later run and event messages.
     pyodide.runPython(executorSource);
     send({ type: "phase", phase: "Verifying installed versions" });

@@ -33,12 +33,12 @@ def check() -> list[str]:
         if not workflow_path.is_file():
             continue
         workflow = workflow_path.read_text(encoding="utf-8")
-        tag_pattern = f'- "{route.tag_prefix}*"'
-        if tag_pattern not in workflow:
-            problems.append(f"{route.workflow} must publish tags matching {tag_pattern}")
+        tag_marker = f"RELEASE_TAG: {route.tag_prefix}${{{{ needs.verify-version.outputs.version }}}}"
+        if tag_marker not in workflow:
+            problems.append(f"{route.workflow} must construct final tags with {tag_marker!r}")
         if workflow.count(f"event_type={DISPATCH_EVENT}") != 1:
             problems.append(f"{route.workflow} must dispatch one {DISPATCH_EVENT} notification")
-        if workflow.count("client_payload[tag]=$GITHUB_REF_NAME") != 1:
+        if workflow.count("client_payload[tag]=$RELEASE_TAG") != 1:
             problems.append(f"{route.workflow} must identify its released tag in the notification dispatch")
 
     notifier = NOTIFIER.read_text(encoding="utf-8")

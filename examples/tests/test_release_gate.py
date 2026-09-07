@@ -29,7 +29,7 @@ def _write_fixture(root: Path, *, example_version: str = "0.4.4") -> tuple[dict,
         f'[project]\nname = "example"\nversion = "0.1.0"\ndependencies = ["citry>={example_version},<0.5"]\n',
         encoding="utf-8",
     )
-    project.joinpath("README.md").write_text(f"Requires Citry {example_version}.\n", encoding="utf-8")
+    project.joinpath("README.md").write_text("Example project.\n", encoding="utf-8")
     wheel_url = "https://files.pythonhosted.org/packages/aa/bb/citry-0.4.4-py3-none-any.whl"
     wheel_hash = "1" * 64
     core_version = "1.6.1"
@@ -56,9 +56,27 @@ def _write_fixture(root: Path, *, example_version: str = "0.4.4") -> tuple[dict,
         "pyodide": {"version": build["pyodide"], "python": build["python"]},
         "citry": {"version": example_version, "core_version": core_version, "ui_version": ui_version},
         "packages": [
-            {"name": "citry", "version": example_version, "url": wheel_url},
-            {"name": "citry-core", "version": core_version, "url": core_url},
-            {"name": "citry-ui", "version": ui_version, "url": ui_url},
+            {
+                "name": "citry",
+                "version": example_version,
+                "source": "pypi",
+                "filename": wheel_url.rsplit("/", 1)[-1],
+                "sha256": wheel_hash,
+            },
+            {
+                "name": "citry-core",
+                "version": core_version,
+                "source": "pypi",
+                "filename": core_filename,
+                "sha256": "2" * 64,
+            },
+            {
+                "name": "citry-ui",
+                "version": ui_version,
+                "source": "pypi",
+                "filename": ui_url.rsplit("/", 1)[-1],
+                "sha256": "3" * 64,
+            },
         ],
     }
     root.joinpath("docs_site/static/playground/runtime.json").write_text(json.dumps(runtime), encoding="utf-8")
@@ -89,15 +107,26 @@ def test_release_surfaces_match_public_citry(tmp_path: Path) -> None:
     assert validate_release_surfaces(tmp_path, pypi_payload=payload, core_pypi_payload=core_payload) == []
 
 
-def test_release_surfaces_reject_stale_examples_and_playground(tmp_path: Path) -> None:
+def test_release_surfaces_allow_an_older_compatible_example_lock(tmp_path: Path) -> None:
     payload, core_payload = _write_fixture(tmp_path, example_version="0.4.3")
 
     problems = validate_release_surfaces(tmp_path, pypi_payload=payload, core_pypi_payload=core_payload)
 
-    assert any("manifest must set its minimum Citry version to 0.4.4" in item for item in problems)
-    assert any("README must name Citry 0.4.4" in item for item in problems)
-    assert any("lock must resolve Citry 0.4.4" in item for item in problems)
     assert any("playground: citry.version must be 0.4.4" in item for item in problems)
+    assert not any(item.startswith("starter-fastapi:") for item in problems)
+
+
+def test_release_surfaces_reject_an_example_lock_outside_its_declared_range(tmp_path: Path) -> None:
+    payload, core_payload = _write_fixture(tmp_path, example_version="0.4.3")
+    project = tmp_path / "examples/starters/fastapi"
+    project.joinpath("pyproject.toml").write_text(
+        '[project]\nname = "example"\nversion = "0.1.0"\ndependencies = ["citry>=0.4.4,<0.5"]\n',
+        encoding="utf-8",
+    )
+
+    problems = validate_release_surfaces(tmp_path, pypi_payload=payload, core_pypi_payload=core_payload)
+
+    assert any("locked Citry '0.4.3' does not satisfy citry<0.5,>=0.4.4" in item for item in problems)
 
 
 def test_release_surfaces_reject_incompatible_core_wheel(tmp_path: Path) -> None:
@@ -105,7 +134,7 @@ def test_release_surfaces_reject_incompatible_core_wheel(tmp_path: Path) -> None
     runtime_path = tmp_path / "docs_site/static/playground/runtime.json"
     runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
     core = next(package for package in runtime["packages"] if package["name"] == "citry-core")
-    core["url"] = "https://files.pythonhosted.org/packages/cc/dd/citry_core-1.6.1-py3-none-any.whl"
+    core["filename"] = "citry_core-1.6.1-py3-none-any.whl"
     runtime_path.write_text(json.dumps(runtime), encoding="utf-8")
 
     problems = validate_release_surfaces(tmp_path, pypi_payload=payload, core_pypi_payload={"urls": []})

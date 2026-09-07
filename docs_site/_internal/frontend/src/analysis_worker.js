@@ -1,3 +1,5 @@
+import { resolvePackageUrl } from "./runtime_packages.js";
+
 // This Worker proves browser-native Citry analysis without sharing mutable
 // state with visitor code in the disposable execution Worker.
 const SCHEMA_VERSION = 1;
@@ -75,7 +77,7 @@ async function initialize() {
 
     const { loadPyodide } = await import(runtime.pyodide.module_url);
     pyodide = await loadPyodide({ indexURL: runtime.pyodide.index_url });
-    await pyodide.loadPackage(new URL(corePackage[0].url, import.meta.url).href);
+    await pyodide.loadPackage(await resolvePackageUrl(corePackage[0]));
     pyodide.FS.writeFile("/citry_portable_ide.py", portableSource);
     pyodide.runPython("import sys\n'/' not in sys.path and sys.path.insert(0, '/')\nimport citry_portable_ide");
     pyodide.runPython(adapterSource);
