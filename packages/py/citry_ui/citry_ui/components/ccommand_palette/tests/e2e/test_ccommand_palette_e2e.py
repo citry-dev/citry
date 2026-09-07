@@ -192,7 +192,7 @@ def test_disabled_navigation_click_refusal_and_escape(page: Any) -> None:
 
 def test_shared_helpers_transfer_shadow_focus_and_prepare_modal_in_order(page: Any) -> None:
     _ready(page)
-    result = page.evaluate(
+    result = page.wait_for_function(
         """async () => {
           const dialogs = globalThis[Symbol.for('citry-ui:dialog-controller-runtime')];
           const anchored = globalThis[Symbol.for('citry-ui:anchored-layer-runtime')];
@@ -252,10 +252,44 @@ def test_shared_helpers_transfer_shadow_focus_and_prepare_modal_in_order(page: A
           nativeOwned.options.nativeClosed = (reason, _source, returnValue) => {
             nativeCloses.push([reason, returnValue]);
           };
+          // Hold a real queued event so frame timing cannot hide an obsolete native close.
+          const nativeAddListener = nativeOwned.dialog.addEventListener.bind(nativeOwned.dialog);
+          const nativeRemoveListener = nativeOwned.dialog.removeEventListener.bind(nativeOwned.dialog);
+          const closeListeners = new Map();
+          const pausedCloses = [];
+          let holdNativeCloses = true;
+          nativeOwned.dialog.addEventListener = (type, listener, options) => {
+            if (type !== 'close') return nativeAddListener(type, listener, options);
+            const forward = event => {
+              const deliver = () => listener.call(nativeOwned.dialog, event);
+              if (holdNativeCloses) pausedCloses.push(deliver);
+              else deliver();
+            };
+            closeListeners.set(listener, forward);
+            nativeAddListener(type, forward, options);
+          };
+          nativeOwned.dialog.removeEventListener = (type, listener, options) => {
+            nativeRemoveListener(type, closeListeners.get(listener) ?? listener, options);
+          };
+          const staleCloseObserved = new Promise(resolve => {
+            nativeAddListener('close', resolve, {once: true});
+          });
           const nativeFirst = dialogs.create(nativeOwned.options);
           nativeFirst.setOpen(true, source);
+          nativeOwned.dialog.close('obsolete');
           const nativeSecond = dialogs.create(nativeOwned.options);
           nativeFirst.cleanup();
+          nativeSecond.setOpen(true, source);
+          await staleCloseObserved;
+          for (let frame = 0; frame < 3; frame++) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+          }
+          const deferredCurrentOwnerClose = pausedCloses.length === 1 && nativeSecond.retained;
+          pausedCloses.splice(0).forEach(deliver => deliver());
+          const retainedLatestOpen = nativeOwned.dialog.matches(':modal')
+            && nativeSecond.isOpen()
+            && nativeCloses.length === 0;
+          holdNativeCloses = false;
           const nativeCloseObserved = new Promise(resolve => {
             nativeOwned.dialog.addEventListener('close', resolve, {once: true});
           });
@@ -343,20 +377,25 @@ def test_shared_helpers_transfer_shadow_focus_and_prepare_modal_in_order(page: A
             staleCleanupPreserved,
             retainedExpectedClose,
             ownerFocusWon,
+            deferredCurrentOwnerClose,
+            retainedLatestOpen,
             retainedDirectNativeClose,
             shadowFocused,
             activeStaleCleanupPreserved,
             modalPrepared,
             modalCount: dialogs.counts().modals,
           };
-        }"""
-    )
+        }""",
+        timeout=10_000,
+    ).json_value()
     assert result == {
         "focusedInitially": True,
         "retainedOpen": True,
         "staleCleanupPreserved": True,
         "retainedExpectedClose": True,
         "ownerFocusWon": True,
+        "deferredCurrentOwnerClose": True,
+        "retainedLatestOpen": True,
         "retainedDirectNativeClose": True,
         "shadowFocused": True,
         "activeStaleCleanupPreserved": True,

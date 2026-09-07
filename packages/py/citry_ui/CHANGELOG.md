@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Dialogs and command palettes stay open when a delayed browser close event
+  arrives after a rerender.
 - Avatars without an initial image source now render valid HTML and preserve
   custom image attributes when the browser creates the image.
 - Radio groups inside a Field now associate its label with the first radio

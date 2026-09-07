@@ -148,9 +148,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       let previousFocus = null;
       let focusGeneration = 0;
       let handedOff = false;
-      let handoffCloseGuard = false;
-      let handoffCloseIntent = false;
-      let handoffFrame = null;
       let actualRoot = host.getRootNode();
       const liveOwner = dialog[ownerKey] ?? null;
       liveOwner?.transfer?.();
@@ -183,14 +180,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         if (previous.timer !== null) clearTimeout(previous.timer);
         appliedOpen = previous.appliedOpen && dialog.open;
         previousFocus = previous.previousFocus;
-        handoffCloseGuard = true;
-        handoffFrame = requestAnimationFrame(() => {
-          handoffFrame = requestAnimationFrame(() => {
-            handoffFrame = null;
-            handoffCloseGuard = false;
-            handoffCloseIntent = false;
-          });
-        });
         delete dialog[handoffKey];
       }
 
@@ -348,19 +337,14 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           || submitter instanceof HTMLInputElement ? submitter.value : "";
         requestClose?.("native", submitter ?? form, returnValue);
       };
-      const onBeforeToggle = (event) => {
-        if (handoffCloseGuard && event.newState === "closed") handoffCloseIntent = true;
-      };
       const onNativeClose = () => {
         if (expectedNativeClose) {
           expectedNativeClose = false;
-          handoffCloseIntent = false;
           return;
         }
+        // A queued native close must not close a dialog that is already open again.
         if (
-          handoffCloseGuard
-          && !handoffCloseIntent
-          && active
+          active
           && dialog[ownerKey] === owner
           && appliedOpen
           && dialog.open
@@ -377,7 +361,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
           focusInitial();
           return;
         }
-        handoffCloseIntent = false;
         closeDescendants();
         appliedOpen = false;
         unregister(record);
@@ -424,7 +407,6 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
       dialog.addEventListener("pointercancel", onPointerCancel);
       dialog.addEventListener("click", onClick);
       dialog.addEventListener("submit", onSubmit);
-      dialog.addEventListener("beforetoggle", onBeforeToggle);
       dialog.addEventListener("close", onNativeClose);
       if (retained && appliedOpen) register(record);
 
@@ -433,17 +415,12 @@ DIALOG_CONTROLLER_RUNTIME_JS = r"""
         active = false;
         owner.active = false;
         focusGeneration += 1;
-        if (handoffFrame !== null) cancelAnimationFrame(handoffFrame);
-        handoffFrame = null;
-        handoffCloseGuard = false;
-        handoffCloseIntent = false;
         dialog.removeEventListener("cancel", onCancel);
         dialog.removeEventListener("keydown", onKeyDown);
         dialog.removeEventListener("pointerdown", onPointerDown);
         dialog.removeEventListener("pointercancel", onPointerCancel);
         dialog.removeEventListener("click", onClick);
         dialog.removeEventListener("submit", onSubmit);
-        dialog.removeEventListener("beforetoggle", onBeforeToggle);
         dialog.removeEventListener("close", onNativeClose);
         unwatchScope();
         if (dialog[ownerKey] === owner) delete dialog[ownerKey];
