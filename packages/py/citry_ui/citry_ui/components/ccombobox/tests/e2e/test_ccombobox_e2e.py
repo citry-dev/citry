@@ -140,6 +140,7 @@ def _remote_page(
     initial_options: tuple[citry_ui.CComboboxOption, ...] = (),
     min_chars: int = 2,
     initial_open: bool = False,
+    manual_requests: bool = False,
 ) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
@@ -154,6 +155,7 @@ def _remote_page(
               <c-css />
             </head>
             <body
+              c-data-manual-requests="manual_requests"
               x-data
               x-init="Alpine.store('remoteDemo', {
                 loading: false,
@@ -170,9 +172,9 @@ def _remote_page(
                   if (query === 'malformed') {
                     return [{ value: 'broken' }];
                   }
-                  return new Promise((resolve, reject) => {
+                  request.promise = new Promise((resolve, reject) => {
                     const delay = query === 'ad' ? 100 : query === 'pending' ? 100 : 10;
-                    setTimeout(() => {
+                    request.complete = () => {
                       if (query === 'error') {
                         reject(new Error('remote failed'));
                         return;
@@ -187,8 +189,12 @@ def _remote_page(
                             : query.toUpperCase(),
                         },
                       ]);
-                    }, delay);
+                    };
+                    if (!document.body.hasAttribute('data-manual-requests')) {
+                      setTimeout(request.complete, delay);
+                    }
                   });
+                  return request.promise;
                 },
               })"
             >
@@ -232,10 +238,27 @@ def _remote_page(
                 "initial_options": initial_options,
                 "initial_value": initial_value,
                 "min_chars": min_chars,
+                "manual_requests": manual_requests,
                 "root_attrs": {"data-remote-combobox": ""},
             }
 
     return str(Page())
+
+
+def _complete_remote_request(page, index: int) -> None:
+    # Tests choose the response order even when the loader ignores an aborted signal.
+    page.wait_for_function(
+        "index => typeof window.__remoteRequests?.[index]?.complete === 'function'",
+        arg=index,
+    )
+    page.evaluate(
+        """async index => {
+          const request = window.__remoteRequests[index];
+          request.complete();
+          await request.promise;
+        }""",
+        index,
+    )
 
 
 def _controlled_remote_page() -> str:
@@ -619,15 +642,16 @@ def test_canceled_native_reset_preserves_selection_and_query(page):
 
 
 def test_remote_loader_aborts_and_rejects_stale_results_even_when_loader_ignores_signal(page):
-    _load(page, _remote_page())
+    _load(page, _remote_page(manual_requests=True))
     input_value = page.get_by_role("combobox")
 
     input_value.fill("ad")
     page.wait_for_function("window.__remoteRequests?.length === 1")
     input_value.fill("ada")
     page.wait_for_function("window.__remoteRequests?.length === 2")
+    _complete_remote_request(page, 1)
     page.wait_for_function("document.querySelector('[data-citry-ui-part=option-label]')?.textContent.includes('Ada')")
-    page.wait_for_timeout(120)
+    _complete_remote_request(page, 0)
 
     assert page.evaluate("window.__remoteRequests[0].signal.aborted") is True
     assert page.locator('[data-citry-ui-part="option-label"]').inner_text() == "<img src=x onerror=alert(1)> Ada"
@@ -685,7 +709,7 @@ def test_minimum_characters_count_unicode_code_points(page):
 
 
 def test_closing_aborts_remote_work_without_selecting_highlight(page):
-    _load(page, _remote_page())
+    _load(page, _remote_page(manual_requests=True))
     input_value = page.get_by_role("combobox")
 
     input_value.fill("pending")
@@ -693,15 +717,17 @@ def test_closing_aborts_remote_work_without_selecting_highlight(page):
     input_value.press("Escape")
 
     assert page.evaluate("window.__remoteRequests[0].signal.aborted") is True
+    _complete_remote_request(page, 0)
     assert input_value.get_attribute("aria-expanded") == "false"
     assert page.locator('[data-citry-ui-part="option"][data-selected]').count() == 0
 
 
 def test_hidden_stale_remote_results_cannot_be_selected_while_loading(page):
-    _load(page, _remote_page())
+    _load(page, _remote_page(manual_requests=True))
     input_value = page.get_by_role("combobox")
 
     input_value.fill("ok")
+    _complete_remote_request(page, 0)
     page.wait_for_function("document.querySelector('[data-citry-ui-part=option]')?.dataset.value === 'ok-value'")
     input_value.fill("pending")
     page.wait_for_function("document.querySelector('[data-remote-combobox]').hasAttribute('data-loading')")
@@ -715,14 +741,14 @@ def test_hidden_stale_remote_results_cannot_be_selected_while_loading(page):
 
 
 def test_changing_remote_loader_aborts_old_work_and_reloads_open_query(page):
-    _load(page, _remote_page())
+    _load(page, _remote_page(manual_requests=True))
     input_value = page.get_by_role("combobox")
 
     input_value.fill("pending")
     page.wait_for_function("window.__remoteRequests?.length === 1")
     page.evaluate("Alpine.store('remoteDemo').loader = null")
     page.wait_for_function("window.__remoteRequests[0].signal.aborted")
-    page.wait_for_timeout(120)
+    _complete_remote_request(page, 0)
     assert page.locator('[data-citry-ui-part="option"][data-value="pending-value"]').count() == 0
 
     page.evaluate(
@@ -742,7 +768,7 @@ def test_changing_remote_loader_aborts_old_work_and_reloads_open_query(page):
 
 @pytest.mark.parametrize("state", ["disabled", "readonly"])
 def test_blocked_state_aborts_and_prevents_controlled_query_loading(page, state):
-    _load(page, _remote_page())
+    _load(page, _remote_page(manual_requests=True))
     input_value = page.get_by_role("combobox")
 
     input_value.fill("pending")
@@ -756,6 +782,7 @@ def test_blocked_state_aborts_and_prevents_controlled_query_loading(page, state)
         state,
     )
     page.wait_for_function("window.__remoteRequests[0].signal.aborted")
+    _complete_remote_request(page, 0)
     page.wait_for_timeout(30)
 
     assert page.evaluate("window.__remoteRequests.length") == 1
@@ -836,7 +863,7 @@ def test_remote_error_recovers_and_does_not_render_exception_text(page):
 
 
 def test_remote_cleanup_aborts_pending_request_and_removes_document_listener(page):
-    _load(page, _remote_page())
+    _load(page, _remote_page(manual_requests=True))
     input_value = page.get_by_role("combobox")
     input_value.fill("pending")
     page.wait_for_function("window.__remoteRequests?.length === 1")
@@ -858,5 +885,6 @@ def test_remote_cleanup_aborts_pending_request_and_removes_document_listener(pag
         }"""
     )
     page.wait_for_function("window.__remoteRequests[0].signal.aborted")
+    _complete_remote_request(page, 0)
 
     assert page.locator("[data-remote-combobox]").count() == 0

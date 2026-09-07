@@ -292,12 +292,17 @@ def test_structural_safety_force_closes_a_controlled_tooltip_truthfully(page):
 
 
 def test_hover_delay_surface_bridge_and_departure_close(page):
+    page.clock.install()
     _load(page)
+    # Action latency must not consume the opening delay under test.
+    page.clock.pause_at(page.evaluate("Date.now() / 1000") + 1)
     trigger = _europa_trigger(page)
     trigger.hover()
-    page.wait_for_timeout(20)
+    page.clock.run_for(20)
     assert not _europa(page).evaluate("element => element.matches(':popover-open')")
+    page.clock.run_for(40)
     page.wait_for_function("document.querySelector('#europa-tooltip').matches(':popover-open')")
+    page.clock.resume()
 
     _europa(page).hover()
     page.wait_for_timeout(160)

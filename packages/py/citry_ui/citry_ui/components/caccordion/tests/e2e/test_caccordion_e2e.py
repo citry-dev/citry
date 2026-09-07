@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 pytest.importorskip("pytest_playwright")
+from playwright.sync_api import expect
 
 import citry_ui
 from citry import Citry, Component
@@ -706,18 +707,14 @@ def test_public_styling_narrow_layout_rtl_print_and_rapid_reversal(accordion_pag
     triggers.nth(1).click()
     triggers.nth(2).click()
     triggers.first.click()
-    page.wait_for_timeout(260)
-    assert triggers.first.get_attribute("aria-expanded") == "true"
-    assert (
-        root.locator(':scope > [data-citry-accordion-item] > [data-citry-accordion-panel][data-state="open"]').count()
-        == 1
-    )
-    assert (
-        root.locator(
-            ':scope > [data-citry-accordion-item] > [data-citry-accordion-panel][style*="block-size"]'
-        ).count()
-        == 0
-    )
+    expect(triggers.first).to_have_attribute("aria-expanded", "true")
+    expect(
+        root.locator(':scope > [data-citry-accordion-item] > [data-citry-accordion-panel][data-state="open"]')
+    ).to_have_count(1)
+    # Browser animation completion, not elapsed host time, releases temporary styles.
+    expect(
+        root.locator(':scope > [data-citry-accordion-item] > [data-citry-accordion-panel][style*="block-size"]')
+    ).to_have_count(0)
 
     page.emulate_media(media="print")
     assert root.locator("[data-citry-accordion-panel]").evaluate_all(
