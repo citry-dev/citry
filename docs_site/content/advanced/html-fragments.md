@@ -103,14 +103,48 @@ Load Citry once in the host document, then insert the response:
 ```
 
 The existing runtime notices the fragment manifest, fetches missing assets,
-and activates the complete fragment. Each dependency is loaded once per page.
+and activates the complete fragment. It reuses dependencies that are still
+loaded in the page.
+
+## Render a fresh fragment for each insertion
+
+If a second insertion loses its styling or browser behavior, check whether
+the endpoint is returning the same serialized HTML. A rendered fragment that
+uses Citry's browser runtime must be inserted only once per page. Render a
+fresh fragment for each later insertion, even when the content is unchanged.
+
+Saving the serialized response and returning it on every request reuses the
+same component identities, so Citry rejects the second insertion:
+
+```python
+# Wrong: every request returns the same rendered fragment.
+saved_html = Card(title="Welcome").render().serialize(
+    deps_strategy="fragment",
+)
+
+
+def card_fragment():
+    return saved_html
+```
+
+Render inside the request handler so each response represents a new fragment:
+
+```python
+def card_fragment():
+    # Each request creates a fragment that can be inserted once.
+    return Card(title="Welcome").render().serialize(
+        deps_strategy="fragment",
+    )
+```
+
+A static demo can load its pre-rendered fragment once, then reload the host
+document to let the reader try again.
 
 ## Insert into a page without Citry
 
 A fragment can include a small loader for Citry's runtime. The browser still
 has to execute that loader. Scripts inserted through `innerHTML` stay inert,
-so the example in the previous section only works because Citry was already
-loaded.
+so the `innerHTML` example above only works because Citry was already loaded.
 
 For a runtime-free host, use a swap library that executes response scripts, or
 parse the response and recreate its `<script>` elements as live DOM nodes.
