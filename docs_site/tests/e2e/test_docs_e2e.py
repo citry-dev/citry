@@ -2406,13 +2406,118 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     # The whole static-fragment path: the page loads the runtime from /citry/,
     # a click fetches the pre-rendered fragment, the runtime loads the component's
     # JS/CSS from the static /citry/cache/ files, and the fragment's own JS runs.
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.goto(docs_site_url + "/examples/fragments/demo/")
-    page.locator("#frag-load").click()
+    load = page.locator("#frag-load")
+    reset = page.locator("#frag-reset")
+    assert load.is_enabled()
+    assert reset.is_hidden()
+    assert page.locator(".frag-widget").count() == 0
+
+    # Hold the response so rapid clicks exercise the pending state regardless
+    # of server speed. Count fetch calls before network events can be delayed.
+    pending: list[Any] = []
+    fragment_url = docs_site_url + load.get_attribute("data-fragment-url")
+    page.route(fragment_url, lambda route: pending.append(route))
+    page.evaluate(
+        """() => {
+          const fetch = window.fetch;
+          window.fragmentFetchCount = 0;
+          window.fetch = (...args) => {
+            window.fragmentFetchCount += 1;
+            return fetch(...args);
+          };
+        }"""
+    )
+    with page.expect_request(fragment_url):
+        immediate = load.evaluate(
+            """button => {
+              button.click();
+              const disabled = button.disabled;
+              button.click();
+              button.dispatchEvent(new MouseEvent('click'));
+              return {disabled, requests: window.fragmentFetchCount};
+            }"""
+        )
+    assert immediate == {"disabled": True, "requests": 1}
+    assert len(pending) == 1
+    assert reset.is_hidden()
+    assert page.locator(".frag-widget").count() == 0
+    pending[0].continue_()
     page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
-    assert "(JS ran)" in page.locator(".frag-widget__title").inner_text()
     # The component's CSS loaded too (the widget got its purple border).
-    border = page.eval_on_selector(".frag-widget", "el => getComputedStyle(el).borderTopColor")
-    assert border == "rgb(130, 80, 223)"  # #8250df
+    widget = page.locator(".frag-widget")
+    assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"  # #8250df
+    assert load.is_disabled()
+    assert reset.is_visible()
+
+    # Reusing these static bytes would replace the initialized node and lose
+    # its dependencies. Both native and synthetic later clicks must leave it intact.
+    original_widget = widget.element_handle()
+    fetch_count = page.evaluate("window.fragmentFetchCount")
+    load.evaluate(
+        """button => {
+          button.click();
+          button.dispatchEvent(new MouseEvent('click'));
+          button.dispatchEvent(new MouseEvent('click'));
+        }"""
+    )
+    assert page.evaluate("window.fragmentFetchCount") == fetch_count
+    assert len(pending) == 1
+    assert widget.evaluate("(el, original) => el === original", original_widget)
+    assert widget.get_attribute("data-ready") == "1"
+    assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
+
+    # A document reload makes the static fragment safe to insert again.
+    page.unroute(fragment_url)
+    with page.expect_navigation(wait_until="load"):
+        reset.click()
+    assert page.evaluate("typeof window.fragmentFetchCount") == "undefined"
+    assert load.is_enabled()
+    assert reset.is_hidden()
+    assert widget.count() == 0
+    load.click()
+    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    assert widget.count() == 1
+    assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
+    assert errors == []
+
+
+@pytest.mark.parametrize("failure", ["http", "network"])
+def test_fragment_fetch_failure_allows_retry(page: Any, docs_site_url: str, failure: str) -> None:
+    page.goto(docs_site_url + "/examples/fragments/demo/")
+    load = page.locator("#frag-load")
+    fragment_url = docs_site_url + load.get_attribute("data-fragment-url")
+
+    # A response error and a rejected fetch take different browser paths, but
+    # neither inserts a fragment or consumes the user's one successful load.
+    def fail_fetch(route: Any) -> None:
+        if failure == "http":
+            route.fulfill(status=503, content_type="text/plain", body="Temporarily unavailable")
+        else:
+            route.abort()
+
+    page.route(fragment_url, fail_fetch, times=1)
+    load.click()
+    page.wait_for_function(
+        """() => !document.querySelector('#frag-load').disabled
+          && document.querySelector('#frag-status').textContent.trim().length > 0"""
+    )
+    status = page.locator("#frag-status")
+    assert status.get_attribute("role") == "status"
+    assert status.is_visible()
+    error_status = status.inner_text()
+    assert page.locator("#frag-reset").is_hidden()
+    assert page.locator("#frag-target").inner_html() == ""
+
+    load.click()
+    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    assert page.locator(".frag-widget").count() == 1
+    assert load.is_disabled()
+    assert page.locator("#frag-reset").is_visible()
+    assert status.inner_text() != error_status
 
 
 def test_content_page_has_an_edit_on_github_link(page: Any, docs_site_url: str) -> None:
