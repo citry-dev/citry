@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const vscode = require("vscode");
+const expectedVersion = require("../../package.json").version;
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -113,7 +114,7 @@ async function run() {
 
 	const extension = vscode.extensions.getExtension("citry-dev.citry");
 	assert.ok(extension, "qualified citry-dev.citry extension is not installed");
-	assert.equal(extension.packageJSON.version, "0.1.2");
+	assert.equal(extension.packageJSON.version, expectedVersion);
 	assert.equal(path.resolve(extension.extensionPath), path.resolve(expectedExtensionPath));
 	await extension.activate();
 	assert.equal(extension.isActive, true);
