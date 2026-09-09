@@ -1,0 +1,181 @@
+"""Carry short-lived scheduling plans through privately constructed body lists."""
+
+from __future__ import annotations
+
+from contextvars import ContextVar
+from dataclasses import dataclass, field
+from functools import wraps
+from typing import Any
+
+from citry import component_render as cr
+from citry import nodes
+
+BODY = cr._render_body
+TREE = cr._render_tree
+ONE = cr._render_one
+SCAN = cr._scan_deferred
+FOR = nodes.ForNode.render
+OWNED_METHODS = {nodes.IfNode: nodes.IfNode.render, nodes.TemplateNode: nodes.TemplateNode.render}
+
+
+@dataclass(slots=True)
+class Plan:
+    """Positions in one private list, with plans for eligible interior renders."""
+
+    parts: list[Any]
+    context: Any
+    entries: list[tuple[int, Any, Any]]
+
+
+@dataclass(slots=True)
+class Scope:
+    """Hold temporary plans for one render-tree execution context."""
+
+    last: Plan | None = None
+    roots: dict[int, tuple[Any, Plan]] = field(default_factory=dict)
+
+
+SCOPE: ContextVar[Scope | None] = ContextVar("producer_schedule_probe", default=None)
+
+
+@wraps(TREE)
+def tree(*args: Any, **kwargs: Any) -> Any:
+    token = SCOPE.set(Scope())
+    try:
+        return TREE(*args, **kwargs)
+    finally:
+        SCOPE.reset(token)
+
+
+@wraps(ONE)
+def one(*args: Any, **kwargs: Any) -> Any:
+    scope = SCOPE.get()
+    if scope is None:
+        return ONE(*args, **kwargs)
+    scope.last = None
+    result = ONE(*args, **kwargs)
+    plan = scope.last
+    scope.last = None
+    if plan is not None and plan.parts is result.render.parts:
+        scope.roots[id(result.render)] = (result.render, plan)
+    return result
+
+
+@wraps(BODY)
+def body(items: Any, context: Any) -> list[Any]:
+    scope = SCOPE.get()
+    if scope is None:
+        return BODY(items, context)
+    parts: list[Any] = []
+    entries = []
+    tracing = cr.is_tracing()
+    for item in items:
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if tracing:
+            cr.trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
+        scope.last = None
+        try:
+            render_method = item.render
+            part = render_method(context)
+        except Exception as err:
+            cr._attach_template_position(err, item, context)
+            raise
+        nested = scope.last
+        scope.last = None
+        if type(part) is str:
+            parts.append(part)
+            continue
+        unwrapped = cr.unwrap_physical_region(part)
+        if (
+            isinstance(unwrapped, cr.CitryRender)
+            and unwrapped.context is not context
+            and not cr._contains_deferred(unwrapped)
+        ):
+            cr._merge_dependencies(context, unwrapped.context)
+        # A borrowed result stays live. Only the known method's own container
+        # can carry a nested plan into the parent without a later full scan.
+        owned = (
+            type(part) is cr.CitryRender
+            and type(item) in OWNED_METHODS
+            and getattr(render_method, "__func__", None) is OWNED_METHODS.get(type(item))
+            and nested is not None
+            and nested.parts is part.parts
+        )
+        entries.append((len(parts), part if owned else None, nested if owned else None))
+        parts.append(part)
+    scope.last = Plan(parts, context, entries)
+    return parts
+
+
+@wraps(FOR)
+def loop(node: Any, context: Any) -> Any:
+    scope = SCOPE.get()
+    if scope is None:
+        return FOR(node, context)
+    if node._precomputed_text is not None:
+        result = FOR(node, context)
+        scope.last = Plan(result.parts, context, [])
+        return result
+    parts: list[Any] = []
+    entries = []
+    for items, child_context in node.iter_bodies(context):
+        rendered = cr._render_body(items, child_context)
+        plan = scope.last
+        scope.last = None
+        offset = len(parts)
+        parts.extend(rendered)
+        if plan is None or plan.parts is not rendered:
+            # A replaced body helper did not provide trustworthy positions.
+            entries.extend((offset + index, None, None) for index in range(len(rendered)))
+        else:
+            entries.extend((offset + index, part, nested) for index, part, nested in plan.entries)
+    result = nodes.CitryRender(parts=parts, context=context)
+    scope.last = Plan(parts, context, entries)
+    return result
+
+
+OWNED_METHODS[nodes.ForNode] = loop
+
+
+def consume(plan: Plan, tasks: list[Any]) -> bool:
+    """Preserve postorder context merges while skipping ordinary text positions."""
+    has_deferred = False
+    parts, context = plan.parts, plan.context
+    for index, owned, nested in plan.entries:
+        part = parts[index]
+        if isinstance(part, cr.DeferredComponent):
+            tasks.append(cr._RenderTask(part, cr._DeferredComponentPosition(parts, index, context)))
+            has_deferred = True
+        else:
+            unwrapped = cr.unwrap_physical_region(part)
+            if isinstance(unwrapped, cr.CitryRender):
+                if part is owned and nested is not None and nested.parts is unwrapped.parts:
+                    nested_has_deferred = consume(nested, tasks)
+                else:
+                    nested_has_deferred = cr._scan_deferred_parts(unwrapped.parts, unwrapped.context, tasks)
+                has_deferred = has_deferred or nested_has_deferred
+                if nested_has_deferred and unwrapped.context is not context:
+                    tasks.append(cr._ContextMergeTask(context, unwrapped.context))
+    return has_deferred
+
+
+@wraps(SCAN)
+def scan(render: Any) -> Any:
+    scope = SCOPE.get()
+    entry = scope.roots.pop(id(render), None) if scope is not None else None
+    if entry is None or entry[0] is not render or entry[1].parts is not render.parts:
+        return SCAN(render)
+    tasks: list[Any] = []
+    consume(entry[1], tasks)
+    return tasks
+
+
+def install(changed: bool) -> None:
+    """Select the producer and consumer together; keep production files intact."""
+    cr._render_tree = tree if changed else TREE
+    cr._render_one = one if changed else ONE
+    cr._render_body = body if changed else BODY
+    cr._scan_deferred = scan if changed else SCAN
+    nodes.ForNode.render = loop if changed else FOR

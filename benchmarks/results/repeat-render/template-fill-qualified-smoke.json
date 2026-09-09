@@ -1,0 +1,230 @@
+{
+  "experiment_only": true,
+  "revision": "3e1307fac85af92568c9d73fd8e04374b0df5ecf",
+  "seed": 20261021,
+  "samples_per_process": 1,
+  "initial_renders_per_process": 6,
+  "hashes": {
+    "benchmarks/template_fill_qualified_probe/probe.py": "7d895a7c147a77601d3b6e12d09d33b87461e0ce328b402397efb017faee6130",
+    "benchmarks/template_fill_qualified_probe/adapter.py": "7729967d1e53a7c374061a4af3fbdd0a5ea2027eb89250c2364b75ba7f56861a",
+    "benchmarks/template_fill_qualified_probe/plan.md": "64851169f0fef047d50ca321639f7e4d89dbc4cdfb2e3ebed426b1aad62eea43",
+    "benchmarks/render_structure_probe/census.py": "d61d6324aab7481276b59a0373526e8af71d378fd0cacad9fa23bdfb925e52b3",
+    "benchmarks/ownership_journal_probe/probe.py": "d259181c5db6f64359fee79fb6e51e88e617e5f27b89d71ccb723e4893bb2d08",
+    "benchmarks/utils.py": "9b7367a2fdea81170e41e89ed1239b6ab566fd1eed808d0e6224958d331455f6",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/citry_render.py": "da6efc5999be9486c64ba75202366e5c16aac4ca351f056308101f3668070533",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/citry/slots.py": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "median_process_pair_mean_savings_ms": {
+    "ms": 0.1636249999999997,
+    "cpu_ms": 0.16400000000000148
+  },
+  "joint_favorable_process_pairs": 1,
+  "pairs": [
+    {
+      "pair": 0,
+      "candidate_first": false,
+      "mean_savings_ms": {
+        "ms": 0.1636249999999997,
+        "cpu_ms": 0.16400000000000148
+      },
+      "reference": {
+        "candidate": false,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 15,
+            "collected": 412,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 15,
+            "collected": 412,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "warmups": [
+          {
+            "ms": 71.020875,
+            "cpu_ms": 71.025,
+            "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+          },
+          {
+            "ms": 34.930666,
+            "cpu_ms": 34.932,
+            "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+          },
+          {
+            "ms": 30.149916,
+            "cpu_ms": 30.15,
+            "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+          },
+          {
+            "ms": 29.359583,
+            "cpu_ms": 29.356,
+            "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+          },
+          {
+            "ms": 28.621875,
+            "cpu_ms": 28.624,
+            "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+          },
+          {
+            "ms": 28.535833,
+            "cpu_ms": 28.537,
+            "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 28.679875,
+            "cpu_ms": 28.681
+          }
+        ],
+        "html_digests": [
+          "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86"
+        ],
+        "snapshot_digests": [
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+        ],
+        "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+        "output_bytes": 1013746,
+        "activation_counts": {},
+        "means_ms": {
+          "ms": 28.679875,
+          "cpu_ms": 28.681
+        }
+      },
+      "candidate": {
+        "candidate": true,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 14,
+            "collected": 412,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 14,
+            "collected": 412,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "warmups": [
+          {
+            "ms": 69.676625,
+            "cpu_ms": 69.679,
+            "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+          },
+          {
+            "ms": 33.514584,
+            "cpu_ms": 33.509,
+            "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+          },
+          {
+            "ms": 28.565834,
+            "cpu_ms": 28.566,
+            "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+          },
+          {
+            "ms": 28.462834,
+            "cpu_ms": 28.464,
+            "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+          },
+          {
+            "ms": 28.651167,
+            "cpu_ms": 28.652,
+            "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+          },
+          {
+            "ms": 28.491208,
+            "cpu_ms": 28.492,
+            "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 28.51625,
+            "cpu_ms": 28.517
+          }
+        ],
+        "html_digests": [
+          "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86"
+        ],
+        "snapshot_digests": [
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+        ],
+        "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+        "output_bytes": 1013746,
+        "activation_counts": {
+          "fallbacks_omitted": 194,
+          "direct_calls": 194
+        },
+        "means_ms": {
+          "ms": 28.51625,
+          "cpu_ms": 28.517
+        }
+      }
+    }
+  ],
+  "source_archives": {
+    "benchmarks/template_fill_qualified_probe/plan.md": "benchmarks/template_fill_qualified_probe/plan.md.measured.txt"
+  }
+}

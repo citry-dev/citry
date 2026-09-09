@@ -1,0 +1,962 @@
+{
+  "revision": "1dcf11298146e8add7f9ce266b6bd24d1616de2b",
+  "detail_value_conversion": false,
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+  "scenario_sha256": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be",
+  "harness_sha256": "39ee6709558822838da17a9a629d58d0aa4c8f10a47b6536808d9f3bdea3fbe7",
+  "ordinary_samples": [
+    {
+      "compose_ms": 0.001958,
+      "tree_ms": 25.363459,
+      "serialize_ms": 3.4665,
+      "total_ms": 28.831917
+    },
+    {
+      "compose_ms": 0.002125,
+      "tree_ms": 25.745542,
+      "serialize_ms": 3.609833,
+      "total_ms": 29.3575
+    },
+    {
+      "compose_ms": 0.002292,
+      "tree_ms": 26.3445,
+      "serialize_ms": 3.642875,
+      "total_ms": 29.989667
+    },
+    {
+      "compose_ms": 0.002292,
+      "tree_ms": 30.328333,
+      "serialize_ms": 3.498458,
+      "total_ms": 33.829083
+    },
+    {
+      "compose_ms": 0.002416,
+      "tree_ms": 25.8695,
+      "serialize_ms": 3.502625,
+      "total_ms": 29.374541
+    },
+    {
+      "compose_ms": 0.002291,
+      "tree_ms": 25.568584,
+      "serialize_ms": 3.5265,
+      "total_ms": 29.097375
+    },
+    {
+      "compose_ms": 0.001958,
+      "tree_ms": 25.54375,
+      "serialize_ms": 3.524917,
+      "total_ms": 29.070625
+    },
+    {
+      "compose_ms": 0.002125,
+      "tree_ms": 25.6475,
+      "serialize_ms": 3.459333,
+      "total_ms": 29.108958
+    },
+    {
+      "compose_ms": 0.002291,
+      "tree_ms": 25.229459,
+      "serialize_ms": 3.44275,
+      "total_ms": 28.6745
+    },
+    {
+      "compose_ms": 0.001917,
+      "tree_ms": 25.019666,
+      "serialize_ms": 3.441334,
+      "total_ms": 28.462917
+    },
+    {
+      "compose_ms": 0.00225,
+      "tree_ms": 25.09425,
+      "serialize_ms": 3.449083,
+      "total_ms": 28.545583
+    },
+    {
+      "compose_ms": 0.002375,
+      "tree_ms": 26.161,
+      "serialize_ms": 3.538375,
+      "total_ms": 29.70175
+    },
+    {
+      "compose_ms": 0.002125,
+      "tree_ms": 29.42025,
+      "serialize_ms": 3.443083,
+      "total_ms": 32.865458
+    },
+    {
+      "compose_ms": 0.002333,
+      "tree_ms": 25.147542,
+      "serialize_ms": 3.441667,
+      "total_ms": 28.591542
+    },
+    {
+      "compose_ms": 0.002084,
+      "tree_ms": 25.017166,
+      "serialize_ms": 3.4455,
+      "total_ms": 28.46475
+    },
+    {
+      "compose_ms": 0.001875,
+      "tree_ms": 24.989333,
+      "serialize_ms": 3.489417,
+      "total_ms": 28.480625
+    },
+    {
+      "compose_ms": 0.002583,
+      "tree_ms": 25.849958,
+      "serialize_ms": 3.546584,
+      "total_ms": 29.399125
+    },
+    {
+      "compose_ms": 0.002125,
+      "tree_ms": 25.725417,
+      "serialize_ms": 3.595041,
+      "total_ms": 29.322583
+    },
+    {
+      "compose_ms": 0.002125,
+      "tree_ms": 25.90575,
+      "serialize_ms": 3.593959,
+      "total_ms": 29.501834
+    },
+    {
+      "compose_ms": 0.002125,
+      "tree_ms": 26.627375,
+      "serialize_ms": 3.628792,
+      "total_ms": 30.258292
+    },
+    {
+      "compose_ms": 0.002166,
+      "tree_ms": 26.448709,
+      "serialize_ms": 3.5735,
+      "total_ms": 30.024375
+    },
+    {
+      "compose_ms": 0.002125,
+      "tree_ms": 27.490833,
+      "serialize_ms": 3.95675,
+      "total_ms": 31.449708
+    },
+    {
+      "compose_ms": 0.002209,
+      "tree_ms": 29.196916,
+      "serialize_ms": 3.639375,
+      "total_ms": 32.8385
+    },
+    {
+      "compose_ms": 0.002167,
+      "tree_ms": 26.381792,
+      "serialize_ms": 3.646,
+      "total_ms": 30.029959
+    },
+    {
+      "compose_ms": 0.002375,
+      "tree_ms": 26.266417,
+      "serialize_ms": 3.652958,
+      "total_ms": 29.92175
+    },
+    {
+      "compose_ms": 0.001958,
+      "tree_ms": 26.574083,
+      "serialize_ms": 3.747834,
+      "total_ms": 30.323875
+    },
+    {
+      "compose_ms": 0.003292,
+      "tree_ms": 27.5545,
+      "serialize_ms": 3.600875,
+      "total_ms": 31.158667
+    },
+    {
+      "compose_ms": 0.00275,
+      "tree_ms": 26.087584,
+      "serialize_ms": 3.517791,
+      "total_ms": 29.608125
+    },
+    {
+      "compose_ms": 0.002167,
+      "tree_ms": 26.542875,
+      "serialize_ms": 3.626125,
+      "total_ms": 30.171167
+    },
+    {
+      "compose_ms": 0.001958,
+      "tree_ms": 26.570208,
+      "serialize_ms": 3.617917,
+      "total_ms": 30.190083
+    }
+  ],
+  "ordinary_medians_ms": {
+    "compose_ms": 0.0021665,
+    "tree_ms": 25.996667000000002,
+    "serialize_ms": 3.5424795,
+    "total_ms": 29.5549795
+  },
+  "ordinary_mean_tree_ms": 26.3237417,
+  "instrumented_samples": [
+    {
+      "tree_ms": 32.961208,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.333788,
+        "Ownership.bind_instance": 0.522083,
+        "Extension configuration allocation": 0.444538,
+        "Extension hooks": 2.107531,
+        "Ownership.bind_supplied_slots": 0.345454,
+        "Application data callbacks": 0.894196,
+        "Template and reusable-body cache work": 1.219011,
+        "Ownership.record_source_location": 1.029376,
+        "Ownership.record_template_fill": 0.779448,
+        "Ownership.record_component_invocation": 0.424059,
+        "Ownership.bind_template_fill_sources": 0.312918,
+        "Child inputs and slot-fill preparation": 2.47199,
+        "Body traversal and result assembly": 1.532632,
+        "Component lifecycle coordination": 4.047952,
+        "Queue and replacement tree scans": 0.80084,
+        "Ownership.capture_slot_call": 1.935775,
+        "Slot invocation": 2.95092,
+        "Element attributes": 3.832874,
+        "Expressions and control flow": 1.162103,
+        "Ownership.settle_component": 0.133365,
+        "Component finalization coordination": 0.346835,
+        "Component lifecycle and remaining orchestration": 1.996688,
+        "Component generator hooks": 0.002208,
+        "Nested serialization": 1.471999,
+        "Ownership.selected_region_ids": 0.000541,
+        "Ownership.retire_component_output": 0.389,
+        "Ownership.release_transient_region_results": 0.238334
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 31.32625,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.307706,
+        "Ownership.bind_instance": 0.524249,
+        "Extension configuration allocation": 0.452835,
+        "Extension hooks": 2.083591,
+        "Ownership.bind_supplied_slots": 0.331704,
+        "Application data callbacks": 0.918029,
+        "Template and reusable-body cache work": 1.213194,
+        "Ownership.record_source_location": 1.033645,
+        "Ownership.record_template_fill": 0.771646,
+        "Ownership.record_component_invocation": 0.425686,
+        "Ownership.bind_template_fill_sources": 0.313497,
+        "Child inputs and slot-fill preparation": 2.45512,
+        "Body traversal and result assembly": 1.535524,
+        "Component lifecycle coordination": 4.042602,
+        "Queue and replacement tree scans": 0.810458,
+        "Ownership.capture_slot_call": 1.547867,
+        "Slot invocation": 2.524325,
+        "Element attributes": 3.541821,
+        "Expressions and control flow": 1.165918,
+        "Ownership.settle_component": 0.129534,
+        "Component finalization coordination": 0.353277,
+        "Component lifecycle and remaining orchestration": 1.975732,
+        "Component generator hooks": 0.002583,
+        "Nested serialization": 1.026708,
+        "Ownership.selected_region_ids": 0.000458,
+        "Ownership.retire_component_output": 0.404041,
+        "Ownership.release_transient_region_results": 0.214292
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 31.228958,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.306163,
+        "Ownership.bind_instance": 0.51662,
+        "Extension configuration allocation": 0.450598,
+        "Extension hooks": 2.074382,
+        "Ownership.bind_supplied_slots": 0.333795,
+        "Application data callbacks": 0.892945,
+        "Template and reusable-body cache work": 1.213006,
+        "Ownership.record_source_location": 1.026344,
+        "Ownership.record_template_fill": 0.766082,
+        "Ownership.record_component_invocation": 0.423383,
+        "Ownership.bind_template_fill_sources": 0.306747,
+        "Child inputs and slot-fill preparation": 2.462788,
+        "Body traversal and result assembly": 1.544654,
+        "Component lifecycle coordination": 4.031,
+        "Queue and replacement tree scans": 0.826669,
+        "Ownership.capture_slot_call": 1.530702,
+        "Slot invocation": 2.487161,
+        "Element attributes": 3.523108,
+        "Expressions and control flow": 1.156832,
+        "Ownership.settle_component": 0.133363,
+        "Component finalization coordination": 0.347734,
+        "Component lifecycle and remaining orchestration": 1.981882,
+        "Component generator hooks": 0.002208,
+        "Nested serialization": 1.03846,
+        "Ownership.selected_region_ids": 0.000541,
+        "Ownership.retire_component_output": 0.37925,
+        "Ownership.release_transient_region_results": 0.226375
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 31.038084,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.304238,
+        "Ownership.bind_instance": 0.51563,
+        "Extension configuration allocation": 0.452062,
+        "Extension hooks": 2.066049,
+        "Ownership.bind_supplied_slots": 0.333448,
+        "Application data callbacks": 0.90173,
+        "Template and reusable-body cache work": 1.20098,
+        "Ownership.record_source_location": 1.017617,
+        "Ownership.record_template_fill": 0.761838,
+        "Ownership.record_component_invocation": 0.423942,
+        "Ownership.bind_template_fill_sources": 0.313967,
+        "Child inputs and slot-fill preparation": 2.465003,
+        "Body traversal and result assembly": 1.528732,
+        "Component lifecycle coordination": 4.026128,
+        "Queue and replacement tree scans": 0.801958,
+        "Ownership.capture_slot_call": 1.529747,
+        "Slot invocation": 2.463305,
+        "Element attributes": 3.503607,
+        "Expressions and control flow": 1.155286,
+        "Ownership.settle_component": 0.128285,
+        "Component finalization coordination": 0.344746,
+        "Component lifecycle and remaining orchestration": 1.972077,
+        "Component generator hooks": 0.002166,
+        "Nested serialization": 1.007042,
+        "Ownership.selected_region_ids": 0.0005,
+        "Ownership.retire_component_output": 0.383292,
+        "Ownership.release_transient_region_results": 0.211542
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 31.183708,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.302857,
+        "Ownership.bind_instance": 0.522248,
+        "Extension configuration allocation": 0.451302,
+        "Extension hooks": 2.095505,
+        "Ownership.bind_supplied_slots": 0.334495,
+        "Application data callbacks": 0.885859,
+        "Template and reusable-body cache work": 1.209295,
+        "Ownership.record_source_location": 1.017259,
+        "Ownership.record_template_fill": 0.762839,
+        "Ownership.record_component_invocation": 0.41861,
+        "Ownership.bind_template_fill_sources": 0.305875,
+        "Child inputs and slot-fill preparation": 2.44402,
+        "Body traversal and result assembly": 1.537663,
+        "Component lifecycle coordination": 4.039365,
+        "Queue and replacement tree scans": 0.810131,
+        "Ownership.capture_slot_call": 1.534091,
+        "Slot invocation": 2.479862,
+        "Element attributes": 3.502382,
+        "Expressions and control flow": 1.15447,
+        "Ownership.settle_component": 0.130118,
+        "Component finalization coordination": 0.349336,
+        "Component lifecycle and remaining orchestration": 1.995419,
+        "Component generator hooks": 0.002375,
+        "Nested serialization": 1.028666,
+        "Ownership.selected_region_ids": 0.000666,
+        "Ownership.retire_component_output": 0.391459,
+        "Ownership.release_transient_region_results": 0.228041
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 30.572458,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.280707,
+        "Ownership.bind_instance": 0.507751,
+        "Extension configuration allocation": 0.438836,
+        "Extension hooks": 2.014837,
+        "Ownership.bind_supplied_slots": 0.330155,
+        "Application data callbacks": 0.930999,
+        "Template and reusable-body cache work": 1.182692,
+        "Ownership.record_source_location": 1.018496,
+        "Ownership.record_template_fill": 0.756847,
+        "Ownership.record_component_invocation": 0.416742,
+        "Ownership.bind_template_fill_sources": 0.302456,
+        "Child inputs and slot-fill preparation": 2.395142,
+        "Body traversal and result assembly": 1.504291,
+        "Component lifecycle coordination": 3.937276,
+        "Queue and replacement tree scans": 0.790544,
+        "Ownership.capture_slot_call": 1.492114,
+        "Slot invocation": 2.388878,
+        "Element attributes": 3.475087,
+        "Expressions and control flow": 1.122825,
+        "Ownership.settle_component": 0.125212,
+        "Component finalization coordination": 0.341139,
+        "Component lifecycle and remaining orchestration": 1.924517,
+        "Component generator hooks": 0.00225,
+        "Nested serialization": 1.031958,
+        "Ownership.selected_region_ids": 0.000458,
+        "Ownership.retire_component_output": 0.377458,
+        "Ownership.release_transient_region_results": 0.231667
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 30.154916,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.265042,
+        "Ownership.bind_instance": 0.499052,
+        "Extension configuration allocation": 0.434712,
+        "Extension hooks": 2.009862,
+        "Ownership.bind_supplied_slots": 0.327164,
+        "Application data callbacks": 0.874622,
+        "Template and reusable-body cache work": 1.173291,
+        "Ownership.record_source_location": 1.006977,
+        "Ownership.record_template_fill": 0.748045,
+        "Ownership.record_component_invocation": 0.412211,
+        "Ownership.bind_template_fill_sources": 0.301376,
+        "Child inputs and slot-fill preparation": 2.37653,
+        "Body traversal and result assembly": 1.481282,
+        "Component lifecycle coordination": 3.911644,
+        "Queue and replacement tree scans": 0.790065,
+        "Ownership.capture_slot_call": 1.477386,
+        "Slot invocation": 2.385476,
+        "Element attributes": 3.441131,
+        "Expressions and control flow": 1.113753,
+        "Ownership.settle_component": 0.12617,
+        "Component finalization coordination": 0.341641,
+        "Component lifecycle and remaining orchestration": 1.899276,
+        "Component generator hooks": 0.002249,
+        "Nested serialization": 0.961375,
+        "Ownership.selected_region_ids": 0.000417,
+        "Ownership.retire_component_output": 0.356417,
+        "Ownership.release_transient_region_results": 0.215
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 31.378042,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.263302,
+        "Ownership.bind_instance": 0.496907,
+        "Extension configuration allocation": 0.419132,
+        "Extension hooks": 1.998639,
+        "Ownership.bind_supplied_slots": 0.326034,
+        "Application data callbacks": 0.860955,
+        "Template and reusable-body cache work": 1.894527,
+        "Ownership.record_source_location": 1.0052,
+        "Ownership.record_template_fill": 0.729838,
+        "Ownership.record_component_invocation": 0.406749,
+        "Ownership.bind_template_fill_sources": 0.301493,
+        "Child inputs and slot-fill preparation": 2.369626,
+        "Body traversal and result assembly": 1.477415,
+        "Component lifecycle coordination": 3.898678,
+        "Queue and replacement tree scans": 0.785125,
+        "Ownership.capture_slot_call": 2.051484,
+        "Slot invocation": 2.378309,
+        "Element attributes": 3.437424,
+        "Expressions and control flow": 1.109575,
+        "Ownership.settle_component": 0.124871,
+        "Component finalization coordination": 0.342389,
+        "Component lifecycle and remaining orchestration": 1.897828,
+        "Component generator hooks": 0.002292,
+        "Nested serialization": 1.04575,
+        "Ownership.selected_region_ids": 0.000417,
+        "Ownership.retire_component_output": 0.355125,
+        "Ownership.release_transient_region_results": 0.198625
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 34.679166,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.269279,
+        "Ownership.bind_instance": 0.501206,
+        "Extension configuration allocation": 0.424048,
+        "Extension hooks": 2.005718,
+        "Ownership.bind_supplied_slots": 0.328787,
+        "Application data callbacks": 0.865158,
+        "Template and reusable-body cache work": 1.335055,
+        "Ownership.record_source_location": 1.408034,
+        "Ownership.record_template_fill": 0.730909,
+        "Ownership.record_component_invocation": 0.407373,
+        "Ownership.bind_template_fill_sources": 0.298708,
+        "Child inputs and slot-fill preparation": 2.359662,
+        "Body traversal and result assembly": 1.48085,
+        "Component lifecycle coordination": 3.937141,
+        "Queue and replacement tree scans": 0.786967,
+        "Ownership.capture_slot_call": 2.303247,
+        "Slot invocation": 2.3811,
+        "Element attributes": 3.455549,
+        "Expressions and control flow": 1.112653,
+        "Ownership.settle_component": 0.126493,
+        "Component finalization coordination": 0.344207,
+        "Component lifecycle and remaining orchestration": 1.919608,
+        "Component generator hooks": 0.002166,
+        "Nested serialization": 4.118707,
+        "Ownership.selected_region_ids": 0.0005,
+        "Ownership.retire_component_output": 0.366709,
+        "Ownership.release_transient_region_results": 0.212458
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    },
+    {
+      "tree_ms": 30.163667,
+      "phases_ms": {
+        "Component construction and typed inputs": 1.265307,
+        "Ownership.bind_instance": 0.51237,
+        "Extension configuration allocation": 0.428675,
+        "Extension hooks": 2.012158,
+        "Ownership.bind_supplied_slots": 0.326077,
+        "Application data callbacks": 0.886262,
+        "Template and reusable-body cache work": 1.175505,
+        "Ownership.record_source_location": 0.996649,
+        "Ownership.record_template_fill": 0.735341,
+        "Ownership.record_component_invocation": 0.405247,
+        "Ownership.bind_template_fill_sources": 0.299001,
+        "Child inputs and slot-fill preparation": 2.372199,
+        "Body traversal and result assembly": 1.487935,
+        "Component lifecycle coordination": 3.924025,
+        "Queue and replacement tree scans": 0.796484,
+        "Ownership.capture_slot_call": 1.479039,
+        "Slot invocation": 2.388318,
+        "Element attributes": 3.428415,
+        "Expressions and control flow": 1.116522,
+        "Ownership.settle_component": 0.127374,
+        "Component finalization coordination": 0.351141,
+        "Component lifecycle and remaining orchestration": 1.904959,
+        "Component generator hooks": 0.002457,
+        "Nested serialization": 0.969415,
+        "Ownership.selected_region_ids": 0.000542,
+        "Ownership.retire_component_output": 0.360958,
+        "Ownership.release_transient_region_results": 0.204958
+      },
+      "calls": {
+        "Component construction and typed inputs": 1710,
+        "Ownership.bind_instance": 342,
+        "Extension configuration allocation": 342,
+        "Extension hooks": 1587,
+        "Ownership.bind_supplied_slots": 342,
+        "Application data callbacks": 1011,
+        "Template and reusable-body cache work": 830,
+        "Ownership.record_source_location": 1081,
+        "Ownership.record_template_fill": 468,
+        "Ownership.record_component_invocation": 339,
+        "Ownership.bind_template_fill_sources": 339,
+        "Child inputs and slot-fill preparation": 339,
+        "Body traversal and result assembly": 927,
+        "Component lifecycle coordination": 342,
+        "Queue and replacement tree scans": 540,
+        "Ownership.capture_slot_call": 274,
+        "Slot invocation": 548,
+        "Element attributes": 505,
+        "Expressions and control flow": 465,
+        "Ownership.settle_component": 342,
+        "Component finalization coordination": 342,
+        "Component lifecycle and remaining orchestration": 2,
+        "Component generator hooks": 6,
+        "Nested serialization": 5,
+        "Ownership.selected_region_ids": 1,
+        "Ownership.retire_component_output": 1,
+        "Ownership.release_transient_region_results": 1
+      }
+    }
+  ],
+  "mean_instrumented_tree_ms": 31.4686457,
+  "phases": {
+    "Application data callbacks": {
+      "mean_ms": 0.8910755,
+      "mean_calls": 1011
+    },
+    "Body traversal and result assembly": {
+      "mean_ms": 1.5110978,
+      "mean_calls": 927
+    },
+    "Child inputs and slot-fill preparation": {
+      "mean_ms": 2.417208,
+      "mean_calls": 339
+    },
+    "Component construction and typed inputs": {
+      "mean_ms": 1.2898389,
+      "mean_calls": 1710
+    },
+    "Component finalization coordination": {
+      "mean_ms": 0.3462445,
+      "mean_calls": 342
+    },
+    "Component generator hooks": {
+      "mean_ms": 0.0022954,
+      "mean_calls": 6
+    },
+    "Component lifecycle and remaining orchestration": {
+      "mean_ms": 1.9467986,
+      "mean_calls": 2
+    },
+    "Component lifecycle coordination": {
+      "mean_ms": 3.9795811,
+      "mean_calls": 342
+    },
+    "Element attributes": {
+      "mean_ms": 3.5141398,
+      "mean_calls": 505
+    },
+    "Expressions and control flow": {
+      "mean_ms": 1.1369937,
+      "mean_calls": 465
+    },
+    "Extension configuration allocation": {
+      "mean_ms": 0.4396738,
+      "mean_calls": 342
+    },
+    "Extension hooks": {
+      "mean_ms": 2.0468272,
+      "mean_calls": 1587
+    },
+    "Nested serialization": {
+      "mean_ms": 1.370008,
+      "mean_calls": 5
+    },
+    "Ownership.bind_instance": {
+      "mean_ms": 0.5118116,
+      "mean_calls": 342
+    },
+    "Ownership.bind_supplied_slots": {
+      "mean_ms": 0.3317113,
+      "mean_calls": 342
+    },
+    "Ownership.bind_template_fill_sources": {
+      "mean_ms": 0.3056038,
+      "mean_calls": 339
+    },
+    "Ownership.capture_slot_call": {
+      "mean_ms": 1.6881452,
+      "mean_calls": 274
+    },
+    "Ownership.record_component_invocation": {
+      "mean_ms": 0.4164002,
+      "mean_calls": 339
+    },
+    "Ownership.record_source_location": {
+      "mean_ms": 1.0559597,
+      "mean_calls": 1081
+    },
+    "Ownership.record_template_fill": {
+      "mean_ms": 0.7542833,
+      "mean_calls": 468
+    },
+    "Ownership.release_transient_region_results": {
+      "mean_ms": 0.2181292,
+      "mean_calls": 1
+    },
+    "Ownership.retire_component_output": {
+      "mean_ms": 0.3763709,
+      "mean_calls": 1
+    },
+    "Ownership.selected_region_ids": {
+      "mean_ms": 0.000504,
+      "mean_calls": 1
+    },
+    "Ownership.settle_component": {
+      "mean_ms": 0.1284785,
+      "mean_calls": 342
+    },
+    "Queue and replacement tree scans": {
+      "mean_ms": 0.7999241,
+      "mean_calls": 540
+    },
+    "Slot invocation": {
+      "mean_ms": 2.4827654,
+      "mean_calls": 548
+    },
+    "Template and reusable-body cache work": {
+      "mean_ms": 1.2816556000000001,
+      "mean_calls": 830
+    }
+  },
+  "groups": {
+    "Component setup and orchestration": {
+      "mean_ms": 8.589803199999997,
+      "share_percent": 27.29638663795435
+    },
+    "Ownership tracking": {
+      "mean_ms": 5.7873977000000005,
+      "share_percent": 18.39099704249427
+    },
+    "Child inputs and slots": {
+      "mean_ms": 4.8999734,
+      "share_percent": 15.570970059254888
+    },
+    "Element attributes": {
+      "mean_ms": 3.5141398,
+      "share_percent": 11.167114827569463
+    },
+    "Body traversal, expressions and control flow": {
+      "mean_ms": 2.6480915,
+      "share_percent": 8.415015775527957
+    },
+    "Extension hooks and configuration allocation": {
+      "mean_ms": 2.486501,
+      "share_percent": 7.901518939532883
+    },
+    "Nested serialization": {
+      "mean_ms": 1.370008,
+      "share_percent": 4.353565174239449
+    },
+    "Template and reusable-body cache work": {
+      "mean_ms": 1.2816556000000001,
+      "share_percent": 4.072801900083041
+    },
+    "Application data callbacks": {
+      "mean_ms": 0.8910755,
+      "share_percent": 2.831629643343692
+    }
+  },
+  "outer_time_included_in_orchestration_ms": 0.22512059999999678,
+  "all_outputs_equal": true,
+  "output_bytes": 1013746
+}

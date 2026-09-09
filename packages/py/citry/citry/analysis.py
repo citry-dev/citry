@@ -539,7 +539,7 @@ def lint_csp_compatibility(
     consumers: Sequence[AlpineLintConsumer],
     mode: Literal["off", "warn", "strict"] | None,
 ) -> tuple[CspCompatibilityFinding, ...]:
-    """Diagnose source-proven incompatibilities with Alpine CSP 3.16.2."""
+    """Diagnose source-proven incompatibilities with Alpine CSP 3.17.1."""
     if mode in {None, "off"}:
         return ()
     if mode not in {"warn", "strict"}:

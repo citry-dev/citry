@@ -54,6 +54,11 @@ class ComponentLike(Protocol):
         ...
 
 
+# Retain the defining identity so an imported alias replacement is not trusted
+# by the renderer's shortcuts for values without instance protocol members.
+_DEFAULT_COMPONENT_LIKE = ComponentLike
+
+
 @contextmanager
 def _component_like_render_scope(citry: Citry) -> Iterator[None]:
     """Expose only the Citry instance active for this render task or thread."""

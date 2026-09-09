@@ -1,0 +1,18 @@
+{
+  "status": "fixture_rejected_by_existing_runtime",
+  "browser": "chromium",
+  "variant": "reference",
+  "failure": "READY timeout after native x-teleport rejected a client-active server component before Alpine initialization",
+  "page_error": "[Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported.",
+  "state": {
+    "ready": "complete",
+    "citry": "object",
+    "alpine": "undefined",
+    "events": null
+  },
+  "hashes": {
+    "benchmarks/inline_browser_probe/probe.py.initial.txt": "513de1c7baa7a80be7cd2e657c3fe8e06d2a97e85cca2f585903e91ec8bba279",
+    "benchmarks/inline_browser_probe/plan.md.initial.txt": "2c6bda116fddd359d51a53dc0dce9503dbf8e33b05871729cba56162bb0b8045",
+    "benchmarks/inline_browser_probe/fixtures.py.initial.txt": "bc874d254947ba369125782187cd43df8c15de0dcb368b358d135154761e4ea7"
+  }
+}

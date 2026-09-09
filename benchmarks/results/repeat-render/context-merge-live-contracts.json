@@ -1,0 +1,276 @@
+{
+  "production_qualified": false,
+  "checks": {
+    "empty": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          []
+        ],
+        [
+          "child",
+          []
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "all_extensions": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "item",
+                  0
+                ]
+              ]
+            ],
+            [
+              "events",
+              [
+                [
+                  "item",
+                  1
+                ]
+              ]
+            ],
+            [
+              "i18n",
+              [
+                [
+                  "item",
+                  2
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "item",
+                  0
+                ]
+              ]
+            ],
+            [
+              "events",
+              [
+                [
+                  "item",
+                  1
+                ]
+              ]
+            ],
+            [
+              "i18n",
+              [
+                [
+                  "item",
+                  2
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "overwrite_and_order": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "old",
+                  1
+                ],
+                [
+                  "collision",
+                  3
+                ],
+                [
+                  "new",
+                  4
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "collision",
+                  3
+                ],
+                [
+                  "new",
+                  4
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "shared_outer": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "shared_inner": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    }
+  },
+  "instance_override": {
+    "reference": {
+      "parent": {
+        "application": "hook ran"
+      },
+      "child": {},
+      "calls": [
+        "instance override"
+      ]
+    },
+    "candidate": {
+      "parent": {
+        "application": "hook ran"
+      },
+      "child": {},
+      "calls": [
+        "instance override"
+      ]
+    }
+  },
+  "sequential_override": {
+    "reference": {
+      "calls": [
+        "first",
+        "second"
+      ],
+      "shared_context": true
+    },
+    "candidate": {
+      "calls": [
+        "first",
+        "second"
+      ],
+      "shared_context": true
+    }
+  },
+  "late_class_override": {
+    "reference": {
+      "calls": [
+        "class override"
+      ],
+      "parent": {
+        "class_change": true
+      }
+    },
+    "candidate": {
+      "calls": [
+        "class override"
+      ],
+      "parent": {
+        "class_change": true
+      }
+    }
+  },
+  "hashes": {
+    "benchmarks/context_merge_probe/live_contracts.py": "86293248774b26e044171193b1b0b7a2a8bc675f40de5a9c9489516184e1c8a3",
+    "benchmarks/context_merge_probe/live_probe.py": "4777214b6d5ff2f5ee8e3e5ea38785700ba886eca4441c1f990c0c69e717a017"
+  }
+}

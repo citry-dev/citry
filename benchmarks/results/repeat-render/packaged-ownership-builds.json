@@ -1,0 +1,39 @@
+{
+  "base_revision": "d9aa7bc14e9a9442601442f5503b1c19e6198bb3",
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "rustc": "rustc 1.98.0-nightly (14210df0e 2026-05-31)",
+  "maturin": "maturin 1.14.1",
+  "builds": [
+    {
+      "command": "maturin develop --release",
+      "cwd": "packages/py/citry_core",
+      "profile": "release",
+      "artifact_sha256": "e1bb149271a9586eef1cf5f12861e12949abcae859bcf679a088bfe6d556f52b",
+      "imported_path_at_qualification": "packages/py/citry_core/citry_core/_rust.cpython-314-darwin.so",
+      "retained_artifact": "/tmp/citry-perf-packaged-ownership-cp314-e1bb1492.so"
+    },
+    {
+      "command": "maturin develop --profile release-wheel --features abi3-py310",
+      "cwd": "packages/py/citry_core",
+      "profile": "release-wheel",
+      "artifact_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+      "imported_path_at_qualification": "packages/py/citry_core/citry_core/_rust.abi3.so"
+    }
+  ],
+  "hashes": {
+    "Cargo.toml": "2e295a8b646a6a5465b8860b22988b98d2989aa5300909eee349131d1bbeee87",
+    "Cargo.lock": "90f4bc157a34c0533184b2bcdf8fffe38e4291ac36e8d0c9bcd4cdddbb039698",
+    "rust-toolchain.toml": "dd58dc7a445ff047a8e35e641142efa232b5926f63b79764cfd407d2ca901722",
+    "crates/citry_core_py/Cargo.toml": "eb34e40953d2f9fe0b44eb73f52fad9f366d6b75539308f36f7bf7efc3b04288",
+    "crates/citry_core_py/src/lib.rs": "64e07af55638f4401b791c90361312154199b8b7535868428839062fd69f230a",
+    "crates/citry_core_py/src/ownership/mod.rs": "5d186c67e7fc8cd107f5ae9a66213523341fb55cdf6c16054d7772b51d58cd04",
+    "crates/citry_core_py/src/ownership/retirement.rs": "a99d8db8eb6b45a31724143538cd0c1d4d09e632bc4b4370e2694fd9499ba5b0",
+    "crates/citry_core_py/src/ownership/storage.rs": "7d4cacde4b695b9f0e302a4196f0fd26aac47c73cb820d83607e34500c530aaf",
+    "crates/citry_ownership/Cargo.toml": "9fcc27144eb5641d4220daa737e80178084e27a4cb8ef5e39d7d5693f84e5a00",
+    "crates/citry_ownership/src/lib.rs": "dad2d97065b1eb95a9ec2c2b001a07f1c091b7653d023381b29828173a6dd9f1",
+    "packages/py/citry_core/pyproject.toml": "7dbc294538964bf02e615a08357e7d722ad6ad837259b93f98e4d5755571bdc6",
+    "packages/py/citry_core/citry_core/_rust.pyi": "e7707dfef555732554103430b73e756dfa0c74b5911168f968b65362ad73e68d",
+    "packages/py/citry_core/citry_core/_ownership.py": "5950644fcacd32b1c936d002bed2f359910c588b644cc87f3a497f46b63619ff",
+    "packages/py/citry_core/tests/test_ownership_storage.py": "56ea635c17b78821f0c5ab82e93e6f209728fe4473242398c102a0dfffa5dfda"
+  }
+}

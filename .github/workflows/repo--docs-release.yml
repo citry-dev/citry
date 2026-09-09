@@ -47,7 +47,7 @@ concurrency:
 env:
   # Snapshot/root builds need only the workspace MSRV. Keep it fixed so release
   # docs reuse the same citry-core cache as the ordinary Pages workflows.
-  RUSTUP_TOOLCHAIN: "1.95.0"
+  RUSTUP_TOOLCHAIN: "1.96.0"
   SCCACHE_GHA_ENABLED: "true"
   RUSTC_WRAPPER: "sccache"
   # The public URL the built site targets (canonical, Open Graph, sitemap). Keep
@@ -105,7 +105,7 @@ jobs:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
 
       - name: Set up shared Rust compiler cache
-        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2

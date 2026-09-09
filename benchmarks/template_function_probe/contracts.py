@@ -1,0 +1,186 @@
+"""Check the trusted fixtures, escaping and deliberate template-function exclusions."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from benchmarks.template_function_probe.fixtures import APP, CASES, Case, Scalar  # noqa: E402
+from benchmarks.template_function_probe.probe import ENGINES, activation, prepare  # noqa: E402
+from benchmarks.template_function_probe.runtime import TemplateFunction  # noqa: E402
+
+from citry import Component  # noqa: E402
+from citry.util.html import Markup  # noqa: E402
+
+
+class SlotBody(Component):
+    citry = APP
+    template = """
+<c-slot />
+"""
+
+
+class ChildBody(Component):
+    citry = APP
+    template = """
+<c-scalar name="Ada" />
+"""
+
+
+class SpreadBody(Component):
+    citry = APP
+    template = """
+<p c-bind="attrs">body</p>
+"""
+
+
+class NestedAttribute(Component):
+    citry = APP
+    template = """
+<p c-body="<span>{{ name }}</span>">body</p>
+"""
+
+
+class CustomText(str):
+    """Represent input subclasses that may expose additional conversion behavior."""
+
+    __slots__ = ()
+
+
+class HtmlObject:
+    """Fail if rejected input reaches a trusted-HTML conversion callback."""
+
+    def __html__(self) -> str:
+        raise AssertionError("Rejected input executed __html__")
+
+
+def main() -> None:
+    """Record actual equality and rejection results without claiming a public API gate."""
+    outputs = {}
+    activation_rows = {}
+    for case in CASES:
+        renders = {engine: prepare(engine, case) for engine in ENGINES}
+        expected = [renders["citry"](values) for values in case.inputs]
+        for engine, render in renders.items():
+            actual = [render(values) for values in case.inputs]
+            if actual != expected:
+                raise AssertionError(f"Fixture output mismatch: {case.name}/{engine}: {actual!r} vs {expected!r}")
+        outputs[case.name] = expected
+        activation_rows[case.name] = {
+            engine: activation(render, case.inputs[-1]) for engine, render in renders.items()
+        }
+        if (
+            activation_rows[case.name]["function"]
+            or activation_rows[case.name]["citry"].get("component_initializations") != 1
+        ):
+            raise AssertionError("Candidate did not omit the intended stages")
+    scalar = next(case for case in CASES if case.name == "scalar")
+    candidate = TemplateFunction(scalar)
+    scalar_outputs = []
+    for value in (None, True, False, 3, 1.25, "'\"<>&"):
+        inputs = {"name": value}
+        expected = str(Scalar(**inputs))
+        actual = candidate(inputs)
+        if actual != expected:
+            raise AssertionError("Scalar escaping/conversion changed from Citry")
+        scalar_outputs.append({"input": value, "output": actual})
+    # Templates must see current values, and rendering must leave the caller's mapping alone.
+    mutable = {"name": "first"}
+    first = candidate(mutable)
+    mutable["name"] = "second"
+    second = candidate(mutable)
+    if first == second or mutable != {"name": "second"}:
+        raise AssertionError("Candidate cached output or mutated its input")
+    rejected = {}
+    cycle: list[Any] = []
+    cycle.append(cycle)
+    invalid = {
+        "markup_input": Markup("<b>trusted</b>"),
+        "html_object": HtmlObject(),
+        "text_subclass": CustomText("text"),
+        "component_element": Scalar(name="child"),
+        "cyclic_container": cycle,
+        "non_string_mapping_key": {1: "value"},
+    }
+    for name, value in invalid.items():
+        try:
+            candidate({"name": value})
+        except (TypeError, ValueError) as error:
+            rejected[name] = {"type": type(error).__name__, "message": str(error)}
+        else:
+            raise AssertionError(f"Unsupported input was accepted: {name}")
+    for cls in (SlotBody, ChildBody, SpreadBody, NestedAttribute):
+        try:
+            TemplateFunction(Case(cls.__name__, cls, "", "", ({},)))
+        except TypeError as error:
+            rejected[cls.__name__] = {"type": type(error).__name__, "message": str(error)}
+        else:
+            raise AssertionError(f"Unsupported body was accepted: {cls.__name__}")
+    for value in (None, [], 3):
+        try:
+            candidate(value)
+        except TypeError as error:
+            rejected[f"root_{type(value).__name__}"] = {"type": type(error).__name__, "message": str(error)}
+        else:
+            raise AssertionError("Non-dictionary root input accepted")
+    attrs = next(case for case in CASES if case.name == "attributes")
+    attr_candidate = TemplateFunction(attrs)
+    attribute_outputs = []
+    for value in (None, True, False, "'\"<>&"):
+        values = {"title": value, "name": "text"}
+        expected = str(attrs.component(**values))
+        actual = attr_candidate(values)
+        if actual != expected:
+            raise AssertionError("Attribute omission/escaping changed from Citry")
+        attribute_outputs.append({"input": value, "output": actual})
+    typed = next(case for case in CASES if case.name == "typed")
+    typed_errors = {}
+    for engine in ENGINES:
+        render = prepare(engine, typed)
+        try:
+            render({"name": "Ada", "extra": 1})
+        except TypeError as error:
+            typed_errors[engine] = type(error).__name__
+        else:
+            raise AssertionError(f"Typed unknown key accepted by {engine}")
+    report = {
+        "passed": True,
+        "trusted_source_only": True,
+        "general_source_classifier": False,
+        "production_compatible": False,
+        "fixture_outputs": outputs,
+        "scalar_outputs": scalar_outputs,
+        "attribute_outputs": attribute_outputs,
+        "activation": activation_rows,
+        "rejected": rejected,
+        "typed_unknown_key_errors": typed_errors,
+        "hashes": {
+            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (
+                *sorted(Path(__file__).parent.glob("*.py")),
+                Path(__file__).with_name("plan.md"),
+            )
+        },
+    }
+    path = ROOT / "benchmarks/results/repeat-render/template-function-contracts.json"
+    path.write_text(json.dumps(report, indent=2) + "\n")
+    print(
+        json.dumps(
+            {
+                "passed": True,
+                "fixtures": len(outputs),
+                "scalar_comparisons": len(scalar_outputs),
+                "rejections": len(rejected),
+            }
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

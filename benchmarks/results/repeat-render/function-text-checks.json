@@ -1,0 +1,248 @@
+{
+  "qualification_only": true,
+  "full_cases": {
+    "large": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 114,
+        "Icon": 40,
+        "HeroIcon": 41,
+        "outlets": 154,
+        "svg_replays": 32
+      },
+      "bytes": 987414
+    },
+    "one_output": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 19,
+        "Icon": 22,
+        "HeroIcon": 23,
+        "outlets": 41,
+        "svg_replays": 17
+      },
+      "bytes": 870071
+    }
+  },
+  "special_cases": {
+    "empty_loop": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 1
+      }
+    },
+    "loop_with_children_and_dependencies": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 3,
+        "Icon": 2,
+        "HeroIcon": 2,
+        "svg_replays": 1
+      }
+    },
+    "changed_loop": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 2,
+        "Icon": 1,
+        "HeroIcon": 1
+      }
+    },
+    "transparent_caller": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 1
+      }
+    },
+    "completed_and_deferred_children": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 1
+      }
+    },
+    "replace_caller_output_with_child_and_slot": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 1
+      }
+    },
+    "partial_failure": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 1
+      }
+    },
+    "child_error_taint": {
+      "raw_html_and_snapshots_equal": true,
+      "counts": {
+        "Button": 1,
+        "outlets": 2,
+        "Icon": 1,
+        "HeroIcon": 1
+      }
+    }
+  },
+  "error_taints": [
+    true,
+    true
+  ],
+  "invalid_input_errors": [
+    "An error occurred while rendering components InvalidInput:\nTemplate-function inputs require exact scalar/container values\n\nIn template of 'InvalidInput' (/Users/mac/repos/citry-perf-repeat/benchmarks/function_text_probe/checks.py::InvalidInput):\n\n     1 | \n     2 | <c-Button c-attrs=\"value\" />\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+    "An error occurred while rendering components InvalidInput:\nTemplate-function inputs require exact scalar/container values\n\nIn template of 'InvalidInput' (/Users/mac/repos/citry-perf-repeat/benchmarks/function_text_probe/checks.py::InvalidInput):\n\n     1 | \n     2 | <c-Button c-attrs=\"value\" />\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | "
+  ],
+  "constructor_counts": {
+    "control": {
+      "CitryRender": 836,
+      "PhysicalRegionRender": 120,
+      "FunctionRender": 195
+    },
+    "candidate": {
+      "CitryRender": 487,
+      "PhysicalRegionRender": 120,
+      "FunctionRender": 3
+    }
+  },
+  "reused_contracts": {
+    "compared": {
+      "inputs_0": "9502300ed42081060787ead447d849d3f7b1e6f3b1b0eaf0393d33d93b68c778",
+      "inputs_1": "c3db5e4d054c48032db8fe9b9662f080cc10d2fb71da8c29973e0b3f93c32924",
+      "inputs_2": "8aebb76e3d5337ac852865731274034394d7ea216c7fb158277bf110b669b193",
+      "inputs_3": "271e6a44cf8a478f2b6e9c67a4de2e403e1a9267a3138f25546600e8c0d636b9"
+    },
+    "formatting_only_and_dynamic_whitespace": {
+      "reference": {
+        "matches_reference": true
+      },
+      "button": {
+        "matches_reference": false
+      },
+      "immediate": {
+        "matches_reference": true
+      },
+      "deferred": {
+        "matches_reference": true
+      }
+    },
+    "ownership": {
+      "immediate": {
+        "logical_parent": "SourceCaller",
+        "invocation_source": "SourceCaller",
+        "physical_receiver": "Receiver",
+        "physical_lexical_owner": "SourceCaller"
+      },
+      "deferred": {
+        "logical_parent": "SourceCaller",
+        "invocation_source": "SourceCaller",
+        "physical_receiver": "Receiver",
+        "physical_lexical_owner": "SourceCaller"
+      }
+    },
+    "cleanup": {
+      "immediate": {
+        "hot_roots": 4,
+        "ancestor_recovered": true,
+        "nested_error_reset": true
+      },
+      "deferred": {
+        "hot_roots": 4,
+        "ancestor_recovered": true,
+        "nested_error_reset": true
+      }
+    },
+    "rejected": {
+      "named_fill/immediate": "TypeError",
+      "named_fill/deferred": "TypeError",
+      "key/immediate": "TypeError",
+      "key/deferred": "TypeError",
+      "client_binding/immediate": "TypeError",
+      "client_binding/deferred": "TypeError",
+      "svg_body/immediate": "TypeError",
+      "svg_body/deferred": "TypeError",
+      "svg_alpine/immediate": "TypeError",
+      "svg_alpine/deferred": "TypeError"
+    },
+    "callback_and_content_order": {
+      "reference": [
+        "sibling",
+        "button",
+        "icon",
+        "content",
+        "heroicon",
+        "child"
+      ],
+      "button": [
+        "button",
+        "sibling",
+        "icon",
+        "content",
+        "heroicon",
+        "child"
+      ],
+      "immediate": [
+        "button",
+        "icon",
+        "heroicon",
+        "content",
+        "sibling",
+        "child"
+      ],
+      "deferred": [
+        "sibling",
+        "button",
+        "icon",
+        "content",
+        "heroicon",
+        "child"
+      ]
+    },
+    "caller_hook_phases": {
+      "reference": [
+        "before",
+        "after"
+      ],
+      "button": [
+        "before",
+        "after"
+      ],
+      "immediate": [
+        "before",
+        "after"
+      ],
+      "deferred": [
+        "before",
+        "after"
+      ]
+    },
+    "caller_completion_hook_counts": {
+      "reference": 1,
+      "button": 1,
+      "immediate": 1,
+      "deferred": 1
+    },
+    "hashes": {
+      "benchmarks/composed_function_probe/contracts.py": "ef4ee016cd04494f055828b6d736e2b2d5b34d19819c31700e9efe34634e1015",
+      "benchmarks/composed_function_probe/adapter.py": "5545aa0531615569a2790b9d886b9b5b57a9d796b5277e5d7edbda39305207d2",
+      "benchmarks/composed_function_probe/probe.py": "e1f2866fa2756a2db11f1c55e8070e20635e0b1e52ee426f36bcccb9cf9adcf3"
+    }
+  },
+  "reused_contract_modes": "immediate uses direct emission; other modes retain iteration 66 implementations",
+  "hashes": {
+    "benchmarks/function_text_probe/adapter.py": "c4a2866ffc5361ec354e05cd1436398aa60b723f86e88f674f97af16e095a0bf",
+    "benchmarks/function_text_probe/checks.py": "a5fb3801f2f407d1377e77d816dc00dacb7296c622b27f96caff37279013e74d",
+    "benchmarks/function_text_probe/browser.py": "6adc9cfb104e0e838b12d1c0bc1f056b02893891e4bacca4903b4c8320033858",
+    "benchmarks/function_text_probe/timing.py": "488f7bbcfaa4dbc1aa40e756a0648fe80fa4ce766bca29102e793d99d5027092",
+    "benchmarks/function_text_probe/plan.md": "96060a2eba2b72d42c88b126599ed436ffeeaf34227590d3ff1dfef32f649761",
+    "benchmarks/composed_function_probe/adapter.py": "5545aa0531615569a2790b9d886b9b5b57a9d796b5277e5d7edbda39305207d2",
+    "benchmarks/composed_function_probe/browser.py": "7863c094184b0d9b0d907f7400196cdc5c993cb456b10b180598b8ca3c7f4a40",
+    "benchmarks/composed_function_probe/timing.py": "a4c779f0b9270f368d3748387cb8ef5109b407edf56af1fcf45e4bdcfb01bc38",
+    "benchmarks/composed_function_probe/probe.py": "e1f2866fa2756a2db11f1c55e8070e20635e0b1e52ee426f36bcccb9cf9adcf3",
+    "benchmarks/composed_function_probe/contracts.py": "ef4ee016cd04494f055828b6d736e2b2d5b34d19819c31700e9efe34634e1015"
+  }
+}

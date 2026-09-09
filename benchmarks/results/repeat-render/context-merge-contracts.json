@@ -1,0 +1,238 @@
+{
+  "production_compatible": false,
+  "checks": {
+    "empty": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          []
+        ],
+        [
+          "child",
+          []
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "all_extensions": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "item",
+                  0
+                ]
+              ]
+            ],
+            [
+              "events",
+              [
+                [
+                  "item",
+                  1
+                ]
+              ]
+            ],
+            [
+              "i18n",
+              [
+                [
+                  "item",
+                  2
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "item",
+                  0
+                ]
+              ]
+            ],
+            [
+              "events",
+              [
+                [
+                  "item",
+                  1
+                ]
+              ]
+            ],
+            [
+              "i18n",
+              [
+                [
+                  "item",
+                  2
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "overwrite_and_order": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "old",
+                  1
+                ],
+                [
+                  "collision",
+                  3
+                ],
+                [
+                  "new",
+                  4
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "collision",
+                  3
+                ],
+                [
+                  "new",
+                  4
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "shared_outer": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    },
+    "shared_inner": {
+      "equal": true,
+      "result": [
+        [
+          "parent",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "child",
+          [
+            [
+              "dependencies",
+              [
+                [
+                  "same",
+                  1
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          "calls",
+          []
+        ]
+      ]
+    }
+  },
+  "instance_override_counterexample": {
+    "reference": {
+      "parent": {
+        "application": "hook ran"
+      },
+      "child": {},
+      "calls": [
+        "instance override"
+      ]
+    },
+    "candidate": {
+      "parent": {},
+      "child": {},
+      "calls": []
+    }
+  },
+  "hashes": {
+    "benchmarks/context_merge_probe/contracts.py": "f75a5be3a6d50844b9553d822ea267e4bc72266c67e489fc7297f3820128fccf",
+    "benchmarks/context_merge_probe/probe.py": "e15fa35c435303f4bc8eb9208aedad39a1ba89cfc08be4d67567588540007590"
+  }
+}

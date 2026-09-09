@@ -1,0 +1,20 @@
+{
+  "instrumentation": "Untimed direct-constructor wrapper for four record tables and invocation/queue journal.",
+  "html_equal": true,
+  "direct_constructions": {
+    "ComponentInvocationRecord": 678,
+    "LogicalFillRecord": 856,
+    "LogicalInstanceRecord": 342,
+    "InitAncestryRecord": 339,
+    "PhysicalRegionRequestRecord": 274,
+    "RenderQueueRecord": 339
+  },
+  "hashes": {
+    "benchmarks/native_combined_capture_probe/readers.py": "86c7bd4640bc3a6302777b037f3ce7a18b7ee9acc059b4a8c9ca6e0d4e3d7747",
+    "benchmarks/native_combined_capture_probe/adapter.py": "1565e74226007b68f3cc83e4eb60cd1a4728fbfd69412af03b0274f0538a6255",
+    "benchmarks/native_record_export_probe/adapter.py": "b7b3ca41dc90c1c4a825c94d67e08f394a987c5208d4422a32afe7faf84dbf53",
+    "benchmarks/native_slot_region_probe/adapter.py": "23cfe1fd64e3abf3f118dd3ed8c09dd317263c3d79b03e76d4cc5edc0021c9f4",
+    "benchmarks/native_combined_capture_probe/probe.py": "5d183fcdcd6306086ad9eb917e47585891352912732d93ede275ce3d22247dd5",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "65f18d630e53841adf99b86efbfe4ae1c867414068724ff687c287d9fd77c5bf"
+  }
+}

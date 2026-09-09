@@ -120,6 +120,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
+name = "ar_archive_writer"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73cd58deff2140a0a8eae87e417bd01db68a33e148aa93d1e8cd837e55e312b6"
+dependencies = [
+ "object",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -252,6 +261,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cc"
+version = "1.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "005ec2760ca554fae18df7a11195552ec576cd665632a881bc011d5bb2fd4d80"
+dependencies = [
+ "find-msvc-tools",
+ "shlex",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -296,6 +315,7 @@ version = "1.1.0"
 dependencies = [
  "citry_html_transform",
  "citry_i18n",
+ "citry_ownership",
  "citry_template_formatter",
  "citry_template_parser",
  "icu_locale",
@@ -333,10 +353,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "citry_ownership"
+version = "0.1.0"
+
+[[package]]
 name = "citry_template_formatter"
 version = "0.0.0"
 dependencies = [
  "citry_template_parser",
+ "python_safe_eval",
  "ruff_formatter",
  "ruff_python_ast",
  "ruff_python_formatter",
@@ -708,6 +733,12 @@ dependencies = [
  "libredox",
  "windows-sys 0.60.2",
 ]
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e0f1c7c3a72c66fd80abe965175f7523475c0489a87d3ff9d6e8c87d87a9d2d"
 
 [[package]]
 name = "fixed_decimal"
@@ -1662,6 +1693,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.39.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2156,6 +2196,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "psm"
+version = "0.1.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dcd034599e63b970727f70d79e02d62390a4a84f7c6b827c27c46d5ac3fa622"
+dependencies = [
+ "ar_archive_writer",
+ "cc",
+]
+
+[[package]]
 name = "pyo3"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2411,7 +2461,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "ruff_annotate_snippets"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "anstream 1.0.0",
  "anstyle",
@@ -2423,7 +2473,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_cache"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "char_str",
  "filetime",
@@ -2437,7 +2487,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_db"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "anstyle",
  "arc-swap",
@@ -2484,7 +2534,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_diagnostics"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "get-size2",
  "is-macro",
@@ -2494,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_formatter"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "drop_bomb",
  "ruff_cache",
@@ -2510,7 +2560,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_macros"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "heck",
  "itertools",
@@ -2523,14 +2573,14 @@ dependencies = [
 
 [[package]]
 name = "ruff_memory_usage"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "get-size2",
 ]
 
 [[package]]
 name = "ruff_notebook"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "rand 0.10.2",
@@ -2546,7 +2596,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_ast"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "aho-corasick",
  "arrayvec",
@@ -2572,7 +2622,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_codegen"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "ruff_python_ast",
  "ruff_python_literal",
@@ -2584,7 +2634,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_formatter"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "clap",
@@ -2617,7 +2667,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_literal"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "bitflags",
  "icu_properties",
@@ -2627,7 +2677,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_parser"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -2646,6 +2696,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "stacker",
  "static_assertions",
  "thin-vec",
  "unicode-ident",
@@ -2656,7 +2707,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_python_trivia"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "itertools",
  "ruff_source_file",
@@ -2667,7 +2718,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_source_file"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "get-size2",
  "memchr",
@@ -2677,7 +2728,7 @@ dependencies = [
 
 [[package]]
 name = "ruff_text_size"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "get-size2",
  "schemars",
@@ -2902,6 +2953,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "shlex"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
 name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2977,6 +3034,19 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "stacker"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "707f49d46706bacf8a2b00d51dace3f9de527c13eec3778f570c411f89e69967"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "psm",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "static_assertions"
@@ -3215,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "ty_static"
-version = "0.0.8"
+version = "0.0.12"
 dependencies = [
  "ruff_macros",
 ]

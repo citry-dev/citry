@@ -1,0 +1,107 @@
+{
+  "compared": {
+    "large_0": {
+      "html": "bbbd5456aa77a099821a39f0af1a91291492b8bffcf0a938523a3636a9873054",
+      "snapshots": [
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+      ]
+    },
+    "large_1": {
+      "html": "bbbd5456aa77a099821a39f0af1a91291492b8bffcf0a938523a3636a9873054",
+      "snapshots": [
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+      ]
+    },
+    "one_output_0": {
+      "html": "b344c8e0a2556599974454d80b0455d332675ccaa6248ae8ccd26a6f014070b7",
+      "snapshots": [
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066"
+      ]
+    },
+    "one_output_1": {
+      "html": "b344c8e0a2556599974454d80b0455d332675ccaa6248ae8ccd26a6f014070b7",
+      "snapshots": [
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066"
+      ]
+    },
+    "icon_0": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460",
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460"
+      ]
+    },
+    "icon_1": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 18px; height: 18px;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460",
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460"
+      ]
+    },
+    "icon_2": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 30 30\" style=\"width: 24px; height: 24px;\" aria-hidden=\"true\" fill=\"red\" stroke=\"none\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460",
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460"
+      ]
+    },
+    "icon_3": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px;\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" title=\"&#39;&#34;&lt;&gt;&amp;\" width=\"0\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460",
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460"
+      ]
+    },
+    "icon_4": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px; color: red;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" class=\"a b\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460",
+        "fe0b46ec073424f0954d7fd5a4d6807384c7fa3c1b834089f5e3860026b3f460"
+      ]
+    }
+  },
+  "errors": {
+    "variant": [
+      "ValueError",
+      "ValueError"
+    ],
+    "unknown_kwarg": [
+      "TypeError",
+      "TypeError"
+    ]
+  },
+  "rejected": {
+    "markup": "TypeError",
+    "html_callback": "TypeError",
+    "subclass": "TypeError",
+    "cycle": "ValueError",
+    "alpine": "TypeError",
+    "events": "TypeError",
+    "client_props": "TypeError",
+    "unknown_attribute": "TypeError",
+    "non_string_key": "TypeError",
+    "component_value": "TypeError",
+    "slots": "TypeError",
+    "direct_root": "TypeError",
+    "render_globals": "TypeError"
+  },
+  "mutable_input": "passed",
+  "hashes": {
+    "benchmarks/identity_leaf_probe/contracts.py": "9dd4a968ca2c2e07225667fd7eaa0b52cb08da855032c93f1742814eb716839a",
+    "benchmarks/identity_leaf_probe/adapter.py": "474dca09a2b02b4a85d202a62a242c0063560e4702610460314dc67e2251546a",
+    "benchmarks/identity_leaf_probe/plan.md": "cf3ba52a7d62660f22bb7ca946b4079d792e5988b279eb3ad2da48b6bd98cb01",
+    "benchmarks/template_function_probe/runtime.py": "d341c7bdd48ad67db592d21a601816ba11ee50e3cbef3afe6881eab219f0ca72"
+  }
+}

@@ -135,4 +135,4 @@ licensed and credits Matt Butterfield and Iwana Labs. The checked-in HTMX
 runtime uses the Zero-Clause BSD license. See
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for both notices.
 
-The demo supports Python 3.10–3.14, Citry 0.4.x, and HTMX 2.0.10.
+The demo supports Python 3.10–3.14, Citry 0.4.6 or newer, and HTMX 2.0.10.

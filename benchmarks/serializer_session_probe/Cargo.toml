@@ -1,0 +1,23 @@
+[package]
+name = "citry_serializer_session_probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[workspace.dependencies]
+pyo3 = { version = "=0.27.1", features = ["extension-module", "abi3-py310"] }
+pyo3-build-config = "=0.27.1"
+citry_html_transform = { path = "../../crates/citry_html_transform" }
+
+[lib]
+name = "citry_serializer_session_probe"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { workspace = true }
+citry_html_transform = { workspace = true }
+
+[build-dependencies]
+pyo3-build-config = { workspace = true }

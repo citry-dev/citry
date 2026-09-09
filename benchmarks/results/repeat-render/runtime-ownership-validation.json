@@ -1,0 +1,30 @@
+{
+  "scope": "Ordinary runtime activation with the packaged ABI3 ownership binding",
+  "final_gate": "PASSED",
+  "coverage_percent": 88.74,
+  "full_browser_before_final_attribute_guard": 553,
+  "ownership_and_replay_browser_after_final_attribute_guard": 28,
+  "linux_mypy_source_files": 169,
+  "large_warm_joint_wins": 8,
+  "small_warm_joint_wins": 1,
+  "source_sha256": {
+    "packages/py/citry/citry/ownership.py": "8debb1c014577f6e6f1bcef247e85d9c506ba83c8155f8d00a062eb0fcbd5c52",
+    "packages/py/citry/tests/test_ownership.py": "2832a8818aa17b234bc6ee4726de19be252370f5739a3fef00bf04966f082c5b",
+    "packages/py/citry/tests/test_ownership_storage.py": "d13445089214abf05366d5b5727d283885be652789546ce6b4f40be260a6bff5",
+    "packages/py/citry/tests/test_ownership_storage_callbacks.py": "3f96186db2354364c5e284a3abdc4a4db8fe2404ad579b794bd0d33d45778dbb",
+    "benchmarks/runtime_ownership_probe/probe.py": "aba548bce4f6c6af72f41fb91ca1cc97dab014d6e7f3f71ff654250a72036c5c",
+    "benchmarks/runtime_ownership_probe/qualify.py": "3333449b02070356797f8a6dc4654344bda0d9ac2290e0687b780d6627ccfd36",
+    "benchmarks/runtime_ownership_probe/reference.py": "7a2b24b72d35099f7e6a3f35ec588fff3ab9106c6acb6242e334fa1ac6efcd87"
+  },
+  "report_sha256": {
+    "benchmarks/results/repeat-render/runtime-ownership-breakdown.json": "666f49b847f344cadd348d789921511183323d57b77d2374d76d7a57d4399b7f",
+    "benchmarks/results/repeat-render/runtime-ownership-browser-final.txt": "0136e4bccbb38f3fd6f91b83cadf2418563622bf7d989e4886088e6d9ac32537",
+    "benchmarks/results/repeat-render/runtime-ownership-browser.txt": "7aeeeb641f17c9d61fd9643b2d69dd4039caaef868252bb24fbbb6275d840207",
+    "benchmarks/results/repeat-render/runtime-ownership-contracts.txt": "764232f6de77e2e06ca7d2d61633738c251c895966390495c7a6e56b8099db42",
+    "benchmarks/results/repeat-render/runtime-ownership-gate-final.json": "cc829cef23c0557723ababeb8e0625b10e70793ec8589697e0713262b67e48cc",
+    "benchmarks/results/repeat-render/runtime-ownership-gate.json": "0dbe54bd9c68a9f374e550363bc7d80556b01d6af47773f9a3dc052334e209a8",
+    "benchmarks/results/repeat-render/runtime-ownership-large.json": "75387b0084add999d316d94120a47e8c9e880d4ebd99cf80c3254af5edd06254",
+    "benchmarks/results/repeat-render/runtime-ownership-linux-mypy.txt": "866f135eda15a6396df37bd084c95fd89cee94239a37fcd17a9f9b0eb3878445",
+    "benchmarks/results/repeat-render/runtime-ownership-small.json": "a8409e3855568086c72ed88e04c10dc4916d7c78398673e02180b83981abf8bf"
+  }
+}

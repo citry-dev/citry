@@ -1,0 +1,542 @@
+{
+  "experiment_only": true,
+  "retains_all_timed_output_strings": true,
+  "revision": "9402f961c40b2894649220bfc2cda6d4338fffde",
+  "seed": 20261028,
+  "samples_per_process": 2,
+  "initial_renders_per_process": 6,
+  "hashes": {
+    "benchmarks/inline_leaf_probe/probe.py": "d00742b4582f750887c83b563387212d18f7b186997388f1052eaaf0a33c6775",
+    "benchmarks/inline_leaf_probe/adapter.py": "be621a2e9e5f406605b7941f68e2fe30d966091c71cb0d1f8e92214dcc8bceea",
+    "benchmarks/inline_leaf_probe/checks.py": "43953171f0c6c3d220823ab11e4860cafa6def10b727aed78340e9683005003e",
+    "benchmarks/inline_leaf_probe/compare.py": "576711813358d6624519243c886ef2afed601bc7604ef93a538eb9b5675e92bb",
+    "benchmarks/leaf_contract_probe/adapter.py": "3bed89337035ae9fc2e74f3d01dfd66db603789eb1a7d345e163c670c130e461",
+    "benchmarks/inline_leaf_probe/plan.md": "a093888d85e6de551a6b53dfb9560d2908fc52861206ba397a11ac8249d055ea",
+    "benchmarks/template_function_probe/runtime.py": "d341c7bdd48ad67db592d21a601816ba11ee50e3cbef3afe6881eab219f0ca72",
+    "benchmarks/render_structure_probe/census.py": "d61d6324aab7481276b59a0373526e8af71d378fd0cacad9fa23bdfb925e52b3",
+    "benchmarks/ownership_journal_probe/probe.py": "d259181c5db6f64359fee79fb6e51e88e617e5f27b89d71ccb723e4893bb2d08",
+    "benchmarks/utils.py": "9b7367a2fdea81170e41e89ed1239b6ab566fd1eed808d0e6224958d331455f6",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/component.py": "3b7099b671a99cb7e6a207fa8d2b8f94ca3cbfbb4bb14c43c274c68c7a1b5a7b",
+    "packages/py/citry/citry/citry_context.py": "5c142b3d93b14bbea737bae0421472019c4345771573f5cf0c9e1a7f6a20d872",
+    "packages/py/citry/citry/citry_render.py": "da6efc5999be9486c64ba75202366e5c16aac4ca351f056308101f3668070533",
+    "packages/py/citry/citry/_pure.py": "e163a6461313c8af4eec23104de19019575b7196ad65ed1fdfae1497a9f3a10c",
+    "packages/py/citry/citry/constness.py": "cd07e1951bf29be3d3a3d4c78c7a6611a30ede761d91e09328a0cba59b3f88a5",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/citry/serialize.py": "36efe85428427020788909c420815046e07ffcd828aa97b699866d11b3136b19",
+    "packages/py/citry/citry/ownership_manifest.py": "e0096744673ee16fc8d596b19f61bf64913d0b2f82ca504cfd3467df997c8c39",
+    "packages/py/citry/citry/_protocol/client_graph/canonical.py": "9e8c60bc0b006c572faaa77f738b02fee40d22af7fca820e5274e172c921e4b4",
+    "packages/py/citry/citry/_protocol/client_graph/manifests.py": "66a1cfec658e15d638f22921715a4b93e612d2ecc37f4dd83d6f65e9240ef0f3",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "contrasts": {
+    "reference_to_inline": {
+      "median_paired_saving_ms": {
+        "ms": 1.8050625000000018,
+        "cpu_ms": 1.8030000000000008
+      },
+      "joint_wins": 1
+    },
+    "identity_to_inline": {
+      "median_paired_saving_ms": {
+        "ms": 1.0415000000000028,
+        "cpu_ms": 1.0399999999999991
+      },
+      "joint_wins": 1
+    }
+  },
+  "blocks": [
+    {
+      "block": 0,
+      "order": [
+        "identity",
+        "reference",
+        "inline"
+      ],
+      "savings_ms": {
+        "reference_to_inline": {
+          "ms": 1.8050625000000018,
+          "cpu_ms": 1.8030000000000008
+        },
+        "identity_to_inline": {
+          "ms": 1.0415000000000028,
+          "cpu_ms": 1.0399999999999991
+        }
+      },
+      "variants": {
+        "identity": {
+          "variant": "identity",
+          "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+          "gc_enabled": true,
+          "gc_before": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "gc_after": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+          "warmups": [
+            {
+              "ms": 70.137125,
+              "cpu_ms": 70.136
+            },
+            {
+              "ms": 33.941542,
+              "cpu_ms": 33.943
+            },
+            {
+              "ms": 29.535166,
+              "cpu_ms": 29.536
+            },
+            {
+              "ms": 29.054417,
+              "cpu_ms": 29.055
+            },
+            {
+              "ms": 28.982209,
+              "cpu_ms": 28.982
+            },
+            {
+              "ms": 29.45575,
+              "cpu_ms": 29.457
+            }
+          ],
+          "observations": [
+            {
+              "ms": 28.774,
+              "cpu_ms": 28.775
+            },
+            {
+              "ms": 28.815875,
+              "cpu_ms": 28.817
+            }
+          ],
+          "raw_html_digests": [
+            "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+            "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86",
+            "140ceb8ba2d20d8f914e328e5d06b9b65c5876c4a52187ae4fd45c90d761b1c0",
+            "d7b6bebfe089f9e8a18b1c05ca238b778c92806afad0c02f07124f38457e90e3",
+            "2e007d7e7a2ae1ff5b113f29b06f4f5bc05050fc5722bc74eefc561b2e46d5d2",
+            "53a71ff410142a192c0374b4aebf1ee8a64ffa239a8f58b0af0e58627ddb49b6",
+            "d07cbe6fffe683ead6cf05440969ee093756300c5375cc504f3ba2abe916d43a",
+            "54c5927b9b658f01f8af291ba7e27f19abadcfb6e17c01d7cffcca9fd1688e48"
+          ],
+          "html_digests": [
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c"
+          ],
+          "activation": {
+            "html_digest": "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "graph_digests": [
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529"
+            ],
+            "counts": {
+              "selected_calls": 41,
+              "selected_frames_with_id": 41,
+              "selected_client_markers": 12,
+              "selected_wire_instances": 13,
+              "selected_identities": 41,
+              "generated_ids": 342,
+              "selected_invocations": 41
+            },
+            "raw_counts": [
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              },
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              },
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              },
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              }
+            ],
+            "raw_bytes": 1013746
+          },
+          "means_ms": {
+            "ms": 28.7949375,
+            "cpu_ms": 28.796
+          }
+        },
+        "reference": {
+          "variant": "reference",
+          "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+          "gc_enabled": true,
+          "gc_before": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "gc_after": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+          "warmups": [
+            {
+              "ms": 70.796917,
+              "cpu_ms": 70.8
+            },
+            {
+              "ms": 34.741834,
+              "cpu_ms": 34.743
+            },
+            {
+              "ms": 30.407459,
+              "cpu_ms": 30.392
+            },
+            {
+              "ms": 29.688917,
+              "cpu_ms": 29.689
+            },
+            {
+              "ms": 29.647166,
+              "cpu_ms": 29.647
+            },
+            {
+              "ms": 29.5775,
+              "cpu_ms": 29.58
+            }
+          ],
+          "observations": [
+            {
+              "ms": 29.604542,
+              "cpu_ms": 29.605
+            },
+            {
+              "ms": 29.512458,
+              "cpu_ms": 29.513
+            }
+          ],
+          "raw_html_digests": [
+            "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+            "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86",
+            "140ceb8ba2d20d8f914e328e5d06b9b65c5876c4a52187ae4fd45c90d761b1c0",
+            "d7b6bebfe089f9e8a18b1c05ca238b778c92806afad0c02f07124f38457e90e3",
+            "2e007d7e7a2ae1ff5b113f29b06f4f5bc05050fc5722bc74eefc561b2e46d5d2",
+            "53a71ff410142a192c0374b4aebf1ee8a64ffa239a8f58b0af0e58627ddb49b6",
+            "d07cbe6fffe683ead6cf05440969ee093756300c5375cc504f3ba2abe916d43a",
+            "54c5927b9b658f01f8af291ba7e27f19abadcfb6e17c01d7cffcca9fd1688e48"
+          ],
+          "html_digests": [
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c"
+          ],
+          "activation": {
+            "html_digest": "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "graph_digests": [
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529"
+            ],
+            "counts": {
+              "selected_initializations": 41,
+              "selected_calls": 41,
+              "selected_frames_with_id": 41,
+              "selected_client_markers": 12,
+              "selected_wire_instances": 13,
+              "selected_identities": 41,
+              "generated_ids": 342,
+              "selected_invocations": 41
+            },
+            "raw_counts": [
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              },
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              },
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              },
+              {
+                "source_locations": 1081,
+                "component_invocations": 339,
+                "logical_instances": 342,
+                "init_ancestry": 339,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 339
+              }
+            ],
+            "raw_bytes": 1013746
+          },
+          "means_ms": {
+            "ms": 29.5585,
+            "cpu_ms": 29.559
+          }
+        },
+        "inline": {
+          "variant": "inline",
+          "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+          "gc_enabled": true,
+          "gc_before": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 13,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "gc_after": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 13,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+          "warmups": [
+            {
+              "ms": 67.465416,
+              "cpu_ms": 67.468
+            },
+            {
+              "ms": 32.099875,
+              "cpu_ms": 32.1
+            },
+            {
+              "ms": 28.139542,
+              "cpu_ms": 28.141
+            },
+            {
+              "ms": 27.760375,
+              "cpu_ms": 27.762
+            },
+            {
+              "ms": 27.805625,
+              "cpu_ms": 27.806
+            },
+            {
+              "ms": 27.857792,
+              "cpu_ms": 27.858
+            }
+          ],
+          "observations": [
+            {
+              "ms": 27.775667,
+              "cpu_ms": 27.779
+            },
+            {
+              "ms": 27.731208,
+              "cpu_ms": 27.733
+            }
+          ],
+          "raw_html_digests": [
+            "aafc23f7db2abcae6c3e3f50a11a139d7dc44b4975beadc01189d1344b0e8b06",
+            "b908ea609f86e6757cf9101a8c21c1232b1f02a2a7bc7908ffa2eba11f00d505",
+            "8620aa76bb70e7608653fc991bced54b1839bfc4b8fcf394871d4a6aca9ec3a0",
+            "01342915900999640b12ce95ef3f159b6e36921cd01a9cf1661e5764ee5ac2b3",
+            "ec47479e8bf4b95a2e4d04c5e805d7b7b9765c668fac273707adbc02cc89ff17",
+            "49bc5d9aa8c45036ebb4c5db73c874851fa294d91987771885214b2e650e4efe",
+            "60bff230012b2b4fcc1ea6b4bc9cb02378de83944daa370e22635e3d4d32d801",
+            "a309bd6dadcacb16b8771bbdd6f976c2f66b7279b25fdb1747972fa21f0da529"
+          ],
+          "html_digests": [
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c"
+          ],
+          "activation": {
+            "html_digest": "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+            "graph_digests": [
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+              "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529"
+            ],
+            "counts": {
+              "selected_calls": 41,
+              "selected_client_markers": 0,
+              "selected_wire_instances": 0,
+              "selected_identities": 0,
+              "generated_ids": 301,
+              "selected_invocations": 0
+            },
+            "raw_counts": [
+              {
+                "source_locations": 1040,
+                "component_invocations": 298,
+                "logical_instances": 301,
+                "init_ancestry": 298,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 298
+              },
+              {
+                "source_locations": 1040,
+                "component_invocations": 298,
+                "logical_instances": 301,
+                "init_ancestry": 298,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 298
+              },
+              {
+                "source_locations": 1040,
+                "component_invocations": 298,
+                "logical_instances": 301,
+                "init_ancestry": 298,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 298
+              },
+              {
+                "source_locations": 1040,
+                "component_invocations": 298,
+                "logical_instances": 301,
+                "init_ancestry": 298,
+                "logical_fills": 468,
+                "physical_regions": 274,
+                "render_queue": 298
+              }
+            ],
+            "raw_bytes": 1005379
+          },
+          "means_ms": {
+            "ms": 27.753437499999997,
+            "cpu_ms": 27.756
+          }
+        }
+      }
+    }
+  ]
+}

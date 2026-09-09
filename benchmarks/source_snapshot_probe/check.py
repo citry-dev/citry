@@ -1,0 +1,120 @@
+"""Exercise immutable source captures and the manifest checks that consume them."""
+
+# ruff: noqa: S101 - executable contract assertions
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from benchmarks.source_record_storage_probe import check as earlier_check  # noqa: E402
+from benchmarks.source_snapshot_probe import adapter  # noqa: E402
+
+from citry import Citry, Component, ownership  # noqa: E402
+from citry.citry_context import CitryContext  # noqa: E402
+from citry.ownership_manifest import GraphCapture, OwnershipManifestArtifact  # noqa: E402
+
+
+def check_variant(changed: bool) -> dict[str, Any]:
+    """Check retained identities, source mutations, overrides and dangling IDs."""
+    earlier_check.install = adapter.install
+    earlier = earlier_check.run(changed=changed)
+    assert earlier["constructor_changed_during_arguments_called"] is True
+    graph = ownership.OwnershipGraph()
+    graph._initialize_native_storage()
+    context = CitryContext(component=SimpleNamespace(id="owner", _citry_class_id="class"))
+    graph.record_source_location(
+        context, kind=ownership.SourceLocationKind.COMPONENT_CALL, source="x", position=(0, 1)
+    )
+    saved = adapter.internal_snapshot(graph)
+    public = graph.snapshot()
+    assert saved == public
+    assert public == saved
+    assert hash(saved) == hash(public)
+    if changed:
+        assert type(saved.source_locations) is adapter.SourceView
+        assert saved.source_locations[0] is saved.source_locations[-1]
+        assert saved.source_locations[:] == public.source_locations
+        assert graph._source_locations.raw_snapshot() is graph._source_locations.raw_snapshot()
+    artifact = OwnershipManifestArtifact(
+        revision="probe",
+        manifest={},
+        captures=(GraphCapture(graph, saved),),
+        graph_indexes={},
+        instance_ids={},
+        transparent_instance_ids=frozenset(),
+        region_ids=frozenset(),
+        client_active_instances=frozenset(),
+    )
+    artifact.assert_unchanged()
+    graph._source_locations[0] = public.source_locations[0]._replace(mapping_index=4)
+    assert saved.source_locations[0].mapping_index is None
+    try:
+        artifact.assert_unchanged()
+    except RuntimeError as error:
+        mutation_error = str(error)
+    else:
+        raise AssertionError("Post-capture source mutation was missed")
+    before_append = adapter.internal_snapshot(graph)
+    graph.record_source_location(
+        context, kind=ownership.SourceLocationKind.COMPONENT_CALL, source="x", position=(0, 1)
+    )
+    assert len(before_append.source_locations) == 1
+    assert len(adapter.internal_snapshot(graph).source_locations) == 2
+    graph.snapshot = lambda: public
+    assert adapter.internal_snapshot(graph) is public
+
+    app = Citry()
+
+    class Child(Component):
+        citry = app
+        template = """
+        <p x-data="{}">body</p>
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+        <c-child />
+        """
+
+    render = Page().render()
+    target = render.context.ownership
+    target._source_locations[0] = target.source_location(1)._replace(id=99999)
+    try:
+        render.serialize()
+    except RuntimeError as error:
+        dangling_error = str(error)
+    else:
+        raise AssertionError("A dangling source ID was accepted")
+    assert "dangling source-location reference" in dangling_error
+    return {
+        "earlier_contracts": earlier,
+        "raw_public_equality": True,
+        "hash_equality": True,
+        "immutable_replacement_and_append": True,
+        "public_snapshot_override": True,
+        "source_mutation_error": mutation_error,
+        "dangling_id_error": dangling_error,
+    }
+
+
+if __name__ == "__main__":
+    try:
+        reference = check_variant(changed=False)
+        candidate = check_variant(changed=True)
+        assert reference == candidate
+        print(
+            json.dumps(
+                {"reference": reference, "candidate": candidate, "checks_equal": True, "production_qualified": False},
+                indent=2,
+            )
+        )
+    finally:
+        adapter.install(changed=False)

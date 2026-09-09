@@ -1,0 +1,88 @@
+{
+  "experiment_only": true,
+  "production_compatible": false,
+  "cases": [
+    {
+      "case": "ordinary_template",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n"
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "python_fallback",
+      "reference": {
+        "result": {
+          "html": "\nfallback\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\nfallback\n"
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "selection_replaces_content",
+      "reference": {
+        "result": {
+          "html": "\n\nfallback\n\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "AttributeError",
+          "error": "An error occurred while rendering components Parent > Child > Child(slot:default):\n'function' object has no attribute '_slot_ref'\n\nIn template of 'Child' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_probe/contracts.py::Child):\n\n     1 | \n     2 | <c-slot>fallback</c-slot>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | "
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": false
+    },
+    {
+      "case": "equal_helper",
+      "reference": {
+        "result": {
+          "html": "\n\nreplacement\n\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n"
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": false
+    }
+  ],
+  "hashes": {
+    "benchmarks/template_fill_probe/contracts.py": "a04ce9c0080d6b9bb8821010802b36336c0731c982982f58d52c9a37482aa6a7",
+    "benchmarks/template_fill_probe/adapter.py": "11f467d358d4574200dcc52cc9901957cbd6b8ab1677b56055651325b6ad30f0",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa"
+  },
+  "source_archives": {
+    "benchmarks/template_fill_probe/adapter.py": "benchmarks/template_fill_probe/adapter.py.prescreen.txt"
+  }
+}

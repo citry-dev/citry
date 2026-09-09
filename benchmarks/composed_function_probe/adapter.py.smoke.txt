@@ -1,0 +1,152 @@
+"""Compose fixed presentation templates in caller ownership, immediately or deferred."""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any
+
+from benchmarks.leaf_contract_probe.adapter import ATTRS, plain
+from benchmarks.wrapper_function_probe.adapter import installed as button_installed
+
+from citry import component_render as runtime
+from citry._pure import pure_body_lookup, store_pure_body
+from citry.citry_context import CitryContext
+from citry.citry_element import CitryElement
+from citry.citry_render import CitryRender, DeferredComponent
+from citry.nodes import ComponentNode, SlotNode
+
+
+class FunctionElement(CitryElement):
+    """Carry a selected template call through the existing deferred scheduler."""
+
+    __slots__ = ("function_call",)
+
+
+class FunctionRender(CitryRender):
+    """Identify an interior function result whose caller must not be finalized again."""
+
+    __slots__ = ()
+
+
+@contextmanager
+def installed(module: Any, variant: str, counts: dict[str, int] | None = None) -> Any:
+    """Select a complete experimental mode and restore all four patched entry points."""
+    if variant in ("reference", "button"):
+        with button_installed(module, variant == "button", counts):
+            yield
+        return
+    if variant not in ("immediate", "deferred"):
+        raise ValueError("Unknown composed-function variant")
+    original_node, original_slot = ComponentNode.render, SlotNode.render
+    original_render, original_finalize = runtime._render_one, runtime._finalize
+    selected = {cls.name.lower(): cls for cls in (module.Button, module.Icon, module.HeroIcon)}
+    prepared: dict[type, tuple[Any, Any]] = {}
+    outlet: ContextVar[Any] = ContextVar("composed_function_outlet", default=None)
+
+    def slot_render(node: Any, context: CitryContext) -> Any:
+        content = outlet.get()
+        if content is None:
+            return original_slot(node, context)
+        if node.attrs or node.body or node.introduced_vars:
+            raise TypeError("Template function supports only its empty default outlet")
+        if counts is not None:
+            counts["outlets"] = counts.get("outlets", 0) + 1
+        token = outlet.set(None)
+        try:
+            return content()
+        finally:
+            outlet.reset(token)
+
+    def execute(cls: type, values: Any, node: Any, caller: CitryContext) -> FunctionRender:
+        try:
+            values = plain(values)
+        except (TypeError, ValueError) as error:
+            raise type(error)(str(error).replace("Icon function", "Template function")) from error
+        if cls is module.HeroIcon:
+            attrs = values.get("attrs")
+            if attrs is not None and (type(attrs) is not dict or any(name not in ATTRS for name in attrs)):
+                raise TypeError("SVG function supports only declared ordinary SVG attributes")
+        kwargs = cls.Kwargs(**values)
+        data = cls.template_data(None, kwargs, {})
+        if counts is not None:
+            counts[cls.__name__] = counts.get(cls.__name__, 0) + 1
+        entry = prepared.get(cls)
+        if entry is None:
+            compiled = runtime._get_compiled_template(cls)
+            entry = prepared[cls] = (compiled, compiled.generate())
+        compiled, body = entry
+        context = CitryContext(
+            variables=data,
+            component=caller.component,
+            provides=caller.provides,
+            ownership=caller.ownership,
+            sandboxed=caller.sandboxed,
+            template_record=compiled,
+        )
+
+        def content() -> CitryRender:
+            return CitryRender(runtime._render_body(node.body, caller), caller)
+
+        token = outlet.set(content if cls is not module.HeroIcon else None)
+        try:
+            lookup = pure_body_lookup(cls, body, data, compiled.used_vars) if cls is module.HeroIcon else None
+            if lookup is not None and lookup[1] is not None:
+                parts = runtime._replay_pure_body(lookup[1], context)
+                if counts is not None:
+                    counts["svg_replays"] = counts.get("svg_replays", 0) + 1
+            else:
+                checkpoint = caller.ownership.checkpoint()
+                parts = runtime._render_body(body, context)
+                if lookup is not None:
+                    plan = tuple(runtime._capture_pure_part(part, context) for part in parts)
+                    if (
+                        any(part is None for part in plan)
+                        or caller.ownership.checkpoint() != checkpoint
+                        or context.extra
+                    ):
+                        raise TypeError("SVG function produced unsupported render effects")
+                    store_pure_body(lookup[0], plan)
+            return FunctionRender(parts, context)
+        finally:
+            outlet.reset(token)
+
+    def node_render(node: Any, caller: CitryContext) -> Any:
+        cls = selected.get(node.name)
+        owner = caller.component
+        if cls is None or owner is None or owner.citry.get(node.name) is not cls:
+            return original_node(node, caller)
+        if node.contains_fills or node.metadata is not None or (cls is module.HeroIcon and node.body):
+            raise TypeError("Template function requires implicit default content and no range directives")
+        if cls.citry.template_globals or runtime._render_globals.get():
+            raise TypeError("Template function does not support template globals")
+        resolved = node._resolve_inputs(caller)
+        if resolved.client_bindings:
+            raise TypeError("Template function does not support component client bindings")
+        if variant == "immediate":
+            return execute(cls, resolved.kwargs, node, caller)
+        element = FunctionElement(cls, resolved.kwargs, {}, ownership_graph=caller.ownership)
+        element.function_call = (cls, resolved.kwargs, node, caller)
+        return DeferredComponent(
+            element, owner, caller.provides, physical_parent_region_id=caller.ownership.current_region_id()
+        )
+
+    def render(element: Any, parent: Any = None, provides: Any = None) -> Any:
+        if type(element) is not FunctionElement:
+            return original_render(element, parent, provides)
+        return runtime._InitialRender(execute(*element.function_call), None, None, None)
+
+    def finalize(result: CitryRender, error: Exception | None) -> CitryRender:
+        if type(result) is not FunctionRender:
+            return original_finalize(result, error)
+        if error is not None:
+            raise error
+        return result
+
+    try:
+        ComponentNode.render, SlotNode.render = node_render, slot_render
+        runtime._render_one, runtime._finalize = render, finalize
+        yield
+    finally:
+        ComponentNode.render, SlotNode.render = original_node, original_slot
+        runtime._render_one, runtime._finalize = original_render, original_finalize

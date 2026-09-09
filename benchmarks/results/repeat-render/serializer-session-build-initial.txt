@@ -1,0 +1,31 @@
+    Updating crates.io index
+     Locking 22 packages to latest Rust 1.98.0-nightly compatible versions
+      Adding pyo3 v0.27.1 (available: v0.27.2)
+      Adding pyo3-build-config v0.27.1 (available: v0.27.2)
+      Adding pyo3-ffi v0.27.1 (available: v0.27.2)
+      Adding pyo3-macros v0.27.1 (available: v0.27.2)
+      Adding pyo3-macros-backend v0.27.1 (available: v0.27.2)
+ Downloading crates ...
+  Downloaded quick-xml v0.38.4
+   Compiling target-lexicon v0.13.5
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.189
+   Compiling heck v0.5.0
+   Compiling memchr v2.8.3
+   Compiling once_cell v1.21.4
+   Compiling unindent v0.2.4
+   Compiling indoc v2.0.7
+   Compiling memoffset v0.9.1
+   Compiling quick-xml v0.38.4
+   Compiling citry_html_transform v1.0.3 (/Users/mac/repos/citry-perf-repeat/crates/citry_html_transform)
+   Compiling syn v2.0.119
+   Compiling pyo3-build-config v0.27.1
+   Compiling pyo3-ffi v0.27.1
+   Compiling pyo3-macros-backend v0.27.1
+   Compiling pyo3 v0.27.1
+   Compiling citry_serializer_session_probe v0.1.0 (/Users/mac/repos/citry-perf-repeat/benchmarks/serializer_session_probe)
+   Compiling pyo3-macros v0.27.1
+    Finished `release` profile [optimized] target(s) in 6.24s

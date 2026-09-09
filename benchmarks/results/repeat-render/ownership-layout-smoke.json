@@ -1,0 +1,367 @@
+{
+  "experiment_only": true,
+  "experiment": "compile ownership with native offsets for Python object fields",
+  "revision": "e0c77ad1e0fc82abb3200a148bd5827ff9302418",
+  "seed": 20261014,
+  "samples_per_process": 1,
+  "initial_renders_per_process": 6,
+  "build": {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "source": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+    "source_sha256": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "copied_source_sha256": "8e3be399c326f85b554b642351d9906878cd5f7281df496edb2a94979b1b9aaa",
+    "setup_sha256": "4597c490328b25934ce6e2e2955c6db16efd0f3042c198ebc657b4c525cdbb67",
+    "directives": {
+      "language_level": 3,
+      "annotation_typing": false,
+      "infer_types": false,
+      "binding": true
+    },
+    "native_object_fields": [
+      "_component_invocations",
+      "_fill_id",
+      "_fill_index",
+      "_init_ancestry",
+      "_init_parents_by_child",
+      "_instance_invocation",
+      "_invocation_id",
+      "_invocation_ids_by_region",
+      "_invocation_ids_by_source",
+      "_invocation_ids_by_target",
+      "_invocation_index",
+      "_logical_fills",
+      "_logical_instances",
+      "_logical_parent_by_render_id",
+      "_order",
+      "_physical_regions",
+      "_queue_index",
+      "_receiver_fill",
+      "_region_id",
+      "_region_ids_by_containing",
+      "_region_ids_by_fill",
+      "_region_ids_by_receiver",
+      "_region_index",
+      "_region_results",
+      "_relation_indexes_current",
+      "_render_queue",
+      "_source_id",
+      "_source_locations",
+      "_source_site_cache",
+      "_template_fill_by_slot_object"
+    ],
+    "returncode": 0,
+    "build_log": "Cython=3.3.0 setuptools=84.0.0\nCompiling ownership.py because it changed.\n[1/1] Cythonizing ownership.py\nrunning build_ext\nbuilding 'citry.ownership' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c ownership.c -o temp/ownership.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/ownership.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/ownership.cpython-314-darwin.so\nld: warning: search path 'Modules/_hacl' not found\n",
+    "generated_c_sha256": "8a412fb3309a9d3779e31491d3ea906a38063b40ffc4b99a7c7b2d39a09b6fb8",
+    "artifact": "/tmp/citry-ownership-layout/out/citry/ownership.cpython-314-darwin.so",
+    "artifact_sha256": "633eb0ccb8d86e6b433a3318999ba9f8e41e1d0241629d1c2c71979368cb2e67"
+  },
+  "hashes": {
+    "benchmarks/ownership_layout_probe/probe.py": "76332bbd5c3ea2343d20cd6b55f42f71f445553d5d5bcf650f852de28af6432f",
+    "benchmarks/ownership_layout_probe/adapter.py": "b31ff44ddb1fda85a580bd1299c8af7ef68c4f50620be1046645ed9810199b36",
+    "benchmarks/ownership_layout_probe/build.py": "21b24ad06b616162f988b1a752acd52ce9e12d2ed5611a06df2231dbce41ad8f",
+    "benchmarks/ownership_layout_probe/plan.md": "e2aa79ac1e3897b02379dd35c9091b19f189544caa5a1c79e6609cfc1d14ea74",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "median_process_pair_mean_savings_ms": {
+    "ms": 1.5594160000000024,
+    "cpu_ms": 1.5559999999999974
+  },
+  "joint_favorable_process_pairs": 1,
+  "pairs": [
+    {
+      "pair": 0,
+      "candidate_first": false,
+      "mean_savings_ms": {
+        "ms": 1.5594160000000024,
+        "cpu_ms": 1.5559999999999974
+      },
+      "reference": {
+        "candidate": false,
+        "layout": {
+          "basic_size": 16,
+          "dict_offset": -1,
+          "weakref_offset": -32,
+          "native_field_descriptors": 0
+        },
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "module_path": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+        "method_type": "function",
+        "module_sha256": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 14,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 14,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 73.067875,
+            "cpu_ms": 73.071,
+            "html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b"
+          },
+          {
+            "ms": 33.339083,
+            "cpu_ms": 33.34,
+            "html_digest": "e6ab49bf38ace2fe803bef24f0aea9cffaf3aa2848e10d17f22669679ee3c593"
+          },
+          {
+            "ms": 28.984709,
+            "cpu_ms": 28.986,
+            "html_digest": "3409ca4eaca3b99b3123cdb24bc9b0b861b0e82b96c429c685021f211f689b96"
+          },
+          {
+            "ms": 29.604708,
+            "cpu_ms": 29.599,
+            "html_digest": "7396e5dfdb72103722cd141a2f1ab2e9fd80de48eabdbd7397c5863bfeef013a"
+          },
+          {
+            "ms": 29.283,
+            "cpu_ms": 29.283,
+            "html_digest": "9d59e149fc05f138093bbd96a7e7f29eba32633bd2e27cd0e761553fdcacdb47"
+          },
+          {
+            "ms": 29.30375,
+            "cpu_ms": 29.305,
+            "html_digest": "bd0f2cbf9aa57dd3cc3607c74af2c154d3d1224eb3566865f3439a306d2c31fc"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 29.344166,
+            "cpu_ms": 29.345
+          }
+        ],
+        "html_digests": [
+          "89ea18ac1fa66f12b733836c416e2147f05ccab598015b5ee4655a1925738722"
+        ],
+        "snapshot_digests": [
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65"
+        ],
+        "snapshot_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "source_record_calls": 1081,
+        "activation_html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b",
+        "means_ms": {
+          "ms": 29.344166,
+          "cpu_ms": 29.345
+        }
+      },
+      "candidate": {
+        "candidate": true,
+        "layout": {
+          "basic_size": 272,
+          "dict_offset": 16,
+          "weakref_offset": 24,
+          "native_field_descriptors": 30
+        },
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "module_path": "/tmp/citry-ownership-layout/out/citry/ownership.cpython-314-darwin.so",
+        "method_type": "cython_function_or_method",
+        "module_sha256": "633eb0ccb8d86e6b433a3318999ba9f8e41e1d0241629d1c2c71979368cb2e67",
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 12,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 12,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 75.10425,
+            "cpu_ms": 75.11,
+            "html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b"
+          },
+          {
+            "ms": 33.372417,
+            "cpu_ms": 33.374,
+            "html_digest": "e6ab49bf38ace2fe803bef24f0aea9cffaf3aa2848e10d17f22669679ee3c593"
+          },
+          {
+            "ms": 29.1325,
+            "cpu_ms": 29.125,
+            "html_digest": "3409ca4eaca3b99b3123cdb24bc9b0b861b0e82b96c429c685021f211f689b96"
+          },
+          {
+            "ms": 27.976042,
+            "cpu_ms": 27.976,
+            "html_digest": "7396e5dfdb72103722cd141a2f1ab2e9fd80de48eabdbd7397c5863bfeef013a"
+          },
+          {
+            "ms": 27.706833,
+            "cpu_ms": 27.707,
+            "html_digest": "9d59e149fc05f138093bbd96a7e7f29eba32633bd2e27cd0e761553fdcacdb47"
+          },
+          {
+            "ms": 27.527625,
+            "cpu_ms": 27.528,
+            "html_digest": "bd0f2cbf9aa57dd3cc3607c74af2c154d3d1224eb3566865f3439a306d2c31fc"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 27.78475,
+            "cpu_ms": 27.789
+          }
+        ],
+        "html_digests": [
+          "89ea18ac1fa66f12b733836c416e2147f05ccab598015b5ee4655a1925738722"
+        ],
+        "snapshot_digests": [
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65"
+        ],
+        "snapshot_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "source_record_calls": 1081,
+        "activation_html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b",
+        "means_ms": {
+          "ms": 27.78475,
+          "cpu_ms": 27.789
+        }
+      }
+    }
+  ],
+  "source_archives": {
+    "benchmarks/ownership_layout_probe/probe.py": "benchmarks/ownership_layout_probe/probe.py.smoke.txt",
+    "benchmarks/ownership_layout_probe/plan.md": "benchmarks/ownership_layout_probe/plan.md.smoke.txt"
+  }
+}

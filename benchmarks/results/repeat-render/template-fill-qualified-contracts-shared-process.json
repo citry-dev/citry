@@ -1,0 +1,301 @@
+{
+  "experiment_only": true,
+  "production_compatible": true,
+  "cases": [
+    {
+      "case": "ordinary_template",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {}
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "python_fallback",
+      "reference": {
+        "result": {
+          "html": "\nfallback\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\nfallback\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "selection_replaces_content",
+      "reference": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "equal_helper",
+      "reference": {
+        "result": {
+          "html": "\n\nreplacement\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nreplacement\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "slot_init",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "content_init",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "content_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "content_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "slot_new",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_new": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_new": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "content_new",
+      "reference": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {
+            "content_new": 1
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {
+            "content_new": 1
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "normalize_data",
+      "reference": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "bind_fill_data",
+      "reference": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "capture_replaces_content",
+      "reference": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "retained_context",
+      "reference": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "error_context_replaces_content",
+      "reference": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "slot_context_getattribute",
+      "reference": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "TypeError",
+          "error": "An error occurred while rendering components Parent:\nobject.__new__() takes exactly one argument (the type to instantiate)\n\nIn template of 'Parent' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Parent):\n\n     1 | \n     2 | <c-child>{{ marker }}</c-child>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    }
+  ],
+  "hashes": {
+    "benchmarks/template_fill_qualified_probe/contracts.py": "45167344628367d8396eef5fe727b77e13d951a171ce4ef36cccea684d1dc4ba",
+    "benchmarks/template_fill_qualified_probe/adapter.py": "c9df2a30ba11e89d104e49aa19ed4b271788423ecfc435129743977fc1637839",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa"
+  },
+  "source_archives": {
+    "benchmarks/template_fill_qualified_probe/contracts.py": "benchmarks/template_fill_qualified_probe/contracts.py.shared-process.txt",
+    "benchmarks/template_fill_qualified_probe/adapter.py": "benchmarks/template_fill_qualified_probe/adapter.py.initial.txt"
+  },
+  "qualification_note": "Shared-process draft contaminated later cases after replacing and restoring inherited __new__; matching errors do not establish those cases."
+}

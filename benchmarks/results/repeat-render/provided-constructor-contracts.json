@@ -1,0 +1,169 @@
+{
+  "production_qualified": false,
+  "census": {
+    "reference": {
+      "unreachable": 265,
+      "saved_objects": 265,
+      "types": {
+        "builtins.cell": 77,
+        "builtins.tuple": 56,
+        "builtins.dict": 49,
+        "builtins.function": 49,
+        "collections._tuplegetter": 13,
+        "builtins.classmethod": 7,
+        "builtins.type": 7,
+        "builtins.staticmethod": 7
+      },
+      "classes": [
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "render_context"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        }
+      ],
+      "objects_reachable_from_classes_within_garbage": 265,
+      "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+      "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]"
+    },
+    "candidate": {
+      "unreachable": 265,
+      "saved_objects": 265,
+      "types": {
+        "builtins.cell": 77,
+        "builtins.tuple": 56,
+        "builtins.dict": 49,
+        "builtins.function": 49,
+        "collections._tuplegetter": 13,
+        "builtins.classmethod": 7,
+        "builtins.type": 7,
+        "builtins.staticmethod": 7
+      },
+      "classes": [
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "render_context"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        },
+        {
+          "module": "citry.provide",
+          "name": "Provided",
+          "fields": [
+            "tabs",
+            "enabled"
+          ]
+        }
+      ],
+      "objects_reachable_from_classes_within_garbage": 265,
+      "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+      "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]"
+    }
+  },
+  "identity_and_class_edit_checks": {
+    "reference": {
+      "same_type": false,
+      "later_attribute": 3,
+      "later_tuple_item": 3
+    },
+    "candidate": {
+      "same_type": false,
+      "later_attribute": 3,
+      "later_tuple_item": 3
+    }
+  },
+  "hashes": {
+    "benchmarks/provided_type_probe/compile_contracts.py": "d91e1ef9642723e5108b0515793acdb3c58ad5dfa54de01f381996b9e81d8846",
+    "benchmarks/provided_type_probe/compile_probe.py": "f570d934e7db3ddac01f246908b98d20a6a573b8c9de101965a21ccaa0c23821"
+  }
+}

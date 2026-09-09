@@ -1,0 +1,724 @@
+{
+  "case": "construction",
+  "revision": "c8da9e030dc3ee1d9aa1db6e477f1b078767e54b",
+  "build": {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "sources": {
+      "render_one": {
+        "original_sha256": "99c76ee84f836397ca3d79cc17c924b31cff94691556b39d412345742e556b62",
+        "generated_sha256": "785c7a4e7e4e4a48a7384758b27446798a5196f4e41f145afc7250b0da3b963a",
+        "globals": [
+          "Any",
+          "CacheArtifactError",
+          "CacheExtension",
+          "CitryContext",
+          "CitryElement",
+          "CitryRender",
+          "_CacheHit",
+          "_CacheMissPlan",
+          "_CacheRevisionChanged",
+          "_InitialRender",
+          "_component_path",
+          "_get_compiled_template",
+          "_normalize_data",
+          "_render_and_capture_pure_body",
+          "_render_body",
+          "_render_globals",
+          "_render_ids_from_parts",
+          "_render_objects_from_parts",
+          "_replacement_parts",
+          "_replay_component_artifact",
+          "_replay_fragment_artifact",
+          "_replay_pure_body",
+          "_selected_region_ids",
+          "_send_into_generator",
+          "_validate_client_props_target",
+          "current_ownership_graph",
+          "extract_const_vars",
+          "is_generator",
+          "is_tracing",
+          "precompute_const_parts",
+          "pure_body_lookup",
+          "store_pure_body",
+          "trace_component_msg"
+        ]
+      },
+      "initialize": {
+        "original_sha256": "0c64cfd8ae363e419ad100c226b6f65e6b3c31481b9ccba1a313adad0c57f80f",
+        "generated_sha256": "f1b7ae92309d5edfc97381a012f79431c811f176970e0b8a033e94649f305ea4",
+        "globals": [
+          "Any",
+          "Component",
+          "Slot",
+          "_DEFER_INPUT_FINALIZATION",
+          "gen_render_id",
+          "normalize_slot_fills",
+          "to_dict",
+          "validate_render_id"
+        ]
+      },
+      "construct": {
+        "original_sha256": "0ff727191c68ef6a2ff44eded47a5d5ef9d1530aef66df02673533595b5b17fa",
+        "generated_sha256": "c7f699315e4be1d715c1a362464f0158a4dd360b4e7d880943cf5a571855b741",
+        "globals": [
+          "Any",
+          "Component",
+          "_DEFER_INPUT_FINALIZATION"
+        ]
+      },
+      "inputs": {
+        "original_sha256": "67e13f95ddf4775313a6453bf8464c13c6a6eb8c5bdb0db99e41666482a9b744",
+        "generated_sha256": "1d6624e7b3c6e3e141ec147a54976a8265f656b8efb820ac5472c7c1dbbc6852",
+        "globals": [
+          "AlpineHandlerClientBindingPayload",
+          "Any",
+          "CLIENT_PROPS_ATTR",
+          "CitryContext",
+          "CitryDomEventClientBindingPayload",
+          "CitryPollClientBindingPayload",
+          "ComponentTagClientBindingKind",
+          "ComponentTagClientBindingPayload",
+          "ComponentTagClientBindingRecord",
+          "ComponentTagClientBindingSource",
+          "Const",
+          "HtmlAttr",
+          "Mapping",
+          "PropsClientBindingPayload",
+          "SourceLocationKind",
+          "_PendingComponentTagClientBinding",
+          "_ResolvedComponentInputs",
+          "_kwarg_is_const",
+          "_reject_dynamic_events_compiler_attr",
+          "_reject_dynamic_translation_binding",
+          "apply_client_props_contribution",
+          "cast",
+          "classify_component_tag_client_binding_key",
+          "is_client_props_key",
+          "merge_attrs",
+          "resolve_component_tag_client_binding_value",
+          "validate_html_attr_name"
+        ]
+      }
+    },
+    "artifact_sha256": {
+      "transaction_render_one.cpython-314-darwin.so": "73507e1283c34b8c8861e2bff6f9b7b2da05122be8338f4bc4b22ceb2c996f95",
+      "transaction_initialize.cpython-314-darwin.so": "4fe8db78e8eec57a7c1a6089e9a767575c0150ae216b40f35532c1777d176d62",
+      "transaction_construct.cpython-314-darwin.so": "b57a463954ba82bd1d58b5203f38e4b2955247dd495899c05f18965b4be9f50a",
+      "transaction_inputs.cpython-314-darwin.so": "aed04530fd54f4b3bcd06c0e1b7d1d682fae587a6ebd553bb9f10f75ca4a17ac"
+    },
+    "build_log": "Cython=3.3.0 setuptools=84.0.0\nCompiling transaction_render_one.py because it changed.\nCompiling transaction_initialize.py because it changed.\nCompiling transaction_construct.py because it changed.\nCompiling transaction_inputs.py because it changed.\n[1/4] Cythonizing transaction_construct.py\n[2/4] Cythonizing transaction_initialize.py\n[3/4] Cythonizing transaction_inputs.py\n[4/4] Cythonizing transaction_render_one.py\nrunning build_ext\nbuilding 'transaction_render_one' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c transaction_render_one.c -o build/temp.macosx-11.0-arm64-cpython-314/transaction_render_one.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 build/temp.macosx-11.0-arm64-cpython-314/transaction_render_one.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o build/lib.macosx-11.0-arm64-cpython-314/transaction_render_one.cpython-314-darwin.so\nbuilding 'transaction_initialize' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c transaction_initialize.c -o build/temp.macosx-11.0-arm64-cpython-314/transaction_initialize.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 build/temp.macosx-11.0-arm64-cpython-314/transaction_initialize.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o build/lib.macosx-11.0-arm64-cpython-314/transaction_initialize.cpython-314-darwin.so\nbuilding 'transaction_construct' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c transaction_construct.c -o build/temp.macosx-11.0-arm64-cpython-314/transaction_construct.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 build/temp.macosx-11.0-arm64-cpython-314/transaction_construct.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o build/lib.macosx-11.0-arm64-cpython-314/transaction_construct.cpython-314-darwin.so\nbuilding 'transaction_inputs' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c transaction_inputs.c -o build/temp.macosx-11.0-arm64-cpython-314/transaction_inputs.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 build/temp.macosx-11.0-arm64-cpython-314/transaction_inputs.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o build/lib.macosx-11.0-arm64-cpython-314/transaction_inputs.cpython-314-darwin.so\ncopying build/lib.macosx-11.0-arm64-cpython-314/transaction_render_one.cpython-314-darwin.so -> \ncopying build/lib.macosx-11.0-arm64-cpython-314/transaction_initialize.cpython-314-darwin.so -> \ncopying build/lib.macosx-11.0-arm64-cpython-314/transaction_construct.cpython-314-darwin.so -> \ncopying build/lib.macosx-11.0-arm64-cpython-314/transaction_inputs.cpython-314-darwin.so -> \nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\n"
+  },
+  "pairs": 60,
+  "snapshots_compared": 4,
+  "snapshots_equal": true,
+  "all_pairs_html_equal": true,
+  "output_bytes": 1013746,
+  "median_paired_saving_ms": 0.09087500000000048,
+  "favorable_pairs": 45,
+  "medians_ms": {
+    "False": 32.1401665,
+    "True": 31.998417000000003
+  },
+  "observations": [
+    {
+      "pair": 0,
+      "candidate": false,
+      "ms": 32.869833
+    },
+    {
+      "pair": 0,
+      "candidate": true,
+      "ms": 32.621416
+    },
+    {
+      "pair": 1,
+      "candidate": true,
+      "ms": 32.484791
+    },
+    {
+      "pair": 1,
+      "candidate": false,
+      "ms": 33.482042
+    },
+    {
+      "pair": 2,
+      "candidate": false,
+      "ms": 33.335458
+    },
+    {
+      "pair": 2,
+      "candidate": true,
+      "ms": 37.264584
+    },
+    {
+      "pair": 3,
+      "candidate": true,
+      "ms": 31.285167
+    },
+    {
+      "pair": 3,
+      "candidate": false,
+      "ms": 31.128042
+    },
+    {
+      "pair": 4,
+      "candidate": false,
+      "ms": 31.118125
+    },
+    {
+      "pair": 4,
+      "candidate": true,
+      "ms": 31.020458
+    },
+    {
+      "pair": 5,
+      "candidate": true,
+      "ms": 31.015875
+    },
+    {
+      "pair": 5,
+      "candidate": false,
+      "ms": 31.174167
+    },
+    {
+      "pair": 6,
+      "candidate": false,
+      "ms": 31.600625
+    },
+    {
+      "pair": 6,
+      "candidate": true,
+      "ms": 31.284917
+    },
+    {
+      "pair": 7,
+      "candidate": true,
+      "ms": 32.712959
+    },
+    {
+      "pair": 7,
+      "candidate": false,
+      "ms": 35.235792
+    },
+    {
+      "pair": 8,
+      "candidate": false,
+      "ms": 31.215917
+    },
+    {
+      "pair": 8,
+      "candidate": true,
+      "ms": 31.1285
+    },
+    {
+      "pair": 9,
+      "candidate": true,
+      "ms": 31.039792
+    },
+    {
+      "pair": 9,
+      "candidate": false,
+      "ms": 31.083417
+    },
+    {
+      "pair": 10,
+      "candidate": false,
+      "ms": 31.134
+    },
+    {
+      "pair": 10,
+      "candidate": true,
+      "ms": 30.914375
+    },
+    {
+      "pair": 11,
+      "candidate": true,
+      "ms": 33.39375
+    },
+    {
+      "pair": 11,
+      "candidate": false,
+      "ms": 35.65275
+    },
+    {
+      "pair": 12,
+      "candidate": false,
+      "ms": 32.090167
+    },
+    {
+      "pair": 12,
+      "candidate": true,
+      "ms": 32.014
+    },
+    {
+      "pair": 13,
+      "candidate": true,
+      "ms": 31.975084
+    },
+    {
+      "pair": 13,
+      "candidate": false,
+      "ms": 32.064208
+    },
+    {
+      "pair": 14,
+      "candidate": false,
+      "ms": 32.190166
+    },
+    {
+      "pair": 14,
+      "candidate": true,
+      "ms": 32.545125
+    },
+    {
+      "pair": 15,
+      "candidate": true,
+      "ms": 32.136208
+    },
+    {
+      "pair": 15,
+      "candidate": false,
+      "ms": 35.673375
+    },
+    {
+      "pair": 16,
+      "candidate": false,
+      "ms": 31.284625
+    },
+    {
+      "pair": 16,
+      "candidate": true,
+      "ms": 31.1225
+    },
+    {
+      "pair": 17,
+      "candidate": true,
+      "ms": 31.350209
+    },
+    {
+      "pair": 17,
+      "candidate": false,
+      "ms": 31.354083
+    },
+    {
+      "pair": 18,
+      "candidate": false,
+      "ms": 31.311625
+    },
+    {
+      "pair": 18,
+      "candidate": true,
+      "ms": 31.311333
+    },
+    {
+      "pair": 19,
+      "candidate": true,
+      "ms": 31.774792
+    },
+    {
+      "pair": 19,
+      "candidate": false,
+      "ms": 32.417083
+    },
+    {
+      "pair": 20,
+      "candidate": false,
+      "ms": 33.760917
+    },
+    {
+      "pair": 20,
+      "candidate": true,
+      "ms": 36.492459
+    },
+    {
+      "pair": 21,
+      "candidate": true,
+      "ms": 32.858625
+    },
+    {
+      "pair": 21,
+      "candidate": false,
+      "ms": 33.00775
+    },
+    {
+      "pair": 22,
+      "candidate": false,
+      "ms": 32.936208
+    },
+    {
+      "pair": 22,
+      "candidate": true,
+      "ms": 32.596666
+    },
+    {
+      "pair": 23,
+      "candidate": true,
+      "ms": 32.8175
+    },
+    {
+      "pair": 23,
+      "candidate": false,
+      "ms": 32.888125
+    },
+    {
+      "pair": 24,
+      "candidate": false,
+      "ms": 34.577
+    },
+    {
+      "pair": 24,
+      "candidate": true,
+      "ms": 36.319125
+    },
+    {
+      "pair": 25,
+      "candidate": true,
+      "ms": 32.838291
+    },
+    {
+      "pair": 25,
+      "candidate": false,
+      "ms": 32.896334
+    },
+    {
+      "pair": 26,
+      "candidate": false,
+      "ms": 32.846625
+    },
+    {
+      "pair": 26,
+      "candidate": true,
+      "ms": 32.874333
+    },
+    {
+      "pair": 27,
+      "candidate": true,
+      "ms": 32.327708
+    },
+    {
+      "pair": 27,
+      "candidate": false,
+      "ms": 32.766666
+    },
+    {
+      "pair": 28,
+      "candidate": false,
+      "ms": 32.8585
+    },
+    {
+      "pair": 28,
+      "candidate": true,
+      "ms": 36.716584
+    },
+    {
+      "pair": 29,
+      "candidate": true,
+      "ms": 32.319667
+    },
+    {
+      "pair": 29,
+      "candidate": false,
+      "ms": 32.402541
+    },
+    {
+      "pair": 30,
+      "candidate": false,
+      "ms": 32.37525
+    },
+    {
+      "pair": 30,
+      "candidate": true,
+      "ms": 32.182667
+    },
+    {
+      "pair": 31,
+      "candidate": true,
+      "ms": 31.215291
+    },
+    {
+      "pair": 31,
+      "candidate": false,
+      "ms": 31.307917
+    },
+    {
+      "pair": 32,
+      "candidate": false,
+      "ms": 31.863791
+    },
+    {
+      "pair": 32,
+      "candidate": true,
+      "ms": 31.593417
+    },
+    {
+      "pair": 33,
+      "candidate": true,
+      "ms": 32.289875
+    },
+    {
+      "pair": 33,
+      "candidate": false,
+      "ms": 35.642208
+    },
+    {
+      "pair": 34,
+      "candidate": false,
+      "ms": 31.405542
+    },
+    {
+      "pair": 34,
+      "candidate": true,
+      "ms": 31.251291
+    },
+    {
+      "pair": 35,
+      "candidate": true,
+      "ms": 31.338
+    },
+    {
+      "pair": 35,
+      "candidate": false,
+      "ms": 31.57125
+    },
+    {
+      "pair": 36,
+      "candidate": false,
+      "ms": 31.473958
+    },
+    {
+      "pair": 36,
+      "candidate": true,
+      "ms": 31.310041
+    },
+    {
+      "pair": 37,
+      "candidate": true,
+      "ms": 32.733959
+    },
+    {
+      "pair": 37,
+      "candidate": false,
+      "ms": 35.106916
+    },
+    {
+      "pair": 38,
+      "candidate": false,
+      "ms": 31.552083
+    },
+    {
+      "pair": 38,
+      "candidate": true,
+      "ms": 31.428875
+    },
+    {
+      "pair": 39,
+      "candidate": true,
+      "ms": 31.404792
+    },
+    {
+      "pair": 39,
+      "candidate": false,
+      "ms": 31.475875
+    },
+    {
+      "pair": 40,
+      "candidate": false,
+      "ms": 31.374333
+    },
+    {
+      "pair": 40,
+      "candidate": true,
+      "ms": 31.781208
+    },
+    {
+      "pair": 41,
+      "candidate": true,
+      "ms": 31.970084
+    },
+    {
+      "pair": 41,
+      "candidate": false,
+      "ms": 35.910167
+    },
+    {
+      "pair": 42,
+      "candidate": false,
+      "ms": 31.532125
+    },
+    {
+      "pair": 42,
+      "candidate": true,
+      "ms": 31.47675
+    },
+    {
+      "pair": 43,
+      "candidate": true,
+      "ms": 31.830583
+    },
+    {
+      "pair": 43,
+      "candidate": false,
+      "ms": 32.271
+    },
+    {
+      "pair": 44,
+      "candidate": false,
+      "ms": 32.19375
+    },
+    {
+      "pair": 44,
+      "candidate": true,
+      "ms": 32.129041
+    },
+    {
+      "pair": 45,
+      "candidate": true,
+      "ms": 32.81325
+    },
+    {
+      "pair": 45,
+      "candidate": false,
+      "ms": 32.744375
+    },
+    {
+      "pair": 46,
+      "candidate": false,
+      "ms": 33.405666
+    },
+    {
+      "pair": 46,
+      "candidate": true,
+      "ms": 36.11225
+    },
+    {
+      "pair": 47,
+      "candidate": true,
+      "ms": 32.28
+    },
+    {
+      "pair": 47,
+      "candidate": false,
+      "ms": 33.013583
+    },
+    {
+      "pair": 48,
+      "candidate": false,
+      "ms": 32.993417
+    },
+    {
+      "pair": 48,
+      "candidate": true,
+      "ms": 32.930167
+    },
+    {
+      "pair": 49,
+      "candidate": true,
+      "ms": 33.022
+    },
+    {
+      "pair": 49,
+      "candidate": false,
+      "ms": 32.975083
+    },
+    {
+      "pair": 50,
+      "candidate": false,
+      "ms": 34.451625
+    },
+    {
+      "pair": 50,
+      "candidate": true,
+      "ms": 36.369
+    },
+    {
+      "pair": 51,
+      "candidate": true,
+      "ms": 31.982834
+    },
+    {
+      "pair": 51,
+      "candidate": false,
+      "ms": 31.396167
+    },
+    {
+      "pair": 52,
+      "candidate": false,
+      "ms": 31.349875
+    },
+    {
+      "pair": 52,
+      "candidate": true,
+      "ms": 31.244708
+    },
+    {
+      "pair": 53,
+      "candidate": true,
+      "ms": 31.26675
+    },
+    {
+      "pair": 53,
+      "candidate": false,
+      "ms": 31.727875
+    },
+    {
+      "pair": 54,
+      "candidate": false,
+      "ms": 31.990916
+    },
+    {
+      "pair": 54,
+      "candidate": true,
+      "ms": 35.934542
+    },
+    {
+      "pair": 55,
+      "candidate": true,
+      "ms": 31.337625
+    },
+    {
+      "pair": 55,
+      "candidate": false,
+      "ms": 31.390792
+    },
+    {
+      "pair": 56,
+      "candidate": false,
+      "ms": 31.3645
+    },
+    {
+      "pair": 56,
+      "candidate": true,
+      "ms": 31.316209
+    },
+    {
+      "pair": 57,
+      "candidate": true,
+      "ms": 31.258959
+    },
+    {
+      "pair": 57,
+      "candidate": false,
+      "ms": 31.435458
+    },
+    {
+      "pair": 58,
+      "candidate": false,
+      "ms": 31.441833
+    },
+    {
+      "pair": 58,
+      "candidate": true,
+      "ms": 36.301167
+    },
+    {
+      "pair": 59,
+      "candidate": true,
+      "ms": 31.393958
+    },
+    {
+      "pair": 59,
+      "candidate": false,
+      "ms": 31.537542
+    }
+  ]
+}

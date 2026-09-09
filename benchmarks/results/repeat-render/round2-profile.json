@@ -1,0 +1,730 @@
+{
+  "renders": 20,
+  "revision": "26a2392b",
+  "instrumented": true,
+  "total_calls": 7749363,
+  "primitive_calls": 7467083,
+  "profile_seconds": 1.9392659920000002,
+  "functions": [
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method builtins.isinstance>",
+      "primitive_calls": 1280960,
+      "calls": 1281000,
+      "self_seconds": 0.07317963100000001,
+      "cumulative_seconds": 0.11654866600000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 971,
+      "name": "_render_one",
+      "primitive_calls": 6800,
+      "calls": 6840,
+      "self_seconds": 0.064364212,
+      "cumulative_seconds": 1.4561550330000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 1767,
+      "name": "_render_body",
+      "primitive_calls": 5960,
+      "calls": 18540,
+      "self_seconds": 0.041369711,
+      "cumulative_seconds": 0.9776421540000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 1046,
+      "name": "_resolve_with_spread",
+      "primitive_calls": 7440,
+      "calls": 7440,
+      "self_seconds": 0.033284075,
+      "cumulative_seconds": 0.15657784900000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1035,
+      "name": "record_source_location",
+      "primitive_calls": 21620,
+      "calls": 21620,
+      "self_seconds": 0.029881844,
+      "cumulative_seconds": 0.046803330000000004
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'append' of 'list' objects>",
+      "primitive_calls": 451420,
+      "calls": 451420,
+      "self_seconds": 0.029372181,
+      "cumulative_seconds": 0.029372181
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1645,
+      "name": "subtree_contains_selected",
+      "primitive_calls": 5480,
+      "calls": 92020,
+      "self_seconds": 0.029096433,
+      "cumulative_seconds": 0.049199110000000004
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'get' of 'dict' objects>",
+      "primitive_calls": 337800,
+      "calls": 337800,
+      "self_seconds": 0.028717812000000002,
+      "cumulative_seconds": 0.028727318
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 207,
+      "name": "_settle_render",
+      "primitive_calls": 20,
+      "calls": 40,
+      "self_seconds": 0.026987225,
+      "cumulative_seconds": 1.8621130030000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/attrs.py",
+      "line": 399,
+      "name": "_format_resolved_attrs_to_str",
+      "primitive_calls": 10700,
+      "calls": 10700,
+      "self_seconds": 0.026094835,
+      "cumulative_seconds": 0.06799674900000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1462,
+      "name": "capture_slot_call",
+      "primitive_calls": 4980,
+      "calls": 5480,
+      "self_seconds": 0.025158364000000003,
+      "cumulative_seconds": 0.22318669300000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 1006,
+      "name": "_resolve",
+      "primitive_calls": 10100,
+      "calls": 10100,
+      "self_seconds": 0.023864975,
+      "cumulative_seconds": 0.235155261
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 1938,
+      "name": "render",
+      "primitive_calls": 4980,
+      "calls": 5480,
+      "self_seconds": 0.02183185,
+      "cumulative_seconds": 0.351356653
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/serialize.py",
+      "line": 190,
+      "name": "serialize_render_result",
+      "primitive_calls": 120,
+      "calls": 120,
+      "self_seconds": 0.019705269,
+      "cumulative_seconds": 0.19112141300000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 577,
+      "name": "_scan_deferred_parts",
+      "primitive_calls": 6860,
+      "calls": 20400,
+      "self_seconds": 0.019563684,
+      "cumulative_seconds": 0.029695702
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/attrs.py",
+      "line": 304,
+      "name": "_merge_resolved_attrs",
+      "primitive_calls": 10100,
+      "calls": 10100,
+      "self_seconds": 0.019326361,
+      "cumulative_seconds": 0.082993304
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method builtins.next>",
+      "primitive_calls": 95080,
+      "calls": 95080,
+      "self_seconds": 0.019315442000000002,
+      "cumulative_seconds": 0.076084817
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/serialize.py",
+      "line": 517,
+      "name": "_append_frame_parts",
+      "primitive_calls": 6500,
+      "calls": 25680,
+      "self_seconds": 0.019311105000000002,
+      "cumulative_seconds": 0.032549282
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1811,
+      "name": "retire_component_output",
+      "primitive_calls": 20,
+      "calls": 20,
+      "self_seconds": 0.018891203000000002,
+      "cumulative_seconds": 0.047201080000000006
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method __new__ of type object at 0x1026e4920>",
+      "primitive_calls": 180360,
+      "calls": 180360,
+      "self_seconds": 0.018890649000000002,
+      "cumulative_seconds": 0.018890649000000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 1396,
+      "name": "_resolve_inputs",
+      "primitive_calls": 6780,
+      "calls": 6780,
+      "self_seconds": 0.018796537000000002,
+      "cumulative_seconds": 0.07921004400000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 1322,
+      "name": "render",
+      "primitive_calls": 6780,
+      "calls": 6780,
+      "self_seconds": 0.0177436,
+      "cumulative_seconds": 0.228996532
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry_core/citry_core/safe_eval/eval.py",
+      "line": 264,
+      "name": "evaluate",
+      "primitive_calls": 48820,
+      "calls": 48820,
+      "self_seconds": 0.017541135,
+      "cumulative_seconds": 0.071969695
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method builtins.getattr>",
+      "primitive_calls": 208340,
+      "calls": 208340,
+      "self_seconds": 0.016646024000000002,
+      "cumulative_seconds": 0.016646024000000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1256,
+      "name": "bind_instance",
+      "primitive_calls": 6840,
+      "calls": 6840,
+      "self_seconds": 0.016335520000000003,
+      "cumulative_seconds": 0.033962395
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1098,
+      "name": "record_component_invocation",
+      "primitive_calls": 6780,
+      "calls": 6780,
+      "self_seconds": 0.015829868,
+      "cumulative_seconds": 0.038494310000000004
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/attrs.py",
+      "line": 60,
+      "name": "_html_attr_identity",
+      "primitive_calls": 68920,
+      "calls": 68920,
+      "self_seconds": 0.015794898,
+      "cumulative_seconds": 0.019750818
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/util/html.py",
+      "line": 51,
+      "name": "escape_to_str",
+      "primitive_calls": 58780,
+      "calls": 58780,
+      "self_seconds": 0.014964459000000001,
+      "cumulative_seconds": 0.023837358000000003
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'join' of 'str' objects>",
+      "primitive_calls": 39200,
+      "calls": 40200,
+      "self_seconds": 0.014639467000000001,
+      "cumulative_seconds": 0.032330386
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component.py",
+      "line": 904,
+      "name": "__init__",
+      "primitive_calls": 6840,
+      "calls": 6840,
+      "self_seconds": 0.014398125000000001,
+      "cumulative_seconds": 0.043663946
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 644,
+      "name": "_render_ids",
+      "primitive_calls": 20,
+      "calls": 20,
+      "self_seconds": 0.013565984000000001,
+      "cumulative_seconds": 0.022499045000000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 798,
+      "name": "resolve",
+      "primitive_calls": 45140,
+      "calls": 45140,
+      "self_seconds": 0.013536715000000001,
+      "cumulative_seconds": 0.077429447
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/extension.py",
+      "line": 1796,
+      "name": "on_component_data",
+      "primitive_calls": 6840,
+      "calls": 6840,
+      "self_seconds": 0.013188900000000002,
+      "cumulative_seconds": 0.068462259
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/attrs.py",
+      "line": 182,
+      "name": "_collect_class",
+      "primitive_calls": 7140,
+      "calls": 18860,
+      "self_seconds": 0.013111250000000001,
+      "cumulative_seconds": 0.018370449
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/citry_render.py",
+      "line": 164,
+      "name": "from_context",
+      "primitive_calls": 20300,
+      "calls": 20300,
+      "self_seconds": 0.013105670000000002,
+      "cumulative_seconds": 0.025517662
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'startswith' of 'str' objects>",
+      "primitive_calls": 174100,
+      "calls": 174100,
+      "self_seconds": 0.012568336000000001,
+      "cumulative_seconds": 0.012568336000000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/extension.py",
+      "line": 1730,
+      "name": "_init_component_instance",
+      "primitive_calls": 6840,
+      "calls": 6840,
+      "self_seconds": 0.011818084000000001,
+      "cumulative_seconds": 0.022385253
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method builtins.eval>",
+      "primitive_calls": 140,
+      "calls": 140,
+      "self_seconds": 0.011465830000000002,
+      "cumulative_seconds": 0.011491871
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/_pure.py",
+      "line": 100,
+      "name": "_freeze_local",
+      "primitive_calls": 3860,
+      "calls": 22200,
+      "self_seconds": 0.011193129000000001,
+      "cumulative_seconds": 0.02210861
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py",
+      "line": 108,
+      "name": "__init__",
+      "primitive_calls": 42240,
+      "calls": 42240,
+      "self_seconds": 0.010834374,
+      "cumulative_seconds": 0.014114366000000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry_core/citry_core/safe_eval/error.py",
+      "line": 143,
+      "name": "wrapper",
+      "primitive_calls": 52740,
+      "calls": 52740,
+      "self_seconds": 0.010639758000000001,
+      "cumulative_seconds": 0.040967182000000005
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership_manifest.py",
+      "line": 328,
+      "name": "prepare_ownership_manifest",
+      "primitive_calls": 20,
+      "calls": 20,
+      "self_seconds": 0.010552349,
+      "cumulative_seconds": 0.064146625
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/extension.py",
+      "line": 1570,
+      "name": "emit",
+      "primitive_calls": 10940,
+      "calls": 10940,
+      "self_seconds": 0.010525184,
+      "cumulative_seconds": 0.029575732
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py",
+      "line": 303,
+      "name": "helper",
+      "primitive_calls": 42240,
+      "calls": 42240,
+      "self_seconds": 0.010407373000000001,
+      "cumulative_seconds": 0.024521739
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 1172,
+      "name": "_kwarg_is_const",
+      "primitive_calls": 19940,
+      "calls": 19940,
+      "self_seconds": 0.010404215000000001,
+      "cumulative_seconds": 0.022006492000000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method html_transform.mark_html>",
+      "primitive_calls": 6500,
+      "calls": 6500,
+      "self_seconds": 0.010361688,
+      "cumulative_seconds": 0.010361688
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 475,
+      "name": "_make_body_slot",
+      "primitive_calls": 9360,
+      "calls": 9360,
+      "self_seconds": 0.010336841000000001,
+      "cumulative_seconds": 0.064479036
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1156,
+      "name": "record_template_fill",
+      "primitive_calls": 9360,
+      "calls": 9360,
+      "self_seconds": 0.010244728,
+      "cumulative_seconds": 0.046800976
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/constness.py",
+      "line": 246,
+      "name": "extract_const_vars",
+      "primitive_calls": 6800,
+      "calls": 6800,
+      "self_seconds": 0.010021071000000001,
+      "cumulative_seconds": 0.025240933
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 1080,
+      "name": "_format",
+      "primitive_calls": 10100,
+      "calls": 10100,
+      "self_seconds": 0.009969851,
+      "cumulative_seconds": 0.08304214500000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+      "line": 966,
+      "name": "render",
+      "primitive_calls": 10100,
+      "calls": 10100,
+      "self_seconds": 0.009761245,
+      "cumulative_seconds": 0.352025326
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1659,
+      "name": "<genexpr>",
+      "primitive_calls": 80,
+      "calls": 101060,
+      "self_seconds": 0.009760842,
+      "cumulative_seconds": 0.047644216
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 1198,
+      "name": "_append_fill",
+      "primitive_calls": 9360,
+      "calls": 9360,
+      "self_seconds": 0.009716959,
+      "cumulative_seconds": 0.014911609000000001
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'lower' of 'str' objects>",
+      "primitive_calls": 78540,
+      "calls": 78540,
+      "self_seconds": 0.009553759,
+      "cumulative_seconds": 0.009553759
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'search' of 're.Pattern' objects>",
+      "primitive_calls": 8280,
+      "calls": 8280,
+      "self_seconds": 0.009429452000000001,
+      "cumulative_seconds": 0.009429452000000001
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py",
+      "line": 145,
+      "name": "__exit__",
+      "primitive_calls": 42240,
+      "calls": 42240,
+      "self_seconds": 0.009278426000000001,
+      "cumulative_seconds": 0.03140923
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 815,
+      "name": "_finalize",
+      "primitive_calls": 6840,
+      "calls": 6840,
+      "self_seconds": 0.00921342,
+      "cumulative_seconds": 0.029635130000000003
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/constness.py",
+      "line": 156,
+      "name": "const_value",
+      "primitive_calls": 76720,
+      "calls": 76720,
+      "self_seconds": 0.00908392,
+      "cumulative_seconds": 0.013122063000000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method builtins.len>",
+      "primitive_calls": 135060,
+      "calls": 135060,
+      "self_seconds": 0.008913299000000001,
+      "cumulative_seconds": 0.008913299000000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 316,
+      "name": "settle",
+      "primitive_calls": 6860,
+      "calls": 6860,
+      "self_seconds": 0.008780874000000001,
+      "cumulative_seconds": 0.254659821
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry_core/citry_core/safe_eval/eval.py",
+      "line": 310,
+      "name": "variable",
+      "primitive_calls": 46880,
+      "calls": 46880,
+      "self_seconds": 0.008714169,
+      "cumulative_seconds": 0.019041435000000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'add' of 'set' objects>",
+      "primitive_calls": 125240,
+      "calls": 125240,
+      "self_seconds": 0.00863938,
+      "cumulative_seconds": 0.00863938
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/inspect.py",
+      "line": 1712,
+      "name": "_shadowed_dict",
+      "primitive_calls": 24760,
+      "calls": 24760,
+      "self_seconds": 0.008639024,
+      "cumulative_seconds": 0.008639024
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/dataclasses.py",
+      "line": 1773,
+      "name": "_replace",
+      "primitive_calls": 6620,
+      "calls": 6620,
+      "self_seconds": 0.008484889,
+      "cumulative_seconds": 0.014263492000000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/citry_render.py",
+      "line": 374,
+      "name": "unwrap_physical_region",
+      "primitive_calls": 60040,
+      "calls": 60040,
+      "self_seconds": 0.008381422000000001,
+      "cumulative_seconds": 0.012551993000000001
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py",
+      "line": 136,
+      "name": "__enter__",
+      "primitive_calls": 42240,
+      "calls": 42240,
+      "self_seconds": 0.008338634000000001,
+      "cumulative_seconds": 0.052268705000000006
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/client_directives.py",
+      "line": 35,
+      "name": "is_client_props_key",
+      "primitive_calls": 34660,
+      "calls": 34660,
+      "self_seconds": 0.008276918000000001,
+      "cumulative_seconds": 0.012427986
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<built-in method client_graph.canonical_json_and_revision>",
+      "primitive_calls": 20,
+      "calls": 20,
+      "self_seconds": 0.008243665,
+      "cumulative_seconds": 0.008243665
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+      "line": 791,
+      "name": "_render_one_traced",
+      "primitive_calls": 6800,
+      "calls": 6840,
+      "self_seconds": 0.008233211,
+      "cumulative_seconds": 1.4756282200000002
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/util/logger.py",
+      "line": 59,
+      "name": "is_tracing",
+      "primitive_calls": 25680,
+      "calls": 25680,
+      "self_seconds": 0.008192489,
+      "cumulative_seconds": 0.01276733
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/extension.py",
+      "line": 1540,
+      "name": "_extensions_with_hook",
+      "primitive_calls": 54300,
+      "calls": 54300,
+      "self_seconds": 0.008130744,
+      "cumulative_seconds": 0.012558010000000001
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/json/encoder.py",
+      "line": 207,
+      "name": "iterencode",
+      "primitive_calls": 1160,
+      "calls": 1160,
+      "self_seconds": 0.007986338,
+      "cumulative_seconds": 0.007986338
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'pop' of 'list' objects>",
+      "primitive_calls": 136520,
+      "calls": 136520,
+      "self_seconds": 0.007909033000000001,
+      "cumulative_seconds": 0.007909033000000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component.py",
+      "line": 970,
+      "name": "_finalize_inputs",
+      "primitive_calls": 6840,
+      "calls": 6840,
+      "self_seconds": 0.007850569,
+      "cumulative_seconds": 0.01049985
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'get' of 'mappingproxy' objects>",
+      "primitive_calls": 80880,
+      "calls": 80880,
+      "self_seconds": 0.007830421,
+      "cumulative_seconds": 0.007830421
+    },
+    {
+      "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/inspect.py",
+      "line": 1725,
+      "name": "getattr_static",
+      "primitive_calls": 8020,
+      "calls": 8020,
+      "self_seconds": 0.007810979000000001,
+      "cumulative_seconds": 0.026765998000000003
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/citry.py",
+      "line": 1103,
+      "name": "get",
+      "primitive_calls": 6780,
+      "calls": 6780,
+      "self_seconds": 0.007797050000000001,
+      "cumulative_seconds": 0.03264421
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "line": 689,
+      "name": "_rebuild_relation_indexes",
+      "primitive_calls": 20,
+      "calls": 20,
+      "self_seconds": 0.007717576,
+      "cumulative_seconds": 0.012822126000000001
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "name": "<method 'setdefault' of 'dict' objects>",
+      "primitive_calls": 96380,
+      "calls": 96380,
+      "self_seconds": 0.007710791000000001,
+      "cumulative_seconds": 0.008070273000000001
+    },
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ext/dependencies/extension.py",
+      "line": 203,
+      "name": "on_component_data",
+      "primitive_calls": 6840,
+      "calls": 6840,
+      "self_seconds": 0.0076368700000000005,
+      "cumulative_seconds": 0.030923192000000002
+    }
+  ]
+}

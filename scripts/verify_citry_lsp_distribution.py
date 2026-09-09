@@ -39,10 +39,10 @@ SOURCE_ROOT: Final = PACKAGE_ROOT / "citry_lsp"
 MAX_WHEEL_BYTES: Final = 512 * 1024
 MAX_SDIST_BYTES: Final = 1024 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
-    "citry<0.5,>=0.4.5",
+    "citry>=0.4.5",
     "pygls==2.1.1",
     "python-dotenv<2,>=1.2.3",
-    "ty==0.0.73",
+    "ty==0.0.78",
 }
 
 
@@ -538,12 +538,12 @@ import citry_lsp
 
 assert importlib.metadata.version("citry-lsp") == "__VERSION__"
 assert importlib.metadata.version("pygls") == "2.1.1"
-assert importlib.metadata.version("ty") == "0.0.73"
+assert importlib.metadata.version("ty") == "0.0.78"
 citry_version = tuple(int(part) for part in importlib.metadata.version("citry").split(".")[:3])
-assert (0, 4, 1) <= citry_version < (0, 5, 0), citry_version
+assert (0, 4, 5) <= citry_version, citry_version
 assert citry_lsp.SERVER_VERSION == "__VERSION__"
 assert citry_lsp.PROTOCOL_VERSION == 1
-assert citry_lsp.SUPPORTED_CITRY_SERIES == (0, 4)
+assert citry_lsp.MINIMUM_CITRY_SERIES == (0, 4)
 assert importlib.resources.files("citry_lsp").joinpath("py.typed").is_file()
 assert importlib.util.find_spec("pytest_lsp") is None
 assert pathlib.Path(citry_lsp.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve())

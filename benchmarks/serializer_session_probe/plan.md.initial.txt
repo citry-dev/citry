@@ -1,0 +1,69 @@
+# Keep marked serializer frames in Rust until final assembly
+
+## Prior art
+
+The serializer's first pass in packages/py/citry/citry/serialize.py builds a
+component's text, calls mark_html, and receives Python lists of segments and
+placeholder tuples. Its second pass joins every frame with completed child
+strings. crates/citry_core_py/src/html_transform.rs exports the scanner's Rust
+strings into those Python containers on every call. The scanner itself lives
+in crates/citry_html_transform/src/marker.rs and already preserves malformed
+HTML, raw-text elements and whitespace-only placeholder rules.
+
+Iteration 11's Python symbolic assembly avoided intermediate joins but added
+traversal and did not improve complete rendering reliably. This experiment moves
+marker inheritance, marked-frame storage, placeholder lookup and assembly into
+one Rust session. Python still builds frames and executes component callbacks
+in the current depth-first order. It makes one native call per frame, but does
+not export all intermediate strings and containers back to Python.
+
+## Scope and alternatives
+
+Use the session only when serialization has no ownership-manifest artifact.
+The existing path handles artifacts and their instance/region caps. Whole-page
+security checks and extension hooks remain around the resulting HTML. An untimed
+profile of the standard fixture counted 282 frames without artifacts and 43 with
+artifacts across its six serialize calls. These are eligibility counts, not a
+predicted saving or a percentage of render time.
+
+Keep the original frame builder, own-marker collection, stack order and
+placeholder map. The session receives own plain/valued markers and child IDs,
+looks up inherited markers internally, scans with the existing Rust marker,
+and updates known extension placeholder text. Preserve the duplicate component
+ID error and the bottom-up resolution rule: authored references to unknown,
+self or earlier frames remain literal. Only references already available in
+reverse frame order resolve. Assemble the root with an explicit stack into one
+output string, avoiding intermediate completed subtree strings.
+
+A single call receiving the entire tree could remove more crossings, but it
+would also move Python field reads and their errors across earlier frame scans.
+The per-frame session preserves those phase boundaries. Moving assembly alone
+retains most Python intermediate exports, so the combined path is the experiment.
+
+This is an isolated benchmark crate, not a shipped interface. Use the existing
+PyO3 version and standard build configuration, with no Cython or ABI comparison.
+Production Rust sources, registration, Python wrappers and stubs remain unchanged.
+The prototype has its own small .pyi declaration. If qualified, portable string
+processing belongs in citry_html_transform, with corresponding core_py glue,
+private Python wrapper/stub and tests. No parser AST, compiler output or LangImpl
+contract changes; the other host bindings have no current serializer to update.
+
+Custom marker/string types, replaced helpers, error ordering, malformed HTML,
+valued markers, duplicate IDs, authored placeholders and invalid native arguments
+need explicit checks. The prototype does not establish general compatibility
+from benchmark HTML equality. Retain concrete failures before further edits.
+
+## Measurement and decision
+
+First compare synthetic frame programs and the production serializer on marker,
+placeholder and security tests. Count session/frame use outside timing. Compare
+complete HTML and four ownership snapshots in eight balanced randomized fresh
+process pairs, six initial and 80 warm renders each, normal GC and all samples.
+Keep second renders separate and run no tests/builds during main timing.
+
+Require seven joint wall/CPU wins and a 0.25 ms median paired reduction in process
+mean warm wall time for further qualification. This targets the existing native
+extension and adds no production toolchain or distribution target, so the normal
+screen applies. A passing timing result cannot override a correctness failure.
+Preserve source/artifact hashes, build output and all observations. Production
+adoption requires broader checks of the final integrated implementation.

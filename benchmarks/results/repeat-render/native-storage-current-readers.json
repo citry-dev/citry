@@ -1,0 +1,60 @@
+{
+  "instrumentation": "Untimed factory wrappers; nearest Python caller only; four RecordTable families.",
+  "html_equal": true,
+  "native_ancestors": false,
+  "rows_captured": {
+    "_logical_instances": 342,
+    "_init_ancestry": 339,
+    "_logical_fills": 468,
+    "_physical_regions": 274
+  },
+  "exports": [
+    {
+      "record": "LogicalFillRecord",
+      "caller": "snapshot",
+      "count": 436
+    },
+    {
+      "record": "LogicalInstanceRecord",
+      "caller": "snapshot",
+      "count": 342
+    },
+    {
+      "record": "InitAncestryRecord",
+      "caller": "snapshot",
+      "count": 339
+    },
+    {
+      "record": "LogicalFillRecord",
+      "caller": "capture_slot_call",
+      "count": 274
+    },
+    {
+      "record": "PhysicalRegionRequestRecord",
+      "caller": "snapshot",
+      "count": 268
+    },
+    {
+      "record": "LogicalFillRecord",
+      "caller": "bind_template_fill_sources",
+      "count": 194
+    },
+    {
+      "record": "LogicalFillRecord",
+      "caller": "_revive_retired_template_fill",
+      "count": 194
+    },
+    {
+      "record": "PhysicalRegionRequestRecord",
+      "caller": "capture_slot_call",
+      "count": 68
+    }
+  ],
+  "hashes": {
+    "benchmarks/native_storage_process_probe/readers.py": "5a5db45bfd6cf63c33104baf9c1797bd2b144eb45c58cb8f8992d12c443a07ac",
+    "benchmarks/native_storage_process_probe/probe.py": "40c8cdf036e0f4cf9ee719aeaf720fb8d799714cc21e3b513b63bd9fcc9dd70f",
+    "benchmarks/ownership_journal_probe/probe.py": "3eba394bef3bf5c4768e81925c2a80a512a659738fd91e9dbebcc7cb509b15c3",
+    "benchmarks/ownership_journal_probe/storage_probe.py": "10f911eaae0c252b37062205f8c82946b1084b55f4b818dffbc32e2a1c2381fd",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "5a4c6c48357f822b58cd5a49b1aee2a1abc0a8338e68c1831b504f0e852b9110"
+  }
+}

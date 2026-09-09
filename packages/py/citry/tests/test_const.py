@@ -48,6 +48,30 @@ class TestConstMarker:
         assert const_value(Const(3)) == 3
         assert const_value(Const("hi")) == "hi"
 
+    def test_const_value_unwraps_nested_markers_without_copying(self):
+        for value in ("span", 3, False, None, [Const("child")]):
+            assert const_value(Const(Const(Const(value)))) is value
+
+    def test_const_value_rejects_cycles_without_hanging(self):
+        source = """
+from citry import Const, const_value
+first = Const(1)
+second = Const(first)
+try:
+    first.__wrapped__ = second
+except RecursionError:
+    pass
+try:
+    const_value(first)
+except ValueError as error:
+    assert "cycle" in str(error)
+else:
+    raise AssertionError("cyclic markers were accepted")
+finally:
+    first.__wrapped__ = 1
+"""
+        subprocess.run([sys.executable, "-c", source], check=True, timeout=5)
+
     def test_const_value_passthrough_for_plain(self):
         assert const_value(3) == 3
         assert const_value("hi") == "hi"

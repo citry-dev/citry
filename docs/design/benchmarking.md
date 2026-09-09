@@ -1,14 +1,16 @@
 # Design: rendering benchmarks (citry vs django-components vs Django)
 
-**Status (2026-08-21): phases 1-3 are built, Jinja2 covers both scenarios, and
-the comparison has been rerun against the beta feature set.** Citry is
-currently about 12% slower than django-components on the first render and 24%
-faster once warm on the large page. The refresh also found and fixed an
-empty-hook ownership scan that had made the first current-tree run more than
-10x slower still, then removed further redundant graph, asset, i18n, and
-manifest work; see
-the 2026-08-20 results entry in section 11. Phase 4 (asv) is not started, and
-the remaining phase 5 engines are still ahead.
+**Status (2026-09-09): phases 1-3 are built and Jinja2 covers both scenarios.**
+The published chart now uses a balanced five-configuration rendering comparison,
+including the public `Component.simple` opt-in. Ordinary Citry measures 32.710 ms
+warmed and the selected simple page 23.849 ms, versus Django 11.277 ms,
+django-components 52.867 ms and Jinja2 6.967 ms. The configurations emit different
+output and provide different component behavior. See the current results in
+[`benchmarks/README.md`](../../benchmarks/README.md) and the retained
+[publication report](../../benchmarks/results/publication-20260909.json).
+The historical measurements below retain their original methods. Phase 4 (asv)
+and the remaining phase 5 engines are not part of this refresh.
+
 This document
 specifies how citry measures its template-rendering performance against
 django-components (DJC) and vanilla Django templates: where the benchmark code

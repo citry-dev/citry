@@ -1,0 +1,5 @@
+
+thread '<unnamed>' (20857146) panicked at /rustc/14210df0e27ccd7d9e6a05b8085cbd438e4bbc65/library/alloc/src/raw_vec/mod.rs:28:5:
+capacity overflow
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+{"cases": 16, "failures": ["invalid_valued", "surrogate_marker_False", "surrogate_marker_True"], "capacity": {"error_type": "PanicException", "error": "capacity overflow"}}

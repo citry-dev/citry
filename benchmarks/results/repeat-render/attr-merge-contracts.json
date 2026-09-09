@@ -1,0 +1,25 @@
+{
+  "production_compatible": false,
+  "randomized_order_and_output_isolation_cases": 300,
+  "structured_mutation_cases": 2,
+  "cache_bound": 256,
+  "oversized_fallback": true,
+  "string_identity_counterexample": {
+    "reference_current_key": true,
+    "reference_current_value": true,
+    "candidate_current_key": false,
+    "candidate_current_value": false
+  },
+  "changed_helper_counterexample": {
+    "reference": {
+      "class": "changed"
+    },
+    "candidate": {
+      "class": "a b"
+    }
+  },
+  "hashes": {
+    "benchmarks/attr_merge_probe/contracts.py": "fb5e0c5de56b0ab49520c9a36ba0e6c1266655ea76e6e428c12c6b905a167a40",
+    "benchmarks/attr_merge_probe/probe.py": "e3b7fed59abfd2d949dd937a60e6fdb0fba427baf175b79e2ed8e6195ef677f7"
+  }
+}

@@ -1,0 +1,205 @@
+{
+  "passed": true,
+  "trusted_source_only": true,
+  "general_source_classifier": false,
+  "production_compatible": false,
+  "fixture_outputs": {
+    "conditional": [
+      "\n<p>yes</p>\n",
+      "\n<p>no</p>\n"
+    ],
+    "static": [
+      "\n<p>Hello</p>\n"
+    ],
+    "scalar": [
+      "\n<p>Hello Ada</p>\n",
+      "\n<p>Hello Bea &amp; &lt;Cy&gt;</p>\n",
+      "\n<p>Hello </p>\n"
+    ],
+    "attributes": [
+      "\n<p title=\"A &amp; B\">Ada</p>\n",
+      "\n<p title=\"&lt;go &amp; now&gt;\">Bea</p>\n"
+    ],
+    "loop": [
+      "\n<ul></ul>\n",
+      "\n<ul><li>one</li></ul>\n",
+      "\n<ul><li>a</li><li>b</li><li>c</li><li>d</li><li>e</li><li>f</li><li>g</li><li>&lt;&amp;&gt;</li></ul>\n"
+    ],
+    "typed": [
+      "\n<p>Ada: 1</p>\n",
+      "\n<p>Bea: 4</p>\n",
+      "\n<p>&lt;&amp;&gt;: 9</p>\n"
+    ]
+  },
+  "scalar_outputs": [
+    {
+      "input": null,
+      "output": "\n<p>Hello </p>\n"
+    },
+    {
+      "input": true,
+      "output": "\n<p>Hello True</p>\n"
+    },
+    {
+      "input": false,
+      "output": "\n<p>Hello False</p>\n"
+    },
+    {
+      "input": 3,
+      "output": "\n<p>Hello 3</p>\n"
+    },
+    {
+      "input": 1.25,
+      "output": "\n<p>Hello 1.25</p>\n"
+    },
+    {
+      "input": "'\"<>&",
+      "output": "\n<p>Hello &#39;&#34;&lt;&gt;&amp;</p>\n"
+    }
+  ],
+  "activation": {
+    "conditional": {
+      "citry": {
+        "ownership_graphs": 1,
+        "component_initializations": 1,
+        "base_config_initializations": 4,
+        "data_dispatches": 1,
+        "settlement_sessions": 1,
+        "finish_dispatches": 1,
+        "document_serializations": 1
+      },
+      "function": {},
+      "django": {},
+      "jinja": {}
+    },
+    "static": {
+      "citry": {
+        "ownership_graphs": 1,
+        "component_initializations": 1,
+        "base_config_initializations": 4,
+        "data_dispatches": 1,
+        "settlement_sessions": 1,
+        "finish_dispatches": 1,
+        "document_serializations": 1
+      },
+      "function": {},
+      "django": {},
+      "jinja": {}
+    },
+    "scalar": {
+      "citry": {
+        "ownership_graphs": 1,
+        "component_initializations": 1,
+        "base_config_initializations": 4,
+        "data_dispatches": 1,
+        "settlement_sessions": 1,
+        "finish_dispatches": 1,
+        "document_serializations": 1
+      },
+      "function": {},
+      "django": {},
+      "jinja": {}
+    },
+    "attributes": {
+      "citry": {
+        "ownership_graphs": 1,
+        "component_initializations": 1,
+        "base_config_initializations": 4,
+        "data_dispatches": 1,
+        "settlement_sessions": 1,
+        "finish_dispatches": 1,
+        "document_serializations": 1
+      },
+      "function": {},
+      "django": {},
+      "jinja": {}
+    },
+    "loop": {
+      "citry": {
+        "ownership_graphs": 1,
+        "component_initializations": 1,
+        "base_config_initializations": 4,
+        "data_dispatches": 1,
+        "settlement_sessions": 1,
+        "finish_dispatches": 1,
+        "document_serializations": 1
+      },
+      "function": {},
+      "django": {},
+      "jinja": {}
+    },
+    "typed": {
+      "citry": {
+        "ownership_graphs": 1,
+        "component_initializations": 1,
+        "base_config_initializations": 4,
+        "data_dispatches": 1,
+        "settlement_sessions": 1,
+        "finish_dispatches": 1,
+        "document_serializations": 1
+      },
+      "function": {},
+      "django": {},
+      "jinja": {}
+    }
+  },
+  "rejected": {
+    "markup_input": {
+      "type": "TypeError",
+      "message": "Template-function inputs require exact scalar/container values"
+    },
+    "html_object": {
+      "type": "TypeError",
+      "message": "Template-function inputs require exact scalar/container values"
+    },
+    "text_subclass": {
+      "type": "TypeError",
+      "message": "Template-function inputs require exact scalar/container values"
+    },
+    "component_element": {
+      "type": "TypeError",
+      "message": "Template-function inputs require exact scalar/container values"
+    },
+    "cyclic_container": {
+      "type": "ValueError",
+      "message": "Template-function input containers must be acyclic"
+    },
+    "non_string_mapping_key": {
+      "type": "TypeError",
+      "message": "Template-function mapping keys must be exact strings"
+    },
+    "SlotBody": {
+      "type": "TypeError",
+      "message": "Unsupported template-function body node: SlotNode"
+    },
+    "ChildBody": {
+      "type": "TypeError",
+      "message": "Unsupported template-function body node: ComponentNode"
+    },
+    "SpreadBody": {
+      "type": "TypeError",
+      "message": "Template-function prototype does not support attribute spreads"
+    }
+  },
+  "typed_unknown_key_errors": {
+    "citry": "TypeError",
+    "function": "TypeError",
+    "django": "TypeError",
+    "jinja": "TypeError"
+  },
+  "hashes": {
+    "benchmarks/template_function_probe/contracts.py": "65cd8f275b1e21c1bb9ef319af41a374f6520b830e31ab85fd55d3b19316752f",
+    "benchmarks/template_function_probe/fixtures.py": "3eed5406bb40a86d756e8a4acb64096d56641944680287851064eb50122593eb",
+    "benchmarks/template_function_probe/probe.py": "495f61a730f51839d51a38e550d5fb41b9121573b50ff9b62dad71a27bee6a64",
+    "benchmarks/template_function_probe/runtime.py": "45760766600a1ba296d0054c741b2173c39952a27e4c3de6afd3d364b8850d67",
+    "benchmarks/template_function_probe/plan.md": "7a208088aabb2e0e6cc337cc7011d67703522c7c52d89b3f38ae8bebe1b08a84"
+  },
+  "source_archives": {
+    "benchmarks/template_function_probe/fixtures.py": "benchmarks/template_function_probe/fixtures.py.contracts.txt",
+    "benchmarks/template_function_probe/runtime.py": "benchmarks/template_function_probe/runtime.py.contracts.txt",
+    "benchmarks/template_function_probe/probe.py": "benchmarks/template_function_probe/probe.py.contracts.txt",
+    "benchmarks/template_function_probe/contracts.py": "benchmarks/template_function_probe/contracts.py.contracts.txt",
+    "benchmarks/template_function_probe/plan.md": "benchmarks/template_function_probe/plan.md.contracts.txt"
+  },
+  "qualification_note": "Initial checks precede root-mapping and nested-attribute restrictions; current contracts supersede them."
+}

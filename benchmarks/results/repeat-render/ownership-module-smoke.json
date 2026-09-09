@@ -1,0 +1,319 @@
+{
+  "experiment_only": true,
+  "experiment": "compile the complete ownership module with dynamic Python objects",
+  "revision": "1dcf11298146e8add7f9ce266b6bd24d1616de2b",
+  "seed": 20261011,
+  "samples_per_process": 1,
+  "initial_renders_per_process": 6,
+  "build": {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "source": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+    "source_sha256": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "copied_source_sha256": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "setup_sha256": "4597c490328b25934ce6e2e2955c6db16efd0f3042c198ebc657b4c525cdbb67",
+    "directives": {
+      "language_level": 3,
+      "annotation_typing": false,
+      "infer_types": false,
+      "binding": true
+    },
+    "returncode": 0,
+    "build_log": "Cython=3.3.0 setuptools=84.0.0\nCompiling ownership.py because it changed.\n[1/1] Cythonizing ownership.py\nrunning build_ext\nbuilding 'citry.ownership' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c ownership.c -o temp/ownership.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/ownership.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/ownership.cpython-314-darwin.so\nld: warning: search path 'Modules/_hacl' not found\n",
+    "generated_c_sha256": "7367ac6a74d18201a03497ced267468dc6932fe9dc1a848e69b518235856fac6",
+    "artifact": "/tmp/citry-ownership-module/out/citry/ownership.cpython-314-darwin.so",
+    "artifact_sha256": "1cf06fbe20973f9564e8a1fdd34a350942ac4a84c952508d0c5ec57f5125c91c"
+  },
+  "hashes": {
+    "benchmarks/ownership_module_probe/probe.py": "2c0fd9885d99968e979addd483773515fd51e179b2ba060ae03836d649de5740",
+    "benchmarks/ownership_module_probe/adapter.py": "607287ca177704a654dafc973ceaa6fd6f1262dac88c843f6eef9ead76234a97",
+    "benchmarks/ownership_module_probe/build.py": "2b8e89f1c6f75328b33b616b0b5b1cef1c5d8eb9453881e91c0d6956d8ab2a80",
+    "benchmarks/ownership_module_probe/plan.md": "9484bbb7ce9dd3342e7f41879f97c47b66356d0ad444b7b081de0c313c7a1cf3",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "median_process_pair_mean_savings_ms": {
+    "ms": 1.8109169999999999,
+    "cpu_ms": 1.8079999999999998
+  },
+  "joint_favorable_process_pairs": 1,
+  "pairs": [
+    {
+      "pair": 0,
+      "candidate_first": false,
+      "mean_savings_ms": {
+        "ms": 1.8109169999999999,
+        "cpu_ms": 1.8079999999999998
+      },
+      "reference": {
+        "candidate": false,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "module_path": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+        "method_type": "function",
+        "module_sha256": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 13,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 13,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 72.971375,
+            "cpu_ms": 72.979,
+            "html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b"
+          },
+          {
+            "ms": 33.969458,
+            "cpu_ms": 33.965,
+            "html_digest": "e6ab49bf38ace2fe803bef24f0aea9cffaf3aa2848e10d17f22669679ee3c593"
+          },
+          {
+            "ms": 29.772916,
+            "cpu_ms": 29.774,
+            "html_digest": "3409ca4eaca3b99b3123cdb24bc9b0b861b0e82b96c429c685021f211f689b96"
+          },
+          {
+            "ms": 29.655167,
+            "cpu_ms": 29.656,
+            "html_digest": "7396e5dfdb72103722cd141a2f1ab2e9fd80de48eabdbd7397c5863bfeef013a"
+          },
+          {
+            "ms": 29.543791,
+            "cpu_ms": 29.544,
+            "html_digest": "9d59e149fc05f138093bbd96a7e7f29eba32633bd2e27cd0e761553fdcacdb47"
+          },
+          {
+            "ms": 29.507583,
+            "cpu_ms": 29.508,
+            "html_digest": "bd0f2cbf9aa57dd3cc3607c74af2c154d3d1224eb3566865f3439a306d2c31fc"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 29.561667,
+            "cpu_ms": 29.562
+          }
+        ],
+        "html_digests": [
+          "89ea18ac1fa66f12b733836c416e2147f05ccab598015b5ee4655a1925738722"
+        ],
+        "snapshot_digests": [
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65"
+        ],
+        "snapshot_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "source_record_calls": 1081,
+        "activation_html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b",
+        "means_ms": {
+          "ms": 29.561667,
+          "cpu_ms": 29.562
+        }
+      },
+      "candidate": {
+        "candidate": true,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "module_path": "/tmp/citry-ownership-module/out/citry/ownership.cpython-314-darwin.so",
+        "method_type": "cython_function_or_method",
+        "module_sha256": "1cf06fbe20973f9564e8a1fdd34a350942ac4a84c952508d0c5ec57f5125c91c",
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 12,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 12,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 73.740541,
+            "cpu_ms": 73.744,
+            "html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b"
+          },
+          {
+            "ms": 33.196791,
+            "cpu_ms": 33.202,
+            "html_digest": "e6ab49bf38ace2fe803bef24f0aea9cffaf3aa2848e10d17f22669679ee3c593"
+          },
+          {
+            "ms": 28.777125,
+            "cpu_ms": 28.778,
+            "html_digest": "3409ca4eaca3b99b3123cdb24bc9b0b861b0e82b96c429c685021f211f689b96"
+          },
+          {
+            "ms": 29.3055,
+            "cpu_ms": 29.31,
+            "html_digest": "7396e5dfdb72103722cd141a2f1ab2e9fd80de48eabdbd7397c5863bfeef013a"
+          },
+          {
+            "ms": 29.163209,
+            "cpu_ms": 29.16,
+            "html_digest": "9d59e149fc05f138093bbd96a7e7f29eba32633bd2e27cd0e761553fdcacdb47"
+          },
+          {
+            "ms": 28.03075,
+            "cpu_ms": 28.032,
+            "html_digest": "bd0f2cbf9aa57dd3cc3607c74af2c154d3d1224eb3566865f3439a306d2c31fc"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 27.75075,
+            "cpu_ms": 27.754
+          }
+        ],
+        "html_digests": [
+          "89ea18ac1fa66f12b733836c416e2147f05ccab598015b5ee4655a1925738722"
+        ],
+        "snapshot_digests": [
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65"
+        ],
+        "snapshot_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "source_record_calls": 1081,
+        "activation_html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b",
+        "means_ms": {
+          "ms": 27.75075,
+          "cpu_ms": 27.754
+        }
+      }
+    }
+  ]
+}

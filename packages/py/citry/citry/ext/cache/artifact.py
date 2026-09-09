@@ -67,6 +67,7 @@ class ArtifactFrame:
     is_component_root: bool
     root_markers: tuple[str, ...]
     parts: tuple[ArtifactPart, ...]
+    is_transparent_root: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,8 +191,17 @@ def _validate_typed_artifact(artifact: CachedRenderArtifact) -> None:
         _require_optional_nonempty_string(frame.class_name, f"{path}.class_name")
         if type(frame.is_component_root) is not bool:
             raise CacheArtifactError(f"{path}.component_root must be a bool.")
+        if type(frame.is_transparent_root) is not bool:
+            raise CacheArtifactError(f"{path}.transparent_root must be a bool.")
+        if frame.is_component_root and frame.is_transparent_root:
+            raise CacheArtifactError(f"{path} cannot be both a nontransparent component root and a transparent root.")
         if frame.instance is None:
-            if frame.class_id is not None or frame.class_name is not None or frame.is_component_root:
+            if (
+                frame.class_id is not None
+                or frame.class_name is not None
+                or frame.is_component_root
+                or frame.is_transparent_root
+            ):
                 raise CacheArtifactError(f"{path} has component identity without an instance reference.")
         elif frame.class_id is None or frame.class_name is None:
             raise CacheArtifactError(f"{path} instance requires class_id and class_name.")
@@ -334,6 +344,7 @@ def _frame_to_wire(frame: ArtifactFrame) -> dict[str, object]:
         "class_id": frame.class_id,
         "class_name": frame.class_name,
         "component_root": frame.is_component_root,
+        "transparent_root": frame.is_transparent_root,
         "root_markers": list(frame.root_markers),
         "parts": [_part_to_wire(part) for part in frame.parts],
     }
@@ -399,7 +410,7 @@ def _frame_from_wire(value: object, index: int) -> ArtifactFrame:
     frame = _require_object(value, path)
     _require_fields(
         frame,
-        {"instance", "class_id", "class_name", "component_root", "root_markers", "parts"},
+        {"instance", "class_id", "class_name", "component_root", "transparent_root", "root_markers", "parts"},
         path,
     )
     instance_value = frame["instance"]
@@ -409,8 +420,13 @@ def _frame_from_wire(value: object, index: int) -> ArtifactFrame:
     component_root = frame["component_root"]
     if type(component_root) is not bool:
         raise CacheArtifactError(f"{path}.component_root must be a bool.")
+    transparent_root = frame["transparent_root"]
+    if type(transparent_root) is not bool:
+        raise CacheArtifactError(f"{path}.transparent_root must be a bool.")
+    if component_root and transparent_root:
+        raise CacheArtifactError(f"{path} cannot be both a nontransparent component root and a transparent root.")
     if instance is None:
-        if class_id is not None or class_name is not None or component_root:
+        if class_id is not None or class_name is not None or component_root or transparent_root:
             raise CacheArtifactError(f"{path} has component identity without an instance reference.")
     elif class_id is None or class_name is None:
         raise CacheArtifactError(f"{path} instance requires class_id and class_name.")
@@ -427,6 +443,7 @@ def _frame_from_wire(value: object, index: int) -> ArtifactFrame:
         class_id=class_id,
         class_name=class_name,
         is_component_root=component_root,
+        is_transparent_root=transparent_root,
         root_markers=root_markers,
         parts=parts,
     )

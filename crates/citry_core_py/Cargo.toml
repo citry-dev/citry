@@ -21,6 +21,7 @@ crate-type = ["cdylib"]
 abi3-py310 = ["pyo3/abi3-py310", "pyo3/extension-module"]
 
 [dependencies]
+citry_ownership = { workspace = true }
 citry_html_transform = { path = "../citry_html_transform" }
 citry_i18n = { path = "../citry_i18n" }
 citry_template_formatter = { path = "../citry_template_formatter" }

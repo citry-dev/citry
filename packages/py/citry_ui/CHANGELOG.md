@@ -1,6 +1,10 @@
 # Changelog
 
-## [0.2.1] - 2026-09-07
+## [0.2.1] - 2026-09-09
+
+### Changed
+
+- Accept Citry 0.4.2 and newer without a dependency upper bound, including Citry 0.5.
 
 ### Fixed
 

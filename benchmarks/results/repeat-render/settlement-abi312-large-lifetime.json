@@ -1,0 +1,100 @@
+{
+  "reference": {
+    "candidate": false,
+    "snapshot_observations": 4,
+    "live_graph_observations_before_gc": 0,
+    "live_graph_observations_after_gc": 0,
+    "collected": 265,
+    "unreachable_types": {
+      "builtins.cell": 77,
+      "builtins.classmethod": 7,
+      "builtins.dict": 49,
+      "builtins.function": 49,
+      "builtins.staticmethod": 7,
+      "builtins.tuple": 56,
+      "builtins.type": 7,
+      "collections._tuplegetter": 13
+    },
+    "output_bytes": 1013746
+  },
+  "candidate": {
+    "candidate": true,
+    "snapshot_observations": 4,
+    "live_graph_observations_before_gc": 0,
+    "live_graph_observations_after_gc": 0,
+    "collected": 265,
+    "unreachable_types": {
+      "builtins.cell": 77,
+      "builtins.classmethod": 7,
+      "builtins.dict": 49,
+      "builtins.function": 49,
+      "builtins.staticmethod": 7,
+      "builtins.tuple": 56,
+      "builtins.type": 7,
+      "collections._tuplegetter": 13
+    },
+    "output_bytes": 1013746
+  },
+  "hashes": {
+    "benchmarks/settlement_abi312_probe/large_lifetime.py": "3d8f17eeab462fdb1b10a5a2d6af2869e54afdfeba1d4d2cfd9a551bdcc684d2",
+    "benchmarks/settlement_abi312_probe/adapter.py": "b8234d52778d77e84dac8e4c91cc1ee3fa8507a75376001a8602d8b5da823232",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "build": {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "modules": {
+      "citry.component_render": {
+        "source": "packages/py/citry/citry/component_render.py",
+        "source_sha256": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+        "copied_source_sha256": "4b6665e6fca853816f01cb69a52bbc998370da839ad09c17e3163f2272b88096",
+        "transformation": {
+          "methods": [
+            "bubble",
+            "commit",
+            "requeue",
+            "settle",
+            "settle_in_invocation_region"
+          ],
+          "fields": [
+            "root_result",
+            "stack"
+          ],
+          "method_shared_references": 12,
+          "outer_state_references": 5
+        },
+        "generated_c_sha256": "eee70f500692c56c021efe176a5b614cfe92e5c655925c6e5a69dc7e3761876a",
+        "artifact": "/tmp/citry-settlement-abi312/out/citry/component_render.abi3.so",
+        "artifact_sha256": "e8cd154ef1735440a89e4524e9ea8808499f2e782a560828763f4a6054cb721e"
+      },
+      "citry.nodes": {
+        "source": "packages/py/citry/citry/nodes/__init__.py",
+        "source_sha256": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+        "copied_source_sha256": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+        "transformation": null,
+        "generated_c_sha256": "8585309588d41f6bab2ab4968e11978e9b5f87b7a627052aa3eb641b5900a96e",
+        "artifact": "/tmp/citry-settlement-abi312/out/citry/nodes.abi3.so",
+        "artifact_sha256": "ba651c81c68b96653053e5bfe9de240406feaadee44ca4f190b743ac3a1b976e"
+      },
+      "citry.slots": {
+        "source": "packages/py/citry/citry/slots.py",
+        "source_sha256": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+        "copied_source_sha256": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+        "transformation": null,
+        "generated_c_sha256": "297d3ba4910d5f2a1090ad88a4ee1b0cc457aa3839750fa29c6c8155f6384f64",
+        "artifact": "/tmp/citry-settlement-abi312/out/citry/slots.abi3.so",
+        "artifact_sha256": "a9c63f86e8a0ff5701283f16129199b5de400e53e81d7dfbdf8995833b892b59"
+      }
+    },
+    "directives": {
+      "language_level": 3,
+      "annotation_typing": false,
+      "infer_types": false,
+      "binding": true
+    },
+    "limited_api": "0x030C0000",
+    "setup_sha256": "d55170266aefb04b4f845d981620a837210180b1c378213bf45b35892ccdbf39",
+    "returncode": 0,
+    "build_log": "Cython=3.3.0 setuptools=84.0.0\nCompiling component_render.py because it changed.\nCompiling nodes.py because it changed.\nCompiling slots.py because it changed.\n[1/3] Cythonizing component_render.py\n[2/3] Cythonizing nodes.py\n[3/3] Cythonizing slots.py\nrunning build_ext\nbuilding 'citry.component_render' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -DPy_LIMITED_API=0x030C0000 -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c component_render.c -o temp/component_render.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/component_render.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/component_render.abi3.so\nbuilding 'citry.nodes' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -DPy_LIMITED_API=0x030C0000 -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c nodes.c -o temp/nodes.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/nodes.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/nodes.abi3.so\nbuilding 'citry.slots' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -DPy_LIMITED_API=0x030C0000 -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c slots.c -o temp/slots.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/slots.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/slots.abi3.so\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\n",
+    "transform_sha256": "1897be2e3a71c8a081e616c3b9e605926ab3d0302a3f5016e35344054a668f84"
+  }
+}

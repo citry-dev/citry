@@ -140,7 +140,7 @@ def _embedded_corpus_results(plan, raw_results) -> list[EmbeddedFormatResult]:
 
 
 def test_python_expression_provider_identity_is_pinned() -> None:
-    assert python_expression_provider() == "ruff@0.16.2+5b48a04097"
+    assert python_expression_provider() == "ruff@0.16.6+22f65a2ab5"
 
 
 def test_format_error_preserves_structured_syntax_details() -> None:

@@ -60,3 +60,11 @@ packages/editors/vscode/out/extension.js text eol=lf whitespace=-blank-at-eol
 # This parser research fixture intentionally contains trailing ASCII spaces in
 # the `trimmed` message so the spike can measure authored-span preservation.
 docs/design/i18n_research/span_parser/fixtures/adversarial.ftl whitespace=-blank-at-eol
+
+# Retained experiment patches, raw test output and generated plots preserve their
+# captured bytes, including blank diff-context lines and SVG path spacing.
+benchmarks/attrs_output_qualification/candidate.patch whitespace=-blank-at-eol
+benchmarks/results/repeat-render/ownership-layout-storage-tests.txt whitespace=-blank-at-eol
+benchmarks/results/repeat-render/render-modules-tests.txt whitespace=-blank-at-eol
+benchmarks/results/repeat-render/performance-timeline.svg whitespace=-blank-at-eol
+docs/design/assets/repeat_render_retained_gains.svg whitespace=-blank-at-eol

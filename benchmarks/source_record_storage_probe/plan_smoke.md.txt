@@ -1,0 +1,62 @@
+# Store source occurrences as fields until a reader asks for a record
+
+## Prior art and hypothesis
+
+`OwnershipGraph.record_source_location` creates 1,081 immutable source records
+per large page. Graph-local source sites already share immutable span metadata;
+iteration 21 rejected an additional cross-render site cache. Iteration 44's
+complete ownership-module compilation improved process means by a median
+0.445 ms, below its declared requirement. Neither experiment deferred creating
+source-occurrence records.
+
+The shipped `RecordTable` already stores field vectors, retains Python values,
+exports immutable records on demand and caches each exported object. Other
+ownership tables use it after the first nested invocation. Source records
+remain an ordinary list and do not participate in retirement state updates.
+`source_location`, `snapshot`, replay capture and replay import are their
+readers/writers. `storage.rs` implements GC traversal, reference-preserving
+append, direct tuple construction and iteration that exports all current rows.
+The latter means that a snapshot can erase much of the proposed saving.
+
+Try adding an eight-field source table to the existing first-invocation
+conversion, then append occurrence fields directly. Preserve prefix record
+identity, IDs, capture order, sites, mapping values and replay rollback to lists.
+Root-only graphs keep Python storage. The existing native binary, Rust APIs,
+parser, compiler and host-language contracts are unchanged. This is an opt-in
+adapter, not a production migration.
+
+## Compatibility and measurement
+
+Build candidate methods from the current Python AST with live module globals.
+Keep current source preparation and validation. Use native field append only
+while the source-record class and its constructor are the original objects;
+otherwise call the live record constructor and append its result. New graph
+conversion captures the original record class for native export. An existing
+row must continue to return the same object on repeated reads and snapshots.
+Replaying into a graph can restore list storage; the next record must check
+its current container. No new integer conversions or limits are added.
+
+First compare full HTML and all reached ownership snapshots, inspect actual
+source-table activation, and run existing ownership tests under the adapter.
+Check prefix and exported identity, invalid UTF-8 spans, rollback and a changed
+record constructor. Arbitrary private-container mutation, custom constructor
+errors after counter advancement, reentrant callbacks/destructors and unusual
+record-class changes need qualification before adoption. A fixture pass alone
+is insufficient.
+
+Retain eight balanced randomized fresh-process comparisons, six initial and
+80 measured warm renders per process, ordinary GC and every sample. Require
+seven joint wall/CPU wins and at least 0.25 ms median paired reduction in mean
+warm-render wall time before production qualification. Retain actual second
+renders separately. Do not retry a failed screen to seek acceptance. Record
+all source/artifact hashes and paired HTML; preparation and checks run outside
+timing. If snapshots recreate every deferred record or native field ownership
+costs offset creation savings, reject this representation for this experiment.
+
+
+The focused checker reproduces one incompatibility: a graph override can change
+`SourceLocationRecord.__new__` during `_next_order`, after the candidate's guard
+but before the original constructor would run. The prototype misses that call.
+It is not production-compatible. Retain the experiment to measure whether this
+storage direction has enough benefit to justify a stronger guard/order design;
+no positive timing alone permits adoption.

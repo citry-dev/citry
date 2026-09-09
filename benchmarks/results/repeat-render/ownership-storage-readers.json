@@ -1,0 +1,73 @@
+{
+  "instrumentation": "Untimed factory wrappers; nearest Python caller only.",
+  "storage_adapter_sha256": "d9f5d3a0205ea12840167cb056b22aa9e65bd62af937c32cafedce3f9c0f38ca",
+  "harness_sha256": "1a74e6fd7f2922856a67c0363e23ca0523e944204236c3ece7f31f49369f8a3a",
+  "rows_captured": {
+    "_logical_instances": 342,
+    "_init_ancestry": 339,
+    "_logical_fills": 468,
+    "_physical_regions": 274
+  },
+  "exports": [
+    {
+      "record": "LogicalFillRecord",
+      "caller": "snapshot",
+      "count": 436
+    },
+    {
+      "record": "LogicalInstanceRecord",
+      "caller": "_rebuild_relation_indexes",
+      "count": 340
+    },
+    {
+      "record": "InitAncestryRecord",
+      "caller": "_rebuild_relation_indexes",
+      "count": 338
+    },
+    {
+      "record": "LogicalInstanceRecord",
+      "caller": "snapshot",
+      "count": 298
+    },
+    {
+      "record": "InitAncestryRecord",
+      "caller": "snapshot",
+      "count": 297
+    },
+    {
+      "record": "LogicalFillRecord",
+      "caller": "capture_slot_call",
+      "count": 274
+    },
+    {
+      "record": "PhysicalRegionRequestRecord",
+      "caller": "snapshot",
+      "count": 244
+    },
+    {
+      "record": "PhysicalRegionRequestRecord",
+      "caller": "_rebuild_relation_indexes",
+      "count": 229
+    },
+    {
+      "record": "LogicalFillRecord",
+      "caller": "bind_template_fill_sources",
+      "count": 194
+    },
+    {
+      "record": "LogicalFillRecord",
+      "caller": "_revive_retired_template_fill",
+      "count": 194
+    },
+    {
+      "record": "PhysicalRegionRequestRecord",
+      "caller": "capture_slot_call",
+      "count": 68
+    },
+    {
+      "record": "LogicalFillRecord",
+      "caller": "_ordered_indexes_between",
+      "count": 4
+    }
+  ]
+}

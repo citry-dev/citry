@@ -1456,3 +1456,48 @@ class TestCoreCacheCheckpoint:
 
         assert "changed" in Cached().render().serialize(deps_strategy="ignore")
         assert app.cache.get(key) is None
+
+
+def test_transparent_output_marker_survives_artifact_round_trip():
+    app = Citry()
+
+    class Receiver(Component):
+        citry = app
+        template = """
+            <section><c-slot /></section>
+        """
+        js = """
+            $component(() => {});
+        """
+
+    class Wrapper(Component):
+        citry = app
+        transparent = True
+        template = """
+            <c-if cond="True"><c-receiver>caller content</c-receiver></c-if>
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+            <main><c-wrapper /></main>
+        """
+
+    artifact = _decode_artifact(_encode_artifact(_export_component_artifact(Page().render())))
+    wrapper_frames = [frame for frame in artifact.frames if frame.class_name == "Wrapper"]
+    assert sum(frame.is_transparent_root for frame in wrapper_frames) == 1
+    assert any(not frame.is_transparent_root for frame in wrapper_frames)
+    boundary, context, _graph = _boundary(Page())
+    replayed = _replay_component_artifact(artifact, boundary=boundary, context=context)
+    html = replayed.serialize()
+    manifest_match = re.search(r'<script type="application/json" data-citry-graph>(.*?)</script>', html, re.DOTALL)
+    assert manifest_match is not None
+    manifest = json.loads(manifest_match.group(1))
+    for graph in manifest["graphs"]:
+        for instance in graph["componentInstances"]:
+            for side in ("s", "e"):
+                cap = (
+                    f"<!--citry:g1:{manifest['revision'][:8]}:{graph['graphId']}:i:{instance['instanceId']}:{side}-->"
+                )
+                assert html.count(cap) == 1
+    assert "caller content" in html

@@ -1,0 +1,95 @@
+"""Render trusted benchmark templates from built-in scalar and container values."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from citry.citry_context import CitryContext
+from citry.citry_render import CitryRender
+from citry.component_render import _get_compiled_template, _render_body
+from citry.nodes import ElementAttrsNode, ExprHtmlAttr, ExprNode, ForNode, IfNode, StaticHtmlAttr
+from citry.util.html import Markup
+
+if TYPE_CHECKING:
+    from benchmarks.template_function_probe.fixtures import Case
+
+
+def validate_values(value: Any, ancestors: set[int] | None = None) -> None:
+    """Reject renderables and custom conversion callbacks before executing a body."""
+    if value is None or type(value) in (str, int, float, bool):
+        return
+    if type(value) not in (dict, list, tuple):
+        raise TypeError("Template-function inputs require exact scalar/container values")
+    if ancestors is None:
+        ancestors = set()
+    key = id(value)
+    if key in ancestors:
+        raise ValueError("Template-function input containers must be acyclic")
+    ancestors.add(key)
+    try:
+        if type(value) is dict:
+            if any(type(name) is not str for name in value):
+                raise TypeError("Template-function mapping keys must be exact strings")
+            for child in value.values():
+                validate_values(child, ancestors)
+        else:
+            for child in value:
+                validate_values(child, ancestors)
+    finally:
+        ancestors.remove(key)
+
+
+def validate_attrs(attrs: Any) -> None:
+    """Prevent nested template attributes from reintroducing another render pipeline."""
+    if any(type(attr) not in (StaticHtmlAttr, ExprHtmlAttr) for attr in attrs):
+        raise TypeError("Template-function attributes must be static values or scalar expressions")
+
+
+def validate_body(body: Any) -> None:
+    """Limit this prototype to the existing scalar and control-flow node implementations."""
+    for item in body:
+        if type(item) is str or type(item) is ExprNode:
+            continue
+        if type(item) is ElementAttrsNode:
+            validate_attrs(item.attrs)
+            if item._has_spread:
+                raise TypeError("Template-function prototype does not support attribute spreads")
+        elif type(item) in (IfNode, ForNode):
+            for branch in item.branches:
+                validate_attrs(branch[1])
+                validate_body(branch[2])
+        else:
+            raise TypeError(f"Unsupported template-function body node: {type(item).__name__}")
+
+
+class TemplateFunction:
+    """Prepare one trusted case; return text with no component identity or live instance."""
+
+    def __init__(self, case: Case) -> None:
+        self.case = case
+        compiled = _get_compiled_template(case.component)
+        if compiled is None or compiled.generate is None:
+            raise ValueError("Template-function fixture requires a compiled body")
+        self.body = compiled.generate()
+        validate_body(self.body)
+
+    def __call__(self, values: dict[str, Any]) -> str:
+        if type(values) is not dict:
+            raise TypeError("Template-function root inputs must be an exact dictionary")
+        validate_values(values)
+        data = self.case.data(values)
+        if type(data) is not dict:
+            raise TypeError("Template-function data must be an exact dictionary")
+        validate_values(data)
+        context = CitryContext(variables=data)
+        pending = list(reversed(_render_body(self.body, context)))
+        chunks = []
+        while pending:
+            part = pending.pop()
+            if type(part) in (str, Markup):
+                chunks.append(part)
+            elif type(part) is CitryRender and part.context.component is None and not part.is_component_root:
+                pending.extend(reversed(part.parts))
+            else:
+                raise TypeError("Template-function output must contain only text and interior renders")
+        return "".join(chunks)

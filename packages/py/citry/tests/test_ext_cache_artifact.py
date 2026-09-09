@@ -501,3 +501,18 @@ class TestArtifactCorruptionIntegration:
 
         assert "hello" in str(Card())
         assert renders == 2
+
+
+@pytest.mark.parametrize("value", [None, 1, "true"])
+def test_transparent_output_marker_requires_an_exact_bool(value):
+    wire = json.loads(_encode_artifact(_artifact()))
+    wire["frames"][0]["transparent_root"] = value
+    with pytest.raises(CacheArtifactError, match="transparent_root must be a bool"):
+        _decode_artifact(json.dumps(wire))
+
+
+def test_artifact_without_transparent_output_marker_is_rejected():
+    wire = json.loads(_encode_artifact(_artifact()))
+    del wire["frames"][0]["transparent_root"]
+    with pytest.raises(CacheArtifactError, match="field"):
+        _decode_artifact(json.dumps(wire))

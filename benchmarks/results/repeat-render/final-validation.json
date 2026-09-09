@@ -1,0 +1,121 @@
+{
+  "status": "PASSED",
+  "original_full_profile_status": "FAILED",
+  "original_full_profile_seconds": 125.894,
+  "phases": [
+    {
+      "name": "uv lock",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "cargo fmt",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "cargo clippy",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "cargo test",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "ruff check",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "ruff format",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "mypy",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "pyright",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "citry-client",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "codemirror Fluent",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "protocol contracts",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "protocol Python copies",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "events protocol JavaScript",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "client graph protocol JavaScript",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "docs-playground",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "vscode-extension",
+      "status": "PASSED",
+      "evidence": "targeted rerun after dependency setup"
+    },
+    {
+      "name": "pytest",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "pytest qualification",
+      "status": "PASSED",
+      "evidence": "full profile"
+    },
+    {
+      "name": "validators",
+      "status": "PASSED",
+      "evidence": "full profile"
+    }
+  ],
+  "python_runtime_tests": {
+    "passed": 4659,
+    "skipped": 5,
+    "expected_failure": 1
+  },
+  "chromium_tests": {
+    "passed": 553
+  },
+  "final_attribute_tests": {
+    "passed": 69
+  },
+  "notes": [
+    "The initial full profile had three Rust dependency setup failures. Targeted reruns after matching the original working Ruff revision passed.",
+    "The complete supported-version matrix was not run."
+  ],
+  "evidence_files": {
+    "full profile": "full-profile-initial.json",
+    "targeted rerun after dependency setup": "dependency-rechecks.json"
+  }
+}

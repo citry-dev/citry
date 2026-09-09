@@ -1,0 +1,255 @@
+{
+  "experiment_only": true,
+  "cases": [
+    {
+      "case": "empty",
+      "reference": {
+        "html": "",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "unknown",
+      "reference": {
+        "html": "<template c-render-id=\"child\" root=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<template c-render-id=\"child\" root=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "inherited",
+      "reference": {
+        "html": "<b child=\"\" root=\"\">x</b>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<b child=\"\" root=\"\">x</b>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "nested",
+      "reference": {
+        "html": "<div root=\"\"><b child=\"\">x</b></div>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<div root=\"\"><b child=\"\">x</b></div>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "valued",
+      "reference": {
+        "html": "<b child=\"\" root=\"\" x=\"outer inner\">x</b>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<b child=\"\" root=\"\" x=\"outer inner\">x</b>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "last_placeholder",
+      "reference": {
+        "html": "<b>x</b><div root=\"\"><b>x</b></div>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<b>x</b><div root=\"\"><b>x</b></div>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "literal_self",
+      "reference": {
+        "html": "<template c-render-id=\"\" root=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<template c-render-id=\"\" root=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "earlier_reference",
+      "reference": {
+        "html": "<template c-render-id=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<template c-render-id=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "extension",
+      "reference": {
+        "html": "<template c-render-id=\"extension\" root=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\" root=\"\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<template c-render-id=\"extension\" root=\"\"></template>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\" root=\"\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "raw_text",
+      "reference": {
+        "html": "<script root=\"\"><template c-render-id=\"child\"></template></script><!-- x --><br root=\"\">",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<script root=\"\"><template c-render-id=\"child\"></template></script><!-- x --><br root=\"\">",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "malformed",
+      "reference": {
+        "html": "<p broken=\" root=\"\"",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<p broken=\" root=\"\"",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "duplicate",
+      "reference": {
+        "error_type": "RuntimeError",
+        "error": "The same rendered component id was encountered more than once during serialization; render a fresh occurrence for each physical position."
+      },
+      "candidate": {
+        "error_type": "RuntimeError",
+        "error": "The same rendered component id was encountered more than once during serialization; render a fresh occurrence for each physical position."
+      },
+      "matches": true
+    },
+    {
+      "case": "invalid_valued",
+      "reference": {
+        "error_type": "ValueError",
+        "error": "Invalid valued root marker 'x=bad': expected the form name=\"value\", with no quotes or angle brackets in the value."
+      },
+      "candidate": {
+        "error_type": "ValueError",
+        "error": "Invalid valued root marker 'x=bad': expected the form name=\"value\", with no quotes or angle brackets in the value."
+      },
+      "matches": true
+    },
+    {
+      "case": "valued_newline",
+      "reference": {
+        "html": "<b root=\"\" x=\"a\"\">x</b>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "candidate": {
+        "html": "<b root=\"\" x=\"a\"\">x</b>",
+        "placeholders": {
+          "extension": "<template c-render-id=\"extension\"></template>"
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "surrogate_marker_False",
+      "reference": {
+        "html": "\ud800"
+      },
+      "candidate": {
+        "error_type": "UnicodeEncodeError",
+        "error": "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed"
+      },
+      "matches": false
+    },
+    {
+      "case": "surrogate_marker_True",
+      "reference": {
+        "html": "<b data-cid-c1=\"\" x=\"\ud800\">text</b>"
+      },
+      "candidate": {
+        "error_type": "UnicodeEncodeError",
+        "error": "'utf-8' codec can't encode character '\\ud800' in position 3: surrogates not allowed"
+      },
+      "matches": false
+    }
+  ],
+  "capacity": {
+    "error_type": "MemoryError",
+    "error": "Unable to reserve the serialized output buffer"
+  },
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "artifact_sha256": "ed32c0f2089aef33feda4c4e33694eb9b80b490cef6e016014c566049587b674",
+  "hashes": {
+    "benchmarks/serializer_session_probe/contracts.py": "220b183c8404a647e3e73cacc0325c6d794c7401488d2403dbbf14c16d4e9d71",
+    "benchmarks/serializer_session_probe/adapter.py": "0e0dae4f95f9f21aab6718458b0b1716f2dbd85fae6c8ea7f131d8f85010601e",
+    "packages/py/citry/citry/serialize.py": "36efe85428427020788909c420815046e07ffcd828aa97b699866d11b3136b19",
+    "benchmarks/serializer_session_probe/src/lib.rs": "04cf87c514a0527c87d8e44d89487a9217666645236c5aee5deb67a800db5bf9"
+  }
+}

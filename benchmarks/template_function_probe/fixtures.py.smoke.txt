@@ -1,0 +1,112 @@
+"""Define equivalent small templates with explicit input and lifecycle contracts."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from citry import Citry, Component
+
+APP = Citry()
+
+
+class Static(Component):
+    citry = APP
+    transparent = True
+    template = """
+<p>Hello</p>
+"""
+
+
+class Scalar(Component):
+    citry = APP
+    transparent = True
+    template = """
+<p>Hello {{ name }}</p>
+"""
+
+
+class Attributes(Component):
+    citry = APP
+    transparent = True
+    template = """
+<p c-title="title">{{ name }}</p>
+"""
+
+
+class Loop(Component):
+    citry = APP
+    transparent = True
+    template = """
+<ul><li c-for="item in items">{{ item }}</li></ul>
+"""
+
+
+def typed_data(kwargs: Any) -> dict[str, Any]:
+    """Share the same per-invocation data preparation across all four renderers."""
+    return {"label": f"{kwargs.name}: {kwargs.count + 1}"}
+
+
+class Typed(Component):
+    citry = APP
+    transparent = True
+
+    class Kwargs:
+        name: str
+        count: int = 0
+
+    def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+        return typed_data(kwargs)
+
+    template = """
+<p>{{ label }}</p>
+"""
+
+
+@dataclass(frozen=True)
+class Case:
+    """Keep source and input equivalence inspectable beside the engine adapters."""
+
+    name: str
+    component: type[Component]
+    django_source: str
+    jinja_source: str
+    inputs: tuple[dict[str, Any], ...]
+
+    def data(self, values: dict[str, Any]) -> dict[str, Any]:
+        if self.component is Typed:
+            return typed_data(Typed.Kwargs(**values))
+        return values
+
+
+CASES = (
+    Case("static", Static, "\n<p>Hello</p>\n", "\n<p>Hello</p>\n", ({},)),
+    Case(
+        "scalar",
+        Scalar,
+        "\n<p>Hello {{ name }}</p>\n",
+        "\n<p>Hello {{ name }}</p>\n",
+        ({"name": "Ada"}, {"name": "Bea & <Cy>"}, {"name": ""}),
+    ),
+    Case(
+        "attributes",
+        Attributes,
+        '\n<p title="{{ title }}">{{ name }}</p>\n',
+        '\n<p title="{{ title }}">{{ name }}</p>\n',
+        ({"title": "A & B", "name": "Ada"}, {"title": "<go & now>", "name": "Bea"}),
+    ),
+    Case(
+        "loop",
+        Loop,
+        "\n<ul>{% for item in items %}<li>{{ item }}</li>{% endfor %}</ul>\n",
+        "\n<ul>{% for item in items %}<li>{{ item }}</li>{% endfor %}</ul>\n",
+        ({"items": []}, {"items": ["one"]}, {"items": ["a", "b", "c", "d", "e", "f", "g", "<&>"]}),
+    ),
+    Case(
+        "typed",
+        Typed,
+        "\n<p>{{ label }}</p>\n",
+        "\n<p>{{ label }}</p>\n",
+        ({"name": "Ada"}, {"name": "Bea", "count": 3}, {"name": "<&>", "count": 8}),
+    ),
+)

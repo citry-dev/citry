@@ -1,0 +1,55 @@
+{
+  "production_compatible": false,
+  "observations": {
+    "write_extra": {
+      "reference": {
+        "value": {
+          "marker": 1
+        }
+      },
+      "candidate": {
+        "value": {}
+      }
+    },
+    "write_contents": {
+      "reference": {
+        "value": [
+          "replacement"
+        ]
+      },
+      "candidate": {
+        "error": "ValueError",
+        "message": "not enough values to unpack (expected 7, got 1)"
+      }
+    },
+    "delete_extra": {
+      "reference": {
+        "value": "deleted"
+      },
+      "candidate": {
+        "error": "AttributeError",
+        "message": "extra"
+      }
+    },
+    "static_contents": {
+      "reference": {
+        "value": "list"
+      },
+      "candidate": {
+        "value": "tuple"
+      }
+    },
+    "type_before_read": {
+      "reference": {
+        "value": "Slot"
+      },
+      "candidate": {
+        "value": "LazyFallbackSlot"
+      }
+    }
+  },
+  "hashes": {
+    "benchmarks/lazy_fallback_probe/contracts.py": "88286e7a9a66b711c91f4772f0d10f82ae48f13f497451fc7f8b125420bcec61",
+    "benchmarks/lazy_fallback_probe/probe.py": "676652d415ecd31834eb86c63b0cbe8141e9bf00209bc2afc33b211a11904046"
+  }
+}

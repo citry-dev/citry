@@ -16,6 +16,17 @@ from citry.attrs import validate_html_attr_name
 
 
 class TestFormatAttrs:
+    def test_repeated_class_merges_keep_mutable_removals_live(self):
+        left = {"class": "alpha\talpha beta"}
+        right = {"CLASS": "beta gamma"}
+        assert merge_attrs(left, right) == {"class": "alpha beta gamma"}
+        assert merge_attrs(left, right) == {"class": "alpha beta gamma"}
+        flags = {"alpha": False}
+        right["CLASS"] = flags
+        assert merge_attrs(left, right) == {"class": "beta"}
+        flags["alpha"] = True
+        assert merge_attrs(left, right) == {"class": "alpha beta"}
+
     def test_attribute_name_cache_does_not_retain_or_hash_string_subclasses(self):
         class AttributeName(str):
             __slots__ = ()
@@ -222,6 +233,22 @@ class TestMergeAttrs:
 
 
 class TestNormalizeClass:
+    def test_nested_string_subclass_does_not_require_hashing(self):
+        class ClassText(str):
+            __slots__ = ()
+
+            def __hash__(self):
+                raise AssertionError("class normalization must not hash a string subclass")
+
+        assert normalize_class([ClassText("base active"), {"active": False}, ["next"]]) == "base next"
+
+    def test_repeated_class_text_still_observes_mutated_mapping(self):
+        flags = {"active": True}
+        values = ["base active", flags]
+        assert normalize_class(values) == "base active"
+        flags["active"] = False
+        assert normalize_class(values) == "base"
+
     def test_string_used_as_is(self):
         assert normalize_class(" btn  btn-lg ") == "btn  btn-lg"
 

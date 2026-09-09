@@ -1,0 +1,223 @@
+//! Retain marked HTML and child references until the root string is requested.
+
+use std::collections::{HashMap, HashSet};
+
+use citry_html_transform::{MarkedHtml, mark_html};
+use pyo3::exceptions::{PyMemoryError, PyRuntimeError, PyValueError};
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyString};
+
+struct Frame {
+    marked: MarkedHtml,
+    valued: Vec<String>,
+}
+
+#[pyclass]
+struct Session {
+    placeholder_attr: String,
+    frames: Vec<Frame>,
+    indexes: HashMap<String, usize>,
+}
+
+// Python's Unicode whitespace class also includes these four control characters.
+fn marker_whitespace(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+
+fn valued_parts(marker: &str) -> Option<(&str, &str)> {
+    // The Python regex's final $ also accepts the position before a final newline.
+    let checked = marker.strip_suffix('\n').unwrap_or(marker);
+    let (name, quoted) = checked.split_once('=')?;
+    if name.is_empty()
+        || name
+            .chars()
+            .any(|c| marker_whitespace(c) || "\"'=<>/".contains(c))
+        || !quoted.starts_with('"')
+        || !quoted.ends_with('"')
+        || quoted.len() < 2
+        || quoted[1..quoted.len() - 1]
+            .chars()
+            .any(|c| "\"<>".contains(c))
+    {
+        return None;
+    }
+    // Extract from the original input, matching the existing Python slice exactly.
+    let (_, original) = marker.split_once('=')?;
+    Some((name, &original[1..original.len() - 1]))
+}
+
+fn apply_valued(
+    py: Python<'_>,
+    marked: &mut MarkedHtml,
+    plain: &[String],
+    valued: &[String],
+) -> PyResult<()> {
+    let mut groups: Vec<(&str, Vec<&str>)> = Vec::new();
+    for marker in valued {
+        let Some((name, value)) = valued_parts(marker) else {
+            let representation = PyString::new(py, marker).repr()?.to_str()?.to_owned();
+            return Err(PyValueError::new_err(format!(
+                "Invalid valued root marker {representation}: expected the form name=\"value\", with no quotes or angle brackets in the value."
+            )));
+        };
+        if let Some((_, values)) = groups.iter_mut().find(|(key, _)| *key == name) {
+            values.push(value);
+        } else {
+            groups.push((name, vec![value]));
+        }
+    }
+    let splice = plain
+        .iter()
+        .map(|name| format!(" {name}=\"\""))
+        .collect::<String>();
+    let mut replacement = splice.clone();
+    for (name, values) in groups {
+        replacement.push_str(&format!(
+            " {name}=\"{}\"",
+            values.into_iter().rev().collect::<Vec<_>>().join(" ")
+        ));
+    }
+    for segment in &mut marked.segments {
+        *segment = segment.replace(&splice, &replacement);
+    }
+    for placeholder in &mut marked.placeholders {
+        placeholder.html = placeholder.html.replace(&splice, &replacement);
+    }
+    Ok(())
+}
+
+#[pymethods]
+impl Session {
+    #[new]
+    fn new(placeholder_attr: String) -> Self {
+        Self {
+            placeholder_attr,
+            frames: Vec::new(),
+            indexes: HashMap::new(),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (key, parent_key, html, own_plain, own_valued, has_children, placeholder_map))]
+    fn add_frame(
+        &mut self,
+        py: Python<'_>,
+        key: String,
+        parent_key: Option<&str>,
+        html: &str,
+        mut own_plain: Vec<String>,
+        mut own_valued: Vec<String>,
+        has_children: bool,
+        placeholder_map: &Bound<'_, PyDict>,
+    ) -> PyResult<()> {
+        if let Some(parent_key) = parent_key {
+            let parent_index = self
+                .indexes
+                .get(parent_key)
+                .ok_or_else(|| PyValueError::new_err("Unknown parent frame"))?;
+            let parent = &self.frames[*parent_index];
+            // The existing placeholder dictionary keeps the last occurrence of each id.
+            if let Some(placeholder) = parent
+                .marked
+                .placeholders
+                .iter()
+                .rev()
+                .find(|entry| entry.id == key)
+            {
+                own_plain.extend(placeholder.added_attributes.iter().cloned());
+                if !placeholder.added_attributes.is_empty() {
+                    own_valued.extend(parent.valued.iter().cloned());
+                }
+            }
+        }
+        let mut seen = HashSet::new();
+        own_plain.retain(|marker| seen.insert(marker.clone()));
+        let mut marked = if !html.is_empty() && (!own_plain.is_empty() || has_children) {
+            mark_html(html, &own_plain, &self.placeholder_attr)
+        } else {
+            MarkedHtml {
+                segments: vec![html.to_owned()],
+                placeholders: Vec::new(),
+            }
+        };
+        if !own_valued.is_empty() && !own_plain.is_empty() {
+            apply_valued(py, &mut marked, &own_plain, &own_valued)?;
+        }
+        if self.indexes.contains_key(&key) {
+            return Err(PyRuntimeError::new_err(
+                "The same rendered component id was encountered more than once during serialization; render a fresh occurrence for each physical position.",
+            ));
+        }
+        for placeholder in &marked.placeholders {
+            if placeholder_map.contains(&placeholder.id)? {
+                placeholder_map.set_item(&placeholder.id, &placeholder.html)?;
+            }
+        }
+        self.indexes.insert(key, self.frames.len());
+        self.frames.push(Frame {
+            marked,
+            valued: own_valued,
+        });
+        Ok(())
+    }
+
+    fn frame_count(&self) -> usize {
+        self.frames.len()
+    }
+
+    fn finish(&self) -> PyResult<String> {
+        let root = *self
+            .indexes
+            .get("")
+            .ok_or_else(|| PyValueError::new_err("Missing root frame"))?;
+        // Resolve only frames already available in the original reverse-order join.
+        // The increasing index rule also prevents authored references from creating cycles.
+        let resolve =
+            |index: usize, id: &str| self.indexes.get(id).copied().filter(|child| *child > index);
+        let mut lengths = vec![0usize; self.frames.len()];
+        for index in (0..self.frames.len()).rev() {
+            let frame = &self.frames[index].marked;
+            let mut length = frame.segments[0].len();
+            for (placeholder, segment) in frame.placeholders.iter().zip(&frame.segments[1..]) {
+                let child_length = resolve(index, &placeholder.id)
+                    .map_or(placeholder.html.len(), |child| lengths[child]);
+                length = length
+                    .checked_add(child_length)
+                    .and_then(|n| n.checked_add(segment.len()))
+                    .ok_or_else(|| PyValueError::new_err("Serialized frame length overflow"))?;
+            }
+            lengths[index] = length;
+        }
+        let mut output = String::new();
+        output.try_reserve_exact(lengths[root]).map_err(|_| {
+            PyMemoryError::new_err("Unable to reserve the serialized output buffer")
+        })?;
+        // Each visit resumes after its child, so the stack grows with depth, not output size.
+        let mut stack = vec![(root, 0usize, false)];
+        while let Some((index, position, after_child)) = stack.pop() {
+            let frame = &self.frames[index].marked;
+            if position == 0 && !after_child {
+                output.push_str(&frame.segments[0]);
+            }
+            if after_child {
+                output.push_str(&frame.segments[position + 1]);
+                stack.push((index, position + 1, false));
+            } else if let Some(placeholder) = frame.placeholders.get(position) {
+                if let Some(child) = resolve(index, &placeholder.id) {
+                    stack.push((index, position, true));
+                    stack.push((child, 0, false));
+                } else {
+                    output.push_str(&placeholder.html);
+                    output.push_str(&frame.segments[position + 1]);
+                    stack.push((index, position + 1, false));
+                }
+            }
+        }
+        Ok(output)
+    }
+}
+
+#[pymodule]
+fn citry_serializer_session_probe(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<Session>()
+}

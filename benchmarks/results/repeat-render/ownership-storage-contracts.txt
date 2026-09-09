@@ -1,0 +1,1 @@
+Cached snapshots, ordered lookup, patch validation, four GC cycles and two mid-callback replay cases passed

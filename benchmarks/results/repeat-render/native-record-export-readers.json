@@ -1,0 +1,18 @@
+{
+  "instrumentation": "Untimed direct-constructor wrapper for four record tables and invocation/queue journal.",
+  "html_equal": true,
+  "direct_constructions": {
+    "ComponentInvocationRecord": 678,
+    "LogicalFillRecord": 1098,
+    "PhysicalRegionRequestRecord": 336,
+    "LogicalInstanceRecord": 342,
+    "InitAncestryRecord": 339,
+    "RenderQueueRecord": 339
+  },
+  "hashes": {
+    "benchmarks/native_record_export_probe/readers.py": "1a95588e810597d5807a11dd716300f07108dafc9a3c70352f988cf234357d99",
+    "benchmarks/native_record_export_probe/adapter.py": "b7b3ca41dc90c1c4a825c94d67e08f394a987c5208d4422a32afe7faf84dbf53",
+    "benchmarks/native_record_export_probe/probe.py": "ab52933e4eb8735b138f287e9e2ec852c5b12844d09271a3b95df8da23dd6cba",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "65f18d630e53841adf99b86efbfe4ae1c867414068724ff687c287d9fd77c5bf"
+  }
+}

@@ -191,6 +191,24 @@ categories:
       - citry.lint_unknown_template_variables
 
   - kind: generated_python
+    slug: preview
+    title: Preview
+    intro: Component examples, layouts, and metadata for command-owned preview pages.
+    symbols:
+      - citry.ext.preview.PreviewExtension
+      - citry.ext.preview.variant
+      - citry.ext.preview.Variant
+      - citry.ext.preview.Viewport
+      - citry.ext.preview.Layout
+      - citry.ext.preview.PreviewError
+      - citry.ext.preview.PreviewComponent
+      - citry.ext.preview.PreviewVariant
+      - citry.ext.preview.PreviewMetadata
+      - citry.ext.preview.PreviewItem
+      - citry.ext.preview.PreviewGroup
+      - citry.ext.preview.PreviewPage
+
+  - kind: generated_python
     slug: extensions
     title: Extensions
     intro: "The plugin system: the extension base, its commands, and the hook context objects."

@@ -1,0 +1,1927 @@
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 21 tests
+test alpine_scan_finds_only_actual_attributes ... ok
+test alpine_scan_is_ascii_case_insensitive_for_x_prefix ... ok
+test empty_root_attributes_still_segments_placeholders ... ok
+test multiple_roots_each_get_attribute ... ok
+test boolean_and_unquoted_attributes ... ok
+test non_ascii_content_is_preserved ... ok
+test comments_doctype_and_cdata_pass_through ... ok
+test malformed_input_never_panics ... ok
+test nested_placeholder_is_reported_without_attributes ... ok
+test placeholder_matching_is_ascii_case_insensitive ... ok
+test nested_elements_are_untouched ... ok
+test placeholder_with_whitespace_body_is_recognized ... ok
+test quoted_attribute_values_may_contain_gt ... ok
+test reassembly_invariant_holds ... ok
+test root_placeholder_inherits_all_attributes ... ok
+test script_content_is_raw_text ... ok
+test self_closing_root_is_marked ... ok
+test single_root_gets_attribute ... ok
+test template_with_real_body_is_not_a_placeholder ... ok
+test text_only_and_empty_inputs ... ok
+test void_root_is_marked_and_not_normalized ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 7 tests
+test test_basic_transformation ... ok
+test test_multiple_roots ... ok
+test test_watch_attribute ... ok
+test test_config_check_end_names ... ok
+test test_html_head_with_meta ... ok
+test test_void_elements ... ok
+test test_complex_html ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 53 tests
+test compiler::tests::diagnostic_layout_masks_text_but_retains_nested_call_punctuation ... ok
+test compiler::tests::compile_request_rejects_invalid_and_noncanonical_locales ... ok
+test compiler::tests::compile_request_rejects_unknown_fallback_nodes ... ok
+test compiler::tests::duplicate_terms_and_param_errors_point_at_the_exact_authored_span ... ok
+test compiler::tests::added_translation_variable_points_at_the_variable ... ok
+test compiler::tests::duplicate_identifier_selector_variants_are_rejected ... ok
+test compiler::tests::private_term_cycles_fail_before_runtime_publication ... ok
+test compiler::tests::one_message_param_comment_types_its_value_and_attributes ... ok
+test compiler::tests::manifest_keeps_parameter_descriptions_spans_and_transitive_origin ... ok
+test compiler::tests::browser_artifact_rejects_unknown_and_duplicate_roots ... ok
+test compiler::tests::rich_slots_must_be_direct_standalone_placeables ... ok
+test compiler::tests::attribute_only_messages_compile_as_public_outputs ... ok
+test compiler::tests::nested_private_terms_are_linked_inside_their_source_unit ... ok
+test compiler::tests::intermediate_fallback_is_selected_before_owner_source ... ok
+test compiler::tests::same_layer_duplicate_reports_both_sources ... ok
+test compiler::tests::compiles_typed_text_string_selectors_and_icu_plurals ... ok
+test compiler::tests::rich_resolution_repeats_one_slot_without_exposing_markers ... ok
+test compiler::tests::semantic_diagnostics_point_at_param_comments_with_valid_message_spacing ... ok
+test compiler::tests::runtime_rejects_an_artifact_with_a_stale_semantic_revision ... ok
+test compiler::tests::browser_artifact_keeps_only_requested_outputs_and_their_closure ... ok
+test compiler::tests::private_terms_can_reference_public_messages_with_a_checked_interface ... ok
+test compiler::tests::source_analysis_uses_the_production_parser_and_indexes_private_terms ... ok
+test compiler::tests::source_analysis_rejects_unsupported_param_types_at_the_comment ... ok
+test compiler::tests::rich_slot_minimum_is_checked_across_selector_branches ... ok
+test compiler::tests::missing_parameter_types_follow_the_catalog_lint_policy ... ok
+test compiler::tests::same_layer_message_id_cannot_be_split_across_source_units ... ok
+test compiler::tests::source_locale_override_cannot_change_the_owner_contract ... ok
+test compiler::tests::translation_cannot_add_arguments_through_a_public_reference ... ok
+test compiler::tests::source_locale_override_may_repeat_the_exact_owner_contract ... ok
+test format::tests::format_registry_rejects_two_digit_year_windows_outside_python_date_range ... ok
+test compiler::tests::translation_cannot_redeclare_source_parameters ... ok
+test format::tests::localized_number_parser_returns_valid_incomplete_and_invalid_states ... ok
+test format::tests::localized_number_parser_accepts_explicit_scientific_notation ... ok
+test format::tests::localized_number_parser_uses_the_profiles_resolved_digits_and_signs ... ok
+test format::tests::browser_parser_artifact_contains_checked_locale_syntax ... ok
+test format::tests::percent_parser_rejects_wrong_affixes_and_bidi_controls ... ok
+test format::tests::percent_uses_ratio_values_and_round_trips_required_or_omitted_affixes ... ok
+test format::tests::percent_parser_accepts_the_formatter_owned_arabic_affix_and_sign ... ok
+test compiler::tests::source_free_link_unit_is_checked_and_does_not_reparse_package_ftl ... ok
+test compiler::tests::source_free_link_unit_preserves_formatter_call_spans ... ok
+test format::tests::currency_uses_data_driven_fraction_digits_and_half_expand_rounding ... ok
+test tests::accepts_canonical_locales_with_unicode_extensions ... ok
+test tests::compiles_and_formats_text_values_and_attributes ... ok
+test tests::text_catalog_rejects_expressions_owned_by_catalog_compiler ... ok
+test format::tests::unit_formatter_keeps_exact_values_and_explicit_units ... ok
+test format::tests::date_parser_preserves_partial_edits_and_rejects_impossible_dates ... ok
+test format::tests::strict_date_parser_uses_locale_order_digits_and_selected_calendar ... ok
+test format::tests::date_parser_rejects_unratified_calendar_input ... ok
+test format::tests::temporal_profiles_keep_wall_time_separate_from_resolved_zone_facts ... ok
+test format::tests::segmented_date_parser_uses_named_fields_and_locale_digits ... ok
+test format::tests::time_and_datetime_parsers_preserve_local_fields ... ok
+test format::tests::date_parser_handles_month_names_two_digit_windows_and_persian_dates ... ok
+test format::tests::date_parser_round_trips_supported_unambiguous_calendars ... ok
+
+test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 37 tests
+test comments::tests::body_attachments_retain_container_and_anchor_identity ... ok
+test formatter::tests::structural_formatting_recurses_into_nested_template_values ... ok
+test formatter::tests::embedded_python_suppression_comments_preserve_their_region ... ok
+test formatter::tests::unquoted_provider_results_fall_back_per_region ... ok
+test formatter::tests::verification_rejects_semantic_and_source_preservation_mutations ... ok
+test formatter::tests::python_comment_normalization_preserves_provider_owned_comments ... ok
+test html::tests::block_container_requires_block_edges ... ok
+test html::tests::block_like_table_is_sorted_and_unique ... ok
+test html::tests::protected_and_verbatim_gaps_are_never_structural ... ok
+test html::tests::protected_body_tags_keep_distinct_outer_edges ... ok
+test html::tests::root_margins_are_structural_only_when_authored ... ok
+test html::tests::select_is_a_structural_container_but_a_sensitive_outer_edge ... ok
+test html::tests::structural_container_boundaries_count_as_block_edges ... ok
+test html::tests::tag_lookup_is_ascii_case_insensitive_and_components_stay_sensitive ... ok
+test html::tests::transparent_branch_edges_are_block_like_only_when_every_branch_is ... ok
+test newline::tests::first_newline_wins_for_mixed_sources ... ok
+test newline::tests::internal_line_processing_handles_every_physical_spelling ... ok
+test printer::tests::protected_ranges_reject_intersecting_edits ... ok
+test projection::tests::exhaustive_block_control_branches_are_structural ... ok
+test projection::tests::contextual_and_empty_structures_do_not_gain_whitespace ... ok
+test formatter::tests::deeply_nested_expression_respects_absolute_width ... ok
+test projection::tests::optional_or_disagreeing_control_edges_stay_sensitive ... ok
+test projection::tests::opening_tags_allow_tag_internal_and_adjacent_structural_layout ... ok
+test projection::tests::projection_keeps_tag_spelling_attribute_order_and_quotes ... ok
+test projection::tests::nested_template_values_use_the_same_projection_contract ... ok
+test formatter::tests::python_regions_follow_lone_cr_and_account_for_suffix_width ... ok
+test projection::tests::structural_layout_normalizes_only_short_comment_free_expression_trivia ... ok
+test python::tests::formats_and_validates_for_clauses ... ok
+test projection::tests::structural_layout_allows_structural_but_not_sensitive_whitespace_changes ... ok
+test projection::tests::shorthand_control_flow_uses_the_underlying_edge_but_remains_optional ... ok
+test python::tests::provider_identity_matches_the_vendored_ruff_release ... ok
+test python::tests::formats_and_validates_ordinary_expressions ... ok
+test python::tests::expression_provider_is_idempotent_across_python_shapes ... ok
+test formatter::tests::long_fill_data_patterns_use_citry_owned_multiline_layout ... ok
+test formatter::tests::leading_multiline_expression_uses_its_parent_tag_column ... ok
+test corpus::corpus_index_and_contract_pairs_are_valid ... ok
+test formatter::tests::adjacent_interpolations_converge_across_the_width_boundary ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+
+
+running 20 tests
+test javascript_regex_literals_do_not_look_like_multiline_strings ... ok
+test citry_comments_inside_embedded_bodies_are_not_delegated ... ok
+test composition_preserves_crlf_unicode_and_missing_final_newline ... ok
+test multiline_language_literals_are_preserved_without_provider_reindentation ... ok
+test nested_javascript_templates_are_conservatively_preserved ... ok
+test keyword_named_properties_cannot_hide_multiline_literals_after_division ... ok
+test css_identifier_whitespace_is_never_treated_as_provider_framing ... ok
+test css_escapes_cannot_hide_multiline_strings ... ok
+test provider_delimiter_conflicts_and_errors_reject_the_complete_plan ... ok
+test ambiguous_statement_position_regex_literals_are_conservatively_preserved ... ok
+test provider_output_cannot_hide_position_sentinels_behind_layout_whitespace ... ok
+test result_identity_and_cardinality_are_validated_atomically ... ok
+test multiline_comments_and_javascript_line_separators_are_preserved ... ok
+test position_sensitive_language_sentinels_are_not_reframed ... ok
+test unavailable_results_preserve_the_region_and_report_it ... ok
+test unsafe_provider_output_is_rejected_before_reindentation ... ok
+test postfix_operators_cannot_hide_multiline_literals_after_division ... ok
+test plans_and_composes_expression_free_script_and_style_bodies ... ok
+test script_type_classification_follows_html_javascript_values ... ok
+test unsupported_and_protected_bodies_are_not_offered_to_providers ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 3 tests
+test accepts_root_absolute_options_for_a_projected_source ... ok
+test treats_attribute_and_start_tag_foreign_spans_as_unknown_source ... ok
+test preserves_body_foreign_spans_while_formatting_citry_markup ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 13 tests
+test fmt_skip_inside_an_end_tag_is_rejected_without_a_target ... ok
+test syntax_errors_retain_the_parser_diagnostic ... ok
+test inserted_lines_follow_lone_cr_and_scalar_source_column ... ok
+test trailing_only_placement_uses_the_actual_tag_column ... ok
+test empty_and_text_only_templates_are_stable ... ok
+test public_api_formats_and_is_idempotent ... ok
+test structural_siblings_have_single_gap_owners ... ok
+test long_item_boundary_uses_unicode_scalars ... ok
+test structural_target_column_prevents_wrap_then_unwrap_residue ... ok
+test width_boundary_counts_unicode_scalars ... ok
+test protected_nodes_keep_their_bytes_while_outer_structural_gaps_layout ... ok
+test earlier_same_line_edits_do_not_stale_later_tag_layout ... ok
+test generated_valid_tags_preserve_contract_and_converge ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+
+running 11 tests
+test structural_layout_formats_complete_block_trees ... ok
+test fully_protected_children_still_layout_their_outer_container ... ok
+test expression_trivia_has_a_deterministic_width_boundary ... ok
+test structural_layout_resumes_around_protected_nodes ... ok
+test root_margins_newlines_and_missing_final_newlines_are_preserved ... ok
+test root_processing_instructions_and_comment_stacks_follow_structure ... ok
+test nested_template_comments_are_formatted_once ... ok
+test verbatim_bodies_disable_all_descendant_formatting ... ok
+test mixed_inline_unknown_and_component_boundaries_remain_exact ... ok
+test generated_boundaries_lock_structural_and_sensitive_classification ... ok
+test generated_boundary_combinations_converge ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+
+running 12 tests
+test constants::tests::tooling_directives_match_the_parser_owned_groups_and_special_names ... ok
+test constants::tests::tooling_structural_attributes_match_parser_validation_rules ... ok
+test constants::tests::tooling_syntax_inventories_are_unique_and_cover_every_structural_tag ... ok
+test utils::template_fragment::tests::unwraps_only_outer_whitespace_and_fragment_delimiters ... ok
+test browser::tests::invalid_source_never_returns_partial_references ... ok
+test browser::tests::statement_analysis_resolves_local_declarations ... ok
+test browser::tests::expression_analysis_reports_only_free_identifiers ... ok
+test browser::tests::component_scope_writes_require_the_runtime_component_helper ... ok
+test browser::tests::component_config_init_is_analyzed_but_dynamic_scope_keys_are_not ... ok
+test browser::tests::component_scope_writes_cover_direct_static_forms_but_not_rebinding_or_later_work ... ok
+test browser::tests::shadowed_component_helpers_do_not_create_initializer_facts ... ok
+test browser::tests::component_analysis_reports_context_bindings_and_only_initializer_free_names ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 76 tests
+test tests::test_component_self_closing ... ok
+test tests::test_component_with_body ... ok
+test tests::test_component_name_normalized_lowercase ... ok
+test tests::test_component_kebab_name_preserved ... ok
+test tests::test_component_kwarg_with_carriage_return_is_escaped ... ok
+test tests::test_component_kwarg_with_literal_newline_is_preserved ... ok
+test tests::test_attr_c_if_wraps_host ... ok
+test tests::test_component_with_expr_attr ... ok
+test tests::test_attr_c_for_wraps_host ... ok
+test tests::test_attr_c_if_and_c_for_nest_if_outer ... ok
+test tests::test_component_with_fragment_template_attr_unwraps_delimiters ... ok
+test tests::test_empty_template ... ok
+test tests::test_empty_fragment_template_attr_stays_a_string ... ok
+test tests::test_expr_arithmetic_multiple_vars ... ok
+test tests::test_component_with_template_attr ... ok
+test tests::test_expr_simple ... ok
+test tests::test_expr_no_vars_has_empty_tuple ... ok
+test tests::test_expr_comment_text_cannot_hide_host_delimiter ... ok
+test tests::test_consecutive_html_coalesced ... ok
+test tests::test_component_with_static_attr ... ok
+test tests::test_fill_inside_component_sets_contains_fills ... ok
+test tests::test_expr_with_surrounding_text ... ok
+test tests::test_fill_data_and_fallback_introduced_vars ... ok
+test tests::test_for_simple ... ok
+test tests::test_for_with_empty ... ok
+test tests::test_for_empty_template_comment_and_surrounding_whitespace_group ... ok
+test tests::test_html_basic ... ok
+test tests::test_html_empty_attr_becomes_boolean ... ok
+test tests::test_html_c_bind_kept_structured ... ok
+test tests::test_fill_data_destructuring_compiles_a_binding_plan ... ok
+test tests::test_html_attr_value_with_carriage_return_is_escaped ... ok
+test tests::test_html_expr_attr ... ok
+test tests::test_html_non_void_self_closing_expands ... ok
+test tests::test_html_fragment_template_attr_uses_unwrapped_payload ... ok
+test tests::test_html_expr_attr_with_trailing_text ... ok
+test tests::test_html_void_element_stays_compact ... ok
+test tests::test_html_void_element_preserves_authored_uppercase_spelling ... ok
+test tests::test_fragment_template_attr_preserves_inner_whitespace ... ok
+test tests::test_html_void_element_self_closing ... ok
+test tests::test_html_static_attr_joins_element_attrs_node ... ok
+test tests::test_for_empty_whitespace_between_branches_groups ... ok
+test tests::test_html_with_static_attr ... ok
+test tests::test_html_literal_c_prefix_escape_keeps_source_keys ... ok
+test tests::test_html_used_vars_deduped_across_attrs ... ok
+test tests::test_if_elif_else ... ok
+test tests::test_if_else_shorthand_template_comment_and_whitespace_group ... ok
+test tests::test_if_elif_else_whitespace_between_branches_groups ... ok
+test tests::test_if_else_template_comment_and_surrounding_whitespace_group ... ok
+test tests::test_if_simple ... ok
+test tests::test_nested_components ... ok
+test tests::test_plain_text ... ok
+test tests::test_raw_body_kept_verbatim ... ok
+test tests::test_literal_events_attrs_remain_structured_for_extensions ... ok
+test tests::test_if_elif_else_multiple_template_comments_group ... ok
+test tests::test_if_else_whitespace_between_branches_groups ... ok
+test tests::test_if_trailing_whitespace_after_group_is_kept ... ok
+test tests::test_if_trailing_comment_split_whitespace_is_kept ... ok
+test tests::test_multiline_component_tag ... ok
+test tests::test_native_text_containers_keep_tag_shaped_text_literal ... ok
+test tests::test_raw_empty_compiles_to_empty_text ... ok
+test tests::test_raw_coalesces_with_surrounding_html ... ok
+test tests::test_raw_keeps_inner_tags_and_comments_literal ... ok
+test tests::test_slot_simple ... ok
+test tests::test_slot_without_name_compiles ... ok
+test tests::test_text_with_backslash_is_escaped ... ok
+test tests::test_text_with_crlf_is_escaped ... ok
+test tests::test_text_with_literal_newline_is_preserved ... ok
+test tests::test_text_with_trailing_backslash_is_escaped ... ok
+test tests::test_slot_used_vars_deduped ... ok
+test tests::test_text_with_carriage_return_is_escaped ... ok
+test tests::test_text_with_quotes_is_escaped ... ok
+test tests::test_template_comments_inside_native_text_containers_are_removed ... ok
+test tests::test_whitespace_after_closing_tag_is_preserved ... ok
+test tests::test_two_expressions_not_coalesced ... ok
+test tests::test_whitespace_before_tag_is_preserved ... ok
+test tests::test_whitespace_between_tags_is_preserved ... ok
+
+test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 7 tests
+test tests::test_direct_form_retains_static_attribute_node ... ok
+test tests::test_static_dynamic_component_rewrites_to_selected_target ... ok
+test tests::test_direct_translation_binding_stays_structured_on_html ... ok
+test tests::test_direct_form_and_spread_preserve_source_order ... ok
+test tests::test_server_dynamic_form_retains_expression_attribute_node ... ok
+test tests::test_direct_translation_binding_keeps_source_order_with_dynamic_forms ... ok
+test tests::test_compile_is_deterministic ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 27 tests
+test tests::test_dynamic_builtins_reject_empty_static_is_at_parse ... ok
+test tests::test_component_requires_is_or_bind ... ok
+test tests::test_dynamic_builtin_suffix_case_variants_share_required_is_rules ... ok
+test tests::test_component_is_and_c_is_conflict_is_parse_error ... ok
+test tests::test_component_dynamic_is_compiles_to_component_builtin ... ok
+test tests::test_element_bind_then_static_is_stays_on_runtime_path ... ok
+test tests::test_component_bind_then_static_is_stays_on_runtime_path ... ok
+test tests::test_component_static_is_rewrites_to_named_component ... ok
+test tests::test_element_dynamic_is_compiles_to_element_builtin ... ok
+test tests::test_element_requires_is_or_bind ... ok
+test tests::test_element_is_and_c_is_conflict_is_parse_error ... ok
+test tests::test_component_static_is_then_bind_stays_on_runtime_path ... ok
+test tests::test_element_bind_then_static_void_is_stays_on_runtime_path ... ok
+test tests::test_element_static_invalid_tag_name_is_compile_error ... ok
+test tests::test_element_named_fill_is_parse_error ... ok
+test tests::test_element_static_is_rewrites_to_plain_element ... ok
+test tests::test_element_static_is_then_bind_stays_on_runtime_path ... ok
+test tests::test_element_static_is_with_default_fill_stays_on_runtime_path ... ok
+test tests::test_element_static_camel_case_name_renders_verbatim ... ok
+test tests::test_element_static_void_with_content_is_compile_error ... ok
+test tests::test_empty_static_is_rule_is_limited_to_dynamic_builtins ... ok
+test tests::test_element_static_non_void_empty_expands ... ok
+test tests::test_element_static_void_self_closing_stays_compact ... ok
+test tests::test_element_static_void_with_whitespace_body_stays_compact ... ok
+test tests::test_element_static_is_with_dynamic_attrs_uses_element_attrs_node ... ok
+test tests::test_element_static_void_is_then_bind_stays_on_runtime_path ... ok
+test tests::test_element_static_void_identity_is_ascii_case_insensitive ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 18 tests
+test tests::test_ignore_on_component_tag ... ok
+test tests::test_key_and_ignore_together ... ok
+test tests::test_ignore_on_element ... ok
+test tests::test_dynamic_element_metadata ... ok
+test tests::test_key_emits_after_static_attrs ... ok
+test tests::test_component_metadata_is_canonical ... ok
+test tests::test_key_on_c_component_with_static_is ... ok
+test tests::test_key_emits_after_dynamic_attr_region ... ok
+test tests::test_key_inside_c_for_evaluates_per_item ... ok
+test tests::test_key_on_c_element_with_static_is_compiles_to_plain_element ... ok
+test tests::test_key_on_component_tag ... ok
+test tests::test_unkeyed_component_output_unchanged ... ok
+test tests::test_key_on_void_element ... ok
+test tests::test_key_on_case_variant_c_element_keeps_element_locus ... ok
+test tests::test_key_on_component_tag_with_dynamic_attr ... ok
+test tests::test_key_with_c_for_shorthand ... ok
+test tests::test_key_on_element ... ok
+test tests::test_compile_is_deterministic ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 6 tests
+test tests::test_boolean_attr_numeric ... ok
+test tests::test_boolean_attr_brackets ... ok
+test tests::test_boolean_attr_quoted ... ok
+test tests::test_boolean_attr_parens ... ok
+test tests::test_boolean_attr_single_quoted ... ok
+test tests::test_positional_args_not_supported ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 5 tests
+test tests::test_unknown_python_kwarg_remains_rejected ... ok
+test tests::test_reserved_control_flow_tag_does_not_gain_handler_bypass ... ok
+test tests::test_component_boundary_handlers_bypass_python_kwarg_allowlist ... ok
+test tests::test_distinct_handler_names_and_spreads_can_interlace ... ok
+test tests::test_direct_and_server_dynamic_handlers_coexist_only_on_component_boundaries ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 12 tests
+test tests::test_exact_duplicate_direct_form_is_rejected ... ok
+test tests::test_client_props_bypasses_component_kwarg_allowlist ... ok
+test tests::test_direct_form_is_static_with_exact_source_spans ... ok
+test tests::test_client_props_does_not_satisfy_required_python_kwarg ... ok
+test tests::test_direct_form_rejects_missing_empty_and_whitespace_values ... ok
+test tests::test_case_variants_are_pointed_errors ... ok
+test tests::test_component_and_dynamic_component_accept_both_forms ... ok
+test tests::test_both_forms_reject_plain_element_and_c_element_placements ... ok
+test tests::test_server_dynamic_form_is_python_expression_with_exact_source_spans ... ok
+test tests::test_only_exact_directive_names_are_reserved ... ok
+test tests::test_both_forms_reject_reserved_citry_tags ... ok
+test tests::test_direct_dynamic_and_spread_forms_resolve_in_source_order ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 30 tests
+test tests::test_html_comment_inside_start_tag ... ok
+test tests::test_html_comment ... ok
+test tests::test_html_comment_inside_end_tag ... ok
+test tests::test_python_comment_inside_end_tag ... ok
+test tests::test_html_comment_inside_tag_body ... ok
+test tests::test_python_comment_not_in_static_attr ... ok
+test tests::test_python_comment_inside_start_tag ... ok
+test tests::test_html_comment_inside_static_attr ... ok
+test tests::test_html_comment_inside_c_attr_template ... ok
+test tests::test_python_comment_not_in_c_attr_template ... ok
+test tests::test_python_comment_not_in_text ... ok
+test tests::test_template_comment ... ok
+test tests::test_template_comment_among_text ... ok
+test tests::test_template_comment_after_expression ... ok
+test tests::test_template_comment_before_expression ... ok
+test tests::test_template_comment_among_text_in_nested_template ... ok
+test tests::test_template_comment_inside_expression_fails ... ok
+test tests::test_template_comment_inside_c_attr_template ... ok
+test tests::test_template_comment_inside_end_tag ... ok
+test tests::test_template_comment_inside_self_closing_tag ... ok
+test tests::test_template_comment_inside_start_tag ... ok
+test tests::test_template_comment_inside_static_attr ... ok
+test tests::test_unterminated_template_comment_errors ... ok
+test tests::test_template_comment_inside_tag_body ... ok
+test tests::test_python_comment_in_c_attr_expression ... ok
+test tests::test_python_comment_in_expression ... ok
+test tests::test_python_comment_text_does_not_change_expression_boundary ... ok
+test tests::test_python_comments_in_dynamic_collection_expressions ... ok
+test tests::test_html_comment_inside_expression ... ok
+test tests::test_html_comment_inside_c_attr_expression ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 4 tests
+test tests::test_composition_mismatched_html_tags ... ok
+test tests::test_composition_mismatched_component_tags ... ok
+test tests::test_composition ... ok
+test tests::test_composition_with_mixed_content ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 29 tests
+test tests::test_c_for_each_boolean ... ok
+test tests::test_c_empty_without_c_for ... ok
+test tests::test_c_for_each_trailing_comma ... ok
+test tests::test_c_empty_self_closing ... ok
+test tests::test_c_empty_follows_c_for ... ok
+test tests::test_c_empty_with_attrs ... ok
+test tests::test_c_for_each_valid_pattern ... ok
+test tests::test_c_for_each_valid_pattern_multiple_generators ... ok
+test tests::test_c_for_each_valid_pattern_multiple_generators_with_ifs ... ok
+test tests::test_c_for_each_multiline ... ok
+test tests::test_c_for_each_valid_pattern_multiple_targets ... ok
+test tests::test_c_for_each_valid_pattern_whitespace ... ok
+test tests::test_c_for_accepts_a_trailing_python_comment ... ok
+test tests::test_c_for_shorthand_loop_var_in_dynamic_attr ... ok
+test tests::test_c_for_self_closing ... ok
+test tests::test_c_for_shorthand_loop_var_in_same_element_cbind_self_closing ... ok
+test tests::test_c_for_extra_attrs ... ok
+test tests::test_c_for_each_python_expression_iterable ... ok
+test tests::test_c_for_shorthand_loop_var_in_same_element_cbind_void ... ok
+test tests::test_c_for_without_each ... ok
+test tests::test_text_between_for_and_empty_is_rejected ... ok
+test tests::test_template_comment_and_surrounding_whitespace_between_for_and_empty_are_allowed ... ok
+test tests::test_c_for_each_empty_targets ... ok
+test tests::test_whitespace_between_for_and_empty_is_allowed ... ok
+test tests::test_c_for_each_valid_pattern_multiple_generators_with_ifs_invalid ... ok
+test tests::test_c_for_tag ... ok
+test tests::test_c_for_each_empty_string ... ok
+test tests::test_c_for_each_whitespace_string ... ok
+test tests::test_c_for_each_invalid_patterns ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 28 tests
+test tests::test_c_elif_without_cond ... ok
+test tests::test_c_elif_after_c_else ... ok
+test tests::test_c_elif_without_c_if ... ok
+test tests::test_c_elif_extra_attrs ... ok
+test tests::test_c_elif_cond_empty_string ... ok
+test tests::test_c_elif_cond_boolean ... ok
+test tests::test_c_elif_self_closing ... ok
+test tests::test_c_elif_follows_c_if ... ok
+test tests::test_c_elif_follows_c_elif ... ok
+test tests::test_c_else_after_c_else ... ok
+test tests::test_c_if_cond_boolean ... ok
+test tests::test_c_else_without_c_if ... ok
+test tests::test_c_if_extra_attrs ... ok
+test tests::test_c_else_self_closing ... ok
+test tests::test_c_if_cond_empty_string ... ok
+test tests::test_c_else_follows_c_if ... ok
+test tests::test_c_if_tag ... ok
+test tests::test_c_else_with_attrs ... ok
+test tests::test_c_if_cond_various_values ... ok
+test tests::test_c_elif_cond_various_values ... ok
+test tests::test_c_else_follows_c_elif ... ok
+test tests::test_c_if_self_closing ... ok
+test tests::test_c_if_without_cond ... ok
+test tests::test_expr_between_branches_is_rejected ... ok
+test tests::test_html_comment_between_branches_is_rejected ... ok
+test tests::test_text_between_branches_is_rejected ... ok
+test tests::test_template_comment_and_surrounding_whitespace_between_branches_are_allowed ... ok
+test tests::test_whitespace_between_branches_is_allowed ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 5 tests
+test shorthand_for_rejects_template_values ... ok
+test shorthand_conditions_reject_template_values ... ok
+test mixed_explicit_and_shorthand_branches_remain_valid ... ok
+test marker_shortcuts_reject_every_value_form ... ok
+test shorthand_branches_enforce_group_ordering ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 3 tests
+test unpositioned_value_failure_has_no_source_range ... ok
+test semantic_failure_exposes_a_half_open_byte_range ... ok
+test grammar_failure_exposes_its_root_source_position ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 12 tests
+test tests::test_c_attr_expression ... ok
+test tests::test_repeated_c_bind_allowed ... ok
+test tests::test_c_attr_with_template ... ok
+test tests::test_value_less_c_else_and_c_empty_allowed ... ok
+test tests::test_exact_duplicate_attr_rejected ... ok
+test tests::test_value_less_control_flow_attr_rejected_with_plain_message ... ok
+test tests::test_c_attr_unquoted_value ... ok
+test tests::test_structural_directive_and_spread_do_not_alias_plain_attrs ... ok
+test tests::test_static_and_dynamic_form_of_same_logical_attr_rejected ... ok
+test tests::test_static_and_dynamic_class_style_forms_accumulate_on_elements ... ok
+test tests::test_value_less_dynamic_attr_rejected ... ok
+test tests::test_unterminated_python_strings_in_dynamic_attrs_error ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 11 tests
+test tests::test_django_block_delimiter_is_literal_text ... ok
+test tests::test_unsupported_await_expression_returns_an_error ... ok
+test tests::test_expression_string_ops ... ok
+test tests::test_expression_in_text ... ok
+test tests::test_expression_arithmetic ... ok
+test tests::test_expression_func_call ... ok
+test tests::test_expression_list_comprehension ... ok
+test tests::test_expression_complex ... ok
+test tests::test_expression_string_with_closing_braces ... ok
+test tests::test_unterminated_expression_errors ... ok
+test tests::test_expression_data_types ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 44 tests
+test tests::test_fill_cannot_nest_inside_fill ... ok
+test tests::test_comments_and_multiple_whitespace_nodes_are_not_implicit_content ... ok
+test tests::test_fill_cannot_mix_with_text_or_expr ... ok
+test tests::test_fill_duplicate_cbind_different_order ... ok
+test tests::test_fill_data_destructuring_records_fields_aliases_rest_and_targets ... ok
+test tests::test_fill_destructured_targets_follow_source_order_around_c_bind ... ok
+test tests::test_fill_data_bindings_follow_python_identifier_normalization ... ok
+test tests::test_fill_data_destructuring_accepts_single_rest_unicode_and_unquoted_forms ... ok
+test tests::test_fill_identity_cbind_cbind_cname_is_dynamic ... ok
+test tests::test_fill_duplicate_cbind_different_values ... ok
+test tests::test_fill_identity_cbind_cname_cbind_is_dynamic ... ok
+test tests::test_fill_identity_cbind_name_cbind_is_dynamic ... ok
+test tests::test_fill_data_destructuring_rejects_duplicate_sources_and_targets ... ok
+test tests::test_fill_identity_cbind_then_name_resolves_to_static ... ok
+test tests::test_fill_identity_name_then_cbind_is_dynamic ... ok
+test tests::test_fill_group_content_checked_inside_control_flow ... ok
+test tests::test_fill_inside_reserved_tag_c_raw ... ok
+test tests::test_fill_overflow_dynamic_cbind_outside_control_flow ... ok
+test tests::test_fill_cannot_mix_with_other_tags ... ok
+test tests::test_fill_must_be_inside_component ... ok
+test tests::test_fill_identity_two_cbinds_only ... ok
+test tests::test_fill_overflow_dynamic_inside_control_flow_excluded ... ok
+test tests::test_fill_overflow_all_slots_filled_plus_dynamic ... ok
+test tests::test_fill_overflow_one_remaining_slot ... ok
+test tests::test_fill_overflow_single_allowed_slot ... ok
+test tests::test_fill_duplicate_names ... ok
+test tests::test_fill_overflow_dynamic_inside_c_for_excluded ... ok
+test tests::test_fill_static_and_dynamic_name_conflict ... ok
+test tests::test_fill_control_flow_sibling_must_contain_only_fills ... ok
+test tests::test_fill_repeated_cbind_tuple_parses ... ok
+test tests::test_slot_metadata_follows_source_order ... ok
+test tests::test_slot_explicit_logical_providers_conflict ... ok
+test tests::test_fill_introduced_vars_follow_source_order_around_c_bind ... ok
+test tests::test_fill_repeated_cbind_source_parses ... ok
+test tests::test_slot_without_name_is_default_slot ... ok
+test tests::test_fill_data_destructuring_rejects_malformed_or_ambiguous_patterns ... ok
+test tests::test_typed_slot_data_rejects_unknown_explicit_source ... ok
+test tests::test_typed_slot_data_defers_dynamic_or_unknown_shapes ... ok
+test tests::test_typed_slot_data_accepts_known_sources_aliases_whole_and_rest ... ok
+test tests::test_typed_slot_data_empty_shape_rejects_explicit_source ... ok
+test tests::test_typed_slot_data_uses_effective_rightmost_providers ... ok
+test tests::test_slot_and_fill_static_names_must_be_nonempty ... ok
+test tests::test_fill_with_data_and_fallback_attrs ... ok
+test tests::test_fill_inside_control_flow ... ok
+
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 16 tests
+test invalid_and_overlapping_claims_fail_before_pest ... ok
+test masking_cannot_turn_an_authored_tag_name_into_body_text ... ok
+test body_claim_preserves_original_text_and_order ... ok
+test adjacent_claims_remain_distinct ... ok
+test compiler_emits_fail_closed_foreign_runtime_node ... ok
+test unicode_before_claim_keeps_byte_offsets_and_character_columns ... ok
+test whole_expression_claim_never_reaches_expression_parser ... ok
+test controlling_foreign_claims_may_select_component_fills ... ok
+test non_controlling_foreign_claim_next_to_fill_stays_invalid ... ok
+test ordinary_attribute_value_is_an_ordered_raw_start_tag_program ... ok
+test between_attribute_foreign_source_retains_authored_order ... ok
+test between_attribute_and_quoted_value_claims_share_one_ordered_program ... ok
+test component_static_input_uses_distinct_foreign_attribute_node ... ok
+test nested_template_attribute_retains_projection_for_lazy_reparse ... ok
+test foreign_source_inside_raw_and_text_containers_is_not_dropped ... ok
+test foreign_start_tag_rejects_citry_dynamic_attribute_rewrites ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 9 tests
+test tests::test_html_void_element_self_closing ... ok
+test tests::test_html_non_void_self_closing ... ok
+test tests::test_html_void_element ... ok
+test tests::test_html_tag_basic ... ok
+test tests::test_html_tag_with_nested_template ... ok
+test tests::test_html_tag_closing_identity_is_ascii_case_insensitive ... ok
+test tests::test_html_tag_with_c_bind ... ok
+test tests::test_html_tag_with_c_attrs ... ok
+test tests::test_html_void_element_identity_is_ascii_case_insensitive ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 9 tests
+test tests::test_unterminated_quoted_attribute_values_error ... ok
+test tests::test_kwarg_unquoted_value ... ok
+test tests::test_kwarg_empty_value ... ok
+test tests::test_kwarg_whitespace_only_value ... ok
+test tests::test_kwarg_special_chars_in_key ... ok
+test tests::test_kwarg_basic ... ok
+test tests::test_kwarg_unquoted_value_stops_at_whitespace ... ok
+test tests::test_kwarg_complex_key_names ... ok
+test tests::test_kwarg_whitespace_around_equals ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 26 tests
+test tests::test_empty_key_value_is_error ... ok
+test tests::test_bare_meta_prefix_is_error ... ok
+test tests::test_empty_valued_ignore_is_error ... ok
+test tests::test_hash_attr_outside_channel_stays_static ... ok
+test tests::test_ignore_on_reserved_tag_is_error ... ok
+test tests::test_key_on_raw_tag_is_error ... ok
+test tests::test_duplicate_key_is_error ... ok
+test tests::test_key_on_control_flow_tag_is_error ... ok
+test tests::test_key_on_fill_tag_is_error ... ok
+test tests::test_meta_attrs_exempt_from_user_attr_rules ... ok
+test tests::test_key_on_slot_tag_is_error ... ok
+test tests::test_meta_key_and_ignore_can_share_an_element ... ok
+test tests::test_meta_ignore_parses_as_bare_meta_kind ... ok
+test tests::test_meta_key_allowed_on_component_tag ... ok
+test tests::test_ignore_rejected_on_every_reserved_structural_tag ... ok
+test tests::test_meta_key_parses_as_meta_kind_with_expression_vars ... ok
+test tests::test_meta_ignore_allowed_on_component_and_element_tags ... ok
+test tests::test_unknown_meta_name_is_error_naming_both_members ... ok
+test tests::test_structural_closing_tag_requires_lowercase_spelling ... ok
+test tests::test_placement_error_reports_real_template_location ... ok
+test tests::test_reserved_structural_tag_case_variants_get_spelling_error ... ok
+test tests::test_uppercase_citry_prefix_gets_pointed_error ... ok
+test tests::test_valued_ignore_is_error ... ok
+test tests::test_valued_ignore_on_component_is_error ... ok
+test tests::test_valueless_key_is_error ... ok
+test tests::test_whitespace_key_value_is_error ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 9 tests
+test nested_errors_show_the_root_source_and_absolute_position ... ok
+test nested_grammar_errors_are_rebased_without_nested_diagnostics ... ok
+test nested_validation_errors_show_the_root_source ... ok
+test unclosed_nested_templates_return_errors_instead_of_panicking ... ok
+test nested_validator_errors_use_root_absolute_tokens ... ok
+test cropped_tokens_track_multiline_and_unicode_prefixes ... ok
+test unicode_before_for_target_uses_character_columns ... ok
+test recursive_template_attributes_keep_absolute_positions ... ok
+test nested_expression_errors_show_the_root_source ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 32 tests
+test tests::test_c_attr_template_fragment_with_whitespace ... ok
+test tests::test_c_attr_template_component_with_whitespace ... ok
+test tests::test_c_attr_template_fragment ... ok
+test tests::test_c_attr_template_fragment_multiple_children ... ok
+test tests::test_c_attr_template_different_root_tags ... ok
+test tests::test_c_attr_template_multiple_components ... ok
+test tests::test_c_attr_template_self_closing_component ... ok
+test tests::test_c_attr_template_self_closing_html ... ok
+test tests::test_c_attr_template_multiple_root_tags ... ok
+test tests::test_c_attr_template_self_closing_with_whitespace ... ok
+test tests::test_c_attr_template_self_closing_no_space ... ok
+test tests::test_c_attr_template_single_component ... ok
+test tests::test_c_attr_template_single_tag_with_whitespace ... ok
+test tests::test_c_attr_template_component_with_text_before ... ok
+test tests::test_dynamic_nested_template_slot_name_is_not_propagated ... ok
+test tests::test_c_attr_not_template_double_angle ... ok
+test tests::test_c_attr_template_with_text_before ... ok
+test tests::test_c_attr_not_template_spaced_angles ... ok
+test tests::test_c_attr_not_template_space_after_lt ... ok
+test tests::test_fragment_slot_metadata_preserves_attribute_then_body_order ... ok
+test tests::test_nested_template_slot_metadata_propagates_from_ordinary_tag_value ... ok
+test tests::test_c_attr_template_single_tag_with_text_before ... ok
+test tests::test_nested_template_slot_metadata_preserves_absolute_position_and_requiredness ... ok
+test tests::test_nested_template_slot_metadata_propagates_from_void_element_attribute ... ok
+test tests::test_c_attr_template_with_text_after ... ok
+test tests::test_reserved_dynamic_attr_spellings_remain_template_capable_component_inputs ... ok
+test tests::test_nested_template_slot_metadata_propagates_recursively ... ok
+test tests::test_fragment_delimiters_must_wrap_the_entire_nested_template ... ok
+test tests::test_nested_template_fill_metadata_stays_local ... ok
+test tests::test_whole_value_fragment_and_adjacent_tag_roots_are_valid ... ok
+test tests::test_reserved_dynamic_attrs_reject_nested_template_values ... ok
+test tests::test_tag_like_text_does_not_fake_the_final_template_boundary ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 5 tests
+test tests::test_c_raw_self_closing ... ok
+test tests::test_c_raw_tag ... ok
+test tests::test_c_raw_nested ... ok
+test tests::test_c_raw_with_c_tags_inside ... ok
+test tests::test_c_raw_with_attrs ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 11 tests
+test tests::test_c_bind_no_value ... ok
+test tests::test_c_bind_rejects_nested_template_values ... ok
+test tests::test_c_bind_empty_value ... ok
+test tests::test_c_bind_whitespace_value ... ok
+test tests::test_c_bind_unquoted_value ... ok
+test tests::test_multiple_c_bind ... ok
+test tests::test_c_bind_with_other_attrs ... ok
+test tests::test_multiple_c_bind_same_value ... ok
+test tests::test_c_bind_remains_valid_on_control_flow_shorthand_hosts ... ok
+test tests::test_c_bind_spread ... ok
+test tests::test_c_bind_is_rejected_on_physical_structural_tags ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 8 tests
+test tests::test_self_closing_slash_must_be_last ... ok
+test tests::test_unclosed_tag_errors ... ok
+test tests::test_end_tag_with_attrs_errors ... ok
+test tests::test_self_closing_tag ... ok
+test tests::test_self_closing_tag_no_space ... ok
+test tests::test_tag_with_close_tag ... ok
+test tests::test_tag_with_close_tag_and_attrs ... ok
+test tests::test_self_closing_tag_with_attrs ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 16 tests
+test tests::test_user_rules_fallback ... ok
+test tests::test_user_rules_allowed_slots_skipped_with_c_name ... ok
+test tests::test_user_rules_match_tags_case_insensitively ... ok
+test tests::test_user_rules_required_attrs ... ok
+test tests::test_user_rules_allowed_slots_empty ... ok
+test tests::test_user_rules_allowed_attrs ... ok
+test tests::test_user_rules_allowed_attrs_with_c_bind ... ok
+test tests::test_user_rules_allowed_slots ... ok
+test tests::test_user_rules_required_attrs_with_c_bind ... ok
+test tests::test_user_rules_allowed_slots_none ... ok
+test tests::test_user_rules_required_slots_static_fill_inside_c_for ... ok
+test tests::test_user_rules_required_slots ... ok
+test tests::test_user_rules_required_slots_dynamic_fill_inside_c_for ... ok
+test tests::test_user_rules_required_slots_dynamic_fill_inside_c_empty ... ok
+test tests::test_user_rules_required_slots_with_c_bind ... ok
+test tests::test_user_rules_required_slots_with_c_name ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 8 tests
+test tests::test_sibling_bindings_do_not_shadow_each_other ... ok
+test tests::test_nested_template_attribute_internal_binding_remains_local ... ok
+test tests::test_duplicate_loop_targets_are_rejected_at_the_second_target ... ok
+test tests::test_loop_target_cannot_read_same_outer_name ... ok
+test tests::test_nested_template_attribute_binding_sees_writer_scope ... ok
+test tests::test_nested_template_attribute_sibling_bindings_have_separate_scopes ... ok
+test tests::test_binding_is_local_to_its_own_body ... ok
+test tests::test_binding_cannot_reuse_root_or_active_outer_name ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 6 tests
+test test_generate_unary_operation ... ok
+test test_generate_comparison ... ok
+test test_generate_binary_operation ... ok
+test test_generate_list ... ok
+test test_generate_dict ... ok
+test test_generate_simple_literal ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 21 tests
+test test_comment_after_string_extracted ... ok
+test test_comment_at_end_of_input ... ok
+test test_comment_inside_string_not_extracted ... ok
+test test_comment_before_string ... ok
+test test_comment_with_carriage_return ... ok
+test test_empty_comment ... ok
+test test_complex_expression_with_comments ... ok
+test test_fstring_newline_replacement ... ok
+test test_multiline_string ... ok
+test test_multiline_string_with_comment ... ok
+test test_multiline_string_with_escaped_newline ... ok
+test test_multiple_comments ... ok
+test test_nested_strings ... ok
+test test_raw_string_preserves_newlines ... ok
+test test_raw_string_with_escape_sequence ... ok
+test test_regular_string_no_newline ... ok
+test test_simple_comment_extraction ... ok
+test test_single_quoted_string_with_literal_newline ... ok
+test test_string_prefixes ... ok
+test test_string_with_escape_sequence ... ok
+test test_triple_quotes_in_single_quote_string ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 278 tests
+test tests::test_allow_binary_divide ... ok
+test tests::test_allow_binary_add ... ok
+test tests::test_allow_binary_less_than ... ok
+test tests::test_allow_binary_equality ... ok
+test tests::test_allow_binary_greater_equal ... ok
+test tests::test_allow_binary_multiply ... ok
+test tests::test_allow_binary_modulo ... ok
+test tests::test_allow_binary_inequality ... ok
+test tests::test_allow_binary_less_equal ... ok
+test tests::test_allow_binary_greater_than ... ok
+test tests::test_allow_binary_power ... ok
+test tests::test_allow_binary_subtract ... ok
+test tests::test_allow_boolean_and ... ok
+test tests::test_allow_boolean_chained_and ... ok
+test tests::test_allow_boolean_chained_or ... ok
+test tests::test_allow_boolean_mixed_operators ... ok
+test tests::test_allow_boolean_or ... ok
+test tests::test_allow_boolean_with_comparisons ... ok
+test tests::test_allow_comments ... ok
+test tests::test_allow_comparison_chained ... ok
+test tests::test_allow_comparison_equality ... ok
+test tests::test_allow_comparison_greater_equal ... ok
+test tests::test_allow_comparison_greater_than ... ok
+test tests::test_allow_comparison_in ... ok
+test tests::test_allow_comparison_inequality ... ok
+test tests::test_allow_comparison_is ... ok
+test tests::test_allow_comparison_is_not ... ok
+test tests::test_allow_comparison_less_equal ... ok
+test tests::test_allow_comparison_less_than ... ok
+test tests::test_allow_comparison_mixed_types ... ok
+test tests::test_allow_comparison_not_in ... ok
+test tests::test_allow_comprehension_with_multiple_conditions ... ok
+test tests::test_allow_dict_empty ... ok
+test tests::test_allow_dict_with_literals ... ok
+test tests::test_allow_generator_expression ... ok
+test tests::test_allow_dict_comprehension ... ok
+test tests::test_allow_list_comprehension ... ok
+test tests::test_allow_list_empty ... ok
+test tests::test_allow_list_with_literals ... ok
+test tests::test_allow_list_comprehension_complex ... ok
+test tests::test_allow_literal_boolean_false ... ok
+test tests::test_allow_literal_boolean_true ... ok
+test tests::test_allow_list_comprehension_with_condition ... ok
+test tests::test_allow_literal_bytes ... ok
+test tests::test_allow_literal_ellipsis ... ok
+test tests::test_allow_literal_float ... ok
+test tests::test_allow_literal_float_negative ... ok
+test tests::test_allow_literal_float_scientific ... ok
+test tests::test_allow_literal_integer ... ok
+test tests::test_allow_literal_integer_negative ... ok
+test tests::test_allow_literal_none ... ok
+test tests::test_allow_literal_string ... ok
+test tests::test_allow_multiline_expr ... ok
+test tests::test_allow_multiline_with_variables ... ok
+test tests::test_allow_multiple_comprehensions ... ok
+test tests::test_allow_nested_binary_operations ... ok
+test tests::test_allow_nested_comprehension ... ok
+test tests::test_allow_nested_data_structures ... ok
+test tests::test_allow_nested_unary_operators ... ok
+test tests::test_allow_set_comprehension ... ok
+test tests::test_allow_set_empty ... ok
+test tests::test_allow_simple_variable ... ok
+test tests::test_allow_set_literal ... ok
+test tests::test_allow_tuple_empty ... ok
+test tests::test_allow_tuple_with_literals ... ok
+test tests::test_allow_unary_invert ... ok
+test tests::test_allow_unary_minus ... ok
+test tests::test_allow_unary_not ... ok
+test tests::test_allow_unary_plus ... ok
+test tests::test_comment_at_end_of_input ... ok
+test tests::test_comment_after_string_extracted ... ok
+test tests::test_comment_before_string ... ok
+test tests::test_comment_inside_string_not_extracted ... ok
+test tests::test_comment_with_carriage_return ... ok
+test tests::test_complex_expression_with_comments ... ok
+test tests::test_comprehension_in_lambda ... ok
+test tests::test_empty_comment ... ok
+test tests::test_comprehension_with_lambda_filter ... ok
+test tests::test_forbid_async_dict_comprehension ... ok
+test tests::test_forbid_async_generator_expression ... ok
+test tests::test_forbid_async_set_comprehension ... ok
+test tests::test_forbid_async_list_comprehension ... ok
+test tests::test_forbid_annotated_assignment ... ok
+test tests::test_forbid_assignment ... ok
+test tests::test_forbid_async_fn ... ok
+test tests::test_forbid_await_expression_without_panicking ... ok
+test tests::test_forbid_async_for ... ok
+test tests::test_forbid_async_with_in_async_fn ... ok
+test tests::test_forbid_assert ... ok
+test tests::test_forbid_assert_with_message ... ok
+test tests::test_forbid_decorator ... ok
+test tests::test_forbid_async_with ... ok
+test tests::test_forbid_augmented_assignment ... ok
+test tests::test_forbid_continue ... ok
+test tests::test_forbid_delete ... ok
+test tests::test_forbid_generic_function ... ok
+test tests::test_forbid_break ... ok
+test tests::test_forbid_class ... ok
+test tests::test_forbid_if ... ok
+test tests::test_forbid_if_else ... ok
+test tests::test_forbid_global ... ok
+test tests::test_forbid_import ... ok
+test tests::test_forbid_except_star ... ok
+test tests::test_forbid_for ... ok
+test tests::test_forbid_fn ... ok
+test tests::test_forbid_import_from_as ... ok
+test tests::test_forbid_match_class ... ok
+test tests::test_forbid_match_or ... ok
+test tests::test_forbid_import_from ... ok
+test tests::test_forbid_match_singleton ... ok
+test tests::test_forbid_match_sequence ... ok
+test tests::test_forbid_match_guard ... ok
+test tests::test_forbid_match_as ... ok
+test tests::test_forbid_match ... ok
+test tests::test_forbid_match_wildcard ... ok
+test tests::test_forbid_match_mapping ... ok
+test tests::test_forbid_match_star ... ok
+test tests::test_forbid_pass ... ok
+test tests::test_forbid_return ... ok
+test tests::test_forbid_try_except ... ok
+test tests::test_forbid_multiple_delete ... ok
+test tests::test_forbid_try_except_finally ... ok
+test tests::test_forbid_try_except_specific ... ok
+test tests::test_forbid_raise ... ok
+test tests::test_forbid_nonlocal ... ok
+test tests::test_forbid_paramspec ... ok
+test tests::test_forbid_typevar ... ok
+test tests::test_forbid_raise_bare ... ok
+test tests::test_forbid_type_alias ... ok
+test tests::test_forbid_typevar_union ... ok
+test tests::test_lambda_in_comprehension ... ok
+test tests::test_lambda_no_params ... ok
+test tests::test_lambda_multiple_params ... ok
+test tests::test_forbid_typevartuple ... ok
+test tests::test_lambda_simple ... ok
+test tests::test_lambda_with_defaults ... ok
+test tests::test_lambda_with_external_variable ... ok
+test tests::test_lambda_with_kwargs ... ok
+test tests::test_lambda_with_kwonly_defaults ... ok
+test tests::test_lambda_with_varargs ... ok
+test tests::test_lambda_with_posonly_defaults ... ok
+test tests::test_lambda_with_mixed_params_and_defaults ... ok
+test tests::test_local_variable_tracking_in_comprehension_conditions ... ok
+test tests::test_local_variable_tracking_in_comprehensions ... ok
+test tests::test_forbid_yield ... ok
+test tests::test_local_variable_tracking_in_multiple_comprehension_conditions ... ok
+test tests::test_local_variable_tracking_in_multiple_comprehensions ... ok
+test tests::test_multiline_string_with_comment ... ok
+test tests::test_local_variable_tracking_in_nested_comprehensions ... ok
+test tests::test_multiline_string_with_escaped_newline ... ok
+test tests::test_forbid_while ... ok
+test tests::test_multiple_lines_escape_2 ... ok
+test tests::test_nested_lambda ... ok
+test tests::test_nested_strings ... ok
+test tests::test_raw_string_with_escape_sequence ... ok
+test tests::test_simple_comment_extraction ... ok
+test tests::test_string_with_escape_sequence ... ok
+test tests::test_nested_lambda_and_comprehension ... ok
+test tests::test_ternary_if_in_comprehension ... ok
+test tests::test_ternary_if_in_expression ... ok
+test tests::test_forbid_yield_from ... ok
+test tests::test_ternary_if_nested ... ok
+test tests::test_ternary_if_simple ... ok
+test tests::test_ternary_if_in_lambda ... ok
+test tests::test_ternary_if_with_attribute_access ... ok
+test tests::test_forbid_with_multiple ... ok
+test tests::test_ternary_if_with_function_calls ... ok
+test tests::test_ternary_if_with_walrus ... ok
+test tests::test_ternary_if_with_walrus_order ... ok
+test tests::test_ternary_if_with_subscript ... ok
+test tests::test_tranform_walrus_overwriting_function_argument_allowed ... ok
+test tests::test_transform_attribute_access_chained ... ok
+test tests::test_transform_attribute_access_simple ... ok
+test tests::test_transform_attribute_access_with_args ... ok
+test tests::test_transform_attribute_access_with_method_call ... ok
+test tests::test_transform_attribute_in_comprehension ... ok
+test tests::test_multiple_lines_escape_1 ... ok
+test tests::test_multiple_lines_escape_3 ... ok
+test tests::test_transform_attribute_in_expression ... ok
+test tests::test_forbid_with ... ok
+test tests::test_transform_attribute_with_dunder ... ok
+test tests::test_transform_attribute_with_underscore ... ok
+test tests::test_transform_complex_nested_access ... ok
+test tests::test_multiple_lines ... ok
+test tests::test_transform_fstring_multiple_interpolations ... ok
+test tests::test_transform_fstring_simple ... ok
+test tests::test_transform_fstring_with_attribute ... ok
+test tests::test_transform_fstring_with_conversion ... ok
+test tests::test_transform_fstring_with_conversion_str ... ok
+test tests::test_transform_fstring_with_conversion_and_format ... ok
+test tests::test_transform_fstring_with_dynamic_format_spec ... ok
+test tests::test_transform_fstring_nested_expression ... ok
+test tests::test_transform_fstring_with_expression ... ok
+test tests::test_transform_fstring_with_format_spec ... ok
+test tests::test_transform_fstring_with_format_spec_alignment ... ok
+test tests::test_transform_fstring_with_function_call ... ok
+test tests::test_transform_function_call_with_keyword_args ... ok
+test tests::test_transform_function_call_complex_signature ... ok
+test tests::test_transform_function_call_simple ... ok
+test tests::test_transform_function_call_with_mixed_args ... ok
+test tests::test_transform_function_call_with_mixed_spreads ... ok
+test tests::test_transform_function_call_with_nested_call_as_arg ... ok
+test tests::test_transform_function_call_with_positional_args ... ok
+test tests::test_transform_function_call_with_spread_args ... ok
+test tests::test_transform_function_call_with_spread_kwargs ... ok
+test tests::test_transform_function_call_with_variable_args ... ok
+test tests::test_transform_function_call_with_variable_kwargs ... ok
+test tests::test_transform_method_call ... ok
+test tests::test_transform_nested_attribute_method_call ... ok
+test tests::test_transform_mixed_attribute_and_subscript ... ok
+test tests::test_transform_percent_formatting ... ok
+test tests::test_transform_nested_function_calls ... ok
+test tests::test_transform_percent_formatting_tuple ... ok
+test tests::test_transform_slice_all ... ok
+test tests::test_transform_slice_full ... ok
+test tests::test_transform_slice_reverse ... ok
+test tests::test_transform_slice_start_only ... ok
+test tests::test_transform_slice_start_stop_with_step ... ok
+test tests::test_transform_slice_start_stop ... ok
+test tests::test_transform_slice_start_with_step ... ok
+test tests::test_transform_slice_stop_only ... ok
+test tests::test_transform_slice_with_attribute_access ... ok
+test tests::test_transform_slice_with_expressions ... ok
+test tests::test_transform_slice_with_function_call ... ok
+test tests::test_transform_slice_with_step ... ok
+test tests::test_transform_subscript_access_chained ... ok
+test tests::test_transform_slice_with_variables ... ok
+test tests::test_transform_subscript_access_in_expression ... ok
+test tests::test_transform_subscript_access_with_expression_key ... ok
+test tests::test_transform_subscript_access_simple ... ok
+test tests::test_transform_subscript_access_with_string_key ... ok
+test tests::test_transform_subscript_then_attribute ... ok
+test tests::test_transform_subscript_access_in_comprehension ... ok
+test tests::test_transform_subscript_access_with_variable_key ... ok
+test tests::test_transform_subscript_with_method_call ... ok
+test tests::test_transform_tstring_multiple_interpolations ... ok
+test tests::test_transform_tstring_simple ... ok
+test tests::test_transform_tstring_with_conversion ... ok
+test tests::test_transform_tstring_with_conversion_and_format ... ok
+test tests::test_transform_tstring_with_expression ... ok
+test tests::test_transform_tstring_with_format_spec ... ok
+test tests::test_transform_tstring_with_dynamic_format_spec ... ok
+test tests::test_transform_variable_in_binary_operation ... ok
+test tests::test_transform_variable_as_callable ... ok
+test tests::test_transform_variable_in_comparison ... ok
+test tests::test_transform_variable_in_boolean_operation ... ok
+test tests::test_transform_variable_in_complex_expression ... ok
+test tests::test_transform_variable_in_dict ... ok
+test tests::test_transform_variable_names_with_underscores ... ok
+test tests::test_transform_variable_in_list ... ok
+test tests::test_transform_variable_in_unary_operation ... ok
+test tests::test_transform_variable_names_with_numbers ... ok
+test tests::test_transform_walrus_before_comprehension ... ok
+test tests::test_transform_walrus_chained ... ok
+test tests::test_transform_walrus_in_comprehension_condition_in_lambda ... ok
+test tests::test_transform_walrus_in_function_call ... ok
+test tests::test_transform_walrus_in_comprehension_condition_in_lambda_3 ... ok
+test tests::test_transform_walrus_in_comprehension ... ok
+test tests::test_transform_walrus_in_comprehension_condition_in_lambda_2 ... ok
+test tests::test_transform_walrus_in_if_expression ... ok
+test tests::test_transform_walrus_in_lambda_leaks ... ok
+test tests::test_transform_walrus_in_lambda_in_comprehension ... ok
+test tests::test_transform_walrus_multiple_assignments ... ok
+test tests::test_transform_walrus_overwriting_loop_argument_syntax_error ... ok
+test tests::test_transform_walrus_remains_accessible_after_scope ... ok
+test tests::test_transform_walrus_simple ... ok
+test tests::test_transform_walrus_with_attribute_access ... ok
+test tests::test_transform_walrus_sequential_usage ... ok
+test tests::test_transform_walrus_nested_scopes ... ok
+test tests::test_transform_walrus_with_function_call ... ok
+test tests::test_transform_walrus_with_expression ... ok
+test tests::test_transform_walrus_with_variable ... ok
+test tests::test_triple_quotes_in_single_quote_string ... ok
+test tests::test_walrus_conflict_with_comprehension_variable ... ok
+test tests::test_walrus_conflict_with_lambda_parameter ... ok
+test tests::test_walrus_conflict_with_nested_lambda_inner_parameter ... ok
+test tests::test_walrus_conflict_with_nested_lambda_outer_parameter ... ok
+test tests::test_walrus_conflict_with_nested_comprehension_variable ... ok
+
+test result: ok. 278 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test crates/citry_template_parser/src/lang/rust.rs - lang::rust::RustLang (line 183) ... ignored
+test crates/citry_template_parser/src/lang/rust.rs - lang::rust::RustLang (line 200) ... ignored
+test crates/citry_template_parser/src/lang/rust.rs - lang::rust::RustLang (line 218) ... ignored
+test crates/citry_template_parser/src/lang/rust.rs - lang::rust::RustLang (line 238) ... ignored
+test crates/citry_template_parser/src/parser_context.rs - parser_context::TagRules (line 21) ... ignored
+
+test result: ok. 0 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test crates/python_safe_eval/src/lib.rs - safe_eval (line 37) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 0.82s; merged doctests compilation took 0.18s
+All checks passed!
+2030 files already formatted
+Success: no issues found in 534 source files
+0 errors, 0 warnings, 0 informations
+
+> citry-client@0.0.0 check /Users/mac/repos/citry-perf-repeat/packages/js/citry-client
+> pnpm run typecheck && pnpm run lint && pnpm run test
+
+
+> citry-client@0.0.0 typecheck /Users/mac/repos/citry-perf-repeat/packages/js/citry-client
+> tsc --noEmit
+
+
+> citry-client@0.0.0 lint /Users/mac/repos/citry-perf-repeat/packages/js/citry-client
+> biome check .
+
+Checked 12 files in 69ms. No fixes applied.
+
+> citry-client@0.0.0 test /Users/mac/repos/citry-perf-repeat/packages/js/citry-client
+> node --test
+
+(node:18799) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the committed browser bundle exactly matches its TypeScript source (24.023083ms)
+✔ the committed CSP browser bundle exactly matches its TypeScript source (15.350416ms)
+✔ the CSP build alias cannot be replaced by a caller (0.276791ms)
+✔ the complete CSP bundle owns both evaluator paths without dynamic evaluation (29.486917ms)
+✔ the committed i18n bundle exactly matches its TypeScript source (10.31775ms)
+✔ the Fluent browser runtime pin is exact (0.282166ms)
+✔ the pinned Alpine directive handler is instrumented exactly (0.124417ms)
+✔ the pinned Alpine morph working sequence is instrumented exactly (0.176792ms)
+✔ the Alpine, morph, and CSP pins are exact (0.322791ms)
+✔ the private scope APIs the runtime calls exist (0.100458ms)
+✔ the lifecycle, magic, listener, and morph internals retain their pinned shape (1.090083ms)
+✔ the slot adapter's scope, structural, and teleport internals retain their pinned shape (0.182125ms)
+✔ addScopeToNode writes the node's _x_dataStack with the scope first (0.318292ms)
+✔ initTree still honors the private _x_ignore hold before walking (0.047916ms)
+✔ the morph package's named export is the plugin installer (spike F1) (0.085084ms)
+✔ morph's Alpine bridge still resolves window.Alpine.cloneNode (0.042791ms)
+✔ test/csp-contract-runner.mjs (26.706875ms)
+(node:18801) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the pinned Alpine CSP evaluator agrees with the compatibility corpus (13.977709ms)
+✔ the pinned CSP build keeps its directive and host restrictions (0.588291ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 144.39025
+
+> @citry/codemirror-lang-fluent@0.0.0 check /Users/mac/repos/citry-perf-repeat/packages/js/codemirror-lang-fluent
+> pnpm run lint && pnpm run test
+
+
+> @citry/codemirror-lang-fluent@0.0.0 lint /Users/mac/repos/citry-perf-repeat/packages/js/codemirror-lang-fluent
+> biome check .
+
+Checked 4 files in 2ms. No fixes applied.
+
+> @citry/codemirror-lang-fluent@0.0.0 test /Users/mac/repos/citry-perf-repeat/packages/js/codemirror-lang-fluent
+> node --test
+
+✔ colors the Fluent constructs used by component messages (1.737333ms)
+✔ keeps prose with an equals sign out of the definition style (0.658916ms)
+✔ accepts incomplete source without throwing (0.109708ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60.775333
+{
+  "package": "packages/protocol/events/v1",
+  "coverage": [
+    {
+      "schema": "call.schema.json",
+      "total": 37,
+      "covered": 6,
+      "uncovered": 31,
+      "uncoveredByKeyword": {
+        "additionalProperties": 2,
+        "const": 1,
+        "enum": 2,
+        "maxItems": 1,
+        "minLength": 5,
+        "required": 5,
+        "type": 14,
+        "uniqueItems": 1
+      },
+      "ownership": {
+        "schema": "call.schema.json",
+        "total": 37,
+        "assigned": 37,
+        "families": 3
+      }
+    },
+    {
+      "schema": "descriptor.schema.json",
+      "total": 24,
+      "covered": 4,
+      "uncovered": 20,
+      "uncoveredByKeyword": {
+        "additionalProperties": 1,
+        "const": 3,
+        "minLength": 2,
+        "pattern": 1,
+        "required": 3,
+        "type": 9,
+        "uniqueItems": 1
+      },
+      "ownership": {
+        "schema": "descriptor.schema.json",
+        "total": 24,
+        "assigned": 24,
+        "families": 2
+      }
+    },
+    {
+      "schema": "manifest.schema.json",
+      "total": 49,
+      "covered": 2,
+      "uncovered": 47,
+      "uncoveredByKeyword": {
+        "additionalProperties": 4,
+        "const": 4,
+        "minLength": 6,
+        "minimum": 2,
+        "pattern": 2,
+        "required": 11,
+        "type": 17,
+        "uniqueItems": 1
+      },
+      "ownership": {
+        "schema": "manifest.schema.json",
+        "total": 49,
+        "assigned": 49,
+        "families": 3
+      }
+    },
+    {
+      "schema": "result.schema.json",
+      "total": 147,
+      "covered": 7,
+      "uncovered": 140,
+      "uncoveredByKeyword": {
+        "additionalProperties": 11,
+        "const": 40,
+        "enum": 5,
+        "maxItems": 1,
+        "maximum": 2,
+        "minItems": 2,
+        "minLength": 8,
+        "minimum": 4,
+        "not": 2,
+        "oneOf": 4,
+        "pattern": 2,
+        "required": 30,
+        "type": 29
+      },
+      "ownership": {
+        "schema": "result.schema.json",
+        "total": 147,
+        "assigned": 147,
+        "families": 4
+      }
+    }
+  ],
+  "problems": []
+}
+{
+  "package": "packages/protocol/client_graph/v1",
+  "coverage": [
+    {
+      "schema": "manifest.schema.json",
+      "total": 219,
+      "covered": 16,
+      "uncovered": 203,
+      "uncoveredByKeyword": {
+        "additionalProperties": 15,
+        "const": 4,
+        "enum": 5,
+        "maximum": 10,
+        "minimum": 9,
+        "oneOf": 7,
+        "required": 90,
+        "type": 63
+      },
+      "ownership": {
+        "schema": "manifest.schema.json",
+        "total": 219,
+        "assigned": 219,
+        "families": 11
+      }
+    }
+  ],
+  "problems": []
+}
+Protocol Python copies are current (events, client_graph).
+
+> @citry/protocol-events-v1@0.0.0 check /Users/mac/repos/citry-perf-repeat/packages/protocol/events/v1/js
+> pnpm run typecheck && pnpm run lint && pnpm run test
+
+
+> @citry/protocol-events-v1@0.0.0 typecheck /Users/mac/repos/citry-perf-repeat/packages/protocol/events/v1/js
+> tsc --noEmit
+
+
+> @citry/protocol-events-v1@0.0.0 lint /Users/mac/repos/citry-perf-repeat/packages/protocol/events/v1/js
+> biome check . ../../../_tooling/conformance.mjs
+
+Checked 10 files in 8ms. No fixes applied.
+
+> @citry/protocol-events-v1@0.0.0 test /Users/mac/repos/citry-perf-repeat/packages/protocol/events/v1/js
+> node --test
+
+✔ replays shared conformance mutations against the runtime validators (9.719458ms)
+✔ accepts every valid fixture and rejects every invalid fixture (14.536875ms)
+✔ builders return validated copies instead of caller-owned containers (0.324125ms)
+✔ builders preserve __proto__ as data without changing prototypes (0.073916ms)
+✔ exports the transport carrier field names (0.046083ms)
+✔ strict JSON checks reject browser-only invalid values (0.074542ms)
+✔ public validators reject object shapes JSON text cannot carry (0.142666ms)
+✔ every public validator checks strict JSON before record shape (0.118ms)
+✔ mathematically integral numbers satisfy integer fields (0.091875ms)
+✔ result preflight validates an entire batch before returning any result (0.328292ms)
+✔ exchange validation enforces advertised actions and swaps (0.223375ms)
+✔ edge errors fan out only after their special shape validates (0.105125ms)
+✔ case parser rejects non-finite operation values (0.244333ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 81.715667
+
+> @citry/protocol-client-graph-v1@0.0.0 check /Users/mac/repos/citry-perf-repeat/packages/protocol/client_graph/v1/js
+> pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build:check && pnpm run prototype
+
+
+> @citry/protocol-client-graph-v1@0.0.0 typecheck /Users/mac/repos/citry-perf-repeat/packages/protocol/client_graph/v1/js
+> tsc --noEmit
+
+
+> @citry/protocol-client-graph-v1@0.0.0 lint /Users/mac/repos/citry-perf-repeat/packages/protocol/client_graph/v1/js
+> biome check . ../../../_tooling/conformance.mjs
+
+Checked 18 files in 10ms. No fixes applied.
+
+> @citry/protocol-client-graph-v1@0.0.0 test /Users/mac/repos/citry-perf-repeat/packages/protocol/client_graph/v1/js
+> node --test
+
+✔ parses one canonical ownership comment (0.689083ms)
+✔ preserves decimal spelling for later canonicality checks (0.098708ms)
+✔ derives the comment alias from a complete validated revision (0.187166ms)
+✔ rejects text outside the client-graph comment format (0.056333ms)
+✔ initializes then refreshes exactly one generated region (0.1495ms)
+✔ rejects duplicate, reversed, and moved generated markers (0.094958ms)
+✔ initialization requires one outer strict directive (0.048125ms)
+✔ client-graph JavaScript replays every shared conformance mutation (9.121833ms)
+✔ object mutation keeps __proto__ as an ordinary JSON member (0.173ms)
+✔ array mutation accepts only ASCII indexes (0.336333ms)
+✔ case data rejects every non-finite JavaScript number (0.231125ms)
+✔ replays shared conformance mutations against the runtime validator (7.589458ms)
+✔ accepts every valid fixture and rejects every invalid fixture (17.759916ms)
+✔ accepts the closed component range morph mode (0.400833ms)
+✔ matches every canonical JSON and SHA-256 vector (0.603125ms)
+✔ strict JSON checks reject browser-only invalid values (0.349125ms)
+✔ assertValidManifest returns the input or throws its protocol issue (0.422333ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 83.284208
+
+> @citry/protocol-client-graph-v1@0.0.0 build:check /Users/mac/repos/citry-perf-repeat/packages/protocol/client_graph/v1/js
+> node build.mjs --check
+
+
+> @citry/protocol-client-graph-v1@0.0.0 prototype /Users/mac/repos/citry-perf-repeat/packages/protocol/client_graph/v1/js
+> node prototype.mjs
+
+{
+  "format": "citry-client-graph-region-prototype/1",
+  "committedMarkerSpanBytes": 35123,
+  "combined": {
+    "rawBytes": 790251,
+    "gzipBytes": 164820
+  },
+  "guard": {
+    "rawBytes": 649000,
+    "gzipBytes": 138000,
+    "rawHeadroom": -141251,
+    "gzipHeadroom": -26820
+  }
+}
+
+> @citry/docs-playground@0.0.0 check /Users/mac/repos/citry-perf-repeat/docs_site/_internal/frontend
+> node --test tests/*.test.mjs && node scripts/build.mjs --check
+
+✔ direct triple-quoted Citry assets expose their exact body (0.663ms)
+✔ asset discovery distinguishes all Citry assets and ordinary strings (0.108875ms)
+✔ analysis withholds Python literals whose decoded body needs a source map (0.046042ms)
+✔ the mixed Python tree publishes only authored template bodies (3.541083ms)
+✔ the mixed Python tree colors component messages as Fluent (1.172ms)
+✔ stale Worker responses resolve to no editor result (0.190209ms)
+✔ Citry completion composes with the nested HTML completion source (0.456958ms)
+✔ runtime catalogs are forwarded only for the exact source generation (0.089833ms)
+✔ direct package coordinates resolve relative to the Worker (0.363458ms)
+✔ PyPI coordinates accept only the qualified filename and digest (0.413416ms)
+✔ PyPI coordinates reject different public bytes (0.481083ms)
+✔ the package list fails as one unit when a source is unknown (0.131334ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82.838167
+
+> citry@0.1.2 check /Users/mac/repos/citry-perf-repeat/packages/editors/vscode
+> pnpm run compile && pnpm run lint && pnpm run test && vsce ls --tree --no-dependencies
+
+
+> citry@0.1.2 compile /Users/mac/repos/citry-perf-repeat/packages/editors/vscode
+> tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node22 --external:vscode --minify --sourcemap --outfile=out/extension.js
+
+
+> citry@0.1.2 lint /Users/mac/repos/citry-perf-repeat/packages/editors/vscode
+> biome check .
+
+Checked 39 files in 30ms. No fixes applied.
+
+> citry@0.1.2 test /Users/mac/repos/citry-perf-repeat/packages/editors/vscode
+> esbuild src/browserRouting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/browserRouting.mjs && esbuild src/clientLifecycle.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/clientLifecycle.mjs && esbuild src/completionRetrigger.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/completionRetrigger.mjs && esbuild src/embedded.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embedded.mjs && esbuild src/embeddedFormatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embeddedFormatting.mjs && esbuild src/formatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/formatting.mjs && esbuild src/nativeHtmlAttributes.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/nativeHtmlAttributes.mjs && esbuild src/providerPipeline.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/providerPipeline.mjs && esbuild src/workspaceConfiguration.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/workspaceConfiguration.mjs && node --test
+
+✔ routes only browser-valued template attributes (1.85125ms)
+✔ finds Alpine expressions inside nested templates (0.093375ms)
+✔ routes complete component JavaScript but not Python around it (0.084083ms)
+✔ does not route browser-looking text in raw HTML bodies (0.05525ms)
+✔ routes registry-owned standalone HTML and unquoted browser values (0.064958ms)
+✔ serializes restart requests that arrive during an active restart (0.706708ms)
+✔ coalesces Python watcher bursts by URI (0.446125ms)
+✔ accepts only the companion 0.1 language-server line (0.110875ms)
+✔ terminates a language server that misses the graceful stop deadline (0.188917ms)
+✔ retriggers once after repeated backspaces leave a corrected tag prefix (2.971ms)
+✔ supports closing tags and every word-character component-name continuation (0.237583ms)
+✔ does not retrigger ordinary typing, moved cursors, replacements, or paste (0.108125ms)
+✔ history operations retrigger only when they land in a partial Citry tag (0.065167ms)
+✔ triggers the first root character without requiring expression whitespace (0.910417ms)
+✔ triggers Unicode roots and roots inside f-string replacements (0.287208ms)
+✔ retriggers expression completion after deletion and history correction (0.057125ms)
+✔ limits expression retriggers to Citry Python hosts and one authored character (0.57675ms)
+✔ retriggers declarative Citry handler completion without routing values to JavaScript (0.096ms)
+✔ scopes Python activation to the current template literal (0.138041ms)
+✔ uses valid language-scoped editor indentation and safe fallbacks (1.62275ms)
+✔ content-addresses immutable virtual documents across passes and requests (0.501041ms)
+✔ returns an idempotent two-pass result without inventing provider identity (0.591334ms)
+✔ accepts VS Code's zero-edit second-pass response (0.125125ms)
+✔ accepts a fixed point after provider activation changes the second result (0.141792ms)
+✔ consumes every applicable shared embedded formatter case (0.685375ms)
+✔ distinguishes no applicable provider from an unchanged provider result (0.131625ms)
+✔ times out and cancels a provider that never resolves (5.711125ms)
+✔ request cancellation aborts the current invocation and starts no later pass or region (0.427ms)
+✔ rejects provider output that keeps changing through the third pass (0.190209ms)
+✔ refuses delimiter conflicts before sending provider text to the server (0.097333ms)
+✔ applies exact UTF-16 ranges and preserves CRLF outside edits (0.076917ms)
+✔ rejects overlapping and protected provider edits (0.090833ms)
+✔ remaps protected ranges before validating the idempotence pass (0.182208ms)
+✔ aborts the complete round trip when the source document becomes stale (0.069417ms)
+✔ rejects duplicate region IDs before invoking a provider (0.052375ms)
+✔ rejects malformed region kinds and provider UTF-16 (0.113291ms)
+✔ discovers exact typed template, JavaScript, and CSS triple-string assignments (0.909834ms)
+✔ ignores assignment-shaped text in comments and other Python strings (0.08925ms)
+✔ keeps unfinished bodies available and respects escaped triple delimiters (0.58575ms)
+✔ virtual documents retain coordinates, newlines, and only the selected language (0.236292ms)
+✔ selects a provider only while the cursor is inside an embedded body (0.085541ms)
+✔ builds a cursor-proven virtual view from one region scan (0.098ms)
+✔ packaging always compiles the current extension source (5.934542ms)
+✔ formatter commands and native save integration are contributed (3.432333ms)
+✔ one extension-owned formatter routes all VS Code workspaces (5.279291ms)
+✔ environment-file configuration is resource-scoped and reloadable (1.620833ms)
+✔ CSS data intelligence activates and routes CSS files through the workspace client (1.47225ms)
+✔ parameterless custom requests include params for pygls (0.719833ms)
+✔ rejects a formatter result after the document generation changes (0.364083ms)
+✔ does not apply an edit when the generation changes during asynchronous conversion (0.104584ms)
+✔ applies every shared formatter corpus result without client-side rewriting (22.709959ms)
+✔ coalesces repeated quiet failures without hiding explicit command failures (0.418459ms)
+✔ builds the quiet whole-file source action used by format-on-save (0.068ms)
+✔ routes a nested workspace document only through its selected workspace (0.043625ms)
+✔ the Citry Template language makes no automatic standalone filename claim (0.514584ms)
+✔ the Fluent language owns standalone .ftl files (0.3245ms)
+✔ every contributed grammar file loads (4.564333ms)
+✔ shared syntax fixture: structural and runtime tags (16.806084ms)
+✔ shared syntax fixture: server and client directive channels (1.5715ms)
+✔ shared syntax fixture: events and Alpine expressions (1.082ms)
+✔ shared syntax fixture: nested template attribute (0.463ms)
+✔ shared syntax fixture: nested template fragment attribute (1.022625ms)
+✔ shared syntax fixture: expressions comments and raw text (2.527708ms)
+✔ shared syntax fixture: unicode before and inside embedded languages (0.559416ms)
+✔ shared syntax fixture: complete component embeds (2.084625ms)
+✔ shared syntax fixture: dynamic attributes on HTML tags in Python templates (1.035666ms)
+✔ shared syntax fixture: double quoted embeds retain triple single text (0.48075ms)
+✔ shared syntax fixture: single quoted embeds retain triple double text (0.595375ms)
+✔ shared syntax fixture: unfinished interpolation (0.141334ms)
+✔ shared syntax fixture: unfinished dynamic attribute (0.127ms)
+✔ shared syntax fixture: unfinished component template string (0.312791ms)
+✔ Python template attributes preserve Citry channel precedence (2.705625ms)
+✔ Python call targets receive standard function and method scopes (1.754792ms)
+✔ typed and triple-single-quoted component attributes embed (0.425542ms)
+✔ standalone Fluent highlights messages, attributes, selectors, and variables (0.365541ms)
+✔ Fluent prose that contains an equals sign is not a message definition (0.055792ms)
+✔ escaped triple delimiters do not end component embeds (0.302458ms)
+✔ triple-string ends respect odd and even backslash runs (3.171541ms)
+✔ JavaScript line comments stop before Python triple-string ends (0.495833ms)
+✔ CSS tokenization is bounded before Python triple-string ends (0.771ms)
+✔ template comments can immediately follow every specialized tag name (0.416958ms)
+✔ ordinary Python strings and static HTML attributes stay in their host language (0.15725ms)
+✔ embedded line comments stop before template host delimiters (0.740167ms)
+✔ interpolation comment text cannot hide the first host delimiter (0.433917ms)
+✔ Python injection uses exact assignment names but cannot prove component inheritance (0.142ms)
+✔ standalone templates inherit HTML script and style embedding (0.299208ms)
+✔ formatted script/style fixture retains tag and embedded-language scopes (2.285667ms)
+✔ Citry event arguments keep JavaScript scope through nested parentheses (0.2375ms)
+✔ activates parser-backed HTML projection only in nested values and c-element start tags (3.686792ms)
+✔ recognizes single-quoted nested hosts with double-quoted inner HTML (0.232083ms)
+✔ returns the deepest containing parser-backed HTML host (0.259958ms)
+✔ gives nested template levels independent projection cache ranges (0.173458ms)
+✔ projects a dynamic native attribute without moving source coordinates (0.745166ms)
+✔ projects Alpine bind shorthand to its native HTML attribute (0.263542ms)
+✔ keeps Citry state bindings out of Alpine native projection (0.251959ms)
+✔ maps every authored name position into the projected suffix interior (0.336ms)
+✔ uses ASCII-insensitive HTML identity and removes exactly one Citry prefix (0.204875ms)
+✔ uses exact Citry prefix and directive casing before HTML suffix normalization (0.304125ms)
+✔ excludes Citry directives and every Citry tag boundary (0.1755ms)
+✔ scans only direct start-tag attribute names (0.333542ms)
+✔ preserves CRLF, astral characters, UTF-16 length, and duplicate native attributes (0.187584ms)
+✔ declines comments, values, whitespace, and uncertain unterminated regions (0.635584ms)
+✔ delegated completion does not eagerly resolve provider items (0.787917ms)
+✔ reuses a linear projection only inside its proven source range (0.816375ms)
+✔ provider deadlines return successful work and reject stalled work (6.837417ms)
+✔ workspace paths expand the folder token and relative values (0.364167ms)
+✔ Windows workspace paths use drive and case-insensitive semantics (0.111083ms)
+✔ POSIX watched paths remain case-sensitive (0.045916ms)
+ℹ tests 108
+ℹ suites 0
+ℹ pass 108
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 135.988041
+citry-0.1.2.vsix
+├─ CHANGELOG.md [1.68 KB]
+├─ LICENSE [1.04 KB]
+├─ README.md [10.56 KB]
+├─ SUPPORT.md [0.86 KB]
+├─ fluent-language-configuration.json [0.34 KB]
+├─ language-configuration.json [0.64 KB]
+├─ package.json [7.23 KB]
+├─ images/
+│  └─ icon.png [9.8 KB]
+├─ out/
+│  └─ extension.js [1.22 MB]
+└─ syntaxes/
+   ├─ citry-html-attributes.injection.tmLanguage.json [1.18 KB]
+   ├─ citry-html.injection.tmLanguage.json [18.64 KB]
+   ├─ citry-html.tmLanguage.json [0.73 KB]
+   ├─ citry-python.injection.tmLanguage.json [7.6 KB]
+   └─ fluent.tmLanguage.json [3.82 KB]
+
+The file out/extension.js is large (1.22 MB)
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/mac/repos/citry-perf-repeat
+configfile: pyproject.toml
+testpaths: packages/py/citry_core/tests, packages/py/citry/tests, packages/py/citry_lsp/tests, packages/py/citry_ui/tests, packages/py/citry_ui/citry_ui/components, packages/py/citry_ui/citry_ui/quality/tests, packages/py/pygments_citry/tests
+plugins: cov-7.1.0, playwright-0.9.0, anyio-4.14.1, xdist-3.8.0, asyncio-1.4.0, lsp-1.0.1, base-url-2.1.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+created: 4/4 workers
+4 workers [8077 items]
+
+........................................................................ [  0%]
+........................................................................ [  1%]
+........................................................................ [  2%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+...........................................s............................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+........................................................................ [ 16%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 19%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 24%]
+........................................................................ [ 24%]
+....................................................x................... [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 30%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 32%]
+........................................................................ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 35%]
+........................................................................ [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+........................................................................ [ 41%]
+........................................................................ [ 41%]
+........................................................................ [ 42%]
+........................................................................ [ 43%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 46%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+........................................................................ [ 49%]
+........................................................................ [ 49%]
+........................................................................ [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 52%]
+.................................................s...................... [ 53%]
+........................................................................ [ 54%]
+........................................................................ [ 55%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+........................................................................ [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+........................................................................ [ 65%]
+........................................................................ [ 65%]
+........................................................................ [ 66%]
+...................................................................s.... [ 67%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 71%]
+........................................................................ [ 72%]
+.....................................................................s.s [ 73%]
+........................................................................ [ 73%]
+........................................................................ [ 74%]
+........................................................................ [ 75%]
+........................................................................ [ 76%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+........................................................................ [ 82%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 86%]
+........................................................................ [ 87%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+........................................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 92%]
+........................................................................ [ 93%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+.............                                                            [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/pygls/feature_manager.py:86: 84 warnings
+packages/py/citry_lsp/tests/test_server.py: 124 warnings
+packages/py/citry_lsp/tests/test_semantic.py: 315 warnings
+packages/py/citry_lsp/tests/test_type_analysis.py: 175 warnings
+  /Users/mac/repos/citry-perf-repeat/.venv/lib/python3.14/site-packages/pygls/feature_manager.py:86: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+packages/py/citry_lsp/tests/test_server.py: 42 warnings
+packages/py/citry_lsp/tests/test_semantic.py: 45 warnings
+packages/py/citry_lsp/tests/test_type_analysis.py: 25 warnings
+  /Users/mac/repos/citry-perf-repeat/.venv/lib/python3.14/site-packages/pygls/protocol/json_rpc.py:207: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(handler):
+
+packages/py/citry_lsp/tests/test_server.py::test_stdio_attribute_completion_replaces_the_authored_token
+  /Users/mac/repos/citry-perf-repeat/packages/py/citry_lsp/tests/test_server.py:1642: LspSpecificationWarning: Client does not support documentation format 'markdown'
+  assert <MarkupKind.Markdown: 'markdown'> in set()
+    initial_completion = await syntax_lsp_client.text_document_completion_async(
+
+packages/py/citry_lsp/tests/test_server.py::test_stdio_attribute_completion_replaces_the_authored_token
+  /Users/mac/repos/citry-perf-repeat/packages/py/citry_lsp/tests/test_server.py:1675: LspSpecificationWarning: Client does not support documentation format 'markdown'
+  assert <MarkupKind.Markdown: 'markdown'> in set()
+    completion = await syntax_lsp_client.text_document_completion_async(
+
+packages/py/citry_lsp/tests/test_server.py::test_stdio_syntax_only_completion_and_lexical_hover
+  /Users/mac/repos/citry-perf-repeat/packages/py/citry_lsp/tests/test_server.py:1711: LspSpecificationWarning: Client does not support documentation format 'markdown'
+  assert <MarkupKind.Markdown: 'markdown'> in set()
+    completion = await syntax_lsp_client.text_document_completion_async(
+
+packages/py/citry_lsp/tests/test_server.py::test_stdio_syntax_only_completion_and_lexical_hover
+  /Users/mac/repos/citry-perf-repeat/packages/py/citry_lsp/tests/test_server.py:1740: LspSpecificationWarning: Client does not support documentation format 'markdown'
+  assert <MarkupKind.Markdown: 'markdown'> in set()
+    updated_completion = await syntax_lsp_client.text_document_completion_async(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 30 durations =============================
+6.87s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_asset_report_is_deterministic_and_covers_every_family
+3.73s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_split_button_incremental_assets_stay_within_the_frozen_budget
+3.56s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_tags_input_incremental_assets_stay_within_the_frozen_budget
+3.48s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_context_menu_assets_stay_within_the_family_budgets
+3.35s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_scroll_area_helper_inclusive_assets_stay_within_the_frozen_budget
+3.30s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_image_assets_stay_within_the_family_budgets
+3.29s call     packages/py/citry_ui/tests/test_asset_budgets.py::test_complete_component_catalog_stays_inside_compressed_asset_budgets
+3.28s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_command_palette_assets_stay_within_the_family_budgets
+3.03s call     packages/py/citry_ui/tests/test_csp_compatibility.py::test_every_production_component_template_is_alpine_csp_compatible
+0.95s call     packages/py/citry_ui/tests/test_i18n_catalog.py::test_every_catalog_message_has_one_structured_component_api_entry
+0.94s call     packages/py/citry_ui/tests/test_component_contracts.py::test_every_public_component_reference_exposes_direct_class_and_style_inputs
+0.88s call     packages/py/citry_ui/citry_ui/components/ctour/tests/test_ctour.py::test_default_labels_register_catalog_bindings_and_overrides_do_not
+0.67s call     packages/py/citry_ui/citry_ui/components/ccarousel/tests/test_ccarousel.py::test_invalid_collections_and_slide_inputs_fail
+0.64s call     packages/py/citry_ui/citry_ui/components/cnavigation_menu/tests/test_cnavigation_menu.py::test_empty_unknown_duplicate_and_orphan_collections_fail
+0.60s call     packages/py/citry/tests/test_format_command.py::test_cli_consumes_every_applicable_shared_embedded_case
+0.58s call     packages/py/citry_lsp/tests/test_semantic.py::test_unknown_builtin_name_is_masked_but_a_declared_same_name_is_typed
+0.56s call     packages/py/citry_ui/citry_ui/quality/tests/test_asset_report.py::test_context_menu_combined_scaling_emits_each_shared_asset_once[100]
+0.55s call     packages/py/citry_ui/citry_ui/quality/tests/test_scaling.py::test_scaling_report_records_counts_without_claiming_timing_gates
+0.55s call     packages/py/citry_ui/citry_ui/components/ctransfer_list/tests/test_ctransfer_list.py::test_declaration_values_and_parent_value_are_validated
+0.53s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_component_assets_round_trip_through_client
+0.52s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_python_formatting_requires_custom_request
+0.52s call     packages/py/citry_ui/citry_ui/components/cbreadcrumbs/tests/test_cbreadcrumbs.py::test_breadcrumbs_validate_records_and_exact_strings
+0.51s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_expression_member_diagnostics_are_mapped_to_python_template
+0.51s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_dynamic_and_custom_formatting
+0.51s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_expression_completion_is_incremental_and_carries_edit_ranges
+0.51s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_diagnostics_and_completion
+0.51s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_registered_dotted_alias_completion
+0.51s call     packages/py/citry/tests/test_contrib_request.py::TestAsgiSyncOffload::test_sync_handler_does_not_block_the_loop
+0.50s setup    packages/py/citry_lsp/tests/test_server.py::test_stdio_expression_member_completion_uses_declared_python_type
+0.44s call     packages/py/citry_lsp/tests/test_engine.py::test_root_references_include_every_free_use_and_optional_python_origins
+===== 8071 passed, 5 skipped, 1 xfailed, 814 warnings in 80.16s (0:01:20) ======
+PASS bindings
+PASS crate_member
+PASS dependabot
+PASS diagnostic_catalog
+PASS published_readme_links
+PASS release_notifications
+PASS toolchain
+
+All validators passed.
+
+=== uv lock ===
+PASS: uv lock (0.02s)
+
+=== cargo fmt ===
+PASS: cargo fmt (0.28s)
+
+=== cargo clippy ===
+PASS: cargo clippy (0.49s)
+
+=== cargo test ===
+PASS: cargo test (3.04s)
+
+=== ruff check ===
+PASS: ruff check (0.06s)
+
+=== ruff format ===
+PASS: ruff format (0.03s)
+
+=== mypy ===
+PASS: mypy (1.52s)
+
+=== pyright ===
+PASS: pyright (0.45s)
+
+=== citry-client ===
+PASS: citry-client (1.21s)
+
+=== codemirror Fluent ===
+PASS: codemirror Fluent (0.75s)
+
+=== protocol contracts ===
+PASS: protocol contracts (0.20s)
+
+=== protocol Python copies ===
+PASS: protocol Python copies (0.04s)
+
+=== events protocol JavaScript ===
+PASS: events protocol JavaScript (1.06s)
+
+=== client graph protocol JavaScript ===
+PASS: client graph protocol JavaScript (1.45s)
+
+=== docs-playground ===
+PASS: docs-playground (0.53s)
+
+=== vscode-extension ===
+PASS: vscode-extension (1.82s)
+
+=== pytest ===
+PASS: pytest (80.95s)
+
+=== validators ===
+PASS: validators (0.06s)
+
+All 18 checks passed in 93.97s.

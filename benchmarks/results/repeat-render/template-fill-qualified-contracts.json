@@ -1,0 +1,328 @@
+{
+  "experiment_only": true,
+  "all_recorded_cases_match": false,
+  "cases": [
+    {
+      "case": "ordinary_template",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {}
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "python_fallback",
+      "reference": {
+        "result": {
+          "html": "\nfallback\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\nfallback\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "selection_replaces_content",
+      "reference": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "equal_helper",
+      "reference": {
+        "result": {
+          "html": "\n\nreplacement\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nreplacement\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "slot_init",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "content_init",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "content_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "content_init": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "slot_new",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_new": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "slot_new": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "content_new",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "content_new": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "content_new": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "normalize_data",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "normalize_data": 1
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "normalize_data": 1
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "bind_fill_data",
+      "reference": {
+        "result": {
+          "html": "\n\nreplacement\n\n",
+          "events": {
+            "bind_fill_data": 1
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nreplacement\n\n",
+          "events": {
+            "bind_fill_data": 1
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "capture_replaces_content",
+      "reference": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {
+            "capture_replaces_content": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {
+            "capture_replaces_content": 2
+          }
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "retained_context",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "inactive_graph": true,
+          "retained_html": "supplied",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "inactive_graph": true,
+          "retained_html": "supplied",
+          "events": {}
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "error_context_replaces_content",
+      "reference": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "slot_context_getattribute",
+      "reference": {
+        "result": {
+          "error_type": "RuntimeError",
+          "error": "An error occurred while rendering components Parent > Child > Child(slot:default):\nslot context observed\n\nIn template of 'Child' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Child):\n\n     1 | \n     2 | <c-slot>fallback</c-slot>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "error_type": "RuntimeError",
+          "error": "An error occurred while rendering components Parent > Child > Child(slot:default):\nslot context observed\n\nIn template of 'Child' (/Users/mac/repos/citry-perf-repeat/benchmarks/template_fill_qualified_probe/contracts.py::Child):\n\n     1 | \n     2 | <c-slot>fallback</c-slot>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^\n     3 | ",
+          "events": {}
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "provided_key_mutation",
+      "reference": {
+        "result": {
+          "html": "\n\nfallback\n\n",
+          "events": {
+            "provided_key_mutation": 2
+          }
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n",
+          "events": {
+            "provided_key_mutation": 1
+          }
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": false
+    }
+  ],
+  "hashes": {
+    "benchmarks/template_fill_qualified_probe/contracts.py": "1087baeeec7475c554d501139f4d44788f046087aad38fa6b68ea7a2f579692a",
+    "benchmarks/template_fill_qualified_probe/adapter.py": "7729967d1e53a7c374061a4af3fbdd0a5ea2027eb89250c2364b75ba7f56861a",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa"
+  }
+}

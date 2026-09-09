@@ -1,0 +1,55 @@
+{
+  "production_compatible": false,
+  "observations": {
+    "zero": {
+      "reference": {
+        "error": "KeyError",
+        "message": "0",
+        "record_states": [
+          "active"
+        ]
+      },
+      "candidate": {
+        "returned": true,
+        "record_states": [
+          "retired"
+        ]
+      }
+    },
+    "past_end": {
+      "reference": {
+        "error": "KeyError",
+        "message": "2",
+        "record_states": [
+          "active"
+        ]
+      },
+      "candidate": {
+        "error": "IndexError",
+        "message": "list index out of range",
+        "record_states": [
+          "active"
+        ]
+      }
+    },
+    "equal_float": {
+      "reference": {
+        "returned": true,
+        "record_states": [
+          "retired"
+        ]
+      },
+      "candidate": {
+        "error": "TypeError",
+        "message": "list indices must be integers or slices, not float",
+        "record_states": [
+          "active"
+        ]
+      }
+    }
+  },
+  "hashes": {
+    "benchmarks/dense_index_probe/contracts.py": "1eff324496f0f75387a60bf21854ac8a802e57556261c45589276d88a5c30b47",
+    "benchmarks/dense_index_probe/probe.py": "9856da9f286e2d20d0c184f97e453969d11a0d6597609f8325c3820462cc6f15"
+  }
+}

@@ -1,71 +1,97 @@
 ---
 title: Benchmarks
-description: How citry's rendering performance compares to django-components, Django, and Jinja2, plus the benchmark chart and how to reproduce it.
+description: Compare optimized Citry rendering with Django, django-components and Jinja2.
 ---
 
 # Benchmarks
 
-Citry is built to render fast, and the repository ships a benchmark that keeps
-that claim honest. It renders one large, realistic page and compares citry
-against django-components, plain Django templates, and Jinja2.
+The chart compares a large project-management page rendered with Citry,
+django-components, Django templates and Jinja2 macros. Citry uses the documented
+performance optimizations described below. The chart shows one controlled run
+from 2026-09-10. Lower bars mean less rendering time.
 
-The scenario is a full project-management page. The current Citry render has
-about 350 component markers and produces 986,021 bytes, including its client
-dependency manager, Events/Alpine runtime, and ownership graph. In the chart
-below, lower bars mean faster results.
+<c-image src="/static/img/benchmark.png" alt="First, second and warmed render times for optimized Citry, Django, django-components and Jinja2" width="720" />
 
-<c-image src="/static/img/benchmark.png" alt="Citry, Django, django-components, and Jinja2 rendering a large page; lower is better" width="720" />
+\* Citry uses `simple` and `pure` optimizations. See the
+[performance optimization guide](/advanced/performance/).
 
-## Versus django-components
+| Configuration | First render | Second render | Warmed render |
+| --- | ---: | ---: | ---: |
+| Django | 19.67 ms | 11.79 ms | 11.67 ms |
+| django-components | 68.27 ms | 48.11 ms | 54.69 ms |
+| Jinja2 | 66.10 ms | 6.77 ms | 7.21 ms |
+| Citry* | 64.19 ms | 25.02 ms | 24.62 ms |
 
-django-components is the closest comparison, because both it and Citry pay the
-full cost of a component lifecycle on every render: constructing components,
-resolving slots, and collecting JS and CSS dependencies. Citry now also builds
-its complete ownership graph and client lifecycle data. On this workload Citry
-is a little slower on the first render, but faster once warm.
+## What the Citry result includes
 
-| What is measured | Citry vs django-components |
-| --- | --- |
-| First render | about 12% slower |
-| Repeat renders | about 24% faster |
-| Startup | about 1.4x slower |
-| Import | about 1.3x slower |
+Button, Icon and HeroIcon are declared as
+[simple components](/advanced/simple-components/). Their data callbacks stay
+live, but they give up independent instances, hooks and browser identity.
+HeroIcon and ProjectOutputBadge also retain the scenario's existing `pure`
+declarations. The page constructs 146 ordinary instances and emits 989,431 bytes,
+including dependencies, browser runtimes and ownership data. It takes about 55%
+less time than django-components once warm.
 
-## Versus bare template engines
+These optimizations are explicit application choices with documented contracts.
+The [repository benchmark guide](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md)
+also retains the ordinary Citry measurements and the paired comparison that
+isolates the effect of opting the three classes into simple mode.
 
-Plain Django and Jinja2 render no components at all, so they skip the work
-Citry does on every render. Citry's repeat render currently takes about 3.5x
-the time of the bare Django template in this scenario.
+## Compare with template engines
 
-## Jinja2, the no-component baseline
+The warmed Citry page takes about 2.11 times Django's render time. Jinja2 is the
+fastest warmed engine here. Its first render compiles the macro library.
 
-Jinja2 is the fast baseline with no component model, where each Citry component
-becomes a precompiled macro. That makes it the quickest engine to start up and
-the quickest once warm, since a warm render just runs precompiled macro code.
-Its first render compiles the whole macro library and lands near
-django-components.
+These engines produce different output and perform different framework work.
+Django emits 456,422 bytes, django-components 309,837 bytes and Jinja2 151,789
+bytes. The Django scenario still uses django-components' HTML-attribute helper;
+Jinja2 represents the component templates as macros. The chart compares these
+workloads, not equivalent implementations of every Citry feature.
 
-## Reading these numbers
+## How the run is measured
 
-These are relative numbers from a single machine, not absolute guarantees.
+The run uses Apple M4, CPython 3.14.3 and the release Citry Core extension,
+with Django 6.0.6, django-components 0.152.0 and Jinja2 3.1.6. Citry 0.5.0 is measured with the qualified Core 1.7.0 release wheel.
 
-- "Citry renders this page N times faster or slower than django-components
-  here" is a fair reading of this run.
-- "A render takes X milliseconds, so my page will take X" is not: a real page
-  has a different mix of components, templates, and data.
-- Never compare numbers across machines, runs, or build profiles.
+The underlying run also measured ordinary Citry as a control; the chart shows
+four configurations. Ten blocks each start a fresh process for every configuration, balancing
+execution position and before/after order. Each process renders six initial
+outputs and 80 warmed outputs, with normal garbage collection enabled, and
+keeps all output strings alive until timing finishes. Loading the scenario
+and preparing application data happen outside the render timer.
+
+First and second columns are medians of the corresponding observations.
+The warmed column is the median of each process's mean of 80 renders.
+A warmed average can be higher than one second-render observation because
+it includes a longer execution period and garbage collection.
+
+Every timed Citry output is checked after timing using a projection that
+removes ownership markers and normalizes generated IDs; its browser manifests
+are validated too. Callback and ownership counts come from a separate observed
+render after each Citry process's timed loop. The other engines retain output
+hashes and sizes; their scenario content tests run separately.
+
+These results are relative to this workload and machine. Use them to compare
+rows within this run, then measure the components and data in your application.
 
 ## Reproduce it
 
-The full methodology, the exact engine versions, and step-by-step instructions
-to run the comparison yourself live in the benchmarks README:
-[benchmarks/README.md]({{ repo_url }}/blob/{{ repo_edit_branch }}/benchmarks/README.md).
+From a checkout with the benchmark dependencies and release extension installed:
 
-One trap worth repeating from there: the Rust extension must be built in
-release mode before measuring. A debug build makes citry's Rust-backed paths
-many times slower and invalidates every citry number.
+```sh
+.venv/bin/python benchmarks/publication.py \
+  --output benchmarks/results/publication-20260910-release-0.5.0.json
+uv run --no-project --with matplotlib python benchmarks/plot.py
+```
+
+The [benchmark repository guide]({{ repo_url }}/blob/{{ repo_edit_branch }}/benchmarks/README.md)
+contains dependency setup, detailed methodology and links to raw observations.
+The extension must be built in release mode; a debug build does not provide
+comparable Citry timings.
 
 ## Related pages
 
-- [Performance](/advanced/performance/) covers opt-in reuse with
-  [`Const`][citry.Const] and pure component classes.
+- [Performance](/advanced/performance/) compares simple rendering, `Const`
+  and pure component bodies.
+- [Simple components](/advanced/simple-components/) explains the opt-in
+  contract used by the Citry result.

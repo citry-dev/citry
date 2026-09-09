@@ -1,0 +1,2 @@
+   Compiling citry_serializer_session_probe v0.1.0 (/Users/mac/repos/citry-perf-repeat/benchmarks/serializer_session_probe)
+    Finished `release` profile [optimized] target(s) in 0.78s

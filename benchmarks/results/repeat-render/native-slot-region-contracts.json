@@ -1,0 +1,78 @@
+{
+  "cases": {
+    "standalone": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "outlet": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "nested": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "retired": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "untracked": {
+      "equal": true,
+      "outcome": [
+        "str",
+        null
+      ],
+      "callback_observations": 1
+    },
+    "error": {
+      "equal": true,
+      "outcome": [
+        "ValueError",
+        "slot callback failed"
+      ],
+      "callback_observations": 1
+    },
+    "wrapper-alias": {
+      "equal": true,
+      "outcome": [
+        "SimpleNamespace",
+        1
+      ],
+      "callback_observations": 1
+    }
+  },
+  "mid_callback_replay": {
+    "success_and_error_equal": true
+  },
+  "invalid_without_append": [
+    "region-width",
+    "fill-width",
+    "fill-index",
+    "parent-index",
+    "ids",
+    "site"
+  ],
+  "inactive_before_parent_lookup": true,
+  "hashes": {
+    "benchmarks/native_slot_region_probe/contracts.py": "029181302de4f46fca12e21eb8ccb6609219700b49e9bd28a9dd8af541d78990",
+    "benchmarks/native_slot_region_probe/adapter.py": "23cfe1fd64e3abf3f118dd3ed8c09dd317263c3d79b03e76d4cc5edc0021c9f4",
+    "benchmarks/ownership_journal_probe/check_storage.py": "c1e160ef7a7eb03c540cfc2ce212b1e977219f85c278376d9303d4c815233337",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "ae0b96d676c5d50939e5a95564b38954f6d76577a25f14842ce18d58d96cf98b"
+  }
+}

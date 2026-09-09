@@ -10,6 +10,7 @@ from types import MappingProxyType, ModuleType
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 from weakref import ReferenceType, ref
 
+from citry._class_introspection import _static_class_dict, _static_class_mro
 from citry.assets import validate_asset_pairs
 from citry.citry import Citry  # noqa: TC001 - required by public runtime annotations
 from citry.citry_element import CitryElement  # noqa: TC001 - required by public runtime annotations
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
         definition_id: ClassVar[str]
         citry: ClassVar[Citry]
         transparent: ClassVar[bool]
+        simple: ClassVar[bool]
         pure: ClassVar[bool]
         name: ClassVar[str | None]
         template: ClassVar[str | None]
@@ -171,6 +173,7 @@ class LibraryComponentMeta(type):
         is_root = attrs.get(_DEFINITION_ROOT_FLAG, False) is True
         is_definition = has_definition_base and not has_component_base and not is_root
         pure = False
+        simple: object = False
 
         if is_definition:
             reserved = {
@@ -194,17 +197,33 @@ class LibraryComponentMeta(type):
         cls = super().__new__(mcs, name, bases, attrs, **kwargs)
         type.__setattr__(cls, _DEFINITION_FLAG, is_definition)
         if is_definition:
+            simple = next(
+                (
+                    _static_class_dict(base)["simple"]
+                    for base in _static_class_mro(cls)
+                    if "simple" in _static_class_dict(base)
+                ),
+                False,
+            )
+            if type(simple) is not bool:
+                msg = f"Library component {name}.simple must be an exact bool; got {simple!r}."
+                raise ValueError(msg)
             # Like a concrete Component, each definition makes its own promise;
             # purity never arrives implicitly from a base class.
             type.__setattr__(cls, "pure", pure)
+            type.__setattr__(cls, "simple", simple)
         return cls
 
     def __setattr__(cls, name: str, value: Any) -> None:
         """Keep published definition behavior stable across installed classes."""
         is_definition = cls.__dict__.get(_DEFINITION_FLAG, False)
-        if is_definition and name == "pure" and type(value) is not bool:
-            msg = f"Library component {cls.__name__}.pure must be an exact bool; got {value!r}."
+        if is_definition and name in {"pure", "simple"} and type(value) is not bool:
+            msg = f"Library component {cls.__name__}.{name} must be an exact bool; got {value!r}."
             raise ValueError(msg)
+        if is_definition and name == "simple" and "simple" in cls.__dict__:
+            if value is cls.__dict__["simple"]:
+                return
+            raise AttributeError(f"Cannot change {cls.__name__}'s simple-component declaration.")
         is_sealed_definition = is_definition and cls.__dict__.get(_SEALED_FLAG, False)
         if is_sealed_definition:
             msg = (
@@ -217,6 +236,8 @@ class LibraryComponentMeta(type):
     def __delattr__(cls, name: str) -> None:
         """Keep fields present on a published definition."""
         is_definition = cls.__dict__.get(_DEFINITION_FLAG, False)
+        if is_definition and name == "simple":
+            raise AttributeError(f"Cannot delete {cls.__name__}'s simple-component declaration.")
         if is_definition and name == "pure":
             msg = f"Cannot delete {cls.__name__}'s pure-component declaration; set it to False instead."
             raise AttributeError(msg)
@@ -263,6 +284,8 @@ class LibraryComponent(_LibraryComponentAuthoringBase, metaclass=LibraryComponen
 
     _citry_library_component_root: ClassVar[bool] = True
     pure: ClassVar[bool] = False
+    simple: ClassVar[bool] = False
+    """Render without an independent instance; see [`Component.simple`][citry.Component.simple]."""
     name: ClassVar[str | None] = None
     """Optional explicit registry name, with the same behavior as ``Component.name``."""
 

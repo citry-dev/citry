@@ -1,0 +1,268 @@
+"""Measure live hook dispatch with declared context-record operations."""
+
+from __future__ import annotations
+
+import argparse
+import gc
+import hashlib
+import itertools
+import json
+import os
+import random
+import statistics
+import subprocess
+import sys
+import time
+from pathlib import Path
+from types import MethodType
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT), str(ROOT / "packages/py/citry"), str(ROOT / "packages/py/citry_core")]
+
+from benchmarks.ownership_journal_probe.probe import scenario  # noqa: E402
+
+import citry.citry_render as renders  # noqa: E402
+import citry.component_render as components  # noqa: E402
+import citry.ext.dependencies.extension as dependencies  # noqa: E402
+import citry.ext.events.emission as event_emission  # noqa: E402
+import citry.ext.events.extension as events  # noqa: E402
+import citry.ext.i18n.extension as i18n  # noqa: E402
+import citry.extension as extension_module  # noqa: E402
+import citry.util.id as ids  # noqa: E402
+import citry_core._rust as native  # noqa: E402
+from citry import ownership  # noqa: E402
+from citry.ownership import OwnershipGraph  # noqa: E402
+
+MANAGER = extension_module.ExtensionManager
+ORIGINAL = MANAGER.on_render_context_merge
+DECLARATIONS = {
+    dependencies.DependenciesExtension: dependencies.EXTRA_KEY,
+    events.EventsExtension: event_emission.EXTRA_KEY,
+    i18n.I18nExtension: i18n.EXTRA_KEY,
+}
+HOOKS = {cls: cls.on_render_context_merge for cls in DECLARATIONS}
+
+
+OPERATIONS = {HOOKS[cls]: key for cls, key in DECLARATIONS.items()}
+
+
+def merge_context(self: Any, parent: Any, child: Any) -> None:
+    """Read every live hook, using declared dictionary operations when recognized."""
+    context = None
+    for extension in self._extensions_with_hook("on_render_context_merge"):
+        hook = getattr(extension, "on_render_context_merge")  # noqa: B009 - retain the measured lookup form
+        key = OPERATIONS.get(hook.__func__) if type(hook) is MethodType else None
+        if key is not None:
+            records = child.extra.get(key)
+            if records:
+                parent.extra.setdefault(key, {}).update(records)
+        else:
+            if context is None:
+                context = extension_module.OnRenderContextMergeContext(
+                    citry=self.citry, parent_context=parent, child_context=child
+                )
+            hook(context)
+
+
+def install(changed: bool) -> None:
+    """Switch manager dispatch; live hooks choose declared operations or ordinary callbacks."""
+    MANAGER.on_render_context_merge = merge_context if changed else ORIGINAL
+
+
+def capture_counts(module: Any, data: Any) -> dict[str, Any]:
+    """Count merge calls and observe child records after merging in an untimed render."""
+    counts = {"merges": 0, "empty_child_extra": 0, "same_extra": 0, "updates": 0, "items": 0}
+
+    def counted(self: Any, parent: Any, child: Any) -> None:
+        counts["merges"] += 1
+        counts["empty_child_extra"] += not child.extra
+        counts["same_extra"] += parent.extra is child.extra
+        merge_context(self, parent, child)
+        keys = tuple(DECLARATIONS.values())
+        for key in keys:
+            records = child.extra.get(key)
+            if records:
+                counts["updates"] += 1
+                counts["items"] += len(records)
+
+    MANAGER.on_render_context_merge = counted
+    try:
+        module.render(data)
+    finally:
+        MANAGER.on_render_context_merge = merge_context
+    if not counts["merges"] or not counts["updates"]:
+        raise RuntimeError("The merge experiment did not reach the expected built-in declarations")
+    return counts
+
+
+def equivalence() -> dict[str, Any]:
+    """Compare every reached ownership snapshot and the fixture HTML."""
+    module = scenario()
+    data = module.gen_render_data()
+    original_snapshot = OwnershipGraph.snapshot
+    traces, outputs = [], []
+    try:
+        for changed in (False, True):
+            install(changed)
+            for _ in range(6):
+                module.render(data)
+            trace = []
+
+            def snapshot(graph: Any, _trace: list[Any] = trace) -> Any:
+                result = original_snapshot(graph)
+                _trace.append(result)
+                return result
+
+            OwnershipGraph.snapshot = snapshot
+            ids._id_counter = itertools.count()
+            outputs.append(module.render(data))
+            OwnershipGraph.snapshot = original_snapshot
+            traces.append(trace)
+        if not traces[0] or traces[0] != traces[1] or outputs[0] != outputs[1]:
+            raise RuntimeError("Declarative context merging changed fixture HTML or ownership snapshots")
+    finally:
+        OwnershipGraph.snapshot = original_snapshot
+        install(changed=False)
+    install(changed=True)
+    try:
+        activation = capture_counts(module, data)
+    finally:
+        install(changed=False)
+    return {
+        "snapshots_compared": len(traces[0]),
+        "snapshots_equal": True,
+        "html_equal": True,
+        "activation": activation,
+    }
+
+
+def worker(changed: bool, samples: int, id_base: int) -> dict[str, Any]:
+    """Include all complete renders and their GC costs on one private heap."""
+    ids._id_base = id_base
+    ids._id_counter = itertools.count()
+    install(changed)
+    module = scenario()
+    data = module.gen_render_data()
+    for _ in range(6):
+        module.render(data)
+    before = gc.get_stats()
+    observations, digests = [], []
+    for index in range(samples):
+        ids._id_counter = itertools.count((index + 1) * 1_000_000)
+        cpu_start = time.process_time_ns()
+        start = time.perf_counter_ns()
+        output = module.render(data)
+        end = time.perf_counter_ns()
+        cpu_end = time.process_time_ns()
+        observations.append({"ms": (end - start) / 1_000_000, "cpu_ms": (cpu_end - cpu_start) / 1_000_000})
+        digests.append(hashlib.sha256(output.encode()).hexdigest())
+        del output
+    after = gc.get_stats()
+    activation = capture_counts(module, data) if changed else None
+    return {
+        "candidate": changed,
+        "python": sys.version,
+        "hash_seed": os.environ.get("PYTHONHASHSEED"),
+        "id_base": id_base,
+        "gc_enabled": gc.isenabled(),
+        "gc_thresholds": gc.get_threshold(),
+        "gc_before": before,
+        "gc_after": after,
+        "native_sha256": hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
+        "activation": activation,
+        "means_ms": {key: statistics.mean(row[key] for row in observations) for key in ("ms", "cpu_ms")},
+        "observations": observations,
+        "html_digests": digests,
+    }
+
+
+def main() -> None:
+    """Retain balanced process comparisons for declarative context merges."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--worker", choices=("reference", "candidate"))
+    parser.add_argument("--pairs", type=int, default=8)
+    parser.add_argument("--samples", type=int, default=80)
+    parser.add_argument("--seed", type=int, default=20260917)
+    parser.add_argument("--id-base", type=int, default=123456)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    if min(args.pairs, args.samples) < 1:
+        parser.error("Pair and sample counts must be positive")
+    if args.worker:
+        print(json.dumps(worker(args.worker == "candidate", args.samples, args.id_base)))
+        return
+    if args.output is None:
+        parser.error("The parent requires --output")
+    checks = equivalence()
+    orders = [bool(index % 2) for index in range(args.pairs)]
+    random.Random(args.seed).shuffle(orders)  # noqa: S311 - repeatable process order
+    pairs = []
+    for pair, candidate_first in enumerate(orders):
+        variants = {}
+        for name in ("candidate", "reference") if candidate_first else ("reference", "candidate"):
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    __file__,
+                    "--worker",
+                    name,
+                    "--samples",
+                    str(args.samples),
+                    "--id-base",
+                    str(args.id_base + pair * 10_000_000),
+                ],
+                cwd=ROOT,
+                env={**os.environ, "PYTHONHASHSEED": str(args.seed + pair)},
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            variants[name] = json.loads(result.stdout)
+        if variants["reference"]["html_digests"] != variants["candidate"]["html_digests"]:
+            raise RuntimeError(f"HTML differs in pair {pair}")
+        if variants["reference"]["native_sha256"] != variants["candidate"]["native_sha256"]:
+            raise RuntimeError("Paired workers loaded different native artifacts")
+        savings = {
+            key: variants["reference"]["means_ms"][key] - variants["candidate"]["means_ms"][key]
+            for key in ("ms", "cpu_ms")
+        }
+        pairs.append({"pair": pair, "candidate_first": candidate_first, "mean_savings_ms": savings, **variants})
+        print(json.dumps({"pair": pair, "mean_savings_ms": savings}), flush=True)
+    report = {
+        "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),  # noqa: S607
+        "experiment_only": True,
+        "order_seed": args.seed,
+        "order": "balanced-random",
+        "samples_per_process": args.samples,
+        "warmups_per_process": 6,
+        "equivalence": checks,
+        "hashes": {
+            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (
+                Path(__file__).resolve(),
+                Path(renders.__file__),
+                Path(components.__file__),
+                Path(ownership.__file__),
+                Path(extension_module.__file__),
+                Path(dependencies.__file__),
+                Path(events.__file__),
+                Path(event_emission.__file__),
+                Path(i18n.__file__),
+                ROOT / "packages/py/citry/tests/test_benchmark_citry.py",
+            )
+        },
+        "median_process_pair_mean_savings_ms": {
+            key: statistics.median(pair["mean_savings_ms"][key] for pair in pairs) for key in ("ms", "cpu_ms")
+        },
+        "joint_favorable_process_pairs": sum(
+            all(value > 0 for value in pair["mean_savings_ms"].values()) for pair in pairs
+        ),
+        "pairs": pairs,
+    }
+    args.output.write_text(json.dumps(report, indent=2) + "\n")
+    print(json.dumps({key: value for key, value in report.items() if key != "pairs"}, indent=2))
+
+
+if __name__ == "__main__":
+    main()

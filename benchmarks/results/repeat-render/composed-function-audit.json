@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "verified_source_references": 354,
+  "historical_sources": {
+    "benchmarks/composed_function_probe/adapter.py": "benchmarks/composed_function_probe/adapter.py.smoke.txt",
+    "benchmarks/composed_function_probe/browser.py": "benchmarks/composed_function_probe/browser.py.smoke.txt",
+    "benchmarks/composed_function_probe/contracts.py": "benchmarks/composed_function_probe/contracts.py.smoke.txt",
+    "benchmarks/composed_function_probe/probe.py": "benchmarks/composed_function_probe/probe.py.smoke.txt",
+    "benchmarks/composed_function_probe/plan.md": "benchmarks/composed_function_probe/plan.md.smoke.txt"
+  },
+  "archived_cases": 8,
+  "archived_snapshots": 32,
+  "browser_pages": 9,
+  "main_blocks": 8,
+  "timed_renders": 2752,
+  "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+  "summary_recomputed": true,
+  "balanced_orders_verified": true
+}

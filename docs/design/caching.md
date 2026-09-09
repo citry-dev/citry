@@ -1547,3 +1547,16 @@ The resulting user model stays small:
 
 That provides the two requested caching surfaces while resolving the exact
 identity, lifetime, slot, deploy, and dependency problems found upstream.
+
+
+### Whole outputs of transparent components
+
+Detached frames preserve whether a render is a transparent component's whole
+output. Caller-owned slot content can carry the same identity while appearing
+elsewhere in the final page, so that identity alone cannot select the component's
+physical boundary. Export, strict JSON validation and replay preserve the
+`transparent_root` boolean separately from the nontransparent component root marker. A frame
+cannot declare both root kinds. Repeated whole outputs are rejected; logical
+transparent ancestors may remain in ownership records without a physical frame.
+Entries missing the field follow the normal invalid-entry cache-miss path.
+The pre-1.0 artifact and runtime compatibility versions remain 1.

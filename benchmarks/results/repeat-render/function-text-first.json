@@ -1,0 +1,99 @@
+{
+  "raw_html_equal": true,
+  "application_html_equal": true,
+  "snapshots_equal": true,
+  "reference_counts": {
+    "Icon": 40,
+    "HeroIcon": 41,
+    "outlets": 154,
+    "svg_replays": 32,
+    "Button": 114
+  },
+  "candidate_counts": {
+    "Icon": 39,
+    "HeroIcon": 40,
+    "outlets": 153,
+    "svg_replays": 31,
+    "Button": 114
+  },
+  "reference_bytes": 987414,
+  "candidate_bytes": 987414,
+  "snapshot_counts": {
+    "immediate": [
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      },
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      },
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      },
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      }
+    ],
+    "text": [
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      },
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      },
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      },
+      {
+        "source_locations": 470,
+        "component_invocations": 144,
+        "logical_instances": 147,
+        "init_ancestry": 144,
+        "logical_fills": 206,
+        "physical_regions": 120,
+        "render_queue": 144
+      }
+    ]
+  }
+}

@@ -1,0 +1,79 @@
+# Iteration 66: compose templates in caller ownership and measure deferred execution
+
+Iteration 65 saves 5.731 ms by making direct Button tags caller-owned functions.
+That combines identity removal with immediate execution. The user asked what the
+scheduling change means, so the next comparison must separate that choice while
+also extending the architectural case beyond one wrapper.
+
+## Prior art and design
+
+Read the Button and Icon wrapper templates and HeroIcon leaf in
+`test_benchmark_citry.py`, iteration 65's adapter, iteration 63's deferred leaf,
+`DeferredComponent`, `_settle_render`, `_scan_deferred`, `_finalize`, and the existing
+pure-body capture/replay helpers. Button and Icon have one empty default outlet.
+Icon calls HeroIcon. HeroIcon already benefits from render-local body reuse, which
+must remain present when composing the functions. One Icon is produced outside a
+direct selected tag in the large page; that occurrence stays an ordinary component.
+
+Use one fixed registry of these three trusted template/data pairs. Each function
+gets fresh variables and its caller's ownership context. Its implicit default body
+uses the original caller context; ordinary components and slots inside that content
+retain their normal execution path. HeroIcon accepts no body and only its declared
+ordinary SVG attribute names. Reuse its existing pure-body mechanism within each
+root render. Neither wrapper body is cached as complete output.
+
+Match ordinary implicit slots by discarding a body made only of static whitespace.
+Whitespace produced by an expression remains content. A focused check found that
+iteration 65 and the first composed draft rendered static formatting as content;
+retain that evidence and correct the composed adapter before main timing. The
+Button-only timing control remains the unchanged, previously measured prototype.
+
+Compare four variants: ordinary Citry, iteration 65's unchanged Button-only adapter,
+composed functions executing immediately, and the same composed functions using the
+existing deferred scheduler. The deferred variant creates a private CitryElement
+subclass carrying the function call and an ordinary DeferredComponent, with no
+invocation or identity record. Its execution returns an interior render identified
+by a private subclass, so finalization propagates errors without invoking the
+caller's component hooks twice. Capture and restore the physical parent region.
+No production code, parser/compiler contract or native build changes.
+
+## Explicit contract and what would disprove the design
+
+Accept direct registered tags with implicit default content. Validate and copy
+their resolved built-in input values. The fixed data callbacks and templates are
+trusted; component and slot hooks do not run for these functions. Ordinary expression/spread resolution can still
+run caller code before validation. Reject range metadata, component client bindings,
+globals and named fills. Ordinary context-merge hooks remain active; custom hooks,
+Events, keyed morphing and development provenance are not qualified. Immediate
+execution changes callback/error order. The deferred variant should preserve order
+in focused supported cases; do not infer arbitrary compatibility from that result.
+
+The large case should run 114 Button, 40 direct Icon and 41 HeroIcon function calls,
+omitting 195 of 342 component identities and leaving one ordinary Icon. Verify
+activation rather than inferring it from matching HTML. Compare full application
+HTML and dependency payloads after the same declared metadata removal as iteration
+65; validate raw browser manifests and retain raw server relationship snapshots.
+Graphs intentionally change, so content equality alone is insufficient. Verify
+ordinary child ownership, physical slot placement, lexical variables, nested wrapper
+outlets, failure cleanup, changed inputs and callback order. In the browser check
+composed icon/button output under a caller and through supplied/fallback slots,
+including ordinary child isolation. A wrong owner, lost content or error propagation
+must be investigated before main timing.
+
+## Timing after qualification
+
+Eight blocks run each of the four variants in its own fresh process, with six
+initial and 80 warm renders per process. Use four cyclic orders and their four reversed orders, shuffled with
+seed 20261102; every variant occupies each position twice, and every pair runs in
+each relative order four times. Keep ordinary GC, change IDs each render, retain all
+86 output strings until timing ends, then validate every raw manifest and application
+HTML projection. Record actual second renders separately. No concurrent tests,
+browsers or builds during main timing; freeze and hash all measured sources.
+
+Primary contrasts compare each composed variant against ordinary Citry. Also report
+Button-only to composed-immediate, and composed-deferred to composed-immediate to
+estimate the scheduling tradeoff under the same selected function set. A median
+paired warm wall saving of at least 0.25 ms and seven of eight joint wall/CPU wins
+justifies further architectural qualification. It does not adopt a public API or
+prove full ownership/lifecycle compatibility. There is no new build complexity and
+no 1 ms threshold. Never add savings from separate experiments.

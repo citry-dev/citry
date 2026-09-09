@@ -1,0 +1,26 @@
+# Iteration 64: qualify caller-owned SVG in the browser
+
+Iteration 63 passed its whole-page performance screen with a changed contract:
+selected icons have no independent identity or Alpine isolation. Existing browser
+coverage in `test_alpine_slot_scope_e2e.py` and `test_ownership_manifest_e2e.py`
+checks ordinary isolation, source-owned fills and client graph reconstruction.
+Use that behavior as the reference while testing the proposed inline contract.
+
+Render the unchanged selected HeroIcon under an ordinary caller, a supplied fill,
+a receiver fallback, a teleported supplied fill, and an Alpine x-if template.
+Compare ordinary Citry, iteration 62's identity-preserving function, and iteration
+63's inline function. The reference and identity variants must remain isolated;
+inline icons must see their lexical caller's Alpine scope. The fallback belongs
+to the receiver, and the supplied/teleported fill belongs to its source caller.
+Click actual SVG paths and verify the enclosing handlers update the intended state.
+Repeatedly destroy/recreate the conditional icon and check behavior after churn.
+Reject browser exceptions. Run installed Chromium, Firefox and WebKit; report any
+missing browser or failed case explicitly rather than counting it as a pass.
+
+This is a bounded browser qualification, not a timing run, public API or final
+repository gate. It does not establish server Events, keyed morphing, independent
+icon lifecycle, arbitrary callbacks, custom directives or general slot topologies.
+A wrong scope, lost click, stale recreated icon or client graph failure falsifies
+the candidate for that case. Preserve failures and read the implementation before
+changing the proposed contract or test. Production and measured iteration63 sources
+remain unchanged; fixes, if needed, belong in a separate candidate or experiment.

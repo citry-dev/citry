@@ -1,0 +1,2 @@
+1000 graphs, 3000 ancestry membership/iteration/identity comparisons passed
+17 unsupported-key/seed fallback cases passed

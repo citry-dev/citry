@@ -1,0 +1,16 @@
+{
+  "reference": {
+    "internal_and_public_record_same_object": true,
+    "changed_id_descriptor_error": "The graph being serialized contains a dangling source-location reference."
+  },
+  "candidate": {
+    "internal_and_public_record_same_object": false,
+    "changed_id_descriptor_error": null
+  },
+  "production_compatible": false,
+  "hashes": {
+    "benchmarks/source_snapshot_probe/counterexamples.py": "3b1fd9261145d4b111b2d44c3eefb07ada79ec5fe650771fe49233af8b00f294",
+    "benchmarks/source_snapshot_probe/adapter.py": "3d28277a08ba2e7a4ea71d20a4ffd8bf031466883d7b76e7a256cb22c70994f3",
+    "benchmarks/source_snapshot_probe/target/release/libcitry_source_snapshot_probe.dylib": "239f21f2f664dd9c0497c2fa358bf3d1a3031697c783d47f31f67b4530d856e7"
+  }
+}

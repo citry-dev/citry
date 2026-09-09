@@ -1,0 +1,77 @@
+{
+  "reference": {
+    "candidate": false,
+    "transformation": {
+      "methods": [
+        "bubble",
+        "commit",
+        "requeue",
+        "settle",
+        "settle_in_invocation_region"
+      ],
+      "fields": [
+        "root_result",
+        "stack"
+      ],
+      "method_shared_references": 12,
+      "outer_state_references": 5,
+      "generated_sha256": "4b6665e6fca853816f01cb69a52bbc998370da839ad09c17e3163f2272b88096"
+    },
+    "snapshot_observations": 4,
+    "live_graph_observations_before_gc": 0,
+    "live_graph_observations_after_gc": 0,
+    "collected": 265,
+    "unreachable_types": {
+      "builtins.cell": 77,
+      "builtins.classmethod": 7,
+      "builtins.dict": 49,
+      "builtins.function": 49,
+      "builtins.staticmethod": 7,
+      "builtins.tuple": 56,
+      "builtins.type": 7,
+      "collections._tuplegetter": 13
+    },
+    "output_bytes": 1013746
+  },
+  "candidate": {
+    "candidate": true,
+    "transformation": {
+      "methods": [
+        "bubble",
+        "commit",
+        "requeue",
+        "settle",
+        "settle_in_invocation_region"
+      ],
+      "fields": [
+        "root_result",
+        "stack"
+      ],
+      "method_shared_references": 12,
+      "outer_state_references": 5,
+      "generated_sha256": "4b6665e6fca853816f01cb69a52bbc998370da839ad09c17e3163f2272b88096"
+    },
+    "snapshot_observations": 4,
+    "live_graph_observations_before_gc": 0,
+    "live_graph_observations_after_gc": 0,
+    "collected": 265,
+    "unreachable_types": {
+      "builtins.cell": 77,
+      "builtins.classmethod": 7,
+      "builtins.dict": 49,
+      "builtins.function": 49,
+      "builtins.staticmethod": 7,
+      "builtins.tuple": 56,
+      "builtins.type": 7,
+      "collections._tuplegetter": 13
+    },
+    "output_bytes": 1013746
+  },
+  "hashes": {
+    "benchmarks/python_settlement_probe/large_lifetime.py": "d58bef2502650153a69b10387bc7a36c26b5d384eae829636d467c06ef07ec81",
+    "benchmarks/python_settlement_probe/adapter.py": "6093e96c27fe93b47700281fa02fb93b14c082c071ba1d82468b3d4119d4e82b",
+    "benchmarks/settlement_state_probe/transform.py": "1897be2e3a71c8a081e616c3b9e605926ab3d0302a3f5016e35344054a668f84",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  }
+}

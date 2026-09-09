@@ -1,0 +1,486 @@
+{
+  "experiment_only": true,
+  "revision": "4dfe3d4c18acdb1c85603bda7dc5c0520ec4dc04",
+  "seed": 20261027,
+  "samples_per_process": 2,
+  "initial_renders_per_process": 6,
+  "hashes": {
+    "benchmarks/leaf_contract_probe/probe.py": "b1a2aaa30f791598829e11cacdd22cea22a8bfc892242c408cb0380368302488",
+    "benchmarks/leaf_contract_probe/adapter.py": "3bed89337035ae9fc2e74f3d01dfd66db603789eb1a7d345e163c670c130e461",
+    "benchmarks/identity_leaf_probe/adapter.py": "474dca09a2b02b4a85d202a62a242c0063560e4702610460314dc67e2251546a",
+    "benchmarks/leaf_contract_probe/plan.md": "00e6d509f8b94f38c8662a0a6642bf35f9b422cab184d9c0b8ac5532d5d86515",
+    "benchmarks/template_function_probe/runtime.py": "d341c7bdd48ad67db592d21a601816ba11ee50e3cbef3afe6881eab219f0ca72",
+    "benchmarks/render_structure_probe/census.py": "d61d6324aab7481276b59a0373526e8af71d378fd0cacad9fa23bdfb925e52b3",
+    "benchmarks/ownership_journal_probe/probe.py": "d259181c5db6f64359fee79fb6e51e88e617e5f27b89d71ccb723e4893bb2d08",
+    "benchmarks/utils.py": "9b7367a2fdea81170e41e89ed1239b6ab566fd1eed808d0e6224958d331455f6",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/component.py": "3b7099b671a99cb7e6a207fa8d2b8f94ca3cbfbb4bb14c43c274c68c7a1b5a7b",
+    "packages/py/citry/citry/citry_context.py": "5c142b3d93b14bbea737bae0421472019c4345771573f5cf0c9e1a7f6a20d872",
+    "packages/py/citry/citry/citry_render.py": "da6efc5999be9486c64ba75202366e5c16aac4ca351f056308101f3668070533",
+    "packages/py/citry/citry/_pure.py": "e163a6461313c8af4eec23104de19019575b7196ad65ed1fdfae1497a9f3a10c",
+    "packages/py/citry/citry/constness.py": "cd07e1951bf29be3d3a3d4c78c7a6611a30ede761d91e09328a0cba59b3f88a5",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/citry/serialize.py": "36efe85428427020788909c420815046e07ffcd828aa97b699866d11b3136b19",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "contrasts": {
+    "reference_to_contract": {
+      "median_paired_saving_ms": {
+        "ms": 0.4499374999999972,
+        "cpu_ms": 0.4504999999999981
+      },
+      "joint_wins": 1
+    },
+    "guarded_to_reuse": {
+      "median_paired_saving_ms": {
+        "ms": -0.4428744999999985,
+        "cpu_ms": -0.4450000000000003
+      },
+      "joint_wins": 0
+    },
+    "reuse_to_contract": {
+      "median_paired_saving_ms": {
+        "ms": -0.08295850000000371,
+        "cpu_ms": -0.08149999999999835
+      },
+      "joint_wins": 0
+    }
+  },
+  "blocks": [
+    {
+      "block": 0,
+      "order": [
+        "reference",
+        "guarded",
+        "reuse",
+        "contract"
+      ],
+      "savings_ms": {
+        "reference_to_contract": {
+          "ms": 0.4499374999999972,
+          "cpu_ms": 0.4504999999999981
+        },
+        "guarded_to_reuse": {
+          "ms": -0.4428744999999985,
+          "cpu_ms": -0.4450000000000003
+        },
+        "reuse_to_contract": {
+          "ms": -0.08295850000000371,
+          "cpu_ms": -0.08149999999999835
+        }
+      },
+      "variants": {
+        "reference": {
+          "variant": "reference",
+          "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+          "gc_enabled": true,
+          "gc_before": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 402,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "gc_after": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 402,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+          "warmups": [
+            {
+              "ms": 69.62025,
+              "cpu_ms": 69.618,
+              "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+            },
+            {
+              "ms": 33.702583,
+              "cpu_ms": 33.704,
+              "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+            },
+            {
+              "ms": 29.182292,
+              "cpu_ms": 29.182,
+              "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+            },
+            {
+              "ms": 28.88875,
+              "cpu_ms": 28.89,
+              "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+            },
+            {
+              "ms": 29.89175,
+              "cpu_ms": 29.884,
+              "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+            },
+            {
+              "ms": 30.467167,
+              "cpu_ms": 30.468,
+              "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+            }
+          ],
+          "observations": [
+            {
+              "ms": 30.565167,
+              "cpu_ms": 30.567
+            },
+            {
+              "ms": 30.256125,
+              "cpu_ms": 30.257
+            }
+          ],
+          "html_digests": [
+            "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86",
+            "140ceb8ba2d20d8f914e328e5d06b9b65c5876c4a52187ae4fd45c90d761b1c0"
+          ],
+          "snapshot_digests": [
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+          ],
+          "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+          "output_bytes": 1013746,
+          "activation_counts": {
+            "selected_calls": 41,
+            "selected_initializations": 41
+          },
+          "means_ms": {
+            "ms": 30.410646,
+            "cpu_ms": 30.412
+          }
+        },
+        "guarded": {
+          "variant": "guarded",
+          "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+          "gc_enabled": true,
+          "gc_before": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "gc_after": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+          "warmups": [
+            {
+              "ms": 68.950792,
+              "cpu_ms": 68.954,
+              "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+            },
+            {
+              "ms": 31.10925,
+              "cpu_ms": 31.111,
+              "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+            },
+            {
+              "ms": 32.379375,
+              "cpu_ms": 32.381,
+              "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+            },
+            {
+              "ms": 29.50525,
+              "cpu_ms": 29.506,
+              "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+            },
+            {
+              "ms": 30.233875,
+              "cpu_ms": 30.236,
+              "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+            },
+            {
+              "ms": 30.55,
+              "cpu_ms": 30.543,
+              "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+            }
+          ],
+          "observations": [
+            {
+              "ms": 29.590834,
+              "cpu_ms": 29.591
+            },
+            {
+              "ms": 29.278917,
+              "cpu_ms": 29.279
+            }
+          ],
+          "html_digests": [
+            "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86",
+            "140ceb8ba2d20d8f914e328e5d06b9b65c5876c4a52187ae4fd45c90d761b1c0"
+          ],
+          "snapshot_digests": [
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+          ],
+          "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+          "output_bytes": 1013746,
+          "activation_counts": {
+            "selected_calls": 41
+          },
+          "means_ms": {
+            "ms": 29.4348755,
+            "cpu_ms": 29.435000000000002
+          }
+        },
+        "reuse": {
+          "variant": "reuse",
+          "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+          "gc_enabled": true,
+          "gc_before": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "gc_after": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+          "warmups": [
+            {
+              "ms": 71.312417,
+              "cpu_ms": 71.316,
+              "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+            },
+            {
+              "ms": 34.966875,
+              "cpu_ms": 34.96,
+              "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+            },
+            {
+              "ms": 29.663625,
+              "cpu_ms": 29.665,
+              "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+            },
+            {
+              "ms": 30.1555,
+              "cpu_ms": 30.15,
+              "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+            },
+            {
+              "ms": 29.886208,
+              "cpu_ms": 29.888,
+              "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+            },
+            {
+              "ms": 29.762708,
+              "cpu_ms": 29.763,
+              "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+            }
+          ],
+          "observations": [
+            {
+              "ms": 29.787,
+              "cpu_ms": 29.788
+            },
+            {
+              "ms": 29.9685,
+              "cpu_ms": 29.972
+            }
+          ],
+          "html_digests": [
+            "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86",
+            "140ceb8ba2d20d8f914e328e5d06b9b65c5876c4a52187ae4fd45c90d761b1c0"
+          ],
+          "snapshot_digests": [
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+          ],
+          "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+          "output_bytes": 1013746,
+          "activation_counts": {
+            "selected_calls": 41,
+            "pure_lookup_calls": 41,
+            "pure_lookup_hits": 32
+          },
+          "means_ms": {
+            "ms": 29.87775,
+            "cpu_ms": 29.880000000000003
+          }
+        },
+        "contract": {
+          "variant": "contract",
+          "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+          "gc_enabled": true,
+          "gc_before": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "gc_after": [
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            },
+            {
+              "collections": 14,
+              "collected": 397,
+              "uncollectable": 0
+            },
+            {
+              "collections": 0,
+              "collected": 0,
+              "uncollectable": 0
+            }
+          ],
+          "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+          "warmups": [
+            {
+              "ms": 68.221416,
+              "cpu_ms": 68.226,
+              "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+            },
+            {
+              "ms": 33.211334,
+              "cpu_ms": 33.212,
+              "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+            },
+            {
+              "ms": 28.85,
+              "cpu_ms": 28.845,
+              "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+            },
+            {
+              "ms": 29.9035,
+              "cpu_ms": 29.903,
+              "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+            },
+            {
+              "ms": 29.854333,
+              "cpu_ms": 29.855,
+              "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+            },
+            {
+              "ms": 29.814625,
+              "cpu_ms": 29.815,
+              "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+            }
+          ],
+          "observations": [
+            {
+              "ms": 29.965167,
+              "cpu_ms": 29.966
+            },
+            {
+              "ms": 29.95625,
+              "cpu_ms": 29.957
+            }
+          ],
+          "html_digests": [
+            "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86",
+            "140ceb8ba2d20d8f914e328e5d06b9b65c5876c4a52187ae4fd45c90d761b1c0"
+          ],
+          "snapshot_digests": [
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+          ],
+          "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+          "output_bytes": 1013746,
+          "activation_counts": {
+            "selected_calls": 41,
+            "pure_lookup_calls": 41,
+            "pure_lookup_hits": 32
+          },
+          "means_ms": {
+            "ms": 29.960708500000003,
+            "cpu_ms": 29.9615
+          }
+        }
+      }
+    }
+  ]
+}

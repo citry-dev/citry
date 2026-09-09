@@ -1688,6 +1688,7 @@ class ExtensionManager:
         with ``component_class`` bound, and assign it back. If the component
         defines no nested class, the synthesized class is just ``ext.Config``.
         """
+        constructors: list[tuple[str, type[ExtensionConfig]]] = []
         defaults_all = self.citry.settings.extensions_defaults
         for extension in self._extensions:
             if not extension._component_config_enabled:
@@ -1723,6 +1724,8 @@ class ExtensionManager:
             # the framework's one-time materialization of the captured source,
             # so bypass the public component metaclass guard deliberately.
             type.__setattr__(component_class, class_name, config_cls)
+            constructors.append((extension.name, config_cls))
+        type.__setattr__(component_class, "_citry_extension_configs", tuple(constructors))
 
     def _init_component_instance(self, component: Component) -> None:
         """
@@ -1730,17 +1733,14 @@ class ExtensionManager:
         it as ``component.<extension.name>``.
         """
         component_class = type(component)
-        for extension in self._extensions:
-            if not extension._component_config_enabled:
-                continue
-            config_cls = getattr(component_class, extension.class_name, None)
-            if not (isinstance(config_cls, type) and issubclass(config_cls, extension.Config)):
-                # The class was defined before this extension's config was set up.
-                # Should not happen in normal flow (the metaclass runs
-                # _init_component_class), but recover defensively.
-                self._init_component_class(component_class)
-                config_cls = getattr(component_class, extension.class_name)
-            setattr(component, extension.name, config_cls(component))
+        # The plan belongs to this exact class: inherited configs may bind a
+        # different component class. Config declarations are immutable.
+        constructors = component_class.__dict__.get("_citry_extension_configs")
+        if constructors is None:
+            self._init_component_class(component_class)
+            constructors = component_class.__dict__["_citry_extension_configs"]
+        for name, config_cls in constructors:
+            setattr(component, name, config_cls(component))
 
     # ----- Lifecycle hooks -----
 

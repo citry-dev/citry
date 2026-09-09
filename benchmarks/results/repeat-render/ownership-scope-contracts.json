@@ -1,0 +1,23 @@
+{
+  "nested_graph_restoration_and_exception_identity": true,
+  "decorator_recreation": true,
+  "copied_context_retains_original_supply_payload": true,
+  "invocation_parent_is_looked_up_on_entry": true,
+  "live_active_region_override_can_suppress": true,
+  "slot_site_uses_entry_component_and_post_record_id": true,
+  "entry_failure_leaves_slot_site_unchanged": true,
+  "completed_manager_releases_graph": true,
+  "abandoned_entered_scope_restores": {
+    "reference": true,
+    "candidate": false
+  },
+  "entry_callback_stop_iteration": {
+    "reference": "RuntimeError",
+    "candidate": "StopIteration"
+  },
+  "site_source_alive_during_body": {
+    "reference": true,
+    "candidate": false
+  },
+  "production_compatible": false
+}

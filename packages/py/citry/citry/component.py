@@ -72,7 +72,8 @@ from citry._nested_declarations import (
     _is_dataclass_family,
     _nested_declaration_bases,
 )
-from citry.assets import load_css, load_js, load_messages, load_template, validate_asset_pairs
+from citry._simple_declarations import validate_simple_declaration
+from citry.assets import _find_pair_declaration, load_css, load_js, load_messages, load_template, validate_asset_pairs
 from citry.assets import reset_files as _reset_files_impl
 from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
@@ -96,6 +97,7 @@ _DATA_SCHEMA_NAMES = ("Kwargs", "Slots", "TemplateData", "JsData", "CssData")
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from citry._simple_declarations import SimpleDeclaration
     from citry.citry_render import OnRenderGenerator, RenderReplacement
     from citry.citry_template import CitryTemplate
     from citry.ext.cache import CacheConfig
@@ -233,6 +235,17 @@ class ComponentMeta(LibraryComponentMeta):
     def __setattr__(cls, name: str, value: Any) -> None:  # noqa: N805
         """Keep a concrete component bound to its class-definition owner."""
         namespace = _static_class_dict(cls)
+        if namespace.get("_citry_simple_frozen", False) and name not in {
+            "_citry_template",
+            "_resolved_js",
+            "_resolved_css",
+            "_resolved_messages",
+            "_citry_simple_template",
+        }:
+            if namespace.get(name) is value:
+                return
+            msg = f"Cannot change simple component {cls.__name__}.{name}; define a new subclass."
+            raise AttributeError(msg)
         class_name = _safe_class_text(cls, "__name__") or "Component"
         if name == "_citry_builtin_token" and name in namespace:
             if value is namespace[name]:
@@ -249,10 +262,10 @@ class ComponentMeta(LibraryComponentMeta):
                 return
             msg = f"Cannot change {class_name}'s component definition identity."
             raise AttributeError(msg)
-        if name == "pure" and "pure" in namespace:
-            if namespace["pure"] is value:
+        if name in {"pure", "simple"} and name in namespace:
+            if namespace[name] is value:
                 return
-            msg = f"Cannot change {class_name}'s pure-component declaration."
+            msg = f"Cannot change {class_name}'s {name}-component declaration."
             raise AttributeError(msg)
         if name in {"citry", "_citry_owner"} and "_citry_owner" in namespace:
             owner = namespace["_citry_owner"]
@@ -277,6 +290,15 @@ class ComponentMeta(LibraryComponentMeta):
     def __delattr__(cls, name: str) -> None:  # noqa: N805
         """Keep the concrete component's owning Citry attribute present."""
         namespace = _static_class_dict(cls)
+        if namespace.get("_citry_simple_frozen", False) and name not in {
+            "_citry_template",
+            "_resolved_js",
+            "_resolved_css",
+            "_resolved_messages",
+            "_citry_simple_template",
+        }:
+            msg = f"Cannot delete simple component {cls.__name__}.{name}; define a new subclass."
+            raise AttributeError(msg)
         class_name = _safe_class_text(cls, "__name__") or "Component"
         if name == "_citry_builtin_token" and name in namespace:
             msg = f"Cannot delete {class_name}'s built-in component identity."
@@ -287,8 +309,8 @@ class ComponentMeta(LibraryComponentMeta):
         if name in {"definition_id", "_definition_id"} and "_definition_id" in namespace:
             msg = f"Cannot delete {class_name}'s component definition identity."
             raise AttributeError(msg)
-        if name == "pure" and "pure" in namespace:
-            msg = f"Cannot delete {class_name}'s pure-component declaration."
+        if name in {"pure", "simple"} and name in namespace:
+            msg = f"Cannot delete {class_name}'s {name}-component declaration."
             raise AttributeError(msg)
         if name in {"citry", "_citry_owner"} and "_citry_owner" in namespace:
             msg = f"Cannot delete {class_name}.citry after the component class is defined."
@@ -409,10 +431,22 @@ class ComponentMeta(LibraryComponentMeta):
         authored_namespace = dict(attrs)
 
         cls = cast("type[Component]", super().__new__(mcs, name, bases, attrs))
+        simple = next(
+            (
+                _static_class_dict(ancestor)["simple"]
+                for ancestor in _static_class_mro(cls)
+                if "simple" in _static_class_dict(ancestor)
+            ),
+            False,
+        )
+        if type(simple) is not bool:
+            msg = f"Component {name}.simple must be an exact bool; got {simple!r}."
+            raise ValueError(msg)
         type.__setattr__(cls, "_definition_id", _new_definition_id())
         # Purity never inherits implicitly: a subclass may add ambient reads
         # or side effects, so it must make its own promise.
         type.__setattr__(cls, "pure", pure)
+        type.__setattr__(cls, "simple", simple)
 
         if _citry_builtin is not None:
             type.__setattr__(cls, "_citry_builtin_token", _citry_builtin)
@@ -472,6 +506,31 @@ class ComponentMeta(LibraryComponentMeta):
             # view extension's Config), before registration.
             extensions.on_component_class_created(cls)
             extensions._init_component_class(cls)
+
+            if simple:
+                declaration = validate_simple_declaration(
+                    cls, Component, extension_names=(ext.class_name for ext in extensions._extensions)
+                )
+                asset_pairs = tuple(
+                    (inline, file, *_find_pair_declaration(cls, inline, file))
+                    for inline, file in (
+                        ("template", "template_file"),
+                        ("js", "js_file"),
+                        ("css", "css_file"),
+                        ("messages", "messages_file"),
+                    )
+                )
+                # A simple definition snapshots its inherited behavior. Later
+                # rebinding a base method must not change its checked contract.
+                effective: dict[str, object] = {}
+                for base in reversed(_static_class_mro(cls)):
+                    effective.update(_static_class_dict(base))
+                for member, value in effective.items():
+                    if not member.startswith("_") and member not in cls.__dict__:
+                        type.__setattr__(cls, member, value)
+                type.__setattr__(cls, "_citry_simple_declaration", declaration)
+                type.__setattr__(cls, "_citry_simple_asset_pairs", asset_pairs)
+                type.__setattr__(cls, "_citry_simple_frozen", True)
 
             # Register with the Citry instance. Uses the class name (or
             # Component.name override) as the registration name; Citry.register()
@@ -590,14 +649,34 @@ class Component(metaclass=ComponentMeta):
     the same as for any component.
     """
 
+    simple: ClassVar[bool] = False
+    """
+    Render a presentation template under its caller's ownership.
+
+    A simple component has no independent instance, component hooks or browser
+    identity. Unsupported declarations and invocations raise errors. The flag
+    inherits to subclasses, which are checked independently, and is fixed after
+    class definition.
+
+    Use the default data method or a synchronous static ``template_data(kwargs,
+    slots)`` method. A template can accept optional default content, but the
+    class cannot declare its own JS, CSS, messages, instance hooks or instance
+    configuration. The data callback still runs for each invocation; this flag
+    does not make the component pure.
+
+    See [Simple components](/advanced/simple-components/) for the full contract
+    and [Performance](/advanced/performance/) to compare the available options.
+    """
+
     pure: ClassVar[bool] = False
     """Whether repeated equal template data may reuse settled body strings.
 
     Set ``pure = True`` only when rendering the template is a deterministic,
     side-effect-free function of its template variables. The memo lives for
     one root render. It can reuse safe strings around a child or Slot, but the
-    child, Slot, component instances, IDs, ownership, and i18n work still run
-    for every occurrence. A subclass must declare purity again rather than
+    child, Slot, ordinary component instances, IDs, ownership, and i18n work
+    still run for every occurrence. A separately declared simple component keeps
+    its restricted instance-free contract. A subclass must declare purity again rather than
     inheriting the promise.
     """
 
@@ -789,6 +868,8 @@ class Component(metaclass=ComponentMeta):
     ``TemplateData``, it inherits through component C3 and a plain annotated
     class converts to a dataclass."""
 
+    _citry_dynamic_selector: ClassVar[bool] = False
+    _citry_simple_declaration: ClassVar[SimpleDeclaration]
     _citry_template: ClassVar[CitryTemplate | None] = None
     """Internal: this component's loaded template (the ``CitryTemplate``,
     which also carries the compiled form once first rendered), resolved once
@@ -888,6 +969,9 @@ class Component(metaclass=ComponentMeta):
 
     _component_tag_client_bindings: tuple[ComponentTagClientBindingRecord, ...]
     """Client bindings from the nested component tag, kept separate from kwargs."""
+
+    _selector_call_shape: tuple[bool, bool]
+    """Authored fill and range-directive presence retained by dynamic selectors."""
 
     _element_morph_metadata: _ElementMorphMetadata | None
     """Private metadata for the dynamic ordinary-element built-in."""

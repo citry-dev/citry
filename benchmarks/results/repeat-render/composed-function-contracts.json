@@ -1,0 +1,123 @@
+{
+  "compared": {
+    "inputs_0": "9502300ed42081060787ead447d849d3f7b1e6f3b1b0eaf0393d33d93b68c778",
+    "inputs_1": "c3db5e4d054c48032db8fe9b9662f080cc10d2fb71da8c29973e0b3f93c32924",
+    "inputs_2": "8aebb76e3d5337ac852865731274034394d7ea216c7fb158277bf110b669b193",
+    "inputs_3": "271e6a44cf8a478f2b6e9c67a4de2e403e1a9267a3138f25546600e8c0d636b9"
+  },
+  "formatting_only_and_dynamic_whitespace": {
+    "reference": {
+      "matches_reference": true
+    },
+    "button": {
+      "matches_reference": false
+    },
+    "immediate": {
+      "matches_reference": true
+    },
+    "deferred": {
+      "matches_reference": true
+    }
+  },
+  "ownership": {
+    "immediate": {
+      "logical_parent": "SourceCaller",
+      "invocation_source": "SourceCaller",
+      "physical_receiver": "Receiver",
+      "physical_lexical_owner": "SourceCaller"
+    },
+    "deferred": {
+      "logical_parent": "SourceCaller",
+      "invocation_source": "SourceCaller",
+      "physical_receiver": "Receiver",
+      "physical_lexical_owner": "SourceCaller"
+    }
+  },
+  "cleanup": {
+    "immediate": {
+      "hot_roots": 4,
+      "ancestor_recovered": true,
+      "nested_error_reset": true
+    },
+    "deferred": {
+      "hot_roots": 4,
+      "ancestor_recovered": true,
+      "nested_error_reset": true
+    }
+  },
+  "rejected": {
+    "named_fill/immediate": "TypeError",
+    "named_fill/deferred": "TypeError",
+    "key/immediate": "TypeError",
+    "key/deferred": "TypeError",
+    "client_binding/immediate": "TypeError",
+    "client_binding/deferred": "TypeError",
+    "svg_body/immediate": "TypeError",
+    "svg_body/deferred": "TypeError",
+    "svg_alpine/immediate": "TypeError",
+    "svg_alpine/deferred": "TypeError"
+  },
+  "callback_and_content_order": {
+    "reference": [
+      "sibling",
+      "button",
+      "icon",
+      "content",
+      "heroicon",
+      "child"
+    ],
+    "button": [
+      "button",
+      "sibling",
+      "icon",
+      "content",
+      "heroicon",
+      "child"
+    ],
+    "immediate": [
+      "button",
+      "icon",
+      "heroicon",
+      "content",
+      "sibling",
+      "child"
+    ],
+    "deferred": [
+      "sibling",
+      "button",
+      "icon",
+      "content",
+      "heroicon",
+      "child"
+    ]
+  },
+  "caller_hook_phases": {
+    "reference": [
+      "before",
+      "after"
+    ],
+    "button": [
+      "before",
+      "after"
+    ],
+    "immediate": [
+      "before",
+      "after"
+    ],
+    "deferred": [
+      "before",
+      "after"
+    ]
+  },
+  "caller_completion_hook_counts": {
+    "reference": 1,
+    "button": 1,
+    "immediate": 1,
+    "deferred": 1
+  },
+  "hashes": {
+    "benchmarks/composed_function_probe/contracts.py": "ef4ee016cd04494f055828b6d736e2b2d5b34d19819c31700e9efe34634e1015",
+    "benchmarks/composed_function_probe/adapter.py": "5545aa0531615569a2790b9d886b9b5b57a9d796b5277e5d7edbda39305207d2",
+    "benchmarks/composed_function_probe/probe.py": "e1f2866fa2756a2db11f1c55e8070e20635e0b1e52ee426f36bcccb9cf9adcf3"
+  }
+}

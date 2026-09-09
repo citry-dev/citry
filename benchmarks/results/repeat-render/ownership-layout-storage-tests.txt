@@ -1,0 +1,94 @@
+................FF........                                               [100%]
+=================================== FAILURES ===================================
+_____ test_stable_component_id_getter_replay_keeps_binding_visible[python] _____
+
+    @pytest.mark.usefixtures("graph")
+    def test_stable_component_id_getter_replay_keeps_binding_visible():
+        c = Citry()
+        observed = []
+    
+        class Child(Component):
+            citry = c
+    
+            @property
+            def id(self):
+                # Target the binding boundary while keeping the constructor's validated ID.
+                if sys._getframe(1).f_code.co_name == "bind_instance":
+                    self._bind_reads = getattr(self, "_bind_reads", 0) + 1
+                    if self._bind_reads == 2:
+                        current = ownership.current_ownership_graph()
+                        assert current is not None
+                        observed.append(current.snapshot())
+                        current.import_replayed_snapshot(ownership.OwnershipGraph().snapshot())
+                        observed.append(current.snapshot())
+                return self._saved_id
+    
+            @id.setter
+            def id(self, value):
+                self._saved_id = value
+    
+            template = """
+            <p>body</p>
+            """
+    
+        class Page(Component):
+            citry = c
+            template = """
+            <c-child />
+            """
+    
+        rendered = Page().render()
+        assert "body" in str(rendered)
+>       assert len(observed) == 2
+E       assert 0 == 2
+E        +  where 0 = len([])
+
+packages/py/citry/tests/test_ownership_storage_callbacks.py:229: AssertionError
+_____ test_stable_component_id_getter_replay_keeps_binding_visible[native] _____
+
+    @pytest.mark.usefixtures("graph")
+    def test_stable_component_id_getter_replay_keeps_binding_visible():
+        c = Citry()
+        observed = []
+    
+        class Child(Component):
+            citry = c
+    
+            @property
+            def id(self):
+                # Target the binding boundary while keeping the constructor's validated ID.
+                if sys._getframe(1).f_code.co_name == "bind_instance":
+                    self._bind_reads = getattr(self, "_bind_reads", 0) + 1
+                    if self._bind_reads == 2:
+                        current = ownership.current_ownership_graph()
+                        assert current is not None
+                        observed.append(current.snapshot())
+                        current.import_replayed_snapshot(ownership.OwnershipGraph().snapshot())
+                        observed.append(current.snapshot())
+                return self._saved_id
+    
+            @id.setter
+            def id(self, value):
+                self._saved_id = value
+    
+            template = """
+            <p>body</p>
+            """
+    
+        class Page(Component):
+            citry = c
+            template = """
+            <c-child />
+            """
+    
+        rendered = Page().render()
+        assert "body" in str(rendered)
+>       assert len(observed) == 2
+E       assert 0 == 2
+E        +  where 0 = len([])
+
+packages/py/citry/tests/test_ownership_storage_callbacks.py:229: AssertionError
+=========================== short test summary info ============================
+FAILED packages/py/citry/tests/test_ownership_storage_callbacks.py::test_stable_component_id_getter_replay_keeps_binding_visible[python]
+FAILED packages/py/citry/tests/test_ownership_storage_callbacks.py::test_stable_component_id_getter_replay_keeps_binding_visible[native]
+2 failed, 24 passed in 0.32s

@@ -1,0 +1,58 @@
+{
+  "revision": "5bad7af8eadca45138015001ad43c42d8db939d9",
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "boundary": "production",
+  "reference": "5bad7af8 ElementAttrsNode._format",
+  "id_schedule": "distinct start per pair; same start within each pair",
+  "order": "alternating",
+  "order_seed": null,
+  "diagnostic": false,
+  "hashes": {
+    "benchmarks/attrs_cache_probe/probe.py": "e197e252ff214f8d83a167ca8e4a3dde180dc9485064a9caffc2cdddeaf1ad7f",
+    "packages/py/citry/citry/attrs.py": "a56d5ddb8bc01e684688a37925c94757254f634adc219711016588b19c278c9a",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/citry/util/html.py": "130e533df85f8f2ecbaeff1059b89294f46388ef54c3e72c71c115141d46735b"
+  },
+  "pairs": 2,
+  "all_pairs_html_equal": true,
+  "snapshot_trace_equal": true,
+  "snapshots_compared": 4,
+  "activation": {
+    "hits": 495,
+    "misses": 0,
+    "entries": 126,
+    "max_entries": 256
+  },
+  "medians_ms": {
+    "reference": 32.3119375,
+    "candidate": 31.2643535
+  },
+  "median_paired_saving_ms": 1.0475840000000005,
+  "favorable_pairs": 2,
+  "observations": [
+    {
+      "pair": 0,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.71975
+    },
+    {
+      "pair": 0,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.039416
+    },
+    {
+      "pair": 1,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.489291
+    },
+    {
+      "pair": 1,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.904125
+    }
+  ]
+}

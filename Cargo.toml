@@ -3,6 +3,7 @@ members = [
     "crates/citry_core_py",
     "crates/citry_html_transform",
     "crates/citry_i18n",
+    "crates/citry_ownership",
     "crates/citry_template_formatter",
     "crates/citry_template_parser",
     "crates/python_safe_eval",
@@ -11,7 +12,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.96"
 authors = ["Juro Oravec <juraj.oravec.josefson@gmail.com>"]
 license = "MIT"
 homepage = "https://citry.dev"
@@ -19,6 +20,8 @@ documentation = "https://citry.dev"
 repository = "https://github.com/citry-dev/citry"
 
 [workspace.dependencies]
+python_safe_eval = { path = "crates/python_safe_eval", version = "=1.0.0" }
+citry_ownership = { path = "crates/citry_ownership", version = "=0.1.0" }
 pyo3 = { version = "0.27.1", features = ["extension-module"] }
 quick-xml = "0.38.3"
 pest = "2.8.3"
@@ -61,6 +64,8 @@ ruff_python_trivia = { path = "third_party/rust/ruff/crates/ruff_python_trivia" 
 ruff_source_file = { path = "third_party/rust/ruff/crates/ruff_source_file" }
 ruff_text_size = { path = "third_party/rust/ruff/crates/ruff_text_size" }
 ty_static = { path = "third_party/rust/ruff/crates/ty_static" }
+
+stacker = "0.1.24"
 
 # Used by ruff_python_formatter and its workspace-inherited dependencies
 arc-swap = { version = "1.7.1" }

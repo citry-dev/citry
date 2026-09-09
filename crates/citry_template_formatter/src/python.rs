@@ -11,6 +11,7 @@
 //! rejected instead of written to the file. The pinned identity below is part of
 //! the contract: change it and the corpus's expected bytes change with it.
 
+use python_safe_eval::parse_expression;
 use ruff_formatter::{IndentWidth, LineWidth, printer::LineEnding};
 use ruff_python_ast::{
     PythonVersion,
@@ -18,7 +19,7 @@ use ruff_python_ast::{
     token::{TokenKind, Tokens},
 };
 use ruff_python_formatter::{PyFormatOptions, QuoteStyle, format_module_ast};
-use ruff_python_parser::{Mode, ParseOptions, parse, parse_expression};
+use ruff_python_parser::{Mode, ParseOptions, parse};
 use ruff_python_trivia::{CommentRanges, SuppressionKind, TriviaRanges};
 
 use crate::error::FormatError;
@@ -32,7 +33,7 @@ const EXPRESSION_WRAPPER: &str = "x";
 const CLAUSE_PREFIX: &str = "None for ";
 
 /// Stable identity for the Python formatter pinned by this workspace.
-pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.16.2+5b48a04097";
+pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.16.6+22f65a2ab5";
 
 pub(crate) fn format_expression(
     source: &str,
@@ -75,7 +76,7 @@ pub(crate) fn format_expression(
             "Python expression wrapper failed to parse: {error}"
         ))
     })?;
-    // Ruff 0.16.2 gives the formatter comments and other protected trivia in
+    // Ruff 0.16.6 gives the formatter comments and other protected trivia in
     // one index, so every non-code range participates in attachment decisions.
     let wrapper_trivia = TriviaRanges::from(parsed_wrapper.tokens());
     let formatted_document = format_module_ast(&parsed_wrapper, &wrapper_trivia, &wrapped, options)
@@ -297,8 +298,8 @@ mod tests {
     #[test]
     fn provider_identity_matches_the_vendored_ruff_release() {
         let manifest = include_str!("../../../third_party/rust/ruff/crates/ruff/Cargo.toml");
-        assert!(manifest.contains("version = \"0.16.2\""));
-        assert_eq!(PYTHON_PROVIDER_IDENTITY, "ruff@0.16.2+5b48a04097");
+        assert!(manifest.contains("version = \"0.16.6\""));
+        assert_eq!(PYTHON_PROVIDER_IDENTITY, "ruff@0.16.6+22f65a2ab5");
     }
 
     #[test]

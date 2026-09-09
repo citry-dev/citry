@@ -1,0 +1,2 @@
+1000 graphs, 3000 sequential retirement comparisons passed
+17 custom-value rejection and Python fallback cases passed

@@ -1,0 +1,241 @@
+{
+  "experiment_only": true,
+  "revision": "77b210f38c1e5fedf17f4f52bf87e0c90ceff600",
+  "seed": 20261022,
+  "samples_per_process": 1,
+  "initial_renders_per_process": 6,
+  "hashes": {
+    "benchmarks/serializer_session_probe/probe.py": "941f0fcec68d82266c1b428e35ceb4b809069b64e6c32205cd1461821b37c105",
+    "benchmarks/serializer_session_probe/adapter.py": "0e0dae4f95f9f21aab6718458b0b1716f2dbd85fae6c8ea7f131d8f85010601e",
+    "benchmarks/serializer_session_probe/plan.md": "4c8883fb5ebe22fc3359ef843e713ea840fbef21171a766b21510175e3c8f19a",
+    "benchmarks/serializer_session_probe/Cargo.toml": "2d588f907ac251bc30b813c7a9a91907b55b862690b2626540d33201d3298433",
+    "benchmarks/serializer_session_probe/Cargo.lock": "89c58ae2d88ece8f6634bf359588b3b046c6802b05c4e9bf7d406f69b52a6366",
+    "benchmarks/serializer_session_probe/build.rs": "c609c2f1a8594abf959388e559d76241e51b0216faa7b37f529255eb1fc2c5eb",
+    "benchmarks/serializer_session_probe/src/lib.rs": "a6172901c9f4c95c01bff6a25ddac066f906760dc7bedb5afc333cfeff46dcaa",
+    "crates/citry_html_transform/src/marker.rs": "80a6d0d1a12b8c8a6abebedd729ebb607ffea151e74155df73d1fa4559ab32f0",
+    "crates/citry_html_transform/src/transformer.rs": "82d4d602391cc2c2b762a8e5993246a5de673ba9ec7a8ab9cffb978efc5d46d4",
+    "packages/py/citry/citry/serialize.py": "36efe85428427020788909c420815046e07ffcd828aa97b699866d11b3136b19",
+    "benchmarks/render_structure_probe/census.py": "d61d6324aab7481276b59a0373526e8af71d378fd0cacad9fa23bdfb925e52b3",
+    "benchmarks/ownership_journal_probe/probe.py": "d259181c5db6f64359fee79fb6e51e88e617e5f27b89d71ccb723e4893bb2d08",
+    "benchmarks/utils.py": "9b7367a2fdea81170e41e89ed1239b6ab566fd1eed808d0e6224958d331455f6",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/citry_render.py": "da6efc5999be9486c64ba75202366e5c16aac4ca351f056308101f3668070533",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/citry/slots.py": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "median_process_pair_mean_savings_ms": {
+    "ms": 0.14129199999999997,
+    "cpu_ms": 0.14099999999999824
+  },
+  "joint_favorable_process_pairs": 1,
+  "pairs": [
+    {
+      "pair": 0,
+      "candidate_first": false,
+      "mean_savings_ms": {
+        "ms": 0.14129199999999997,
+        "cpu_ms": 0.14099999999999824
+      },
+      "reference": {
+        "candidate": false,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 14,
+            "collected": 403,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 14,
+            "collected": 403,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "candidate_artifact_sha256": "bcfbd5dc5332f11db9baf223a6cc984ef4d37f5cb8a1019cbb9e7e52757514e0",
+        "warmups": [
+          {
+            "ms": 68.211667,
+            "cpu_ms": 68.218,
+            "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+          },
+          {
+            "ms": 32.810166,
+            "cpu_ms": 32.811,
+            "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+          },
+          {
+            "ms": 28.574916,
+            "cpu_ms": 28.575,
+            "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+          },
+          {
+            "ms": 28.562875,
+            "cpu_ms": 28.567,
+            "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+          },
+          {
+            "ms": 28.80175,
+            "cpu_ms": 28.794,
+            "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+          },
+          {
+            "ms": 29.31625,
+            "cpu_ms": 29.319,
+            "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 29.204792,
+            "cpu_ms": 29.205
+          }
+        ],
+        "html_digests": [
+          "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86"
+        ],
+        "snapshot_digests": [
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+        ],
+        "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+        "output_bytes": 1013746,
+        "activation_counts": {},
+        "means_ms": {
+          "ms": 29.204792,
+          "cpu_ms": 29.205
+        }
+      },
+      "candidate": {
+        "candidate": true,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 13,
+            "collected": 403,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 13,
+            "collected": 403,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "candidate_artifact_sha256": "bcfbd5dc5332f11db9baf223a6cc984ef4d37f5cb8a1019cbb9e7e52757514e0",
+        "warmups": [
+          {
+            "ms": 68.085416,
+            "cpu_ms": 68.089,
+            "html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff"
+          },
+          {
+            "ms": 32.609583,
+            "cpu_ms": 32.611,
+            "html_digest": "a734fafb34de6624228401325783f44c6f6a3db28505287af6a26285dd3f2ad3"
+          },
+          {
+            "ms": 28.303583,
+            "cpu_ms": 28.305,
+            "html_digest": "4bc11026351504ee787877ab5a962943ac5165ec1d7860e064f79b125f43b178"
+          },
+          {
+            "ms": 29.202459,
+            "cpu_ms": 29.204,
+            "html_digest": "6244a3d319bdc8601d8790f7e9bcd13ceb1d1dc6e0af943ba09f233fc20235dc"
+          },
+          {
+            "ms": 29.21475,
+            "cpu_ms": 29.208,
+            "html_digest": "92342a4451b9ebc083b90c93e68cb7ef0678d8632d45be49c305e329e80536b8"
+          },
+          {
+            "ms": 29.106792,
+            "cpu_ms": 29.109,
+            "html_digest": "a85e12265e03e597615cb7a850caac0b7bfeaf701ca068e22e65ed0b972bc57b"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 29.0635,
+            "cpu_ms": 29.064
+          }
+        ],
+        "html_digests": [
+          "986b6ddb49bf3144725f538d36b4fcae812695b5df750fad7d913fce70c9ed86"
+        ],
+        "snapshot_digests": [
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+          "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+        ],
+        "activation_html_digest": "d2c981c48bab1ed1fc8ded983c9353a24a3469d4a5e9b95832312a7bceb6c5ff",
+        "output_bytes": 1013746,
+        "activation_counts": {
+          "sessions": 5,
+          "frames": 282
+        },
+        "means_ms": {
+          "ms": 29.0635,
+          "cpu_ms": 29.064
+        }
+      }
+    }
+  ],
+  "source_archives": {
+    "benchmarks/serializer_session_probe/src/lib.rs": "benchmarks/serializer_session_probe/src/lib.rs.initial.txt",
+    "benchmarks/serializer_session_probe/plan.md": "benchmarks/serializer_session_probe/plan.md.initial.txt"
+  },
+  "candidate_artifact_archive": "/tmp/citry-serializer-session-initial.dylib"
+}

@@ -1,0 +1,91 @@
+"""Separate instrumented admission checks from native deferred-tree traversal."""
+
+from __future__ import annotations
+
+import ast
+import hashlib
+import inspect
+import json
+import statistics
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from benchmarks.native_deferred_scan_probe import adapter  # noqa: E402
+from benchmarks.native_deferred_scan_probe.probe import scenario  # noqa: E402
+
+from citry import component_render as components  # noqa: E402
+
+# Compile the measured condition itself so the diagnostic cannot silently omit a guard.
+tree = ast.parse(inspect.getsource(adapter.scan))
+condition = tree.body[0].body[1].test
+function = ast.parse("def diagnostic_eligible():\n    return True\n")
+function.body[0].body[0].value = condition
+ast.fix_missing_locations(function)
+exec(compile(function, __file__, "exec"), adapter.__dict__)  # noqa: S102 - inspected experiment source
+eligible = adapter.diagnostic_eligible
+
+
+def main() -> None:
+    """Keep short alternating instrumented renders separate from the performance screen."""
+    module = scenario()
+    data = module.gen_render_data()
+    for _ in range(6):
+        module.render(data)
+    rows = []
+    try:
+        for pair in range(10):
+            for changed in (False, True) if pair % 2 == 0 else (True, False):
+                totals = {"guard_ns": 0, "scan_ns": 0, "calls": 0}
+
+                def scan(root: Any, *, _changed: bool = changed, _totals: dict[str, int] = totals) -> Any:
+                    start = time.perf_counter_ns()
+                    if _changed:
+                        if not eligible():
+                            raise RuntimeError("The diagnostic candidate was not eligible")
+                        middle = time.perf_counter_ns()
+                        result = adapter.NATIVE.scan(root, adapter.TYPES)
+                        end = time.perf_counter_ns()
+                        if result is None:
+                            raise RuntimeError("The native diagnostic unexpectedly fell back")
+                        _totals["guard_ns"] += middle - start
+                        _totals["scan_ns"] += end - middle
+                    else:
+                        result = adapter.ORIGINAL(root)
+                        end = time.perf_counter_ns()
+                        _totals["scan_ns"] += end - start
+                    _totals["calls"] += 1
+                    return result
+
+                components._scan_deferred = scan
+                module.render(data)
+                rows.append({"pair": pair, "candidate": changed, **totals})
+    finally:
+        adapter.install(changed=False)
+    report = {
+        "diagnostic_only": True,
+        "note": "Timers and the extracted guard function add overhead; these are not whole-render savings.",
+        "same_process": True,
+        "rows": rows,
+        "median_instrumented_ms_per_render": {
+            "reference_scan": statistics.median(row["scan_ns"] / 1e6 for row in rows if not row["candidate"]),
+            "candidate_guard": statistics.median(row["guard_ns"] / 1e6 for row in rows if row["candidate"]),
+            "candidate_native_scan": statistics.median(row["scan_ns"] / 1e6 for row in rows if row["candidate"]),
+        },
+        "hashes": {
+            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (Path(__file__), Path(adapter.__file__), Path(components.__file__), adapter.ARTIFACT)
+        },
+    }
+    (ROOT / "benchmarks/results/repeat-render/native-deferred-scan-diagnostic.json").write_text(
+        json.dumps(report, indent=2) + "\n"
+    )
+    print(json.dumps(report["median_instrumented_ms_per_render"], indent=2))
+
+
+if __name__ == "__main__":
+    main()

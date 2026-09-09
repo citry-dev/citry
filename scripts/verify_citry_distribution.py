@@ -38,17 +38,19 @@ PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
 MAX_WHEEL_BYTES: Final = 1_100 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
-    "citry-core==1.6.1",
+    'uvicorn>=0.49; extra == "ext-preview"',
+    'playwright>=1.62.0; extra == "ext-preview"',
+    "citry-core==1.7.0",
     "wrapt>=1.16",
     "markupsafe>=2.1",
     "typing-extensions>=4.10",
     'tomli>=2.0; python_version < "3.11"',
     "tzdata>=2026.3",
-    'ty==0.0.73; extra == "analysis-ty"',
+    'ty==0.0.78; extra == "analysis-ty"',
     'watchfiles>=1.0; extra == "watcher-watchfiles"',
     'watchdog>=4.0; extra == "watcher-watchdog"',
 }
-EXPECTED_EXTRAS: Final = {"analysis-ty", "watcher-watchfiles", "watcher-watchdog"}
+EXPECTED_EXTRAS: Final = {"analysis-ty", "ext-preview", "watcher-watchfiles", "watcher-watchdog"}
 
 
 class DistributionVerificationError(RuntimeError):

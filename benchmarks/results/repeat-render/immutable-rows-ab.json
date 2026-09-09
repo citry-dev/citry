@@ -1,0 +1,162 @@
+[
+  {
+    "mode": "baseline",
+    "ms": 38.3695
+  },
+  {
+    "mode": "candidate",
+    "ms": 36.714042
+  },
+  {
+    "mode": "baseline",
+    "ms": 38.416
+  },
+  {
+    "mode": "candidate",
+    "ms": 37.430792
+  },
+  {
+    "mode": "baseline",
+    "ms": 43.13625
+  },
+  {
+    "mode": "candidate",
+    "ms": 36.576125
+  },
+  {
+    "mode": "baseline",
+    "ms": 38.918584
+  },
+  {
+    "mode": "candidate",
+    "ms": 37.245125
+  },
+  {
+    "mode": "baseline",
+    "ms": 39.023417
+  },
+  {
+    "mode": "candidate",
+    "ms": 37.1705
+  },
+  {
+    "mode": "baseline",
+    "ms": 39.092708
+  },
+  {
+    "mode": "candidate",
+    "ms": 37.92375
+  },
+  {
+    "mode": "baseline",
+    "ms": 39.046709
+  },
+  {
+    "mode": "candidate",
+    "ms": 36.992375
+  },
+  {
+    "mode": "baseline",
+    "ms": 40.326875
+  },
+  {
+    "mode": "candidate",
+    "ms": 35.460375
+  },
+  {
+    "mode": "baseline",
+    "ms": 37.090416
+  },
+  {
+    "mode": "candidate",
+    "ms": 35.381584
+  },
+  {
+    "mode": "baseline",
+    "ms": 37.1725
+  },
+  {
+    "mode": "candidate",
+    "ms": 35.436584
+  },
+  {
+    "mode": "baseline",
+    "ms": 39.280125
+  },
+  {
+    "mode": "candidate",
+    "ms": 39.049583
+  },
+  {
+    "mode": "baseline",
+    "ms": 37.327042
+  },
+  {
+    "mode": "candidate",
+    "ms": 35.527958
+  },
+  {
+    "mode": "baseline",
+    "ms": 37.189708
+  },
+  {
+    "mode": "candidate",
+    "ms": 35.383667
+  },
+  {
+    "mode": "baseline",
+    "ms": 37.413792
+  },
+  {
+    "mode": "candidate",
+    "ms": 36.884542
+  },
+  {
+    "mode": "baseline",
+    "ms": 38.8965
+  },
+  {
+    "mode": "candidate",
+    "ms": 40.757792
+  },
+  {
+    "mode": "baseline",
+    "ms": 38.578292
+  },
+  {
+    "mode": "candidate",
+    "ms": 36.720875
+  },
+  {
+    "mode": "baseline",
+    "ms": 38.550125
+  },
+  {
+    "mode": "candidate",
+    "ms": 36.633958
+  },
+  {
+    "mode": "baseline",
+    "ms": 38.961708
+  },
+  {
+    "mode": "candidate",
+    "ms": 37.126042
+  },
+  {
+    "mode": "baseline",
+    "ms": 40.05125
+  },
+  {
+    "mode": "candidate",
+    "ms": 39.0515
+  },
+  {
+    "mode": "baseline",
+    "ms": 41.847375
+  },
+  {
+    "mode": "candidate",
+    "ms": 37.510542
+  }
+]

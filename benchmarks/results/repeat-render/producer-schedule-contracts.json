@@ -1,0 +1,74 @@
+{
+  "experiment_only": true,
+  "production_compatible": false,
+  "cases": [
+    {
+      "case": "append",
+      "reference": {
+        "html": "\n<b data-cid-c2=\"\" data-cid-c1=\"\">first</b>\n",
+        "scope_released": true
+      },
+      "candidate": {
+        "html": "\n<b data-cid-c2=\"\" data-cid-c1=\"\">first</b>\n",
+        "scope_released": true
+      },
+      "matches": true
+    },
+    {
+      "case": "remove",
+      "reference": {
+        "html": "",
+        "scope_released": true
+      },
+      "candidate": {
+        "html": "",
+        "scope_released": true
+      },
+      "matches": true
+    },
+    {
+      "case": "replace",
+      "reference": {
+        "html": "\n<i data-cid-c2=\"\" data-cid-c1=\"\">second</i>\n",
+        "scope_released": true
+      },
+      "candidate": {
+        "html": "\n<i data-cid-c2=\"\" data-cid-c1=\"\">second</i>\n",
+        "scope_released": true
+      },
+      "matches": true
+    },
+    {
+      "case": "constructor_exposure",
+      "reference": {
+        "has_pending_child": false,
+        "scope_released": true
+      },
+      "candidate": {
+        "has_pending_child": true,
+        "scope_released": true
+      },
+      "matches": false
+    },
+    {
+      "case": "error_cleanup",
+      "reference": {
+        "raised": true,
+        "scope_released": true
+      },
+      "candidate": {
+        "raised": true,
+        "scope_released": true
+      },
+      "matches": true
+    }
+  ],
+  "hashes": {
+    "benchmarks/producer_schedule_probe/contracts.py": "84c7e115fc262593326eea347af5da1b9a2a32cd5fb46d4a8fcf89015b545691",
+    "benchmarks/producer_schedule_probe/adapter.py": "044b529bb8d4e0282a7c46e8eba4e45f7922213223440b69a0c58dec1bb95916",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42"
+  },
+  "source_archives": {
+    "benchmarks/producer_schedule_probe/adapter.py": "benchmarks/producer_schedule_probe/adapter.py.measured.txt"
+  }
+}

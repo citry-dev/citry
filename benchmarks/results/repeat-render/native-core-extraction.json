@@ -1,0 +1,23 @@
+{
+  "base_revision": "e8f55c7eb5bec68dd23ce8f59f60a81d32718d15",
+  "calculation_byte_identical_to_base": true,
+  "focused_rust_tests_passed": 5,
+  "differential_graphs_passed": 1000,
+  "sequential_retirement_comparisons_passed": 3000,
+  "custom_value_fallback_cases_passed": 17,
+  "hashes": {
+    "Cargo.toml": "2e295a8b646a6a5465b8860b22988b98d2989aa5300909eee349131d1bbeee87",
+    "Cargo.lock": "11c5d06f94164262bc10c20999a715aa4b288a2764bd48a38a03d316dfcc93f1",
+    "crates/citry_ownership/src/lib.rs": "dad2d97065b1eb95a9ec2c2b001a07f1c091b7653d023381b29828173a6dd9f1",
+    "crates/citry_ownership/tests/retirement.rs": "0159930637925f8d53880b3b0c0f2e9aef3d29eb58ff8e68a7ab16e57186471b",
+    "crates/citry_ownership/Cargo.toml": "9fcc27144eb5641d4220daa737e80178084e27a4cb8ef5e39d7d5693f84e5a00",
+    "benchmarks/ownership_journal_probe/Cargo.toml": "61ca1eaa1dabaa4d2b46856a41c163cc25be9abe4c6a7bcf0fb0613ce8579b65",
+    "benchmarks/ownership_journal_probe/Cargo.lock": "bce26ec943533c66478f42b5ed3ea38761a39b75e62b869e1aa7140a3e31d548",
+    "benchmarks/ownership_journal_probe/src/ancestry.rs": "bec7838375df6f00249a86ce27b17edb938e400b5254e9a095739cb92adaf1eb",
+    "benchmarks/ownership_journal_probe/src/lib.rs": "9f14ce7481ca395dbede5256af560be343e883905a1dbf480b1ad04c182cb389",
+    "benchmarks/ownership_journal_probe/src/retirement.rs": "8ef7d8b49e2ca307795938bed92aaf431fc3e091e5e6470fbce5aa0fe8f34a9a",
+    "benchmarks/ownership_journal_probe/src/storage.rs": "c11c04e35aca43ed31117639db5308e9a689eccc2016248a68ee255ec7430f89",
+    "benchmarks/ownership_journal_probe/check_retirement.py": "ce5732f3d5812472da01523186b69e956ecfa9875c4e4e8cc91f7716681ab0e0",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "c181375468618f6a1c3bbc90fb27d098c003b8e9b527c1f435e0b83bdeea2ea5"
+  }
+}

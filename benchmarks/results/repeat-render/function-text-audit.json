@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "verified_hash_references": 392,
+  "historical_sources": {
+    "benchmarks/function_text_probe/timing.py": "benchmarks/function_text_probe/timing.py.smoke.txt",
+    "benchmarks/function_text_probe/plan.md": "benchmarks/function_text_probe/plan.md.smoke.txt"
+  },
+  "main_pairs": 8,
+  "timed_renders": 1376,
+  "browser_pages": 9,
+  "candidate_browser_pages": 3,
+  "all_paired_raw_digests_equal": true,
+  "all_paired_observed_snapshots_equal": true,
+  "summary_recomputed": {
+    "median_paired_warm_saving_ms": {
+      "ms": 1.3674724000000005,
+      "cpu_ms": 1.3675374999999974
+    },
+    "joint_wins": 8,
+    "median_paired_warm_ratio": 0.9361755071008409,
+    "median_paired_second_saving_ms": 1.3921869999999998
+  },
+  "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7"
+}

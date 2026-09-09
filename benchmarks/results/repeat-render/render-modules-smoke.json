@@ -1,0 +1,368 @@
+{
+  "experiment_only": true,
+  "experiment": "compile component rendering, nodes and slots together",
+  "revision": "1805e151f608f08371bc16c86cd566f95bfb66cb",
+  "seed": 20261015,
+  "samples_per_process": 1,
+  "initial_renders_per_process": 6,
+  "build": {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "modules": {
+      "citry.component_render": {
+        "source": "packages/py/citry/citry/component_render.py",
+        "source_sha256": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+        "generated_c_sha256": "8bb90d3dd4fe7b305e4402a8173a02e475d42659b69b233d31544d2bb93eb226",
+        "artifact": "/tmp/citry-render-modules/out/citry/component_render.cpython-314-darwin.so",
+        "artifact_sha256": "ee839d6ed47c7eb5d27902c97bf441efac767db67154319d020c0de86d621c0b"
+      },
+      "citry.nodes": {
+        "source": "packages/py/citry/citry/nodes/__init__.py",
+        "source_sha256": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+        "generated_c_sha256": "934ae2d29534464781a947c75db11f011940839818dc8341879901e82fc1d2bd",
+        "artifact": "/tmp/citry-render-modules/out/citry/nodes.cpython-314-darwin.so",
+        "artifact_sha256": "6b9d952a4596d5bf9ad15d4a83387a34ca1d9034c1735f7c44a31eaa9dd23e53"
+      },
+      "citry.slots": {
+        "source": "packages/py/citry/citry/slots.py",
+        "source_sha256": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+        "generated_c_sha256": "3e3f6575d8d569d5dab884417e909708542f757b05991ed45b46218f94db1fc1",
+        "artifact": "/tmp/citry-render-modules/out/citry/slots.cpython-314-darwin.so",
+        "artifact_sha256": "f47f57d94e0336d799a4fcd244618672589493525fe01f5f6f06c490538e1906"
+      }
+    },
+    "directives": {
+      "language_level": 3,
+      "annotation_typing": false,
+      "infer_types": false,
+      "binding": true
+    },
+    "setup_sha256": "1806d1f67e2461713f960f214f5aa2fd4b8946aa038b4b76baca9af07e68eac6",
+    "returncode": 0,
+    "build_log": "Cython=3.3.0 setuptools=84.0.0\nCompiling component_render.py because it changed.\nCompiling nodes.py because it changed.\nCompiling slots.py because it changed.\n[1/3] Cythonizing component_render.py\n[2/3] Cythonizing nodes.py\n[3/3] Cythonizing slots.py\nrunning build_ext\nbuilding 'citry.component_render' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c component_render.c -o temp/component_render.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/component_render.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/component_render.cpython-314-darwin.so\nbuilding 'citry.nodes' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c nodes.c -o temp/nodes.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/nodes.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/nodes.cpython-314-darwin.so\nbuilding 'citry.slots' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c slots.c -o temp/slots.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/slots.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/slots.cpython-314-darwin.so\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\n"
+  },
+  "hashes": {
+    "benchmarks/render_modules_probe/probe.py": "75bb15c44eb10fab23440b69adcce537be236f1ba91d740774848e93c80edbac",
+    "benchmarks/render_modules_probe/adapter.py": "d51bc13423fa2eac64b55db0cbfc6adb52d9742f2dd4610923631bb876c9b005",
+    "benchmarks/render_modules_probe/build.py": "b62a45231bdaf9966eb19e84f7a34fb30c0ee359e3436a8500d9656155c01c53",
+    "benchmarks/render_modules_probe/plan.md": "97081c565aedb1442c11831ff26aa271c93fef7a0031c24f57c0d4069c2bf1b5",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/citry/slots.py": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "median_process_pair_mean_savings_ms": {
+    "ms": 3.7356669999999994,
+    "cpu_ms": 3.7369999999999983
+  },
+  "joint_favorable_process_pairs": 1,
+  "pairs": [
+    {
+      "pair": 0,
+      "candidate_first": false,
+      "mean_savings_ms": {
+        "ms": 3.7356669999999994,
+        "cpu_ms": 3.7369999999999983
+      },
+      "reference": {
+        "candidate": false,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "modules": {
+          "citry.component_render": {
+            "path": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/component_render.py",
+            "method_type": "function",
+            "sha256": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42"
+          },
+          "citry.nodes": {
+            "path": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/nodes/__init__.py",
+            "method_type": "function",
+            "sha256": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4"
+          },
+          "citry.slots": {
+            "path": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/slots.py",
+            "method_type": "function",
+            "sha256": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64"
+          }
+        },
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 13,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 13,
+            "collected": 400,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 67.096875,
+            "cpu_ms": 67.102,
+            "html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b"
+          },
+          {
+            "ms": 32.629667,
+            "cpu_ms": 32.631,
+            "html_digest": "e6ab49bf38ace2fe803bef24f0aea9cffaf3aa2848e10d17f22669679ee3c593"
+          },
+          {
+            "ms": 28.420625,
+            "cpu_ms": 28.421,
+            "html_digest": "3409ca4eaca3b99b3123cdb24bc9b0b861b0e82b96c429c685021f211f689b96"
+          },
+          {
+            "ms": 29.161666,
+            "cpu_ms": 29.155,
+            "html_digest": "7396e5dfdb72103722cd141a2f1ab2e9fd80de48eabdbd7397c5863bfeef013a"
+          },
+          {
+            "ms": 29.094333,
+            "cpu_ms": 29.098,
+            "html_digest": "9d59e149fc05f138093bbd96a7e7f29eba32633bd2e27cd0e761553fdcacdb47"
+          },
+          {
+            "ms": 28.936834,
+            "cpu_ms": 28.937,
+            "html_digest": "bd0f2cbf9aa57dd3cc3607c74af2c154d3d1224eb3566865f3439a306d2c31fc"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 28.968084,
+            "cpu_ms": 28.97
+          }
+        ],
+        "html_digests": [
+          "89ea18ac1fa66f12b733836c416e2147f05ccab598015b5ee4655a1925738722"
+        ],
+        "snapshot_digests": [
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65"
+        ],
+        "snapshot_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "source_record_calls": 1081,
+        "activation_html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b",
+        "means_ms": {
+          "ms": 28.968084,
+          "cpu_ms": 28.97
+        }
+      },
+      "candidate": {
+        "candidate": true,
+        "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+        "modules": {
+          "citry.component_render": {
+            "path": "/tmp/citry-render-modules/out/citry/component_render.cpython-314-darwin.so",
+            "method_type": "cython_function_or_method",
+            "sha256": "ee839d6ed47c7eb5d27902c97bf441efac767db67154319d020c0de86d621c0b"
+          },
+          "citry.nodes": {
+            "path": "/tmp/citry-render-modules/out/citry/nodes.cpython-314-darwin.so",
+            "method_type": "cython_function_or_method",
+            "sha256": "6b9d952a4596d5bf9ad15d4a83387a34ca1d9034c1735f7c44a31eaa9dd23e53"
+          },
+          "citry.slots": {
+            "path": "/tmp/citry-render-modules/out/citry/slots.cpython-314-darwin.so",
+            "method_type": "cython_function_or_method",
+            "sha256": "f47f57d94e0336d799a4fcd244618672589493525fe01f5f6f06c490538e1906"
+          }
+        },
+        "native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+        "gc_enabled": true,
+        "gc_before": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 12,
+            "collected": 420,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "gc_after": [
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          },
+          {
+            "collections": 12,
+            "collected": 420,
+            "uncollectable": 0
+          },
+          {
+            "collections": 0,
+            "collected": 0,
+            "uncollectable": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 67.109167,
+            "cpu_ms": 67.112,
+            "html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b"
+          },
+          {
+            "ms": 30.692208,
+            "cpu_ms": 30.694,
+            "html_digest": "e6ab49bf38ace2fe803bef24f0aea9cffaf3aa2848e10d17f22669679ee3c593"
+          },
+          {
+            "ms": 26.651084,
+            "cpu_ms": 26.644,
+            "html_digest": "3409ca4eaca3b99b3123cdb24bc9b0b861b0e82b96c429c685021f211f689b96"
+          },
+          {
+            "ms": 25.333292,
+            "cpu_ms": 25.335,
+            "html_digest": "7396e5dfdb72103722cd141a2f1ab2e9fd80de48eabdbd7397c5863bfeef013a"
+          },
+          {
+            "ms": 25.145625,
+            "cpu_ms": 25.146,
+            "html_digest": "9d59e149fc05f138093bbd96a7e7f29eba32633bd2e27cd0e761553fdcacdb47"
+          },
+          {
+            "ms": 25.163333,
+            "cpu_ms": 25.164,
+            "html_digest": "bd0f2cbf9aa57dd3cc3607c74af2c154d3d1224eb3566865f3439a306d2c31fc"
+          }
+        ],
+        "observations": [
+          {
+            "ms": 25.232417,
+            "cpu_ms": 25.233
+          }
+        ],
+        "html_digests": [
+          "89ea18ac1fa66f12b733836c416e2147f05ccab598015b5ee4655a1925738722"
+        ],
+        "snapshot_digests": [
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65",
+          "e58611c4e175e4c1d94e44f2ddc6aad55b2abb3c194fde16b79678503ec13c65"
+        ],
+        "snapshot_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "source_record_calls": 1081,
+        "activation_html_digest": "1cace41bf839ee51aa8ae17790d1b0470c6805ffb3210da34ac6da3e0dd30c8b",
+        "means_ms": {
+          "ms": 25.232417,
+          "cpu_ms": 25.233
+        }
+      }
+    }
+  ],
+  "source_archives": {
+    "benchmarks/render_modules_probe/probe.py": "benchmarks/render_modules_probe/probe.py.smoke.txt"
+  }
+}

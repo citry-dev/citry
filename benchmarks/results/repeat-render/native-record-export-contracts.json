@@ -1,0 +1,58 @@
+{
+  "records": {
+    "LogicalInstanceRecord": {
+      "type_value_identity_equal": true,
+      "retained_view_preserved": true
+    },
+    "InitAncestryRecord": {
+      "type_value_identity_equal": true,
+      "retained_view_preserved": true
+    },
+    "LogicalFillRecord": {
+      "type_value_identity_equal": true,
+      "retained_view_preserved": true
+    },
+    "PhysicalRegionRequestRecord": {
+      "type_value_identity_equal": true,
+      "retained_view_preserved": true
+    },
+    "ComponentInvocationRecord": {
+      "exact_type": true,
+      "retained_view_preserved": true
+    },
+    "RenderQueueRecord": {
+      "exact_type": true,
+      "retained_view_preserved": true
+    }
+  },
+  "constructor_error_recovery": [
+    "table",
+    "journal"
+  ],
+  "constructor_cycles": [
+    {
+      "kind": "table",
+      "exported": false,
+      "collected": true
+    },
+    {
+      "kind": "table",
+      "exported": true,
+      "collected": true
+    },
+    {
+      "kind": "journal",
+      "exported": false,
+      "collected": true
+    },
+    {
+      "kind": "journal",
+      "exported": true,
+      "collected": true
+    }
+  ],
+  "hashes": {
+    "benchmarks/native_record_export_probe/contracts.py": "4811c3efa0d7e6662fdabb21b7e238b1e749e5061a725e576f0e6ecfb44a0e51",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "65f18d630e53841adf99b86efbfe4ae1c867414068724ff687c287d9fd77c5bf"
+  }
+}

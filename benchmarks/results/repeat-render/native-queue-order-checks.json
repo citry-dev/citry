@@ -1,0 +1,75 @@
+{
+  "input_orders": [
+    18446744073709551617,
+    18446744073709551618,
+    18446744073709551619,
+    18446744073709551620
+  ],
+  "queue_order_identity": true,
+  "retained_views": true,
+  "crossed_u64": true,
+  "failed_queue_preserved": true,
+  "cycles": [
+    {
+      "field": "enqueued",
+      "exported": false,
+      "collected": true
+    },
+    {
+      "field": "enqueued",
+      "exported": true,
+      "collected": true
+    },
+    {
+      "field": "rendered",
+      "exported": false,
+      "collected": true
+    },
+    {
+      "field": "rendered",
+      "exported": true,
+      "collected": true
+    },
+    {
+      "field": "settled",
+      "exported": false,
+      "collected": true
+    },
+    {
+      "field": "settled",
+      "exported": true,
+      "collected": true
+    }
+  ],
+  "retirement_fallbacks": {
+    "large-id": {
+      "snapshots_equal": true,
+      "native_calls": 0,
+      "fallback_calls": 1
+    },
+    "negative-id": {
+      "snapshots_equal": true,
+      "native_calls": 0,
+      "fallback_calls": 1
+    },
+    "large-order": {
+      "snapshots_equal": true,
+      "native_calls": 0,
+      "fallback_calls": 1
+    },
+    "large-through": {
+      "snapshots_equal": true,
+      "native_calls": 0,
+      "fallback_calls": 1
+    },
+    "negative-through": {
+      "snapshots_equal": true,
+      "native_calls": 0,
+      "fallback_calls": 1
+    }
+  },
+  "hashes": {
+    "benchmarks/native_ownership_qualification/queue_order_checks.py": "56b939f03964cad0039da123cc4c9334b27c5916cbd3df8d9e5d70913a0dd152",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "ed18f4ee76278cd28bad581565d6ee39dbf285951bc056aa6268e1da9848ddec"
+  }
+}

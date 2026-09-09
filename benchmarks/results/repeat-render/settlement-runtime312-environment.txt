@@ -1,0 +1,21 @@
+Using Python 3.12.13 environment at: /tmp/citry-settlement-runtime312
+Resolved 15 packages in 217ms
+Downloading pydantic-core (1.9MiB)
+ Downloaded pydantic-core
+Prepared 2 packages in 160ms
+Installed 15 packages in 28ms
+ + annotated-types==0.8.0
+ + coverage==7.16.0
+ + iniconfig==2.3.0
+ + markupsafe==3.0.3
+ + packaging==26.3
+ + pluggy==1.6.0
+ + pydantic==2.13.4
+ + pydantic-core==2.46.4
+ + pygments==2.21.0
+ + pytest==9.1.1
+ + pytest-cov==7.1.0
+ + typing-extensions==4.15.0
+ + typing-inspection==0.4.4
+ + tzdata==2026.3
+ + wrapt==2.2.2

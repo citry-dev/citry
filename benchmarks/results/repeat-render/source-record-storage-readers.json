@@ -1,0 +1,22 @@
+{
+  "diagnostic_only": true,
+  "timing_measured": false,
+  "capture_calls": 1081,
+  "prefix_rows_at_conversion": [
+    4
+  ],
+  "native_export_count": 1077,
+  "exports_by_python_reader": [
+    {
+      "file": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+      "function": "snapshot",
+      "count": 1077
+    }
+  ],
+  "html_sha256": "a2dc7a0c2ae67f68f0b6e2fcff57aba96efd1ecab650dce927b01fe555569152",
+  "hashes": {
+    "benchmarks/source_record_storage_probe/readers.py": "8a30de6bce7d6eb6a469e87f5b13bf7cae38b678080d33ee97faa198f77fcdb6",
+    "benchmarks/source_record_storage_probe/adapter.py": "885714850e44e61340a753fe2f218651ae19c4e2a38e41e2d76c850ac60e4565",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa"
+  }
+}

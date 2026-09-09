@@ -1,0 +1,30 @@
+{
+  "reference": {
+    "matches_reference": true,
+    "digest": "89692218486316eefca809f88ae89124b65a4d391b572c4aa20e3a01268e4f5e",
+    "bytes": 1203
+  },
+  "button": {
+    "matches_reference": false,
+    "digest": "c03a0d016a9a0c5fe87ff69455771f8623d701f79c3dce85e6da2ec8b38beeac",
+    "bytes": 1184
+  },
+  "immediate": {
+    "matches_reference": false,
+    "digest": "9d8ce486b5f6477f4bd0b7ec4e49cd588b8421474c190849075ce7b963f74a36",
+    "bytes": 1143
+  },
+  "deferred": {
+    "matches_reference": false,
+    "digest": "9d8ce486b5f6477f4bd0b7ec4e49cd588b8421474c190849075ce7b963f74a36",
+    "bytes": 1143
+  },
+  "reproduction": {
+    "template": "\n<main><c-Button> \n </c-Button><c-Icon name=\"home\"> \n </c-Icon></main>\n",
+    "method": "Render a Component named Formatting registered with the benchmark app through observe(module, lambda: str(Formatting()), variant), for each of the four variants.",
+    "expected": "The application HTML projection must match the ordinary reference; static formatting alone is absent default content.",
+    "before_adapter_archive": "benchmarks/composed_function_probe/adapter.py.smoke.txt",
+    "before_adapter_sha256": "3abd84b8007e29335c4aabe247a0c5b4c6aaba913a7ee327079e1d471bd7ac46",
+    "follow_up": "The current composed adapter fixes this; contracts.py retains the unchanged Button-only mismatch."
+  }
+}

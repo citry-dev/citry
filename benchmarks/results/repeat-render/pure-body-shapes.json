@@ -1,0 +1,58 @@
+{
+  "revision": "6eb971aacb036482c0ab3a6399e9c6611b9776df",
+  "html_equal": true,
+  "timing_measured": false,
+  "lookups": [
+    {
+      "class": "HeroIcon",
+      "body_items": 5,
+      "live_nodes": 2,
+      "cache_hit": false,
+      "calls": 11
+    },
+    {
+      "class": "HeroIcon",
+      "body_items": 5,
+      "live_nodes": 2,
+      "cache_hit": true,
+      "calls": 30
+    },
+    {
+      "class": "ProjectOutputBadge",
+      "body_items": 3,
+      "live_nodes": 1,
+      "cache_hit": false,
+      "calls": 4
+    },
+    {
+      "class": "ProjectOutputBadge",
+      "body_items": 3,
+      "live_nodes": 1,
+      "cache_hit": true,
+      "calls": 10
+    }
+  ],
+  "captures": [
+    {
+      "class": "HeroIcon",
+      "cached_node_count": 2,
+      "calls": 11
+    },
+    {
+      "class": "ProjectOutputBadge",
+      "cached_node_count": 0,
+      "calls": 3
+    },
+    {
+      "class": "ProjectOutputBadge",
+      "cached_node_count": 1,
+      "calls": 1
+    }
+  ],
+  "hashes": {
+    "benchmarks/pure_body_shape_probe.py": "806fc2dee8238033642d6b55d52f0b23878eba2a6d455ff9fbe71e109206964b",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/_pure.py": "e163a6461313c8af4eec23104de19019575b7196ad65ed1fdfae1497a9f3a10c",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  }
+}

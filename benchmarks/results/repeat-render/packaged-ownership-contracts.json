@@ -1,0 +1,80 @@
+{
+  "cases": {
+    "standalone": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "outlet": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "nested": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "retired": {
+      "equal": true,
+      "outcome": [
+        "PhysicalRegionPart",
+        1
+      ],
+      "callback_observations": 1
+    },
+    "untracked": {
+      "equal": true,
+      "outcome": [
+        "str",
+        null
+      ],
+      "callback_observations": 1
+    },
+    "error": {
+      "equal": true,
+      "outcome": [
+        "ValueError",
+        "slot callback failed"
+      ],
+      "callback_observations": 1
+    },
+    "wrapper-alias": {
+      "equal": true,
+      "outcome": [
+        "SimpleNamespace",
+        1
+      ],
+      "callback_observations": 1
+    }
+  },
+  "mid_callback_replay": {
+    "success_and_error_equal": true
+  },
+  "invalid_without_append": [
+    "region-width",
+    "fill-width",
+    "fill-index",
+    "parent-index",
+    "ids",
+    "site"
+  ],
+  "inactive_before_parent_lookup": true,
+  "hashes": {
+    "benchmarks/native_combined_capture_probe/contracts.py": "f0330d43e3fcbb51a4dd8c99c2cc8642aff5fa7d81a2b2147e6609bbbce468f6",
+    "benchmarks/native_combined_capture_probe/adapter.py": "1565e74226007b68f3cc83e4eb60cd1a4728fbfd69412af03b0274f0538a6255",
+    "benchmarks/native_record_export_probe/adapter.py": "b7b3ca41dc90c1c4a825c94d67e08f394a987c5208d4422a32afe7faf84dbf53",
+    "benchmarks/native_slot_region_probe/adapter.py": "23cfe1fd64e3abf3f118dd3ed8c09dd317263c3d79b03e76d4cc5edc0021c9f4",
+    "benchmarks/ownership_journal_probe/check_storage.py": "c1e160ef7a7eb03c540cfc2ce212b1e977219f85c278376d9303d4c815233337",
+    "packages/py/citry_core/citry_core/_rust.abi3.so": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7"
+  }
+}

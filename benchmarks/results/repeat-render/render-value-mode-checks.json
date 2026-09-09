@@ -1,0 +1,12 @@
+[
+  {
+    "script": "probe.py",
+    "exit_code": 2,
+    "production_mode_required": true
+  },
+  {
+    "script": "protocol_matrix.py",
+    "exit_code": 2,
+    "production_mode_required": true
+  }
+]

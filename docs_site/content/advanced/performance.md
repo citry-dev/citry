@@ -1,20 +1,62 @@
 ---
 title: Performance
-description: Reuse stable values and pure component bodies when repeated rendering work becomes measurable.
+description: Reduce component setup or reuse stable template work when repeated rendering becomes measurable.
 ---
 
 # Performance
 
-Citry provides two explicit rendering optimizations for repeated work:
+Citry provides three explicit rendering optimizations:
 
+- [`simple = True`][citry.Component.simple] renders a presentation component
+  without its own instance, hooks or browser identity.
 - [`Const`][citry.Const] marks an individual value that will not change, so
   template work depending only on that value can be prepared once.
 - `pure = True` marks an entire component class whose body is deterministic
   and side-effect-free, so equal occurrences within one root render can reuse
   the settled body strings.
 
-Both are promises made by your code. Start without them, measure a real
-repeated-render workload, and opt in only where the same work recurs.
+Start without them, measure a real repeated-render workload, and choose the
+contract that fits the component.
+
+## Skip independent setup with simple components
+
+Use `simple = True` for a presentation component that only needs to turn
+inputs and optional default content into HTML:
+
+```citry
+from citry import Component
+
+
+class StatusLabel(Component):
+    simple = True
+
+    class Kwargs:
+        text: str
+
+    template = """
+      <span class="status">{{ text }}</span>
+    """
+```
+
+The surrounding component owns the output. Inputs and data callbacks remain
+live on every invocation; equal inputs are not required. Citry rejects
+declarations or calls that need an independent instance, including component
+hooks, own JS/CSS, named outlets and component-level client bindings.
+Use a static `template_data(kwargs, slots)` method if data needs preparation.
+
+The [Simple components](/advanced/simple-components/) guide explains the
+supported content, inheritance and error rules. This changes the component's
+contract, so it is useful only where independent identity and hooks are
+unnecessary.
+
+| Choice | What it avoids | What your code promises |
+| --- | --- | --- |
+| `simple = True` | Independent component setup and ownership records | The component fits the restricted presentation contract |
+| `Const(value)` | Repeating template work based only on that value | The marked value will not change |
+| `pure = True` | Repeating safe body work for equal data within one root render | The template is deterministic and side-effect-free |
+
+You can combine simple and pure declarations when both contracts apply.
+The data callback still runs. Simple bodies with default outlets remain live.
 
 ## Reuse stable values with `Const`
 
@@ -193,8 +235,9 @@ class StatusIcon(Component):
 
 This is a class-level promise: rendering the template body must be a
 deterministic, side-effect-free function of its template variables. Citry
-still creates each component instance, runs its data and lifecycle hooks, and
-gives it a fresh render ID. Within that one root render, a later equal body can
+still creates each ordinary component instance, runs its data and lifecycle
+hooks, and gives it a fresh render ID. A component also declared simple keeps
+the simple contract described above. Within one root render, a later equal body can
 reuse the first body's immutable strings and transparent control-flow shape.
 When a body also renders a child or a slot, that live content still renders
 again while safe work beside it can be reused. The memo is discarded when the

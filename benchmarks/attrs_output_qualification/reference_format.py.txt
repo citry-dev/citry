@@ -1,0 +1,95 @@
+    def _format(
+        self,
+        resolved: Mapping[str, Any],
+        context: CitryContext,
+        *,
+        validate_keys: bool = True,
+    ) -> RenderPart:
+        """Format the merged dict into the output part(s)."""
+        cache_key: _AttrsOutputKey | None = None
+        if (
+            validate_keys is False
+            and type(self) is ElementAttrsNode
+            and type(resolved) is dict
+            and len(resolved) <= 16
+            and _has_default_attr_formatting(_format_resolved_attrs_to_str)
+        ):
+            items: list[tuple[str, type, object]] = []
+            chars = 0
+            for key, value in resolved.items():
+                if type(key) is not str:
+                    break
+                chars += len(key)
+                kind = type(value)
+                if kind is str:
+                    chars += len(value)
+                elif kind is int:
+                    if value.bit_length() > 256:
+                        break
+                elif value is not None and kind is not bool:
+                    break
+                if chars > 2048:
+                    break
+                items.append((key, kind, value))
+            else:
+                cache_key = tuple(items)
+                cached = _attrs_output_cache.get(cache_key)
+                if cached is not None:
+                    return cached
+                # Format the same immutable values used by the key, even if a
+                # caller retains and changes its input dictionary concurrently.
+                resolved = {key: value for key, _, value in cache_key}
+
+        if validate_keys:
+            for key in resolved:
+                validate_html_attr_name(key, where=f"attributes resolved for <{self.tag_name}>")
+        formatter = format_attrs if validate_keys else _format_resolved_attrs_to_str
+
+        # Common case: no attribute value is a nested-template render, so the
+        # whole dict formats in a single pass. Doing it per key (the mixed-case
+        # path below) would escape, join, and concatenate once per attribute,
+        # which is the dominant per-element cost on a big page.
+        if not any(isinstance(value, CitryRender) for value in resolved.values()):
+            chunk = formatter(resolved)
+            result = (" " + chunk) if chunk else ""
+            if (
+                cache_key is not None
+                and type(result) is str
+                and _has_default_attr_formatting(_format_resolved_attrs_to_str)
+            ):
+                # Only misses take the lock. Eviction/insertion must be one
+                # operation so simultaneous misses retain at most 256 entries.
+                with _attrs_output_cache_lock:
+                    if cache_key not in _attrs_output_cache and len(_attrs_output_cache) >= 256:
+                        _attrs_output_cache.pop(next(iter(_attrs_output_cache)))
+                    _attrs_output_cache[cache_key] = result
+            return result
+
+        # Mixed: a nested-template value (`c-foo="<div>...</div>"`) keeps its
+        # parts so components inside it stay deferred and render through the
+        # queue. Format the runs of plain attributes around it in one call each.
+        parts: list[RenderPart] = []
+        plain: dict[str, Any] = {}
+
+        def flush_plain() -> None:
+            if plain:
+                chunk = formatter(plain)
+                if chunk:
+                    parts.append(" " + chunk)
+                plain.clear()
+
+        for key, value in resolved.items():
+            if isinstance(value, CitryRender):
+                flush_plain()
+                parts.append(f' {escape(key)}="')
+                parts.append(value)
+                parts.append('"')
+            else:
+                plain[key] = value
+        flush_plain()
+
+        if not parts:
+            return ""
+        if all(isinstance(part, str) for part in parts):
+            return "".join(str(part) for part in parts)
+        return CitryRender(parts=parts, context=context)

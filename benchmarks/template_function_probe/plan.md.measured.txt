@@ -1,0 +1,71 @@
+# Iteration 60: measure a template function with a restricted contract
+
+## Case and hypothesis
+
+Iteration 59 found 54 observed ordinary leaves, but typed inputs, instance data
+methods and general expression values still keep them inside the component model.
+The user authorized exploring API restrictions as well as compatible changes.
+Measure a concrete alternative: a prepared template function with scalar/container
+inputs and an optional instance-free data function. This can omit component
+construction, extension configs and instance hooks, ownership capture, deferred
+component settlement, per-component identity and full document serialization.
+Keep the existing Citry body nodes, expression evaluation, escaping and attribute
+formatting so the experiment tests omitted stages rather than a replacement engine.
+
+This is an explicit experimental contract, not an automatic shortcut for existing
+components. It returns HTML text; it provides no Component, self/parent/root,
+slots, renderable-object expression values, assets, client behavior, provided
+values, runtime extension hooks or retained CitryRender result. Template definitions
+are prepared once. The benchmark inputs are exact built-in scalar values nested
+in plain dict/list/tuple containers; reject other objects before body execution.
+Typed cases use the ordinary Citry kwargs schema on every path. A shared data
+function runs on every invocation, including Django/Jinja comparisons.
+
+## Implementation and boundaries
+
+Read `_render_one`, `_render_body`, `_normalize_data`, `_get_compiled_template`,
+CitryContext, the scalar/attribute/if/for nodes and render-value conversion.
+Prepare the ordinary compiled body and permit only text, expression, attribute,
+if and for nodes. Reject component/slot/foreign/template nodes, nested template attributes and
+attribute spreads. This initial constructor is for the retained trusted benchmark templates;
+it is not a general classifier proving that arbitrary template source has no
+client behavior or effects. It also does not qualify arbitrary Python expressions.
+Those source/definition restrictions need a public enforcement design before an
+application-facing API could be proposed. Keep this distinction visible in results.
+
+At each call, validate restricted inputs, run any shared schema/data adapter,
+validate its values, create a component-free CitryContext, execute the ordinary
+body walker and flatten only ordinary text, escaped Markup produced by the existing nodes, and interior renders. Reject component-root
+or component-owned render output. There is no output cache or native build change.
+
+Compare against ordinary transparent Citry components: their HTML already omits
+root identity markers, but instances, render IDs, hooks and ownership still exist.
+Django and Jinja templates express the same retained examples with autoescaping.
+Cases cover static HTML, scalar text, dynamic attributes, a condition, a loop and typed data
+preparation. Run output/escaping and rejected-value checks before timing. These
+are bounded benchmark-contract checks, not a repository or production API gate.
+
+## Measurement and decision
+
+Prepare engine adapters outside throughput timing. Record adapter preparation
+and six individual initial calls separately; these calls also finish lazy setup.
+They are not comparable application cold-start costs.
+Use eight fresh-process blocks with all four engine orders balanced, matching
+hash seeds, 80 measured batches of 50 calls per case, ordinary GC and every sample.
+Rotate through several input sets. The prototype adds no whole-output cache; both
+Citry paths retain existing node caches.
+Check complete outputs for every input outside timing, then compare complete output strings
+across engines. No tests or builds overlap the main timing run.
+
+Report per-call process means and paired differences/ratios for every case,
+including how far each remains from Django/Jinja. These small fixtures are a
+mechanism study, not the full large-page adoption comparison; the 0.25 ms large-page
+saving requirement does not apply to their microsecond totals. At least seven
+of eight joint wall/CPU wins over ordinary Citry in a dynamic case justify trying
+this contract on a real reached case. A synthetic result cannot establish a
+large-page saving, automatic eligibility or Django parity for the full framework.
+
+The scripts add no CI/release step. Reuse the installed engines, template nodes,
+schemas and existing fresh-process timing method. Expected local checks take
+seconds and the main run roughly one to two minutes. Independent source/prose
+review can overlap preparation; CPU-heavy checks finish before main timing.

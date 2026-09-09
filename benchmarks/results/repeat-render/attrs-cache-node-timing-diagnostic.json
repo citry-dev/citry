@@ -1,0 +1,6873 @@
+{
+  "revision": "0bab61ad8b2526404b07c3f9dccdfcbe7d00ee39",
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "boundary": "node",
+  "id_schedule": "distinct start per pair; same start within each pair",
+  "order": "balanced-random",
+  "order_seed": 20260909,
+  "diagnostic": true,
+  "hashes": {
+    "benchmarks/attrs_cache_probe/probe.py": "43806cbcacfb8c948410f8beef592741ba62c3eda3ea1a3de0731568f4287564",
+    "packages/py/citry/citry/attrs.py": "adf54e36a89e51553ac8de3bc0498ff994a77ca9386f96bad6770dbcf9316263",
+    "packages/py/citry/citry/nodes/__init__.py": "08fc57dcf6a0302e29691204a6a16993e9d837ba92a11f666194bd9182fabb6f",
+    "packages/py/citry/citry/util/html.py": "a9c7973f09c50829eb12a428c82e7061dd0520cfa90499dbac74f95e0e68b5a5"
+  },
+  "pairs": 60,
+  "all_pairs_html_equal": true,
+  "snapshot_trace_equal": true,
+  "snapshots_compared": 4,
+  "activation": {
+    "hits": 495,
+    "misses": 0,
+    "entries": 126,
+    "max_entries": 256
+  },
+  "medians_ms": {
+    "reference": 32.7703125,
+    "candidate": 32.232
+  },
+  "median_paired_saving_ms": 0.48758350000000306,
+  "favorable_pairs": 45,
+  "observations": [
+    {
+      "pair": 0,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.603042,
+      "cpu_ms": 32.607,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 833,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 708,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 0,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 33.486667,
+      "cpu_ms": 33.482,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 573667,
+          "collected": 1345,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 667,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 454167,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 1,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 33.586084,
+      "cpu_ms": 33.587,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 425542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 257833,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 245417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 74833,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 1,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 37.741042,
+      "cpu_ms": 37.743,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 120667,
+          "collected": 643,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 206583,
+          "collected": 134,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 254583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 247708,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 447000,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3144167,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 709,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 2,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.776,
+      "cpu_ms": 32.777,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 2,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.256708,
+      "cpu_ms": 33.261,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 3,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.825292,
+      "cpu_ms": 32.826,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 3,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.248333,
+      "cpu_ms": 33.248,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 4,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.193958,
+      "cpu_ms": 33.195,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 4,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.696958,
+      "cpu_ms": 32.698,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 5,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.785958,
+      "cpu_ms": 33.787,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 667,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 599916,
+          "collected": 1590,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 5,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 33.366417,
+      "cpu_ms": 33.367,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 271333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 334166,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 6,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 34.54125,
+      "cpu_ms": 34.542,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 114625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 133417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 127000,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 159166,
+          "collected": 378,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 212541,
+          "collected": 379,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 236208,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 186458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 6,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 37.020167,
+      "cpu_ms": 37.022,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 410167,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 110917,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3035875,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 709,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 7,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.507917,
+      "cpu_ms": 33.5,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 7,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.157916,
+      "cpu_ms": 32.158,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 8,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.161125,
+      "cpu_ms": 32.162,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 8,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.648791,
+      "cpu_ms": 32.65,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 9,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.582292,
+      "cpu_ms": 32.583,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 9,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.809666,
+      "cpu_ms": 32.81,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 575250,
+          "collected": 1325,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 10,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.977625,
+      "cpu_ms": 32.979,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 309750,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 10,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 33.294208,
+      "cpu_ms": 33.297,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 109583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 147375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 140709,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 115292,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 202542,
+          "collected": 795,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 237500,
+          "collected": 265,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 183250,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 11,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 35.870041,
+      "cpu_ms": 35.871,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 205584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 394042,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 2992542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 11,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.799792,
+      "cpu_ms": 32.801,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 12,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.236709,
+      "cpu_ms": 32.229,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 12,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 31.451917,
+      "cpu_ms": 31.455,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 13,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.136584,
+      "cpu_ms": 31.138,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 13,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 31.71275,
+      "cpu_ms": 31.714,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 14,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.2005,
+      "cpu_ms": 32.201,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 540750,
+          "collected": 1325,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 14,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.604333,
+      "cpu_ms": 31.605,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 284958,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 15,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.320041,
+      "cpu_ms": 32.323,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 104417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 122500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 127125,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 110750,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 175625,
+          "collected": 681,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 200000,
+          "collected": 379,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 172917,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 15,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 35.513125,
+      "cpu_ms": 35.514,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 190917,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 402209,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 2924833,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 16,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.3975,
+      "cpu_ms": 31.398,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 666,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 16,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 31.815125,
+      "cpu_ms": 31.81,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 17,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.948125,
+      "cpu_ms": 31.949,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 334,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 17,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.342666,
+      "cpu_ms": 31.343,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 18,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.876916,
+      "cpu_ms": 31.878,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 334,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 18,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.345334,
+      "cpu_ms": 31.347,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 4542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 19,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 36.238959,
+      "cpu_ms": 36.24,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 249541,
+          "collected": 1590,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 95458,
+          "collected": 189,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 217541,
+          "collected": 871,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 222666,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 217375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 217125,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 396750,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3111750,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 19,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.668292,
+      "cpu_ms": 32.67,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 667,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 20,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.253833,
+      "cpu_ms": 31.255,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 20,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 31.936125,
+      "cpu_ms": 31.94,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 334,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 21,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.400792,
+      "cpu_ms": 31.402,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 21,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 31.982083,
+      "cpu_ms": 31.982,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 22,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.864084,
+      "cpu_ms": 31.864,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 22,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.769375,
+      "cpu_ms": 31.772,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 23,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.18675,
+      "cpu_ms": 32.188,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 487000,
+          "collected": 1855,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 328625,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 23,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.971334,
+      "cpu_ms": 32.973,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 367625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 132083,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 111542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 112583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 178542,
+          "collected": 265,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 188209,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 24,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 35.8745,
+      "cpu_ms": 35.876,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 179250,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 394250,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 154083,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3154375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 24,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.521167,
+      "cpu_ms": 31.515,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 25,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.096125,
+      "cpu_ms": 32.098,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 25,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.774375,
+      "cpu_ms": 32.772,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 26,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.192291,
+      "cpu_ms": 32.194,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 334,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 26,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.76625,
+      "cpu_ms": 32.768,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 27,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.812916,
+      "cpu_ms": 32.814,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 27,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 33.686667,
+      "cpu_ms": 33.687,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 639125,
+          "collected": 1590,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 396666,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 215792,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 28,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 37.79025,
+      "cpu_ms": 37.791,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 61750,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 141917,
+          "collected": 454,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 257959,
+          "collected": 341,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 216792,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 263875,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 435667,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 148458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3216750,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 28,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.184417,
+      "cpu_ms": 32.177,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 29,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.477541,
+      "cpu_ms": 31.479,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 667,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 29,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.31525,
+      "cpu_ms": 31.316,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 30,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.8205,
+      "cpu_ms": 31.822,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 30,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.520083,
+      "cpu_ms": 31.521,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 31,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.984291,
+      "cpu_ms": 31.986,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 31,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.374417,
+      "cpu_ms": 31.374,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 32,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.590583,
+      "cpu_ms": 32.591,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 548917,
+          "collected": 1855,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 297458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 32,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.021458,
+      "cpu_ms": 33.025,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 369333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 122834,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 108500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 113166,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 158125,
+          "collected": 530,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 178917,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 33,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 36.626083,
+      "cpu_ms": 36.619,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 174250,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 199917,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 397250,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3105167,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 33,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.6375,
+      "cpu_ms": 32.639,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 34,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.679583,
+      "cpu_ms": 32.68,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 34,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.319,
+      "cpu_ms": 33.32,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 35,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.244041,
+      "cpu_ms": 33.245,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 35,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.850917,
+      "cpu_ms": 32.852,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 36,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.778791,
+      "cpu_ms": 32.779,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 36,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 34.50875,
+      "cpu_ms": 34.509,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 617875,
+          "collected": 1590,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 406291,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 200625,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 37,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 37.549792,
+      "cpu_ms": 37.55,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 66875,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 107958,
+          "collected": 227,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 244292,
+          "collected": 568,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 254208,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 244250,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 441541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 184000,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3151583,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 37,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.515916,
+      "cpu_ms": 33.516,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 38,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.746875,
+      "cpu_ms": 32.748,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 38,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.238333,
+      "cpu_ms": 33.239,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 39,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.724459,
+      "cpu_ms": 32.726,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 39,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.183959,
+      "cpu_ms": 33.186,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 40,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.61525,
+      "cpu_ms": 32.616,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 40,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.277167,
+      "cpu_ms": 32.269,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 292,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 41,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.151458,
+      "cpu_ms": 33.152,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 484541,
+          "collected": 1855,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 41,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 36.801208,
+      "cpu_ms": 36.803,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 171084,
+          "collected": 530,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 204209,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 276458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 420666,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 152875,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3156583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 42,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.714792,
+      "cpu_ms": 32.716,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 42,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.227291,
+      "cpu_ms": 32.228,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 43,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.614375,
+      "cpu_ms": 32.615,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 43,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.18625,
+      "cpu_ms": 32.187,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 44,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.749833,
+      "cpu_ms": 31.742,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 709,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 44,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 31.398042,
+      "cpu_ms": 31.399,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 45,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.670167,
+      "cpu_ms": 31.671,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 709,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 667,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 554583,
+          "collected": 1590,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 45,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.019292,
+      "cpu_ms": 32.019,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 297958,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 46,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.226208,
+      "cpu_ms": 33.227,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 106041,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 124083,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 150875,
+          "collected": 378,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 238041,
+          "collected": 152,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 209416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 231458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375042,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 46,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 34.323125,
+      "cpu_ms": 34.324,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 2889292,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 47,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.184083,
+      "cpu_ms": 32.186,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 47,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.285291,
+      "cpu_ms": 32.287,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 666,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 48,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.744375,
+      "cpu_ms": 31.746,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 666,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 48,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.243459,
+      "cpu_ms": 31.245,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 49,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.110333,
+      "cpu_ms": 31.103,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 49,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.689583,
+      "cpu_ms": 32.69,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 391375,
+          "collected": 1553,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 419958,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 50,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.389333,
+      "cpu_ms": 32.391,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 106625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 232416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 106209,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 170334,
+          "collected": 567,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 194916,
+          "collected": 493,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 194042,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 50,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 35.845625,
+      "cpu_ms": 35.848,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 187416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 396208,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 162291,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 2967292,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 51,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.031583,
+      "cpu_ms": 32.032,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 51,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.482917,
+      "cpu_ms": 31.484,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 52,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 32.353375,
+      "cpu_ms": 32.355,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 52,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.404417,
+      "cpu_ms": 31.406,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 53,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.81125,
+      "cpu_ms": 31.812,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 53,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.292416,
+      "cpu_ms": 31.294,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 54,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 32.502708,
+      "cpu_ms": 32.503,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 574292,
+          "collected": 1590,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 358541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 179084,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 54,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 36.39775,
+      "cpu_ms": 36.402,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 58584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 74000,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 173500,
+          "collected": 567,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 222084,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 225125,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 219917,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417209,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3094042,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 55,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 31.96525,
+      "cpu_ms": 31.966,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 667,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 55,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 31.306291,
+      "cpu_ms": 31.306,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 56,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 31.752792,
+      "cpu_ms": 31.753,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 416,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 56,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 32.293375,
+      "cpu_ms": 32.286,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 57,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.201209,
+      "cpu_ms": 33.202,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 625,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 57,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 32.745375,
+      "cpu_ms": 32.746,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 58,
+      "candidate": false,
+      "candidate_first": false,
+      "ms": 33.262458,
+      "cpu_ms": 33.263,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 333,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 459,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 58,
+      "candidate": true,
+      "candidate_first": false,
+      "ms": 33.3175,
+      "cpu_ms": 33.319,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 509667,
+          "collected": 1855,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 458,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 59,
+      "candidate": true,
+      "candidate_first": true,
+      "ms": 37.234208,
+      "cpu_ms": 37.235,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 108083,
+          "collected": 530,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 207791,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 249584,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 249250,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 410166,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 3056792,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 583,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 750,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    },
+    {
+      "pair": 59,
+      "candidate": false,
+      "candidate_first": true,
+      "ms": 33.2745,
+      "cpu_ms": 33.276,
+      "gc_events": [
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 542,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 417,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 375,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 500,
+          "collected": 0,
+          "uncollectable": 0
+        },
+        {
+          "generation": 1,
+          "ns": 541,
+          "collected": 0,
+          "uncollectable": 0
+        }
+      ]
+    }
+  ]
+}

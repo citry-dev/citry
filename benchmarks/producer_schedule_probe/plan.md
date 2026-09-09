@@ -1,0 +1,69 @@
+# Carry pending child positions through renderer-owned bodies
+
+## Prior art and proposed boundary
+
+Iteration 53 counted 927 body calls and deferred-scan inputs totaling 4,167
+entries. Its mutation probe shows that tasks captured from arbitrary returned
+fragments become stale after later nodes mutate those fragments. Iteration 42
+moved discovery to Rust and regressed full rendering. This candidate changes
+where pending-work information comes from, while keeping Python execution and
+the existing public tree objects.
+
+`component_render._render_body` builds a private parts list before returning it.
+Exact ordinary IfNode, ForNode and TemplateNode render methods create their own
+interior containers. Carry a temporary plan of non-text positions and eligible
+nested plans through those paths. Treat every other returned fragment as borrowed
+and scan its current contents at settlement, preserving the demonstrated later
+mutations. Transfer loop-body positions when ForNode extends its output list.
+Keep all returned lists, render objects, contexts and frames in their original
+types. Do not cache any request's graph or output for a later request.
+
+Select a plan only for an initial component result immediately after the ordinary
+component renderer returns, and consume it once at deferred discovery. Scope all
+plans to one `_render_tree` call with a ContextVar, including a fresh scope for
+nested renders. A single last-body handoff avoids a registry retaining unused
+slot bodies; borrowed node returns discard that handoff. Replacement output,
+cache replay, pure-body replay, standalone calls and unrecognized structures use
+ordinary discovery unless their result is explicitly qualified by this handoff.
+
+This ownership assumption needs falsification before adoption. Overrides of node
+render methods must not certify returned trees; external slot hooks can retain
+and mutate their results; custom constructors and tracing can expose internals;
+context merges must follow the same descendants. A changed method or unsafe
+boundary requires fallback. Public list mutation is preserved for borrowed
+fragments, not assumed absent everywhere. No compiler, Rust binding or template
+syntax changes are involved.
+
+## Experiment and rejection criteria
+
+Keep the adapter isolated under benchmarks. First check full HTML and four
+canonical ownership snapshots in fresh processes, the earlier mutation cases,
+and the existing focused rendering/ownership selection. Count plan use and
+ordinary fallback outside timing. Check that the ContextVar releases its state
+on success and error. Preserve a concrete compatibility failure if found rather
+than silently weakening the contract.
+
+If these checks justify timing, use eight balanced randomized fresh-process
+pairs, six initial and 80 warm renders each, ordinary GC and every sample. No
+other tests or builds run during measurement. Require at least seven joint
+wall/CPU wins and 1 ms median paired reduction in process mean warm wall time:
+the extra scheduling representation should yield a material complete-render
+benefit. Keep actual second renders separate. A failure rejects this prototype
+without changing production or the adopted timeline; a pass still requires
+broader mutation, lifecycle and supported-runtime qualification.
+
+## Compatibility failure found before main timing
+
+The 625-test selection and borrowed append/remove/replace cases pass. A custom
+render constructor that appends a deferred child to its received parts list
+exposes a missing guard: the candidate accepts the previously recorded plan and
+leaves that child unresolved. The reference scanner finds and renders it. This
+already blocks adoption and is retained in the contracts report.
+
+Run the declared eight-pair comparison only to decide whether the reduced
+scanning work yields enough complete-render benefit to justify repairing and
+qualifying this architecture. The unchanged benchmark fixture has matching HTML
+and complete snapshots and does not use the failing constructor. A timing pass
+cannot override the compatibility failure; a timing failure rejects the current
+plan representation without spending more effort on its guard surface. The
+single-sample draft smoke is activation evidence and not the performance decision.

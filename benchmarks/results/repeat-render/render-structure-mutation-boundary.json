@@ -1,0 +1,33 @@
+{
+  "diagnostic_only": true,
+  "cases": [
+    {
+      "mutation": "append",
+      "captured_during_emission": [],
+      "discovered_after_body": [
+        "First"
+      ]
+    },
+    {
+      "mutation": "remove",
+      "captured_during_emission": [
+        "First"
+      ],
+      "discovered_after_body": []
+    },
+    {
+      "mutation": "replace",
+      "captured_during_emission": [
+        "First"
+      ],
+      "discovered_after_body": [
+        "Second"
+      ]
+    }
+  ],
+  "hashes": {
+    "benchmarks/render_structure_probe/mutation_boundary.py": "c1229bdafabee49a6d45e3fd675d985369a1aa7b73d4483b580c6d4060e0310c",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "packages/py/citry/citry/citry_render.py": "da6efc5999be9486c64ba75202366e5c16aac4ca351f056308101f3668070533"
+  }
+}

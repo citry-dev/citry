@@ -1,0 +1,223 @@
+{
+  "diagnostic_only": true,
+  "counts_from_one_untimed_warm_render": {
+    "hits": 495,
+    "misses": 0,
+    "format_str_casts": 0
+  },
+  "admitted_maps": 495,
+  "keys_equal": true,
+  "micro_scope": "Native key calls only; excludes cache lookup, formatting and the rest of rendering.",
+  "median_packaged_minus_standalone_ms_per_fixture_maps": {
+    "wall_ms": -0.00023436249999999811,
+    "cpu_ms": -0.0002500000000000002
+  },
+  "observations": [
+    {
+      "standalone": {
+        "wall_ms": 0.0578104,
+        "cpu_ms": 0.0579
+      },
+      "packaged": {
+        "wall_ms": 0.057623975,
+        "cpu_ms": 0.057675
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.05855105,
+        "cpu_ms": 0.05855
+      },
+      "standalone": {
+        "wall_ms": 0.05766355,
+        "cpu_ms": 0.057675
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.057022925,
+        "cpu_ms": 0.057025
+      },
+      "packaged": {
+        "wall_ms": 0.056740625,
+        "cpu_ms": 0.05675
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.055823975,
+        "cpu_ms": 0.05585
+      },
+      "standalone": {
+        "wall_ms": 0.05724165,
+        "cpu_ms": 0.05725
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.05759585,
+        "cpu_ms": 0.0576
+      },
+      "packaged": {
+        "wall_ms": 0.055139575,
+        "cpu_ms": 0.05515
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.056445825,
+        "cpu_ms": 0.056425
+      },
+      "standalone": {
+        "wall_ms": 0.05555,
+        "cpu_ms": 0.05555
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.056284375,
+        "cpu_ms": 0.056275
+      },
+      "packaged": {
+        "wall_ms": 0.055122925,
+        "cpu_ms": 0.055125
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.05611355,
+        "cpu_ms": 0.056125
+      },
+      "standalone": {
+        "wall_ms": 0.05525,
+        "cpu_ms": 0.05525
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.056544775,
+        "cpu_ms": 0.05655
+      },
+      "packaged": {
+        "wall_ms": 0.056192725,
+        "cpu_ms": 0.0562
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.05532395,
+        "cpu_ms": 0.055325
+      },
+      "standalone": {
+        "wall_ms": 0.0563823,
+        "cpu_ms": 0.056375
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.0569396,
+        "cpu_ms": 0.05695
+      },
+      "packaged": {
+        "wall_ms": 0.05495415,
+        "cpu_ms": 0.054975
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.055653125,
+        "cpu_ms": 0.05565
+      },
+      "standalone": {
+        "wall_ms": 0.0555177,
+        "cpu_ms": 0.055525
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.0554573,
+        "cpu_ms": 0.05545
+      },
+      "packaged": {
+        "wall_ms": 0.0558479,
+        "cpu_ms": 0.05585
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.05535,
+        "cpu_ms": 0.05535
+      },
+      "standalone": {
+        "wall_ms": 0.05644585,
+        "cpu_ms": 0.056425
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.056705225,
+        "cpu_ms": 0.056725
+      },
+      "packaged": {
+        "wall_ms": 0.054909375,
+        "cpu_ms": 0.0549
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.055373975,
+        "cpu_ms": 0.0554
+      },
+      "standalone": {
+        "wall_ms": 0.055395825,
+        "cpu_ms": 0.0554
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.05546875,
+        "cpu_ms": 0.055475
+      },
+      "packaged": {
+        "wall_ms": 0.05490625,
+        "cpu_ms": 0.0549
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.0552375,
+        "cpu_ms": 0.05525
+      },
+      "standalone": {
+        "wall_ms": 0.05518125,
+        "cpu_ms": 0.055175
+      }
+    },
+    {
+      "standalone": {
+        "wall_ms": 0.055690625,
+        "cpu_ms": 0.055675
+      },
+      "packaged": {
+        "wall_ms": 0.0557552,
+        "cpu_ms": 0.055775
+      }
+    },
+    {
+      "packaged": {
+        "wall_ms": 0.05656875,
+        "cpu_ms": 0.056575
+      },
+      "standalone": {
+        "wall_ms": 0.05572395,
+        "cpu_ms": 0.055725
+      }
+    }
+  ],
+  "hashes": {
+    "benchmarks/attrs_output_qualification/diagnose.py": "5ad4e58cac7e37b3eb6dadf7cc3ab7f411dfb385af3e5df3a461ea943cfbc5b1",
+    "benchmarks/native_attrs_output_probe/target/release/libcitry_native_attrs_output_probe.dylib": "dc0dff174bf1df185edfd99362c871c2c12c57b3823a19217dadfc289c13187e",
+    "packages/py/citry_core/citry_core/_rust.abi3.so": "71f278f655855eb1b4d5d03383233c4f24442ed705f430e12b9b1a74e5d6f859",
+    "crates/citry_core_py/src/attrs.rs": "5709a8134e16db42b73047c2794f12976cf80804227c2026de9a424eada9eb2f"
+  }
+}

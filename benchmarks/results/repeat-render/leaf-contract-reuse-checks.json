@@ -1,0 +1,120 @@
+{
+  "variant": "reuse",
+  "compared": {
+    "large_0": {
+      "html": "bbbd5456aa77a099821a39f0af1a91291492b8bffcf0a938523a3636a9873054",
+      "snapshots": [
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+      ]
+    },
+    "large_1": {
+      "html": "bbbd5456aa77a099821a39f0af1a91291492b8bffcf0a938523a3636a9873054",
+      "snapshots": [
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+        "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+      ]
+    },
+    "one_output_0": {
+      "html": "b344c8e0a2556599974454d80b0455d332675ccaa6248ae8ccd26a6f014070b7",
+      "snapshots": [
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066"
+      ]
+    },
+    "one_output_1": {
+      "html": "b344c8e0a2556599974454d80b0455d332675ccaa6248ae8ccd26a6f014070b7",
+      "snapshots": [
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+        "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066"
+      ]
+    },
+    "icon_0": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556",
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556"
+      ]
+    },
+    "icon_1": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 18px; height: 18px;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556",
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556"
+      ]
+    },
+    "icon_2": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 30 30\" style=\"width: 24px; height: 24px;\" aria-hidden=\"true\" fill=\"red\" stroke=\"none\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556",
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556"
+      ]
+    },
+    "icon_3": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px;\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" title=\"&#39;&#34;&lt;&gt;&amp;\" width=\"0\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556",
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556"
+      ]
+    },
+    "icon_4": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px; color: red;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" class=\"a b\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556",
+        "18628503930a6122e5b619367e982fd5e97f2c29c7ba81fa3bffe990834e4556"
+      ]
+    },
+    "repeated_icons": {
+      "html": "\n<div data-cid-c00002n9c=\"\">\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" title=\"same\" data-cid-c00002n9d=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" title=\"same\" data-cid-c00002n9e=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n\n<svg viewBox=\"0 0 24 24\" style=\"width: 24px; height: 24px;\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" title=\"different\" data-cid-c00002n9f=\"\">\n    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5\"></path>\n</svg>\n</div>\n",
+      "snapshots": [
+        "3ca9c034903443be1cc592ac6b02c2d84078d0eb322d6d2ad2060bfbfd94a195",
+        "3ca9c034903443be1cc592ac6b02c2d84078d0eb322d6d2ad2060bfbfd94a195"
+      ],
+      "cache_hits": [
+        false,
+        true,
+        false
+      ]
+    }
+  },
+  "errors": {
+    "variant": [
+      "ValueError",
+      "ValueError"
+    ],
+    "unknown_kwarg": [
+      "TypeError",
+      "TypeError"
+    ]
+  },
+  "rejected": {
+    "markup": "TypeError",
+    "html_callback": "TypeError",
+    "subclass": "TypeError",
+    "cycle": "ValueError",
+    "alpine": "TypeError",
+    "events": "TypeError",
+    "client_props": "TypeError",
+    "unknown_attribute": "TypeError",
+    "non_string_key": "TypeError",
+    "component_value": "TypeError",
+    "slots": "TypeError",
+    "direct_root": "TypeError",
+    "render_globals": "TypeError"
+  },
+  "mutable_input": "passed",
+  "hashes": {
+    "benchmarks/leaf_contract_probe/contracts.py": "6c18a19abc2058c3205bdfeb550522f5d5b86885963e639e6b3e6c15596b42c3",
+    "benchmarks/leaf_contract_probe/adapter.py": "3bed89337035ae9fc2e74f3d01dfd66db603789eb1a7d345e163c670c130e461",
+    "benchmarks/leaf_contract_probe/plan.md": "00e6d509f8b94f38c8662a0a6642bf35f9b422cab184d9c0b8ac5532d5d86515",
+    "benchmarks/template_function_probe/runtime.py": "d341c7bdd48ad67db592d21a601816ba11ee50e3cbef3afe6881eab219f0ca72"
+  }
+}

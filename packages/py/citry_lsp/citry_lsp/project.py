@@ -17,7 +17,7 @@ from citry_lsp.catalog import CatalogIndex
 from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
     CATALOG_SCHEMA_VERSION,
-    SUPPORTED_CITRY_SERIES,
+    MINIMUM_CITRY_SERIES,
     ProjectStatus,
 )
 
@@ -891,12 +891,12 @@ def _project_from_worker_output(
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     series = _version_series(catalog.citry_version)
-    if series != SUPPORTED_CITRY_SERIES:
-        expected = ".".join(str(part) for part in SUPPORTED_CITRY_SERIES)
+    if series is None or series < MINIMUM_CITRY_SERIES:
+        expected = ".".join(str(part) for part in MINIMUM_CITRY_SERIES)
         return _failure(
             workspace,
             app,
-            f"Citry {catalog.citry_version} is outside this server's supported {expected}.x series.",
+            f"Citry {catalog.citry_version} requires a valid version in series {expected} or newer.",
             environment_file=environment_file,
             citry_version=catalog.citry_version,
             catalog_schema_version=catalog.schema_version,

@@ -4,6 +4,16 @@ All notable changes to `citry-lsp` are documented here.
 
 ## Unreleased
 
+## [0.1.4] - 2026-09-09
+
+### Changed
+
+- Accept Citry 0.4.5 and newer without a dependency upper bound; project checks
+  accept later versions with compatible catalog and protocol schemas.
+- Export `MINIMUM_CITRY_SERIES` in place of `SUPPORTED_CITRY_SERIES` to describe
+  the project version check.
+
+
 ## [0.1.3] - 2026-08-30
 
 ### Added

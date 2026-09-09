@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## v1.7.0
+
+_9 Sep 2026_
+
+### Changed
+
+- Repeated Citry renders use native ownership storage for larger component trees
+  and reuse prepared expression metadata.
+- Building from source requires Rust 1.96 or newer.
+
+
 ## v1.6.1
 
 _30 Aug 2026_

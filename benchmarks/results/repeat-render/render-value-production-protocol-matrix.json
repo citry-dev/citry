@@ -1,0 +1,142 @@
+[
+  {
+    "python": "3.10.20 (main, Mar 10 2026, 18:15:07) [Clang 21.1.4 ]",
+    "production": true,
+    "dispatch_cases": [
+      "text",
+      "render",
+      "integer",
+      "instance-member",
+      "subclass-member",
+      "added-class-member",
+      "removed-class-member",
+      "dynamic-getattr",
+      "dynamic-getattribute",
+      "rebound-CitryRender",
+      "rebound-PhysicalRegionPart",
+      "registered-str",
+      "registered-render"
+    ],
+    "native_runtime_tested": false
+  },
+  {
+    "python": "3.11.15 (main, Mar 10 2026, 18:01:34) [Clang 21.1.4 ]",
+    "production": true,
+    "dispatch_cases": [
+      "text",
+      "render",
+      "integer",
+      "instance-member",
+      "subclass-member",
+      "added-class-member",
+      "removed-class-member",
+      "dynamic-getattr",
+      "dynamic-getattribute",
+      "rebound-CitryRender",
+      "rebound-PhysicalRegionPart",
+      "registered-str",
+      "registered-render"
+    ],
+    "native_runtime_tested": false
+  },
+  {
+    "python": "3.12.13 (main, Mar 10 2026, 18:18:07) [Clang 21.1.4 ]",
+    "production": true,
+    "dispatch_cases": [
+      "text",
+      "render",
+      "integer",
+      "instance-member",
+      "subclass-member",
+      "added-class-member",
+      "removed-class-member",
+      "dynamic-getattr",
+      "dynamic-getattribute",
+      "rebound-CitryRender",
+      "rebound-PhysicalRegionPart",
+      "registered-str",
+      "registered-render"
+    ],
+    "native_runtime_tested": false
+  },
+  {
+    "python": "3.13.12 (main, Mar 10 2026, 18:26:32) [Clang 21.1.4 ]",
+    "production": true,
+    "dispatch_cases": [
+      "text",
+      "render",
+      "integer",
+      "instance-member",
+      "subclass-member",
+      "added-class-member",
+      "removed-class-member",
+      "dynamic-getattr",
+      "dynamic-getattribute",
+      "rebound-CitryRender",
+      "rebound-PhysicalRegionPart",
+      "registered-str",
+      "registered-render"
+    ],
+    "native_runtime_tested": false
+  },
+  {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "production": true,
+    "dispatch_cases": [
+      "text",
+      "render",
+      "integer",
+      "instance-member",
+      "subclass-member",
+      "added-class-member",
+      "removed-class-member",
+      "dynamic-getattr",
+      "dynamic-getattribute",
+      "rebound-CitryRender",
+      "rebound-PhysicalRegionPart",
+      "registered-str",
+      "registered-render"
+    ],
+    "native_runtime_tested": false
+  },
+  {
+    "python": "3.14.6 free-threading build (main, Jul 23 2026, 14:34:05) [Clang 22.1.3 ]",
+    "production": true,
+    "dispatch_cases": [
+      "text",
+      "render",
+      "integer",
+      "instance-member",
+      "subclass-member",
+      "added-class-member",
+      "removed-class-member",
+      "dynamic-getattr",
+      "dynamic-getattribute",
+      "rebound-CitryRender",
+      "rebound-PhysicalRegionPart",
+      "registered-str",
+      "registered-render"
+    ],
+    "native_runtime_tested": false
+  },
+  {
+    "python": "3.11.15 (194f9f44b505, May 25 2026, 19:34:18)\n[PyPy 7.3.23 with GCC Apple LLVM 16.0.0 (clang-1600.0.26.6)]",
+    "production": true,
+    "dispatch_cases": [
+      "text",
+      "render",
+      "integer",
+      "instance-member",
+      "subclass-member",
+      "added-class-member",
+      "removed-class-member",
+      "dynamic-getattr",
+      "dynamic-getattribute",
+      "rebound-CitryRender",
+      "rebound-PhysicalRegionPart",
+      "registered-str",
+      "registered-render"
+    ],
+    "native_runtime_tested": false
+  }
+]

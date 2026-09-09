@@ -1,0 +1,12 @@
+{
+  "seeded_trees": 1000,
+  "comparisons_before_and_after_reverse": 2000,
+  "tasks_compared": 10222,
+  "wrapped_deferred_preserves_original_ignore": true,
+  "wrapped_render_uses_inner_context_and_parts": true,
+  "unknown_subclass_nonlist_and_depth_fallback": true,
+  "changed_getattribute_preserves_original_reads": true,
+  "changed_class_dispatch_and_wrapper_base_use_original_scan": true,
+  "changed_task_constructor_runs_once_on_unsupported_tree": true,
+  "production_qualified": false
+}

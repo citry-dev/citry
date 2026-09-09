@@ -1,0 +1,10 @@
+{
+  "reference": "5bad7af8 ElementAttrsNode._format",
+  "randomized_cases_twice": 3000,
+  "hashes": {
+    "benchmarks/attrs_cache_probe/production_check.py": "d4e44ae1c93ad54184614d3f4016ea156408f019b7e24ca51b23a3b8ea4f2bc3",
+    "packages/py/citry/citry/nodes/__init__.py": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+    "packages/py/citry/citry/attrs.py": "a56d5ddb8bc01e684688a37925c94757254f634adc219711016588b19c278c9a",
+    "packages/py/citry/citry/util/html.py": "130e533df85f8f2ecbaeff1059b89294f46388ef54c3e72c71c115141d46735b"
+  }
+}

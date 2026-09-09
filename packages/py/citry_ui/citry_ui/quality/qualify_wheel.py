@@ -419,7 +419,7 @@ def qualify_wheel(path: Path) -> WheelReport:
         raise WheelQualificationError("Wheel METADATA version does not match its filename.")
     if metadata.get("Requires-Python") not in {">=3.10, <4.0", "<4.0,>=3.10"}:
         raise WheelQualificationError("Wheel METADATA has an unexpected Python requirement.")
-    if metadata.get_all("Requires-Dist", []) != ["citry<0.5.0,>=0.4.2"]:
+    if metadata.get_all("Requires-Dist", []) != ["citry>=0.4.2"]:
         raise WheelQualificationError("Wheel METADATA has unexpected runtime dependencies.")
     if metadata.get_all("Provides-Extra", []):
         raise WheelQualificationError("Wheel METADATA has unexpected optional extras.")

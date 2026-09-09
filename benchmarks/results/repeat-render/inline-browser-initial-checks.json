@@ -1,0 +1,688 @@
+{
+  "browser_qualification_only": true,
+  "passed": true,
+  "results": {
+    "chromium": {
+      "version": "151.0.7922.34",
+      "cases": {
+        "basic": {
+          "reference": {
+            "scopes": {
+              "direct": {
+                "owner": null,
+                "isolated": true
+              },
+              "fill": {
+                "owner": null,
+                "isolated": true
+              },
+              "fallback": {
+                "owner": null,
+                "isolated": true
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          },
+          "identity": {
+            "scopes": {
+              "direct": {
+                "owner": null,
+                "isolated": true
+              },
+              "fill": {
+                "owner": null,
+                "isolated": true
+              },
+              "fallback": {
+                "owner": null,
+                "isolated": true
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        },
+        "conditional": {
+          "reference": {
+            "status": "expected_rejection",
+            "expected_error": "native x-if cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "identity": {
+            "status": "expected_rejection",
+            "expected_error": "native x-if cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              },
+              "conditional": {
+                "owner": "caller",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 4,
+              "caller": "4",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": "caller"
+            },
+            "churn_cycles": 20,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        },
+        "teleport": {
+          "reference": {
+            "status": "expected_rejection",
+            "expected_error": "native x-teleport cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "identity": {
+            "status": "expected_rejection",
+            "expected_error": "native x-teleport cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              },
+              "teleport": {
+                "owner": "caller",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 4,
+              "caller": "3",
+              "receiver": "1",
+              "teleported": true,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        }
+      }
+    },
+    "firefox": {
+      "version": "153.0",
+      "cases": {
+        "basic": {
+          "reference": {
+            "scopes": {
+              "direct": {
+                "owner": null,
+                "isolated": true
+              },
+              "fill": {
+                "owner": null,
+                "isolated": true
+              },
+              "fallback": {
+                "owner": null,
+                "isolated": true
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          },
+          "identity": {
+            "scopes": {
+              "direct": {
+                "owner": null,
+                "isolated": true
+              },
+              "fill": {
+                "owner": null,
+                "isolated": true
+              },
+              "fallback": {
+                "owner": null,
+                "isolated": true
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        },
+        "conditional": {
+          "reference": {
+            "status": "expected_rejection",
+            "expected_error": "native x-if cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "identity": {
+            "status": "expected_rejection",
+            "expected_error": "native x-if cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              },
+              "conditional": {
+                "owner": "caller",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 4,
+              "caller": "4",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": "caller"
+            },
+            "churn_cycles": 20,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        },
+        "teleport": {
+          "reference": {
+            "status": "expected_rejection",
+            "expected_error": "native x-teleport cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "identity": {
+            "status": "expected_rejection",
+            "expected_error": "native x-teleport cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              },
+              "teleport": {
+                "owner": "caller",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 4,
+              "caller": "3",
+              "receiver": "1",
+              "teleported": true,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        }
+      }
+    },
+    "webkit": {
+      "version": "26.5",
+      "cases": {
+        "basic": {
+          "reference": {
+            "scopes": {
+              "direct": {
+                "owner": null,
+                "isolated": true
+              },
+              "fill": {
+                "owner": null,
+                "isolated": true
+              },
+              "fallback": {
+                "owner": null,
+                "isolated": true
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          },
+          "identity": {
+            "scopes": {
+              "direct": {
+                "owner": null,
+                "isolated": true
+              },
+              "fill": {
+                "owner": null,
+                "isolated": true
+              },
+              "fallback": {
+                "owner": null,
+                "isolated": true
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 3,
+              "caller": "2",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        },
+        "conditional": {
+          "reference": {
+            "status": "expected_rejection",
+            "expected_error": "native x-if cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "identity": {
+            "status": "expected_rejection",
+            "expected_error": "native x-if cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-if cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              },
+              "conditional": {
+                "owner": "caller",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 4,
+              "caller": "4",
+              "receiver": "1",
+              "teleported": false,
+              "revisions": 1,
+              "conditionalOwner": "caller"
+            },
+            "churn_cycles": 20,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        },
+        "teleport": {
+          "reference": {
+            "status": "expected_rejection",
+            "expected_error": "native x-teleport cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "identity": {
+            "status": "expected_rejection",
+            "expected_error": "native x-teleport cannot clone a server-rendered client-active Citry component",
+            "final": {
+              "revisions": 0,
+              "anchors": 0,
+              "started": false
+            },
+            "page_errors": [
+              "[Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ],
+            "console_errors": [
+              "[Citry] failed to process ownership graph manifest: [Citry] Alpine: native x-teleport cannot clone a server-rendered client-active Citry component. Use server <c-for> for server component lists, or keep the Alpine structural directive inside an existing Citry component. A browser blueprint protocol must mint fresh graph, lifecycle, source, region, and Events identity before client component instantiation can be supported."
+            ]
+          },
+          "inline": {
+            "scopes": {
+              "direct": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fill": {
+                "owner": "caller",
+                "isolated": false
+              },
+              "fallback": {
+                "owner": "receiver",
+                "isolated": false
+              },
+              "teleport": {
+                "owner": "caller",
+                "isolated": false
+              }
+            },
+            "final": {
+              "icons": 4,
+              "caller": "3",
+              "receiver": "1",
+              "teleported": true,
+              "revisions": 1,
+              "conditionalOwner": null
+            },
+            "churn_cycles": 0,
+            "status": "passed",
+            "page_errors": [],
+            "console_errors": []
+          }
+        }
+      }
+    }
+  },
+  "html_hashes": {
+    "/basic/reference": "380b1f41e9b21cf07126936f647272ee2dfe25b3189d57ea01879be3e909ed0c",
+    "/basic/identity": "e568fa432470b097256a9d8a34919bddb5b3877af170a72a8f2290859d923f1b",
+    "/basic/inline": "b085c4fc42260fd9975b9b1b27816eb7c5cf7376bd0170c660835982cb7da374",
+    "/conditional/reference": "b518ef2696488335a6e3f0753de6b82e2a4ab6896279380c1fbaae2c246be2fe",
+    "/conditional/identity": "71760fa8ee0da7efdc90e6209e4d155e5cf8e0bc57cd141b92a4c2ea33d6c4f9",
+    "/conditional/inline": "1535a87387d9f5631ccedc23eb9a55d80d30b1ab5a44dd0c2fed981c3f9fd15d",
+    "/teleport/reference": "7205bf121ff53c30feb1d09dff44a1fe83943e1e5d964066a8b88ad74d09c191",
+    "/teleport/identity": "dcf24e069709fce733c3c734e7aa96fa412cb6580681ec1253ebe21ab4e0c909",
+    "/teleport/inline": "46d4270590564f4b823e087d7bee0be1b0fb59f42e54227f4287e6f025f9efac"
+  },
+  "hashes": {
+    "benchmarks/inline_browser_probe/probe.py": "0e1446f927376a8fcb43538985ee832523d9cbb8121eafade2149c25fdb00af9",
+    "benchmarks/inline_browser_probe/fixtures.py": "9fa34910fc60301272ad2063c4ebbcecc861e84391d4c5b3f00ba45d792fc545",
+    "benchmarks/inline_browser_probe/plan.md": "76b9f76836dc535ea447e621b95d791d3ed55a677734d11e56b020d09549b4f7",
+    "benchmarks/inline_leaf_probe/adapter.py": "be621a2e9e5f406605b7941f68e2fe30d966091c71cb0d1f8e92214dcc8bceea",
+    "benchmarks/inline_leaf_probe/checks.py": "43953171f0c6c3d220823ab11e4860cafa6def10b727aed78340e9683005003e",
+    "benchmarks/leaf_contract_probe/adapter.py": "3bed89337035ae9fc2e74f3d01dfd66db603789eb1a7d345e163c670c130e461",
+    "benchmarks/identity_leaf_probe/adapter.py": "474dca09a2b02b4a85d202a62a242c0063560e4702610460314dc67e2251546a",
+    "benchmarks/ownership_journal_probe/probe.py": "d259181c5db6f64359fee79fb6e51e88e617e5f27b89d71ccb723e4893bb2d08",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be",
+    "packages/py/citry/citry/ext/dependencies/client/citry.js": "08e6a2ec26108be53eb5efe881351b26c9a43e5719dac12dd05f5ee6c0b0d7b9",
+    "packages/py/citry/citry/ext/events/client/citry-events.js": "7ab76e0638f55519566eca3b542b9c563e17b6aa7526968fea1bb1ddc3d26f81",
+    "packages/py/citry_core/citry_core/_rust.abi3.so": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7"
+  }
+}

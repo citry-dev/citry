@@ -1,0 +1,33 @@
+{
+  "production_qualified": false,
+  "randomized_order_and_output_isolation_cases": 300,
+  "structured_mutation_cases": 2,
+  "cache_bound": 256,
+  "oversized_fallback": true,
+  "current_string_identity": {
+    "reference_current_key": true,
+    "reference_current_value": true,
+    "candidate_current_key": true,
+    "candidate_current_value": true
+  },
+  "changed_normalizer": {
+    "reference": {
+      "class": "changed"
+    },
+    "candidate": {
+      "class": "changed"
+    }
+  },
+  "changed_identity_helper": {
+    "reference": {
+      "data-first": "two"
+    },
+    "candidate": {
+      "data-first": "two"
+    }
+  },
+  "hashes": {
+    "benchmarks/attr_merge_probe/positions_contracts.py": "571f17272ff752ef795163e49db2999be938484cc19cfcbe59c6486b7d9c1153",
+    "benchmarks/attr_merge_probe/positions_probe.py": "8251b0c0d3abb68b9506213f811e34c2c60db00345df3b2c0f5d0a6d42e4588e"
+  }
+}

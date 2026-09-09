@@ -1,0 +1,620 @@
+{
+  "case": "input-constness",
+  "reference": "current runtime",
+  "runtime_sha256": "995125c85000944fde2cbe84a8744d3f6c024c306acf3fe587905bf8a9a3d52a",
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "pairs": 60,
+  "all_pairs_html_equal": true,
+  "snapshots_compared": 4,
+  "snapshot_trace_equal": true,
+  "medians_ms": {
+    "reference": 32.405958,
+    "candidate": 32.3545
+  },
+  "median_paired_saving_ms": 0.1315210000000011,
+  "favorable_pairs": 40,
+  "shared_source_sites": 0,
+  "shared_distinct_source_bytes": 0,
+  "observations": [
+    {
+      "pair": 0,
+      "candidate": false,
+      "ms": 33.044125
+    },
+    {
+      "pair": 0,
+      "candidate": true,
+      "ms": 32.708917
+    },
+    {
+      "pair": 1,
+      "candidate": true,
+      "ms": 33.322708
+    },
+    {
+      "pair": 1,
+      "candidate": false,
+      "ms": 33.45125
+    },
+    {
+      "pair": 2,
+      "candidate": false,
+      "ms": 37.414708
+    },
+    {
+      "pair": 2,
+      "candidate": true,
+      "ms": 32.66225
+    },
+    {
+      "pair": 3,
+      "candidate": true,
+      "ms": 32.205375
+    },
+    {
+      "pair": 3,
+      "candidate": false,
+      "ms": 31.270459
+    },
+    {
+      "pair": 4,
+      "candidate": false,
+      "ms": 31.27025
+    },
+    {
+      "pair": 4,
+      "candidate": true,
+      "ms": 31.093834
+    },
+    {
+      "pair": 5,
+      "candidate": true,
+      "ms": 31.085709
+    },
+    {
+      "pair": 5,
+      "candidate": false,
+      "ms": 31.824416
+    },
+    {
+      "pair": 6,
+      "candidate": false,
+      "ms": 31.612334
+    },
+    {
+      "pair": 6,
+      "candidate": true,
+      "ms": 32.309875
+    },
+    {
+      "pair": 7,
+      "candidate": true,
+      "ms": 35.593375
+    },
+    {
+      "pair": 7,
+      "candidate": false,
+      "ms": 31.645417
+    },
+    {
+      "pair": 8,
+      "candidate": false,
+      "ms": 31.32025
+    },
+    {
+      "pair": 8,
+      "candidate": true,
+      "ms": 31.182875
+    },
+    {
+      "pair": 9,
+      "candidate": true,
+      "ms": 31.281291
+    },
+    {
+      "pair": 9,
+      "candidate": false,
+      "ms": 31.319333
+    },
+    {
+      "pair": 10,
+      "candidate": false,
+      "ms": 31.131709
+    },
+    {
+      "pair": 10,
+      "candidate": true,
+      "ms": 32.59525
+    },
+    {
+      "pair": 11,
+      "candidate": true,
+      "ms": 35.006458
+    },
+    {
+      "pair": 11,
+      "candidate": false,
+      "ms": 31.403542
+    },
+    {
+      "pair": 12,
+      "candidate": false,
+      "ms": 31.276333
+    },
+    {
+      "pair": 12,
+      "candidate": true,
+      "ms": 31.207084
+    },
+    {
+      "pair": 13,
+      "candidate": true,
+      "ms": 31.765458
+    },
+    {
+      "pair": 13,
+      "candidate": false,
+      "ms": 32.165416
+    },
+    {
+      "pair": 14,
+      "candidate": false,
+      "ms": 32.616
+    },
+    {
+      "pair": 14,
+      "candidate": true,
+      "ms": 32.644625
+    },
+    {
+      "pair": 15,
+      "candidate": true,
+      "ms": 36.578084
+    },
+    {
+      "pair": 15,
+      "candidate": false,
+      "ms": 32.269333
+    },
+    {
+      "pair": 16,
+      "candidate": false,
+      "ms": 32.203375
+    },
+    {
+      "pair": 16,
+      "candidate": true,
+      "ms": 32.056
+    },
+    {
+      "pair": 17,
+      "candidate": true,
+      "ms": 31.967583
+    },
+    {
+      "pair": 17,
+      "candidate": false,
+      "ms": 31.323583
+    },
+    {
+      "pair": 18,
+      "candidate": false,
+      "ms": 31.362583
+    },
+    {
+      "pair": 18,
+      "candidate": true,
+      "ms": 31.674834
+    },
+    {
+      "pair": 19,
+      "candidate": true,
+      "ms": 31.555375
+    },
+    {
+      "pair": 19,
+      "candidate": false,
+      "ms": 32.867125
+    },
+    {
+      "pair": 20,
+      "candidate": false,
+      "ms": 36.236584
+    },
+    {
+      "pair": 20,
+      "candidate": true,
+      "ms": 32.614375
+    },
+    {
+      "pair": 21,
+      "candidate": true,
+      "ms": 32.665458
+    },
+    {
+      "pair": 21,
+      "candidate": false,
+      "ms": 32.822958
+    },
+    {
+      "pair": 22,
+      "candidate": false,
+      "ms": 32.843792
+    },
+    {
+      "pair": 22,
+      "candidate": true,
+      "ms": 32.780917
+    },
+    {
+      "pair": 23,
+      "candidate": true,
+      "ms": 32.490875
+    },
+    {
+      "pair": 23,
+      "candidate": false,
+      "ms": 34.406166
+    },
+    {
+      "pair": 24,
+      "candidate": false,
+      "ms": 36.6175
+    },
+    {
+      "pair": 24,
+      "candidate": true,
+      "ms": 32.88325
+    },
+    {
+      "pair": 25,
+      "candidate": true,
+      "ms": 32.822584
+    },
+    {
+      "pair": 25,
+      "candidate": false,
+      "ms": 32.947875
+    },
+    {
+      "pair": 26,
+      "candidate": false,
+      "ms": 33.120708
+    },
+    {
+      "pair": 26,
+      "candidate": true,
+      "ms": 32.811125
+    },
+    {
+      "pair": 27,
+      "candidate": true,
+      "ms": 34.423167
+    },
+    {
+      "pair": 27,
+      "candidate": false,
+      "ms": 32.399
+    },
+    {
+      "pair": 28,
+      "candidate": false,
+      "ms": 35.874292
+    },
+    {
+      "pair": 28,
+      "candidate": true,
+      "ms": 31.213
+    },
+    {
+      "pair": 29,
+      "candidate": true,
+      "ms": 31.262167
+    },
+    {
+      "pair": 29,
+      "candidate": false,
+      "ms": 31.33525
+    },
+    {
+      "pair": 30,
+      "candidate": false,
+      "ms": 31.381375
+    },
+    {
+      "pair": 30,
+      "candidate": true,
+      "ms": 31.283166
+    },
+    {
+      "pair": 31,
+      "candidate": true,
+      "ms": 31.149709
+    },
+    {
+      "pair": 31,
+      "candidate": false,
+      "ms": 32.418292
+    },
+    {
+      "pair": 32,
+      "candidate": false,
+      "ms": 32.412333
+    },
+    {
+      "pair": 32,
+      "candidate": true,
+      "ms": 33.27475
+    },
+    {
+      "pair": 33,
+      "candidate": true,
+      "ms": 36.47775
+    },
+    {
+      "pair": 33,
+      "candidate": false,
+      "ms": 32.59475
+    },
+    {
+      "pair": 34,
+      "candidate": false,
+      "ms": 32.495417
+    },
+    {
+      "pair": 34,
+      "candidate": true,
+      "ms": 32.218334
+    },
+    {
+      "pair": 35,
+      "candidate": true,
+      "ms": 32.333375
+    },
+    {
+      "pair": 35,
+      "candidate": false,
+      "ms": 32.399583
+    },
+    {
+      "pair": 36,
+      "candidate": false,
+      "ms": 31.531833
+    },
+    {
+      "pair": 36,
+      "candidate": true,
+      "ms": 32.676375
+    },
+    {
+      "pair": 37,
+      "candidate": true,
+      "ms": 34.799333
+    },
+    {
+      "pair": 37,
+      "candidate": false,
+      "ms": 31.56975
+    },
+    {
+      "pair": 38,
+      "candidate": false,
+      "ms": 31.3545
+    },
+    {
+      "pair": 38,
+      "candidate": true,
+      "ms": 31.206208
+    },
+    {
+      "pair": 39,
+      "candidate": true,
+      "ms": 31.255042
+    },
+    {
+      "pair": 39,
+      "candidate": false,
+      "ms": 31.405167
+    },
+    {
+      "pair": 40,
+      "candidate": false,
+      "ms": 31.847167
+    },
+    {
+      "pair": 40,
+      "candidate": true,
+      "ms": 31.74475
+    },
+    {
+      "pair": 41,
+      "candidate": true,
+      "ms": 35.522333
+    },
+    {
+      "pair": 41,
+      "candidate": false,
+      "ms": 31.538875
+    },
+    {
+      "pair": 42,
+      "candidate": false,
+      "ms": 31.3115
+    },
+    {
+      "pair": 42,
+      "candidate": true,
+      "ms": 31.177
+    },
+    {
+      "pair": 43,
+      "candidate": true,
+      "ms": 31.133583
+    },
+    {
+      "pair": 43,
+      "candidate": false,
+      "ms": 31.293792
+    },
+    {
+      "pair": 44,
+      "candidate": false,
+      "ms": 31.286083
+    },
+    {
+      "pair": 44,
+      "candidate": true,
+      "ms": 31.66175
+    },
+    {
+      "pair": 45,
+      "candidate": true,
+      "ms": 31.441084
+    },
+    {
+      "pair": 45,
+      "candidate": false,
+      "ms": 32.431042
+    },
+    {
+      "pair": 46,
+      "candidate": false,
+      "ms": 35.279
+    },
+    {
+      "pair": 46,
+      "candidate": true,
+      "ms": 31.449792
+    },
+    {
+      "pair": 47,
+      "candidate": true,
+      "ms": 31.299584
+    },
+    {
+      "pair": 47,
+      "candidate": false,
+      "ms": 31.849417
+    },
+    {
+      "pair": 48,
+      "candidate": false,
+      "ms": 32.160834
+    },
+    {
+      "pair": 48,
+      "candidate": true,
+      "ms": 32.167
+    },
+    {
+      "pair": 49,
+      "candidate": true,
+      "ms": 32.297542
+    },
+    {
+      "pair": 49,
+      "candidate": false,
+      "ms": 33.910208
+    },
+    {
+      "pair": 50,
+      "candidate": false,
+      "ms": 36.098625
+    },
+    {
+      "pair": 50,
+      "candidate": true,
+      "ms": 32.299375
+    },
+    {
+      "pair": 51,
+      "candidate": true,
+      "ms": 32.375625
+    },
+    {
+      "pair": 51,
+      "candidate": false,
+      "ms": 32.965166
+    },
+    {
+      "pair": 52,
+      "candidate": false,
+      "ms": 33.00925
+    },
+    {
+      "pair": 52,
+      "candidate": true,
+      "ms": 32.949625
+    },
+    {
+      "pair": 53,
+      "candidate": true,
+      "ms": 33.433875
+    },
+    {
+      "pair": 53,
+      "candidate": false,
+      "ms": 33.673625
+    },
+    {
+      "pair": 54,
+      "candidate": false,
+      "ms": 37.38825
+    },
+    {
+      "pair": 54,
+      "candidate": true,
+      "ms": 32.847625
+    },
+    {
+      "pair": 55,
+      "candidate": true,
+      "ms": 32.8985
+    },
+    {
+      "pair": 55,
+      "candidate": false,
+      "ms": 32.874292
+    },
+    {
+      "pair": 56,
+      "candidate": false,
+      "ms": 33.05625
+    },
+    {
+      "pair": 56,
+      "candidate": true,
+      "ms": 32.738375
+    },
+    {
+      "pair": 57,
+      "candidate": true,
+      "ms": 32.854875
+    },
+    {
+      "pair": 57,
+      "candidate": false,
+      "ms": 33.660583
+    },
+    {
+      "pair": 58,
+      "candidate": false,
+      "ms": 33.4075
+    },
+    {
+      "pair": 58,
+      "candidate": true,
+      "ms": 33.934667
+    },
+    {
+      "pair": 59,
+      "candidate": true,
+      "ms": 35.749875
+    },
+    {
+      "pair": 59,
+      "candidate": false,
+      "ms": 32.4235
+    }
+  ]
+}

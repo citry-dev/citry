@@ -1,0 +1,110 @@
+{
+  "cases": {
+    "normal": {
+      "equal": true,
+      "error": null,
+      "fills": 1,
+      "visits": []
+    },
+    "repeat": {
+      "equal": true,
+      "error": null,
+      "fills": 1,
+      "visits": []
+    },
+    "fallback": {
+      "equal": true,
+      "error": null,
+      "fills": 1,
+      "visits": []
+    },
+    "python": {
+      "equal": true,
+      "error": null,
+      "fills": 1,
+      "visits": []
+    },
+    "wrong-owner": {
+      "equal": true,
+      "error": [
+        "RuntimeError",
+        "A template fill source invocation must belong to the fill's lexical owner."
+      ],
+      "fills": 1,
+      "visits": []
+    },
+    "rebind": {
+      "equal": true,
+      "error": [
+        "RuntimeError",
+        "A template fill cannot be rebound to a second source invocation."
+      ],
+      "fills": 1,
+      "visits": []
+    },
+    "forward": {
+      "equal": true,
+      "error": null,
+      "fills": 2,
+      "visits": []
+    },
+    "retired": {
+      "equal": true,
+      "error": null,
+      "fills": 2,
+      "visits": []
+    },
+    "materialize": {
+      "equal": true,
+      "error": null,
+      "fills": 1,
+      "visits": [
+        "first",
+        "second"
+      ]
+    }
+  },
+  "invalid": [
+    {
+      "operation": "bind_fill_source",
+      "width": 12,
+      "index": 0,
+      "unchanged": true
+    },
+    {
+      "operation": "attach_active_fill",
+      "width": 12,
+      "index": 0,
+      "unchanged": true
+    },
+    {
+      "operation": "bind_fill_source",
+      "width": 13,
+      "index": 0,
+      "unchanged": true
+    },
+    {
+      "operation": "attach_active_fill",
+      "width": 13,
+      "index": 0,
+      "unchanged": true
+    },
+    {
+      "operation": "bind_fill_source",
+      "width": 13,
+      "index": -1,
+      "unchanged": true
+    },
+    {
+      "operation": "attach_active_fill",
+      "width": 13,
+      "index": -1,
+      "unchanged": true
+    }
+  ],
+  "scope": "Production/grouped-native graph binding, retained rows, errors and forwarding/revival fallback.",
+  "hashes": {
+    "benchmarks/native_fill_binding_probe/contracts.py": "f8ff83793547e97a1172968a68cdfabd6c7d1797916a7b2459d7b9c9c4b27372",
+    "benchmarks/native_fill_binding_probe/adapter.py": "0a2696f217f20aaae2b00c107847563d94d31c380310790675e089818c065af5"
+  }
+}

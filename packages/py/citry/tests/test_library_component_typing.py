@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     assert_type(LibraryComponent.definition_id, str)
     assert_type(LibraryComponent.citry, Citry)
     assert_type(LibraryComponent.transparent, bool)
+    assert_type(LibraryComponent.simple, bool)
+    assert_type(Component.simple, bool)
     assert_type(LibraryComponent.name, str | None)
     assert_type(LibraryComponent.template, str | None)
     assert_type(LibraryComponent.template_file, str | None)

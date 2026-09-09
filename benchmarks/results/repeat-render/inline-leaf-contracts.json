@@ -1,0 +1,947 @@
+{
+  "compared": {
+    "large": {
+      "reference": {
+        "html_digest": "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+        "graph_digests": [
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529"
+        ],
+        "counts": {
+          "selected_initializations": 41,
+          "selected_calls": 41,
+          "selected_frames_with_id": 41,
+          "selected_client_markers": 12,
+          "selected_wire_instances": 13,
+          "selected_identities": 41,
+          "generated_ids": 342,
+          "selected_invocations": 41
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "raw_bytes": 1013746
+      },
+      "identity": {
+        "html_digest": "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+        "graph_digests": [
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529"
+        ],
+        "counts": {
+          "selected_calls": 41,
+          "selected_frames_with_id": 41,
+          "selected_client_markers": 12,
+          "selected_wire_instances": 13,
+          "selected_identities": 41,
+          "generated_ids": 342,
+          "selected_invocations": 41
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          },
+          {
+            "source_locations": 1081,
+            "component_invocations": 339,
+            "logical_instances": 342,
+            "init_ancestry": 339,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 339
+          }
+        ],
+        "raw_bytes": 1013746
+      },
+      "inline": {
+        "html_digest": "ab7f8843e76091c77407948b881074d03296988f726afaf32d3a6a0b49e9450c",
+        "graph_digests": [
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529",
+          "2e751a4eefe5ae9834446d3e51cfdbe40d604690bc229e0d0f907e713044f529"
+        ],
+        "counts": {
+          "selected_calls": 41,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 0,
+          "generated_ids": 301,
+          "selected_invocations": 0
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1040,
+            "component_invocations": 298,
+            "logical_instances": 301,
+            "init_ancestry": 298,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 298
+          },
+          {
+            "source_locations": 1040,
+            "component_invocations": 298,
+            "logical_instances": 301,
+            "init_ancestry": 298,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 298
+          },
+          {
+            "source_locations": 1040,
+            "component_invocations": 298,
+            "logical_instances": 301,
+            "init_ancestry": 298,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 298
+          },
+          {
+            "source_locations": 1040,
+            "component_invocations": 298,
+            "logical_instances": 301,
+            "init_ancestry": 298,
+            "logical_fills": 468,
+            "physical_regions": 274,
+            "render_queue": 298
+          }
+        ],
+        "raw_bytes": 1005379
+      }
+    },
+    "one_output": {
+      "reference": {
+        "html_digest": "6ad236ed21b2a0a4143921bdbcc6404dfd61fb8205cf0e403cc70d1ef3301d90",
+        "graph_digests": [
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b"
+        ],
+        "counts": {
+          "selected_initializations": 23,
+          "selected_calls": 23,
+          "selected_frames_with_id": 23,
+          "selected_client_markers": 12,
+          "selected_wire_instances": 13,
+          "selected_identities": 23,
+          "generated_ids": 110,
+          "selected_invocations": 23
+        },
+        "raw_counts": [
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          },
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          },
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          },
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          }
+        ],
+        "raw_bytes": 893521
+      },
+      "identity": {
+        "html_digest": "6ad236ed21b2a0a4143921bdbcc6404dfd61fb8205cf0e403cc70d1ef3301d90",
+        "graph_digests": [
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b"
+        ],
+        "counts": {
+          "selected_calls": 23,
+          "selected_frames_with_id": 23,
+          "selected_client_markers": 12,
+          "selected_wire_instances": 13,
+          "selected_identities": 23,
+          "generated_ids": 110,
+          "selected_invocations": 23
+        },
+        "raw_counts": [
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          },
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          },
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          },
+          {
+            "source_locations": 331,
+            "component_invocations": 107,
+            "logical_instances": 110,
+            "init_ancestry": 107,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 107
+          }
+        ],
+        "raw_bytes": 893521
+      },
+      "inline": {
+        "html_digest": "6ad236ed21b2a0a4143921bdbcc6404dfd61fb8205cf0e403cc70d1ef3301d90",
+        "graph_digests": [
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b",
+          "f9d0058d099d164b74efa8b6337e01dd92a3596ebd42d3f0ba9b3476b042314b"
+        ],
+        "counts": {
+          "selected_calls": 23,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 0,
+          "generated_ids": 87,
+          "selected_invocations": 0
+        },
+        "raw_counts": [
+          {
+            "source_locations": 308,
+            "component_invocations": 84,
+            "logical_instances": 87,
+            "init_ancestry": 84,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 84
+          },
+          {
+            "source_locations": 308,
+            "component_invocations": 84,
+            "logical_instances": 87,
+            "init_ancestry": 84,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 84
+          },
+          {
+            "source_locations": 308,
+            "component_invocations": 84,
+            "logical_instances": 87,
+            "init_ancestry": 84,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 84
+          },
+          {
+            "source_locations": 308,
+            "component_invocations": 84,
+            "logical_instances": 87,
+            "init_ancestry": 84,
+            "logical_fills": 143,
+            "physical_regions": 81,
+            "render_queue": 84
+          }
+        ],
+        "raw_bytes": 885550
+      }
+    },
+    "icons_0": {
+      "reference": {
+        "html_digest": "f3400767db38b889282bf10e1ff47da72e9a17b4e1f93a3073f3fe0fe402999b",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_initializations": 1,
+          "selected_calls": 1,
+          "selected_frames_with_id": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 732
+      },
+      "identity": {
+        "html_digest": "f3400767db38b889282bf10e1ff47da72e9a17b4e1f93a3073f3fe0fe402999b",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 1,
+          "selected_frames_with_id": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 732
+      },
+      "inline": {
+        "html_digest": "f3400767db38b889282bf10e1ff47da72e9a17b4e1f93a3073f3fe0fe402999b",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 0,
+          "generated_ids": 1,
+          "selected_invocations": 0
+        },
+        "raw_counts": [
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          },
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          }
+        ],
+        "raw_bytes": 710
+      }
+    },
+    "icons_1": {
+      "reference": {
+        "html_digest": "f8b897ac478a2b03dfa9b36b3113c02d7abd207da9c84e876d3517a55308b810",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_initializations": 1,
+          "selected_calls": 1,
+          "selected_frames_with_id": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 764
+      },
+      "identity": {
+        "html_digest": "f8b897ac478a2b03dfa9b36b3113c02d7abd207da9c84e876d3517a55308b810",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 1,
+          "selected_frames_with_id": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 764
+      },
+      "inline": {
+        "html_digest": "f8b897ac478a2b03dfa9b36b3113c02d7abd207da9c84e876d3517a55308b810",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 0,
+          "generated_ids": 1,
+          "selected_invocations": 0
+        },
+        "raw_counts": [
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          },
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          }
+        ],
+        "raw_bytes": 742
+      }
+    },
+    "icons_2": {
+      "reference": {
+        "html_digest": "566048d59b9a35fd3c29e23b4f3a9d6fe89f397cc9f4be36061f86f65c5adc1a",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_initializations": 1,
+          "selected_calls": 1,
+          "selected_frames_with_id": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 756
+      },
+      "identity": {
+        "html_digest": "566048d59b9a35fd3c29e23b4f3a9d6fe89f397cc9f4be36061f86f65c5adc1a",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 1,
+          "selected_frames_with_id": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 756
+      },
+      "inline": {
+        "html_digest": "566048d59b9a35fd3c29e23b4f3a9d6fe89f397cc9f4be36061f86f65c5adc1a",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 0,
+          "generated_ids": 1,
+          "selected_invocations": 0
+        },
+        "raw_counts": [
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          },
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          }
+        ],
+        "raw_bytes": 734
+      }
+    },
+    "icons_3": {
+      "reference": {
+        "html_digest": "a6683265083d2bcf1f79c3fcfbd6dc24c497fe360f2ed3b9691b4200e7de5af3",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_initializations": 3,
+          "selected_calls": 3,
+          "selected_frames_with_id": 3,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 3,
+          "generated_ids": 4,
+          "selected_invocations": 3
+        },
+        "raw_counts": [
+          {
+            "source_locations": 3,
+            "component_invocations": 3,
+            "logical_instances": 4,
+            "init_ancestry": 3,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 3
+          },
+          {
+            "source_locations": 3,
+            "component_invocations": 3,
+            "logical_instances": 4,
+            "init_ancestry": 3,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 3
+          }
+        ],
+        "raw_bytes": 2086
+      },
+      "identity": {
+        "html_digest": "a6683265083d2bcf1f79c3fcfbd6dc24c497fe360f2ed3b9691b4200e7de5af3",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 3,
+          "selected_frames_with_id": 3,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 3,
+          "generated_ids": 4,
+          "selected_invocations": 3
+        },
+        "raw_counts": [
+          {
+            "source_locations": 3,
+            "component_invocations": 3,
+            "logical_instances": 4,
+            "init_ancestry": 3,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 3
+          },
+          {
+            "source_locations": 3,
+            "component_invocations": 3,
+            "logical_instances": 4,
+            "init_ancestry": 3,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 3
+          }
+        ],
+        "raw_bytes": 2086
+      },
+      "inline": {
+        "html_digest": "a6683265083d2bcf1f79c3fcfbd6dc24c497fe360f2ed3b9691b4200e7de5af3",
+        "graph_digests": [
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548",
+          "aafaf2ecf28a15e72223c69e0cdfd70c1418e726afa44a7950d9e960fbf0e548"
+        ],
+        "counts": {
+          "selected_calls": 3,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 0,
+          "generated_ids": 1,
+          "selected_invocations": 0
+        },
+        "raw_counts": [
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          },
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          }
+        ],
+        "raw_bytes": 2020
+      }
+    },
+    "recovery": {
+      "reference": {
+        "html_digest": "f23d11b65195c513eb6729cec1b699d7be6236fc789754d7a89cd1a7700fb204",
+        "graph_digests": [
+          "07a9dd2e557e7603ae88b11e4577732509f1b743d4ac624391c906ca5838fcc8",
+          "07a9dd2e557e7603ae88b11e4577732509f1b743d4ac624391c906ca5838fcc8"
+        ],
+        "counts": {
+          "selected_initializations": 1,
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 38
+      },
+      "identity": {
+        "html_digest": "f23d11b65195c513eb6729cec1b699d7be6236fc789754d7a89cd1a7700fb204",
+        "graph_digests": [
+          "07a9dd2e557e7603ae88b11e4577732509f1b743d4ac624391c906ca5838fcc8",
+          "07a9dd2e557e7603ae88b11e4577732509f1b743d4ac624391c906ca5838fcc8"
+        ],
+        "counts": {
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 1,
+          "generated_ids": 2,
+          "selected_invocations": 1
+        },
+        "raw_counts": [
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          },
+          {
+            "source_locations": 1,
+            "component_invocations": 1,
+            "logical_instances": 2,
+            "init_ancestry": 1,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 1
+          }
+        ],
+        "raw_bytes": 38
+      },
+      "inline": {
+        "html_digest": "f23d11b65195c513eb6729cec1b699d7be6236fc789754d7a89cd1a7700fb204",
+        "graph_digests": [
+          "07a9dd2e557e7603ae88b11e4577732509f1b743d4ac624391c906ca5838fcc8",
+          "07a9dd2e557e7603ae88b11e4577732509f1b743d4ac624391c906ca5838fcc8"
+        ],
+        "counts": {
+          "selected_client_markers": 0,
+          "selected_wire_instances": 0,
+          "selected_identities": 0,
+          "generated_ids": 1,
+          "selected_invocations": 0
+        },
+        "raw_counts": [
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          },
+          {
+            "source_locations": 0,
+            "component_invocations": 0,
+            "logical_instances": 1,
+            "init_ancestry": 0,
+            "logical_fills": 0,
+            "physical_regions": 0,
+            "render_queue": 0
+          }
+        ],
+        "raw_bytes": 38
+      }
+    }
+  },
+  "errors": {
+    "variant": [
+      "ValueError",
+      "ValueError",
+      "ValueError"
+    ],
+    "unknown_kwarg": [
+      "TypeError",
+      "TypeError",
+      "TypeError"
+    ]
+  },
+  "rejected": {
+    "markup": "TypeError",
+    "html_callback": "TypeError",
+    "subclass": "TypeError",
+    "cycle": "ValueError",
+    "slots": "TypeError",
+    "key": "TypeError",
+    "hook_descriptor": "TypeError",
+    "root": "TypeError",
+    "globals": "TypeError",
+    "alpine": "TypeError"
+  },
+  "detected_corruptions": [
+    "svg_text",
+    "caller_marker",
+    "bad_revision",
+    "retained_browser_field"
+  ],
+  "hashes": {
+    "benchmarks/inline_leaf_probe/contracts.py": "79f9197af37e3a19167d12c9630a74d25470dc2df6b8d5cb5b997bc6555e7b4e",
+    "benchmarks/inline_leaf_probe/adapter.py": "be621a2e9e5f406605b7941f68e2fe30d966091c71cb0d1f8e92214dcc8bceea",
+    "benchmarks/inline_leaf_probe/checks.py": "43953171f0c6c3d220823ab11e4860cafa6def10b727aed78340e9683005003e",
+    "benchmarks/inline_leaf_probe/compare.py": "576711813358d6624519243c886ef2afed601bc7604ef93a538eb9b5675e92bb",
+    "benchmarks/inline_leaf_probe/plan.md": "a093888d85e6de551a6b53dfb9560d2908fc52861206ba397a11ac8249d055ea"
+  }
+}

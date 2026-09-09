@@ -102,7 +102,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "citry", specifier = ">=0.4.6,<0.5" },
+    { name = "citry", specifier = ">=0.4.6" },
     { name = "waitress", specifier = ">=3.0,<4" },
 ]
 

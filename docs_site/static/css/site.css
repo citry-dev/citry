@@ -1307,7 +1307,7 @@ a.djc-sidebar__label:hover {
 .djc-sidebar__link {
   display: block;
   position: relative;
-  padding: 0.4rem 0.75rem;
+  padding: 0.4rem 1.5rem;
   font-size: 0.85rem;
   line-height: 1.4;
   color: var(--c-fg-muted);
@@ -1424,7 +1424,7 @@ a.djc-sidebar__label:hover {
 
 /* Indent items inside a group */
 .djc-sidebar__group .djc-sidebar__items {
-  padding-left: 0.75rem;
+  padding-left: 1.5rem;
 }
 
 /* A top-level collapsible section (e.g. Release notes): its toggle reads as a

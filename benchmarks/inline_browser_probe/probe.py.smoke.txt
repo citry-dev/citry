@@ -1,0 +1,246 @@
+"""Check the proposed caller-owned icon behavior in installed real browsers."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from benchmarks.inline_browser_probe.fixtures import fixtures  # noqa: E402
+from benchmarks.inline_leaf_probe.checks import installed  # noqa: E402
+from benchmarks.ownership_journal_probe.probe import scenario  # noqa: E402
+from playwright.sync_api import Error as PlaywrightError  # noqa: E402
+from playwright.sync_api import sync_playwright  # noqa: E402
+
+READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
+OWNER = 'typeof owner === "undefined" ? null : owner'
+CASES = ("basic", "conditional", "teleport")
+VARIANTS = ("reference", "identity", "inline")
+
+
+def serve(documents: dict[str, str]) -> ThreadingHTTPServer:
+    """Serve complete HTML documents over the same transport as the existing browser tests."""
+    bodies = {key: value.encode() for key, value in documents.items()}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = bodies.get(self.path)
+            if body is None:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args: Any) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+    return server
+
+
+def check(browser: Any, url: str, variant: str, case: str, churn: int) -> dict[str, Any]:
+    """Record failures as well as passes; every page owns its error listeners and cleanup."""
+    page = browser.new_page()
+    errors: list[str] = []
+    console_errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    result: dict[str, Any] = {}
+    try:
+        if variant != "inline" and case != "basic":
+            directive = "x-if" if case == "conditional" else "x-teleport"
+            expected_error = f"native {directive} cannot clone a server-rendered client-active Citry component"
+            with page.expect_event("pageerror", predicate=lambda error: expected_error in str(error)):
+                page.goto(url)
+            state = page.evaluate("""() => ({
+                revisions: Citry.manager.ownership.revisions().length,
+                anchors: Citry.manager.ownership.anchors().length,
+                started: !!Citry.events?._internal?.alpineStarted
+            })""")
+            if state != {"revisions": 0, "anchors": 0, "started": False}:
+                raise AssertionError(f"Rejected component clone activated browser state: {state!r}")
+            if any(expected_error not in error for error in errors + console_errors):
+                raise AssertionError("Unexpected additional browser error")
+            result.update(status="expected_rejection", expected_error=expected_error, final=state)
+        else:
+            page.goto(url)
+            page.wait_for_function(READY)
+            result.update(check_active(page, variant, case, churn))
+            if errors or console_errors:
+                raise AssertionError("Browser reported errors during an accepted case")
+            result["status"] = "passed"
+    except (AssertionError, PlaywrightError) as exc:
+        result.update(status="failed", failure=f"{type(exc).__name__}: {exc}")
+    finally:
+        result.update(page_errors=errors, console_errors=console_errors)
+        page.close()
+    return result
+
+
+def check_active(page: Any, variant: str, case: str, churn: int) -> dict[str, Any]:
+    """Check lexical scope, SVG click bubbling and conditional recreation."""
+    icons = ["direct", "fill", "fallback"] + ([] if case == "basic" else [case])
+    for name in icons:
+        page.locator(f".{name}-icon").wait_for(state="visible")
+    scopes = page.evaluate(
+        """([icons, expression]) => Object.fromEntries(icons.map(name => {
+        const element = document.querySelector('.' + name + '-icon');
+        return [name, {owner: Alpine.evaluate(element, expression),
+                       isolated: element.hasAttribute('data-citry-root')}];
+    }))""",
+        [icons, OWNER],
+    )
+    expected = {
+        name: {
+            "owner": ("receiver" if name == "fallback" else "caller") if variant == "inline" else None,
+            "isolated": variant != "inline",
+        }
+        for name in icons
+    }
+    if scopes != expected:
+        raise AssertionError(f"Unexpected {variant} scopes: {scopes!r}; expected {expected!r}")
+    caller_icons = [name for name in icons if name != "fallback"]
+    for count, name in enumerate(caller_icons, 1):
+        page.locator(f".{name}-icon path").click()
+        page.wait_for_function(
+            "expected => document.querySelector('.caller-count').textContent === String(expected)", arg=count
+        )
+    page.locator(".fallback-icon path").click()
+    page.wait_for_function("document.querySelector('.receiver-count').textContent === '1'")
+    expected_count = len(caller_icons)
+    if case == "conditional":
+        for _ in range(churn):
+            page.locator(".toggle").click()
+            page.locator(".conditional-icon").wait_for(state="detached")
+            page.locator(".toggle").click()
+            page.locator(".conditional-icon").wait_for(state="visible")
+        page.locator(".conditional-icon path").click()
+        expected_count += 1
+        page.wait_for_function(
+            "expected => document.querySelector('.caller-count').textContent === String(expected)", arg=expected_count
+        )
+    final = page.evaluate(
+        """expression => ({
+        icons: document.querySelectorAll('svg').length,
+        caller: document.querySelector('.caller-count').textContent,
+        receiver: document.querySelector('.receiver-count').textContent,
+        teleported: !!document.querySelector('#teleport-target .teleport-icon'),
+        revisions: Citry.manager.ownership.revisions().length,
+        conditionalOwner: document.querySelector('.conditional-icon')
+            ? Alpine.evaluate(document.querySelector('.conditional-icon'), expression) : null
+    })""",
+        OWNER,
+    )
+    expected_final = {
+        "icons": len(icons),
+        "caller": str(expected_count),
+        "receiver": "1",
+        "teleported": case == "teleport",
+        "revisions": 1,
+        "conditionalOwner": "caller" if case == "conditional" else None,
+    }
+    if final != expected_final:
+        raise AssertionError(f"Unexpected final state: {final!r}; expected {expected_final!r}")
+    return {"scopes": scopes, "final": final, "churn_cycles": churn if case == "conditional" else 0}
+
+
+def main() -> None:
+    """Keep browser qualification separate from the retained server timing experiment."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--browsers", nargs="+", choices=("chromium", "firefox", "webkit"), default=["chromium", "firefox", "webkit"]
+    )
+    parser.add_argument("--churn", type=int, default=20)
+    args = parser.parse_args()
+    if args.churn < 1:
+        parser.error("--churn must be positive")
+    paths = [Path(__file__), Path(__file__).with_name("fixtures.py"), Path(__file__).with_name("plan.md")]
+    paths.extend(
+        ROOT / path
+        for path in (
+            "benchmarks/inline_leaf_probe/adapter.py",
+            "benchmarks/inline_leaf_probe/checks.py",
+            "benchmarks/leaf_contract_probe/adapter.py",
+            "benchmarks/identity_leaf_probe/adapter.py",
+            "benchmarks/ownership_journal_probe/probe.py",
+            "packages/py/citry/tests/test_benchmark_citry.py",
+            "packages/py/citry/citry/ext/dependencies/client/citry.js",
+            "packages/py/citry/citry/ext/events/client/citry-events.js",
+            "packages/py/citry_core/citry_core/_rust.abi3.so",
+        )
+    )
+    hashes = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    documents = {}
+    for case in CASES:
+        module = scenario()
+        page_class = fixtures(module, case)
+        for variant in VARIANTS:
+            with installed(module, variant):
+                documents[f"/{case}/{variant}"] = page_class().render().serialize()
+    server = serve(documents)
+    results = {}
+    try:
+        with sync_playwright() as playwright:
+            for name in args.browsers:
+                try:
+                    browser = getattr(playwright, name).launch()
+                except PlaywrightError as exc:
+                    results[name] = {"status": "failed", "failure": str(exc)}
+                    continue
+                try:
+                    results[name] = {
+                        "version": browser.version,
+                        "cases": {
+                            case: {
+                                variant: check(
+                                    browser,
+                                    f"http://127.0.0.1:{server.server_address[1]}/{case}/{variant}",
+                                    variant,
+                                    case,
+                                    args.churn,
+                                )
+                                for variant in VARIANTS
+                            }
+                            for case in CASES
+                        },
+                    }
+                finally:
+                    browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+    failed = any(
+        result.get("status") == "failed"
+        or any(variant["status"] == "failed" for case in result.get("cases", {}).values() for variant in case.values())
+        for result in results.values()
+    )
+    print(
+        json.dumps(
+            {
+                "browser_qualification_only": True,
+                "passed": not failed,
+                "results": results,
+                "html_hashes": {key: hashlib.sha256(value.encode()).hexdigest() for key, value in documents.items()},
+                "hashes": hashes,
+            },
+            indent=2,
+        )
+    )
+    if failed:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

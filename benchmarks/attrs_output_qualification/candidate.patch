@@ -1,0 +1,371 @@
+diff --git a/crates/citry_core_py/AGENTS.md b/crates/citry_core_py/AGENTS.md
+index 49ef2180..5378f5b2 100644
+--- a/crates/citry_core_py/AGENTS.md
++++ b/crates/citry_core_py/AGENTS.md
+@@ -12,6 +12,7 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
+ - `src/lib.rs` - the `#[pymodule] fn _rust(...)`. Registers each submodule and
+   its functions / classes. This is the registration point for everything Python
+   can import.
++- `src/attrs.rs` - bounded Python value snapshots for the attribute-output cache.
+ - `src/html_transform.rs` - wraps `citry_html_transform`.
+ - `src/i18n.rs` - exposes ICU4X locale canonicalization and direction lookup,
+   and wraps the language-neutral `citry_i18n` catalog runtime.
+diff --git a/crates/citry_core_py/src/attrs.rs b/crates/citry_core_py/src/attrs.rs
+new file mode 100644
+index 00000000..cc84f92a
+--- /dev/null
++++ b/crates/citry_core_py/src/attrs.rs
+@@ -0,0 +1,42 @@
++//! Bounded Python attribute snapshots used by the formatted-output cache.
++
++use pyo3::prelude::*;
++use pyo3::types::{PyBool, PyDict, PyInt, PyString, PyTuple};
++
++#[pyfunction]
++pub fn output_cache_key<'py>(
++    py: Python<'py>,
++    resolved: &Bound<'py, PyAny>,
++) -> PyResult<Option<Bound<'py, PyTuple>>> {
++    let Ok(resolved) = resolved.cast_exact::<PyDict>() else {
++        return Ok(None);
++    };
++    if resolved.len() > 16 {
++        return Ok(None);
++    }
++    let mut fields = Vec::with_capacity(resolved.len() * 3);
++    let mut chars = 0;
++    for (key, value) in resolved.iter() {
++        let Ok(name) = key.cast_exact::<PyString>() else {
++            return Ok(None);
++        };
++        chars += name.len()?;
++        if let Ok(text) = value.cast_exact::<PyString>() {
++            chars += text.len()?;
++        } else if value.cast_exact::<PyInt>().is_ok() {
++            if value.call_method0("bit_length")?.extract::<usize>()? > 256 {
++                return Ok(None);
++            }
++        } else if !value.is_none() && value.cast_exact::<PyBool>().is_err() {
++            return Ok(None);
++        }
++        if chars > 2048 {
++            return Ok(None);
++        }
++        // The same references become the immutable snapshot used on a miss.
++        fields.push(key);
++        fields.push(value.get_type().into_any());
++        fields.push(value);
++    }
++    Ok(Some(PyTuple::new(py, fields)?))
++}
+diff --git a/crates/citry_core_py/src/lib.rs b/crates/citry_core_py/src/lib.rs
+index 2b8b0107..2c19a9f4 100644
+--- a/crates/citry_core_py/src/lib.rs
++++ b/crates/citry_core_py/src/lib.rs
+@@ -5,6 +5,7 @@
+ #![allow(clippy::type_complexity)]
+ #![allow(clippy::too_many_arguments)]
+ 
++mod attrs;
+ pub mod client_graph;
+ pub mod html_transform;
+ pub mod i18n;
+@@ -47,6 +48,11 @@ use crate::template_parser::{
+ ///       It MUST match the `module-name` setting in `pyproject.toml` in `packages/py/citry_core/`.
+ #[pymodule]
+ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
++    // Python attribute snapshots retain current values for output-cache hits and misses.
++    let attrs_mod = PyModule::new(m.py(), "attrs")?;
++    attrs_mod.add_function(wrap_pyfunction!(attrs::output_cache_key, &attrs_mod)?)?;
++    m.add_submodule(&attrs_mod)?;
++
+     // Ownership capture shares Python records with the higher-level runtime.
+     let ownership_mod = PyModule::new(m.py(), "ownership")?;
+     ownership::register(&ownership_mod)?;
+diff --git a/packages/py/citry/citry/attrs.py b/packages/py/citry/citry/attrs.py
+index 02d464f2..0b16c415 100644
+--- a/packages/py/citry/citry/attrs.py
++++ b/packages/py/citry/citry/attrs.py
+@@ -36,7 +36,7 @@ rule; component keyword arguments remain case-sensitive elsewhere.
+ from __future__ import annotations
+ 
+ import re
+-from collections.abc import Iterable, Mapping, Sequence
++from collections.abc import Callable, Iterable, Mapping, Sequence
+ from functools import lru_cache
+ from typing import Any, TypeAlias
+ 
+@@ -44,6 +44,7 @@ import wrapt
+ 
+ from citry.util import html as _html
+ from citry.util.html import Markup, escape_to_str
++from citry_core import _rust
+ 
+ ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
+ """A ``class`` attribute value: string, ``{class_name: bool}`` dict, or a list of those."""
+@@ -474,3 +475,37 @@ def _has_default_attr_formatting(formatter: object) -> bool:
+         and _html._CACHEABLE_ESCAPE_BACKEND
+         and _html._escape_to_str_impl is _html._DEFAULT_ESCAPE_TO_STR_IMPL
+     )
++
++
++_AttrsOutputKey: TypeAlias = tuple[object, ...]
++
++
++def _python_attrs_output_key(resolved: object) -> _AttrsOutputKey | None:
++    """Snapshot bounded primitive attributes for cores without native key construction."""
++    if type(resolved) is not dict or len(resolved) > 16:
++        return None
++    fields: list[object] = []
++    chars = 0
++    for key, value in resolved.items():
++        if type(key) is not str:
++            return None
++        chars += len(key)
++        kind = type(value)
++        if kind is str:
++            chars += len(value)
++        elif kind is int:
++            if value.bit_length() > 256:
++                return None
++        elif value is not None and kind is not bool:
++            return None
++        if chars > 2048:
++            return None
++        fields.extend((key, kind, value))
++    return tuple(fields)
++
++
++# Capability selection keeps existing core installations importable. Both builders
++# retain the same flat triples, so a miss always formats the key's own snapshot.
++_build_attrs_output_key: Callable[[object], _AttrsOutputKey | None] = getattr(
++    getattr(_rust, "attrs", None), "output_cache_key", _python_attrs_output_key
++)
+diff --git a/packages/py/citry/citry/nodes/__init__.py b/packages/py/citry/citry/nodes/__init__.py
+index f1574dad..7783d292 100644
+--- a/packages/py/citry/citry/nodes/__init__.py
++++ b/packages/py/citry/citry/nodes/__init__.py
+@@ -75,6 +75,8 @@ from typing_extensions import Unpack, override
+ 
+ from citry._i18n_directives import looks_like_i18n_binding
+ from citry.attrs import (
++    _AttrsOutputKey,
++    _build_attrs_output_key,
+     _format_resolved_attrs_to_str,
+     _has_default_attr_formatting,
+     _merge_resolved_attrs,
+@@ -896,7 +898,6 @@ class TemplateHtmlAttr(HtmlAttr):
+         return f"TemplateHtmlAttr(key={self.key!r})"
+ 
+ 
+-_AttrsOutputKey: TypeAlias = tuple[tuple[str, type, object], ...]
+ _attrs_output_cache: dict[_AttrsOutputKey, str] = {}
+ _attrs_output_cache_lock = RLock()
+ 
+@@ -1108,31 +1109,16 @@ class ElementAttrsNode(Node):
+             and len(resolved) <= 16
+             and _has_default_attr_formatting(_format_resolved_attrs_to_str)
+         ):
+-            items: list[tuple[str, type, object]] = []
+-            chars = 0
+-            for key, value in resolved.items():
+-                if type(key) is not str:
+-                    break
+-                chars += len(key)
+-                kind = type(value)
+-                if kind is str:
+-                    chars += len(value)
+-                elif kind is int:
+-                    if value.bit_length() > 256:
+-                        break
+-                elif value is not None and kind is not bool:
+-                    break
+-                if chars > 2048:
+-                    break
+-                items.append((key, kind, value))
+-            else:
+-                cache_key = tuple(items)
++            cache_key = _build_attrs_output_key(resolved)
++            if cache_key is not None:
+                 cached = _attrs_output_cache.get(cache_key)
+                 if cached is not None:
+                     return cached
+-                # Format the same immutable values used by the key, even if a
+-                # caller retains and changes its input dictionary concurrently.
+-                resolved = {key: value for key, _, value in cache_key}
++                # Format the immutable references used by the key even if lookup
++                # callbacks or another thread have changed the original mapping.
++                resolved = {
++                    cast("str", cache_key[index]): cache_key[index + 2] for index in range(0, len(cache_key), 3)
++                }
+ 
+         if validate_keys:
+             for key in resolved:
+diff --git a/packages/py/citry/tests/test_attrs_output_cache.py b/packages/py/citry/tests/test_attrs_output_cache.py
+index 3f7a4537..c82b378c 100644
+--- a/packages/py/citry/tests/test_attrs_output_cache.py
++++ b/packages/py/citry/tests/test_attrs_output_cache.py
+@@ -15,6 +15,12 @@ from citry import Citry, Component, Const, Markup, attrs, nodes
+ from citry.util import html
+ 
+ 
++@pytest.fixture(autouse=True, params=["installed", "python"])
++def key_builder(request, monkeypatch):
++    if request.param == "python":
++        monkeypatch.setattr(nodes, "_build_attrs_output_key", attrs._python_attrs_output_key)
++
++
+ @pytest.fixture
+ def output_cache(monkeypatch):
+     cache = {}
+@@ -231,7 +237,7 @@ def test_concurrent_misses_preserve_fifo_bound(output_cache, monkeypatch):
+     class ConcurrentCache(dict):
+         def get(self, key, default=None):
+             result = super().get(key, default)
+-            if result is None and key[0][2].startswith("thread-"):
++            if result is None and key[2].startswith("thread-"):
+                 barrier.wait(timeout=10)
+             return result
+ 
+@@ -252,3 +258,20 @@ def test_concurrent_misses_preserve_fifo_bound(output_cache, monkeypatch):
+         actual = list(pool.map(invoke, range(64)))
+     assert actual == [f' title="thread-{i}"' for i in range(64)]
+     assert len(cache) == 256
++
++
++def test_core_without_attribute_keys_uses_python_in_fresh_process():
++    source = """
++from citry_core import _rust
++if hasattr(_rust, "attrs"):
++    del _rust.attrs
++from citry import attrs, nodes
++assert attrs._build_attrs_output_key is attrs._python_attrs_output_key
++assert nodes._build_attrs_output_key is attrs._python_attrs_output_key
++assert nodes._build_attrs_output_key({"title": "value"}) == ("title", str, "value")
++node = nodes.ElementAttrsNode("<div>", (0, 5), (), ())
++assert node._format({"title": "value"}, None, validate_keys=False) == ' title="value"'
++assert node._format({"title": "next"}, None, validate_keys=False) == ' title="next"'
++"""
++    result = subprocess.run([sys.executable, "-c", source], capture_output=True, text=True, check=False)
++    assert result.returncode == 0, result.stderr
+diff --git a/packages/py/citry_core/AGENTS.md b/packages/py/citry_core/AGENTS.md
+index f78b9e25..a3fdec8e 100644
+--- a/packages/py/citry_core/AGENTS.md
++++ b/packages/py/citry_core/AGENTS.md
+@@ -12,6 +12,7 @@ facts see [`/docs/agent/INDEX.md`](../../../docs/agent/INDEX.md).
+ - `citry_core/_rust.pyi` - **hand-written type stub** mirroring everything the
+   Rust `_rust` module exposes. This is the IDE / type-check contract; keep it in
+   sync with `crates/citry_core_py/src/lib.rs`.
++- `citry_core/_attrs.py` - private bounded snapshots for formatted HTML attributes.
+ - `citry_core/_ownership.py` - internal reference storage for ownership records
+   supplied by the higher-level Citry runtime.
+ - `citry_core/html_transform/` - wraps the `html_transform` submodule.
+diff --git a/packages/py/citry_core/citry_core/_attrs.py b/packages/py/citry_core/citry_core/_attrs.py
+new file mode 100644
+index 00000000..3148a903
+--- /dev/null
++++ b/packages/py/citry_core/citry_core/_attrs.py
+@@ -0,0 +1,7 @@
++"""Internal bounded snapshots for the formatted HTML attribute cache."""
++
++from citry_core import _rust
++
++output_cache_key = _rust.attrs.output_cache_key
++
++__all__ = ["output_cache_key"]
+diff --git a/packages/py/citry_core/citry_core/_rust.pyi b/packages/py/citry_core/citry_core/_rust.pyi
+index c76db0ca..c3ce663c 100644
+--- a/packages/py/citry_core/citry_core/_rust.pyi
++++ b/packages/py/citry_core/citry_core/_rust.pyi
+@@ -27,6 +27,13 @@
+ from collections.abc import Iterator, Mapping
+ from typing import Any
+ 
++########################################################
++# Attribute-output cache snapshots
++########################################################
++
++class attrs:
++    def output_cache_key(resolved: object) -> tuple[object, ...] | None: ...
++
+ ########################################################
+ # Internationalization
+ ########################################################
+diff --git a/packages/py/citry_core/tests/test_attrs_output_key.py b/packages/py/citry_core/tests/test_attrs_output_key.py
+new file mode 100644
+index 00000000..9a5eab90
+--- /dev/null
++++ b/packages/py/citry_core/tests/test_attrs_output_key.py
+@@ -0,0 +1,72 @@
++"""Native output-cache snapshots retain bounded primitive values and identities."""
++
++import pytest
++
++from citry_core._attrs import output_cache_key
++
++
++@pytest.mark.parametrize(
++    ("values", "admitted"),
++    [
++        ({}, True),
++        ({"name": None, "bool": True, "int": 1, "negative": -3}, True),
++        ({"k": "x" * 2047}, True),
++        ({"k": "x" * 2048}, False),
++        ({str(i): i for i in range(16)}, True),
++        ({str(i): i for i in range(17)}, False),
++        ({"n": (1 << 256) - 1}, True),
++        ({"n": -((1 << 256) - 1)}, True),
++        ({"n": 1 << 256}, False),
++        ({"n": -(1 << 256)}, False),
++        ({"🦊": "\ud800"}, True),
++        ({"\udfff": "🦊" * 2047}, True),
++        ({"\udfff": "🦊" * 2048}, False),
++        ({"value": 1.0}, False),
++        ({"class": ["a"]}, False),
++        ({1: "name"}, False),
++        ([("name", "value")], False),
++    ],
++)
++def test_bounds_and_reference_identity(values, admitted):
++    key = output_cache_key(values)
++    if not admitted:
++        assert key is None
++        return
++    expected = tuple(field for name, value in values.items() for field in (name, type(value), value))
++    assert key == expected
++    assert all(actual is reference for actual, reference in zip(key, expected, strict=True))
++
++
++def test_type_and_order_distinguish_cache_entries():
++    assert output_cache_key({"key": True}) != output_cache_key({"key": 1})
++    assert output_cache_key({"key": False}) != output_cache_key({"key": 0})
++    assert output_cache_key({"a": 1, "b": 2}) != output_cache_key({"b": 2, "a": 1})
++
++
++def test_custom_values_are_rejected_without_protocol_calls():
++    class Text(str):
++        __slots__ = ()
++
++        def __len__(self):
++            raise AssertionError("custom length executed")
++
++    class Number(int):
++        def bit_length(self):
++            raise AssertionError("custom bit length executed")
++
++    class Mapping(dict):
++        def items(self):
++            raise AssertionError("custom iteration executed")
++
++    class Value:
++        def __html__(self):
++            raise AssertionError("custom HTML executed")
++
++        def __str__(self):
++            raise AssertionError("custom string executed")
++
++    assert output_cache_key({Text("key"): "value"}) is None
++    assert output_cache_key({"key": Text("value")}) is None
++    assert output_cache_key({"key": Number(1)}) is None
++    assert output_cache_key(Mapping(key="value")) is None
++    assert output_cache_key({"key": Value()}) is None

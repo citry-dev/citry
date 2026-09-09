@@ -1,0 +1,26 @@
+{
+  "large": {
+    "raw_html_equal": true,
+    "snapshots_equal": true,
+    "calls": {
+      "Icon": 40,
+      "HeroIcon": 41,
+      "outlets": 154,
+      "svg_replays": 32,
+      "Button": 114
+    },
+    "bytes": 987414
+  },
+  "one_output": {
+    "raw_html_equal": true,
+    "snapshots_equal": true,
+    "calls": {
+      "Icon": 22,
+      "HeroIcon": 23,
+      "outlets": 41,
+      "svg_replays": 17,
+      "Button": 19
+    },
+    "bytes": 870071
+  }
+}

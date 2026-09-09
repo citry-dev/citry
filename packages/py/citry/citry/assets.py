@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
 
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
 from citry._inline_assets import normalize_inline_asset
@@ -126,6 +126,12 @@ def _find_pair_declaration(
     """
     for klass in _static_class_mro(comp_cls):
         attrs = _static_class_dict(klass)
+        # Simple definitions freeze the selected pair while retaining its
+        # original owner for relative paths and template source provenance.
+        frozen_pairs = cast("tuple[tuple[str, str, type, Any, Any], ...]", attrs.get("_citry_simple_asset_pairs", ()))
+        for inline, file, owner, inline_value, file_value in frozen_pairs:
+            if inline == inline_attr and file == file_attr:
+                return owner, inline_value, file_value
         if inline_attr in attrs or file_attr in attrs:
             inline_val = attrs.get(inline_attr)
             file_val = attrs.get(file_attr)

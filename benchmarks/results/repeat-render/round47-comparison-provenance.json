@@ -1,0 +1,8 @@
+{
+  "revision": "e0c77ad1e0fc82abb3200a148bd5827ff9302418",
+  "baseline_revision": "1294c51d",
+  "baseline_original_native_sha256": "57c7320a79c9ba202dfe3512b7e5a53c59a935fab8b26fcaabf4946fdf8fe9bc",
+  "comparison_native_sha256": "321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7",
+  "runner_sha256": "a117181fccd8ec93d989f125820c219f43587f73b08121b21907c17e183f3378",
+  "note": "Both checkouts load the current ABI3 binary; the baseline native binary is restored after timing; an earlier run rejected mismatched artifacts and produced no report."
+}

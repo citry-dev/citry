@@ -1,0 +1,161 @@
+{
+  "diagnostic_only": true,
+  "note": "Timers and the extracted guard function add overhead; these are not whole-render savings.",
+  "same_process": true,
+  "rows": [
+    {
+      "pair": 0,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 482877,
+      "calls": 343
+    },
+    {
+      "pair": 0,
+      "candidate": true,
+      "guard_ns": 756059,
+      "scan_ns": 389821,
+      "calls": 343
+    },
+    {
+      "pair": 1,
+      "candidate": true,
+      "guard_ns": 745210,
+      "scan_ns": 378835,
+      "calls": 343
+    },
+    {
+      "pair": 1,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 496411,
+      "calls": 343
+    },
+    {
+      "pair": 2,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 483406,
+      "calls": 343
+    },
+    {
+      "pair": 2,
+      "candidate": true,
+      "guard_ns": 759135,
+      "scan_ns": 379375,
+      "calls": 343
+    },
+    {
+      "pair": 3,
+      "candidate": true,
+      "guard_ns": 741670,
+      "scan_ns": 377547,
+      "calls": 343
+    },
+    {
+      "pair": 3,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 471905,
+      "calls": 343
+    },
+    {
+      "pair": 4,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 466336,
+      "calls": 343
+    },
+    {
+      "pair": 4,
+      "candidate": true,
+      "guard_ns": 742711,
+      "scan_ns": 369499,
+      "calls": 343
+    },
+    {
+      "pair": 5,
+      "candidate": true,
+      "guard_ns": 724290,
+      "scan_ns": 365714,
+      "calls": 343
+    },
+    {
+      "pair": 5,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 475961,
+      "calls": 343
+    },
+    {
+      "pair": 6,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 475334,
+      "calls": 343
+    },
+    {
+      "pair": 6,
+      "candidate": true,
+      "guard_ns": 727956,
+      "scan_ns": 368958,
+      "calls": 343
+    },
+    {
+      "pair": 7,
+      "candidate": true,
+      "guard_ns": 725575,
+      "scan_ns": 381721,
+      "calls": 343
+    },
+    {
+      "pair": 7,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 468492,
+      "calls": 343
+    },
+    {
+      "pair": 8,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 475581,
+      "calls": 343
+    },
+    {
+      "pair": 8,
+      "candidate": true,
+      "guard_ns": 762787,
+      "scan_ns": 385258,
+      "calls": 343
+    },
+    {
+      "pair": 9,
+      "candidate": true,
+      "guard_ns": 765617,
+      "scan_ns": 379996,
+      "calls": 343
+    },
+    {
+      "pair": 9,
+      "candidate": false,
+      "guard_ns": 0,
+      "scan_ns": 502714,
+      "calls": 343
+    }
+  ],
+  "median_instrumented_ms_per_render": {
+    "reference_scan": 0.475771,
+    "candidate_guard": 0.7439605,
+    "candidate_native_scan": 0.379105
+  },
+  "hashes": {
+    "benchmarks/native_deferred_scan_probe/diagnose.py": "173d39c01a4856299bc0d7097c439ab777e0210336dc83e96fea595295d51256",
+    "benchmarks/native_deferred_scan_probe/adapter.py": "d003e9b7abcb41027e33699d05dba58274760022439b9373aabf59b2a25754cf",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+    "benchmarks/native_deferred_scan_probe/target/release/libcitry_native_deferred_scan_probe.dylib": "1d0f832d3328f1124b069cf929ce959db1c41aeef33170ab47dec12fadb1f496"
+  },
+  "source_archives": {
+    "benchmarks/native_deferred_scan_probe/diagnose.py": "benchmarks/native_deferred_scan_probe/diagnose_measured.py.txt"
+  }
+}

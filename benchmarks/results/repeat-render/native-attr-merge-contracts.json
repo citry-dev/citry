@@ -1,0 +1,9 @@
+{
+  "seeded_ordered_outcome_comparisons": 2000,
+  "current_key_and_value_identity": true,
+  "unsupported_shapes_and_surrogates": 7,
+  "class_callback_replaces_style_helper": true,
+  "changed_identity_helper_uses_python": true,
+  "callable_equality_cannot_bypass_guard": true,
+  "note": "Experimental scope only; plan.md lists unqualified runtime mutation and lifetime cases."
+}

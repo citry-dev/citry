@@ -1,0 +1,410 @@
+{
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "pairs": 40,
+  "all_pairs_html_equal": true,
+  "output_bytes": 1013746,
+  "replay_implementation": "materialize tables and use Python reference",
+  "bulk_retirement": true,
+  "observations": [
+    {
+      "pair": 0,
+      "candidate": false,
+      "ms": 32.015042
+    },
+    {
+      "pair": 0,
+      "candidate": true,
+      "ms": 32.420041
+    },
+    {
+      "pair": 1,
+      "candidate": true,
+      "ms": 33.387584
+    },
+    {
+      "pair": 1,
+      "candidate": false,
+      "ms": 33.661167
+    },
+    {
+      "pair": 2,
+      "candidate": false,
+      "ms": 34.61525
+    },
+    {
+      "pair": 2,
+      "candidate": true,
+      "ms": 37.034917
+    },
+    {
+      "pair": 3,
+      "candidate": true,
+      "ms": 33.59375
+    },
+    {
+      "pair": 3,
+      "candidate": false,
+      "ms": 33.714834
+    },
+    {
+      "pair": 4,
+      "candidate": false,
+      "ms": 33.619834
+    },
+    {
+      "pair": 4,
+      "candidate": true,
+      "ms": 33.295375
+    },
+    {
+      "pair": 5,
+      "candidate": true,
+      "ms": 32.758958
+    },
+    {
+      "pair": 5,
+      "candidate": false,
+      "ms": 33.520167
+    },
+    {
+      "pair": 6,
+      "candidate": false,
+      "ms": 34.050167
+    },
+    {
+      "pair": 6,
+      "candidate": true,
+      "ms": 41.809333
+    },
+    {
+      "pair": 7,
+      "candidate": true,
+      "ms": 38.017916
+    },
+    {
+      "pair": 7,
+      "candidate": false,
+      "ms": 32.983042
+    },
+    {
+      "pair": 8,
+      "candidate": false,
+      "ms": 32.435542
+    },
+    {
+      "pair": 8,
+      "candidate": true,
+      "ms": 31.956583
+    },
+    {
+      "pair": 9,
+      "candidate": true,
+      "ms": 32.008666
+    },
+    {
+      "pair": 9,
+      "candidate": false,
+      "ms": 32.837667
+    },
+    {
+      "pair": 10,
+      "candidate": false,
+      "ms": 32.359083
+    },
+    {
+      "pair": 10,
+      "candidate": true,
+      "ms": 33.030375
+    },
+    {
+      "pair": 11,
+      "candidate": true,
+      "ms": 35.63475
+    },
+    {
+      "pair": 11,
+      "candidate": false,
+      "ms": 32.267083
+    },
+    {
+      "pair": 12,
+      "candidate": false,
+      "ms": 32.176916
+    },
+    {
+      "pair": 12,
+      "candidate": true,
+      "ms": 31.972875
+    },
+    {
+      "pair": 13,
+      "candidate": true,
+      "ms": 31.974792
+    },
+    {
+      "pair": 13,
+      "candidate": false,
+      "ms": 32.187666
+    },
+    {
+      "pair": 14,
+      "candidate": false,
+      "ms": 33.38175
+    },
+    {
+      "pair": 14,
+      "candidate": true,
+      "ms": 34.632334
+    },
+    {
+      "pair": 15,
+      "candidate": true,
+      "ms": 37.068792
+    },
+    {
+      "pair": 15,
+      "candidate": false,
+      "ms": 33.269333
+    },
+    {
+      "pair": 16,
+      "candidate": false,
+      "ms": 33.16775
+    },
+    {
+      "pair": 16,
+      "candidate": true,
+      "ms": 32.817417
+    },
+    {
+      "pair": 17,
+      "candidate": true,
+      "ms": 32.885958
+    },
+    {
+      "pair": 17,
+      "candidate": false,
+      "ms": 33.079125
+    },
+    {
+      "pair": 18,
+      "candidate": false,
+      "ms": 33.741416
+    },
+    {
+      "pair": 18,
+      "candidate": true,
+      "ms": 33.32425
+    },
+    {
+      "pair": 19,
+      "candidate": true,
+      "ms": 33.948708
+    },
+    {
+      "pair": 19,
+      "candidate": false,
+      "ms": 35.68175
+    },
+    {
+      "pair": 20,
+      "candidate": false,
+      "ms": 32.085958
+    },
+    {
+      "pair": 20,
+      "candidate": true,
+      "ms": 31.883
+    },
+    {
+      "pair": 21,
+      "candidate": true,
+      "ms": 31.787958
+    },
+    {
+      "pair": 21,
+      "candidate": false,
+      "ms": 32.077125
+    },
+    {
+      "pair": 22,
+      "candidate": false,
+      "ms": 32.041625
+    },
+    {
+      "pair": 22,
+      "candidate": true,
+      "ms": 32.279208
+    },
+    {
+      "pair": 23,
+      "candidate": true,
+      "ms": 32.944959
+    },
+    {
+      "pair": 23,
+      "candidate": false,
+      "ms": 36.908541
+    },
+    {
+      "pair": 24,
+      "candidate": false,
+      "ms": 33.621709
+    },
+    {
+      "pair": 24,
+      "candidate": true,
+      "ms": 33.491917
+    },
+    {
+      "pair": 25,
+      "candidate": true,
+      "ms": 33.479583
+    },
+    {
+      "pair": 25,
+      "candidate": false,
+      "ms": 33.727833
+    },
+    {
+      "pair": 26,
+      "candidate": false,
+      "ms": 33.653125
+    },
+    {
+      "pair": 26,
+      "candidate": true,
+      "ms": 34.025167
+    },
+    {
+      "pair": 27,
+      "candidate": true,
+      "ms": 33.790833
+    },
+    {
+      "pair": 27,
+      "candidate": false,
+      "ms": 34.844584
+    },
+    {
+      "pair": 28,
+      "candidate": false,
+      "ms": 37.15875
+    },
+    {
+      "pair": 28,
+      "candidate": true,
+      "ms": 33.40375
+    },
+    {
+      "pair": 29,
+      "candidate": true,
+      "ms": 33.218958
+    },
+    {
+      "pair": 29,
+      "candidate": false,
+      "ms": 32.004541
+    },
+    {
+      "pair": 30,
+      "candidate": false,
+      "ms": 32.091
+    },
+    {
+      "pair": 30,
+      "candidate": true,
+      "ms": 31.831125
+    },
+    {
+      "pair": 31,
+      "candidate": true,
+      "ms": 32.275083
+    },
+    {
+      "pair": 31,
+      "candidate": false,
+      "ms": 33.097666
+    },
+    {
+      "pair": 32,
+      "candidate": false,
+      "ms": 35.8085
+    },
+    {
+      "pair": 32,
+      "candidate": true,
+      "ms": 31.992125
+    },
+    {
+      "pair": 33,
+      "candidate": true,
+      "ms": 32.031333
+    },
+    {
+      "pair": 33,
+      "candidate": false,
+      "ms": 32.188375
+    },
+    {
+      "pair": 34,
+      "candidate": false,
+      "ms": 32.269541
+    },
+    {
+      "pair": 34,
+      "candidate": true,
+      "ms": 31.861833
+    },
+    {
+      "pair": 35,
+      "candidate": true,
+      "ms": 32.243459
+    },
+    {
+      "pair": 35,
+      "candidate": false,
+      "ms": 32.3515
+    },
+    {
+      "pair": 36,
+      "candidate": false,
+      "ms": 33.022917
+    },
+    {
+      "pair": 36,
+      "candidate": true,
+      "ms": 35.301625
+    },
+    {
+      "pair": 37,
+      "candidate": true,
+      "ms": 31.8415
+    },
+    {
+      "pair": 37,
+      "candidate": false,
+      "ms": 32.019666
+    },
+    {
+      "pair": 38,
+      "candidate": false,
+      "ms": 31.966208
+    },
+    {
+      "pair": 38,
+      "candidate": true,
+      "ms": 31.858959
+    },
+    {
+      "pair": 39,
+      "candidate": true,
+      "ms": 32.511833
+    },
+    {
+      "pair": 39,
+      "candidate": false,
+      "ms": 33.494917
+    }
+  ]
+}

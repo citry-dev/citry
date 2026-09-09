@@ -1,0 +1,229 @@
+"""Compare a restricted template function with ordinary Citry, Django and Jinja."""
+
+from __future__ import annotations
+
+import argparse
+import gc
+import hashlib
+import json
+import os
+import random
+import statistics
+import subprocess
+import sys
+import time
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT), str(ROOT / "packages/py/citry"), str(ROOT / "packages/py/citry_core")]
+
+from benchmarks.template_function_probe.fixtures import CASES  # noqa: E402
+from benchmarks.template_function_probe.runtime import TemplateFunction  # noqa: E402
+
+ENGINES = ("citry", "function", "django", "jinja")
+
+
+def prepare(engine: str, case: Any) -> Any:
+    """Keep each engine's template preparation outside warm throughput samples."""
+    if engine == "citry":
+        return lambda values: str(case.component(**values))
+    if engine == "function":
+        return TemplateFunction(case)
+    if engine == "django":
+        from django.template import Context, Engine  # noqa: PLC0415
+
+        template = Engine().from_string(case.django_source)
+        return lambda values: template.render(Context(case.data(values), use_l10n=False, autoescape=True))
+    if engine == "jinja":
+        from jinja2 import Environment  # noqa: PLC0415
+
+        template = Environment(autoescape=True, keep_trailing_newline=True).from_string(case.jinja_source)
+        return lambda values: template.render(case.data(values))
+    raise ValueError(engine)
+
+
+def activation(render: Any, values: Any) -> dict[str, int]:
+    """Count the omitted stages separately from all timing samples."""
+    import citry.component_render as rendering  # noqa: PLC0415
+    from citry.component import Component  # noqa: PLC0415
+    from citry.extension import ExtensionConfig, ExtensionManager  # noqa: PLC0415
+    from citry.ownership import OwnershipGraph  # noqa: PLC0415
+    from citry.serialize import serialize_render_result  # noqa: PLC0415
+
+    codes = {
+        Component.__init__.__code__: "component_initializations",
+        OwnershipGraph.__init__.__code__: "ownership_graphs",
+        ExtensionConfig.__init__.__code__: "base_config_initializations",
+        ExtensionManager.on_component_data.__code__: "data_dispatches",
+        ExtensionManager.on_component_rendered.__code__: "finish_dispatches",
+        rendering._settle_render.__code__: "settlement_sessions",
+        serialize_render_result.__code__: "document_serializations",
+    }
+    counts: Counter[str] = Counter()
+
+    def profile(frame: Any, event: str, _arg: Any) -> None:
+        if event == "call" and frame.f_code in codes:
+            counts[codes[frame.f_code]] += 1
+
+    sys.setprofile(profile)
+    try:
+        render(values)
+    finally:
+        sys.setprofile(None)
+    return dict(counts)
+
+
+def worker(engine: str, samples: int, batch: int, block: int) -> dict[str, Any]:
+    """Run all cases in a fresh engine process, rotating input values inside batches."""
+    import django  # noqa: PLC0415
+    import jinja2  # noqa: PLC0415
+    import citry_core._rust as native  # noqa: PLC0415
+
+    cases = list(CASES[block % len(CASES) :] + CASES[: block % len(CASES)])
+    reports = {}
+    for case in cases:
+        start = time.perf_counter_ns()
+        render = prepare(engine, case)
+        preparation_ms = (time.perf_counter_ns() - start) / 1e6
+        warmups = []
+        for index in range(6):
+            cpu = time.process_time_ns()
+            start = time.perf_counter_ns()
+            output = render(case.inputs[index % len(case.inputs)])
+            elapsed = time.perf_counter_ns() - start
+            cpu_elapsed = time.process_time_ns() - cpu
+            warmups.append({"ms": elapsed / 1e6, "cpu_ms": cpu_elapsed / 1e6})
+        before = gc.get_stats()
+        observations = []
+        index = 0
+        for _ in range(samples):
+            cpu = time.process_time_ns()
+            start = time.perf_counter_ns()
+            for _ in range(batch):
+                output = render(case.inputs[index % len(case.inputs)])
+                index += 1
+            elapsed = time.perf_counter_ns() - start
+            cpu_elapsed = time.process_time_ns() - cpu
+            observations.append({"ms": elapsed / (1e6 * batch), "cpu_ms": cpu_elapsed / (1e6 * batch)})
+        after = gc.get_stats()
+        reports[case.name] = {
+            "preparation_ms": preparation_ms,
+            "warmups": warmups,
+            "observations": observations,
+            "means_ms": {key: statistics.mean(row[key] for row in observations) for key in ("ms", "cpu_ms")},
+            "outputs": [render(values) for values in case.inputs],
+            "activation": activation(render, case.inputs[-1]),
+            "gc_before": before,
+            "gc_after": after,
+        }
+    return {
+        "engine": engine,
+        "gc_enabled": gc.isenabled(),
+        "python": sys.version,
+        "django": django.get_version(),
+        "jinja": jinja2.__version__,
+        "native_sha256": hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest(),
+        "cases": reports,
+    }
+
+
+def main() -> None:
+    """Retain balanced engine orders and all paired case measurements."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--worker", choices=ENGINES)
+    parser.add_argument("--samples", type=int, default=80)
+    parser.add_argument("--batch", type=int, default=50)
+    parser.add_argument("--blocks", type=int, default=8)
+    parser.add_argument("--block", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=20261025)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    if min(args.samples, args.batch, args.blocks) < 1:
+        parser.error("Counts must be positive")
+    if args.worker:
+        print(json.dumps(worker(args.worker, args.samples, args.batch, args.block)))
+        return
+    if args.output is None:
+        parser.error("The parent requires --output")
+    orders = [list(ENGINES[index % 4 :] + ENGINES[: index % 4]) for index in range(args.blocks)]
+    random.Random(args.seed).shuffle(orders)  # noqa: S311 - reproducible engine order
+    blocks = []
+    for block, order in enumerate(orders):
+        workers = {}
+        for engine in order:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    __file__,
+                    "--worker",
+                    engine,
+                    "--samples",
+                    str(args.samples),
+                    "--batch",
+                    str(args.batch),
+                    "--block",
+                    str(block),
+                ],
+                cwd=ROOT,
+                env={**os.environ, "PYTHONHASHSEED": str(args.seed + block)},
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            workers[engine] = json.loads(result.stdout)
+        for case in CASES:
+            expected = workers["citry"]["cases"][case.name]["outputs"]
+            if any(workers[engine]["cases"][case.name]["outputs"] != expected for engine in ENGINES):
+                raise RuntimeError(f"Complete output differs in case {case.name}")
+        blocks.append({"order": order, "workers": workers})
+        print(json.dumps({"block": block, "order": order}), flush=True)
+    summary = {}
+    for case in CASES:
+        means = {
+            engine: [block["workers"][engine]["cases"][case.name]["means_ms"] for block in blocks]
+            for engine in ENGINES
+        }
+        savings = {
+            key: [ref[key] - candidate[key] for ref, candidate in zip(means["citry"], means["function"], strict=True)]
+            for key in ("ms", "cpu_ms")
+        }
+        summary[case.name] = {
+            "median_process_means_ms": {
+                engine: statistics.median(row["ms"] for row in rows) for engine, rows in means.items()
+            },
+            "median_paired_savings_ms": {key: statistics.median(values) for key, values in savings.items()},
+            "joint_wins_over_citry": sum(all(savings[key][i] > 0 for key in savings) for i in range(len(blocks))),
+            "median_paired_ratio_to": {
+                engine: statistics.median(
+                    candidate["ms"] / other["ms"]
+                    for candidate, other in zip(means["function"], means[engine], strict=True)
+                )
+                for engine in ("citry", "django", "jinja")
+            },
+        }
+    report = {
+        "experimental_contract": True,
+        "production_compatible": False,
+        "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),  # noqa: S607
+        "samples": args.samples,
+        "batch": args.batch,
+        "seed": args.seed,
+        "hashes": {
+            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (
+                *sorted(Path(__file__).parent.glob("*.py")),
+                Path(__file__).with_name("plan.md"),
+                *sorted((ROOT / "packages/py/citry/citry").rglob("*.py")),
+            )
+        },
+        "summary": summary,
+        "blocks": blocks,
+    }
+    args.output.write_text(json.dumps(report, indent=2) + "\n")
+    print(json.dumps(summary, indent=2))
+
+
+if __name__ == "__main__":
+    main()

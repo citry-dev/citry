@@ -1,0 +1,10 @@
+{
+  "seeded_keys_compared": 2000,
+  "seeded_admitted_keys_with_reference_identity": 950,
+  "bounds_and_unsupported_cases": 17,
+  "type_and_order_distinct": true,
+  "original_cache_test_source_sha256": "e741aa9782eebc305cbf4abc1987b82075f4db45ce2225a28eac3cec99c33ad8",
+  "adapted_cache_test_source_sha256": "7bf9c1bffc60841ac4efb0e1de5299cc833590c8ea74d82f8feaf3aee4095d9f",
+  "cache_test_scope": "Original cache tests; changed private tuple offset and installed adapter in parent/child.",
+  "pytest_output": "...................                                                      [100%]\n19 passed in 0.30s\n"
+}

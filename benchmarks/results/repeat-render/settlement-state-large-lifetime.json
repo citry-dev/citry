@@ -1,0 +1,99 @@
+{
+  "reference": {
+    "candidate": false,
+    "snapshot_observations": 4,
+    "live_graph_observations_before_gc": 0,
+    "live_graph_observations_after_gc": 0,
+    "collected": 265,
+    "unreachable_types": {
+      "builtins.cell": 77,
+      "builtins.classmethod": 7,
+      "builtins.dict": 49,
+      "builtins.function": 49,
+      "builtins.staticmethod": 7,
+      "builtins.tuple": 56,
+      "builtins.type": 7,
+      "collections._tuplegetter": 13
+    },
+    "output_bytes": 1013746
+  },
+  "candidate": {
+    "candidate": true,
+    "snapshot_observations": 4,
+    "live_graph_observations_before_gc": 0,
+    "live_graph_observations_after_gc": 0,
+    "collected": 265,
+    "unreachable_types": {
+      "builtins.cell": 77,
+      "builtins.classmethod": 7,
+      "builtins.dict": 49,
+      "builtins.function": 49,
+      "builtins.staticmethod": 7,
+      "builtins.tuple": 56,
+      "builtins.type": 7,
+      "collections._tuplegetter": 13
+    },
+    "output_bytes": 1013746
+  },
+  "hashes": {
+    "benchmarks/settlement_state_probe/large_lifetime.py": "d3612d45cfa7093e2122e9c5ddc8c24b1c7aca32d70111ae96b87f81fe36041d",
+    "benchmarks/settlement_state_probe/adapter.py": "17f4a147a56316b1a93d1b1a883e01b5f3b3338002abdd2754334d97183589d3",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  },
+  "build": {
+    "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+    "modules": {
+      "citry.component_render": {
+        "source": "packages/py/citry/citry/component_render.py",
+        "source_sha256": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42",
+        "copied_source_sha256": "4b6665e6fca853816f01cb69a52bbc998370da839ad09c17e3163f2272b88096",
+        "transformation": {
+          "methods": [
+            "bubble",
+            "commit",
+            "requeue",
+            "settle",
+            "settle_in_invocation_region"
+          ],
+          "fields": [
+            "root_result",
+            "stack"
+          ],
+          "method_shared_references": 12,
+          "outer_state_references": 5
+        },
+        "generated_c_sha256": "f67ea282cc2928f465a9d7c70270c631c5983afc94ffe8ecf5ac3b277f6a2196",
+        "artifact": "/tmp/citry-settlement-state/out/citry/component_render.cpython-314-darwin.so",
+        "artifact_sha256": "668c285212b3d293c981b320dfabceb643a0a297c7a10387c3a7b3d428d8ce75"
+      },
+      "citry.nodes": {
+        "source": "packages/py/citry/citry/nodes/__init__.py",
+        "source_sha256": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+        "copied_source_sha256": "c97ff471fe415f890b17a54d7496faf11e3c7d9ceb82d7ff1d8efacc7b6b10a4",
+        "transformation": null,
+        "generated_c_sha256": "934ae2d29534464781a947c75db11f011940839818dc8341879901e82fc1d2bd",
+        "artifact": "/tmp/citry-settlement-state/out/citry/nodes.cpython-314-darwin.so",
+        "artifact_sha256": "ca11fc68d93f62aaad47ab600bc4161709410bed70055f16e98aa262bf745577"
+      },
+      "citry.slots": {
+        "source": "packages/py/citry/citry/slots.py",
+        "source_sha256": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+        "copied_source_sha256": "67e1be1ed02c6959534e77200ff05c309ce542e348d35901316b266b94a88a64",
+        "transformation": null,
+        "generated_c_sha256": "3e3f6575d8d569d5dab884417e909708542f757b05991ed45b46218f94db1fc1",
+        "artifact": "/tmp/citry-settlement-state/out/citry/slots.cpython-314-darwin.so",
+        "artifact_sha256": "e659862dee13bb1415c4c92080e596be53b9583433b5f6c29f6b94055985f493"
+      }
+    },
+    "directives": {
+      "language_level": 3,
+      "annotation_typing": false,
+      "infer_types": false,
+      "binding": true
+    },
+    "setup_sha256": "1806d1f67e2461713f960f214f5aa2fd4b8946aa038b4b76baca9af07e68eac6",
+    "returncode": 0,
+    "build_log": "Cython=3.3.0 setuptools=84.0.0\nCompiling component_render.py because it changed.\nCompiling nodes.py because it changed.\nCompiling slots.py because it changed.\n[1/3] Cythonizing component_render.py\n[2/3] Cythonizing nodes.py\n[3/3] Cythonizing slots.py\nrunning build_ext\nbuilding 'citry.component_render' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c component_render.c -o temp/component_render.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/component_render.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/component_render.cpython-314-darwin.so\nbuilding 'citry.nodes' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c nodes.c -o temp/nodes.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/nodes.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/nodes.cpython-314-darwin.so\nbuilding 'citry.slots' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c slots.c -o temp/slots.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/slots.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/slots.cpython-314-darwin.so\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\nld: warning: search path 'Modules/_hacl' not found\n",
+    "transform_sha256": "1897be2e3a71c8a081e616c3b9e605926ab3d0302a3f5016e35344054a668f84"
+  }
+}

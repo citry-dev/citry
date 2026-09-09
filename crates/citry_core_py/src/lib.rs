@@ -8,6 +8,7 @@
 pub mod client_graph;
 pub mod html_transform;
 pub mod i18n;
+mod ownership;
 pub mod safe_eval;
 pub mod template_formatter;
 pub mod template_parser;
@@ -46,6 +47,11 @@ use crate::template_parser::{
 ///       It MUST match the `module-name` setting in `pyproject.toml` in `packages/py/citry_core/`.
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Ownership capture shares Python records with the higher-level runtime.
+    let ownership_mod = PyModule::new(m.py(), "ownership")?;
+    ownership::register(&ownership_mod)?;
+    m.add_submodule(&ownership_mod)?;
+
     // HTML transformer
     let html_transform_mod = PyModule::new(m.py(), "html_transform")?;
     m.add_submodule(&html_transform_mod)?;

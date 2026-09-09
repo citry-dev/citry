@@ -1,0 +1,40 @@
+{
+  "compared": {
+    "inputs_0": "95e24b89f7423216652beba93f63229a966da4a671d923c9037ca0b0fb077c9d",
+    "inputs_1": "e686d962bad99b801176089a130792872bb391fabb6a851cbffdec3c4013eea5",
+    "inputs_2": "a7d9dee295b77c3099d0f73a335f9374d0c04f73a066e0dfa5cf348ad03593dc",
+    "inputs_3": "69093dda7caf8c43cc9c4aba7d914e54079c19060313c898f3168a7abd0d5706",
+    "ordinary_child_and_caller_slot": "1598444340ca1ccf760bde24f522d4e42b552517467496cc8dca062d551c74ec",
+    "nested_wrappers": "1a25092a959f3b929095d253708a68f9cc85f64c45951969f20cd7d2424edbd5"
+  },
+  "ancestor_recovery": [
+    "<p class=\"recovered\">recovered</p>",
+    "<p class=\"recovered\">recovered</p>"
+  ],
+  "body_error_reset": true,
+  "hot_outputs_match": true,
+  "rejected": {
+    "named_fill": "An error occurred while rendering components named_fill:\nWrapper function requires implicit default content and no range directives\n\nIn template of 'named_fill' (/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/library_component.py::named_fill):\n\n     1 | <c-Button><c-fill name=\"default\">text</c-fill></c-Button>\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "key": "An error occurred while rendering components key:\nWrapper function requires implicit default content and no range directives\n\nIn template of 'key' (/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/library_component.py::key):\n\n     1 | <c-Button #c-key=\"'key'\" />\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "client_binding": "An error occurred while rendering components client_binding:\nWrapper function does not support component client bindings\n\nIn template of 'client_binding' (/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/library_component.py::client_binding):\n\n     1 | <c-Button @click=\"count++\" />\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "markup": "TypeError",
+    "object": "TypeError",
+    "cycle": "ValueError",
+    "globals": "TypeError"
+  },
+  "callback_order_reference_then_candidate": [
+    [
+      "sibling",
+      "button"
+    ],
+    [
+      "button",
+      "sibling"
+    ]
+  ],
+  "hashes": {
+    "benchmarks/wrapper_function_probe/contracts.py": "82f240ed31f2e5a2e87b608c68ff3cae8b037a35f3521839101fcf9e69617d29",
+    "benchmarks/wrapper_function_probe/adapter.py": "700d23d8a761688e24b0174cdd5327e064385f32a366b78e9a1c66532a311a61",
+    "benchmarks/wrapper_function_probe/probe.py": "b549b23312d0d7b2b7c46a0c9a482131dd5e03069a9e82e53625101497b7af99"
+  }
+}

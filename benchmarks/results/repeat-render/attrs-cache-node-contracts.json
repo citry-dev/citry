@@ -1,0 +1,10 @@
+{
+  "randomized_cases_twice": 3000,
+  "protocol_calls_preserved": 2,
+  "custom_tag_reads_preserved": 2,
+  "rebound_alias_calls_preserved": 2,
+  "oversized_fallbacks": 3,
+  "churned_entries": 1000,
+  "retained_entries": 256,
+  "preinstalled_helpers_qualified": false
+}

@@ -1,0 +1,2367 @@
+{
+  "instrumented_not_throughput": true,
+  "results": {
+    "reference": {
+      "candidate": false,
+      "selected_calls_per_page": 41.0,
+      "repeats": 8,
+      "instrumented_selected_ms_per_page": 5.5993275,
+      "rows": [
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1002,
+          "function": "_render_one",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.7004355000000001,
+          "inclusive_ms_per_page": 5.346910500000001
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 100,
+          "function": "_freeze_local",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 984.0,
+          "self_ms_per_page": 0.467663875,
+          "inclusive_ms_per_page": 0.9082411250000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'disable' of '_lsprof.Profiler' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.334734,
+          "inclusive_ms_per_page": 0.334734
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.isinstance>",
+          "primitive_calls_per_page": 2941.0,
+          "total_calls_per_page": 2941.0,
+          "self_ms_per_page": 0.17903762500000003,
+          "inclusive_ms_per_page": 0.23323637500000002
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1796,
+          "function": "on_component_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.15836475000000003,
+          "inclusive_ms_per_page": 0.563008625
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 904,
+          "function": "__init__",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.1424335,
+          "inclusive_ms_per_page": 0.333361625
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 119,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 533.0,
+          "total_calls_per_page": 533.0,
+          "self_ms_per_page": 0.13191112500000002,
+          "inclusive_ms_per_page": 0.502564
+        },
+        {
+          "file": "packages/py/citry/citry/constness.py",
+          "line": 156,
+          "function": "const_value",
+          "primitive_calls_per_page": 1127.0,
+          "total_calls_per_page": 1127.0,
+          "self_ms_per_page": 0.11345250000000001,
+          "inclusive_ms_per_page": 0.16687725
+        },
+        {
+          "file": "packages/py/citry/citry/ownership.py",
+          "line": 1349,
+          "function": "bind_instance",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.109226,
+          "inclusive_ms_per_page": 0.16087625000000003
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1053,
+          "function": "_resolve_with_spread",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.08827625000000001,
+          "inclusive_ms_per_page": 0.38807400000000003
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1095,
+          "function": "_format",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.08670612500000001,
+          "inclusive_ms_per_page": 0.28323950000000003
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1730,
+          "function": "_init_component_instance",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.07523575,
+          "inclusive_ms_per_page": 0.13683299999999998
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'get' of 'dict' objects>",
+          "primitive_calls_per_page": 414.0,
+          "total_calls_per_page": 414.0,
+          "self_ms_per_page": 0.07152187500000001,
+          "inclusive_ms_per_page": 0.07193375
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 85,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.071200375,
+          "inclusive_ms_per_page": 0.9794415000000001
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 514,
+          "function": "_create_instance",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.069293625,
+          "inclusive_ms_per_page": 0.42128787500000003
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1464,
+          "function": "_replay_pure_body",
+          "primitive_calls_per_page": 30.0,
+          "total_calls_per_page": 60.0,
+          "self_ms_per_page": 0.067986,
+          "inclusive_ms_per_page": 0.15531625000000002
+        },
+        {
+          "file": "packages/py/citry/citry/citry_render.py",
+          "line": 164,
+          "function": "from_context",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.064502875,
+          "inclusive_ms_per_page": 0.12159400000000001
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 973,
+          "function": "render",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.06395350000000001,
+          "inclusive_ms_per_page": 0.9604638750000001
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1013,
+          "function": "_resolve",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.05863025,
+          "inclusive_ms_per_page": 0.520974
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 319,
+          "function": "_merge_resolved_attrs",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.058309125,
+          "inclusive_ms_per_page": 0.20422975000000002
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 414,
+          "function": "_format_resolved_attrs_to_str",
+          "primitive_calls_per_page": 10.0,
+          "total_calls_per_page": 10.0,
+          "self_ms_per_page": 0.057017000000000005,
+          "inclusive_ms_per_page": 0.150811875
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 72,
+          "function": "pure_body_lookup",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.05604775000000001,
+          "inclusive_ms_per_page": 1.0772026250000002
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1449,
+          "function": "_render_pure_live_item",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.054879125,
+          "inclusive_ms_per_page": 1.200754
+        },
+        {
+          "file": "packages/py/citry/tests/test_benchmark_citry.py",
+          "line": 1564,
+          "function": "template_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.05407800000000001,
+          "inclusive_ms_per_page": 0.15270912500000003
+        },
+        {
+          "file": "packages/py/citry/tests/test_benchmark_citry.py",
+          "line": 1474,
+          "function": "__post_init__",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.052884875000000005,
+          "inclusive_ms_per_page": 0.08254525
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1416,
+          "function": "_render_and_capture_pure_body",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.05222875,
+          "inclusive_ms_per_page": 1.3114008750000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'append' of 'list' objects>",
+          "primitive_calls_per_page": 749.0,
+          "total_calls_per_page": 749.0,
+          "self_ms_per_page": 0.052192625,
+          "inclusive_ms_per_page": 0.052192625
+        },
+        {
+          "file": "packages/py/citry/citry/constness.py",
+          "line": 351,
+          "function": "get_or_build",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.049923,
+          "inclusive_ms_per_page": 0.0768115
+        },
+        {
+          "file": "packages/py/citry/citry/ext/dependencies/extension.py",
+          "line": 203,
+          "function": "on_component_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.044936625,
+          "inclusive_ms_per_page": 0.2254225
+        },
+        {
+          "file": "packages/py/citry/citry/util/logger.py",
+          "line": 59,
+          "function": "is_tracing",
+          "primitive_calls_per_page": 63.0,
+          "total_calls_per_page": 63.0,
+          "self_ms_per_page": 0.044532625000000006,
+          "inclusive_ms_per_page": 0.057762875
+        },
+        {
+          "file": "packages/py/citry/citry/ext/dependencies/scripts.py",
+          "line": 519,
+          "function": "has_component_asset",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.04185587500000001,
+          "inclusive_ms_per_page": 0.08129075
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 970,
+          "function": "_finalize_inputs",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0412655,
+          "inclusive_ms_per_page": 0.0462445
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 61,
+          "function": "_html_attr_identity",
+          "primitive_calls_per_page": 180.0,
+          "total_calls_per_page": 180.0,
+          "self_ms_per_page": 0.038789875,
+          "inclusive_ms_per_page": 0.047934375
+        },
+        {
+          "file": "packages/py/citry/citry/citry_render.py",
+          "line": 208,
+          "function": "__init__",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.038205625,
+          "inclusive_ms_per_page": 0.15979962500000003
+        },
+        {
+          "file": "packages/py/citry/citry/ext/events/extension.py",
+          "line": 416,
+          "function": "on_component_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.037400375,
+          "inclusive_ms_per_page": 0.090969625
+        },
+        {
+          "file": "packages/py/citry/citry/util/html.py",
+          "line": 52,
+          "function": "escape_to_str",
+          "primitive_calls_per_page": 140.0,
+          "total_calls_per_page": 140.0,
+          "self_ms_per_page": 0.03554475,
+          "inclusive_ms_per_page": 0.0538915
+        },
+        {
+          "file": "packages/py/citry/citry/util/id.py",
+          "line": 59,
+          "function": "gen_id",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.035100375,
+          "inclusive_ms_per_page": 0.049813
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'get' of 'mappingproxy' objects>",
+          "primitive_calls_per_page": 369.0,
+          "total_calls_per_page": 369.0,
+          "self_ms_per_page": 0.034730625,
+          "inclusive_ms_per_page": 0.034730625
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1930,
+          "function": "has_hook",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.034493625,
+          "inclusive_ms_per_page": 0.055954000000000004
+        },
+        {
+          "file": "packages/py/citry/citry/constness.py",
+          "line": 246,
+          "function": "extract_const_vars",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.033988375,
+          "inclusive_ms_per_page": 0.058950125000000006
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.len>",
+          "primitive_calls_per_page": 578.0,
+          "total_calls_per_page": 578.0,
+          "self_ms_per_page": 0.033303000000000006,
+          "inclusive_ms_per_page": 0.033303000000000006
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.getattr>",
+          "primitive_calls_per_page": 451.0,
+          "total_calls_per_page": 451.0,
+          "self_ms_per_page": 0.032104125000000004,
+          "inclusive_ms_per_page": 0.032104125000000004
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1936,
+          "function": "render",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.031242125,
+          "inclusive_ms_per_page": 0.349801375
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'items' of 'dict' objects>",
+          "primitive_calls_per_page": 366.0,
+          "total_calls_per_page": 366.0,
+          "self_ms_per_page": 0.03112125,
+          "inclusive_ms_per_page": 0.03112125
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1584,
+          "function": "_get_compiled_template",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.030442125000000004,
+          "inclusive_ms_per_page": 0.06175150000000001
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1878,
+          "function": "iter_bodies",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.030124375000000002,
+          "inclusive_ms_per_page": 0.061219875
+        },
+        {
+          "file": "packages/py/citry/citry/_class_introspection.py",
+          "line": 14,
+          "function": "_static_class_attribute",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.028458375,
+          "inclusive_ms_per_page": 0.037610250000000005
+        },
+        {
+          "file": "packages/py/citry/citry/_class_introspection.py",
+          "line": 25,
+          "function": "_static_class_dict",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.0284225,
+          "inclusive_ms_per_page": 0.06603275
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1009,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 132.0,
+          "total_calls_per_page": 132.0,
+          "self_ms_per_page": 0.02837775,
+          "inclusive_ms_per_page": 0.041308250000000005
+        },
+        {
+          "file": "packages/py/citry/citry/ext/cache/extension.py",
+          "line": 219,
+          "function": "_lookup_component",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.027856375000000003,
+          "inclusive_ms_per_page": 0.09299575000000002
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 305,
+          "function": "class_id",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.027543625,
+          "inclusive_ms_per_page": 0.07340675
+        },
+        {
+          "file": "packages/py/citry/citry/ext/dependencies/extension.py",
+          "line": 126,
+          "function": "get_dependencies",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.026999,
+          "inclusive_ms_per_page": 0.07556825
+        },
+        {
+          "file": "packages/py/citry/citry/client_directives.py",
+          "line": 35,
+          "function": "is_client_props_key",
+          "primitive_calls_per_page": 110.0,
+          "total_calls_per_page": 110.0,
+          "self_ms_per_page": 0.02633025,
+          "inclusive_ms_per_page": 0.041486
+        },
+        {
+          "file": "<frozen abc>",
+          "line": 117,
+          "function": "__instancecheck__",
+          "primitive_calls_per_page": 202.0,
+          "total_calls_per_page": 202.0,
+          "self_ms_per_page": 0.02594875,
+          "inclusive_ms_per_page": 0.054198750000000004
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method _abc._abc_instancecheck>",
+          "primitive_calls_per_page": 202.0,
+          "total_calls_per_page": 202.0,
+          "self_ms_per_page": 0.025416875000000002,
+          "inclusive_ms_per_page": 0.02825
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 953,
+          "function": "_validate_client_props_target",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.025338625,
+          "inclusive_ms_per_page": 0.02895375
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1399,
+          "function": "_capture_pure_part",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 55.0,
+          "self_ms_per_page": 0.024588125000000002,
+          "inclusive_ms_per_page": 0.032678125
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1540,
+          "function": "_extensions_with_hook",
+          "primitive_calls_per_page": 145.0,
+          "total_calls_per_page": 145.0,
+          "self_ms_per_page": 0.023934375,
+          "inclusive_ms_per_page": 0.035581375000000005
+        },
+        {
+          "file": "packages/py/citry/citry/ext/dependencies/scripts.py",
+          "line": 529,
+          "function": "_component_script_capture",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.023805375000000004,
+          "inclusive_ms_per_page": 0.039434875
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.setattr>",
+          "primitive_calls_per_page": 315.0,
+          "total_calls_per_page": 315.0,
+          "self_ms_per_page": 0.023621875,
+          "inclusive_ms_per_page": 0.023621875
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 613,
+          "function": "__init__",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.023199875000000002,
+          "inclusive_ms_per_page": 0.023199875000000002
+        },
+        {
+          "file": "packages/py/citry/citry/assets.py",
+          "line": 271,
+          "function": "load_template",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0227305,
+          "inclusive_ms_per_page": 0.031309375
+        },
+        {
+          "file": "packages/py/citry/citry/ext/i18n/bindings.py",
+          "line": 221,
+          "function": "render",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.022024000000000002,
+          "inclusive_ms_per_page": 1.000072125
+        },
+        {
+          "file": "packages/py/citry/citry/util/id.py",
+          "line": 71,
+          "function": "gen_render_id",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.021925125000000004,
+          "inclusive_ms_per_page": 0.071738125
+        },
+        {
+          "file": "packages/py/citry/citry/ext/i18n/config.py",
+          "line": 44,
+          "function": "__init__",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.021561125,
+          "inclusive_ms_per_page": 0.025900875000000004
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 267,
+          "function": "parse_string_style",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.02108075,
+          "inclusive_ms_per_page": 0.04052575
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'startswith' of 'str' objects>",
+          "primitive_calls_per_page": 264.0,
+          "total_calls_per_page": 264.0,
+          "self_ms_per_page": 0.020983250000000002,
+          "inclusive_ms_per_page": 0.020983250000000002
+        },
+        {
+          "file": "packages/py/citry/citry/client_directives.py",
+          "line": 50,
+          "function": "has_client_props_key",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.019743875,
+          "inclusive_ms_per_page": 0.061229875
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1881,
+          "function": "_normalize_data",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.019212250000000004,
+          "inclusive_ms_per_page": 0.027718250000000003
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1005,
+          "function": "_runtime_extension_candidate",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.019171125,
+          "inclusive_ms_per_page": 0.060479375
+        },
+        {
+          "file": "packages/py/citry/citry/ext/i18n/extension.py",
+          "line": 1148,
+          "function": "on_component_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.019002625000000002,
+          "inclusive_ms_per_page": 0.028563375000000002
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 799,
+          "function": "resolve",
+          "primitive_calls_per_page": 33.0,
+          "total_calls_per_page": 33.0,
+          "self_ms_per_page": 0.0180295,
+          "inclusive_ms_per_page": 0.04350225
+        },
+        {
+          "file": "packages/py/citry/citry/ownership.py",
+          "line": 1416,
+          "function": "bind_supplied_slots",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.017552,
+          "inclusive_ms_per_page": 0.02478675
+        },
+        {
+          "file": "packages/py/citry/citry/ext/events/emission.py",
+          "line": 169,
+          "function": "capture_instance",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.017469500000000002,
+          "inclusive_ms_per_page": 0.053569250000000006
+        },
+        {
+          "file": "<string>",
+          "line": 2,
+          "function": "__init__",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.016085875,
+          "inclusive_ms_per_page": 0.098631125
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.vars>",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.015940125000000003,
+          "inclusive_ms_per_page": 0.015940125000000003
+        },
+        {
+          "file": "packages/py/citry/citry/ext/cache/extension.py",
+          "line": 276,
+          "function": "_is_fragment_boundary",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.015827,
+          "inclusive_ms_per_page": 0.059682875
+        },
+        {
+          "file": "packages/py/citry/citry/util/id.py",
+          "line": 76,
+          "function": "validate_render_id",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.015631,
+          "inclusive_ms_per_page": 0.028188500000000002
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 1335,
+          "function": "get_dependencies",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.015571999999999999,
+          "inclusive_ms_per_page": 0.09114025
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'add' of 'set' objects>",
+          "primitive_calls_per_page": 175.0,
+          "total_calls_per_page": 175.0,
+          "self_ms_per_page": 0.015112875000000001,
+          "inclusive_ms_per_page": 0.015112875000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'append_values' of 'citry_core._ownership.RecordTable' objects>",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.015054625000000002,
+          "inclusive_ms_per_page": 0.015054625000000002
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1280,
+          "function": "get_extension",
+          "primitive_calls_per_page": 93.0,
+          "total_calls_per_page": 93.0,
+          "self_ms_per_page": 0.014840500000000001,
+          "inclusive_ms_per_page": 0.021369375
+        },
+        {
+          "file": "packages/py/citry/citry/constness.py",
+          "line": 151,
+          "function": "is_const",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.014713875000000001,
+          "inclusive_ms_per_page": 0.021356875
+        },
+        {
+          "file": "packages/py/citry/citry/ext/dependencies/extension.py",
+          "line": 114,
+          "function": "_cached_dependencies",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.01468875,
+          "inclusive_ms_per_page": 0.023916375000000004
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.id>",
+          "primitive_calls_per_page": 215.0,
+          "total_calls_per_page": 215.0,
+          "self_ms_per_page": 0.0142225,
+          "inclusive_ms_per_page": 0.0142225
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1934,
+          "function": "_attrs_resolved_extensions",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.014195125000000001,
+          "inclusive_ms_per_page": 0.022525875
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.hasattr>",
+          "primitive_calls_per_page": 186.0,
+          "total_calls_per_page": 186.0,
+          "self_ms_per_page": 0.01417175,
+          "inclusive_ms_per_page": 0.01417175
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 251,
+          "function": "_collect_style",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.014098750000000002,
+          "inclusive_ms_per_page": 0.057984125000000004
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 218,
+          "function": "normalize_style",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.014037125000000001,
+          "inclusive_ms_per_page": 0.086833
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1798,
+          "function": "_render_body",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.013846625000000001,
+          "inclusive_ms_per_page": 0.23325537500000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'remove' of 'set' objects>",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.013830375,
+          "inclusive_ms_per_page": 0.013830375
+        },
+        {
+          "file": "packages/py/citry/citry/ext/events/extension.py",
+          "line": 185,
+          "function": "_component_events_info",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.013809250000000002,
+          "inclusive_ms_per_page": 0.022804
+        },
+        {
+          "file": "packages/py/citry/citry/ext/dependencies/extension.py",
+          "line": 374,
+          "function": "resolve",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.013591125,
+          "inclusive_ms_per_page": 0.0375075
+        },
+        {
+          "file": "packages/py/citry/citry/citry.py",
+          "line": 1349,
+          "function": "_is_builtin_component",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.013495625,
+          "inclusive_ms_per_page": 0.043855875
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__enter__' of '_thread.RLock' objects>",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.013410625,
+          "inclusive_ms_per_page": 0.013410625
+        },
+        {
+          "file": "packages/py/citry/citry/ext/events/extension.py",
+          "line": 467,
+          "function": "resolve",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.01329575,
+          "inclusive_ms_per_page": 0.03609975
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'get' of '_contextvars.ContextVar' objects>",
+          "primitive_calls_per_page": 134.0,
+          "total_calls_per_page": 134.0,
+          "self_ms_per_page": 0.013131,
+          "inclusive_ms_per_page": 0.013131
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'hex' of 'float' objects>",
+          "primitive_calls_per_page": 35.0,
+          "total_calls_per_page": 35.0,
+          "self_ms_per_page": 0.012906875,
+          "inclusive_ms_per_page": 0.012906875
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/eval.py",
+          "line": 206,
+          "function": "evaluate",
+          "primitive_calls_per_page": 33.0,
+          "total_calls_per_page": 33.0,
+          "self_ms_per_page": 0.012802250000000001,
+          "inclusive_ms_per_page": 0.023853875
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1780,
+          "function": "on_component_input",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.012621,
+          "inclusive_ms_per_page": 0.047855625000000006
+        },
+        {
+          "file": "packages/py/citry/citry/util/misc.py",
+          "line": 28,
+          "function": "to_dict",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.01258325,
+          "inclusive_ms_per_page": 0.01681825
+        },
+        {
+          "file": "packages/py/citry/citry/citry_context.py",
+          "line": 140,
+          "function": "_get_root_markers",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.012463875000000001,
+          "inclusive_ms_per_page": 0.018191125000000002
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 210,
+          "function": "_normalize_class_contributions",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.012339,
+          "inclusive_ms_per_page": 0.016568500000000003
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method '__exit__' of '_thread.RLock' objects>",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.012033875,
+          "inclusive_ms_per_page": 0.012033875
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 127,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.011697500000000001,
+          "inclusive_ms_per_page": 0.21968225000000002
+        },
+        {
+          "file": "packages/py/citry/citry/citry_context.py",
+          "line": 96,
+          "function": "__init__",
+          "primitive_calls_per_page": 52.0,
+          "total_calls_per_page": 52.0,
+          "self_ms_per_page": 0.011470125000000001,
+          "inclusive_ms_per_page": 0.011470125000000001
+        },
+        {
+          "file": "packages/py/citry/citry/ext/i18n/config.py",
+          "line": 93,
+          "function": "_extension",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.01102025,
+          "inclusive_ms_per_page": 0.016349125
+        },
+        {
+          "file": "packages/py/citry/citry/ownership.py",
+          "line": 746,
+          "function": "_next_order",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.0103715,
+          "inclusive_ms_per_page": 0.0103715
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 118,
+          "function": "_underlying",
+          "primitive_calls_per_page": 81.0,
+          "total_calls_per_page": 81.0,
+          "self_ms_per_page": 0.010363875000000002,
+          "inclusive_ms_per_page": 0.014332250000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.divmod>",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.010345875000000001,
+          "inclusive_ms_per_page": 0.010345875000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'lower' of 'str' objects>",
+          "primitive_calls_per_page": 110.0,
+          "total_calls_per_page": 110.0,
+          "self_ms_per_page": 0.010277,
+          "inclusive_ms_per_page": 0.010277
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'fullmatch' of 're.Pattern' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.010272375,
+          "inclusive_ms_per_page": 0.010272375
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'setdefault' of 'dict' objects>",
+          "primitive_calls_per_page": 110.0,
+          "total_calls_per_page": 110.0,
+          "self_ms_per_page": 0.010268250000000001,
+          "inclusive_ms_per_page": 0.010268250000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'join' of 'str' objects>",
+          "primitive_calls_per_page": 21.0,
+          "total_calls_per_page": 21.0,
+          "self_ms_per_page": 0.01005225,
+          "inclusive_ms_per_page": 0.015031250000000001
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1146,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 80.0,
+          "total_calls_per_page": 80.0,
+          "self_ms_per_page": 0.010027625,
+          "inclusive_ms_per_page": 0.013864750000000002
+        },
+        {
+          "file": "packages/py/citry/citry/ownership.py",
+          "line": 807,
+          "function": "checkpoint",
+          "primitive_calls_per_page": 167.0,
+          "total_calls_per_page": 167.0,
+          "self_ms_per_page": 0.009901625,
+          "inclusive_ms_per_page": 0.009901625
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'bind' of 'citry_core._ownership.Journal' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.009737250000000001,
+          "inclusive_ms_per_page": 0.009737250000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method markupsafe._speedups._escape_inner>",
+          "primitive_calls_per_page": 140.0,
+          "total_calls_per_page": 140.0,
+          "self_ms_per_page": 0.009549750000000001,
+          "inclusive_ms_per_page": 0.009549750000000001
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1941,
+          "function": "has_attrs_resolved_hook",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.009291625000000001,
+          "inclusive_ms_per_page": 0.031817500000000006
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'split' of 're.Pattern' objects>",
+          "primitive_calls_per_page": 33.0,
+          "total_calls_per_page": 33.0,
+          "self_ms_per_page": 0.008547375000000001,
+          "inclusive_ms_per_page": 0.008547375000000001
+        },
+        {
+          "file": "packages/py/citry/citry/ext/dependencies/extension.py",
+          "line": 99,
+          "function": "__bool__",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.008054875,
+          "inclusive_ms_per_page": 0.008054875
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/sandbox.py",
+          "line": 245,
+          "function": "is_safe_variable",
+          "primitive_calls_per_page": 44.0,
+          "total_calls_per_page": 44.0,
+          "self_ms_per_page": 0.007653000000000001,
+          "inclusive_ms_per_page": 0.01151025
+        },
+        {
+          "file": "<string>",
+          "line": 1,
+          "function": "<lambda>",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.00760025,
+          "inclusive_ms_per_page": 0.017157250000000002
+        },
+        {
+          "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/logging/__init__.py",
+          "line": 1765,
+          "function": "isEnabledFor",
+          "primitive_calls_per_page": 63.0,
+          "total_calls_per_page": 63.0,
+          "self_ms_per_page": 0.0072822500000000005,
+          "inclusive_ms_per_page": 0.0072822500000000005
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'move_to_end' of 'collections.OrderedDict' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.006956000000000001,
+          "inclusive_ms_per_page": 0.006956000000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'reset' of '_contextvars.ContextVar' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0067843750000000005,
+          "inclusive_ms_per_page": 0.0067843750000000005
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'set' of '_contextvars.ContextVar' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.006750000000000001,
+          "inclusive_ms_per_page": 0.006750000000000001
+        },
+        {
+          "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/typing.py",
+          "line": 2300,
+          "function": "cast",
+          "primitive_calls_per_page": 115.0,
+          "total_calls_per_page": 115.0,
+          "self_ms_per_page": 0.006724125000000001,
+          "inclusive_ms_per_page": 0.006724125000000001
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 461,
+          "function": "_has_default_attr_formatting",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.00655175,
+          "inclusive_ms_per_page": 0.00655175
+        },
+        {
+          "file": "packages/py/citry/citry/util/misc.py",
+          "line": 23,
+          "function": "is_generator",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.006542875,
+          "inclusive_ms_per_page": 0.011219250000000002
+        },
+        {
+          "file": "packages/py/citry/citry/util/logger.py",
+          "line": 43,
+          "function": "_ensure_trace_level",
+          "primitive_calls_per_page": 63.0,
+          "total_calls_per_page": 63.0,
+          "self_ms_per_page": 0.005948,
+          "inclusive_ms_per_page": 0.005948
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1390,
+          "function": "_i18n_body_capture_is_empty",
+          "primitive_calls_per_page": 44.0,
+          "total_calls_per_page": 44.0,
+          "self_ms_per_page": 0.005603625,
+          "inclusive_ms_per_page": 0.005603625
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method __new__ of type object at 0x107034920>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.005576625,
+          "inclusive_ms_per_page": 0.005576625
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'pop' of 'dict' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.00509825,
+          "inclusive_ms_per_page": 0.00509825
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 867,
+          "function": "root",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.005032,
+          "inclusive_ms_per_page": 0.005032
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 248,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 33.0,
+          "total_calls_per_page": 33.0,
+          "self_ms_per_page": 0.004979,
+          "inclusive_ms_per_page": 0.004979
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'strip' of 'str' objects>",
+          "primitive_calls_per_page": 44.0,
+          "total_calls_per_page": 44.0,
+          "self_ms_per_page": 0.0044383750000000005,
+          "inclusive_ms_per_page": 0.0044383750000000005
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.next>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.00436675,
+          "inclusive_ms_per_page": 0.00436675
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 317,
+          "function": "_validate_introduced_variables",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.004291125000000001,
+          "inclusive_ms_per_page": 0.00526025
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/error.py",
+          "line": 143,
+          "function": "wrapper",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.00424425,
+          "inclusive_ms_per_page": 0.009557
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/eval.py",
+          "line": 314,
+          "function": "evaluate",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.0038226250000000005,
+          "inclusive_ms_per_page": 0.020979875000000002
+        },
+        {
+          "file": "packages/py/citry/citry/constness.py",
+          "line": 388,
+          "function": "_prune_collected_components",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0036427500000000006,
+          "inclusive_ms_per_page": 0.0036427500000000006
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 957,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0036151250000000003,
+          "inclusive_ms_per_page": 0.0036151250000000003
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 93,
+          "function": "store_pure_body",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.0033427500000000002,
+          "inclusive_ms_per_page": 0.00436975
+        },
+        {
+          "file": "packages/py/citry/citry/citry_render.py",
+          "line": 374,
+          "function": "unwrap_physical_region",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.003292625,
+          "inclusive_ms_per_page": 0.004610750000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'sub' of 're.Pattern' objects>",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.003078,
+          "inclusive_ms_per_page": 0.003078
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 213,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.0029635,
+          "inclusive_ms_per_page": 0.0035003750000000004
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 1018,
+          "function": "js_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.00267275,
+          "inclusive_ms_per_page": 0.00267275
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 1939,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.002589125,
+          "inclusive_ms_per_page": 0.002589125
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 1103,
+          "function": "on_render",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.002568625,
+          "inclusive_ms_per_page": 0.002568625
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/eval.py",
+          "line": 368,
+          "function": "variable",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.002484625,
+          "inclusive_ms_per_page": 0.00531275
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 1043,
+          "function": "css_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0023893750000000004,
+          "inclusive_ms_per_page": 0.0023893750000000004
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 957,
+          "function": "tag_name",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.0021618749999999997,
+          "inclusive_ms_per_page": 0.0021618749999999997
+        },
+        {
+          "file": "packages/py/citry/citry/extension.py",
+          "line": 618,
+          "function": "component",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.0021051250000000002,
+          "inclusive_ms_per_page": 0.0021051250000000002
+        },
+        {
+          "file": "<string>",
+          "line": 2,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 22.0,
+          "total_calls_per_page": 22.0,
+          "self_ms_per_page": 0.0019172500000000001,
+          "inclusive_ms_per_page": 0.0019172500000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'update' of 'dict' objects>",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.001796,
+          "inclusive_ms_per_page": 0.001796
+        },
+        {
+          "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/dataclasses.py",
+          "line": 1468,
+          "function": "is_dataclass",
+          "primitive_calls_per_page": 5.0,
+          "total_calls_per_page": 5.0,
+          "self_ms_per_page": 0.0016773750000000003,
+          "inclusive_ms_per_page": 0.0028801250000000003
+        },
+        {
+          "file": "<frozen abc>",
+          "line": 121,
+          "function": "__subclasscheck__",
+          "primitive_calls_per_page": 10.0,
+          "total_calls_per_page": 10.0,
+          "self_ms_per_page": 0.001479125,
+          "inclusive_ms_per_page": 0.002833125
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'extend' of 'list' objects>",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.00135475,
+          "inclusive_ms_per_page": 0.00135475
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method _abc._abc_subclasscheck>",
+          "primitive_calls_per_page": 10.0,
+          "total_calls_per_page": 10.0,
+          "self_ms_per_page": 0.0013540000000000002,
+          "inclusive_ms_per_page": 0.0013540000000000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'values' of 'dict' objects>",
+          "primitive_calls_per_page": 10.0,
+          "total_calls_per_page": 10.0,
+          "self_ms_per_page": 0.000995375,
+          "inclusive_ms_per_page": 0.000995375
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 48,
+          "function": "__init__",
+          "primitive_calls_per_page": 5.0,
+          "total_calls_per_page": 5.0,
+          "self_ms_per_page": 0.0009482500000000001,
+          "inclusive_ms_per_page": 0.001260625
+        },
+        {
+          "file": "packages/py/citry/citry/citry_render.py",
+          "line": 220,
+          "function": "is_component_root",
+          "primitive_calls_per_page": 11.0,
+          "total_calls_per_page": 11.0,
+          "self_ms_per_page": 0.0008810000000000001,
+          "inclusive_ms_per_page": 0.0008810000000000001
+        },
+        {
+          "file": "packages/py/citry/citry/_pure.py",
+          "line": 52,
+          "function": "__hash__",
+          "primitive_calls_per_page": 5.0,
+          "total_calls_per_page": 5.0,
+          "self_ms_per_page": 0.000411875,
+          "inclusive_ms_per_page": 0.000411875
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'bit_length' of 'int' objects>",
+          "primitive_calls_per_page": 1.0,
+          "total_calls_per_page": 1.0,
+          "self_ms_per_page": 0.000125125,
+          "inclusive_ms_per_page": 0.000125125
+        }
+      ]
+    },
+    "candidate": {
+      "candidate": true,
+      "selected_calls_per_page": 41.0,
+      "repeats": 8,
+      "instrumented_selected_ms_per_page": 6.5913604999999995,
+      "rows": [
+        {
+          "file": "benchmarks/template_function_probe/runtime.py",
+          "line": 17,
+          "function": "validate_values",
+          "primitive_calls_per_page": 492.0,
+          "total_calls_per_page": 1804.0,
+          "self_ms_per_page": 0.72895375,
+          "inclusive_ms_per_page": 0.9845753750000001
+        },
+        {
+          "file": "benchmarks/identity_leaf_probe/adapter.py",
+          "line": 85,
+          "function": "render",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.3841085,
+          "inclusive_ms_per_page": 6.299447750000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'disable' of '_lsprof.Profiler' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.34459862500000005,
+          "inclusive_ms_per_page": 0.34459862500000005
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1053,
+          "function": "_resolve_with_spread",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.31278425,
+          "inclusive_ms_per_page": 1.376083125
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1095,
+          "function": "_format",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.291647125,
+          "inclusive_ms_per_page": 0.9411083750000001
+        },
+        {
+          "file": "benchmarks/identity_leaf_probe/adapter.py",
+          "line": 42,
+          "function": "plain",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 328.0,
+          "self_ms_per_page": 0.2629345,
+          "inclusive_ms_per_page": 0.348208875
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1013,
+          "function": "_resolve",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.199176125,
+          "inclusive_ms_per_page": 1.8357063750000002
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 319,
+          "function": "_merge_resolved_attrs",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.19796750000000002,
+          "inclusive_ms_per_page": 0.69826675
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 973,
+          "function": "render",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.18862262500000002,
+          "inclusive_ms_per_page": 3.170161375
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.isinstance>",
+          "primitive_calls_per_page": 3020.0,
+          "total_calls_per_page": 3020.0,
+          "self_ms_per_page": 0.18238425,
+          "inclusive_ms_per_page": 0.21432525000000002
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 414,
+          "function": "_format_resolved_attrs_to_str",
+          "primitive_calls_per_page": 35.0,
+          "total_calls_per_page": 35.0,
+          "self_ms_per_page": 0.1807835,
+          "inclusive_ms_per_page": 0.49170700000000006
+        },
+        {
+          "file": "packages/py/citry/citry/component_render.py",
+          "line": 1798,
+          "function": "_render_body",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.17326450000000002,
+          "inclusive_ms_per_page": 3.8285263750000005
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 61,
+          "function": "_html_attr_identity",
+          "primitive_calls_per_page": 655.0,
+          "total_calls_per_page": 655.0,
+          "self_ms_per_page": 0.13064025,
+          "inclusive_ms_per_page": 0.16152650000000002
+        },
+        {
+          "file": "benchmarks/template_function_probe/runtime.py",
+          "line": 31,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 1681.0,
+          "total_calls_per_page": 1681.0,
+          "self_ms_per_page": 0.12497525000000002,
+          "inclusive_ms_per_page": 0.12497525000000002
+        },
+        {
+          "file": "packages/py/citry/citry/util/html.py",
+          "line": 52,
+          "function": "escape_to_str",
+          "primitive_calls_per_page": 490.0,
+          "total_calls_per_page": 490.0,
+          "self_ms_per_page": 0.11905837500000001,
+          "inclusive_ms_per_page": 0.181769375
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.len>",
+          "primitive_calls_per_page": 2143.0,
+          "total_calls_per_page": 2143.0,
+          "self_ms_per_page": 0.11723900000000001,
+          "inclusive_ms_per_page": 0.11723900000000001
+        },
+        {
+          "file": "packages/py/citry/citry/ownership.py",
+          "line": 1349,
+          "function": "bind_instance",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.111777625,
+          "inclusive_ms_per_page": 0.16450900000000002
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1009,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 492.0,
+          "total_calls_per_page": 492.0,
+          "self_ms_per_page": 0.099996125,
+          "inclusive_ms_per_page": 0.146246875
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1878,
+          "function": "iter_bodies",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.099975875,
+          "inclusive_ms_per_page": 0.20095175
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'append' of 'list' objects>",
+          "primitive_calls_per_page": 1405.0,
+          "total_calls_per_page": 1405.0,
+          "self_ms_per_page": 0.097690625,
+          "inclusive_ms_per_page": 0.097690625
+        },
+        {
+          "file": "benchmarks/identity_leaf_probe/adapter.py",
+          "line": 65,
+          "function": "validate_attributes",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.09558662500000001,
+          "inclusive_ms_per_page": 0.49240875
+        },
+        {
+          "file": "packages/py/citry/citry/client_directives.py",
+          "line": 35,
+          "function": "is_client_props_key",
+          "primitive_calls_per_page": 410.0,
+          "total_calls_per_page": 410.0,
+          "self_ms_per_page": 0.09343625000000001,
+          "inclusive_ms_per_page": 0.1475865
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1936,
+          "function": "render",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.07751425,
+          "inclusive_ms_per_page": 1.09654625
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'startswith' of 'str' objects>",
+          "primitive_calls_per_page": 984.0,
+          "total_calls_per_page": 984.0,
+          "self_ms_per_page": 0.074576,
+          "inclusive_ms_per_page": 0.074576
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 267,
+          "function": "parse_string_style",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0721225,
+          "inclusive_ms_per_page": 0.138832625
+        },
+        {
+          "file": "packages/py/citry/citry/client_directives.py",
+          "line": 50,
+          "function": "has_client_props_key",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.066052625,
+          "inclusive_ms_per_page": 0.213639125
+        },
+        {
+          "file": "packages/py/citry/citry/constness.py",
+          "line": 156,
+          "function": "const_value",
+          "primitive_calls_per_page": 533.0,
+          "total_calls_per_page": 533.0,
+          "self_ms_per_page": 0.062018000000000004,
+          "inclusive_ms_per_page": 0.090432625
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 799,
+          "function": "resolve",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.061738375000000005,
+          "inclusive_ms_per_page": 0.149133
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1005,
+          "function": "_runtime_extension_candidate",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.058477125000000005,
+          "inclusive_ms_per_page": 0.20472400000000002
+        },
+        {
+          "file": "packages/py/citry/tests/test_benchmark_citry.py",
+          "line": 1474,
+          "function": "__post_init__",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.05700837500000001,
+          "inclusive_ms_per_page": 0.090454125
+        },
+        {
+          "file": "benchmarks/identity_leaf_probe/adapter.py",
+          "line": 69,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 615.0,
+          "total_calls_per_page": 615.0,
+          "self_ms_per_page": 0.0557425,
+          "inclusive_ms_per_page": 0.0557425
+        },
+        {
+          "file": "packages/py/citry/citry/util/logger.py",
+          "line": 59,
+          "function": "is_tracing",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.050494000000000004,
+          "inclusive_ms_per_page": 0.067632125
+        },
+        {
+          "file": "packages/py/citry/tests/test_benchmark_citry.py",
+          "line": 1564,
+          "function": "template_data",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.049791375000000006,
+          "inclusive_ms_per_page": 0.15765287500000003
+        },
+        {
+          "file": "packages/py/citry/citry/component.py",
+          "line": 305,
+          "function": "class_id",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.04933675,
+          "inclusive_ms_per_page": 0.136068125
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'add' of 'set' objects>",
+          "primitive_calls_per_page": 574.0,
+          "total_calls_per_page": 574.0,
+          "self_ms_per_page": 0.047944875,
+          "inclusive_ms_per_page": 0.047944875
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'items' of 'dict' objects>",
+          "primitive_calls_per_page": 568.0,
+          "total_calls_per_page": 568.0,
+          "self_ms_per_page": 0.047185500000000005,
+          "inclusive_ms_per_page": 0.047185500000000005
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 218,
+          "function": "normalize_style",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.045301375000000005,
+          "inclusive_ms_per_page": 0.29422575
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 251,
+          "function": "_collect_style",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.045290000000000004,
+          "inclusive_ms_per_page": 0.19629862500000003
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/eval.py",
+          "line": 206,
+          "function": "evaluate",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.042255,
+          "inclusive_ms_per_page": 0.081389125
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'remove' of 'set' objects>",
+          "primitive_calls_per_page": 533.0,
+          "total_calls_per_page": 533.0,
+          "self_ms_per_page": 0.041581875,
+          "inclusive_ms_per_page": 0.041581875
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 210,
+          "function": "_normalize_class_contributions",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.039998125,
+          "inclusive_ms_per_page": 0.056181
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'setdefault' of 'dict' objects>",
+          "primitive_calls_per_page": 410.0,
+          "total_calls_per_page": 410.0,
+          "self_ms_per_page": 0.036207,
+          "inclusive_ms_per_page": 0.036207
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'lower' of 'str' objects>",
+          "primitive_calls_per_page": 410.0,
+          "total_calls_per_page": 410.0,
+          "self_ms_per_page": 0.03557575,
+          "inclusive_ms_per_page": 0.03557575
+        },
+        {
+          "file": "packages/py/citry/citry/util/id.py",
+          "line": 59,
+          "function": "gen_id",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.03521575,
+          "inclusive_ms_per_page": 0.050141875
+        },
+        {
+          "file": "packages/py/citry/citry/citry_render.py",
+          "line": 208,
+          "function": "__init__",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.035028750000000004,
+          "inclusive_ms_per_page": 0.08494937500000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.id>",
+          "primitive_calls_per_page": 533.0,
+          "total_calls_per_page": 533.0,
+          "self_ms_per_page": 0.034944625,
+          "inclusive_ms_per_page": 0.034944625
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'values' of 'dict' objects>",
+          "primitive_calls_per_page": 445.0,
+          "total_calls_per_page": 445.0,
+          "self_ms_per_page": 0.034596625,
+          "inclusive_ms_per_page": 0.034596625
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 118,
+          "function": "_underlying",
+          "primitive_calls_per_page": 286.0,
+          "total_calls_per_page": 286.0,
+          "self_ms_per_page": 0.033646875,
+          "inclusive_ms_per_page": 0.048243125
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method markupsafe._speedups._escape_inner>",
+          "primitive_calls_per_page": 490.0,
+          "total_calls_per_page": 490.0,
+          "self_ms_per_page": 0.03349925,
+          "inclusive_ms_per_page": 0.03349925
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'join' of 'str' objects>",
+          "primitive_calls_per_page": 76.0,
+          "total_calls_per_page": 76.0,
+          "self_ms_per_page": 0.033248375000000004,
+          "inclusive_ms_per_page": 0.050692375
+        },
+        {
+          "file": "benchmarks/identity_leaf_probe/adapter.py",
+          "line": 57,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 369.0,
+          "total_calls_per_page": 369.0,
+          "self_ms_per_page": 0.03303975000000001,
+          "inclusive_ms_per_page": 0.03303975000000001
+        },
+        {
+          "file": "packages/py/citry/citry/_class_introspection.py",
+          "line": 14,
+          "function": "_static_class_attribute",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.032098125000000005,
+          "inclusive_ms_per_page": 0.042188625
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 1146,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 280.0,
+          "total_calls_per_page": 280.0,
+          "self_ms_per_page": 0.03206150000000001,
+          "inclusive_ms_per_page": 0.043936125
+        },
+        {
+          "file": "packages/py/citry/citry/_class_introspection.py",
+          "line": 25,
+          "function": "_static_class_dict",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.03129375,
+          "inclusive_ms_per_page": 0.073482375
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.hasattr>",
+          "primitive_calls_per_page": 490.0,
+          "total_calls_per_page": 490.0,
+          "self_ms_per_page": 0.02921175,
+          "inclusive_ms_per_page": 0.02921175
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.getattr>",
+          "primitive_calls_per_page": 369.0,
+          "total_calls_per_page": 369.0,
+          "self_ms_per_page": 0.029135625000000002,
+          "inclusive_ms_per_page": 0.029135625000000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'split' of 're.Pattern' objects>",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.028466625000000002,
+          "inclusive_ms_per_page": 0.028466625000000002
+        },
+        {
+          "file": "packages/py/citry/citry/citry_render.py",
+          "line": 164,
+          "function": "from_context",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.027217875,
+          "inclusive_ms_per_page": 0.049920625
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/sandbox.py",
+          "line": 245,
+          "function": "is_safe_variable",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.026585875000000002,
+          "inclusive_ms_per_page": 0.040294250000000004
+        },
+        {
+          "file": "packages/py/citry/citry/util/id.py",
+          "line": 71,
+          "function": "gen_render_id",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.023974875000000003,
+          "inclusive_ms_per_page": 0.07411675000000001
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 461,
+          "function": "_has_default_attr_formatting",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.023953875000000003,
+          "inclusive_ms_per_page": 0.023953875000000003
+        },
+        {
+          "file": "<string>",
+          "line": 1,
+          "function": "<lambda>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.023701250000000004,
+          "inclusive_ms_per_page": 0.055717375
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'get' of 'mappingproxy' objects>",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.018179,
+          "inclusive_ms_per_page": 0.018179
+        },
+        {
+          "file": "<frozen abc>",
+          "line": 117,
+          "function": "__instancecheck__",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.017750625000000003,
+          "inclusive_ms_per_page": 0.031941000000000004
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 248,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.017444,
+          "inclusive_ms_per_page": 0.017444
+        },
+        {
+          "file": "<string>",
+          "line": 2,
+          "function": "__init__",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.017407375,
+          "inclusive_ms_per_page": 0.10786150000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'get' of 'dict' objects>",
+          "primitive_calls_per_page": 88.0,
+          "total_calls_per_page": 88.0,
+          "self_ms_per_page": 0.016058250000000003,
+          "inclusive_ms_per_page": 0.016058250000000003
+        },
+        {
+          "file": "packages/py/citry/citry/citry_context.py",
+          "line": 96,
+          "function": "__init__",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.015971375000000003,
+          "inclusive_ms_per_page": 0.015971375000000003
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'strip' of 'str' objects>",
+          "primitive_calls_per_page": 164.0,
+          "total_calls_per_page": 164.0,
+          "self_ms_per_page": 0.015842250000000002,
+          "inclusive_ms_per_page": 0.015842250000000002
+        },
+        {
+          "file": "packages/py/citry/citry/util/id.py",
+          "line": 76,
+          "function": "validate_render_id",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.015248125000000001,
+          "inclusive_ms_per_page": 0.027928
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 317,
+          "function": "_validate_introduced_variables",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0148795,
+          "inclusive_ms_per_page": 0.018415125
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'append_values' of 'citry_core._ownership.RecordTable' objects>",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.0145105,
+          "inclusive_ms_per_page": 0.0145105
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method _abc._abc_instancecheck>",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.014190375,
+          "inclusive_ms_per_page": 0.014190375
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/error.py",
+          "line": 143,
+          "function": "wrapper",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.014053000000000001,
+          "inclusive_ms_per_page": 0.032016125
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.setattr>",
+          "primitive_calls_per_page": 151.0,
+          "total_calls_per_page": 151.0,
+          "self_ms_per_page": 0.012502250000000001,
+          "inclusive_ms_per_page": 0.012502250000000001
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/eval.py",
+          "line": 314,
+          "function": "evaluate",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.012439500000000001,
+          "inclusive_ms_per_page": 0.068156875
+        },
+        {
+          "file": "packages/py/citry/citry/attrs.py",
+          "line": 213,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.011566375000000002,
+          "inclusive_ms_per_page": 0.013573
+        },
+        {
+          "file": "packages/py/citry/citry/ownership.py",
+          "line": 746,
+          "function": "_next_order",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.010287,
+          "inclusive_ms_per_page": 0.010287
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.divmod>",
+          "primitive_calls_per_page": 123.0,
+          "total_calls_per_page": 123.0,
+          "self_ms_per_page": 0.010275250000000001,
+          "inclusive_ms_per_page": 0.010275250000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'fullmatch' of 're.Pattern' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.010209,
+          "inclusive_ms_per_page": 0.010209
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'bind' of 'citry_core._ownership.Journal' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.009981625000000001,
+          "inclusive_ms_per_page": 0.009981625000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'sub' of 're.Pattern' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0099595,
+          "inclusive_ms_per_page": 0.0099595
+        },
+        {
+          "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/logging/__init__.py",
+          "line": 1765,
+          "function": "isEnabledFor",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.00918775,
+          "inclusive_ms_per_page": 0.00918775
+        },
+        {
+          "file": "packages/py/citry_core/citry_core/safe_eval/eval.py",
+          "line": 368,
+          "function": "variable",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.008573750000000002,
+          "inclusive_ms_per_page": 0.017963125000000003
+        },
+        {
+          "file": "packages/py/citry/citry/util/logger.py",
+          "line": 43,
+          "function": "_ensure_trace_level",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.007950375,
+          "inclusive_ms_per_page": 0.007950375
+        },
+        {
+          "file": "packages/py/citry/citry/nodes/__init__.py",
+          "line": 957,
+          "function": "tag_name",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.0075645,
+          "inclusive_ms_per_page": 0.0075645
+        },
+        {
+          "file": "<string>",
+          "line": 2,
+          "function": "<genexpr>",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.0068823750000000005,
+          "inclusive_ms_per_page": 0.0068823750000000005
+        },
+        {
+          "file": "packages/py/citry/citry/citry_render.py",
+          "line": 374,
+          "function": "unwrap_physical_region",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.006066625000000001,
+          "inclusive_ms_per_page": 0.008751875
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'update' of 'dict' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.005811875,
+          "inclusive_ms_per_page": 0.005811875
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method __new__ of type object at 0x1069f8920>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.00565125,
+          "inclusive_ms_per_page": 0.00565125
+        },
+        {
+          "file": "/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/typing.py",
+          "line": 2300,
+          "function": "cast",
+          "primitive_calls_per_page": 82.0,
+          "total_calls_per_page": 82.0,
+          "self_ms_per_page": 0.0051605,
+          "inclusive_ms_per_page": 0.0051605
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'get' of '_contextvars.ContextVar' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0050627499999999995,
+          "inclusive_ms_per_page": 0.0050627499999999995
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.next>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.0046508750000000005,
+          "inclusive_ms_per_page": 0.0046508750000000005
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'extend' of 'list' objects>",
+          "primitive_calls_per_page": 41.0,
+          "total_calls_per_page": 41.0,
+          "self_ms_per_page": 0.004627,
+          "inclusive_ms_per_page": 0.004627
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'bit_length' of 'int' objects>",
+          "primitive_calls_per_page": 6.0,
+          "total_calls_per_page": 6.0,
+          "self_ms_per_page": 0.00068225,
+          "inclusive_ms_per_page": 0.00068225
+        }
+      ]
+    }
+  },
+  "hashes": {
+    "benchmarks/identity_leaf_probe/diagnose.py": "f1212b268ae467bf84db005b5717c4d682a840131b523118e7e4e43de201197c",
+    "benchmarks/identity_leaf_probe/adapter.py": "474dca09a2b02b4a85d202a62a242c0063560e4702610460314dc67e2251546a",
+    "benchmarks/template_function_probe/runtime.py": "d341c7bdd48ad67db592d21a601816ba11ee50e3cbef3afe6881eab219f0ca72",
+    "packages/py/citry/citry/component_render.py": "d1c6fea6de050c8ebc80a0fd0e04c0d5267003e54b2f9e64a96b194c6c01cc42"
+  }
+}

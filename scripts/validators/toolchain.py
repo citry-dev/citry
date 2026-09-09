@@ -53,7 +53,7 @@ _MATURIN_ACTION = "PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
 _RUST_ACTION = "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772"
 _PYPI_ACTION = "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33"
 _UV_ACTION = "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78"
-_SCCACHE_ACTION = "mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad"
+_SCCACHE_ACTION = "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
 _RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
 _PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
 
@@ -132,8 +132,8 @@ def check() -> list[str]:
 
     root_manifest = tomllib.loads(_ROOT_CARGO.read_text(encoding="utf-8"))
     minimum = root_manifest.get("workspace", {}).get("package", {}).get("rust-version")
-    if minimum != "1.95":
-        errors.append(f"Cargo workspace rust-version must be '1.95', found {minimum!r}")
+    if minimum != "1.96":
+        errors.append(f"Cargo workspace rust-version must be '1.96', found {minimum!r}")
     for crate in _CORE_CRATES:
         manifest_path = REPO_ROOT / "crates" / crate / "Cargo.toml"
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
@@ -201,7 +201,7 @@ def check() -> list[str]:
     examples_rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", examples_workflow))
     if examples_workflow.count(f"uses: {_RUST_ACTION}") != examples_rust_actions:
         errors.append("every examples evidence Rust setup must use the reviewed immutable action commit")
-    if examples_workflow.count('toolchain: "1.95.0"') != examples_rust_actions:
+    if examples_workflow.count('toolchain: "1.96.0"') != examples_rust_actions:
         errors.append("every examples evidence Rust setup must pin the workspace MSRV")
     examples_rust_caches = len(re.findall(r"uses:\s+Swatinem/rust-cache@", examples_workflow))
     if examples_workflow.count(f"uses: {_RUST_CACHE_ACTION}") != examples_rust_caches:

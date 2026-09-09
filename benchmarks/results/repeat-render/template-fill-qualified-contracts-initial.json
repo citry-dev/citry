@@ -1,0 +1,82 @@
+{
+  "experiment_only": true,
+  "production_compatible": true,
+  "cases": [
+    {
+      "case": "ordinary_template",
+      "reference": {
+        "result": {
+          "html": "\n\nsupplied\n\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nsupplied\n\n"
+        },
+        "activation": {
+          "fallbacks_omitted": 1,
+          "direct_calls": 1
+        }
+      },
+      "matches": true
+    },
+    {
+      "case": "python_fallback",
+      "reference": {
+        "result": {
+          "html": "\nfallback\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\nfallback\n"
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "selection_replaces_content",
+      "reference": {
+        "result": {
+          "html": "\n\nfallback\n\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nfallback\n\n"
+        },
+        "activation": {}
+      },
+      "matches": true
+    },
+    {
+      "case": "equal_helper",
+      "reference": {
+        "result": {
+          "html": "\n\nreplacement\n\n"
+        },
+        "activation": {}
+      },
+      "candidate": {
+        "result": {
+          "html": "\n\nreplacement\n\n"
+        },
+        "activation": {}
+      },
+      "matches": true
+    }
+  ],
+  "hashes": {
+    "benchmarks/template_fill_qualified_probe/contracts.py": "e3db4ff922dbc38531945e699b162f410c09df4337212048af7f7908b895e793",
+    "benchmarks/template_fill_qualified_probe/adapter.py": "c9df2a30ba11e89d104e49aa19ed4b271788423ecfc435129743977fc1637839",
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa"
+  },
+  "source_archives": {
+    "benchmarks/template_fill_qualified_probe/contracts.py": "benchmarks/template_fill_qualified_probe/contracts.py.initial.txt",
+    "benchmarks/template_fill_qualified_probe/adapter.py": "benchmarks/template_fill_qualified_probe/adapter.py.initial.txt"
+  }
+}

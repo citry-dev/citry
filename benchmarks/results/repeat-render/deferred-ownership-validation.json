@@ -1,0 +1,30 @@
+{
+  "final_gate": "PASSED",
+  "coverage_percent": 88.75,
+  "final_browser_tests": 553,
+  "linux_mypy_source_files": 169,
+  "tiny_joint_wins": 8,
+  "large_joint_wins": 5,
+  "large_regression_margin_ms": 0.1,
+  "source_sha256": {
+    "packages/py/citry/citry/ownership.py": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+    "packages/py/citry/tests/test_ownership_storage.py": "56af25ad0515c9ae3e1b39da47b291e86599659fc319ee79a4769de0be759ae2",
+    "packages/py/citry/tests/test_ownership_storage_callbacks.py": "36ffe2367aaed82c8a5fabe2482f968ca68bfe5e64a572b9b01d2cc61951172c",
+    "packages/py/citry/tests/test_ownership_storage_deferred.py": "346cf2abd56c4713a8badbdd0af0083982b04d45dc14ef98f55d783844a52a7e",
+    "benchmarks/native_ownership_qualification/deferred.md": "054d665f9fceddc83b41ddf2b6e47fdb4cd7e121e1df02cffe90f6b00d3b4ecc",
+    "benchmarks/ownership_journal_probe/check_retirement.py": "d00a4391a5339bd9575005586999373bbb36dfe2b2a7764932ba936451bf6c18",
+    "benchmarks/ownership_journal_probe/check_storage.py": "e9d98f349e78917a37b6570a28351f96e22122e610879ec73666f4c7595219b7",
+    "benchmarks/runtime_ownership_probe/probe.py": "82d1b65366bcc3a92b51524b45bc8bbaa95cf4de892fc408f78821de553edee1",
+    "benchmarks/runtime_ownership_probe/qualify.py": "3333449b02070356797f8a6dc4654344bda0d9ac2290e0687b780d6627ccfd36",
+    "benchmarks/deferred_ownership_probe/probe.py": "c41673b24ce81f01f263ce01d42b5a359420594ebc7615aba8a01eba1ccdcbba",
+    "benchmarks/deferred_ownership_probe/reference.py": "b253313e26ca656148e26ab6f4866329c2c64e7d22971f23195e48aba2e536ea"
+  },
+  "report_sha256": {
+    "benchmarks/results/repeat-render/deferred-ownership-browser.txt": "ccd520c1aeca8cb01bde3b8f80db5804382f640643b3898fd5736d014c3efc3e",
+    "benchmarks/results/repeat-render/deferred-ownership-contracts.txt": "49ca2f2a5ad84dfae53279f4e5c7bae2caa9f79d37260c5e4fd423c394d7d245",
+    "benchmarks/results/repeat-render/deferred-ownership-gate.json": "fecb05613b4b43396d32aad25ada75ec5d9a74fc9fda646d60f4db1c27ee1ad2",
+    "benchmarks/results/repeat-render/deferred-ownership-large.json": "ea782f6e8a771486277ce94df3efb8f487ec57c2262f0f03119d1e2cdb7d5406",
+    "benchmarks/results/repeat-render/deferred-ownership-linux-mypy.txt": "866f135eda15a6396df37bd084c95fd89cee94239a37fcd17a9f9b0eb3878445",
+    "benchmarks/results/repeat-render/deferred-ownership-small.json": "94e54c9a8b6b872670532326a41804f7434531d3877fe14ef05328e70562391c"
+  }
+}

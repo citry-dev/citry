@@ -1,0 +1,432 @@
+{
+  "browser_qualification_only": true,
+  "passed": true,
+  "results": {
+    "chromium": {
+      "version": "151.0.7922.34",
+      "variants": {
+        "reference": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": null,
+              "isolated": true
+            },
+            "fill": {
+              "owner": null,
+              "isolated": true
+            },
+            "fallback": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-direct": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-fill": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-fallback": {
+              "owner": null,
+              "isolated": true
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "0",
+            "receiver": "0",
+            "revisions": 1
+          },
+          "clicked": false,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        },
+        "immediate": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "icon-direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "2",
+            "receiver": "1",
+            "revisions": 1
+          },
+          "clicked": true,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        },
+        "deferred": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "icon-direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "2",
+            "receiver": "1",
+            "revisions": 1
+          },
+          "clicked": true,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        }
+      }
+    },
+    "firefox": {
+      "version": "153.0",
+      "variants": {
+        "reference": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": null,
+              "isolated": true
+            },
+            "fill": {
+              "owner": null,
+              "isolated": true
+            },
+            "fallback": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-direct": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-fill": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-fallback": {
+              "owner": null,
+              "isolated": true
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "0",
+            "receiver": "0",
+            "revisions": 1
+          },
+          "clicked": false,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        },
+        "immediate": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "icon-direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "2",
+            "receiver": "1",
+            "revisions": 1
+          },
+          "clicked": true,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        },
+        "deferred": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "icon-direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "2",
+            "receiver": "1",
+            "revisions": 1
+          },
+          "clicked": true,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        }
+      }
+    },
+    "webkit": {
+      "version": "26.5",
+      "variants": {
+        "reference": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": null,
+              "isolated": true
+            },
+            "fill": {
+              "owner": null,
+              "isolated": true
+            },
+            "fallback": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-direct": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-fill": {
+              "owner": null,
+              "isolated": true
+            },
+            "icon-fallback": {
+              "owner": null,
+              "isolated": true
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "0",
+            "receiver": "0",
+            "revisions": 1
+          },
+          "clicked": false,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        },
+        "immediate": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "icon-direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "2",
+            "receiver": "1",
+            "revisions": 1
+          },
+          "clicked": true,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        },
+        "deferred": {
+          "status": "passed",
+          "scopes": {
+            "direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "icon-direct": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fill": {
+              "owner": "caller",
+              "isolated": false
+            },
+            "icon-fallback": {
+              "owner": "receiver",
+              "isolated": false
+            },
+            "child": {
+              "owner": "child",
+              "isolated": true
+            }
+          },
+          "final": {
+            "caller": "2",
+            "receiver": "1",
+            "revisions": 1
+          },
+          "clicked": true,
+          "child_scope": {
+            "count": "undefined",
+            "receiverCount": "undefined"
+          },
+          "page_errors": [],
+          "console_errors": []
+        }
+      }
+    }
+  },
+  "hashes": {
+    "benchmarks/composed_function_probe/browser.py": "7863c094184b0d9b0d907f7400196cdc5c993cb456b10b180598b8ca3c7f4a40",
+    "benchmarks/composed_function_probe/adapter.py": "5545aa0531615569a2790b9d886b9b5b57a9d796b5277e5d7edbda39305207d2",
+    "packages/py/citry/citry/ext/dependencies/client/citry.js": "08e6a2ec26108be53eb5efe881351b26c9a43e5719dac12dd05f5ee6c0b0d7b9",
+    "packages/py/citry/citry/ext/events/client/citry-events.js": "7ab76e0638f55519566eca3b542b9c563e17b6aa7526968fea1bb1ddc3d26f81"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "changed_values_order_normalization_and_escaping": true,
+  "input_callbacks_once_per_render": true,
+  "post_warm_style_parser_and_class_collector_changes": true,
+  "custom_html_values_remain_live": true,
+  "invalid_class_repeats_error": true,
+  "node_override_and_added_hook_remain_live": true,
+  "cache_bound_after_300_keys": 256,
+  "unqualified_component_citry_reads_on_miss": {
+    "reference": 1,
+    "candidate": 3
+  },
+  "production_compatible": false
+}

@@ -1,0 +1,52 @@
+{
+  "observations": [
+    {
+      "operation": "capture",
+      "error": "OverflowError",
+      "message": "int too big to convert",
+      "state_changed": false,
+      "invocation_states": [],
+      "queue_states": []
+    },
+    {
+      "operation": "bind",
+      "error": "OverflowError",
+      "message": "int too big to convert",
+      "state_changed": false,
+      "invocation_states": [
+        "active"
+      ],
+      "queue_states": [
+        "enqueued"
+      ]
+    },
+    {
+      "operation": "settle",
+      "error": "OverflowError",
+      "message": "int too big to convert",
+      "state_changed": false,
+      "invocation_states": [
+        "active"
+      ],
+      "queue_states": [
+        "enqueued"
+      ]
+    },
+    {
+      "operation": "retire",
+      "error": "OverflowError",
+      "message": "journal order exceeds u64",
+      "state_changed": true,
+      "invocation_states": [
+        "retired"
+      ],
+      "queue_states": [
+        "enqueued"
+      ]
+    }
+  ],
+  "hashes": {
+    "benchmarks/native_ownership_qualification/boundaries.py": "d207c1139c23dbfb25d16726df967bf91686bc3d8dd21905ae1647103a840657",
+    "benchmarks/ownership_journal_probe/target/release/libcitry_ownership_journal_probe.dylib": "65f18d630e53841adf99b86efbfe4ae1c867414068724ff687c287d9fd77c5bf"
+  }
+}

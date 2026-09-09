@@ -1,0 +1,50 @@
+{
+  "reference": {
+    "earlier_contracts": {
+      "prefix_identity": true,
+      "export_identity": true,
+      "site_identity": true,
+      "invalid_span_errors": [
+        "Runtime source byte span (0, 1) does not fall on UTF-8 character boundaries.",
+        "Runtime source byte span (0, 9) is outside a 3-byte template.",
+        "Runtime source byte span (-1, 2) is outside a 3-byte template."
+      ],
+      "changed_constructor_called": true,
+      "rollback_identity": true,
+      "append_after_rollback": true,
+      "field_cycle_collected": true,
+      "constructor_changed_during_arguments_called": true
+    },
+    "raw_public_equality": true,
+    "hash_equality": true,
+    "immutable_replacement_and_append": true,
+    "public_snapshot_override": true,
+    "source_mutation_error": "The client ownership graph changed after its manifest was prepared.",
+    "dangling_id_error": "The graph being serialized contains a dangling source-location reference."
+  },
+  "candidate": {
+    "earlier_contracts": {
+      "prefix_identity": true,
+      "export_identity": true,
+      "site_identity": true,
+      "invalid_span_errors": [
+        "Runtime source byte span (0, 1) does not fall on UTF-8 character boundaries.",
+        "Runtime source byte span (0, 9) is outside a 3-byte template.",
+        "Runtime source byte span (-1, 2) is outside a 3-byte template."
+      ],
+      "changed_constructor_called": true,
+      "rollback_identity": true,
+      "append_after_rollback": true,
+      "field_cycle_collected": true,
+      "constructor_changed_during_arguments_called": true
+    },
+    "raw_public_equality": true,
+    "hash_equality": true,
+    "immutable_replacement_and_append": true,
+    "public_snapshot_override": true,
+    "source_mutation_error": "The client ownership graph changed after its manifest was prepared.",
+    "dangling_id_error": "The graph being serialized contains a dangling source-location reference."
+  },
+  "checks_equal": true,
+  "production_qualified": false
+}

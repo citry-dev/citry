@@ -1,0 +1,72 @@
+........................................................................ [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 34%]
+........................................................................ [ 46%]
+......................................................FF................ [ 57%]
+........................................................................ [ 69%]
+........................................................................ [ 80%]
+........................................................................ [ 92%]
+.................................................                        [100%]
+=================================== FAILURES ===================================
+__ test_root_settlement_releases_transient_region_roots_without_gc[installed] __
+
+    def test_root_settlement_releases_transient_region_roots_without_gc():
+        c = Citry()
+    
+        class Child(Component):
+            citry = c
+            template = "<c-slot />"
+    
+        class Page(Component):
+            citry = c
+            template = "<c-child>body</c-child>"
+    
+        render = Page().render()
+        component = render.context.component
+        graph = render.context.ownership
+        assert component is not None
+        assert graph is not None
+        assert component.root is component
+        assert graph._region_results == {}
+    
+        component_ref = ref(component)
+        graph_ref = ref(graph)
+        del component, graph, render
+>       assert component_ref() is None
+E       AssertionError: assert <Page> is None
+E        +  where <Page> = <weakref at 0x111038ea0; to 'tests.test_ownership.test_root_settlement_releases_transient_region_roots_without_gc.<locals>.Page' at 0x11110ee40>()
+
+packages/py/citry/tests/test_ownership.py:107: AssertionError
+___ test_root_settlement_releases_transient_region_roots_without_gc[python] ____
+
+    def test_root_settlement_releases_transient_region_roots_without_gc():
+        c = Citry()
+    
+        class Child(Component):
+            citry = c
+            template = "<c-slot />"
+    
+        class Page(Component):
+            citry = c
+            template = "<c-child>body</c-child>"
+    
+        render = Page().render()
+        component = render.context.component
+        graph = render.context.ownership
+        assert component is not None
+        assert graph is not None
+        assert component.root is component
+        assert graph._region_results == {}
+    
+        component_ref = ref(component)
+        graph_ref = ref(graph)
+        del component, graph, render
+>       assert component_ref() is None
+E       AssertionError: assert <Page> is None
+E        +  where <Page> = <weakref at 0x111080630; to 'tests.test_ownership.test_root_settlement_releases_transient_region_roots_without_gc.<locals>.Page' at 0x11110de80>()
+
+packages/py/citry/tests/test_ownership.py:107: AssertionError
+=========================== short test summary info ============================
+FAILED packages/py/citry/tests/test_ownership.py::test_root_settlement_releases_transient_region_roots_without_gc[installed]
+FAILED packages/py/citry/tests/test_ownership.py::test_root_settlement_releases_transient_region_roots_without_gc[python]
+2 failed, 623 passed in 3.63s

@@ -1,0 +1,18 @@
+{
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "source": "/Users/mac/repos/citry-perf-repeat/packages/py/citry/citry/ownership.py",
+  "source_sha256": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+  "copied_source_sha256": "2c643efc5c302711df861860a4f29389d86509f9b30d98b3fcd90d5b31dec1fa",
+  "setup_sha256": "4597c490328b25934ce6e2e2955c6db16efd0f3042c198ebc657b4c525cdbb67",
+  "directives": {
+    "language_level": 3,
+    "annotation_typing": false,
+    "infer_types": false,
+    "binding": true
+  },
+  "returncode": 0,
+  "build_log": "Cython=3.3.0 setuptools=84.0.0\nCompiling ownership.py because it changed.\n[1/1] Cythonizing ownership.py\nrunning build_ext\nbuilding 'citry.ownership' extension\ncc -fno-strict-overflow -Wsign-compare -Wunreachable-code -DNDEBUG -g -O3 -Wall -O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix -fPIC -I/Users/mac/repos/citry-perf-repeat/.venv/include -I/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/include/python3.14 -c ownership.c -o temp/ownership.o\ncc -bundle -undefined dynamic_lookup -arch arm64 -mmacosx-version-min=11.0 -LModules/_hacl -Wl,-headerpad,40 temp/ownership.o -L/Users/mac/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib -o out/citry/ownership.cpython-314-darwin.so\nld: warning: search path 'Modules/_hacl' not found\n",
+  "generated_c_sha256": "7367ac6a74d18201a03497ced267468dc6932fe9dc1a848e69b518235856fac6",
+  "artifact": "/tmp/citry-ownership-module/out/citry/ownership.cpython-314-darwin.so",
+  "artifact_sha256": "1cf06fbe20973f9564e8a1fdd34a350942ac4a84c952508d0c5ec57f5125c91c"
+}

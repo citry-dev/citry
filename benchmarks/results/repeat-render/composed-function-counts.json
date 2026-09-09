@@ -1,0 +1,861 @@
+{
+  "diagnostic_only": true,
+  "graph_equality_claimed_only_between_composed_variants": true,
+  "cases": [
+    {
+      "case": "large",
+      "variants": {
+        "reference": {
+          "projected_digest": "feeb5d786af0224b74dcfb7d27cae3de8c46f7d8f67bd78e30f65f430a05c77a",
+          "bytes": 1013746,
+          "generated_ids": 342,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Icon": 41,
+            "HeroIcon": 41,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Button": 114,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 15,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 19,
+            "ProjectOutputs": 5,
+            "ProjectOutputBadge": 14,
+            "ProjectOutputForm": 14,
+            "Form": 14,
+            "ProjectOutputAttachments": 16,
+            "Tags": 16,
+            "ProjectOutputDependency": 2,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {},
+          "scheduled_functions": {},
+          "snapshot_counts": [
+            {
+              "source_locations": 1081,
+              "component_invocations": 339,
+              "logical_instances": 342,
+              "init_ancestry": 339,
+              "logical_fills": 468,
+              "physical_regions": 274,
+              "render_queue": 339
+            },
+            {
+              "source_locations": 1081,
+              "component_invocations": 339,
+              "logical_instances": 342,
+              "init_ancestry": 339,
+              "logical_fills": 468,
+              "physical_regions": 274,
+              "render_queue": 339
+            },
+            {
+              "source_locations": 1081,
+              "component_invocations": 339,
+              "logical_instances": 342,
+              "init_ancestry": 339,
+              "logical_fills": 468,
+              "physical_regions": 274,
+              "render_queue": 339
+            },
+            {
+              "source_locations": 1081,
+              "component_invocations": 339,
+              "logical_instances": 342,
+              "init_ancestry": 339,
+              "logical_fills": 468,
+              "physical_regions": 274,
+              "render_queue": 339
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 20,
+              "componentExecutionOrderConstraints": 40,
+              "componentInstances": 44,
+              "fills": 30,
+              "nestedComponents": 41,
+              "slotRegions": 30,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff",
+            "03250d3e1a5ce5beffa59fda95cbd99cc28aba71ed97b8bc00b0e174214775ff"
+          ]
+        },
+        "button": {
+          "projected_digest": "feeb5d786af0224b74dcfb7d27cae3de8c46f7d8f67bd78e30f65f430a05c77a",
+          "bytes": 1010065,
+          "generated_ids": 228,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Icon": 41,
+            "HeroIcon": 41,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 15,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 19,
+            "ProjectOutputs": 5,
+            "ProjectOutputBadge": 14,
+            "ProjectOutputForm": 14,
+            "Form": 14,
+            "ProjectOutputAttachments": 16,
+            "Tags": 16,
+            "ProjectOutputDependency": 2,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {
+            "callbacks": 114,
+            "outlets": 114
+          },
+          "scheduled_functions": {},
+          "snapshot_counts": [
+            {
+              "source_locations": 641,
+              "component_invocations": 225,
+              "logical_instances": 228,
+              "init_ancestry": 225,
+              "logical_fills": 256,
+              "physical_regions": 160,
+              "render_queue": 225
+            },
+            {
+              "source_locations": 641,
+              "component_invocations": 225,
+              "logical_instances": 228,
+              "init_ancestry": 225,
+              "logical_fills": 256,
+              "physical_regions": 160,
+              "render_queue": 225
+            },
+            {
+              "source_locations": 641,
+              "component_invocations": 225,
+              "logical_instances": 228,
+              "init_ancestry": 225,
+              "logical_fills": 256,
+              "physical_regions": 160,
+              "render_queue": 225
+            },
+            {
+              "source_locations": 641,
+              "component_invocations": 225,
+              "logical_instances": 228,
+              "init_ancestry": 225,
+              "logical_fills": 256,
+              "physical_regions": 160,
+              "render_queue": 225
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 19,
+              "componentExecutionOrderConstraints": 39,
+              "componentInstances": 43,
+              "fills": 29,
+              "nestedComponents": 40,
+              "slotRegions": 29,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "d1afc7e0f67bdc19661e371b9c0fb357c25ccbe73b2c0511a9941ef12680702b",
+            "d1afc7e0f67bdc19661e371b9c0fb357c25ccbe73b2c0511a9941ef12680702b",
+            "d1afc7e0f67bdc19661e371b9c0fb357c25ccbe73b2c0511a9941ef12680702b",
+            "d1afc7e0f67bdc19661e371b9c0fb357c25ccbe73b2c0511a9941ef12680702b"
+          ]
+        },
+        "immediate": {
+          "projected_digest": "feeb5d786af0224b74dcfb7d27cae3de8c46f7d8f67bd78e30f65f430a05c77a",
+          "bytes": 987414,
+          "generated_ids": 147,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "Icon": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 15,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 19,
+            "ProjectOutputs": 5,
+            "ProjectOutputBadge": 14,
+            "ProjectOutputForm": 14,
+            "Form": 14,
+            "ProjectOutputAttachments": 16,
+            "Tags": 16,
+            "ProjectOutputDependency": 2,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {
+            "Icon": 40,
+            "HeroIcon": 41,
+            "outlets": 154,
+            "svg_replays": 32,
+            "Button": 114
+          },
+          "scheduled_functions": {},
+          "snapshot_counts": [
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            },
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            },
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            },
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 18,
+              "componentExecutionOrderConstraints": 14,
+              "componentInstances": 18,
+              "fills": 17,
+              "nestedComponents": 15,
+              "slotRegions": 17,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340",
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340",
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340",
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340"
+          ]
+        },
+        "deferred": {
+          "projected_digest": "feeb5d786af0224b74dcfb7d27cae3de8c46f7d8f67bd78e30f65f430a05c77a",
+          "bytes": 987414,
+          "generated_ids": 147,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "Icon": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 15,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 19,
+            "ProjectOutputs": 5,
+            "ProjectOutputBadge": 14,
+            "ProjectOutputForm": 14,
+            "Form": 14,
+            "ProjectOutputAttachments": 16,
+            "Tags": 16,
+            "ProjectOutputDependency": 2,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {
+            "Icon": 40,
+            "outlets": 154,
+            "HeroIcon": 41,
+            "svg_replays": 32,
+            "Button": 114
+          },
+          "scheduled_functions": {
+            "Icon": 40,
+            "HeroIcon": 41,
+            "Button": 114
+          },
+          "snapshot_counts": [
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            },
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            },
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            },
+            {
+              "source_locations": 470,
+              "component_invocations": 144,
+              "logical_instances": 147,
+              "init_ancestry": 144,
+              "logical_fills": 206,
+              "physical_regions": 120,
+              "render_queue": 144
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 18,
+              "componentExecutionOrderConstraints": 14,
+              "componentInstances": 18,
+              "fills": 17,
+              "nestedComponents": 15,
+              "slotRegions": 17,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340",
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340",
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340",
+            "aa777172e39fb874e7cc873ced63d2383b40ffa5b497d728360ce63b2ef6b340"
+          ]
+        }
+      }
+    },
+    {
+      "case": "one_output",
+      "variants": {
+        "reference": {
+          "projected_digest": "6a13073ff8c3a1172c9983dfc697a55448f96c842b494a63f7286218746938ec",
+          "bytes": 893521,
+          "generated_ids": 110,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Icon": 23,
+            "HeroIcon": 23,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Button": 19,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 2,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 6,
+            "ProjectOutputs": 1,
+            "ProjectOutputBadge": 1,
+            "ProjectOutputForm": 1,
+            "Form": 1,
+            "ProjectOutputAttachments": 1,
+            "Tags": 1,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {},
+          "scheduled_functions": {},
+          "snapshot_counts": [
+            {
+              "source_locations": 331,
+              "component_invocations": 107,
+              "logical_instances": 110,
+              "init_ancestry": 107,
+              "logical_fills": 143,
+              "physical_regions": 81,
+              "render_queue": 107
+            },
+            {
+              "source_locations": 331,
+              "component_invocations": 107,
+              "logical_instances": 110,
+              "init_ancestry": 107,
+              "logical_fills": 143,
+              "physical_regions": 81,
+              "render_queue": 107
+            },
+            {
+              "source_locations": 331,
+              "component_invocations": 107,
+              "logical_instances": 110,
+              "init_ancestry": 107,
+              "logical_fills": 143,
+              "physical_regions": 81,
+              "render_queue": 107
+            },
+            {
+              "source_locations": 331,
+              "component_invocations": 107,
+              "logical_instances": 110,
+              "init_ancestry": 107,
+              "logical_fills": 143,
+              "physical_regions": 81,
+              "render_queue": 107
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 20,
+              "componentExecutionOrderConstraints": 40,
+              "componentInstances": 44,
+              "fills": 30,
+              "nestedComponents": 41,
+              "slotRegions": 30,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+            "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+            "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066",
+            "bc04670e2e050015d46c7179922013b5b1107a45ea7e2bf914e79d9271ec5066"
+          ]
+        },
+        "button": {
+          "projected_digest": "6a13073ff8c3a1172c9983dfc697a55448f96c842b494a63f7286218746938ec",
+          "bytes": 891930,
+          "generated_ids": 91,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Icon": 23,
+            "HeroIcon": 23,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 2,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 6,
+            "ProjectOutputs": 1,
+            "ProjectOutputBadge": 1,
+            "ProjectOutputForm": 1,
+            "Form": 1,
+            "ProjectOutputAttachments": 1,
+            "Tags": 1,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {
+            "callbacks": 19,
+            "outlets": 19
+          },
+          "scheduled_functions": {},
+          "snapshot_counts": [
+            {
+              "source_locations": 256,
+              "component_invocations": 88,
+              "logical_instances": 91,
+              "init_ancestry": 88,
+              "logical_fills": 106,
+              "physical_regions": 62,
+              "render_queue": 88
+            },
+            {
+              "source_locations": 256,
+              "component_invocations": 88,
+              "logical_instances": 91,
+              "init_ancestry": 88,
+              "logical_fills": 106,
+              "physical_regions": 62,
+              "render_queue": 88
+            },
+            {
+              "source_locations": 256,
+              "component_invocations": 88,
+              "logical_instances": 91,
+              "init_ancestry": 88,
+              "logical_fills": 106,
+              "physical_regions": 62,
+              "render_queue": 88
+            },
+            {
+              "source_locations": 256,
+              "component_invocations": 88,
+              "logical_instances": 91,
+              "init_ancestry": 88,
+              "logical_fills": 106,
+              "physical_regions": 62,
+              "render_queue": 88
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 19,
+              "componentExecutionOrderConstraints": 39,
+              "componentInstances": 43,
+              "fills": 29,
+              "nestedComponents": 40,
+              "slotRegions": 29,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "319730bb0d2fb2b20f85e445e7239079f0764c775147fd984139a8fb1c254422",
+            "319730bb0d2fb2b20f85e445e7239079f0764c775147fd984139a8fb1c254422",
+            "319730bb0d2fb2b20f85e445e7239079f0764c775147fd984139a8fb1c254422",
+            "319730bb0d2fb2b20f85e445e7239079f0764c775147fd984139a8fb1c254422"
+          ]
+        },
+        "immediate": {
+          "projected_digest": "6a13073ff8c3a1172c9983dfc697a55448f96c842b494a63f7286218746938ec",
+          "bytes": 870071,
+          "generated_ids": 46,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "Icon": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 2,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 6,
+            "ProjectOutputs": 1,
+            "ProjectOutputBadge": 1,
+            "ProjectOutputForm": 1,
+            "Form": 1,
+            "ProjectOutputAttachments": 1,
+            "Tags": 1,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {
+            "Icon": 22,
+            "HeroIcon": 23,
+            "outlets": 41,
+            "svg_replays": 17,
+            "Button": 19
+          },
+          "scheduled_functions": {},
+          "snapshot_counts": [
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            },
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            },
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            },
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 18,
+              "componentExecutionOrderConstraints": 14,
+              "componentInstances": 18,
+              "fills": 17,
+              "nestedComponents": 15,
+              "slotRegions": 17,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688",
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688",
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688",
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688"
+          ]
+        },
+        "deferred": {
+          "projected_digest": "6a13073ff8c3a1172c9983dfc697a55448f96c842b494a63f7286218746938ec",
+          "bytes": 870071,
+          "generated_ids": 46,
+          "component_calls": {
+            "ProjectPage": 1,
+            "ProjectLayoutTabbed": 1,
+            "Layout": 1,
+            "RenderContextProvider": 1,
+            "Base": 1,
+            "Css": 1,
+            "Sidebar": 1,
+            "Bookmarks": 1,
+            "Bookmark": 1,
+            "Menu": 1,
+            "MenuList": 1,
+            "Navbar": 1,
+            "Breadcrumbs": 1,
+            "Icon": 1,
+            "TabsStatic": 1,
+            "ListComponent": 1,
+            "DynamicElement": 2,
+            "Tabs": 1,
+            "TabItem": 5,
+            "ProjectInfo": 1,
+            "ProjectStatusUpdates": 1,
+            "ProjectUsers": 1,
+            "Table": 1,
+            "ProjectNotes": 3,
+            "ProjectOutputsSummary": 1,
+            "ExpansionPanel": 6,
+            "ProjectOutputs": 1,
+            "ProjectOutputBadge": 1,
+            "ProjectOutputForm": 1,
+            "Form": 1,
+            "ProjectOutputAttachments": 1,
+            "Tags": 1,
+            "_TabsImpl": 1,
+            "Js": 1
+          },
+          "candidate_counts": {
+            "Icon": 22,
+            "outlets": 41,
+            "HeroIcon": 23,
+            "svg_replays": 17,
+            "Button": 19
+          },
+          "scheduled_functions": {
+            "Icon": 22,
+            "HeroIcon": 23,
+            "Button": 19
+          },
+          "snapshot_counts": [
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            },
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            },
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            },
+            {
+              "source_locations": 157,
+              "component_invocations": 43,
+              "logical_instances": 46,
+              "init_ancestry": 43,
+              "logical_fills": 74,
+              "physical_regions": 40,
+              "render_queue": 43
+            }
+          ],
+          "browser_graph_counts": [
+            {
+              "componentClasses": 18,
+              "componentExecutionOrderConstraints": 14,
+              "componentInstances": 18,
+              "fills": 17,
+              "nestedComponents": 15,
+              "slotRegions": 17,
+              "sourceLocations": 0
+            }
+          ],
+          "snapshot_digests": [
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688",
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688",
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688",
+            "c53e220cb112df030904b833bafea9e2eb391f8d87cf2ec38f02a4943b9ef688"
+          ]
+        }
+      }
+    }
+  ],
+  "snapshot_archive": {
+    "path": "benchmarks/results/repeat-render/composed-function-snapshots.json.gz",
+    "sha256": "ad51b9b3257f913a68eb423729de7955a03e25b343e1d7e182f324cb8b0a495d"
+  },
+  "hashes": {
+    "benchmarks/composed_function_probe/probe.py": "e1f2866fa2756a2db11f1c55e8070e20635e0b1e52ee426f36bcccb9cf9adcf3",
+    "benchmarks/composed_function_probe/adapter.py": "5545aa0531615569a2790b9d886b9b5b57a9d796b5277e5d7edbda39305207d2",
+    "benchmarks/composed_function_probe/plan.md": "8f4869c86100c61d623a15e719c7ebc502414475835086cc17e0413da329b7d7",
+    "benchmarks/wrapper_function_probe/adapter.py": "700d23d8a761688e24b0174cdd5327e064385f32a366b78e9a1c66532a311a61",
+    "benchmarks/leaf_contract_probe/adapter.py": "3bed89337035ae9fc2e74f3d01dfd66db603789eb1a7d345e163c670c130e461",
+    "benchmarks/template_function_probe/runtime.py": "d341c7bdd48ad67db592d21a601816ba11ee50e3cbef3afe6881eab219f0ca72",
+    "packages/py/citry/tests/test_benchmark_citry.py": "05703823414b5c1feb2b01067861b514f9b2d03906b46eb8d918fb55c64781be"
+  }
+}

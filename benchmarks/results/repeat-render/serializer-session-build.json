@@ -1,0 +1,23 @@
+{
+  "experiment_only": true,
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "rustc": "rustc 1.98.0-nightly (14210df0e 2026-05-31)\nbinary: rustc\ncommit-hash: 14210df0e27ccd7d9e6a05b8085cbd438e4bbc65\ncommit-date: 2026-05-31\nhost: aarch64-apple-darwin\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6\n",
+  "cargo": "cargo 1.98.0-nightly (fbb61be30 2026-05-26)\n",
+  "build_command": "PYO3_PYTHON=/Users/mac/repos/citry-perf-repeat/.venv/bin/python cargo build --release --manifest-path benchmarks/serializer_session_probe/Cargo.toml",
+  "artifact": "/Users/mac/repos/citry-perf-repeat/benchmarks/serializer_session_probe/target/release/libcitry_serializer_session_probe.dylib",
+  "artifact_sha256": "ed32c0f2089aef33feda4c4e33694eb9b80b490cef6e016014c566049587b674",
+  "initial_artifact": "/tmp/citry-serializer-session-initial.dylib",
+  "initial_artifact_sha256": "bcfbd5dc5332f11db9baf223a6cc984ef4d37f5cb8a1019cbb9e7e52757514e0",
+  "hashes": {
+    "benchmarks/serializer_session_probe/src/lib.rs": "04cf87c514a0527c87d8e44d89487a9217666645236c5aee5deb67a800db5bf9",
+    "benchmarks/serializer_session_probe/Cargo.toml": "2d588f907ac251bc30b813c7a9a91907b55b862690b2626540d33201d3298433",
+    "benchmarks/serializer_session_probe/Cargo.lock": "89c58ae2d88ece8f6634bf359588b3b046c6802b05c4e9bf7d406f69b52a6366",
+    "benchmarks/serializer_session_probe/build.rs": "c609c2f1a8594abf959388e559d76241e51b0216faa7b37f529255eb1fc2c5eb",
+    "crates/citry_html_transform/src/marker.rs": "80a6d0d1a12b8c8a6abebedd729ebb607ffea151e74155df73d1fa4559ab32f0",
+    "crates/citry_html_transform/src/transformer.rs": "82d4d602391cc2c2b762a8e5993246a5de673ba9ec7a8ab9cffb978efc5d46d4",
+    "crates/citry_html_transform/src/lib.rs": "3b139a0900a7cb5eb8a48823c76b8080efd4ef0d84ddcad3eb89ca0838e6a199",
+    "crates/citry_html_transform/Cargo.toml": "05a2edcf12e512d14fc509322d2f5b73686b2a4efe2ab447b9dd82652ef7e15f",
+    "Cargo.toml": "2e295a8b646a6a5465b8860b22988b98d2989aa5300909eee349131d1bbeee87",
+    "rust-toolchain.toml": "dd58dc7a445ff047a8e35e641142efa232b5926f63b79764cfd407d2ca901722"
+  }
+}
