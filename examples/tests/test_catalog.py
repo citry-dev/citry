@@ -54,6 +54,9 @@ def test_catalog_projects_have_complete_independent_inventory() -> None:
         assert (project.source / "pyproject.toml").is_file()
         assert (project.source / "uv.lock").is_file()
         assert (project.source / "tests").is_dir()
+        if project.kind == "starter":
+            assert (project.source / "AGENTS.md").is_file()
+            assert (project.source / "CLAUDE.md").read_text(encoding="utf-8").strip() == "@AGENTS.md"
         assert project.test[:2] == ("uv", "run")
         assert "../" not in project.source.joinpath("README.md").read_text()
         if project.is_web:

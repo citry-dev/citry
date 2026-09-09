@@ -183,6 +183,10 @@ class CitryElement:
         return f"{cls_name}({kwargs_str})"
 
 
+# Capture this at definition, before another module can import a replaced alias.
+_DEFAULT_CITRY_ELEMENT = CitryElement
+
+
 class _TemplateElement(CitryElement):
     """Private element carrying a standalone template record into rendering."""
 

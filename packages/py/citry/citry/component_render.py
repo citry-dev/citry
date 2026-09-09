@@ -50,9 +50,12 @@ from citry.assets import load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import (
+    _VALUE_CONTEXT,
     CitryRender,
     DeferredComponent,
+    RenderFrame,
     _PhysicalRegion,
+    _render_slot_value,
     unwrap_physical_region,
 )
 from citry.citry_template import CitryTemplate, DeclaredSlot
@@ -91,7 +94,7 @@ from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
     from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
     from citry.component import Component
@@ -131,23 +134,37 @@ def render_impl(
     leaves any enclosing render's globals in place, so a nested ``render_impl``
     call does not disturb the render it runs inside.
     """
-    owns_ownership_graph = current_ownership_graph() is None
-    with (
-        ownership_render_scope() as ownership,
-        _component_like_render_scope(element.comp_cls.citry),
-        pure_body_cache_scope(),
-    ):
-        try:
-            if render_globals is None:
-                return _render_tree(element, parent, provides)
-            token = _render_globals.set(render_globals)
+    value_token = _VALUE_CONTEXT.set(None)
+    try:
+        owns_ownership_graph = current_ownership_graph() is None
+        if element.comp_cls.simple and parent is None:
+            # A standalone template supplies an explicit owner for a root simple
+            # call. Embedded calls already carry their actual insertion context.
+            return element.comp_cls.citry.render_template(
+                "{{ simple_root_value }}",
+                {"simple_root_value": element},
+                provides=provides,
+                template_globals=render_globals,
+                origin=f"<simple root {element.comp_cls.__name__}>",
+            )
+        with (
+            ownership_render_scope() as ownership,
+            _component_like_render_scope(element.comp_cls.citry),
+            pure_body_cache_scope(),
+        ):
             try:
-                return _render_tree(element, parent, provides)
+                if render_globals is None:
+                    return _render_tree(element, parent, provides)
+                token = _render_globals.set(render_globals)
+                try:
+                    return _render_tree(element, parent, provides)
+                finally:
+                    _render_globals.reset(token)
             finally:
-                _render_globals.reset(token)
-        finally:
-            if owns_ownership_graph:
-                ownership.release_transient_region_results()
+                if owns_ownership_graph:
+                    ownership.release_transient_region_results()
+    finally:
+        _VALUE_CONTEXT.reset(value_token)
 
 
 def _render_tree(
@@ -282,16 +299,22 @@ def _settle_render(
             parts=_replacement_parts(content, old.context, component),
             context=old.context,
             is_component_root=old.is_component_root,
+            is_transparent_root=old.frame.is_transparent_root,
         )
         if ownership is not None:
             selected_render_ids, selected_object_ids = _render_selection(new_render)
+            # This container was just created, so no captured region can own
+            # it. Only objects carried into its parts can preserve old output.
+            selected_object_ids.discard(id(new_render))
             selected_region_ids = ownership.selected_region_ids(render_object_ids=selected_object_ids)
-            ownership.retire_unselected_after(
-                hook_checkpoint,
-                through_order=hook_through_order,
-                preserved_render_ids=selected_render_ids,
-                preserved_region_ids=selected_region_ids,
-            )
+            # Equal capture orders mean the hook created no ownership records to retire.
+            if hook_checkpoint != hook_through_order:
+                ownership.retire_unselected_after(
+                    hook_checkpoint,
+                    through_order=hook_through_order,
+                    preserved_render_ids=selected_render_ids,
+                    preserved_region_ids=selected_region_ids,
+                )
         if ownership is not None and ownership_checkpoint is not None and id(old) not in selected_object_ids:
             ownership.retire_component_output(
                 component.id,
@@ -410,10 +433,17 @@ def _settle_render(
             return None
         finalized = _finalize(task.render, error)
         if finalized.frame.is_component_root and finalized.context.component is not None:
-            finalized.frame = replace(
-                finalized.frame,
-                root_markers=tuple(dict.fromkeys(finalized.context._get_root_markers())),
-            )
+            root_markers = tuple(dict.fromkeys(finalized.context._get_root_markers()))
+            # Most roots have no extra markers. Keep their immutable frame;
+            # custom frame constructors and marker changes still run replacement.
+            frame = finalized.frame
+            if (
+                root_markers
+                or type(frame) is not RenderFrame
+                or type(frame.root_markers) is not tuple
+                or frame.root_markers
+            ):
+                finalized.frame = replace(finalized.frame, root_markers=root_markers)
         if task.cache_plan is not None:
             component = finalized.context.component
             if component is None:
@@ -579,20 +609,31 @@ def _scan_deferred_parts(
     parent_context: CitryContext,
     tasks: list[_RenderTask | _ContextMergeTask],
 ) -> bool:
-    """Append deferred work without creating one recursive closure per scan."""
-    has_deferred = False
-    for i, part in enumerate(parts):
+    """Append child work in source order, merging contexts after their children."""
+    initial_count = len(tasks)
+    stack: list[tuple[Iterator[tuple[int, RenderPart]], list[RenderPart], CitryContext, int]] = [
+        (iter(enumerate(parts)), parts, parent_context, initial_count)
+    ]
+    while stack:
+        entries, current_parts, context, task_count = stack[-1]
+        try:
+            i, part = next(entries)
+        except StopIteration:
+            stack.pop()
+            if stack and len(tasks) > task_count:
+                enclosing_context = stack[-1][2]
+                if context is not enclosing_context:
+                    tasks.append(_ContextMergeTask(enclosing_context, context))
+            continue
+        if type(part) is str:
+            continue
         if isinstance(part, DeferredComponent):
-            tasks.append(_RenderTask(part, _DeferredComponentPosition(parts, i, parent_context)))
-            has_deferred = True
+            tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context)))
         else:
             unwrapped = unwrap_physical_region(part)
             if isinstance(unwrapped, CitryRender):
-                nested_has_deferred = _scan_deferred_parts(unwrapped.parts, unwrapped.context, tasks)
-                has_deferred = has_deferred or nested_has_deferred
-                if nested_has_deferred and unwrapped.context is not parent_context:
-                    tasks.append(_ContextMergeTask(parent_context, unwrapped.context))
-    return has_deferred
+                stack.append((iter(enumerate(unwrapped.parts)), unwrapped.parts, unwrapped.context, len(tasks)))
+    return len(tasks) > initial_count
 
 
 def _scan_deferred(render: CitryRender) -> list[_RenderTask | _ContextMergeTask]:
@@ -629,6 +670,8 @@ def _contains_deferred(render: CitryRender) -> bool:
             continue
         seen.add(object_id)
         for part in current.parts:
+            if type(part) is str:
+                continue
             if isinstance(part, DeferredComponent):
                 return True
             unwrapped = unwrap_physical_region(part)
@@ -652,6 +695,8 @@ def _render_ids(render: CitryRender, *, exclude_render_id: str | None = None) ->
         if render_id is not None and render_id != exclude_render_id:
             render_ids.add(render_id)
         for part in current.parts:
+            if type(part) is str:
+                continue
             nested_part = unwrap_physical_region(part)
             if isinstance(nested_part, CitryRender):
                 pending.append(nested_part)
@@ -670,6 +715,10 @@ def _render_selection(render: CitryRender) -> tuple[set[str], set[int]]:
     pending: list[RenderPart] = [render]
     while pending:
         current = pending.pop()
+        # Text identity cannot select an occurrence: equal or interned text
+        # can appear in unrelated slots. Keep only structural identities.
+        if not isinstance(current, (CitryRender, _PhysicalRegion)):
+            continue
         object_id = id(current)
         if object_id in object_ids:
             continue
@@ -735,6 +784,8 @@ def _contains_render(container: CitryRender, target: CitryRender) -> bool:
             continue
         seen.add(object_id)
         for part in current.parts:
+            if type(part) is str:
+                continue
             nested_part = unwrap_physical_region(part)
             if isinstance(nested_part, CitryRender):
                 pending.append(nested_part)
@@ -793,15 +844,29 @@ def _render_one_traced(
     from this ``parent`` argument), and is available even when the failure
     happens before the instance exists (e.g. kwargs validation).
     """
-    with resume_ownership_graph(element.ownership_graph):
-        try:
-            return _render_one(element, parent, provides)
-        except Exception as err:
-            ownership = element.ownership_graph or current_ownership_graph()
-            if ownership is not None:
-                ownership.fail_invocation(element.ownership_invocation_id)
-            set_component_error_message(err, [*_component_path(parent), element.comp_cls.__name__])
-            raise
+    graph = element.ownership_graph
+    # Ordinary descendants already share the active graph. Only delayed work
+    # from another graph needs a temporary scope and its cleanup machinery.
+    if graph is None or graph is current_ownership_graph():
+        return _render_one_with_error_path(element, parent, provides)
+    with resume_ownership_graph(graph):
+        return _render_one_with_error_path(element, parent, provides)
+
+
+def _render_one_with_error_path(
+    element: CitryElement,
+    parent: Component | None,
+    provides: dict[str, Any] | None,
+) -> _InitialRender:
+    """Record a rendering failure while its owning graph is still active."""
+    try:
+        return _render_one(element, parent, provides)
+    except Exception as err:
+        ownership = element.ownership_graph or current_ownership_graph()
+        if ownership is not None:
+            ownership.fail_invocation(element.ownership_invocation_id)
+        set_component_error_message(err, [*_component_path(parent), element.comp_cls.__name__])
+        raise
 
 
 def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
@@ -817,6 +882,12 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
     replace the error. An error that is not swallowed is raised here, to
     continue bubbling.
     """
+    from citry._simple_runtime import SimpleRender  # noqa: PLC0415
+
+    if isinstance(render, SimpleRender):
+        if error is not None:
+            raise error
+        return render
     component = render.context.component
     if component is None:
         if error is not None:
@@ -896,16 +967,27 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
                 ),
             )
     if isinstance(new_render, str):
-        return CitryRender(parts=[new_render], context=render.context, is_component_root=render.is_component_root)
+        return CitryRender(
+            parts=[new_render],
+            context=render.context,
+            is_component_root=render.is_component_root,
+            is_transparent_root=render.frame.is_transparent_root,
+        )
     if isinstance(new_render, CitryRender) and new_render is not render:
         if new_render.context is render.context:
             return CitryRender(
                 parts=new_render.parts,
                 context=render.context,
                 is_component_root=render.is_component_root,
+                is_transparent_root=render.frame.is_transparent_root,
             )
         _merge_dependencies(render.context, new_render.context)
-        return CitryRender(parts=[new_render], context=render.context, is_component_root=render.is_component_root)
+        return CitryRender(
+            parts=[new_render],
+            context=render.context,
+            is_component_root=render.is_component_root,
+            is_transparent_root=render.frame.is_transparent_root,
+        )
     if new_render is not None:
         return new_render
     return render
@@ -990,6 +1072,20 @@ def _render_one(
 
     """
     comp_cls = element.comp_cls
+    if comp_cls.simple:
+        from citry._simple_runtime import SimpleElement, prepare_simple_element, render_simple  # noqa: PLC0415
+
+        if not isinstance(element, SimpleElement):
+            element = prepare_simple_element(
+                element,
+                CitryContext(
+                    component=parent,
+                    provides=provides,
+                    ownership=element.ownership_graph or current_ownership_graph(),
+                    sandboxed=comp_cls.citry.settings.sandbox_expressions,
+                ),
+            )
+        return _InitialRender(render_simple(element), None, None, None)
     _validate_client_props_target(element)
     citry_instance = comp_cls.citry
     extensions = citry_instance.extensions
@@ -1007,6 +1103,11 @@ def _render_one(
         provides=provides,
         _defer_input_finalization=True,
     )
+    if type(element) is not CitryElement:
+        from citry.components.dynamic import _DynamicSelectorElement  # noqa: PLC0415
+
+        if isinstance(element, _DynamicSelectorElement):
+            component._selector_call_shape = (element.contains_fills, element.has_range_directives)
     component._component_tag_client_bindings = element.component_tag_client_bindings
     # Private dynamic-element directives must be visible to input hooks, but
     # never enter the user kwargs those hooks can replace.
@@ -1178,7 +1279,12 @@ def _render_one(
                 preserved_region_ids=_selected_region_ids(ownership, selected_objects),
             )
         return _InitialRender(
-            render=CitryRender(parts=parts, context=context, is_component_root=not comp_cls.transparent),
+            render=CitryRender(
+                parts=parts,
+                context=context,
+                is_component_root=not comp_cls.transparent,
+                is_transparent_root=comp_cls.transparent,
+            ),
             generator=generator,
             cache_plan=cache_plan,
             cache_hit=None,
@@ -1341,7 +1447,12 @@ def _render_one(
             preserved_region_ids=_selected_region_ids(ownership, selected_objects),
         )
     return _InitialRender(
-        render=CitryRender(parts=parts, context=context, is_component_root=not comp_cls.transparent),
+        render=CitryRender(
+            parts=parts,
+            context=context,
+            is_component_root=not comp_cls.transparent,
+            is_transparent_root=comp_cls.transparent,
+        ),
         generator=generator,
         cache_plan=cache_plan,
         cache_hit=None,
@@ -1363,7 +1474,12 @@ def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInt
         return part
     # Exact type matters: PhysicalRegionRender is a CitryRender subclass whose
     # wrapper identity and graph record must be recreated by the slot runtime.
-    if type(part) is not CitryRender or part.context is not context or part.is_component_root:
+    if (
+        type(part) is not CitryRender
+        or part.context is not context
+        or part.is_component_root
+        or part.frame.is_transparent_root
+    ):
         return None
     plan: list[str | PureInteriorBody] = []
     for nested_part in part.parts:
@@ -1411,11 +1527,14 @@ def _render_pure_live_item(item: Node, context: CitryContext, *, tracing: bool) 
     """Execute one live plan hole with the ordinary body-walker contract."""
     if tracing:
         trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
+    value_token = _VALUE_CONTEXT.set(context)
     try:
         part = item.render(context)
     except Exception as err:
         _attach_template_position(err, item, context)
         raise
+    finally:
+        _VALUE_CONTEXT.reset(value_token)
     unwrapped = unwrap_physical_region(part)
     if isinstance(unwrapped, CitryRender) and unwrapped.context is not context and not _contains_deferred(unwrapped):
         _merge_dependencies(context, unwrapped.context)
@@ -1505,7 +1624,9 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
         # Invoked with no data, like {{ my_slot }}. Slot content renders with
         # the scope of the component that wrote it, so its collected data is
         # copied into this render (the same merge as _render_body does).
-        part = value(provides=context.provides)
+        part = _render_slot_value(value, None, None, context)
+        if type(part) is str:
+            return [part]
         unwrapped = unwrap_physical_region(part)
         if (
             isinstance(unwrapped, CitryRender)
@@ -1519,6 +1640,10 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
         # renders it, so a replacement chain can never exhaust the Python
         # call stack.
         ownership = context.ownership
+        if value.comp_cls.simple:
+            from citry._simple_runtime import simple_deferred  # noqa: PLC0415
+
+            return [simple_deferred(value, context)]
         return [
             DeferredComponent(
                 value,
@@ -1772,29 +1897,36 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     already-rendered value embedded in the middle can still be read later. Joining
     happens in ``CitryRender.serialize()``.
     """
-    parts: list[RenderPart] = []
-    tracing = is_tracing()  # hoisted: one level check per body walk, not per node
-    for item in body:
-        if isinstance(item, str):
-            parts.append(item)
-            continue
-        if tracing:
-            trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
-        try:
-            part = item.render(context)
-        except Exception as err:
-            _attach_template_position(err, item, context)
-            raise
-        unwrapped = unwrap_physical_region(part)
-        if (
-            isinstance(unwrapped, CitryRender)
-            and unwrapped.context is not context
-            and not _contains_deferred(unwrapped)
-        ):
-            _merge_dependencies(context, unwrapped.context)
-        parts.append(part)
+    value_token = _VALUE_CONTEXT.set(context)
+    try:
+        parts: list[RenderPart] = []
+        tracing = is_tracing()  # hoisted: one level check per body walk, not per node
+        for item in body:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            if tracing:
+                trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
+            try:
+                part = item.render(context)
+            except Exception as err:
+                _attach_template_position(err, item, context)
+                raise
+            if type(part) is str:
+                parts.append(part)
+                continue
+            unwrapped = unwrap_physical_region(part)
+            if (
+                isinstance(unwrapped, CitryRender)
+                and unwrapped.context is not context
+                and not _contains_deferred(unwrapped)
+            ):
+                _merge_dependencies(context, unwrapped.context)
+            parts.append(part)
 
-    return parts
+        return parts
+    finally:
+        _VALUE_CONTEXT.reset(value_token)
 
 
 def _attach_template_position(err: Exception, node: BodyItem, context: CitryContext) -> None:
@@ -1808,10 +1940,9 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
     render through ``_render_body`` recursively, so the enclosing node's
     pass through here is a no-op (see ``set_template_position_error_message``).
 
-    The header names ``context.component`` as the template's owner. That
-    holds for slot-fill content too: a fill body renders with the context of
-    the component that wrote it, and its nodes come from that component's
-    template.
+    The header names the lexical template class, which can be a simple class
+    rendering under another component's ownership. Slot-fill content retains
+    the source context of the component that wrote it.
     """
     source = getattr(node, "source", None)
     position = getattr(node, "position", None)
@@ -1819,6 +1950,8 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
         return
     component = context.component
     component_name = type(component).__name__ if component is not None else None
+    if context._simple_scope is not None:
+        component_name = context._simple_scope.component_class.__name__
     # Prefer the exact template record that produced this body. This matters
     # for render_template() and nested templates: loading the component's
     # primary template would report the wrong origin and provider metadata.

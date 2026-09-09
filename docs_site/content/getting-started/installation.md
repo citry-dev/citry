@@ -46,6 +46,13 @@ It adds highlighting, completion, navigation, diagnostics, and formatting for
 Citry code inside Python files. Follow the [VS Code setup guide](/ide/vscode/)
 to connect it to the Citry environment and component registry for your project.
 
+## Set up a coding agent
+
+If you use a coding agent, follow the optional
+[AI coding agents guide](/getting-started/ai-agents/) to add documentation
+pointers and project instructions. Citry's starter projects include these
+instruction files; you can also add them to an existing project.
+
 ## Check the installation
 
 Save this complete example as `hello.py`. It uses Citry's

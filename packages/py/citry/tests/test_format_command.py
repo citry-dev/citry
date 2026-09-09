@@ -354,7 +354,7 @@ def test_verbose_reports_the_pinned_python_provider(
 
     captured = capsys.readouterr()
     assert (
-        "citry-html@1, python-expressions:ruff@0.16.2+5b48a04097, javascript:unavailable, css:unavailable\n"
+        "citry-html@1, python-expressions:ruff@0.16.6+22f65a2ab5, javascript:unavailable, css:unavailable\n"
     ) in captured.err
 
 

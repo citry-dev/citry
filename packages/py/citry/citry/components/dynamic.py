@@ -61,6 +61,29 @@ _ELEMENT_KEY_ATTR = "data-citry-key"
 _ELEMENT_MORPH_ATTR = "data-citry-morph"
 
 
+class _DynamicSelectorElement(CitryElement):
+    """Retain authored call restrictions while selector input hooks choose a target."""
+
+    __slots__ = ("contains_fills", "has_range_directives")
+    contains_fills: bool
+    has_range_directives: bool
+
+
+def _simple_selector_target(component: Component, target: type[Component], kwargs: dict[str, Any]) -> CitryElement:
+    """Keep the ordinary selector as owner when its selected target has no instance."""
+    shape = getattr(component, "_selector_call_shape", (False, False))
+    if any(shape) or component._element_morph_metadata is not None:
+        raise TypeError(
+            f"Component {target.__name__} uses simple=True; named fills and range directives are unsupported."
+        )
+    if component._component_tag_client_bindings:
+        raise TypeError(f"Component {target.__name__} uses simple=True; component bindings are unsupported.")
+    graph = component._ownership_graph
+    if graph.complete_selector_invocation(component):
+        graph.bind_supplied_slots(component)
+    return CitryElement(target, kwargs, component.raw_slots, ownership_graph=graph)
+
+
 def make_dynamic_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-component>`` component for one Citry instance."""
 
@@ -76,9 +99,7 @@ def make_dynamic_component(citry_instance: Citry) -> type[Component]:
         citry = citry_instance
         name = "component"
         transparent = True
-        template = """
-          {{ target }}
-        """.strip()
+        _citry_dynamic_selector = True
 
         def template_data(
             self,
@@ -87,20 +108,26 @@ def make_dynamic_component(citry_instance: Citry) -> type[Component]:
         ) -> dict[str, Any]:
             data = dict(self.raw_kwargs)
             comp_cls = _resolve_component(self, const_value(data.pop("is", None)))
+            if comp_cls.simple:
+                return {"target": _simple_selector_target(self, comp_cls, data)}
             # The target renders in this tag's place: remaining kwargs and the
             # full slots pass through, so the target's own Kwargs/Slots
             # validation speaks for unexpected inputs.
-            return {
-                "target": CitryElement(
-                    comp_cls,
-                    data,
-                    self.raw_slots,
-                    component_tag_client_bindings=self._component_tag_client_bindings,
-                    ownership_invocation_id=self._ownership_invocation_id,
-                    ownership_graph=self._ownership_graph,
-                    forward_ownership_invocation=(getattr(comp_cls, "name", None) or "").lower() == "component",
-                )
-            }
+            target = _DynamicSelectorElement(
+                comp_cls,
+                data,
+                self.raw_slots,
+                component_tag_client_bindings=self._component_tag_client_bindings,
+                ownership_invocation_id=self._ownership_invocation_id,
+                ownership_graph=self._ownership_graph,
+                forward_ownership_invocation=(getattr(comp_cls, "name", None) or "").lower() == "component",
+            )
+            target.contains_fills, target.has_range_directives = getattr(self, "_selector_call_shape", (False, False))
+            return {"target": target}
+
+        template = """
+          {{ target }}
+        """.strip()
 
     return DynamicComponent
 

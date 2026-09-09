@@ -1,5 +1,5 @@
 {
-  "alpineVersion": "3.16.2",
+  "alpineVersion": "3.17.1",
   "cases": [
     {
       "id": "core-operators",

@@ -26,6 +26,7 @@ citry/
 │   ├── citry_core_py/   # Main Rust crate exposed to Python
 │   ├── citry_html_transform/
 │   ├── citry_i18n/     # Language-neutral Fluent catalog runtime
+│   ├── citry_ownership/ # Internal render relationship calculation
 │   ├── citry_template_formatter/
 │   ├── python_safe_eval/
 │   └── citry_template_parser/
@@ -61,7 +62,7 @@ As such, the Rust crates are ideal for:
 ### Prerequisites
 
 - **Rust**: Install via [rustup](https://rustup.rs/). Vendored Ruff requires
-  Rust 1.95 or higher, and this repository selects the nightly channel.
+  Rust 1.96 or higher, and this repository selects the nightly channel.
 - **Python**: 3.10 or higher
 - **UV**: Fast Python package installer (recommended)
 - **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based
@@ -76,7 +77,7 @@ As such, the Rust crates are ideal for:
 
 ### Installing and Managing Rust
 
-This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.95
+This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.96
 or higher. The edition and minimum version are both available on stable Rust;
 the repository separately chooses to track nightly in
 [`rust-toolchain.toml`](../rust-toolchain.toml) so local and CI builds use one
@@ -187,6 +188,19 @@ pip install uv
 
    Note: both `maturin develop` and the `uv sync` build produce a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark.
 
+   When switching between a version-specific extension and an ABI3 build, both
+   generated binaries can remain in the package directory. Python prefers the
+   binary matching its exact version. Check the imported file before testing:
+
+   ```bash
+   uv run --no-sync python -c \
+     'import citry_core._rust as rust; print(rust.__file__)'
+   ```
+
+   To test ABI3, move the older generated binary for that interpreter outside
+   the package directory and confirm that Python imports the intended ABI3
+   artifact (`_rust.abi3.so` in the macOS build).
+
 5. **Run tests**:
 
    ```bash
@@ -194,7 +208,7 @@ pip install uv
    uv run pytest
 
    # Or run Rust tests first (scoped to our crates, see "Running tests" below)
-   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval
    ```
 
 ## Common Development Tasks
@@ -232,10 +246,10 @@ would also run ruff's own test suite. CI scopes the run the same way
 uv run pytest
 
 # Rust tests (our crates only)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval
 
 # Both (Rust first, then Python)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
 ```
 
 #### Browser end-to-end tests
@@ -982,13 +996,14 @@ only be uploaded through the web interface; there is no API for either.
 The top-level `Cargo.toml` defines a workspace that includes:
 
 - Core crates (`citry_core_py`, `citry_html_transform`, `citry_i18n`,
+  `citry_ownership`,
   `citry_template_formatter`, `python_safe_eval`, `citry_template_parser`)
 - Shared dependencies and toolchain configuration
 - Unified linting, formatting, and testing
 
 ### One binary, hand-owned Python API
 
-All the Rust crates are exposed to Python through a single binding crate,
+Shipping Rust capabilities are exposed to Python through a single binding crate,
 `citry_core_py`, compiled to one extension module, `citry_core._rust`. A
 Rust-to-Python binary is large (on the order of ~100 MB), so bundling every
 crate into one module ships one binary instead of one per crate.
@@ -1329,13 +1344,17 @@ change public package bytes. Retry a missed post by manually running **Notify
 Discord on Release** with the existing GitHub Release tag; do not rerun the
 package publisher merely to resend Discord.
 
-**`citry` pins one exact `citry-core` version** (`citry-core==1.6.1`, not a
+**`citry` pins one exact `citry-core` version** (`citry-core==1.7.0`, not a
 range). The runtime node classes in `citry.nodes` read the source that
 citry-core's compiler emits, so a citry-core release that changes that output
 would otherwise reach an already-published `citry` that cannot read it. Raise
 the pin in the same change that bumps citry-core's version. That makes the two
 releases a pair, and the controller publishes and verifies `citry-core` before
 it starts Citry's publication layer.
+
+Citry UI, the LSP and example applications declare a minimum Citry version
+without an upper bound. Version checks accept later Citry versions; integrations
+that consume versioned protocols must still validate those schemas.
 
 ### The `review` branch holds work that has not been read yet
 
@@ -1638,7 +1657,7 @@ not missed.
 ### Docs workflow Rust cache
 
 The docs workflows build the local `citry_core` extension because the rendered
-site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.95.0`), not
+site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.96.0`), not
 the repository's moving development nightly, and share the
 `docs-citry-core-py314` Rust cache across Ubuntu/CPython 3.14 jobs. The cache
 deliberately omits the GitHub job ID and is saved even if a later docs guard,
@@ -1708,7 +1727,7 @@ The workflow also builds one
 pinned by the playground. That browser wheel is another build of
 `citry-core`, not a package dependency.
 
-The qualification uses Rust 1.95.0, Maturin 1.14.1, and Cargo's
+The qualification uses Rust 1.96.0, Maturin 1.15.0, and Cargo's
 performance-qualified `release-wheel` profile: fat LTO, one codegen unit, and
 no debug information in the stripped distribution build. The four-way
 profile/ABI comparison and keep/drop decision are recorded in
@@ -1718,7 +1737,7 @@ runner-image change cannot silently add or remove a wheel. Runnable wheels are
 installed and exercised in their build jobs: every supported interpreter on
 Linux x86_64 and Windows, plus the oldest and newest CPython on macOS. The
 remaining cross-architecture wheels receive the same static inspection. The
-sdist job rebuilds outside the checkout with the declared Rust 1.95 minimum and
+sdist job rebuilds outside the checkout with the declared Rust 1.96 minimum and
 exercises the resulting wheel before uploading the sdist.
 
 Each builder keeps its output in a separate directory. The final qualification

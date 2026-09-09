@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.3 - 2026-09-09
+
+- Use Citry LSP 0.1.4 with Citry 0.5 projects.
+
+
 ## 0.1.2 - 2026-08-30
 
 - Show native HTML hover information for Alpine `:attribute` bindings while

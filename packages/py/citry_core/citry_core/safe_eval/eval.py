@@ -1,9 +1,11 @@
 import builtins
 from collections.abc import Callable, Mapping, MutableMapping
+from keyword import iskeyword
 from types import MappingProxyType
 from typing import Any, Literal, cast
 
 from citry_core import _rust
+from citry_core.safe_eval import error as error_module
 from citry_core.safe_eval.error import error_context, format_error_with_context
 from citry_core.safe_eval.sandbox import (
     is_safe_attribute,
@@ -182,7 +184,49 @@ def safe_eval(
     #       the newlines ensure that trailing comments don't swallow the closing parenthesis.
     lambda_code = f"_eval_expr = lambda context: (\n{transformed_code}\n)"
 
-    return _exec_func_with_error_handling(lambda_code, "_eval_expr", source, "expression", eval_namespace)
+    # A complete ASCII name has one lookup and an unambiguous source range.
+    # Keep Rust validation above and custom interceptors on the general path.
+    simple_name = (
+        variable_fn is _DEFAULT_VARIABLE
+        and type(source) is str
+        and source.isascii()
+        and source.isidentifier()
+        and not iskeyword(source)
+    )
+    return _exec_func_with_error_handling(
+        lambda_code, "_eval_expr", source, "expression", eval_namespace, simple_name=simple_name
+    )
+
+
+def _simple_name_evaluator(
+    reference: Callable[..., Any], source: str, function_source: str, name: str, token: tuple[int, int]
+) -> Callable[..., Any]:
+    """Combine a name's live policy check and lookup while retaining error context."""
+
+    def evaluate(*args: Any, **kwargs: Any) -> Any:
+        """Evaluate the compiled function with the given arguments."""
+        # The generated lambda owns keyword binding and invalid-call diagnostics.
+        if len(args) != 1 or kwargs:
+            return reference(*args, **kwargs)
+        try:
+            try:
+                if not is_safe_variable(name):
+                    raise SecurityError(f"variable '{name}' is unsafe")
+                return args[0][name]
+            except Exception as error:
+                # Match the operation decorator, including its live formatter.
+                start, end = token
+                error_module.format_error_with_context(error, source, start, end, "variable")
+                raise
+        except Exception as error:
+            # A failure in operation formatting still receives expression context.
+            if not getattr(error, "_error_processed", False):
+                format_error_with_context(error, source, 0, len(source), "expression", add_prefix=False)
+                error._error_processed = True  # type: ignore[attr-defined]
+            raise
+
+    evaluate._source_code = function_source  # type: ignore[attr-defined]
+    return evaluate
 
 
 # A read-only empty mapping used as `__builtins__` for unsandboxed evaluation:
@@ -239,7 +283,13 @@ def compile_expr(source: str, *, sandboxed: bool = True) -> Callable[[Mapping[st
 
 # NOTE: This is used also in citry_template_parser.
 def _exec_func_with_error_handling(
-    func_string: str, func_name: str, source: str, kind: str, global_scope: dict[str, Any]
+    func_string: str,
+    func_name: str,
+    source: str,
+    kind: str,
+    global_scope: dict[str, Any],
+    *,
+    simple_name: bool = False,
 ) -> Callable[..., Any]:
     local_scope: dict[str, Any] = {}
 
@@ -275,6 +325,14 @@ def _exec_func_with_error_handling(
             raise
 
     evaluate._source_code = func_string  # type: ignore[attr-defined]
+    if simple_name:
+        # Preserve the exact key and offsets that the generated call would pass.
+        # Different compiler constant layouts can use the general evaluator.
+        constants = compiled_func.__code__.co_consts
+        names = [value for value in constants if type(value) is str and value == source]
+        tokens = [value for value in constants if type(value) is tuple and value == (0, len(source))]
+        if len(names) == len(tokens) == 1:
+            return _simple_name_evaluator(evaluate, source, func_string, names[0], tokens[0])
     return evaluate
 
 
@@ -313,6 +371,10 @@ def variable(__context: Mapping[str, Any], __source: str, __token: tuple[int, in
     if not is_safe_variable(var_name):
         raise SecurityError(f"variable '{var_name}' is unsafe")
     return __context[var_name]
+
+
+# Substituted interceptors must retain their own lookup and error behavior.
+_DEFAULT_VARIABLE = variable
 
 
 @error_context("attribute")

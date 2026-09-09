@@ -208,20 +208,30 @@ citry --app myproject.app:citry_app check
 See the [VS Code guide](https://citry.dev/ide/vscode/) and
 [CLI reference](https://citry.dev/cli/) for setup and CI usage.
 
+## Work with a coding agent
+
+Point your agent at [Citry's documentation index](https://citry.dev/llms.txt)
+and your project's setup and test commands. The
+[AI coding agents guide](https://citry.dev/getting-started/ai-agents/) includes
+instructions for existing projects and explains the agent files included in
+the current starter projects. You do not need to install a Citry skill.
+
 ## Performance
 
-The current benchmark renders a large page with about 350 Citry component
-markers and 986 KB of output, including browser runtimes and the component
-ownership graph:
+The current benchmark renders a large project page using Citry's documented
+performance optimizations:
 
-![Citry vs Django vs django-components rendering a large page. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
+![First, second and warmed render times for optimized Citry, Django, django-components and Jinja2. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
 
-- Compared with django-components, Citry is about 12% slower on the first
-  render and 24% faster once warm.
-- Compared with a bare Django template, Citry's warm render takes about 3.5
-  times as long while also running its component lifecycle, extension,
-  dependency, ownership, and security work.
-- Jinja2 remains the fastest no-component baseline once warm.
+\* Citry uses `simple` and `pure` optimizations. See the
+[performance optimization guide](https://citry.dev/advanced/performance/).
+
+- Citry takes 24.62 ms warmed, about 55% less time than django-components
+  on this workload.
+- Button, Icon and HeroIcon use `simple = True`, giving up independent
+  component identity and hooks while keeping their data callbacks live.
+- Django takes 11.67 ms warmed and Jinja2 7.21 ms. The scenarios emit different
+  output and perform different component and browser-support work.
 
 These are relative results from one machine. Read the
 [published benchmark](https://citry.dev/about/benchmarks/) for the chart and

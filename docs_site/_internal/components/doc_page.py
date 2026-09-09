@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 # Site-level social-card image used when a page sets no og_image of its own.
 _DEFAULT_OG_IMAGE_PATH = "/static/img/favicon.png"
 
-_REVIEW_HINT = "This page has not completed final human review. May contain minor inaccuracies."
+_REVIEW_HINT = "This page needs final human review. May contain minor inaccuracies."
 
 
 class TocItems(Component):

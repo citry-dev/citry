@@ -1,0 +1,13 @@
+[package]
+name = "citry_ownership"
+description = "Calculate preserved and retired render ownership relationships"
+version = "0.1.0"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+
+[lints]
+workspace = true

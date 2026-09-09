@@ -1,6 +1,6 @@
 # Rust toolchain configuration
 [toolchain]
-# Vendored Ruff 0.16.2 requires rustc/cargo v1.95 or higher.
+# Vendored Ruff 0.16.6 requires rustc/cargo v1.96 or higher.
 # This repository tracks nightly, which satisfies that minimum automatically.
 # The channel below is selected whenever cargo/rustc runs in this directory.
 channel = "nightly"

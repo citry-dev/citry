@@ -7,6 +7,7 @@
 
 pub mod codegen;
 pub mod comments;
+mod parse;
 pub mod transformer;
 mod utils {
     pub mod python_ast;
@@ -15,6 +16,7 @@ mod utils {
 // Re-export public API
 pub use codegen::generate_python_code;
 pub use comments::extract_comments;
+pub use parse::parse_expression;
 pub use transformer::{
     Comment, Token, TransformResult, parse_expression_with_adjusted_error_ranges,
     transform_expression_string,

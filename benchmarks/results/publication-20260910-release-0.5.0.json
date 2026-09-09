@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "measured_on": "2026-09-10",
+  "python": "3.14.3 (main, Mar 10 2026, 18:02:52) [Clang 21.1.4 ]",
+  "package_versions": {
+    "Django": "6.0.6",
+    "django-components": "0.152.0",
+    "Jinja2": "3.1.6",
+    "citry": "0.5.0",
+    "citry-core": "1.7.0"
+  },
+  "measurement": {
+    "blocks": 10,
+    "initial_renders_per_worker": 6,
+    "warm_renders_per_worker": 80,
+    "method": "10 fresh-process blocks, six initial renders and 80 warmed renders per worker."
+  },
+  "summary": {
+    "ordinary": {
+      "first_ms": 77.216104,
+      "second_ms": 37.5907295,
+      "warm_ms": 33.7709479375,
+      "output_bytes": [
+        1016575
+      ]
+    },
+    "simple": {
+      "first_ms": 64.1915205,
+      "second_ms": 25.022624999999998,
+      "warm_ms": 24.62381614375,
+      "output_bytes": [
+        989431
+      ]
+    },
+    "django": {
+      "first_ms": 19.674979,
+      "second_ms": 11.7907295,
+      "warm_ms": 11.6713133125,
+      "output_bytes": [
+        456422
+      ]
+    },
+    "django-components": {
+      "first_ms": 68.2727295,
+      "second_ms": 48.114479,
+      "warm_ms": 54.6919650875,
+      "output_bytes": [
+        309837
+      ]
+    },
+    "jinja2": {
+      "first_ms": 66.095583,
+      "second_ms": 6.765375000000001,
+      "warm_ms": 7.2109093375,
+      "output_bytes": [
+        151789
+      ]
+    }
+  },
+  "source_report": "https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260910-release-0.5.0.json",
+  "source_report_sha256": "9410645a99ea0cf8102db6a6971660aa4f5241a3bac43fa5f481378414960cb1",
+  "source_captures": "https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260910-release-0.5.0.captures.json.gz",
+  "research_branch": "https://github.com/citry-dev/citry/tree/research/performance-render-20260910"
+}

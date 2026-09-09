@@ -30,7 +30,7 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_LICENSES.md"]
-dependencies = ["citry>=0.4.2,<0.5.0"]
+dependencies = ["citry>=0.4.2"]
 
 [dependency-groups]
 dev = [

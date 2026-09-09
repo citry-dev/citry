@@ -1,5 +1,5 @@
 # Extensions bundled with Citry. Cache, Dependencies, Events, and i18n are built in
-# and always installed; Debug is public but opt-in. Mirrors citry/components/ as
+# and always installed; Debug and Preview are public but opt-in. Mirrors citry/components/ as
 # the package-level grouping surface.
 #
 # See docs/design/asset_loading.md section 7.2 and docs/design/extensions.md
@@ -13,4 +13,5 @@ __all__ = [
     "dependencies",
     "events",
     "i18n",
+    "preview",
 ]

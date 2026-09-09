@@ -74,7 +74,7 @@ permissions:
 env:
   # Docs only need the workspace MSRV. Override the repository's moving nightly
   # so all Ubuntu docs jobs can reuse one stable citry-core build cache.
-  RUSTUP_TOOLCHAIN: "1.95.0"
+  RUSTUP_TOOLCHAIN: "1.96.0"
   # Share compiler objects across simultaneous cold jobs; rust-cache below also
   # preserves the assembled Cargo target directory between workflow runs.
   SCCACHE_GHA_ENABLED: "true"
@@ -108,7 +108,7 @@ jobs:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
 
       - name: Set up shared Rust compiler cache
-        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -183,7 +183,7 @@ jobs:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
 
       - name: Set up shared Rust compiler cache
-        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2

@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Final
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from citry._simple_runtime import SimpleScope
     from citry.citry_template import CitryTemplate
     from citry.component import Component
     from citry.ownership import OwnershipGraph
@@ -84,6 +85,7 @@ class CitryContext:
 
     __slots__ = (
         "_error_tainted",
+        "_simple_scope",
         "component",
         "extra",
         "ownership",
@@ -102,18 +104,37 @@ class CitryContext:
         sandboxed: bool = True,
         ownership: OwnershipGraph | None = None,
         template_record: CitryTemplate | None = None,
+        _simple_scope: SimpleScope | None = None,
     ) -> None:
         self.variables = variables if variables is not None else {}
         self.extra = extra if extra is not None else {}
         self.component = component
         self.ownership = ownership
         self.template_record = template_record
+        self._simple_scope = _simple_scope
         self.provides = provides if provides is not None else {}
         # A recovered render error still makes this subtree unsafe to publish
         # as reusable output. The bit bubbles upward with render metadata.
         self._error_tainted = False
         # Whether expressions evaluated in this context use the security sandbox.
         self.sandboxed = sandboxed
+
+    def _with_provides(self, provides: dict[str, Any] | None) -> CitryContext:
+        """Carry the same insertion owner with a value call's provided entries."""
+        if provides is self.provides:
+            return self
+        context = CitryContext(
+            variables=self.variables,
+            extra=self.extra,
+            component=self.component,
+            provides=provides,
+            sandboxed=self.sandboxed,
+            ownership=self.ownership,
+            template_record=self.template_record,
+            _simple_scope=self._simple_scope,
+        )
+        context._error_tainted = self._error_tainted
+        return context
 
     def _add_root_markers(self, markers: Iterable[str]) -> None:
         """

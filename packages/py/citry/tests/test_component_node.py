@@ -14,7 +14,8 @@ import re
 import pytest
 
 from citry import Citry, Component, NotRegistered
-from citry.nodes import ComponentNode, ExprHtmlAttr
+from citry.citry_context import CitryContext
+from citry.nodes import ComponentNode, ExprHtmlAttr, _kwarg_is_const
 
 
 def _component_node(metadata=None):
@@ -572,3 +573,39 @@ class TestComponentNodeBody:
             template = '<main><c-card><c-fill name="h">f</c-fill></c-card></main>'
 
         assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">x</span></main>'
+
+
+@pytest.mark.parametrize("failure_site", ["lookup", "classification"])
+def test_constness_preserves_stop_iteration_from_variable_checks(failure_site):
+    error = StopIteration("variable check failed")
+
+    class FailingLookup(dict):
+        def get(self, *_args, **_kwargs):
+            raise error
+
+    class FailingClassification:
+        @property
+        def __class__(self):
+            raise error
+
+    values = FailingLookup() if failure_site == "lookup" else {"value": FailingClassification()}
+    context = CitryContext(variables=values)
+    attr = ExprHtmlAttr("", (0, 0), "c-value", "value", ("value",))
+    with pytest.raises(RuntimeError, match=r"^generator raised StopIteration$") as raised:
+        _kwarg_is_const(attr, context)
+    assert raised.value.__cause__ is error
+
+
+def test_constness_preserves_stop_iteration_while_obtaining_variable_iterator():
+    error = StopIteration("iterator creation failed")
+
+    class FailingNames(tuple):
+        __slots__ = ()
+
+        def __iter__(self):
+            raise error
+
+    attr = ExprHtmlAttr("", (0, 0), "c-value", "value", FailingNames(("value",)))
+    with pytest.raises(StopIteration) as raised:
+        _kwarg_is_const(attr, CitryContext())
+    assert raised.value is error

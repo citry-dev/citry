@@ -9,21 +9,77 @@ from weakref import ref
 import pytest
 
 from citry import Citry, CitryRender, Component, Extension, Markup, Slot
+from citry.component_render import _render_one_traced
 from citry.constness import const_value
 from citry.ownership import (
     CitryDomEventClientBindingPayload,
     ComponentTagClientBindingKind,
     ComponentTagClientBindingSource,
     LogicalFillKind,
+    OwnershipGraph,
     QueueState,
     SourcePolicy,
+    current_ownership_graph,
+    resume_ownership_graph,
 )
+
+
+@pytest.fixture(autouse=True, params=("installed", "python"))
+def ownership_storage_backend(request, monkeypatch):
+    """Exercise ownership contracts with the installed core and the older-core fallback."""
+    if request.param == "python":
+        monkeypatch.setattr("citry.ownership._native_ownership", None)
 
 
 def _snapshot(render):
     graph = render.context.ownership
     assert graph is not None
     return graph.snapshot()
+
+
+@pytest.mark.parametrize("graph_mode", ["inherited", "same", "saved"])
+@pytest.mark.parametrize("fail", [False, True])
+def test_delayed_component_keeps_its_graph_active_through_error_recording(graph_mode, fail):
+    seen = []
+
+    class RecordingGraph(OwnershipGraph):
+        def fail_invocation(self, invocation_id):
+            seen.append(("failure", current_ownership_graph()))
+            super().fail_invocation(invocation_id)
+
+    ambient = RecordingGraph()
+    saved = RecordingGraph()
+    expected = saved if graph_mode == "saved" else ambient
+    c = Citry()
+
+    class Card(Component):
+        citry = c
+
+        def template_data(self, kwargs, slots):
+            seen.append(("data", current_ownership_graph()))
+            if fail:
+                raise ValueError("delayed render failed")
+            return {}
+
+        template = """
+        <p>card</p>
+        """
+
+    element = Card()
+    element.ownership_graph = None if graph_mode == "inherited" else expected
+    before = current_ownership_graph()
+    with resume_ownership_graph(ambient):
+        if fail:
+            with pytest.raises(ValueError, match="delayed render failed") as caught:
+                _render_one_traced(element)
+            assert "Card" in str(caught.value)
+        else:
+            initial = _render_one_traced(element)
+            assert initial.render.context.ownership is expected
+        assert current_ownership_graph() is ambient
+    assert current_ownership_graph() is before
+    expected_calls = [("data", expected), ("failure", expected)] if fail else [("data", expected)]
+    assert seen == expected_calls
 
 
 def test_root_settlement_releases_transient_region_roots_without_gc():
@@ -337,7 +393,7 @@ class TestComponentTagClientBindingOwnership:
         assert calls[0].id != calls[1].id
         assert calls[0].source_location_id != calls[1].source_location_id
         assert locations[calls[0].source_location_id].span == locations[calls[1].source_location_id].span
-        assert locations[calls[0].source_location_id]._site is locations[calls[1].source_location_id]._site
+        assert locations[calls[0].source_location_id].site is locations[calls[1].source_location_id].site
         assert calls[0].client_bindings[0].payload.expression == "{ n: 1 }"
         assert calls[1].client_bindings[0].payload.expression == "{ n: 2 }"
 

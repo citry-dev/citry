@@ -135,6 +135,18 @@ The detection happens at the leaf nodes that can surface an arbitrary value:
 - `ComponentNode.render(ctx)` renders a child component inline, which produces a
   child `CitryRender`, then merges its deps into `ctx`.
 
+`_render_value()` can skip instance-level `ComponentLike` inspection for exact
+strings and ordinary exact `CitryRender` objects. Strings have no instance
+members; the render class has slots and an object base. The shortcut requires
+the original dispatch types and checks class membership on each call, so
+explicit protocol registration remains effective. A render class with a
+protocol member, custom attribute access, changed base or class override uses
+the general path, as do subclasses and Markup values. Const unwrapping, Slot
+dispatch and escaping stay live. No result or arbitrary negative class check
+is cached. The identity checks cover stable alias and class changes between
+calls; they do not establish support for concurrent class mutation or private
+changes to Python's protocol implementation or metadata.
+
 **Discovery: inline child rendering and external pre-rendered embedding are the
 same operation.** Whether a child component is rendered inline during the parent
 render, or was rendered earlier and passed in via `{{ }}`/kwargs/attr, the

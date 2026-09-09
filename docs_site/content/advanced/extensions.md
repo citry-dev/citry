@@ -345,3 +345,9 @@ extension commands.
 - [`URLRoute`][citry.URLRoute]
 - [`RouteRequest`][citry.RouteRequest]
 - [`RouteResponse`][citry.RouteResponse]
+
+## Preview component examples
+
+Use [Component previews](/advanced/previews/) to define named examples, serve
+them in a gallery, and capture PNGs. `PreviewExtension` registers configuration
+and CLI commands; its routes exist only in the command-owned preview server.

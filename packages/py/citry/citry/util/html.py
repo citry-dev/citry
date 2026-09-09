@@ -24,6 +24,7 @@ same ``Markup`` class directly.
 
 from __future__ import annotations
 
+from types import BuiltinFunctionType
 from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup, escape
@@ -70,5 +71,16 @@ def escape_to_str(value: Any) -> str:
         return str(escape(text))
     return _escape_to_str_impl(text)
 
+
+# Formatting caches must recognize the defining implementation, including
+# replacements installed before the first render. Custom/Python backends keep
+# executing on each call; only the known C escaper supplies cached output.
+_DEFAULT_ESCAPE_TO_STR = escape_to_str
+_DEFAULT_ESCAPE_TO_STR_IMPL = _escape_to_str_impl
+_CACHEABLE_ESCAPE_BACKEND = (
+    type(_escape_to_str_impl) is BuiltinFunctionType
+    and _escape_to_str_impl.__module__ == "markupsafe._speedups"
+    and _escape_to_str_impl.__name__ == "_escape_inner"
+)
 
 __all__ = ["Markup", "escape", "escape_to_str"]

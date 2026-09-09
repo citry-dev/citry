@@ -75,7 +75,8 @@ from typing_extensions import Unpack, override
 
 from citry._i18n_directives import looks_like_i18n_binding
 from citry.attrs import (
-    _format_resolved_attrs,
+    _format_resolved_attrs_to_str,
+    _has_default_attr_formatting,
     _merge_resolved_attrs,
     format_attrs,
     merge_attrs,
@@ -87,6 +88,7 @@ from citry.citry_render import (
     CitryRender,
     DeferredComponent,
     _PhysicalRegion,
+    _render_slot_value,
     _render_value,
     unwrap_physical_region,
 )
@@ -466,6 +468,7 @@ class _TemplateSlotContent:
                 sandboxed=context.sandboxed,
                 ownership=context.ownership,
                 template_record=context.template_record,
+                _simple_scope=context._simple_scope,
             )
         else:
             render_context = context
@@ -650,6 +653,7 @@ class ExprNode(Node):
             value,
             provides=context.provides,
             citry=context.component.citry if context.component is not None else None,
+            context=context,
         )
 
     @override
@@ -895,6 +899,11 @@ class TemplateHtmlAttr(HtmlAttr):
         return f"TemplateHtmlAttr(key={self.key!r})"
 
 
+_AttrsOutputKey: TypeAlias = tuple[tuple[str, type, object], ...]
+_attrs_output_cache: dict[_AttrsOutputKey, str] = {}
+_attrs_output_cache_lock = RLock()
+
+
 @final
 class ElementAttrsNode(Node):
     """
@@ -939,6 +948,7 @@ class ElementAttrsNode(Node):
         self.used_vars = used_vars
         self._resolved_keys = tuple(attr.key.removeprefix("c-") for attr in attrs)
         self._has_spread = any(attr.key == "c-bind" for attr in attrs)
+        self._validated_spread_keys: set[str] = set()
         self._has_runtime_events_candidate = self._has_spread or any(
             attr.key.startswith(("@c-", ":c-")) or attr.key.removeprefix("c-") == "data-cev-bind" for attr in attrs
         )
@@ -1062,14 +1072,28 @@ class ElementAttrsNode(Node):
                     )
                     raise TypeError(msg)
                 for key, item in value.items():
+                    # Only bounded exact strings can share validation across
+                    # renders. Values and user-defined key behavior stay live.
+                    cacheable_key = type(key) is str and len(key) <= 256
+                    if cacheable_key and key in self._validated_spread_keys:
+                        items.append((key, const_value(item)))
+                        continue
                     resolved_key = validate_html_attr_name(key, where=f"c-bind on <{self.tag_name}>")
                     if looks_like_i18n_binding(resolved_key):
+                        if context._simple_scope is not None:
+                            msg = (
+                                f"Component {context._simple_scope.component_class.__name__} uses simple=True; "
+                                "$c-tr bindings are unsupported."
+                            )
+                            raise TypeError(msg)
                         raise RuntimeError(
                             f"{resolved_key!r} resolved on <{self.tag_name}> through c-bind, but no active "
                             "i18n catalog consumed it. Configure i18n or declare component messages before "
                             "rendering a dynamic $c-tr binding."
                         )
                     _reject_dynamic_events_compiler_attr(resolved_key, tag_name=self.tag_name)
+                    if cacheable_key and len(self._validated_spread_keys) < 64:
+                        self._validated_spread_keys.add(resolved_key)
                     items.append((resolved_key, const_value(item)))
             else:
                 if attr.key.startswith("c-"):
@@ -1085,10 +1109,44 @@ class ElementAttrsNode(Node):
         validate_keys: bool = True,
     ) -> RenderPart:
         """Format the merged dict into the output part(s)."""
+        cache_key: _AttrsOutputKey | None = None
+        if (
+            validate_keys is False
+            and type(self) is ElementAttrsNode
+            and type(resolved) is dict
+            and len(resolved) <= 16
+            and _has_default_attr_formatting(_format_resolved_attrs_to_str)
+        ):
+            items: list[tuple[str, type, object]] = []
+            chars = 0
+            for key, value in resolved.items():
+                if type(key) is not str:
+                    break
+                chars += len(key)
+                kind = type(value)
+                if kind is str:
+                    chars += len(value)
+                elif kind is int:
+                    if value.bit_length() > 256:
+                        break
+                elif value is not None and kind is not bool:
+                    break
+                if chars > 2048:
+                    break
+                items.append((key, kind, value))
+            else:
+                cache_key = tuple(items)
+                cached = _attrs_output_cache.get(cache_key)
+                if cached is not None:
+                    return cached
+                # Format the same immutable values used by the key, even if a
+                # caller retains and changes its input dictionary concurrently.
+                resolved = {key: value for key, _, value in cache_key}
+
         if validate_keys:
             for key in resolved:
                 validate_html_attr_name(key, where=f"attributes resolved for <{self.tag_name}>")
-        formatter = format_attrs if validate_keys else _format_resolved_attrs
+        formatter = format_attrs if validate_keys else _format_resolved_attrs_to_str
 
         # Common case: no attribute value is a nested-template render, so the
         # whole dict formats in a single pass. Doing it per key (the mixed-case
@@ -1096,7 +1154,19 @@ class ElementAttrsNode(Node):
         # which is the dominant per-element cost on a big page.
         if not any(isinstance(value, CitryRender) for value in resolved.values()):
             chunk = formatter(resolved)
-            return (" " + chunk) if chunk else ""
+            result = (" " + chunk) if chunk else ""
+            if (
+                cache_key is not None
+                and type(result) is str
+                and _has_default_attr_formatting(_format_resolved_attrs_to_str)
+            ):
+                # Only misses take the lock. Eviction/insertion must be one
+                # operation so simultaneous misses retain at most 256 entries.
+                with _attrs_output_cache_lock:
+                    if cache_key not in _attrs_output_cache and len(_attrs_output_cache) >= 256:
+                        _attrs_output_cache.pop(next(iter(_attrs_output_cache)))
+                    _attrs_output_cache[cache_key] = result
+            return result
 
         # Mixed: a nested-template value (`c-foo="<div>...</div>"`) keeps its
         # parts so components inside it stay deferred and render through the
@@ -1178,8 +1248,8 @@ def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
     it reads is itself constant. Two cases follow from that one rule:
 
     - An expression that reads no variables at all (``c-items="[1, 2]"``,
-      ``c-age="30"``) is constant: nothing in it can change. (This is why
-      ``all()`` of an empty list of variables is true.)
+      ``c-age="30"``) is constant: nothing in it can change. An empty list
+      of variable names therefore counts as constant.
     - An expression that reads only constant variables (``c-age="base + 1"``
       when ``base`` is constant) is constant too: a template expression only
       depends on its inputs, so if none of the inputs can change, neither can
@@ -1192,7 +1262,15 @@ def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
     if isinstance(attr, StaticHtmlAttr):
         return True
     if isinstance(attr, ExprHtmlAttr):
-        return all(is_const(context.variables.get(name)) for name in attr.used_vars)
+        # Read live variables in order without allocating a generator for each input.
+        for name in attr.used_vars:
+            try:
+                if not is_const(context.variables.get(name)):
+                    return False
+            except StopIteration as error:
+                # Callers expect callback StopIteration to surface as RuntimeError.
+                raise RuntimeError("generator raised StopIteration") from error
+        return True
     return False
 
 
@@ -1344,6 +1422,20 @@ class ComponentNode(Node):
 
         resolved = self._resolve_inputs(context)
         child_cls = component.citry.get(self.name)
+        if child_cls.simple:
+            from citry._simple_runtime import simple_deferred  # noqa: PLC0415
+
+            if self.contains_fills or self.metadata is not None:
+                msg = (
+                    f"Component {child_cls.__name__} uses simple=True;"
+                    " named fills and range directives are unsupported."
+                )
+                raise TypeError(msg)
+            return simple_deferred(
+                CitryElement(child_cls, resolved.kwargs, component_tag_client_bindings=resolved.client_bindings),
+                context,
+                body=self.body,
+            )
         slots = self._collect_slots(context)
         # The key expression evaluates once in the parent's scope. Exactly
         # None opts out; every other value, including falsey values, is a key.
@@ -1373,7 +1465,12 @@ class ComponentNode(Node):
             client_bindings=resolved.client_bindings,
         )
         ownership.bind_template_fill_sources(slots, invocation_id)
-        element = CitryElement(
+        element_type = CitryElement
+        if child_cls._citry_dynamic_selector:
+            from citry.components.dynamic import _DynamicSelectorElement  # noqa: PLC0415
+
+            element_type = _DynamicSelectorElement
+        element = element_type(
             child_cls,
             resolved.kwargs,
             slots,
@@ -1383,6 +1480,10 @@ class ComponentNode(Node):
             element_morph_metadata=element_morph_metadata,
             forward_ownership_invocation=self.name == "component",
         )
+        if child_cls._citry_dynamic_selector:
+            selector = cast("_DynamicSelectorElement", element)
+            selector.contains_fills = self.contains_fills
+            selector.has_range_directives = self.metadata is not None
         # The active provide/inject entries are captured now, like the kwargs:
         # the child renders later (through the queue), when this context is
         # gone, but must still inherit what was provided around its tag.
@@ -1857,6 +1958,7 @@ class ForNode(Node):
                 sandboxed=context.sandboxed,
                 ownership=context.ownership,
                 template_record=context.template_record,
+                _simple_scope=context._simple_scope,
             )
             yield body, child
 
@@ -1956,6 +2058,13 @@ class SlotNode(Node):
             msg = "SlotNode.render requires a component context bound to a Citry instance."
             raise RuntimeError(msg)
 
+        if context._simple_scope is not None:
+            from citry._simple_runtime import render_simple_outlet  # noqa: PLC0415
+
+            if self.attrs or self.body or self.introduced_vars:
+                raise TypeError("A simple template supports only an empty default slot outlet.")
+            return render_simple_outlet(context)
+
         name, required, data = self._resolve_props(context)
         fills = component.raw_slots
         fill = fills.get(name)
@@ -2016,7 +2125,7 @@ class SlotNode(Node):
                 # frame ("Card(slot:body)") in its message.
                 with ownership.select_supply(fill, fill_id):
                     with add_slot_to_error_message(type(component).__name__, name):
-                        part = fill(data, fallback=body_slot, provides=context.provides)
+                        part = _render_slot_value(fill, data, body_slot, context)
             else:
                 if required:
                     msg = (
@@ -2029,7 +2138,7 @@ class SlotNode(Node):
                     raise RuntimeError(msg)
                 slot_used = body_slot
                 with add_slot_to_error_message(type(component).__name__, name):
-                    part = body_slot(data, provides=context.provides)
+                    part = _render_slot_value(body_slot, data, None, context)
 
         if not has_rendered_hook:
             return part

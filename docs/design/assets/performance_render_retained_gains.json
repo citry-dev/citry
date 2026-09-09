@@ -1,0 +1,553 @@
+{
+  "method": "64 ledger rows through iteration 46, iterations 48\u201368, one final qualified public API checkpoint. Excludes iteration 47 cumulative comparison. Counts retained large-page gains, not provisional advances or tiny-only/no-material claims. Entries are not independent trials or equal effort.",
+  "entries": [
+    {
+      "entry": 1,
+      "iteration": "1a",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 2,
+      "iteration": "1b",
+      "retained_gain": false,
+      "decision": "Adopted, no material speed claim"
+    },
+    {
+      "entry": 3,
+      "iteration": "1c",
+      "retained_gain": false,
+      "decision": "Adopted, no material speed claim"
+    },
+    {
+      "entry": 4,
+      "iteration": "1d",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 5,
+      "iteration": "1e",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 6,
+      "iteration": "1f",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 7,
+      "iteration": "1g",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 8,
+      "iteration": "2a",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 9,
+      "iteration": "2b",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 10,
+      "iteration": "2c",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 11,
+      "iteration": "2d",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 12,
+      "iteration": "3",
+      "retained_gain": false,
+      "decision": "Rejected at this stage"
+    },
+    {
+      "entry": 13,
+      "iteration": "4",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 14,
+      "iteration": "5a",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 15,
+      "iteration": "5b",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 16,
+      "iteration": "6",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 17,
+      "iteration": "7",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 18,
+      "iteration": "8a",
+      "retained_gain": false,
+      "decision": "Rejected, insufficient for added build system"
+    },
+    {
+      "entry": 19,
+      "iteration": "8b",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 20,
+      "iteration": "8c",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 21,
+      "iteration": "8d",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 22,
+      "iteration": "9",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 23,
+      "iteration": "10",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 24,
+      "iteration": "11",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 25,
+      "iteration": "12",
+      "retained_gain": false,
+      "decision": "Rejected at this stage"
+    },
+    {
+      "entry": 26,
+      "iteration": "13",
+      "retained_gain": false,
+      "decision": "Kept experimental, not adopted"
+    },
+    {
+      "entry": 27,
+      "iteration": "14",
+      "retained_gain": false,
+      "decision": "Adopted, no standalone speed claim"
+    },
+    {
+      "entry": 28,
+      "iteration": "15a",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 29,
+      "iteration": "15b",
+      "retained_gain": false,
+      "decision": "Advanced to better-controlled timing"
+    },
+    {
+      "entry": 30,
+      "iteration": "16",
+      "retained_gain": false,
+      "decision": "Advanced to production qualification"
+    },
+    {
+      "entry": 31,
+      "iteration": "17",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 32,
+      "iteration": "18a",
+      "retained_gain": false,
+      "decision": "Advanced to production qualification"
+    },
+    {
+      "entry": 33,
+      "iteration": "18b",
+      "retained_gain": true,
+      "decision": "Adopted"
+    },
+    {
+      "entry": 34,
+      "iteration": "19",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 35,
+      "iteration": "20",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 36,
+      "iteration": "21",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 37,
+      "iteration": "22",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 38,
+      "iteration": "23a",
+      "retained_gain": false,
+      "decision": "Rejected, incompatible"
+    },
+    {
+      "entry": 39,
+      "iteration": "23b",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 40,
+      "iteration": "24a",
+      "retained_gain": false,
+      "decision": "Rejected, incompatible"
+    },
+    {
+      "entry": 41,
+      "iteration": "24b",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 42,
+      "iteration": "25a",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 43,
+      "iteration": "25b",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 44,
+      "iteration": "26",
+      "retained_gain": false,
+      "decision": "Advanced"
+    },
+    {
+      "entry": 45,
+      "iteration": "27",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 46,
+      "iteration": "28",
+      "retained_gain": false,
+      "decision": "Advanced only as part of a combination"
+    },
+    {
+      "entry": 47,
+      "iteration": "29",
+      "retained_gain": false,
+      "decision": "Advanced only as part of a combination"
+    },
+    {
+      "entry": 48,
+      "iteration": "30",
+      "retained_gain": false,
+      "decision": "Advanced"
+    },
+    {
+      "entry": 49,
+      "iteration": "31",
+      "retained_gain": false,
+      "decision": "Qualification, no gain claimed"
+    },
+    {
+      "entry": 50,
+      "iteration": "32",
+      "retained_gain": false,
+      "decision": "Advanced, not an incremental gain"
+    },
+    {
+      "entry": 51,
+      "iteration": "33",
+      "retained_gain": false,
+      "decision": "Integrated shared crate, not an incremental gain"
+    },
+    {
+      "entry": 52,
+      "iteration": "34",
+      "retained_gain": false,
+      "decision": "Integrated inactive binding"
+    },
+    {
+      "entry": 53,
+      "iteration": "35",
+      "retained_gain": true,
+      "decision": "Adopted with tiny-case tradeoff"
+    },
+    {
+      "entry": 54,
+      "iteration": "36",
+      "retained_gain": false,
+      "decision": "Adopted, no new large-throughput claim"
+    },
+    {
+      "entry": 55,
+      "iteration": "37",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 56,
+      "iteration": "38",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 57,
+      "iteration": "39",
+      "retained_gain": false,
+      "decision": "Advanced to packaged qualification"
+    },
+    {
+      "entry": 58,
+      "iteration": "40",
+      "retained_gain": false,
+      "decision": "Reverted after qualification"
+    },
+    {
+      "entry": 59,
+      "iteration": "41",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 60,
+      "iteration": "42",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 61,
+      "iteration": "43",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 62,
+      "iteration": "44",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 63,
+      "iteration": "45",
+      "retained_gain": false,
+      "decision": "Rejected, including constructor compatibility gap"
+    },
+    {
+      "entry": 64,
+      "iteration": "46",
+      "retained_gain": false,
+      "decision": "Rejected"
+    },
+    {
+      "entry": 65,
+      "iteration": "48",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 66,
+      "iteration": "49",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 67,
+      "iteration": "50",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 68,
+      "iteration": "51",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 69,
+      "iteration": "52",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 70,
+      "iteration": "53",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 71,
+      "iteration": "54",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 72,
+      "iteration": "55",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 73,
+      "iteration": "56",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 74,
+      "iteration": "57",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 75,
+      "iteration": "58",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 76,
+      "iteration": "59",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 77,
+      "iteration": "60",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 78,
+      "iteration": "61",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 79,
+      "iteration": "62",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 80,
+      "iteration": "63",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 81,
+      "iteration": "64",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 82,
+      "iteration": "65",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 83,
+      "iteration": "66",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 84,
+      "iteration": "67",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 85,
+      "iteration": "68",
+      "retained_gain": false,
+      "decision": "No retained incremental large-page gain; see journal"
+    },
+    {
+      "entry": 86,
+      "iteration": "Public simple API and final qualification",
+      "retained_gain": true,
+      "decision": "Retained; final handoff and gates in research journal"
+    }
+  ],
+  "bins": [
+    {
+      "entries": "1\u201320",
+      "wins": 9,
+      "total": 20,
+      "percent": 45.0
+    },
+    {
+      "entries": "21\u201340",
+      "wins": 4,
+      "total": 20,
+      "percent": 20.0
+    },
+    {
+      "entries": "41\u201360",
+      "wins": 1,
+      "total": 20,
+      "percent": 5.0
+    },
+    {
+      "entries": "61\u201380",
+      "wins": 0,
+      "total": 20,
+      "percent": 0.0
+    },
+    {
+      "entries": "81\u201386",
+      "wins": 1,
+      "total": 6,
+      "percent": 16.666666666666668
+    }
+  ]
+}

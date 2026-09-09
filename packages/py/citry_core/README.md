@@ -190,12 +190,12 @@ _rust.html_transform.transform_html(...)
 
 ## Development
 
-Installing from the source distribution requires Rust 1.95 or newer. Normal
+Installing from the source distribution requires Rust 1.96 or newer. Normal
 GIL-enabled CPython 3.10-3.14 installations use a prebuilt ABI3 wheel and do
 not need a Rust toolchain. Free-threaded CPython and PyPy wheel coverage is
 narrower and currently targets the release workflow's Linux platforms; an
 interpreter/platform pair without a matching wheel falls back to the source
-distribution and therefore needs Rust 1.95 or newer.
+distribution and therefore needs Rust 1.96 or newer.
 
 ### Build
 

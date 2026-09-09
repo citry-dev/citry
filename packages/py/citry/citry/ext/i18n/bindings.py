@@ -373,7 +373,7 @@ class I18nBoundExprNode(Node):
         collector = cast("Any", component).i18n._bindings
         if not collector.has_pending_text(self.ordinal):
             value = self.original.evaluate(context.variables, sandboxed=context.sandboxed)
-            return _render_value(value, provides=context.provides, citry=component.citry)
+            return _render_value(value, provides=context.provides, citry=component.citry, context=context)
         with collector.capture() as captures:
             value = self.original.evaluate(context.variables, sandboxed=context.sandboxed)
         if len(captures) != 1 or value is not captures[0].text:
@@ -381,7 +381,7 @@ class I18nBoundExprNode(Node):
                 "$c-tr textContent must contain exactly one complete {{ tr(...) }} expression, with no composition."
             )
         collector.finish_text(self.ordinal, captures[0])
-        return _render_value(value, provides=context.provides, citry=component.citry)
+        return _render_value(value, provides=context.provides, citry=component.citry, context=context)
 
 
 def compile_template_bindings(nodes: list[Any], *, component_name: str) -> list[Any]:
