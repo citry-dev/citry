@@ -6,8 +6,6 @@ Historical paths describe the original checkout; the archive guide records
 the renames.
 
 This records the preparation checkpoint before integration was authorized.
-For subsequent integration and qualification, see
-[Citry 0.5.0 release preparation](release_0_5_0.md).
 
 At that checkpoint, the work was preparation only.
 No files had been copied into the review worktree, no index or branch pointer
