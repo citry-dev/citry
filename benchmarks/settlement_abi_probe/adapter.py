@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-REPORT = ROOT / "benchmarks/results/repeat-render/settlement-abi310-build.json"
+REPORT = ROOT / "benchmarks/results/performance-render/settlement-abi310-build.json"
 
 
 class Finder:

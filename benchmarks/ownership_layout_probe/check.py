@@ -132,8 +132,8 @@ def main() -> None:
             ROOT / "packages/py/citry/citry/ownership.py",
         )
     }
-    report["build"] = json.loads((ROOT / "benchmarks/results/repeat-render/ownership-layout-build.json").read_text())
-    (ROOT / "benchmarks/results/repeat-render/ownership-layout-contracts.json").write_text(
+    report["build"] = json.loads((ROOT / "benchmarks/results/performance-render/ownership-layout-build.json").read_text())
+    (ROOT / "benchmarks/results/performance-render/ownership-layout-contracts.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps(report, indent=2))

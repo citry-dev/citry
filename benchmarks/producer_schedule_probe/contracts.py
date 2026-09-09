@@ -154,7 +154,7 @@ def main() -> None:
             for path in (Path(__file__), Path(__file__).with_name("adapter.py"), Path(cr.__file__))
         },
     }
-    path = ROOT / "benchmarks/results/repeat-render/producer-schedule-contracts.json"
+    path = ROOT / "benchmarks/results/performance-render/producer-schedule-contracts.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(rows, indent=2))
 

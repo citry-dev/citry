@@ -104,7 +104,7 @@ def main() -> None:
             for path in (Path(__file__), artifact, Path(_rust.__file__), ROOT / "crates/citry_core_py/src/attrs.rs")
         },
     }
-    (ROOT / "benchmarks/results/repeat-render/packaged-attrs-output-diagnosis.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/packaged-attrs-output-diagnosis.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps({key: value for key, value in report.items() if key != "observations"}, indent=2))

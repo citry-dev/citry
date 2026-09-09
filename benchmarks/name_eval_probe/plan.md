@@ -98,7 +98,7 @@ speedup or memory reduction. No application data or policy result is cached.
 
 Earlier prototype timings precede key-identity and formatter-namespace
 corrections. The active reports are `name-eval-active.json` and
-`name-eval-active-confirmation.json` in `benchmarks/results/repeat-render/`.
+`name-eval-active-confirmation.json` in `benchmarks/results/performance-render/`.
 The harness checks active evaluator names outside timed renders. Arbitrary
 code-object/closure mutation and interpreter versions outside the tested
 Python 3.14.3 environment remain unqualified.

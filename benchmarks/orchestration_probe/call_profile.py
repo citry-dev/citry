@@ -48,7 +48,7 @@ report = {
     "source_sha256": hashlib.sha256(Path(component_render.__file__).read_bytes()).hexdigest(),
     "rows": rows,
 }
-path = ROOT / "benchmarks/results/repeat-render/orchestration-profile.json"
+path = ROOT / "benchmarks/results/performance-render/orchestration-profile.json"
 path.write_text(json.dumps(report, indent=2) + "\n")
 for row in rows[:35]:
     print(json.dumps(row))

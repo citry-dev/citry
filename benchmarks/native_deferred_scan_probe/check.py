@@ -165,7 +165,7 @@ def main() -> None:
         "changed_task_constructor_runs_once_on_unsupported_tree": True,
         "production_qualified": False,
     }
-    (ROOT / "benchmarks/results/repeat-render/native-deferred-scan-contracts.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/native-deferred-scan-contracts.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps(report, indent=2))

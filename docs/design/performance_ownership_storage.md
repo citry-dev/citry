@@ -1,7 +1,7 @@
 # Ownership storage: what is necessary and what can be cheaper
 
 Implementation follow-up and current measurements are recorded in
-[Repeat-render optimization research](repeat_render_research.md).
+[Repeat-render optimization research](performance_render_research.md).
 The measurements and representation descriptions below describe the earlier
 investigation baseline.
 

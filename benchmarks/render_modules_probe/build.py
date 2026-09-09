@@ -66,7 +66,7 @@ def main() -> None:
         "returncode": result.returncode,
         "build_log": result.stdout + result.stderr,
     }
-    (ROOT / "benchmarks/results/repeat-render/render-modules-build.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/render-modules-build.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(result.stdout + result.stderr)

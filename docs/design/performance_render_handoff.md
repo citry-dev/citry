@@ -98,9 +98,9 @@ the retained benchmark evidence.
 
 ## Detailed evidence
 
-- [Research journal](repeat_render_research.md)
-- [Every experiment and its decision](repeat_render_experiment_summary.md)
+- [Research journal](performance_render_research.md)
+- [Every experiment and its decision](performance_render_experiment_summary.md)
 - [Simple-component design](component_simple.md)
-- [Cumulative comparison](../../benchmarks/results/repeat-render/round47-comparison.json)
-- [First public simple comparison](../../benchmarks/results/repeat-render/simple-api-timing-main.json)
+- [Cumulative comparison](../../benchmarks/results/performance-render/round47-comparison.json)
+- [First public simple comparison](../../benchmarks/results/performance-render/simple-api-timing-main.json)
 - [Public feature guide](../../docs_site/content/advanced/simple-components.md)

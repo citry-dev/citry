@@ -9,7 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "benchmarks/results/repeat-render"
+RESULTS = ROOT / "benchmarks/results/performance-render"
 CHECKPOINTS = [
     (1, "Initial six areas", "final-comparison.json"),
     (2, "Selection and attributes", "round2-comparison.json"),
@@ -114,15 +114,15 @@ def main() -> None:
             "the comparison includes different output and framework features.",
             "",
             "![Performance across measured checkpoints]"
-            "(../../benchmarks/results/repeat-render/performance-timeline.png)",
+            "(../../benchmarks/results/performance-render/performance-timeline.png)",
             "",
-            "[Raw timeline](../../benchmarks/results/repeat-render/performance-timeline.json),",
-            "[current observations](../../benchmarks/results/repeat-render/round47-comparison.json),",
-            "[current provenance](../../benchmarks/results/repeat-render/round47-comparison-provenance.json).",
-            "Regenerate with `uv run --no-project --with matplotlib python benchmarks/repeat_render_timeline.py`.",
+            "[Raw timeline](../../benchmarks/results/performance-render/performance-timeline.json),",
+            "[current observations](../../benchmarks/results/performance-render/round47-comparison.json),",
+            "[current provenance](../../benchmarks/results/performance-render/round47-comparison-provenance.json).",
+            "Regenerate with `uv run --no-project --with matplotlib python benchmarks/performance_render_timeline.py`.",
         ]
     )
-    target = ROOT / "docs/design/repeat_render_experiment_summary.md"
+    target = ROOT / "docs/design/performance_render_experiment_summary.md"
     before, rest = target.read_text().split("<!-- timeline:start -->")
     _, after = rest.split("<!-- timeline:end -->")
     target.write_text(before + "<!-- timeline:start -->\n" + "\n".join(lines) + "\n<!-- timeline:end -->" + after)

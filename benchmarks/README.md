@@ -150,7 +150,7 @@ GC counters, source hashes and output digests;
 [observed ownership captures](results/publication-20260910-release-0.5.0.captures.json.gz)
 retain the post-timing Citry snapshots and manifests. The full optimization
 history and kept changes are in the
-[handoff](../docs/design/repeat_render_handoff.md).
+[handoff](../docs/design/performance_render_handoff.md).
 
 The earlier [9 September run](results/publication-20260909.json) remains
 available as a historical observation before the dependency updates.

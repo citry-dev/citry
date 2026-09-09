@@ -91,7 +91,7 @@ def main() -> None:
             ROOT / "packages/py/citry/tests/test_benchmark_citry.py",
         )
     }
-    (ROOT / "benchmarks/results/repeat-render/python-settlement-large-lifetime.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/python-settlement-large-lifetime.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps({variant: report[variant] for variant in ("reference", "candidate")}, indent=2))

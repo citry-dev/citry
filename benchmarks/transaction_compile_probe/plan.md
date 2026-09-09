@@ -84,7 +84,7 @@ producing 1,013,746 bytes. The confirmation counts 342 native rendering,
 initialization and construction calls each, plus 339 native input resolutions.
 It also includes the stronger artifact/source checks added after review.
 Earlier fresh-process reports predate those guards. Results are preserved in
-`../results/repeat-render/transaction-compiled-*.json`.
+`../results/performance-render/transaction-compiled-*.json`.
 
 The combined candidate has a small repeatable benefit on this scenario, but
 this does not justify shipping another compiler and native distribution path.

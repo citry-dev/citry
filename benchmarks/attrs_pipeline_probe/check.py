@@ -143,7 +143,7 @@ def main() -> None:
             "unqualified_component_citry_reads_on_miss": {"reference": reads[0], "candidate": reads[1]},
             "production_compatible": False,
         }
-        (ROOT / "benchmarks/results/repeat-render/attrs-pipeline-contracts.json").write_text(
+        (ROOT / "benchmarks/results/performance-render/attrs-pipeline-contracts.json").write_text(
             json.dumps(report, indent=2) + "\n"
         )
         print(json.dumps(report, indent=2))

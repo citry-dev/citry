@@ -104,7 +104,7 @@ def main() -> None:
         "callable_equality_cannot_bypass_guard": True,
         "note": "Experimental scope only; plan.md lists unqualified runtime mutation and lifetime cases.",
     }
-    (ROOT / "benchmarks/results/repeat-render/native-attr-merge-contracts.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/native-attr-merge-contracts.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps(report))

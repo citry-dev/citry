@@ -168,7 +168,7 @@ def main() -> None:
             )
         },
     }
-    path = ROOT / "benchmarks/results/repeat-render/template-function-contracts.json"
+    path = ROOT / "benchmarks/results/performance-render/template-function-contracts.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(
         json.dumps(

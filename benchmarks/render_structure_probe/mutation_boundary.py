@@ -80,7 +80,7 @@ def main() -> None:
             )
         },
     }
-    path = ROOT / "benchmarks/results/repeat-render/render-structure-mutation-boundary.json"
+    path = ROOT / "benchmarks/results/performance-render/render-structure-mutation-boundary.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(rows, indent=2))
 

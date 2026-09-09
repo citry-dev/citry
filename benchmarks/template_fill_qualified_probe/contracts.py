@@ -255,7 +255,7 @@ def main() -> None:
             for path in (Path(__file__), Path(adapter.__file__), Path(ownership.__file__))
         },
     }
-    path = ROOT / "benchmarks/results/repeat-render/template-fill-qualified-contracts.json"
+    path = ROOT / "benchmarks/results/performance-render/template-fill-qualified-contracts.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(rows, indent=2))
 

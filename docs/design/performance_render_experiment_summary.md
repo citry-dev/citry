@@ -1,6 +1,6 @@
 # Repeat-render experiment results
 
-This ledger summarizes the experiments in [the research journal](repeat_render_research.md)
+This ledger summarizes the experiments in [the research journal](performance_render_research.md)
 through iteration 46, followed by a fresh cumulative comparison at iteration 47.
 The journal retains the individual runs, checks, limitations and source hashes.
 Rows group revisions and confirmation runs of the same idea; distinct candidates
@@ -129,12 +129,12 @@ Earlier checkpoints use their then-current matching native artifacts.
 Citry emits 1,013,746 bytes and Django 456,422 bytes in these scenarios:
 the comparison includes different output and framework features.
 
-![Performance across measured checkpoints](../../benchmarks/results/repeat-render/performance-timeline.png)
+![Performance across measured checkpoints](../../benchmarks/results/performance-render/performance-timeline.png)
 
-[Raw timeline](../../benchmarks/results/repeat-render/performance-timeline.json),
-[current observations](../../benchmarks/results/repeat-render/round47-comparison.json),
-[current provenance](../../benchmarks/results/repeat-render/round47-comparison-provenance.json).
-Regenerate with `uv run --no-project --with matplotlib python benchmarks/repeat_render_timeline.py`.
+[Raw timeline](../../benchmarks/results/performance-render/performance-timeline.json),
+[current observations](../../benchmarks/results/performance-render/round47-comparison.json),
+[current provenance](../../benchmarks/results/performance-render/round47-comparison-provenance.json).
+Regenerate with `uv run --no-project --with matplotlib python benchmarks/performance_render_timeline.py`.
 <!-- timeline:end -->
 
 
@@ -151,7 +151,7 @@ snapshots matched; 168 ownership/manifest tests passed, while the additional
 storage selection had 24 passes and two failures in a frame-sensitive replay
 trigger. All 194 tests pass against the unchanged production runtime.
 Production performance remains the iteration 47 checkpoint above.
-[The research entry](repeat_render_research.md#forty-eighth-iteration-native-field-offsets-throughout-ownership-capture)
+[The research entry](performance_render_research.md#forty-eighth-iteration-native-field-offsets-throughout-ownership-capture)
 records the implementation, checks and limitations.
 
 
@@ -159,7 +159,7 @@ records the implementation, checks and limitations.
 
 The user requested a shift toward larger-scope and architectural experiments
 at iteration 49, after `1805e15`; the transition's production anchor is the
-30.147 ms warm checkpoint above. [The mode-change marker](repeat_render_research.md#research-mode-change-larger-scope-and-architectural-experiments)
+30.147 ms warm checkpoint above. [The mode-change marker](performance_render_research.md#research-mode-change-larger-scope-and-architectural-experiments)
 records this explicitly for later analysis.
 
 Iteration 49 compiled the complete component-render, node and slot modules

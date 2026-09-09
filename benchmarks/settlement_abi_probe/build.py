@@ -83,7 +83,7 @@ def main() -> None:
             (ROOT / "benchmarks/settlement_state_probe/transform.py").read_bytes()
         ).hexdigest(),
     }
-    (ROOT / "benchmarks/results/repeat-render/settlement-abi310-build.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/settlement-abi310-build.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(result.stdout + result.stderr)

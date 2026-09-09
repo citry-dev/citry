@@ -195,7 +195,7 @@ def main() -> None:
             for key in ("raw_html", "projected_html", "names"):
                 row.pop(key)
         results.append({"case": label, "variants": variants})
-    archive = ROOT / "benchmarks/results/repeat-render/composed-function-snapshots.json.gz"
+    archive = ROOT / "benchmarks/results/performance-render/composed-function-snapshots.json.gz"
     archive.write_bytes(gzip.compress(json.dumps(raw, separators=(",", ":")).encode(), mtime=0))
     paths = [
         Path(__file__),

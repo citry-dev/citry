@@ -1,7 +1,7 @@
 # Ownership tracking cost and reusable template work
 
 Implementation follow-up and current measurements are recorded in
-[Repeat-render optimization research](repeat_render_research.md).
+[Repeat-render optimization research](performance_render_research.md).
 The measurements and representation descriptions below describe the earlier
 investigation baseline.
 

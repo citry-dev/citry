@@ -81,7 +81,7 @@ def main() -> None:
             for path in (Path(__file__), Path(adapter.__file__), Path(components.__file__), adapter.ARTIFACT)
         },
     }
-    (ROOT / "benchmarks/results/repeat-render/native-deferred-scan-diagnostic.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/native-deferred-scan-diagnostic.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps(report["median_instrumented_ms_per_render"], indent=2))

@@ -88,8 +88,8 @@ def main() -> None:
             ROOT / "packages/py/citry/tests/test_benchmark_citry.py",
         )
     }
-    report["build"] = json.loads((ROOT / "benchmarks/results/repeat-render/settlement-state-build.json").read_text())
-    (ROOT / "benchmarks/results/repeat-render/settlement-state-large-lifetime.json").write_text(
+    report["build"] = json.loads((ROOT / "benchmarks/results/performance-render/settlement-state-build.json").read_text())
+    (ROOT / "benchmarks/results/performance-render/settlement-state-large-lifetime.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps({variant: report[variant] for variant in ("reference", "candidate")}, indent=2))

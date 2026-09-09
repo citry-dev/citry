@@ -379,7 +379,7 @@ def main() -> None:
     parser.add_argument("--native-retirement", action="store_true")
     parser.add_argument("--reference-bulk", action="store_true")
     parser.add_argument(
-        "--output", type=Path, default=ROOT / "benchmarks/results/repeat-render/combined-journal-probe.json"
+        "--output", type=Path, default=ROOT / "benchmarks/results/performance-render/combined-journal-probe.json"
     )
     args = parser.parse_args()
     native = load_native()

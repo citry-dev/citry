@@ -74,7 +74,7 @@ large whole-render gain. They also do not disprove a complete native graph:
 Python readers still require immutable rows and Python/native crossings here.
 The native retirement experiment below moves those closure operations into
 the backend while retaining Python storage for the other record families. All observations are preserved in
-`../results/repeat-render/combined-journal*.json`; the research log records the
+`../results/performance-render/combined-journal*.json`; the research log records the
 revision context and next decision.
 
 ## Native relationship calculation

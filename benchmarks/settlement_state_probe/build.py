@@ -78,7 +78,7 @@ def main() -> None:
         "build_log": result.stdout + result.stderr,
         "transform_sha256": hashlib.sha256(Path(__file__).with_name("transform.py").read_bytes()).hexdigest(),
     }
-    (ROOT / "benchmarks/results/repeat-render/settlement-state-build.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/settlement-state-build.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(result.stdout + result.stderr)

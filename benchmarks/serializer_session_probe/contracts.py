@@ -160,7 +160,7 @@ def main() -> None:
             )
         },
     }
-    path = ROOT / "benchmarks/results/repeat-render/serializer-session-contracts.json"
+    path = ROOT / "benchmarks/results/performance-render/serializer-session-contracts.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(
         json.dumps(

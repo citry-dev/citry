@@ -193,7 +193,7 @@ def main() -> None:
             "site_source_alive_during_body": {"reference": source_alive[0], "candidate": source_alive[1]},
             "production_compatible": False,
         }
-        (ROOT / "benchmarks/results/repeat-render/ownership-scope-contracts.json").write_text(
+        (ROOT / "benchmarks/results/performance-render/ownership-scope-contracts.json").write_text(
             json.dumps(report, indent=2) + "\n"
         )
         print(json.dumps(report, indent=2))

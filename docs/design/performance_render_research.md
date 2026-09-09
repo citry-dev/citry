@@ -26,7 +26,7 @@ Jinja2 3.1.6 provide the documented baseline dependencies.
 The bounded worker uses the repository's scenario source slicer, times first
 and second renders separately, then takes 20 samples after six renders.
 Fresh-process comparisons alternate original and candidate checkouts seven
-times. Raw results are in `benchmarks/results/repeat-render/`. Absolute times
+times. Raw results are in `benchmarks/results/performance-render/`. Absolute times
 only describe this workload and machine. Per-process HTML hashes vary because
 scenario/runtime state differs; equivalence is checked separately within one
 process with shared scenario data and reset render IDs.
@@ -141,13 +141,13 @@ one extra blank line from extension configuration setup.
 
 ## Final combined measurement
 
-The durable runner is `benchmarks/repeat_render.py`. It executes the existing
+The durable runner is `benchmarks/performance_render.py`. It executes the existing
 scenarios in fresh subprocesses, alternating baseline/candidate/Django order,
 with five rounds per engine and size. Each process records the first and second
 renders separately, then measures 20 renders after six warmup renders. Unlike
 the exploratory equivalence probes, this runner does not reset render IDs or
 replace the scenario's clock. Full observations and native/scenario hashes are
-in `benchmarks/results/repeat-render/final-comparison.json`.
+in `benchmarks/results/performance-render/final-comparison.json`.
 
 The baseline checkout is pinned to `1294c51d`, rather than depending on later
 edits to the user's original checkout. Both Citry checkouts used the same native
@@ -198,10 +198,10 @@ The full repository coverage and qualification profile passed every non-Rust
 phase. Its three Rust phases initially failed on worktree dependency setup;
 formatting, Clippy and Rust tests all passed on targeted reruns after the
 correction described below. All final phase verdicts and their evidence sources
-are in `benchmarks/results/repeat-render/final-validation.json`; the initial
+are in `benchmarks/results/performance-render/final-validation.json`; the initial
 full-profile report is preserved in `full-profile-initial.json` with its FAILED
 status. Detailed passing rerun records are preserved in
-`benchmarks/results/repeat-render/dependency-rechecks.json`. The complete
+`benchmarks/results/performance-render/dependency-rechecks.json`. The complete
 supported-Python/browser version matrix was not run. Rust source, protocol
 formats and browser source were unchanged.
 
@@ -256,7 +256,7 @@ Across 40 alternating same-process pairs, the large-page median moved from
 34.434 ms to 33.983 ms (1.3%). Resetting render IDs between observations produced
 byte-identical 1,013,746-byte HTML. These are per-area observations against the
 previous optimized renderer, not a refreshed comparison with Django. Raw
-observations are in `benchmarks/results/repeat-render/selection-shortcut.json`.
+observations are in `benchmarks/results/performance-render/selection-shortcut.json`.
 The ownership, ownership-manifest and cache-replay test suites passed.
 
 ### Selection follow-up and independent review
@@ -275,7 +275,7 @@ claims require a new alternating comparison.
 An instrumented large render creates 342 each of Cache, Dependencies, Events
 and I18n configs. It reads fields on every Cache and I18n config but no fields
 on Dependencies or Events configs. Counts are recorded in
-`benchmarks/results/repeat-render/config-access-counts.json`. These observations
+`benchmarks/results/performance-render/config-access-counts.json`. These observations
 cover this scenario, not other applications or all access through arbitrary
 custom descriptors.
 
@@ -286,7 +286,7 @@ omits compatibility guards for user constructors, existing component attributes
 and custom attribute access. The saving is too small to justify adopting that
 version or claiming the guarded design would win. Production initialization
 remains eager. Raw observations and the prototype's unproven production-safety
-status are in `benchmarks/results/repeat-render/lazy-config-probe.json`.
+status are in `benchmarks/results/performance-render/lazy-config-probe.json`.
 
 ## Continued iteration: reuse successful attribute work
 
@@ -328,7 +328,7 @@ runtime changes through `3533fba`, alternating Citry baseline, candidate and
 Django. This refresh includes both new optimization areas and the preceding six.
 No scenario, opt-in purity setting, output feature or native artifact changed.
 The detailed observations and hashes are in
-`benchmarks/results/repeat-render/round2-comparison.json`.
+`benchmarks/results/performance-render/round2-comparison.json`.
 
 | Scenario and observation | Baseline Citry, ms | Optimized Citry, ms | Django, ms |
 |---|---:|---:|---:|
@@ -346,7 +346,7 @@ comparison still apply. The difference between rounds is not a direct measure
 of the two new commits; the interleaved per-area probes isolate those changes.
 
 The profile motivating this iteration is now preserved in
-`benchmarks/results/repeat-render/round2-profile.json`: the 80 functions with
+`benchmarks/results/performance-render/round2-profile.json`: the 80 functions with
 most instrumented self time, from 20 renders of `26a2392b`. It is a profile of
 the starting point, not the final optimized tree.
 
@@ -2632,7 +2632,7 @@ Every executable timing runner that recorded the probe's graph source now
 records the shared crate source/manifest and root manifests. Historical reports
 retain their original source hashes. New reports are
 `native-core-extraction.json`, `native-core-extraction-contracts.json` and
-`native-core-extraction-queue-orders.json` under `benchmarks/results/repeat-render`.
+`native-core-extraction-queue-orders.json` under `benchmarks/results/performance-render`.
 
 Moving code across a crate boundary can change compiler inlining, so the
 extraction also received one fresh complete-render comparison. It retains
@@ -3708,10 +3708,10 @@ of operations. Production source and release behavior remain unchanged.
 ## Forty-seventh iteration: consolidate experiments and refresh the comparison
 
 The user's requested one-sentence experiment ledger and cumulative timeline are
-in [repeat_render_experiment_summary.md](repeat_render_experiment_summary.md).
+in [performance_render_experiment_summary.md](performance_render_experiment_summary.md).
 The ledger distinguishes adopted changes, rejected prototypes, and successive
 qualification of the same native combination. Its local savings are not summed.
-`benchmarks/repeat_render_timeline.py` derives the timeline from nine retained
+`benchmarks/performance_render_timeline.py` derives the timeline from nine retained
 five-round comparisons, using the contemporaneous original-branch measurement
 as each checkpoint's denominator. Its x-axis is research iteration, not hours.
 
@@ -5355,7 +5355,7 @@ fill. No independent icon lifecycle is promised by the proposed contract.
 ### Retained evidence and decision
 
 The standalone harness and plan are in `benchmarks/inline_browser_probe/`. Reports
-under `benchmarks/results/repeat-render/` are:
+under `benchmarks/results/performance-render/` are:
 
 - `inline-browser-initial-failure.json`: the first fixture's diagnosed rejection;
   `*.initial.txt` preserve its original sources and plan.
@@ -5515,7 +5515,7 @@ measurement.
 
 The implementation and plan are in `benchmarks/wrapper_function_probe/`. Retained
 reports are `wrapper-function-{counts,contracts,browser,timing-smoke,timing-main}.json`
-under `benchmarks/results/repeat-render/`. Raw server snapshots and browser manifests
+under `benchmarks/results/performance-render/`. Raw server snapshots and browser manifests
 are in `wrapper-function-snapshots.json.gz`; its hash is recorded in the counts
 report. The smoke pair with two warm samples is harness evidence, not the performance
 decision. Sources referenced by that smoke but changed during qualification are
@@ -5727,7 +5727,7 @@ its comparison does not add iteration 63 or 65's separately measured savings.
 ### Retained evidence and next architectural question
 
 Sources and the predeclared plan are in `benchmarks/composed_function_probe/`.
-Reports under `benchmarks/results/repeat-render/` are
+Reports under `benchmarks/results/performance-render/` are
 `composed-function-{counts,contracts,browser,timing-smoke,timing-main,audit}.json`,
 the before-fix whitespace report, and `composed-function-snapshots.json.gz`.
 The one-block, two-warm-sample smoke is harness evidence only; historical source
@@ -5885,7 +5885,7 @@ against the unchanged composed implementation, and measure the complete page.
 
 Sources are `benchmarks/function_tree_probe/call_profile.py` and `plan.md`; reports
 are `function-tree-profile-{reference,immediate,deferred}.json` under
-`benchmarks/results/repeat-render/`. Each report records 182 source hashes, including
+`benchmarks/results/performance-render/`. Each report records 182 source hashes, including
 the executed earlier adapters, scenario/observation helpers, Python runtime and core
 wrappers, plus the unchanged native artifact hash. No adopted checkpoint or Django
 parity claim is added.
@@ -6027,7 +6027,7 @@ artifact. Its hash remains
 `321af83391e96c3770513de105b53f51e0cb2af60ea254857faa85b8fc9f71c7`.
 
 Sources and the predeclared plan are in `benchmarks/function_text_probe/`. Reports
-under `benchmarks/results/repeat-render/` are
+under `benchmarks/results/performance-render/` are
 `function-text-{checks,browser,timing-smoke,timing-main,audit}.json`, plus the first
 and corrected activation observations. The reused iteration 66 contract result is
 embedded in the checks report with its mode substitution explicitly identified.
@@ -6378,8 +6378,8 @@ This is the first public-API performance result, not completed feature adoption,
 and the historical adopted timeline remains unchanged. Public documentation and
 tooling, broader qualification and the final repository gate remain pending.
 
-Evidence: [timing report](../../benchmarks/results/repeat-render/simple-api-timing-main.json),
-[complete observed captures](../../benchmarks/results/repeat-render/simple-api-timing-main.captures.json.gz),
+Evidence: [timing report](../../benchmarks/results/performance-render/simple-api-timing-main.json),
+[complete observed captures](../../benchmarks/results/performance-render/simple-api-timing-main.captures.json.gz),
 and [measurement method](../../benchmarks/simple_api_probe/plan.md).
 
 Independent audit recomputed the reported savings and ratios, checked every
@@ -6468,8 +6468,8 @@ is unlikely to close the roughly twofold gap to Django. No further optimization
 experiment is scheduled during the documentation and handoff work.
 
 Evidence: [diagnostic method](../../benchmarks/simple_api_probe/diagnosis.md),
-[ordinary profile](../../benchmarks/results/repeat-render/simple-api-diagnosis-ordinary.json)
-and [simple profile](../../benchmarks/results/repeat-render/simple-api-diagnosis-simple.json).
+[ordinary profile](../../benchmarks/results/performance-render/simple-api-diagnosis-ordinary.json)
+and [simple profile](../../benchmarks/results/performance-render/simple-api-diagnosis-simple.json).
 Independent technical review verified both sets of 374 hashes, constructor and
 caller counts, profile self-time totals, unchanged attribute counts and the
 thirteen-class/32-call screen. It found no blocker and performed no rerenders.
@@ -6536,7 +6536,7 @@ The final `python -m docs_site build-check --strict` passed with no guard findin
 
 At the user's request, posted the optimization journey to
 [citry-ops issue 79](https://github.com/citry-dev/citry-ops/issues/79#issuecomment-5607335812).
-The local [story](repeat_render_devlog_story.md) includes the user's account of
+The local [story](performance_render_devlog_story.md) includes the user's account of
 the 14-hour Astra run and the measured results from the two distinct benchmark
 comparisons. The diminishing-returns graph counts retained large-page gains
 across logged research entries, including qualification; it does not measure

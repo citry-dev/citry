@@ -67,7 +67,7 @@ iteration 66 savings.
 The fixed examples passed bounded HTML, ownership, dependency, error and browser
 checks. They did not establish a general class classifier, all extension behavior,
 all composition entry points or Django parity. See
-[`repeat_render_research.md`](repeat_render_research.md), iterations 66-68, for
+[`performance_render_research.md`](performance_render_research.md), iterations 66-68, for
 methods, artifacts and limitations.
 
 ## Proposed authoring API

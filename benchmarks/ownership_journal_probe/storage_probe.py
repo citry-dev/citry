@@ -322,7 +322,7 @@ def main() -> None:
     parser.add_argument("--compare-storage", action="store_true")
     parser.add_argument("--pairs", type=int, default=60)
     parser.add_argument(
-        "--output", type=Path, default=ROOT / "benchmarks/results/repeat-render/ownership-storage.json"
+        "--output", type=Path, default=ROOT / "benchmarks/results/performance-render/ownership-storage.json"
     )
     args = parser.parse_args()
     if args.pairs < 1:

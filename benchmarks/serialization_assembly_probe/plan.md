@@ -65,7 +65,7 @@ Run the opt-in comparison from this checkout:
   --output /tmp/assembly-symbolic.json
 ```
 
-The retained report is `benchmarks/results/repeat-render/assembly-symbolic.json`.
+The retained report is `benchmarks/results/performance-render/assembly-symbolic.json`.
 No production serializer source changed and no new ordinary-CI test was added.
 The equality checks qualify the experiment's measured cases, not every
 possible extension or custom string subtype. A future adaptive or native

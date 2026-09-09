@@ -25,7 +25,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", action="store_true")
     args = parser.parse_args()
-    result_dir = ROOT / "benchmarks/results/repeat-render"
+    result_dir = ROOT / "benchmarks/results/performance-render"
     paths = (
         Path(__file__).resolve(),
         Path(packaged.__file__),

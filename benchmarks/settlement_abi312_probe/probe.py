@@ -231,7 +231,7 @@ def main() -> None:
         "seed": args.seed,
         "samples_per_process": args.samples,
         "initial_renders_per_process": 6,
-        "build": json.loads((ROOT / "benchmarks/results/repeat-render/settlement-abi312-build.json").read_text()),
+        "build": json.loads((ROOT / "benchmarks/results/performance-render/settlement-abi312-build.json").read_text()),
         "hashes": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (

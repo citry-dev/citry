@@ -58,7 +58,7 @@ setup(ext_modules=cythonize(
     if result.returncode == 0:
         report["artifact"] = str(artifact)
         report["artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
-    (ROOT / "benchmarks/results/repeat-render/ownership-module-build.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/ownership-module-build.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(result.stdout + result.stderr)

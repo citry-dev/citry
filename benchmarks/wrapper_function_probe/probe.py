@@ -155,7 +155,7 @@ def main() -> None:
                     "browser_manifests": row.pop("browser_manifests"),
                 }
             )
-    archive = ROOT / "benchmarks/results/repeat-render/wrapper-function-snapshots.json.gz"
+    archive = ROOT / "benchmarks/results/performance-render/wrapper-function-snapshots.json.gz"
     archive.write_bytes(gzip.compress(json.dumps(raw, separators=(",", ":")).encode(), mtime=0))
     paths = [
         Path(__file__),

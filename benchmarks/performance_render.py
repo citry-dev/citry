@@ -4,7 +4,7 @@ Compare second and steady-state renders in alternating fresh processes.
 Run with the benchmark dependencies installed and the same release native
 extension in both checkouts. Example:
 
-    .venv/bin/python benchmarks/repeat_render.py \
+    .venv/bin/python benchmarks/performance_render.py \
         --baseline-root /path/to/baseline --output /tmp/repeat.json
 
 The baseline is a Citry checkout. Django runs from the candidate checkout.
@@ -34,7 +34,7 @@ def measure(root: Path, engine: str, size: str, samples: int) -> dict[str, Any]:
 
     suffix = "_small" if size == "sm" else ""
     path = root / "packages/py/citry/tests" / f"test_benchmark_{engine}{suffix}.py"
-    module = types.ModuleType("repeat_render_scenario")
+    module = types.ModuleType("performance_render_scenario")
     module.__file__ = str(path)
     sys.modules[module.__name__] = module
     exec(compile(get_benchmark_script(path), str(path), "exec"), module.__dict__)  # noqa: S102

@@ -91,8 +91,8 @@ def main() -> None:
         str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in (Path(__file__), Path(__file__).with_name("adapter.py"))
     }
-    report["build"] = json.loads((ROOT / "benchmarks/results/repeat-render/settlement-abi310-build.json").read_text())
-    (ROOT / "benchmarks/results/repeat-render/settlement-abi310-lifetime.json").write_text(
+    report["build"] = json.loads((ROOT / "benchmarks/results/performance-render/settlement-abi310-build.json").read_text())
+    (ROOT / "benchmarks/results/performance-render/settlement-abi310-lifetime.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps({variant: report[variant] for variant in ("reference", "candidate")}, indent=2))

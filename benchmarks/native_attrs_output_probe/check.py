@@ -126,7 +126,7 @@ def main() -> None:
         "cache_test_scope": "Original cache tests with flat-key offset and adapter installed in parent/child.",
         "pytest_output": result.stdout + result.stderr,
     }
-    (ROOT / "benchmarks/results/repeat-render/native-attrs-output-contracts.json").write_text(
+    (ROOT / "benchmarks/results/performance-render/native-attrs-output-contracts.json").write_text(
         json.dumps(report, indent=2) + "\n"
     )
     print(json.dumps(report, indent=2))

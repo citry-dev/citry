@@ -266,7 +266,7 @@ def main() -> None:
             )
         },
     }
-    path = ROOT / "benchmarks/results/repeat-render/component-cases-census.json"
+    path = ROOT / "benchmarks/results/performance-render/component-cases-census.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(
         json.dumps(
