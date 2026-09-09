@@ -71,6 +71,9 @@ jobs:
     if: ${{ inputs.operation == 'qualify' }}
     needs: verify-version
     runs-on: ubuntu-latest
+    env:
+      # Match Rust's s390x baseline when assembling stack-switching code.
+      CFLAGS_s390x_unknown_linux_gnu: -march=z10
     strategy:
       fail-fast: false
       matrix:

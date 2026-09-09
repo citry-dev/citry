@@ -101,7 +101,7 @@ def test_client_runtime_bundle_budget():
     # bundle drift.
     # Alpine and morph 3.17.1 measure 793,080 combined raw / 165,406 gzip bytes.
     assert len(payload) <= 795_000
-    assert len(gzip.compress(payload, mtime=0)) <= 166_000
+    assert len(gzip.compress(payload, compresslevel=9, mtime=0)) <= 166_000
 
 
 def test_csp_events_runtime_bundle_budget():
@@ -114,9 +114,10 @@ def test_csp_events_runtime_bundle_budget():
     # phase-7 baseline was 387,046 raw / 77,715 gzip bytes. I18n phase 5's
     # fragment transaction moves it to 390,324 raw / 78,515 gzip bytes.
     # Alpine and morph 3.16.2 move it to 408,782 raw / 82,201 gzip bytes.
-    # Alpine and morph 3.17.1 measure 411,988 raw / 82,893 gzip bytes.
+    # Alpine and morph 3.17.1 measure 411,988 raw bytes. Level-9 gzip uses
+    # 82,893 bytes with zlib and 83,019 with Windows Python 3.14 zlib-ng.
     assert len(payload) <= 413_000
-    assert len(gzip.compress(payload, mtime=0)) <= 83_000
+    assert len(gzip.compress(payload, compresslevel=9, mtime=0)) <= 83_200
 
 
 def test_i18n_runtime_bundle_budget():
@@ -131,7 +132,7 @@ def test_i18n_runtime_bundle_budget():
     # baseline to 110,533 raw / 23,844 gzip bytes.
     # Keep only narrow headroom so new browser work has to account for its cost.
     assert len(payload) <= 111_000
-    assert len(gzip.compress(payload, mtime=0)) <= 24_000
+    assert len(gzip.compress(payload, compresslevel=9, mtime=0)) <= 24_000
 
 
 def test_325_instance_client_payload_budget():
