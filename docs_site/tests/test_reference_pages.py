@@ -53,6 +53,7 @@ def test_public_entrypoints_are_the_three_shapes() -> None:
         "citry.ext.dependencies",
         "citry.ext.events",
         "citry.ext.i18n",
+        "citry.ext.preview",
     ]
 
 

@@ -251,14 +251,16 @@
 // - ❌                - ExprIpyEscapeCommand
 
 use crate::comments::extract_comments;
+use crate::parse::parse_expression;
 use crate::utils::python_ast::{
     attribute, call, get_expr_range, interceptor_call, none_literal, string_literal,
 };
 use regex::Regex;
 use ruff_python_ast::visitor::transformer::Transformer;
 use ruff_python_ast::{self as ast, Expr, Stmt};
-use ruff_python_parser::{Parsed, parse_expression};
+use ruff_python_parser::Parsed;
 use ruff_source_file::LineIndex;
+use ruff_text_size::Ranged;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -938,7 +940,7 @@ impl Transformer for SandboxTransformer {
                 args.extend(call_expr.arguments.args.to_vec());
 
                 // `call(context, source, (start_index, end_index), fn, *args, **kwargs)`
-                let adjusted_range = self.adjust_range(call_expr.range);
+                let adjusted_range = self.adjust_range(call_expr.range());
                 let wrapper_call = interceptor_call(
                     "call",
                     args,

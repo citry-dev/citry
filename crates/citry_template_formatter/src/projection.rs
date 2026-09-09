@@ -21,11 +21,11 @@ use citry_template_parser::{
     Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, ParseOptions, Template,
     TemplateElement, Token, parse_template, parse_template_with_options,
 };
+use python_safe_eval::parse_expression;
 use ruff_python_ast::{
     comparable::ComparableExpr,
     token::{TokenKind, Tokens},
 };
-use ruff_python_parser::parse_expression;
 use ruff_python_trivia::CommentRanges;
 use thiserror::Error;
 

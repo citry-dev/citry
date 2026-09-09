@@ -154,8 +154,23 @@ def is_const(value: Any) -> bool:
 
 
 def const_value(value: Any) -> Any:
-    """Return the underlying value if ``value`` is ``Const``, else ``value``."""
-    return value.__wrapped__ if isinstance(value, _ConstProxy) else value
+    """Unwrap nested markers; leave unmarked values unchanged and reject cycles with ``ValueError``."""
+    # Forwarding a constant through another constant input can add a marker layer.
+    # Exact-type consumers need the underlying value, regardless of that depth.
+    if isinstance(value, _ConstProxy):
+        value = value.__wrapped__
+    if isinstance(value, _ConstProxy):
+        # Allocate cycle tracking only for nested markers; the usual one-layer
+        # case stays allocation-free. Proxy targets can be rebound by callers.
+        seen: set[int] = set()
+        while isinstance(value, _ConstProxy):
+            marker_id = id(value)
+            if marker_id in seen:
+                msg = "Const markers contain a cycle."
+                raise ValueError(msg)
+            seen.add(marker_id)
+            value = value.__wrapped__
+    return value
 
 
 # #########################################################

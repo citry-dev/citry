@@ -1190,6 +1190,11 @@ class I18nExtension(Extension):
         """Install render-time wrappers for direct, dynamic, and spread `$c-tr`."""
         from .bindings import compile_template_bindings  # noqa: PLC0415
 
+        if ctx.component_class.simple:
+            # Simple bodies have no translation collector of their own. Their
+            # template validator rejects literal bindings, and ordinary
+            # attribute resolution rejects bindings arriving through spreads.
+            return ctx.nodes
         return compile_template_bindings(ctx.nodes, component_name=ctx.component_class.__name__)
 
     def on_component_rendered(self, ctx: OnComponentRenderedContext) -> None:

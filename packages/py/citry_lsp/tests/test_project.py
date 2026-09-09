@@ -565,7 +565,7 @@ def test_no_app_selects_reported_syntax_only_mode(tmp_path):
     assert state.status.app is None
     assert "No Citry app configured" in (state.status.message or "")
     assert state.status.to_dict()["mode"] == "syntax-only"
-    assert state.status.python_expression_provider == "ruff@0.16.2+5b48a04097"
+    assert state.status.python_expression_provider == "ruff@0.16.6+22f65a2ab5"
 
 
 def test_worker_process_and_json_failures_degrade(tmp_path, monkeypatch):
@@ -625,7 +625,7 @@ def test_worker_protocol_and_version_mismatches_degrade(tmp_path, monkeypatch):
     assert "contains unsupported fields" in messages[4]
     assert "protocol mismatch" in messages[5]
     assert "template lint component ids do not match" in messages[6]
-    assert "outside this server's supported" in messages[7]
+    assert "requires a valid version" in messages[7]
     assert "schema 999 is unsupported" in messages[8]
 
 
@@ -710,3 +710,21 @@ def test_source_analysis_declines_non_function_template_data_without_invoking_it
     card = state.catalog.get("c-card")
     assert card is not None
     assert state.source_analysis.template_data_chain(card) is None
+
+
+@pytest.mark.parametrize("version", ["0.4.5", "0.5.0", "0.6.0", "1.0.0", "9.0.0"])
+def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkeypatch, version):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "version_app.py").write_text(
+        "from citry import Citry\nengine = Citry(autodiscover=False)\n",
+        encoding="utf-8",
+    )
+    payload = app_worker._run("version_app:engine", tmp_path)
+    payload["catalog"]["citry_version"] = version
+    state = project_module._project_from_worker_output(tmp_path, "version_app:engine", 0, json.dumps(payload), "")
+    assert state.status.mode == "registry"
+
+    payload["catalog"]["schema_version"] = 999
+    state = project_module._project_from_worker_output(tmp_path, "version_app:engine", 0, json.dumps(payload), "")
+    assert state.status.mode == "syntax-only"
+    assert "schema 999 is unsupported" in state.status.message

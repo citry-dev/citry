@@ -50,6 +50,26 @@ renders a bare attribute, while `False` and `None` leave it out:
 
 Attribute names and values are HTML-escaped. The value can opt-out of HTML-escaping, see [Bypass HTML escape](/syntax/expressions/#bypass-html-escape).
 
+### ARIA values
+
+If `aria-pressed` renders without a value or disappears, check the type of
+the expression's result. A Python `True` renders a bare attribute; `False`
+or `None` omits it. For a boolean ARIA state such as `aria-pressed`, return
+the strings `"true"` and `"false"`, including when the state is false:
+
+```citry-html
+<!-- Wrong: True becomes bare aria-pressed; False omits it. -->
+<button c-aria-pressed="selected">Choose</button>
+
+<!-- Use strings to retain both ARIA states. -->
+<button c-aria-pressed="'true' if selected else 'false'">
+  Choose
+</button>
+```
+
+For a Python value, use the `c-` expression form shown here. An ordinary
+attribute such as `aria-pressed="{{ selected }}"` keeps that text literally.
+
 ### Components
 
 On a component tag, an attribute is the [component's Python input](/concepts/inputs-and-validation/). A static value

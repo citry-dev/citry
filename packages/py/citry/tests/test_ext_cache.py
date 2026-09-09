@@ -2,6 +2,7 @@
 
 import re
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from threading import Event
 
 import pytest
@@ -228,6 +229,21 @@ class TestCacheKeyEncoding:
 
         with pytest.raises(CacheKeyError, match="Values"):
             fragment_cache_key(Citry(), "x", vary=Values([1]))
+
+    def test_nested_const_markers_keep_their_key_format_and_cycle_checks(self):
+        app = Citry()
+        assert fragment_cache_key(app, "key", vary=[Const(1)]) != fragment_cache_key(
+            app, "key", vary=[Const(Const(1))]
+        )
+        first = Const(1)
+        second = Const(first)
+        with suppress(RecursionError):
+            first.__wrapped__ = second
+        try:
+            with pytest.raises(CacheKeyError, match="cycle"):
+                fragment_cache_key(app, "key", vary=[first])
+        finally:
+            first.__wrapped__ = 1
 
     def test_cycles_are_rejected_but_do_not_overflow_python(self):
         value = []

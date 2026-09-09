@@ -107,6 +107,55 @@ class TestBooleanValues:
 
 
 class TestCBindSpread:
+    @pytest.mark.parametrize("bad_key", ["bad name", "data-cev-bind", "$C-TR:title", "#c-key", 123])
+    def test_repeated_spread_revalidates_changed_keys(self, bad_key):
+        c = Citry()
+        attrs = {"title": "first"}
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": attrs}
+
+            template = """
+              <div c-bind="attrs"></div>
+            """
+
+        assert 'title="first"' in str(Page())
+        attrs["title"] = "<second>"
+        assert 'title="&lt;second&gt;"' in str(Page())
+        attrs.clear()
+        attrs[bad_key] = "value"
+        with pytest.raises((TypeError, ValueError, RuntimeError)):
+            str(Page())
+
+    def test_repeated_spread_preserves_string_subclass_validation(self):
+        class ChangingKey(str):
+            __slots__ = ("reserved",)
+
+            def lower(self):
+                return "data-cev-bind" if self.reserved else super().lower()
+
+        key = ChangingKey("title")
+        key.reserved = False
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {key: "value"}}
+
+            template = """
+              <div c-bind="attrs"></div>
+            """
+
+        assert 'title="value"' in str(Page())
+        key.reserved = True
+        with pytest.raises(RuntimeError, match="compiler-owned"):
+            str(Page())
+
     def test_spreads_mapping_onto_element(self):
         tpl = """<div c-bind="{'class': 'btn', 'disabled': True, 'data-id': item['id']}">y</div>"""
         assert _html(tpl, item={"id": 123}) == '<div class="btn" disabled data-id="123">y</div>'

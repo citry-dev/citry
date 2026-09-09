@@ -231,11 +231,11 @@ def test_navigation_renders_review_hint_and_area_badge_without_changing_titles()
         '//a[@href="/ui-library/" and contains(@class, "djc-sidebar__link")]',
     )[0]
     assert sidebar.get("aria-label") == (
-        "Overview. This page has not completed final human review. May contain minor inaccuracies."
+        "Overview. This page needs final human review. May contain minor inaccuracies."
     )
     assert sidebar.xpath('.//span[contains(@class, "djc-sidebar__review-icon")]/text()') == ["🚧"]
     assert (
-        "has not completed final human review"
+        "needs final human review"
         in sidebar.xpath(
             './/span[contains(@class, "djc-sidebar__review-hint")]',
         )[0].text_content()

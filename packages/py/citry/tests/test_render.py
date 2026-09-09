@@ -9,7 +9,7 @@ the dependency flow are later phases.
 
 # ruff: noqa: ANN
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, asdict, dataclass, replace
 
 import pytest
 
@@ -40,6 +40,96 @@ def _card(template="<p>hi</p>"):
 
 
 class TestRenderReturnsCitryRender:
+    @pytest.mark.parametrize(
+        ("initial", "contributed", "expected"),
+        [
+            ((), [], ()),
+            ((), ['data-extra="new"'], ('data-extra="new"',)),
+            (('data-extra="old"',), [], ()),
+            (('data-extra="old"',), ['data-extra="new"', 'data-extra="new"'], ('data-extra="new"',)),
+        ],
+    )
+    def test_finalization_snapshots_hook_marker_changes(self, initial, contributed, expected):
+        retained = []
+
+        class Markers(Extension):
+            name = "markers"
+
+            def on_component_rendered(self, ctx):
+                ctx.render.frame = replace(ctx.render.frame, root_markers=initial)
+                retained.append(ctx.render.frame)
+                ctx.render.context._add_root_markers(contributed)
+
+        c = Citry(extensions=[Markers])
+
+        class Card(Component):
+            citry = c
+            template = """
+            <p>card</p>
+            """
+
+        rendered = Card().render()
+        assert rendered.frame.root_markers == expected
+        assert retained[0].root_markers == initial
+        html = rendered.serialize()
+        assert ('data-extra="new"' in html) == bool(expected)
+        assert 'data-extra="old"' not in html
+
+    def test_finalization_preserves_custom_frame_construction(self):
+        constructed = []
+
+        @dataclass(frozen=True, slots=True)
+        class CustomFrame(RenderFrame):
+            def __post_init__(self):
+                constructed.append(self)
+
+        class Frames(Extension):
+            name = "frames"
+
+            def on_component_rendered(self, ctx):
+                ctx.render.frame = CustomFrame(**asdict(ctx.render.frame))
+
+        c = Citry(extensions=[Frames])
+
+        class Card(Component):
+            citry = c
+            template = """
+            <p>card</p>
+            """
+
+        rendered = Card().render()
+        assert len(constructed) == 2
+        assert rendered.frame is constructed[-1]
+        assert constructed[0] is not constructed[1]
+
+    @pytest.mark.parametrize("custom_tuple", [False, True])
+    def test_finalization_normalizes_custom_empty_marker_containers(self, custom_tuple):
+        class EmptyMarkers(tuple):
+            __slots__ = ()
+
+            def __bool__(self):
+                raise AssertionError("Custom marker truthiness must not run")
+
+        markers = EmptyMarkers() if custom_tuple else []
+
+        class Markers(Extension):
+            name = "markers"
+
+            def on_component_rendered(self, ctx):
+                ctx.render.frame = replace(ctx.render.frame, root_markers=markers)
+
+        c = Citry(extensions=[Markers])
+
+        class Card(Component):
+            citry = c
+            template = """
+            <p>card</p>
+            """
+
+        rendered = Card().render()
+        assert type(rendered.frame.root_markers) is tuple
+        assert rendered.frame.root_markers == ()
+
     def test_render_returns_citry_render(self):
         rendered = _card().render()
         assert isinstance(rendered, CitryRender)

@@ -1,10 +1,10 @@
-/* Citry events CSP client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles @alpinejs/csp 3.16.2 + @alpinejs/morph 3.16.2 (MIT). */
+/* Citry events CSP client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles @alpinejs/csp 3.17.1 + @alpinejs/morph 3.17.1 (MIT). */
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/scheduler.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/scheduler.js
   var flushPending = false;
   var flushing = false;
   var queue = [];
@@ -87,7 +87,7 @@
     return depth;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/reactivity.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/reactivity.js
   var reactive;
   var effect;
   var release;
@@ -172,7 +172,7 @@
     }
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/mutation.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/mutation.js
   var onAttributeAddeds = [];
   var onElRemoveds = [];
   var onElAddeds = [];
@@ -230,6 +230,11 @@
         while (queuedMutations.length > 0) queuedMutations.shift()();
       }
     });
+  }
+  function flushPendingMutations() {
+    while (queuedMutations.length > 0) queuedMutations.shift()();
+    let records = observer.takeRecords();
+    if (records.length > 0) onMutate(records);
   }
   function mutateDom(callback) {
     if (!currentlyObserving) return callback();
@@ -317,7 +322,7 @@
     removedAttributes = null;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/scope.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/scope.js
   function scope(node) {
     return mergeProxies(closestDataStack(node));
   }
@@ -388,7 +393,7 @@
     }, {});
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/interceptor.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/interceptor.js
   function initInterceptors(data2, cleanup = () => {
   }) {
     let isObject3 = (val) => typeof val === "object" && !Array.isArray(val) && val !== null;
@@ -449,7 +454,7 @@
     }
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics.js
   var magics = {};
   function magic(name, callback) {
     magics[name] = callback;
@@ -473,7 +478,7 @@
     return utils;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/error.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/error.js
   function tryCatch(el, expression, callback, ...args) {
     try {
       return callback(...args);
@@ -501,7 +506,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }, 0);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/evaluator.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/evaluator.js
   var shouldAutoEvaluateFunctions = true;
   function dontAutoEvaluateFunctions(callback) {
     let cache = shouldAutoEvaluateFunctions;
@@ -556,7 +561,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return theRawEvaluatorFunction(...args);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives.js
   function runCitryAmbientDirective(el, attributeName, registerCleanup, callback) {
     let run = globalThis.Citry && globalThis.Citry.alpine && globalThis.Citry.alpine._runDirective;
     return typeof run === "function" ? run(el, attributeName, registerCleanup, callback) : callback();
@@ -728,22 +733,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return directiveOrder.indexOf(typeA) - directiveOrder.indexOf(typeB);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/dispatch.js
-  function dispatch(el, name, detail = {}, options = {}) {
-    return el.dispatchEvent(
-      new CustomEvent(name, {
-        detail,
-        bubbles: true,
-        // Allows events to pass the shadow DOM barrier.
-        composed: true,
-        cancelable: true,
-        // Allows overriding the default event options.
-        ...options
-      })
-    );
-  }
-
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/walk.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/walk.js
   function walk(el, callback) {
     if (typeof ShadowRoot === "function" && el instanceof ShadowRoot) {
       Array.from(el.children).forEach((el2) => walk(el2, callback));
@@ -759,12 +749,158 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/warn.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/clone.js
+  var isCloning = false;
+  function skipDuringClone(callback, fallback = () => {
+  }) {
+    return (...args) => isCloning ? fallback(...args) : callback(...args);
+  }
+  function onlyDuringClone(callback) {
+    return (...args) => isCloning && callback(...args);
+  }
+  var interceptors = [];
+  function interceptClone(callback) {
+    interceptors.push(callback);
+  }
+  function cloneNode(from, to) {
+    interceptors.forEach((i) => i(from, to));
+    isCloning = true;
+    dontRegisterReactiveSideEffects(() => {
+      initTree(to, (el, callback) => {
+        callback(el, () => {
+        });
+      });
+    });
+    isCloning = false;
+  }
+  var isCloningLegacy = false;
+  function clone(oldEl, newEl) {
+    if (!newEl._x_dataStack) newEl._x_dataStack = oldEl._x_dataStack;
+    isCloning = true;
+    isCloningLegacy = true;
+    dontRegisterReactiveSideEffects(() => {
+      cloneTree(newEl);
+    });
+    isCloning = false;
+    isCloningLegacy = false;
+  }
+  function cloneTree(el) {
+    let hasRunThroughFirstEl = false;
+    let shallowWalker = (el2, callback) => {
+      walk(el2, (el3, skip) => {
+        if (hasRunThroughFirstEl && isRoot(el3)) return skip();
+        hasRunThroughFirstEl = true;
+        callback(el3, skip);
+      });
+    };
+    initTree(el, shallowWalker);
+  }
+  function dontRegisterReactiveSideEffects(callback) {
+    let cache = effect;
+    overrideEffect((callback2, el) => {
+      let storedEffect = cache(callback2);
+      release(storedEffect);
+      return () => {
+      };
+    });
+    callback();
+    overrideEffect(cache);
+  }
+
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/deferInit.js
+  var activeDefers = 0;
+  function deferInit(el, promise) {
+    let record = el._x_deferInit;
+    if (!record) {
+      record = el._x_deferInit = {
+        pending: 0,
+        ownsIgnore: !el._x_ignore,
+        queuedAttributes: /* @__PURE__ */ new Map()
+      };
+      if (record.ownsIgnore) el._x_ignore = true;
+      activeDefers++;
+    }
+    record.pending++;
+    Promise.resolve(promise).catch((error2) => {
+      try {
+        handleError(error2, el);
+      } catch (error3) {
+        setTimeout(() => {
+          throw error3;
+        }, 0);
+      }
+    }).then(() => settle(el, record));
+  }
+  function settle(el, record) {
+    record.pending--;
+    if (record.pending > 0) return;
+    flushPendingMutations();
+    if (record.pending > 0) return;
+    if (el._x_deferInit !== record) return;
+    delete el._x_deferInit;
+    if (record.ownsIgnore) delete el._x_ignore;
+    activeDefers--;
+    if (!el.isConnected) return;
+    replayQueuedAttributes(record);
+    initTree(el);
+  }
+  function queueAttributesForDeferredTree(el, attrs) {
+    if (activeDefers === 0) return false;
+    let root = findClosest(el, (i) => i._x_deferInit);
+    if (!root) return false;
+    queueInto(root._x_deferInit, el, attrs.map(({ name }) => name));
+    return true;
+  }
+  function queueInto(record, el, names) {
+    let entry = record.queuedAttributes.get(el);
+    if (!entry || entry.marker !== el._x_marker) {
+      entry = { marker: el._x_marker, names: /* @__PURE__ */ new Set() };
+      record.queuedAttributes.set(el, entry);
+    }
+    names.forEach((name) => entry.names.add(name));
+  }
+  function replayQueuedAttributes(record) {
+    record.queuedAttributes.forEach((entry, el) => {
+      if (!el.isConnected) return;
+      if (!el._x_marker) return;
+      if (el._x_marker !== entry.marker) return;
+      let suspendedAncestor = findClosest(el, (i) => i._x_deferInit);
+      if (suspendedAncestor) {
+        queueInto(suspendedAncestor._x_deferInit, el, Array.from(entry.names));
+        return;
+      }
+      let attrs = Array.from(entry.names).filter((name) => el.hasAttribute(name)).map((name) => ({ name, value: el.getAttribute(name) }));
+      if (attrs.length === 0) return;
+      directives(el, attrs).forEach((handle) => handle());
+    });
+  }
+  interceptClone((from, to) => {
+    if (activeDefers === 0) return;
+    if (!from || from.nodeType !== 1 || !to || to.nodeType !== 1) return;
+    if (findClosest(from, (i) => i._x_deferInit)) to._x_ignore = true;
+  });
+
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/dispatch.js
+  function dispatch(el, name, detail = {}, options = {}) {
+    return el.dispatchEvent(
+      new CustomEvent(name, {
+        detail,
+        bubbles: true,
+        // Allows events to pass the shadow DOM barrier.
+        composed: true,
+        cancelable: true,
+        // Allows overriding the default event options.
+        ...options
+      })
+    );
+  }
+
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/warn.js
   function warn(message, ...args) {
     console.warn(`Alpine Warning: ${message}`, ...args);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/lifecycle.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/lifecycle.js
   var started = false;
   function start() {
     if (started) warn("Alpine has already been initialized on this page. Calling Alpine.start() more than once can cause problems.");
@@ -776,6 +912,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     onElAdded((el) => initTree(el, walk));
     onElRemoved((el) => destroyTree(el));
     onAttributesAdded((el, attrs) => {
+      if (queueAttributesForDeferredTree(el, attrs)) return;
       directives(el, attrs).forEach((handle) => handle());
     });
     let outNestedComponents = (el) => !closestRoot(el.parentElement, true);
@@ -863,7 +1000,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     });
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/nextTick.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/nextTick.js
   var tickStack = [];
   var isHolding = false;
   function nextTick(callback = () => {
@@ -888,7 +1025,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     isHolding = true;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/classes.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/classes.js
   function setClasses(el, value) {
     if (Array.isArray(value)) {
       return setClassesFromString(el, value.join(" "));
@@ -936,7 +1073,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/styles.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/styles.js
   function setStyles(el, value) {
     if (typeof value === "object" && value !== null) {
       return setStylesFromObject(el, value);
@@ -972,7 +1109,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return subject.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/once.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/once.js
   function once(callback, fallback = () => {
   }) {
     let called = false;
@@ -986,7 +1123,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-transition.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-transition.js
   directive("transition", (el, { value, modifiers, expression }, { evaluate: evaluate2 }) => {
     if (typeof expression === "function") expression = evaluate2(expression);
     if (expression === false) return;
@@ -1247,65 +1384,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return rawValue;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/clone.js
-  var isCloning = false;
-  function skipDuringClone(callback, fallback = () => {
-  }) {
-    return (...args) => isCloning ? fallback(...args) : callback(...args);
-  }
-  function onlyDuringClone(callback) {
-    return (...args) => isCloning && callback(...args);
-  }
-  var interceptors = [];
-  function interceptClone(callback) {
-    interceptors.push(callback);
-  }
-  function cloneNode(from, to) {
-    interceptors.forEach((i) => i(from, to));
-    isCloning = true;
-    dontRegisterReactiveSideEffects(() => {
-      initTree(to, (el, callback) => {
-        callback(el, () => {
-        });
-      });
-    });
-    isCloning = false;
-  }
-  var isCloningLegacy = false;
-  function clone(oldEl, newEl) {
-    if (!newEl._x_dataStack) newEl._x_dataStack = oldEl._x_dataStack;
-    isCloning = true;
-    isCloningLegacy = true;
-    dontRegisterReactiveSideEffects(() => {
-      cloneTree(newEl);
-    });
-    isCloning = false;
-    isCloningLegacy = false;
-  }
-  function cloneTree(el) {
-    let hasRunThroughFirstEl = false;
-    let shallowWalker = (el2, callback) => {
-      walk(el2, (el3, skip) => {
-        if (hasRunThroughFirstEl && isRoot(el3)) return skip();
-        hasRunThroughFirstEl = true;
-        callback(el3, skip);
-      });
-    };
-    initTree(el, shallowWalker);
-  }
-  function dontRegisterReactiveSideEffects(callback) {
-    let cache = effect;
-    overrideEffect((callback2, el) => {
-      let storedEffect = cache(callback2);
-      release(storedEffect);
-      return () => {
-      };
-    });
-    callback();
-    overrideEffect(cache);
-  }
-
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/bind.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/bind.js
   function bind(el, name, value, modifiers = []) {
     if (!el._x_bindings) el._x_bindings = reactive({});
     el._x_bindings[name] = value;
@@ -1481,7 +1560,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return el.type === "radio" || el.localName === "ui-radio";
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/debounce.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/debounce.js
   function debounce(func, wait) {
     let timeout;
     return function() {
@@ -1495,7 +1574,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/throttle.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/throttle.js
   function throttle(func, limit) {
     let inThrottle;
     return function() {
@@ -1508,7 +1587,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/entangle.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/entangle.js
   function entangle({ get: outerGet, set: outerSet }, { get: innerGet, set: innerSet }) {
     let firstRun = true;
     let outerHash;
@@ -1540,13 +1619,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return typeof value === "object" ? JSON.parse(JSON.stringify(value)) : value;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/plugin.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/plugin.js
   function plugin(callback) {
     let callbacks = Array.isArray(callback) ? callback : [callback];
     callbacks.forEach((i) => i(alpine_default));
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/store.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/store.js
   var stores = {};
   var isReactive = false;
   function store(name, value) {
@@ -1572,7 +1651,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return stores;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/binds.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/binds.js
   var binds = {};
   function bind2(name, bindings) {
     let getBindings = typeof bindings !== "function" ? () => bindings : bindings;
@@ -1619,7 +1698,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/datas.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/datas.js
   var datas = {};
   function data(name, callback) {
     datas[name] = callback;
@@ -1638,7 +1717,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return obj;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/alpine.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/alpine.js
   var Alpine = {
     get reactive() {
       return reactive;
@@ -1655,7 +1734,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     get transaction() {
       return transaction;
     },
-    version: "3.16.2",
+    version: "3.17.1",
     flushAndStopDeferringMutations,
     dontAutoEvaluateFunctions,
     disableEffectScheduling,
@@ -1693,6 +1772,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     setStyles,
     // INTERNAL
     mutateDom,
+    deferInit,
     directive,
     entangle,
     throttle,
@@ -1720,7 +1800,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   };
   var alpine_default = Alpine;
 
-  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.2/node_modules/@alpinejs/csp/src/parser.js
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.17.1/node_modules/@alpinejs/csp/src/parser.js
   var safemap = /* @__PURE__ */ new WeakMap();
   var globals = /* @__PURE__ */ new Set();
   Object.getOwnPropertyNames(globalThis).forEach((key) => {
@@ -1846,6 +1926,16 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             case quote:
               value += quote;
               break;
+            case "u": {
+              const codeUnit = this.input.slice(this.position + 1, this.position + 5);
+              if (/^[0-9a-fA-F]{4}$/.test(codeUnit)) {
+                value += String.fromCharCode(parseInt(codeUnit, 16));
+                this.position += 4;
+              } else {
+                value += char;
+              }
+              break;
+            }
             default:
               value += char;
           }
@@ -2507,7 +2597,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }
   }
 
-  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.2/node_modules/@alpinejs/csp/src/evaluator.js
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.17.1/node_modules/@alpinejs/csp/src/evaluator.js
   function cspRawEvaluator(el, expression, extras = {}) {
     let dataStack = generateDataStack(el);
     let scope2 = mergeProxies([extras.scope ?? {}, ...dataStack]);
@@ -3847,13 +3937,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return r ? r["__v_isRef"] === true : false;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$nextTick.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$nextTick.js
   magic("nextTick", () => nextTick);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$dispatch.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$dispatch.js
   magic("dispatch", (el) => dispatch.bind(dispatch, el));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$watch.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$watch.js
   magic("watch", (el, { evaluateLater: evaluateLater2, cleanup }) => (key, callback) => {
     let evaluate2 = evaluateLater2(key);
     let getter = () => {
@@ -3865,16 +3955,16 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     cleanup(unwatch);
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$store.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$store.js
   magic("store", getStores);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$data.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$data.js
   magic("data", (el) => scope(el));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$root.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$root.js
   magic("root", (el) => closestRoot(el));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$refs.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$refs.js
   magic("refs", (el) => {
     if (el._x_refs_proxy) return el._x_refs_proxy;
     el._x_refs_proxy = mergeProxies(getArrayOfRefObject(el));
@@ -3888,7 +3978,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return refObjects;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/ids.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/ids.js
   var globalIdMemo = {};
   function findAndIncrementId(name) {
     if (!globalIdMemo[name]) globalIdMemo[name] = 0;
@@ -3904,7 +3994,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     if (!el._x_ids[name]) el._x_ids[name] = findAndIncrementId(name);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$id.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$id.js
   magic("id", (el, { cleanup }) => (name, key = null) => {
     let cacheKey = `${name}${key ? `-${key}` : ""}`;
     return cacheIdByNameOnElement(el, cacheKey, cleanup, () => {
@@ -3929,17 +4019,17 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return output;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/$el.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/$el.js
   magic("el", (el) => el);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/magics/index.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/magics/index.js
   warnMissingPluginMagic("Focus", "focus", "focus");
   warnMissingPluginMagic("Persist", "persist", "persist");
   function warnMissingPluginMagic(name, magicName, slug) {
     magic(magicName, (el) => warn(`You can't use [$${magicName}] without first installing the "${name}" plugin here: https://alpinejs.dev/plugins/${slug}`, el));
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-modelable.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-modelable.js
   directive("modelable", (el, { expression }, { effect: effect3, evaluateLater: evaluateLater2, cleanup }) => {
     let func = evaluateLater2(expression);
     let innerGet = () => {
@@ -3979,7 +4069,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     });
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-teleport.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-teleport.js
   directive("teleport", (el, { modifiers, expression }, { cleanup }) => {
     if (el.tagName.toLowerCase() !== "template") warn("x-teleport can only be used on a <template> tag", el);
     let target = getTarget(expression);
@@ -4036,7 +4126,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return target;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-ignore.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-ignore.js
   var handler = () => {
   };
   handler.inline = (el, { modifiers }, { cleanup }) => {
@@ -4047,12 +4137,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   };
   directive("ignore", handler);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-effect.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-effect.js
   directive("effect", skipDuringClone((el, { expression }, { effect: effect3 }) => {
     effect3(evaluateLater(el, expression));
   }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/utils/on.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/utils/on.js
   function on(el, event, modifiers, callback) {
     let listenerTarget = el;
     let handler4 = (e) => callback(e);
@@ -4204,7 +4294,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }).filter((modifier) => modifier);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-model.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-model.js
   directive("model", (el, { modifiers, expression }, { effect: effect3, cleanup }) => {
     let scopeTarget = el;
     if (modifiers.includes("parent")) {
@@ -4410,10 +4500,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return value !== null && typeof value === "object" && typeof value.get === "function" && typeof value.set === "function";
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-cloak.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-cloak.js
   directive("cloak", (el) => queueMicrotask(() => mutateDom(() => el.removeAttribute(prefix("cloak")))));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-init.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-init.js
   addInitSelector(() => `[${prefix("init")}]`);
   directive("init", skipDuringClone((el, { expression }, { evaluate: evaluate2 }) => {
     if (typeof expression === "string") {
@@ -4422,7 +4512,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return evaluate2(expression, {}, false);
   }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-text.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-text.js
   directive("text", (el, { expression }, { effect: effect3, evaluateLater: evaluateLater2 }) => {
     let evaluate2 = evaluateLater2(expression);
     effect3(() => {
@@ -4434,7 +4524,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     });
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-html.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-html.js
   directive("html", (el, { expression }, { effect: effect3, evaluateLater: evaluateLater2 }) => {
     let evaluate2 = evaluateLater2(expression);
     effect3(() => {
@@ -4450,7 +4540,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }, { priority: "structural" });
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-bind.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-bind.js
   mapAttributes(startingWith(":", into(prefix("bind:"))));
   var handler2 = (el, { value, modifiers, expression, original }, { effect: effect3, cleanup }) => {
     if (!value) {
@@ -4488,7 +4578,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     el._x_keyExpression = expression;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-data.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-data.js
   addRootSelector(() => `[${prefix("data")}]`);
   var dataForReconciliation = /* @__PURE__ */ Symbol();
   directive("data", ((el, { expression }, { cleanup }) => {
@@ -4558,7 +4648,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return el.hasAttribute("data-has-alpine-state");
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-show.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-show.js
   directive("show", (el, { modifiers, expression }, { effect: effect3 }) => {
     let evaluate2 = evaluateLater(el, expression);
     if (!el._x_doHide) el._x_doHide = () => {
@@ -4605,7 +4695,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }));
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-for.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-for.js
   directive("for", skipDuringClone((el, { expression }, { effect: effect3, cleanup }) => {
     let iteratorNames = parseForExpression(expression);
     let evaluateItems = evaluateLater(el, iteratorNames.items);
@@ -4751,7 +4841,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return typeof subject === "object" && !Array.isArray(subject);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-ref.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-ref.js
   function handler3() {
   }
   handler3.inline = (el, { expression }, { cleanup }) => {
@@ -4763,7 +4853,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   };
   directive("ref", handler3);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-if.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-if.js
   directive("if", skipDuringClone((el, { expression }, { effect: effect3, cleanup }) => {
     if (el.tagName.toLowerCase() !== "template") warn("x-if can only be used on a <template> tag", el);
     let evaluate2 = evaluateLater(el, expression);
@@ -4798,7 +4888,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     cleanup(() => el._x_undoIf && el._x_undoIf());
   }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-id.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-id.js
   directive("id", (el, { expression }, { evaluate: evaluate2 }) => {
     let names = evaluate2(expression);
     names.forEach((name) => setIdRoot(el, name));
@@ -4809,7 +4899,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/x-on.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/x-on.js
   mapAttributes(startingWith("@", into(prefix("on:"))));
   directive("on", skipDuringClone((el, { value, modifiers, expression }, { cleanup }) => {
     let evaluate2 = expression ? evaluateLater(el, expression) : () => {
@@ -4825,7 +4915,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     cleanup(() => removeListener());
   }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.16.2/node_modules/alpinejs/src/directives/index.js
+  // ../../../node_modules/.pnpm/alpinejs@3.17.1/node_modules/alpinejs/src/directives/index.js
   warnMissingPluginDirective("Collapse", "collapse", "collapse");
   warnMissingPluginDirective("Intersect", "intersect", "intersect");
   warnMissingPluginDirective("Focus", "trap", "focus");
@@ -4834,12 +4924,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     directive(directiveName, (el) => warn(`You can't use [x-${directiveName}] without first installing the "${name}" plugin here: https://alpinejs.dev/plugins/${slug}`, el));
   }
 
-  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.2/node_modules/@alpinejs/csp/src/directives/x-html.js
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.17.1/node_modules/@alpinejs/csp/src/directives/x-html.js
   directive("html", (el, { expression }) => {
     handleError(new Error("Using the x-html directive is prohibited in the CSP build"), el);
   });
 
-  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.2/node_modules/@alpinejs/csp/src/index.js
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.17.1/node_modules/@alpinejs/csp/src/index.js
   alpine_default.setEvaluator(cspEvaluator);
   alpine_default.setRawEvaluator(cspRawEvaluator);
   alpine_default.setReactivityEngine({
@@ -4861,7 +4951,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   });
   var src_default = alpine_default;
 
-  // ../../../node_modules/.pnpm/@alpinejs+morph@3.16.2/node_modules/@alpinejs/morph/dist/module.esm.js
+  // ../../../node_modules/.pnpm/@alpinejs+morph@3.17.1/node_modules/@alpinejs/morph/dist/module.esm.js
   function morph(from, toHtml, options) {
     monkeyPatchDomSetAttributeToAllowAtSymbols();
     let context = createMorphContext(options);

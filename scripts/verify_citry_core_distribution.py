@@ -387,6 +387,9 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         "crates/citry_template_formatter/Cargo.toml",
         "crates/citry_template_parser/Cargo.toml",
         "crates/python_safe_eval/Cargo.toml",
+        "crates/python_safe_eval/src/parse.rs",
+        "crates/citry_ownership/Cargo.toml",
+        "crates/citry_ownership/src/lib.rs",
         "third_party/rust/ruff/crates/ruff_python_parser/Cargo.toml",
     }
     missing = sorted(required - relative.keys())
@@ -436,8 +439,8 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         elif payload != source_path.read_bytes():
             raise DistributionVerificationError(f"{path.name} contains changed source bytes in {name}")
     workspace = _loads_toml(relative["Cargo.toml"].decode("utf-8"))
-    if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.95":
-        raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.95 minimum")
+    if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.96":
+        raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.96 minimum")
     for crate in required:
         if not crate.startswith("crates/") or not crate.endswith("/Cargo.toml"):
             continue
@@ -660,7 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     promote.add_argument("--output-dir", type=Path, required=True)
     sdist = subparsers.add_parser("smoke-sdist")
     sdist.add_argument("--sdist", required=True)
-    sdist.add_argument("--rust-toolchain", default="1.95.0")
+    sdist.add_argument("--rust-toolchain", default="1.96.0")
     args = parser.parse_args(argv)
     try:
         if args.command == "inventory":

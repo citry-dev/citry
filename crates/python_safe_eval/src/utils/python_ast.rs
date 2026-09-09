@@ -4,7 +4,7 @@ use ruff_python_ast::{
     ExprNumberLiteral, ExprStringLiteral, ExprTuple, Identifier, Keyword, StringLiteral,
     StringLiteralFlags, StringLiteralValue,
 };
-use ruff_text_size::TextRange;
+use ruff_text_size::{Ranged, TextRange};
 
 pub fn string_literal(value: &str, range: TextRange) -> Expr {
     Expr::StringLiteral(ExprStringLiteral {
@@ -68,7 +68,7 @@ pub fn attribute(value: Expr, attr: &str, range: TextRange) -> Expr {
 pub fn call(func: Expr, args: Vec<Expr>, keywords: Vec<Keyword>, range: TextRange) -> Expr {
     Expr::Call(ExprCall {
         node_index: Default::default(),
-        range,
+        range_start: range.start(),
         func: Box::new(func),
         arguments: Arguments {
             range,
@@ -116,7 +116,7 @@ pub fn get_expr_range(
 ) -> ruff_text_size::TextRange {
     match expr {
         Expr::Name(n) => n.range,
-        Expr::Call(c) => c.range,
+        Expr::Call(c) => c.range(),
         Expr::Attribute(a) => a.range,
         Expr::Subscript(s) => s.range,
         Expr::BinOp(b) => b.range,

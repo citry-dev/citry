@@ -42,6 +42,7 @@ from typing import Any, TypeAlias
 
 import wrapt
 
+from citry.util import html as _html
 from citry.util.html import Markup, escape_to_str
 
 ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
@@ -59,6 +60,18 @@ _INVALID_HTML_ATTR_NAME_CHARS = frozenset(" \t\n\r=/><")
 
 def _html_attr_identity(name: str) -> str:
     """Return HTML identity without erasing case-sensitive Citry payloads."""
+    if type(name) is str and len(name) <= 256:
+        return _exact_html_attr_identity(name)
+    return _uncached_html_attr_identity(name)
+
+
+@lru_cache(maxsize=512)
+def _exact_html_attr_identity(name: str) -> str:
+    """Share normalization of bounded ordinary attribute names."""
+    return _uncached_html_attr_identity(name)
+
+
+def _uncached_html_attr_identity(name: str) -> str:
     folded = name.translate(_ASCII_LOWER_TRANSLATION)
     if name.startswith(("@c-", ":c-", "#c-", "$c-", "c-$c-")):
         # These names carry a case-sensitive event/State/meta payload or must
@@ -150,7 +163,8 @@ def normalize_class(value: ClassValue) -> str:
 
     flattened: dict[str, bool]
     if isinstance(value, (list, tuple)):
-        flattened = _flatten_class(value)
+        flattened = {}
+        _collect_class(value, flattened)
     elif isinstance(value, Mapping):
         flattened = dict(value)
     else:
@@ -160,24 +174,45 @@ def normalize_class(value: ClassValue) -> str:
     return " ".join(name for name, enabled in flattened.items() if enabled)
 
 
-def _flatten_class(value: ClassValue) -> dict[str, bool]:
-    """Convert any ``class`` value form into one ``{class_name: bool}`` dict."""
-    res: dict[str, bool] = {}
+@lru_cache(maxsize=512)
+def _class_tokens(value: str) -> tuple[str, ...]:
+    """Reuse whitespace splitting for bounded ordinary class strings."""
+    return tuple(part for part in _whitespace_re.split(value) if part)
+
+
+def _collect_class(value: ClassValue, res: dict[str, bool]) -> None:
+    """Apply nested class contributions to one ordered accumulator."""
     # Defuse a transparent proxy (e.g. a Const-marked class string) so the
     # whitespace split below sees a real str. Recursion re-enters here for
     # each list element, so a marker nested inside a list is unwrapped too.
     value = _underlying(value)
     if isinstance(value, str):
-        res.update({part: True for part in _whitespace_re.split(value) if part})
+        parts = _class_tokens(value) if type(value) is str and len(value) <= 2048 else _whitespace_re.split(value)
+        for part in parts:
+            if part:
+                res[part] = True
     elif isinstance(value, (list, tuple)):
         for item in value:
-            res.update(_flatten_class(item))
+            _collect_class(item, res)
     elif isinstance(value, Mapping):
         res.update(value)
     else:
         msg = f"Invalid class value: {value!r}"
         raise TypeError(msg)
-    return res
+
+
+@lru_cache(maxsize=512)
+def _merge_class_strings(values: tuple[str, ...]) -> str:
+    """Reuse the final merge when all contributions are bounded plain text."""
+    return " ".join(dict.fromkeys(token for value in values for token in _class_tokens(value)))
+
+
+def _normalize_class_contributions(values: list[Any]) -> str:
+    # Snapshot only exact strings. Mutable mappings, nested lists and proxies
+    # still run the normal merge, including later false values removing names.
+    if len(values) <= 8 and all(type(value) is str and len(value) <= 256 for value in values):
+        return _merge_class_strings(tuple(values))
+    return normalize_class(values)
 
 
 def normalize_style(value: StyleValue) -> str:
@@ -204,7 +239,8 @@ def normalize_style(value: StyleValue) -> str:
     if isinstance(value, str):
         return value.strip()
     if isinstance(value, (list, tuple, Mapping)):
-        merged = _flatten_style(value)
+        merged = {}
+        _collect_style(value, merged)
     else:
         msg = f"Invalid style value: {value!r}"
         raise TypeError(msg)
@@ -212,20 +248,20 @@ def normalize_style(value: StyleValue) -> str:
     return " ".join(f"{prop}: {val};" for prop, val in merged.items() if val is not None and val is not False)
 
 
-def _flatten_style(value: StyleValue) -> dict[str, Any]:
-    """Convert any ``style`` value form into one property dict, dropping ``None`` entries."""
-    res: dict[str, Any] = {}
+def _collect_style(value: StyleValue, res: dict[str, Any]) -> None:
+    """Apply nested style contributions without intermediate dictionaries."""
     if isinstance(value, str):
         res.update(parse_string_style(value))
     elif isinstance(value, (list, tuple)):
         for item in value:
-            res.update(_flatten_style(item))
+            _collect_style(item, res)
     elif isinstance(value, Mapping):
-        res.update({prop: val for prop, val in value.items() if val is not None})
+        for prop, val in value.items():
+            if val is not None:
+                res[prop] = val  # noqa: PERF403 - avoid an intermediate mapping
     else:
         msg = f"Invalid style value: {value!r}"
         raise TypeError(msg)
-    return res
 
 
 def parse_string_style(css_text: str) -> dict[str, Any]:
@@ -297,7 +333,7 @@ def _merge_resolved_attrs(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
     for identity, values in accumulated.items():
         if values:
             output_key = identity_to_key[identity]
-            normalizer = normalize_class if identity == "class" else normalize_style
+            normalizer = _normalize_class_contributions if identity == "class" else normalize_style
             result[output_key] = normalizer(values)
     return result
 
@@ -335,7 +371,7 @@ def _coalesce_html_attrs(
             continue
         output_key = identity_to_key[identity]
         if normalize_accumulators or len(values) > 1:
-            normalizer = normalize_class if identity == "class" else normalize_style
+            normalizer = _normalize_class_contributions if identity == "class" else normalize_style
             result[output_key] = normalizer(values)
         else:
             # format_attrs still normalizes a single structured value below;
@@ -372,6 +408,11 @@ def format_attrs(attrs: Mapping[str, Any]) -> Markup:
 
 def _format_resolved_attrs(coalesced: Mapping[str, Any]) -> Markup:
     """Format an already validated, identity-coalesced attribute mapping."""
+    return Markup(_format_resolved_attrs_to_str(coalesced))  # noqa: S704
+
+
+def _format_resolved_attrs_to_str(coalesced: Mapping[str, Any]) -> str:
+    """Format validated attributes for insertion into an existing render tree."""
     parts: list[str] = []
     for key, value in coalesced.items():
         # The boolean tests below compare identity, and a transparent proxy is
@@ -397,9 +438,39 @@ def _format_resolved_attrs(coalesced: Mapping[str, Any]) -> Markup:
         if value is True:
             parts.append(escape_to_str(key))
         else:
-            # escape_to_str (not escape): each piece is concatenated into the
-            # joined string that is wrapped as Markup below, so escaping to
-            # a plain str avoids a throwaway Markup per key and per value.
+            # Escape pieces to plain strings for insertion into trusted render
+            # parts. The public formatting helper wraps the complete result.
             parts.append(f'{escape_to_str(key)}="{escape_to_str(value)}"')
 
-    return Markup(" ".join(parts))  # noqa: S704 - every part is validated or escaped above
+    return " ".join(parts)
+
+
+# Captured where the helpers are defined, before a caller can replace them.
+# Checking the live aliases preserves overrides made before any cache use.
+_DEFAULT_FORMATTING_HELPERS = (
+    _format_resolved_attrs_to_str,
+    _underlying,
+    _html_attr_identity,
+    _exact_html_attr_identity,
+    _uncached_html_attr_identity,
+    normalize_class,
+    normalize_style,
+)
+
+
+def _has_default_attr_formatting(formatter: object) -> bool:
+    """Whether already-validated primitive maps can share formatted output."""
+    return (
+        formatter is _DEFAULT_FORMATTING_HELPERS[0]
+        and _format_resolved_attrs_to_str is _DEFAULT_FORMATTING_HELPERS[0]
+        and _underlying is _DEFAULT_FORMATTING_HELPERS[1]
+        and _html_attr_identity is _DEFAULT_FORMATTING_HELPERS[2]
+        and _exact_html_attr_identity is _DEFAULT_FORMATTING_HELPERS[3]
+        and _uncached_html_attr_identity is _DEFAULT_FORMATTING_HELPERS[4]
+        and normalize_class is _DEFAULT_FORMATTING_HELPERS[5]
+        and normalize_style is _DEFAULT_FORMATTING_HELPERS[6]
+        and escape_to_str is _html._DEFAULT_ESCAPE_TO_STR
+        and _html.escape_to_str is _html._DEFAULT_ESCAPE_TO_STR
+        and _html._CACHEABLE_ESCAPE_BACKEND
+        and _html._escape_to_str_impl is _html._DEFAULT_ESCAPE_TO_STR_IMPL
+    )

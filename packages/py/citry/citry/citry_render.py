@@ -53,12 +53,13 @@ Example:
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 from weakref import ReferenceType, ref
 
-from citry.citry_element import CitryElement
-from citry.component_like import ComponentLike, _resolve_component_like
+from citry.citry_element import _DEFAULT_CITRY_ELEMENT, CitryElement
+from citry.component_like import _DEFAULT_COMPONENT_LIKE, ComponentLike, _resolve_component_like
 from citry.constness import const_value
 from citry.slots import Slot
 from citry.util.html import escape
@@ -71,6 +72,8 @@ if TYPE_CHECKING:
     from citry.component import Component
     from citry.ownership import OwnershipGraph, PhysicalRegionId
     from citry.settings import SecurityCspMode, SecurityJavascriptMode, SecurityScriptIntegrityMode
+
+_VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_context", default=None)
 
 # One piece of rendered output. It is one of:
 #   - str: final text.
@@ -160,9 +163,13 @@ class RenderFrame:
     class_name: str | None
     is_component_root: bool
     root_markers: tuple[str, ...]
+    is_transparent_root: bool = False
+    """True for a transparent component's whole output, excluding caller-owned interiors."""
 
     @classmethod
-    def from_context(cls, context: CitryContext, *, is_component_root: bool) -> RenderFrame:
+    def from_context(
+        cls, context: CitryContext, *, is_component_root: bool, is_transparent_root: bool = False
+    ) -> RenderFrame:
         """Snapshot the identity-bearing portion of one live render context."""
         component = context.component
         if component is None:
@@ -171,6 +178,7 @@ class RenderFrame:
                 class_id=None,
                 class_name=None,
                 is_component_root=is_component_root,
+                is_transparent_root=is_transparent_root,
                 root_markers=tuple(context._get_root_markers()) if is_component_root else (),
             )
         component_class = type(component)
@@ -179,6 +187,7 @@ class RenderFrame:
             class_id=component._citry_class_id,
             class_name=component_class.__name__,
             is_component_root=is_component_root,
+            is_transparent_root=is_transparent_root,
             root_markers=tuple(context._get_root_markers()) if is_component_root else (),
         )
 
@@ -190,9 +199,8 @@ class CitryRender:
     Attributes:
         parts: Ordered list of ``str`` or nested ``CitryRender`` fragments.
         context: The ``CitryContext`` used to produce this render.
-        is_component_root: True only for the render that is a component's whole
-            output (produced by the render pipeline, one per component
-            instance). Interior renders (a ``<c-if>``/``<c-for>`` block, a
+        is_component_root: True for a nontransparent component's whole output.
+            Transparent whole outputs and interior renders (a ``<c-if>``/``<c-for>`` block, a
             nested template, slot-fill content rendered in the enclosing
             scope) are False. Serialization uses this to tell a completed
             child-component subtree (which becomes its own marked frame) from
@@ -212,10 +220,13 @@ class CitryRender:
         *,
         is_component_root: bool = False,
         frame: RenderFrame | None = None,
+        is_transparent_root: bool = False,
     ) -> None:
         self.parts = parts
         self.context = context
-        self.frame = frame or RenderFrame.from_context(context, is_component_root=is_component_root)
+        self.frame = frame or RenderFrame.from_context(
+            context, is_component_root=is_component_root, is_transparent_root=is_transparent_root
+        )
 
     @property
     def is_component_root(self) -> bool:
@@ -479,11 +490,26 @@ class DeferredComponent:
         return f"DeferredComponent({self.element!r})"
 
 
+# The imported identities come from their defining modules; the local classes
+# are captured here before callers can replace any dispatch aliases.
+_DEFAULT_VALUE_TYPES = (_DEFAULT_COMPONENT_LIKE, _DEFAULT_CITRY_ELEMENT, CitryRender, PhysicalRegionPart)
+
+
+def _render_slot_value(slot: Slot, data: Any, fallback: Slot | None, context: CitryContext) -> RenderPart:
+    """Keep the insertion context while a Python slot produces a component value."""
+    token = _VALUE_CONTEXT.set(context)
+    try:
+        return slot(data, fallback=fallback, provides=context.provides)
+    finally:
+        _VALUE_CONTEXT.reset(token)
+
+
 def _render_value(
     value: Any,
     provides: dict[str, Any] | None = None,
     *,
     citry: Citry | None = None,
+    context: CitryContext | None = None,
 ) -> RenderPart:
     """
     Convert an evaluated expression value into a body part.
@@ -520,17 +546,48 @@ def _render_value(
     so the marker has no further role, and the identity check below
     (``value is None``) must see the real value, not the proxy.
     """
+    if context is None:
+        context = _VALUE_CONTEXT.get()
     value = const_value(value)
     if value is None:
         return ""
     if isinstance(value, Slot):
+        if context is not None:
+            return _render_slot_value(value, None, None, context._with_provides(provides))
         return value(provides=provides)
+
+    # Exact strings and ordinary slotted renders have no instance-level
+    # protocol members. Keep registration and class changes visible on each call.
+    kind = type(value)
+    if (
+        ComponentLike is _DEFAULT_VALUE_TYPES[0]
+        and CitryElement is _DEFAULT_VALUE_TYPES[1]
+        and CitryRender is _DEFAULT_VALUE_TYPES[2]
+        and PhysicalRegionPart is _DEFAULT_VALUE_TYPES[3]
+    ):
+        if kind is str and not issubclass(str, ComponentLike):
+            return escape(value)
+        if (
+            kind is _DEFAULT_VALUE_TYPES[2]
+            and kind.__bases__ == (object,)
+            and "__citry_element__" not in kind.__dict__
+            and "__getattribute__" not in kind.__dict__
+            and "__getattr__" not in kind.__dict__
+            and "__class__" not in kind.__dict__
+            and not issubclass(kind, ComponentLike)
+        ):
+            return value
     if isinstance(value, ComponentLike):
         value = _resolve_component_like(value, citry)
     if isinstance(value, CitryElement):
         # Imported here, not at module load: component_render imports this
         # module, so a top-level import back into it would be circular.
         from citry.component_render import render_impl  # noqa: PLC0415
+
+        if value.comp_cls.simple and context is not None:
+            from citry._simple_runtime import render_simple_value  # noqa: PLC0415
+
+            return render_simple_value(value, context, provides)
 
         value = render_impl(value, provides=provides)
     if isinstance(value, (CitryRender, PhysicalRegionPart)):

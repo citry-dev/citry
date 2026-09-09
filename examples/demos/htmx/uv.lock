@@ -142,7 +142,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "citry", specifier = ">=0.4.6,<0.5" },
+    { name = "citry", specifier = ">=0.4.6" },
     { name = "fastapi", specifier = ">=0.141,<1" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "python-multipart", specifier = ">=0.0.20,<1" },

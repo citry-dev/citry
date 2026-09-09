@@ -11,7 +11,7 @@ here exercise them end to end plus the full runtime (dynamic) paths.
 
 import pytest
 
-from citry import Citry, Component, Extension
+from citry import Citry, Component, Const, Extension
 from citry.component_registry import AlreadyRegistered, NotRegistered
 
 
@@ -878,3 +878,43 @@ class TestRegistryReservation:
 
         assert "component table" in str(PageComp())
         assert str(PageEl()).startswith("<table")
+
+
+@pytest.mark.parametrize(
+    ("attributes", "data"),
+    [
+        ('as_="span"', {}),
+        ("c-as_=\"'span'\"", {}),
+        ('c-as_="tag"', {"tag": "span"}),
+        ('c-bind="attrs"', {"attrs": {"as_": "span"}}),
+        ('c-as_="tag"', {"tag": Const(Const("span"))}),
+    ],
+)
+def test_dynamic_element_accepts_forwarded_constant_tag_on_repeat_render(attributes, data):
+    app = Citry(autodiscover=False)
+
+    class Heading(Component):
+        citry = app
+
+        class Kwargs:
+            as_: str = "div"
+
+        def template_data(self, kwargs, slots):
+            return {"tag": kwargs.as_}
+
+        template = """
+            <c-element c-is="tag">hello</c-element>
+        """
+
+    assert ">hello</span>" in str(Heading(as_="span"))
+    for _ in range(2):
+        html = app.render_template(f"<c-heading {attributes} />", data).serialize()
+        assert "<span " in html
+        assert ">hello</span>" in html
+
+
+@pytest.mark.parametrize("tag", ["bad tag", 42, "script>"])
+def test_dynamic_element_rejects_invalid_nested_constant_tags(tag):
+    app = Citry(autodiscover=False)
+    with pytest.raises((TypeError, ValueError), match="<c-element>"):
+        app.render_template('<c-element c-is="tag" />', {"tag": Const(Const(tag))})

@@ -74,7 +74,7 @@ From the repository root:
 
 ```bash
 # 1. Install the baseline engines (not part of the default dev install)
-uv pip install django==6.0.6 django-components==0.151.1 jinja2==3.1.6
+uv pip install django==6.0.6 django-components==0.152.0 jinja2==3.1.6
 
 # 2. REQUIRED: build the Rust extension in release mode. The default debug
 #    build makes citry's Rust-backed paths many times slower and invalidates
@@ -101,11 +101,68 @@ django-components):
   has a different mix of templates, components, and data.
 - Never compare numbers across machines, runs, or build profiles.
 
-## Results (small scenario)
+## Current rendering results (large scenario, 2026-09-10)
+
+The README and docs-site chart use retained measurements of the runtime and
+public `Component.simple = True` API. The
+[publication runner](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/publication.py)
+and its experiment helpers live on the performance research branch.
+
+| Configuration | First render, ms | Actual second render, ms | Warmed render, ms | Output bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Django | 19.675 | 11.791 | 11.671 | 456,422 |
+| django-components | 68.273 | 48.114 | 54.692 | 309,837 |
+| Jinja2 | 66.096 | 6.765 | 7.211 | 151,789 |
+| Citry | 77.216 | 37.591 | 33.771 | 1,016,575 |
+| Citry + simple | 64.192 | 25.023 | 24.624 | 989,431 |
+
+Apple M4, CPython 3.14.3; Django 6.0.6, django-components 0.152.0 and Jinja2
+3.1.6. Citry 0.5.0 uses the qualified Core 1.7.0 release wheel.
+Ten fresh-process blocks balance each engine's position and before/after order.
+Each worker keeps six initial and 80 warmed output strings alive with normal GC.
+First and second figures are medians of the respective samples; warmed figures
+are medians of per-process means. Scenario loading and data preparation are
+excluded. Startup/import measurements remain available through `compare.py` but
+are not part of the refreshed chart.
+
+The simple row changes only Button, Icon and HeroIcon declarations to the public
+flag and static data-method contract. Templates and callback bodies stay the
+same; all 114 Button, 41 Icon and 41 HeroIcon callbacks remain live. Existing
+HeroIcon and ProjectOutputBadge pure declarations remain in both rows. The
+candidate removes 196 independent identities, leaving 146 ordinary instances.
+Its median paired warmed saving is 9.091 ms, or 26.93%; this restricted component
+contract is an explicit application opt-in. It remains 2.11 times Django's warmed
+time. Output and framework features differ across engines.
+
+Every timed Citry output passes the existing application-content projection and
+browser-manifest validation. Activation and server ownership are captured once
+per Citry worker after timing. Other engines retain output digests and sizes;
+their page-size and anchor tests are independent checks, not exact snapshots.
+
+Regenerate both PNG copies from the compact, checked-in chart data:
+
+```sh
+uv run --no-project --with matplotlib python benchmarks/plot.py
+```
+
+The [chart data](results/publication-20260910-release-0.5.0.json) retains the
+published medians and measurement settings. To repeat the measurement, use the
+[archived benchmark checkout](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/RESEARCH.md).
+Its [full observations](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260910-release-0.5.0.json)
+include wall/CPU samples, GC counters, source hashes and output digests;
+[ownership captures](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260910-release-0.5.0.captures.json.gz)
+retain the post-timing Citry snapshots and manifests. The full optimization
+history and kept changes are in the
+[handoff](../docs/design/performance_render_handoff.md).
+
+The earlier [9 September run](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260909.json) remains
+available as a historical observation before the dependency updates.
+
+## Historical results (small scenario, 2026-08-20)
 
 Measured 2026-08-20 on an Apple M4, macOS 26.6.2, Python 3.14.3, median of 5
 fresh-process rounds per cell. Versions: django 6.0.6, django-components
-0.151.1, jinja2 3.1.6, and the current Citry source declared as 0.4.1 with
+0.151.1, jinja2 3.1.6, and the Citry source used for that run declared as 0.4.1 with
 citry-core 1.5.0 built in release mode. Ratios are vs the `django` row.
 
 | engine | startup | import | first | subsequent |
@@ -120,7 +177,7 @@ Highlights, with the relative-only caveat above:
 - The two bare template engines (django, jinja2) do no per-render component
   work, so they lead the component engines (django-components, citry) on
   render time; the meaningful reading is within each pair.
-- Citry is currently about 1.3x slower than django-components to start/import,
+- In that run, Citry was about 1.3x slower than django-components to start/import,
   about 5.2x slower on the first render, and effectively even once warm. The
   small scenario has only one component, so fixed application, extension, and
   template-analysis work dominates its first render.
@@ -137,15 +194,15 @@ The small scenario also has older dated tables in the results log
 measured on earlier code; compare rows within this run, never numbers across the
 dated tables.
 
-## Results (large scenario)
+## Historical results (large scenario, 2026-08-21)
 
 Measured 2026-08-21 on an Apple M4, macOS 26.6.2, Python 3.14.3, median of 5
 fresh-process rounds per cell. Versions: django 6.0.6, django-components
-0.151.1, jinja2 3.1.6, and the current Citry source declared as 0.4.1 with
+0.151.1, jinja2 3.1.6, and the Citry source used for that run declared as 0.4.1 with
 citry-core 1.5.0 built in release mode. Ratios are vs the `django` row. The
 large scenario is the full project-management page: 35 authored component
 classes, about 350 rendered Citry component markers, JS dependency collection,
-provide/inject, slots/fills, and dynamic elements. The current Citry render is
+provide/inject, slots/fills, and dynamic elements. That Citry render produced
 980,643 bytes, including its client dependency manager, Events/Alpine runtime,
 and ownership graph. The Citry scenarios declare their repeated `HeroIcon` and
 `ProjectOutputBadge` leaves pure; every engine still renders the same page.
@@ -161,7 +218,7 @@ and ownership graph. The Citry scenarios declare their repeated `HeroIcon` and
 Highlights, with the relative-only caveat above:
 
 - Against django-components (the fair component-to-component comparison),
-  Citry is currently about 1.4x slower to start, 1.3x slower to import, and
+  In that run, Citry was about 1.4x slower to start, 1.3x slower to import, and
   12% slower on the first render, but about 24% faster once warm.
 - The result includes Citry's current ownership graph, client lifecycle,
   extension hooks, security-aware serialization, and much larger browser
@@ -220,9 +277,9 @@ benchmarks/
     plot.py      draws the project README chart from the large-scenario table
 ```
 
-`plot.py` renders the charts shown in the project README and docs site from the
-large-scenario numbers above. After re-measuring that table, update the data in
-`plot.py` to match and re-run it:
+`plot.py` reads the compact publication report under `results/`. After a new
+measurement, update that report with the published medians and a link to the
+retained full observations, then regenerate the images:
 `uv run --no-project --with matplotlib python benchmarks/plot.py`.
 
 Still ahead: asv adoption (per-commit tracking, dashboards, memory

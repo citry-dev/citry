@@ -99,7 +99,8 @@ def test_client_runtime_bundle_budget():
     # / 164,820 gzip bytes.
     # These are deliberate validation and identity features, not incidental
     # bundle drift.
-    assert len(payload) <= 792_000
+    # Alpine and morph 3.17.1 measure 793,080 combined raw / 165,406 gzip bytes.
+    assert len(payload) <= 795_000
     assert len(gzip.compress(payload, mtime=0)) <= 166_000
 
 
@@ -113,7 +114,8 @@ def test_csp_events_runtime_bundle_budget():
     # phase-7 baseline was 387,046 raw / 77,715 gzip bytes. I18n phase 5's
     # fragment transaction moves it to 390,324 raw / 78,515 gzip bytes.
     # Alpine and morph 3.16.2 move it to 408,782 raw / 82,201 gzip bytes.
-    assert len(payload) <= 410_000
+    # Alpine and morph 3.17.1 measure 411,988 raw / 82,893 gzip bytes.
+    assert len(payload) <= 413_000
     assert len(gzip.compress(payload, mtime=0)) <= 83_000
 
 

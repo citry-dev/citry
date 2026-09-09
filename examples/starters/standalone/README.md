@@ -24,7 +24,7 @@ a Python Event handler after the render command finishes.
 - Python 3.10 through 3.14
 - [uv](https://docs.astral.sh/uv/)
 
-The project accepts Citry 0.4.6 or newer within the 0.4.x release line. Its
+The project accepts Citry 0.4.6 or newer. Its
 lockfile pins the version exercised by the tests.
 
 ## Render the page
@@ -42,6 +42,14 @@ process.
 
 Run the render command again whenever you change the data or components. With
 unchanged inputs, it produces the same document each time.
+
+## Set up an AI coding agent
+
+This project includes [AGENTS.md](AGENTS.md) with local instructions and a
+[CLAUDE.md](CLAUDE.md) import for Claude Code. Open this project directory in
+your coding tool and follow the
+[AI agent setup guide](https://citry.dev/getting-started/ai-agents/).
+This README remains the source for installation and render commands.
 
 ## Test the project
 

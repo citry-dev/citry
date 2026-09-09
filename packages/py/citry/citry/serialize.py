@@ -63,6 +63,8 @@ from citry.settings import (
 from citry_core.html_transform import mark_html
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from citry.citry_render import RenderPart
 
 # The attribute name the placeholders carry, and that mark_html splits the
@@ -344,9 +346,7 @@ def serialize_render_result(
             if graph is None:
                 msg = f"Component frame {render_frame.class_name!r} has no ownership graph at serialization."
                 raise RuntimeError(msg)
-            instance_in_manifest = render_frame.is_component_root or artifact.is_transparent_instance(
-                graph, render_frame.render_id
-            )
+            instance_in_manifest = render_frame.is_component_root or artifact.has_transparent_placement(render)
             if instance_in_manifest:
                 segments[0] = artifact.instance_cap(graph, render_frame.render_id, "s") + segments[0]
                 segments[-1] += artifact.instance_cap(graph, render_frame.render_id, "e")
@@ -524,27 +524,28 @@ def _append_frame_parts(
     artifact: OwnershipManifestArtifact | None,
     out: list[str],
 ) -> None:
-    """Append one frame's nested parts without a per-frame recursive closure."""
-    for part in parts:
+    """Append nested content iteratively, preserving region caps and child order."""
+    stack: list[tuple[Iterator[RenderPart], str | None]] = [(iter(parts), None)]
+    while stack:
+        entries, end_cap = stack[-1]
+        try:
+            part = next(entries)
+        except StopIteration:
+            stack.pop()
+            if end_cap is not None:
+                out.append(end_cap)
+            continue
         if isinstance(part, str):
             out.append(part)
         elif isinstance(part, _PhysicalRegion):
             region_artifact = (
                 artifact if artifact is not None and artifact.has_region(part.graph, part.region_id) else None
             )
+            region_end = None
             if region_artifact is not None:
                 out.append(region_artifact.region_cap(part.graph, part.region_id, "s"))
-            _append_frame_parts(
-                [part.part],
-                render=render,
-                children=children,
-                placeholder_map=placeholder_map,
-                placeholder_nonce=placeholder_nonce,
-                artifact=artifact,
-                out=out,
-            )
-            if region_artifact is not None:
-                out.append(region_artifact.region_cap(part.graph, part.region_id, "e"))
+                region_end = region_artifact.region_cap(part.graph, part.region_id, "e")
+            stack.append((iter((part.part,)), region_end))
         elif isinstance(part, CitryRender):
             part_frame = part.frame
             if (
@@ -556,48 +557,28 @@ def _append_frame_parts(
                 out.append(f'<template c-render-id="{part_frame.render_id}"></template>')
                 children.append((part, part_frame.render_id))
             else:
-                # Interior content (control flow, nested template, slot-fill
-                # content) or a component-less render: join in directly.
+                # Interior content joins this frame and may be nested beyond
+                # Python's recursion limit.
                 graph = part.context.ownership
                 render_id = part_frame.render_id
+                instance_end = None
                 if (
                     artifact is not None
                     and graph is not None
                     and render_id is not None
-                    and artifact.is_transparent_instance(graph, render_id)
+                    and artifact.has_transparent_placement(part)
                 ):
                     out.append(artifact.instance_cap(graph, render_id, "s"))
-                    _append_frame_parts(
-                        part.parts,
-                        render=render,
-                        children=children,
-                        placeholder_map=placeholder_map,
-                        placeholder_nonce=placeholder_nonce,
-                        artifact=artifact,
-                        out=out,
-                    )
-                    out.append(artifact.instance_cap(graph, render_id, "e"))
-                else:
-                    _append_frame_parts(
-                        part.parts,
-                        render=render,
-                        children=children,
-                        placeholder_map=placeholder_map,
-                        placeholder_nonce=placeholder_nonce,
-                        artifact=artifact,
-                        out=out,
-                    )
+                    instance_end = artifact.instance_cap(graph, render_id, "e")
+                stack.append((iter(part.parts), instance_end))
         elif isinstance(part, Placeholder):
-            # The counter makes each occurrence's id (and so its text)
-            # unique, so the hook can address occurrences individually.
+            # Each occurrence needs its own identity for serialization hooks.
             placeholder_id = f"{part.key}:{len(placeholder_map) + 1}:{placeholder_nonce}"
             text = f'<template c-render-id="{placeholder_id}"></template>'
             placeholder_map[placeholder_id] = text
             out.append(text)
         else:
             # A DeferredComponent here means render() never resolved it.
-            # RuntimeError (not TypeError): the render is unfinished, nothing
-            # was given the wrong type.
             msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
             raise RuntimeError(msg)  # noqa: TRY004
 
@@ -622,9 +603,8 @@ def _build_frame(
     HTML. Every other nested render joins in directly:
     ``<c-if>``/``<c-for>`` blocks and nested templates (same component), and
     slot-fill content (which carries the context of the component that
-    *wrote* the fill, but renders as part of this frame). Walking the
-    joined-in blocks only follows the template's own nesting, so it does not
-    recurse deeply.
+    *wrote* the fill, but renders as part of this frame). The explicit
+    stack also handles deeply nested interior content.
     """
     out: list[str] = []
     _append_frame_parts(

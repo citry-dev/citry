@@ -12,6 +12,8 @@ facts see [`/docs/agent/INDEX.md`](../../../docs/agent/INDEX.md).
 - `citry_core/_rust.pyi` - **hand-written type stub** mirroring everything the
   Rust `_rust` module exposes. This is the IDE / type-check contract; keep it in
   sync with `crates/citry_core_py/src/lib.rs`.
+- `citry_core/_ownership.py` - internal reference storage for ownership records
+  supplied by the higher-level Citry runtime.
 - `citry_core/html_transform/` - wraps the `html_transform` submodule.
 - `citry_core/safe_eval/` - sandboxed expression eval (`eval.py`, `sandbox.py`,
   `error.py`); wraps the `safe_eval` submodule.

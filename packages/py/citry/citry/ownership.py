@@ -15,14 +15,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal, NewType, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Generic, Literal, NamedTuple, NewType, TypeAlias, TypeVar, cast
 from weakref import WeakKeyDictionary
 
 from citry.client_directives import ComponentTagClientBindingKind, ComponentTagClientBindingSource
+from citry_core import _rust
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
-    from typing import TypeVar
 
     from citry.citry_context import CitryContext
     from citry.citry_element import CitryElement
@@ -94,8 +94,7 @@ class RegionState(str, Enum):
     RETIRED = "retired"
 
 
-@dataclass(frozen=True, slots=True)
-class _SourceSite:
+class _SourceSite(NamedTuple):
     """Immutable class/template metadata shared by executed occurrences."""
 
     origin: str | None
@@ -106,8 +105,7 @@ class _SourceSite:
     column: int
 
 
-@dataclass(frozen=True, slots=True)
-class SourceLocationRecord:
+class SourceLocationRecord(NamedTuple):
     """One execution of one post-template-hook runtime source span."""
 
     id: SourceLocationId
@@ -115,7 +113,7 @@ class SourceLocationRecord:
     kind: SourceLocationKind
     owner_render_id: str
     owner_class_id: str
-    _site: _SourceSite
+    site: _SourceSite
     mapping_key: str | None = None
     mapping_index: int | None = None
 
@@ -144,7 +142,7 @@ class SourceLocationRecord:
             kind=kind,
             owner_render_id=owner_render_id,
             owner_class_id=owner_class_id,
-            _site=_SourceSite(
+            site=_SourceSite(
                 origin=origin,
                 source=source,
                 byte_span=byte_span,
@@ -159,32 +157,32 @@ class SourceLocationRecord:
     @property
     def origin(self) -> str | None:
         """Source origin shared by every execution of this site."""
-        return self._site.origin
+        return self.site.origin
 
     @property
     def source(self) -> str:
         """Compiled runtime source shared by every execution of this site."""
-        return self._site.source
+        return self.site.source
 
     @property
     def byte_span(self) -> tuple[int, int]:
         """UTF-8 byte offsets of the executed site."""
-        return self._site.byte_span
+        return self.site.byte_span
 
     @property
     def span(self) -> tuple[int, int]:
         """Python character offsets of the executed site."""
-        return self._site.span
+        return self.site.span
 
     @property
     def line(self) -> int:
         """One-based source line of the executed site."""
-        return self._site.line
+        return self.site.line
 
     @property
     def column(self) -> int:
         """One-based source column of the executed site."""
-        return self._site.column
+        return self.site.column
 
     @property
     def snippet(self) -> str:
@@ -270,8 +268,7 @@ class ComponentTagClientBindingRecord:
         return ComponentTagClientBindingKind.CITRY_HANDLER
 
 
-@dataclass(frozen=True, slots=True)
-class ComponentInvocationRecord:
+class ComponentInvocationRecord(NamedTuple):
     """One executed component tag, eventually bound to its actual target."""
 
     id: ComponentInvocationId
@@ -344,8 +341,7 @@ class ComponentInvocationRecord:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class LogicalInstanceRecord:
+class LogicalInstanceRecord(NamedTuple):
     """One server-rendered component instance in the ownership graph."""
 
     order: int
@@ -370,8 +366,7 @@ class LogicalInstanceRecord:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class InitAncestryRecord:
+class InitAncestryRecord(NamedTuple):
     """One explicit parent-before-child initialization dependency."""
 
     order: int
@@ -390,8 +385,7 @@ class InitAncestryRecord:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class LogicalFillRecord:
+class LogicalFillRecord(NamedTuple):
     """One supplied fill or receiver fallback, independent of outlet count."""
 
     id: LogicalFillId
@@ -466,8 +460,7 @@ class LogicalFillRecord:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class PhysicalRegionRequestRecord:
+class PhysicalRegionRequestRecord(NamedTuple):
     """One actual occurrence of a logical fill, before A2 chooses DOM caps."""
 
     id: PhysicalRegionId
@@ -528,8 +521,7 @@ class PhysicalRegionRequestRecord:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class RenderQueueRecord:
+class RenderQueueRecord(NamedTuple):
     """One invocation's passage through deferred component rendering."""
 
     invocation_id: ComponentInvocationId
@@ -629,6 +621,38 @@ _SLOT_SITE: ContextVar[_SlotSite | None] = ContextVar("citry_ownership_slot_site
 _SELECTED_SUPPLY: ContextVar[_SelectedSupply | None] = ContextVar("citry_ownership_supply", default=None)
 
 
+# Older paired core releases can render through the Python storage path.
+_native_ownership = getattr(_rust, "ownership", None)
+if TYPE_CHECKING:
+    _RecordTable = _rust.ownership.RecordTable
+else:
+    _RecordTable = getattr(_native_ownership, "RecordTable", ())
+
+_TRecord = TypeVar("_TRecord")
+
+
+class _JournalRecords(Generic[_TRecord]):
+    """Expose one immutable record family from the shared native journal."""
+
+    def __init__(self, journal: _rust.ownership.Journal, *, queue: bool) -> None:
+        self.journal = journal
+        self._read: Callable[[int], _TRecord] = journal.queue if queue else journal.invocation
+        self._read_all: Callable[[], list[_TRecord]] = journal.queues if queue else journal.invocations
+        self._write: Callable[[int, _TRecord], None] = journal.set_queue if queue else journal.set_invocation
+
+    def __len__(self) -> int:
+        return len(self.journal)
+
+    def __getitem__(self, index: int) -> _TRecord:
+        return self._read(index)
+
+    def __setitem__(self, index: int, value: _TRecord) -> None:
+        self._write(index, value)
+
+    def __iter__(self) -> Iterator[_TRecord]:
+        return iter(self._read_all())
+
+
 class OwnershipGraph:
     """Mutable capture collector whose public result is an immutable snapshot."""
 
@@ -640,12 +664,12 @@ class OwnershipGraph:
         self._region_id = 0
 
         self._source_locations: list[SourceLocationRecord] = []
-        self._component_invocations: list[ComponentInvocationRecord] = []
-        self._logical_instances: list[LogicalInstanceRecord] = []
-        self._init_ancestry: list[InitAncestryRecord] = []
-        self._logical_fills: list[LogicalFillRecord] = []
-        self._physical_regions: list[PhysicalRegionRequestRecord] = []
-        self._render_queue: list[RenderQueueRecord] = []
+        self._component_invocations: list[ComponentInvocationRecord] | _JournalRecords[ComponentInvocationRecord] = []
+        self._logical_instances: list[LogicalInstanceRecord] | _RecordTable = []
+        self._init_ancestry: list[InitAncestryRecord] | _RecordTable = []
+        self._logical_fills: list[LogicalFillRecord] | _RecordTable = []
+        self._physical_regions: list[PhysicalRegionRequestRecord] | _RecordTable = []
+        self._render_queue: list[RenderQueueRecord] | _JournalRecords[RenderQueueRecord] = []
 
         self._invocation_index: dict[ComponentInvocationId, int] = {}
         self._instance_invocation: dict[str, ComponentInvocationId] = {}
@@ -683,12 +707,50 @@ class OwnershipGraph:
         # owner-specific record per occurrence.
         self._source_site_cache: dict[tuple[str, tuple[int, int], str | None], _SourceSite] = {}
 
+    def _initialize_native_storage(self) -> None:
+        """Convert the Python prefix when the first nested component call begins."""
+        # Replay can supply queue rows without consuming a local invocation ID.
+        if self._component_invocations or self._render_queue:
+            return
+        journal = _rust.ownership.Journal(
+            ComponentInvocationRecord,
+            RenderQueueRecord,
+            OwnershipState.ACTIVE,
+            QueueState.ENQUEUED,
+            QueueState.RENDERED,
+        )
+        journal.set_tuple_constructor(tuple.__new__)
+        invocations: _JournalRecords[ComponentInvocationRecord] = _JournalRecords(journal, queue=False)
+        queue: _JournalRecords[RenderQueueRecord] = _JournalRecords(journal, queue=True)
+        instances = _RecordTable(LogicalInstanceRecord, 8)
+        ancestry = _RecordTable(InitAncestryRecord, 5)
+        fills = _RecordTable(LogicalFillRecord, 13)
+        regions = _RecordTable(PhysicalRegionRequestRecord, 11)
+        # Finish allocation before publishing the new storage. append keeps saved row identities.
+        for table, records in (
+            (instances, self._logical_instances),
+            (ancestry, self._init_ancestry),
+            (fills, self._logical_fills),
+            (regions, self._physical_regions),
+        ):
+            table.set_tuple_constructor(tuple.__new__)
+            for record in records:
+                table.append(record)
+        self._component_invocations = invocations
+        self._render_queue = queue
+        self._logical_instances = instances
+        self._init_ancestry = ancestry
+        self._logical_fills = fills
+        self._physical_regions = regions
+
     def _next_order(self) -> int:
         self._order += 1
         return self._order
 
     @staticmethod
-    def _ordered_indexes_between(records: list[Any], after: int, through: int) -> range:
+    def _ordered_indexes_between(
+        records: list[Any] | _RecordTable | _JournalRecords[Any], after: int, through: int
+    ) -> range:
         """Return the capture-list indexes in one exclusive/inclusive order segment."""
         start = bisect_right(records, after, key=lambda record: record.order)
         stop = bisect_right(records, through, key=lambda record: record.order)
@@ -835,6 +897,13 @@ class OwnershipGraph:
         :meth:`replay_transaction` and registers physical result wrappers only
         after rebuilding the detached render tree.
         """
+        # Replay can import relationships beyond the native paired journal.
+        self._component_invocations = list(self._component_invocations)
+        self._render_queue = list(self._render_queue)
+        self._logical_instances = list(self._logical_instances)
+        self._init_ancestry = list(self._init_ancestry)
+        self._logical_fills = list(self._logical_fills)
+        self._physical_regions = list(self._physical_regions)
         external_source_ids = external_source_ids or {}
         external_invocation_ids = external_invocation_ids or {}
         external_fill_ids = external_fill_ids or {}
@@ -936,8 +1005,7 @@ class OwnershipGraph:
 
         for source_record in snapshot.source_locations:
             self._source_locations.append(
-                replace(
-                    source_record,
+                source_record._replace(
                     id=source_ids[source_record.id],
                     order=order_map[source_record.order],
                 )
@@ -951,8 +1019,7 @@ class OwnershipGraph:
                 )
                 for client_binding in invocation_record.client_bindings
             )
-            fresh_invocation = replace(
-                invocation_record,
+            fresh_invocation = invocation_record._replace(
                 id=fresh_invocation_id,
                 order=order_map[invocation_record.order],
                 source_location_id=cast("SourceLocationId", source_id(invocation_record.source_location_id)),
@@ -965,16 +1032,14 @@ class OwnershipGraph:
             if fresh_invocation.target_render_id is not None:
                 self._instance_invocation[fresh_invocation.target_render_id] = fresh_invocation_id
         for instance_record in snapshot.logical_instances:
-            fresh_instance = replace(
-                instance_record,
+            fresh_instance = instance_record._replace(
                 order=order_map[instance_record.order],
                 invocation_id=invocation_id(instance_record.invocation_id),
             )
             self._logical_instances.append(fresh_instance)
             self._relation_indexes_current = False
         for init_record in snapshot.init_ancestry:
-            fresh_init = replace(
-                init_record,
+            fresh_init = init_record._replace(
                 order=order_map[init_record.order],
                 invocation_id=cast("ComponentInvocationId", invocation_id(init_record.invocation_id)),
             )
@@ -982,8 +1047,7 @@ class OwnershipGraph:
             self._relation_indexes_current = False
         for fill_record in snapshot.logical_fills:
             fresh_fill_id = fill_id(fill_record.id)
-            fresh_fill = replace(
-                fill_record,
+            fresh_fill = fill_record._replace(
                 id=fresh_fill_id,
                 order=order_map[fill_record.order],
                 source_location_id=source_id(fill_record.source_location_id),
@@ -996,8 +1060,7 @@ class OwnershipGraph:
                 self._receiver_fill[(fresh_fill.receiver_render_id, fresh_fill.slot_name)] = fresh_fill_id
         for region_record in snapshot.physical_regions:
             fresh_region_id = cast("PhysicalRegionId", region_id(region_record.id))
-            fresh_region = replace(
-                region_record,
+            fresh_region = region_record._replace(
                 id=fresh_region_id,
                 order=order_map[region_record.order],
                 logical_fill_id=fill_id(region_record.logical_fill_id),
@@ -1010,8 +1073,7 @@ class OwnershipGraph:
             self._relation_indexes_current = False
         for queue_record in snapshot.render_queue:
             fresh_invocation_id = cast("ComponentInvocationId", invocation_id(queue_record.invocation_id))
-            fresh_queue = replace(
-                queue_record,
+            fresh_queue = queue_record._replace(
                 invocation_id=fresh_invocation_id,
                 enqueued_order=order_map[queue_record.enqueued_order],
                 rendered_order=(
@@ -1063,7 +1125,9 @@ class OwnershipGraph:
             msg = "A template source location requires a component-owned render context."
             raise RuntimeError(msg)
         component_class = type(component)
-        template = getattr(component_class, "_citry_template", None)
+        template = getattr(context, "template_record", None)
+        if template is None:
+            template = getattr(component_class, "_citry_template", None)
         origin = template.origin if template is not None else None
         source_text = str(source)
         site_key = (source_text, position, origin)
@@ -1103,7 +1167,7 @@ class OwnershipGraph:
                 kind=kind,
                 owner_render_id=component.id,
                 owner_class_id=component._citry_class_id,
-                _site=site,
+                site=site,
                 mapping_key=mapping_key,
                 mapping_index=mapping_index,
             )
@@ -1136,36 +1200,45 @@ class OwnershipGraph:
         active = _ACTIVE_REGION.get()
         parent_region = active[1] if active is not None and active[0] is self else None
 
+        # Root-only renders keep Python storage; nested capture amortizes native setup.
+        if self._invocation_id == 0 and _native_ownership is not None:
+            self._initialize_native_storage()
         self._invocation_id += 1
         invocation_id = ComponentInvocationId(self._invocation_id)
-        record = ComponentInvocationRecord(
-            id=invocation_id,
-            order=self._next_order(),
-            source_render_id=component.id,
-            source_class_id=component._citry_class_id,
-            source_location_id=source_location_id,
-            authored_tag=authored_tag,
-            target_class_id=target_class_id,
-            morph_key=morph_key,
-            morph_mode=morph_mode,
-            target_render_id=None,
-            physical_parent_region_id=parent_region,
-            client_bindings=client_bindings,
+        values = (
+            invocation_id,
+            self._next_order(),
+            component.id,
+            component._citry_class_id,
+            source_location_id,
+            authored_tag,
+            target_class_id,
+            morph_key,
+            morph_mode,
+            None,
+            parent_region,
+            client_bindings,
         )
-        self._invocation_index[invocation_id] = len(self._component_invocations)
-        self._component_invocations.append(record)
-        self._relation_indexes_current = False
-        self._queue_index[invocation_id] = len(self._render_queue)
-        self._render_queue.append(
-            RenderQueueRecord(
-                invocation_id=invocation_id,
-                enqueued_order=self._next_order(),
-                target_render_id=None,
-                rendered_order=None,
-                settled_order=None,
-                state=QueueState.ENQUEUED,
+        if isinstance(self._component_invocations, _JournalRecords):
+            index = self._component_invocations.journal.capture(values, self._next_order())
+            self._invocation_index[invocation_id] = index
+            self._queue_index[invocation_id] = index
+        else:
+            self._invocation_index[invocation_id] = len(self._component_invocations)
+            self._component_invocations.append(ComponentInvocationRecord(*values))
+            self._queue_index[invocation_id] = len(self._render_queue)
+            # Invocation and queue tables materialize together during replay.
+            cast("list[RenderQueueRecord]", self._render_queue).append(
+                RenderQueueRecord(
+                    invocation_id,
+                    self._next_order(),
+                    None,
+                    None,
+                    None,
+                    QueueState.ENQUEUED,
+                )
             )
-        )
+        self._relation_indexes_current = False
         return invocation_id
 
     def record_template_fill(
@@ -1227,22 +1300,25 @@ class OwnershipGraph:
         self._fill_id += 1
         fill_id = LogicalFillId(self._fill_id)
         self._fill_index[fill_id] = len(self._logical_fills)
-        self._logical_fills.append(
-            LogicalFillRecord(
-                id=fill_id,
-                order=self._next_order(),
-                kind=kind,
-                slot_name=slot_name,
-                source_policy=source_policy,
-                lexical_owner_render_id=lexical_owner_render_id,
-                lexical_owner_class_id=lexical_owner_class_id,
-                source_location_id=source_location_id,
-                source_invocation_id=source_invocation_id,
-                receiver_render_id=receiver_render_id,
-                receiver_class_id=receiver_class_id,
-                fallback_slot_site_location_id=fallback_slot_site_location_id,
-            )
+        values = (
+            fill_id,
+            self._next_order(),
+            kind,
+            slot_name,
+            source_policy,
+            lexical_owner_render_id,
+            lexical_owner_class_id,
+            source_location_id,
+            source_invocation_id,
+            receiver_render_id,
+            receiver_class_id,
+            fallback_slot_site_location_id,
+            OwnershipState.ACTIVE,
         )
+        if isinstance(self._logical_fills, _RecordTable):
+            self._logical_fills.append_values(values)
+        else:
+            self._logical_fills.append(LogicalFillRecord(*values))
         return fill_id
 
     def bind_template_fill_sources(
@@ -1266,7 +1342,11 @@ class OwnershipGraph:
             if fill.source_invocation_id is not None and fill.source_invocation_id != invocation_id:
                 msg = "A template fill cannot be rebound to a second source invocation."
                 raise RuntimeError(msg)
-            self._logical_fills[fill_index] = fill._with_source_invocation(invocation_id)
+            # Comparisons above may run Python and replace the saved row.
+            if isinstance(self._logical_fills, _RecordTable) and self._logical_fills[fill_index] is fill:
+                self._logical_fills.patch(fill_index, ((8, invocation_id),))
+            else:
+                self._logical_fills[fill_index] = fill._with_source_invocation(invocation_id)
 
     def bind_instance(self, component: Component, element: CitryElement) -> None:
         """Bind a fresh render ID to its invocation and supplied fills."""
@@ -1276,39 +1356,104 @@ class OwnershipGraph:
 
         if invocation_id is not None:
             index = self._invocation_index[invocation_id]
-            invocation = self._component_invocations[index]
-            logical_parent = invocation.source_render_id
+            # Custom attribute access or IDs can run Python between binding mutations.
+            # Keep those mutations separate, including later comparisons with stored IDs.
+            if isinstance(self._component_invocations, _JournalRecords) and (
+                type(component).__getattribute__ is not object.__getattribute__
+                or getattr(type(component), "id", None) is not None
+                or getattr(type(component), "_citry_class_id", None) is not None
+                or type(component.id) is not str
+            ):
+                self._component_invocations = list(self._component_invocations)
+                self._render_queue = list(self._render_queue)
+            if isinstance(self._component_invocations, _JournalRecords):
+                logical_parent = self._component_invocations.journal.bind(
+                    index,
+                    component._citry_class_id,
+                    component.id,
+                    0 if element.forward_ownership_invocation else self._next_order(),
+                    selector=element.forward_ownership_invocation,
+                )
+                if not element.forward_ownership_invocation:
+                    self._instance_invocation[component.id] = invocation_id
+            else:
+                invocation = self._component_invocations[index]
+                logical_parent = invocation.source_render_id
+                if element.forward_ownership_invocation:
+                    self._component_invocations[index] = invocation._bind_selector(component.id)
+                else:
+                    self._component_invocations[index] = invocation._bind_target(
+                        component._citry_class_id, component.id
+                    )
+                    self._instance_invocation[component.id] = invocation_id
+                    queue_index = self._queue_index[invocation_id]
+                    queue = self._render_queue[queue_index]
+                    self._render_queue[queue_index] = queue._rendered(component.id, self._next_order())
             if element.forward_ownership_invocation:
-                self._component_invocations[index] = invocation._bind_selector(component.id)
                 bound_invocation = None
             else:
-                self._component_invocations[index] = invocation._bind_target(component._citry_class_id, component.id)
-                self._instance_invocation[component.id] = invocation_id
-                queue_index = self._queue_index[invocation_id]
-                queue = self._render_queue[queue_index]
-                self._render_queue[queue_index] = queue._rendered(component.id, self._next_order())
-                init_edge = InitAncestryRecord(
-                    order=self._next_order(),
-                    invocation_id=invocation_id,
-                    parent_render_id=invocation.source_render_id,
-                    child_render_id=component.id,
-                )
-                self._init_ancestry.append(init_edge)
-            # Target and selector IDs participate in replacement closure even
-            # when this invocation was indexed before its deferred child ran.
+                values = (self._next_order(), invocation_id, logical_parent, component.id, OwnershipState.ACTIVE)
+                if isinstance(self._init_ancestry, _RecordTable):
+                    self._init_ancestry.append_values(values)
+                else:
+                    self._init_ancestry.append(InitAncestryRecord(*values))
             self._relation_indexes_current = False
 
-        instance = LogicalInstanceRecord(
-            order=self._next_order(),
-            render_id=component.id,
-            class_id=component._citry_class_id,
-            class_name=type(component).__name__,
-            invocation_id=bound_invocation,
-            logical_parent_render_id=logical_parent,
-            transparent=type(component).transparent,
+        instance_values = (
+            self._next_order(),
+            component.id,
+            component._citry_class_id,
+            type(component).__name__,
+            bound_invocation,
+            logical_parent,
+            type(component).transparent,
+            OwnershipState.ACTIVE,
         )
-        self._logical_instances.append(instance)
+        if isinstance(self._logical_instances, _RecordTable):
+            self._logical_instances.append_values(instance_values)
+        else:
+            self._logical_instances.append(LogicalInstanceRecord(*instance_values))
         self._relation_indexes_current = False
+
+    def complete_selector_invocation(self, component: Component) -> bool:
+        """Bind the existing selector as target and report whether supplies need binding."""
+        invocation_id = component._ownership_invocation_id
+        if invocation_id is None:
+            return False
+        invocation_index = self._invocation_index[invocation_id]
+        invocation = self._component_invocations[invocation_index]
+        render_id = component.id
+        if invocation.target_render_id == render_id:
+            return False
+        if invocation.target_render_id is not None or render_id not in invocation.selector_render_ids:
+            raise RuntimeError("Only an unresolved selector can own a simple target's invocation.")
+        instance_index = next(
+            index for index, record in enumerate(self._logical_instances) if record.render_id == render_id
+        )
+        if isinstance(self._component_invocations, _JournalRecords):
+            self._component_invocations.journal.bind(
+                invocation_index, component._citry_class_id, render_id, self._next_order(), selector=False
+            )
+        else:
+            self._component_invocations[invocation_index] = invocation._bind_target(
+                component._citry_class_id, render_id
+            )
+            queue_index = self._queue_index[invocation_id]
+            self._render_queue[queue_index] = self._render_queue[queue_index]._rendered(render_id, self._next_order())
+        self._instance_invocation[render_id] = invocation_id
+        if isinstance(self._logical_instances, _RecordTable):
+            self._logical_instances.patch(instance_index, ((4, invocation_id),))
+        else:
+            self._logical_instances[instance_index] = self._logical_instances[instance_index]._replace(
+                invocation_id=invocation_id
+            )
+        values = (self._next_order(), invocation_id, invocation.source_render_id, render_id, OwnershipState.ACTIVE)
+        if isinstance(self._init_ancestry, _RecordTable):
+            self._init_ancestry.append_values(values)
+        else:
+            self._init_ancestry.append(InitAncestryRecord(*values))
+        self._relation_indexes_current = False
+        return True
 
     def bind_supplied_slots(self, component: Component) -> None:
         """Attach each normalized supplied slot to this rendered receiver."""
@@ -1330,7 +1475,11 @@ class OwnershipGraph:
                 fill_index = self._fill_index[fill_id]
                 fill = self._logical_fills[fill_index]
                 if fill.receiver_render_id is None or fill.receiver_render_id == component.id:
-                    self._logical_fills[fill_index] = fill._with_receiver(component.id, component_class_id)
+                    # Preserve the saved record if receiver comparison changed the table.
+                    if isinstance(self._logical_fills, _RecordTable) and self._logical_fills[fill_index] is fill:
+                        self._logical_fills.patch(fill_index, ((9, component.id), (10, component_class_id)))
+                    else:
+                        self._logical_fills[fill_index] = fill._with_receiver(component.id, component_class_id)
                 else:
                     # One stored template Slot can be forwarded to several
                     # receiver instances. Each receiver is a distinct logical
@@ -1485,6 +1634,71 @@ class OwnershipGraph:
         if fill_id is None:
             return callback()
 
+        region_index: int | None = None
+        region_id = PhysicalRegionId(self._region_id + 1)
+        if isinstance(self._physical_regions, _RecordTable) and isinstance(self._logical_fills, _RecordTable):
+            site = _SLOT_SITE.get()
+            active = _ACTIVE_REGION.get()
+            containing = active[1] if active is not None and active[0] is self else None
+            order = self._order + 1
+            region_index = self._physical_regions.begin_slot_region(
+                self._logical_fills,
+                self._fill_index[fill_id],
+                self._region_index[containing] if containing is not None else None,
+                (region_id, order, fill_id, containing),
+                (site.receiver_render_id, site.source_location_id)
+                if site is not None and site.graph is self
+                else None,
+                OwnershipState.ACTIVE,
+                RegionState.CAPTURED,
+            )
+            if region_index is not None:
+                self._region_id = region_id
+                self._order = order
+                self._region_index[region_id] = region_index
+        if region_index is None:
+            region_id, region_index = self._capture_python_slot_region(slot, fill_id)
+        self._relation_indexes_current = False
+        token = _ACTIVE_REGION.set((self, region_id))
+        try:
+            result = callback()
+        except Exception:
+            if isinstance(self._physical_regions, _RecordTable):
+                self._physical_regions.patch(region_index, ((10, RegionState.FAILED),))
+            else:
+                self._physical_regions[region_index] = self._physical_regions[region_index]._with_state(
+                    RegionState.FAILED
+                )
+            raise
+        finally:
+            _ACTIVE_REGION.reset(token)
+
+        result_context = getattr(result, "context", None)
+        result_frame = getattr(result, "frame", None)
+        result_render_id = getattr(result_frame, "render_id", None)
+        result_owner = (
+            result_render_id
+            if result_render_id is not None and getattr(result_context, "ownership", None) is self
+            else None
+        )
+        if isinstance(self._physical_regions, _RecordTable):
+            self._physical_regions.patch(region_index, ((9, result_owner),))
+        else:
+            self._physical_regions[region_index] = self._physical_regions[region_index]._with_result_owner(
+                result_owner
+            )
+        from citry.citry_render import CitryRender, PhysicalRegionPart, PhysicalRegionRender  # noqa: PLC0415
+
+        wrapped = (
+            PhysicalRegionRender(self, region_id, result)
+            if isinstance(result, CitryRender)
+            else PhysicalRegionPart(self, region_id, cast("RenderPart", result))
+        )
+        self._region_results[region_id] = wrapped
+        return cast("TResult", wrapped)
+
+    def _capture_python_slot_region(self, slot: Slot, fill_id: LogicalFillId) -> tuple[PhysicalRegionId, int]:
+        """Prepare a slot region through the Python record path."""
         site = _SLOT_SITE.get()
         old_fill = self._logical_fills[self._fill_index[fill_id]]
         standalone_receiver_id = old_fill.lexical_owner_render_id
@@ -1536,34 +1750,7 @@ class OwnershipGraph:
             state=RegionState.CAPTURED,
         )
         self._physical_regions.append(region)
-        self._relation_indexes_current = False
-        token = _ACTIVE_REGION.set((self, region_id))
-        try:
-            result = callback()
-        except Exception:
-            self._physical_regions[region_index] = self._physical_regions[region_index]._with_state(RegionState.FAILED)
-            raise
-        finally:
-            _ACTIVE_REGION.reset(token)
-
-        result_context = getattr(result, "context", None)
-        result_frame = getattr(result, "frame", None)
-        result_render_id = getattr(result_frame, "render_id", None)
-        result_owner = (
-            result_render_id
-            if result_render_id is not None and getattr(result_context, "ownership", None) is self
-            else None
-        )
-        self._physical_regions[region_index] = self._physical_regions[region_index]._with_result_owner(result_owner)
-        from citry.citry_render import CitryRender, PhysicalRegionPart, PhysicalRegionRender  # noqa: PLC0415
-
-        wrapped = (
-            PhysicalRegionRender(self, region_id, result)
-            if isinstance(result, CitryRender)
-            else PhysicalRegionPart(self, region_id, cast("RenderPart", result))
-        )
-        self._region_results[region_id] = wrapped
-        return cast("TResult", wrapped)
+        return region_id, region_index
 
     def resolve_slot_region(self, slot_site_location_id: SourceLocationId) -> PhysicalRegionId:
         """Resolve the outer region created by one executed slot outlet."""
@@ -1622,7 +1809,11 @@ class OwnershipGraph:
             if result_render_id is not None and getattr(result_context, "ownership", None) is self
             else None
         )
-        self._physical_regions[region_index] = region._with_result_owner(result_owner)
+        # Result properties may replace the row; this operation updates the saved record.
+        if isinstance(self._physical_regions, _RecordTable) and self._physical_regions[region_index] is region:
+            self._physical_regions.patch(region_index, ((9, result_owner),))
+        else:
+            self._physical_regions[region_index] = region._with_result_owner(result_owner)
         from citry.citry_render import CitryRender, PhysicalRegionPart, PhysicalRegionRender  # noqa: PLC0415
 
         wrapped = (
@@ -1639,6 +1830,10 @@ class OwnershipGraph:
         render_object_ids: set[int],
     ) -> set[PhysicalRegionId]:
         """Resolve selected render objects to transient physical occurrences."""
+        # A replacement containing only text preserves no physical objects.
+        # Avoid searching the captured tree when there is nothing to find.
+        if not render_object_ids:
+            return set()
         # Every occurrence has its own wrapper. The wrapper itself is the
         # unambiguous signal. A hook may intentionally select a nested
         # CitryRender out of the occurrence, though, so preserve its ownership
@@ -1658,6 +1853,8 @@ class OwnershipGraph:
         visiting: set[int] = set()
 
         def subtree_contains_selected(current: object) -> bool:
+            if type(current) is str:
+                return False
             object_id = id(current)
             cached = contains_selected.get(object_id)
             if cached is not None:
@@ -1696,8 +1893,11 @@ class OwnershipGraph:
             self.fail_invocation(invocation_id)
             return
         queue_index = self._queue_index[invocation_id]
-        queue = self._render_queue[queue_index]
-        self._render_queue[queue_index] = queue._settled(self._next_order(), QueueState.SETTLED)
+        if isinstance(self._render_queue, _JournalRecords):
+            self._render_queue.journal.settle(queue_index, self._next_order(), QueueState.SETTLED)
+        else:
+            queue = self._render_queue[queue_index]
+            self._render_queue[queue_index] = queue._settled(self._next_order(), QueueState.SETTLED)
 
     def retire_invocation(self, invocation_id: ComponentInvocationId | None) -> None:
         """Retire deferred work discarded before it rendered."""
@@ -1831,6 +2031,38 @@ class OwnershipGraph:
         preserved_region_ids: set[PhysicalRegionId] | None = None,
     ) -> None:
         """Retire records belonging to one replaced component output."""
+        if isinstance(self._component_invocations, _JournalRecords) and isinstance(
+            self._logical_instances, _RecordTable
+        ):
+            try:
+                order, receivers, promoted_regions = self._component_invocations.journal.retire_output(
+                    (self._logical_instances, self._init_ancestry, self._logical_fills, self._physical_regions),
+                    (
+                        render_id,
+                        through_order,
+                        set(descendant_render_ids or ()),
+                        set(preserved_render_ids or ()),
+                        set(preserved_region_ids or ()),
+                    ),
+                    self._order,
+                    (
+                        RegionState.CAPTURED,
+                        OwnershipState.RETIRED,
+                        QueueState.RETIRED,
+                        QueueState.FAILED,
+                        RegionState.RETIRED,
+                    ),
+                )
+            except _rust.ownership.UnsupportedRetirement:
+                # Unsupported values leave native rows untouched for Python readers.
+                pass
+            else:
+                self._order = order
+                for receiver, name, fill_id in receivers:
+                    self._receiver_fill[(receiver, name)] = fill_id
+                if promoted_regions:
+                    self._relation_indexes_current = False
+                return
         direct_preserved_render_ids = set(preserved_render_ids or ())
         explicit_preserved_region_ids = set(preserved_region_ids or ())
         region_receiver_ids = {
@@ -1951,9 +2183,6 @@ class OwnershipGraph:
             ):
                 self._init_ancestry[index] = edge._with_state(OwnershipState.RETIRED)
 
-        active_receiver_ids = {
-            instance.render_id for instance in self._logical_instances if instance.state == OwnershipState.ACTIVE
-        }
         active_class_by_render_id = {
             instance.render_id: instance.class_id
             for instance in self._logical_instances
@@ -1963,23 +2192,24 @@ class OwnershipGraph:
         for index, fill in enumerate(self._logical_fills):
             if fill.order > through_order:
                 continue
-            fill_region_entries = [
-                (self._region_index[region_id], self._physical_regions[self._region_index[region_id]])
-                for region_id in self._region_ids_by_fill.get(fill.id, ())
-            ]
-            selected_regions = [
-                (region_index, region)
-                for region_index, region in fill_region_entries
-                if region.order > through_order and region.state == RegionState.CAPTURED
-            ]
+            fill_region_ids = self._region_ids_by_fill.get(fill.id, ())
+            selected_regions: list[tuple[int, PhysicalRegionRequestRecord]] = []
+            has_preserved_region = False
+            for region_id in fill_region_ids:
+                region_index = self._region_index[region_id]
+                region = self._physical_regions[region_index]
+                if region.order > through_order and region.state == RegionState.CAPTURED:
+                    selected_regions.append((region_index, region))
+                if region_id in preserved_region_ids:
+                    has_preserved_region = True
             if selected_regions:
                 selected_receiver_id = fill.receiver_render_id
-                if selected_receiver_id not in active_receiver_ids:
+                if selected_receiver_id not in active_class_by_render_id:
                     selected_receiver_id = next(
                         (
                             region.receiver_render_id
                             for _, region in selected_regions
-                            if region.receiver_render_id in active_receiver_ids
+                            if region.receiver_render_id in active_class_by_render_id
                         ),
                         render_id,
                     )
@@ -1991,14 +2221,13 @@ class OwnershipGraph:
                 )
                 self._receiver_fill[(selected_receiver_id, fill.slot_name)] = fill.id
                 for region_index, region in selected_regions:
-                    if region.receiver_render_id not in active_receiver_ids:
+                    if region.receiver_render_id not in active_class_by_render_id:
                         rebound = region._with_receiver(selected_receiver_id)
                         self._physical_regions[region_index] = rebound
                         self._relation_indexes_current = False
                 continue
-            fill_regions = [region for _, region in fill_region_entries]
-            if any(region.id in preserved_region_ids for region in fill_regions) or (
-                not fill_regions and fill.receiver_render_id in direct_preserved_render_ids
+            if has_preserved_region or (
+                not fill_region_ids and fill.receiver_render_id in direct_preserved_render_ids
             ):
                 continue
             if (

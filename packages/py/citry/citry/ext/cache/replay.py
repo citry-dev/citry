@@ -109,7 +109,11 @@ def _export_fragment_artifact(render: CitryRender) -> CachedRenderArtifact:
 def _export_boundary_artifact(render: CitryRender, *, component_root: bool) -> CachedRenderArtifact:
     """Detach one settled subtree rooted at a live component boundary."""
     boundary_id = render.frame.render_id
-    if render.frame.is_component_root is not component_root or boundary_id is None:
+    if (
+        render.frame.is_component_root is not component_root
+        or render.frame.is_transparent_root is component_root
+        or boundary_id is None
+    ):
         kind = "component" if component_root else "fragment"
         raise CacheArtifactError(f"A {kind} cache artifact has an invalid root render boundary.")
     graph = render.context.ownership
@@ -172,7 +176,10 @@ def _select_render_instances(
 ) -> set[str]:
     """Select component identities represented by the physical subtree."""
     frame_candidates = {
-        frame.render.frame.render_id for frame in live_frames if frame.render.frame.render_id is not None
+        frame.render.frame.render_id
+        for frame in live_frames
+        if (frame.render.frame.is_component_root or frame.render.frame.is_transparent_root)
+        and frame.render.frame.render_id is not None
     }
     selected = {
         frame.render.frame.render_id
@@ -218,7 +225,7 @@ def _collect_live_frames(
         if object_id in active:
             raise CacheArtifactError(f"Render object cycle encountered at {path}.")
         render_id = render.frame.render_id
-        if render.frame.is_component_root and render_id is not None:
+        if (render.frame.is_component_root or render.frame.is_transparent_root) and render_id is not None:
             if render_id in component_roots:
                 raise CacheArtifactError(f"Component render {render_id!r} occurs more than once in the subtree.")
             component_roots.add(render_id)
@@ -816,6 +823,7 @@ def _detach_frame(
         class_id=class_id,
         class_name=class_name,
         is_component_root=frame.is_component_root,
+        is_transparent_root=frame.is_transparent_root,
         root_markers=markers,
         parts=live.parts,
     )
@@ -1142,19 +1150,29 @@ def _validate_instance_frames(
             raise CacheArtifactError(
                 f"artifact.frames[{frame_index}] class identity does not match its ownership instance."
             )
-        if frame.is_component_root:
+        if (frame.is_component_root and instance.transparent) or (
+            frame.is_transparent_root and not instance.transparent
+        ):
+            raise CacheArtifactError(
+                f"artifact.frames[{frame_index}] root kind does not match its ownership instance."
+            )
+        if frame.is_component_root or frame.is_transparent_root:
             roots[frame.instance] += 1
     root_frame = artifact.frames[artifact.root_frame]
-    if root_frame.instance != 0 or root_frame.is_component_root is not boundary_component_root:
+    if (
+        root_frame.instance != 0
+        or root_frame.is_component_root is not boundary_component_root
+        or root_frame.is_transparent_root is boundary_component_root
+    ):
         expected = "component root" if boundary_component_root else "transparent fragment boundary"
         raise CacheArtifactError(f"The artifact root frame must be the cache-boundary {expected}.")
     if instances[0].transparent is boundary_component_root:
         raise CacheArtifactError("The artifact cache boundary has invalid transparency for its cache kind.")
     for index, (instance, count) in enumerate(zip(instances, roots, strict=True)):
-        expected_roots = 0 if instance.transparent else 1
-        if count != expected_roots:
+        # Logical transparent ancestors can be retained without physical output.
+        if count > 1 or (not instance.transparent and count != 1):
             raise CacheArtifactError(
-                f"artifact ownership instance {index} requires {expected_roots} component-root frame(s), got {count}."
+                f"artifact ownership instance {index} has an invalid whole-component output count: {count}."
             )
 
 
@@ -1993,6 +2011,7 @@ def _build_replayed_tree(
                     class_id=frame.class_id,
                     class_name=frame.class_name,
                     is_component_root=frame.is_component_root,
+                    is_transparent_root=frame.is_transparent_root,
                     root_markers=markers,
                 )
             built[frame_index] = CitryRender(parts=parts, context=frame_context, frame=render_frame)

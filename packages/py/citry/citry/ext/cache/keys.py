@@ -295,7 +295,9 @@ def _canonical_cache_tree(value: object, *, path: str, state: _EncodingState, de
         try:
             return [
                 "c",
-                _canonical_cache_tree(const_value(value), path=path, state=state, depth=depth + 1),
+                # Preserve each marker in the key format and account for its depth
+                # and identity before following the next proxy layer.
+                _canonical_cache_tree(cast("Any", value).__wrapped__, path=path, state=state, depth=depth + 1),
             ]
         finally:
             state.active.remove(marker_id)

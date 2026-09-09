@@ -432,6 +432,25 @@ ElementAttrsNode(source, (start, end), (attr_nodes...), (used_vars...))
   attribute for every value except `None`, which emits nothing. An explicit
   `#c-ignore` compiles to its fixed morph marker.
 
+Already-validated attribute maps can reuse their formatted string across
+renders. The process-wide cache holds at most 256 entries, removing the oldest
+inserted entry when full. It accepts only exact `ElementAttrsNode` and `dict`
+objects, exact string keys, and exact string, integer, boolean or `None` values.
+An entry contains at most 16 attributes, 2,048 characters across keys and string
+values, and integers of at most 256 bits. Its key preserves order and types.
+Only the default formatting helpers with the MarkupSafe C escaper enable reuse;
+replacing a covered helper between calls sends formatting through the ordinary
+path. Concurrent replacement-and-restoration or changes inside an unchanged
+helper are outside that identity check.
+
+Resolution and input callbacks still run on every render. Validation-required
+maps, nested renders, subclasses, proxies and user HTML protocols use the
+ordinary path. A cacheable miss formats a copy made from its immutable key
+values; insertion and eviction share a lock. The cache retains no component,
+node or context, and contains no engine-specific facts, so `Citry.clear()`
+does not flush these shared strings. Regression cases live in
+`packages/py/citry/tests/test_attrs_output_cache.py`.
+
 ### 5.3 Compiler change (high-risk area: compiler output format)
 
 In `compile_html_node` (`compiler.rs:432`): when any attribute is

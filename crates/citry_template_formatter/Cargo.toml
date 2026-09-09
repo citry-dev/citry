@@ -12,6 +12,7 @@ repository = { workspace = true }
 publish = false
 
 [dependencies]
+python_safe_eval = { workspace = true }
 citry_template_parser = { path = "../citry_template_parser" }
 ruff_formatter = { workspace = true }
 ruff_python_ast = { workspace = true }

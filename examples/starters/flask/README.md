@@ -21,7 +21,7 @@ the project cards without reloading the page.
 - Python 3.10 through 3.14
 - [uv](https://docs.astral.sh/uv/)
 
-The project accepts Citry 0.4.6 or newer within the 0.4.x release line. Its
+The project accepts Citry 0.4.6 or newer. Its
 lockfile pins the version exercised by the tests.
 
 ## Run the project
@@ -54,6 +54,14 @@ The app reads `CITRY_SECRET` directly from the environment. `.env.example`
 records the variable name, but the running starter does not load `.env` files.
 The committed VS Code setup uses that example file only for Citry's isolated
 editor discovery worker.
+
+## Set up an AI coding agent
+
+This project includes [AGENTS.md](AGENTS.md) with local instructions and a
+[CLAUDE.md](CLAUDE.md) import for Claude Code. Open this project directory in
+your coding tool and follow the
+[AI agent setup guide](https://citry.dev/getting-started/ai-agents/).
+This README remains the source for installation, secret setup, and run commands.
 
 ## Test the project
 

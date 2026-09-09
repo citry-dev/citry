@@ -164,6 +164,49 @@ def _index_settled_tree(root: CitryRender) -> _SettledTreeIndex:
     return _SettledTreeIndex(_iterator=_walk_settled_tree(root), _entries=[])
 
 
+def _transparent_instance_placements(root: CitryRender, included: frozenset[tuple[int, str]]) -> frozenset[int]:
+    """
+    Select each transparent component's whole output for its physical caps.
+
+    Caller-owned fills can appear outside the component's output. Their frame
+    identity selects the lexical scope; only the explicit root marker selects
+    the component boundary. Repeated whole outputs cannot share one boundary.
+    """
+    if not included:
+        return frozenset()
+    placements: dict[tuple[int, str], int] = {}
+    active: set[tuple[int, str]] = set()
+    pending: list[tuple[object, tuple[int, str] | None]] = [(root, None)]
+    while pending:
+        current, leaving = pending.pop()
+        if leaving is not None:
+            active.remove(leaving)
+            continue
+        if isinstance(current, _PhysicalRegion):
+            pending.append((current.part, None))
+            continue
+        if not isinstance(current, CitryRender):
+            continue
+        render_id = current.frame.render_id
+        graph = current.context.ownership
+        if render_id is not None and graph is not None:
+            key = (id(graph), render_id)
+            if current.frame.is_transparent_root and key in included and key not in active:
+                if key in placements:
+                    msg = (
+                        "The same transparent component occurrence has disconnected output; "
+                        "render a fresh component occurrence for each physical position."
+                    )
+                    raise RuntimeError(msg)
+                placements[key] = id(current)
+                active.add(key)
+                pending.append((None, key))
+        pending.extend((part, None) for part in reversed(current.parts) if not isinstance(part, str))
+    if placements.keys() != included:
+        raise RuntimeError("A transparent component included in the graph has no physical output placement.")
+    return frozenset(placements.values())
+
+
 @dataclass(frozen=True, slots=True)
 class OwnershipManifestArtifact:
     """A validated wire manifest plus physical-cap lookup tables."""
@@ -176,6 +219,8 @@ class OwnershipManifestArtifact:
     transparent_instance_ids: frozenset[tuple[int, str]]
     region_ids: frozenset[tuple[int, int]]
     client_active_instances: frozenset[tuple[int, str]]
+    transparent_placements: frozenset[int] = frozenset()
+    """Render object identities enclosing each included transparent instance's output."""
     scope_seed_instances: tuple[tuple[str, str], ...] = ()
     """Source-ordered ``(class_id, render_id)`` instances whose own Alpine expressions need JsData."""
     audit_manifest: bool = True
@@ -208,6 +253,10 @@ class OwnershipManifestArtifact:
     def is_transparent_instance(self, graph: OwnershipGraph, render_id: str) -> bool:
         """Whether an instance included in the graph uses caps without an element root."""
         return (id(graph), render_id) in self.transparent_instance_ids
+
+    def has_transparent_placement(self, render: CitryRender) -> bool:
+        """Whether this render encloses the one cap pair for its transparent owner."""
+        return id(render) in self.transparent_placements
 
     def region_cap(self, graph: OwnershipGraph, region_id: PhysicalRegionId, side: str) -> str:
         key = (id(graph), int(region_id))
@@ -842,18 +891,20 @@ def prepare_ownership_manifest(
         _canonicalize=_rust.client_graph.canonical_json_and_revision,
     )
     revision = manifest["revision"]
+    transparent_instance_ids = frozenset(
+        (id(capture.graph), record.render_id)
+        for capture in captures
+        for record in capture.snapshot.logical_instances
+        if record.transparent and (id(capture.graph), record.render_id) in instance_ids
+    )
     artifact = OwnershipManifestArtifact(
         revision=revision,
         manifest=manifest,
         captures=captures,
         graph_indexes=graph_indexes,
         instance_ids=instance_ids,
-        transparent_instance_ids=frozenset(
-            (id(capture.graph), record.render_id)
-            for capture in captures
-            for record in capture.snapshot.logical_instances
-            if record.transparent and (id(capture.graph), record.render_id) in instance_ids
-        ),
+        transparent_instance_ids=transparent_instance_ids,
+        transparent_placements=_transparent_instance_placements(root, transparent_instance_ids),
         region_ids=frozenset(region_ids),
         client_active_instances=frozenset(client_active_instances),
         scope_seed_instances=tuple(

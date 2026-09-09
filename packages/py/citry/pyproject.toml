@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry"
-version = "0.4.6"
+version = "0.5.0"
 requires-python = ">=3.10, <4.0"
 description = "Fully typed frontend framework for Python with server events and Alpine.js, inspired by Vue and Livewire"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
@@ -40,7 +40,7 @@ dependencies = [
     # Pinned to one exact version, not a range. The runtime node classes in
     # `citry.nodes` read the source citry-core's compiler emits, so the two
     # move together: raise this in the same change that releases citry-core.
-    "citry-core==1.6.1",
+    "citry-core==1.7.0",
     # Deliberately wide. Citry uses only `ObjectProxy` and `__wrapped__`, and
     # wrapt keeps `ObjectProxy` working across its 2.0 rewrite, so both major
     # lines serve. Raising the floor would force wrapt 2 on every installation
@@ -73,7 +73,9 @@ dependencies = [
 # have. citry.reload imports only `watchfiles.watch`, and watchdog's
 # `FileSystemEventHandler` and `Observer`, which every release in range provides.
 [project.optional-dependencies]
-analysis-ty = ["ty==0.0.73"]       # Python expression types for analysis tooling
+# Command-owned preview serving and browser capture; imported only by those commands.
+ext-preview = ["uvicorn>=0.49", "playwright>=1.62.0"]
+analysis-ty = ["ty==0.0.78"]       # Python expression types for analysis tooling
 watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
 watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
 
@@ -109,6 +111,8 @@ dev = [
 e2e = [
     "playwright>=1.62.0",
     "pytest-playwright>=0.9.0",
+    "uvicorn>=0.49",  # command-owned Preview server browser integration
+
 ]
 # Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
 # a deliberate re-baseline; skipped when absent (tests/conftest.py).
@@ -117,7 +121,7 @@ e2e = [
 # make the whole workspace unresolvable on those versions).
 benchmark = [
     "django==6.0.6; python_version >= '3.12'",
-    "django-components==0.151.1; python_version >= '3.12'",
+    "django-components==0.152.0; python_version >= '3.12'",
     "jinja2==3.1.6",
 ]
 
