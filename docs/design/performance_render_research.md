@@ -6551,3 +6551,31 @@ Citry 0.5.0 target and the Preview extension being developed by another agent.
 Package metadata changes and combined release qualification remain part of the
 prepared release work. Optimization remains paused; no Git promotion, commit,
 branch change or push was performed.
+
+## Bounded follow-up after the 0.5.0 release (2026-09-10)
+
+The maintainer authorized exactly four parked avenues, with no further search
+after them. This resumes the distinct-case and architectural approach; Cython
+and ABI explorations remain parked. Package publication and docs deployment are
+complete. The release-automation replay is being monitored separately while
+these experiments run. Benchmark probes and results remain on this research
+branch and must not be merged into main.
+
+The four attempts are:
+
+1. Qualify the remaining thirteen presentation declarations as one group using
+   the public simple flag, then measure the eligible group.
+2. Investigate DynamicElement's transparent component and default-slot path as
+   a distinct built-in rendering case.
+3. Evaluate one explicit slot/JS contract for a broader component fast path.
+4. Evaluate one output representation that avoids repeated attribute and
+   interior-render work.
+
+Each avenue gets one candidate, correctness qualification and a measurement
+where meaningful. Record rejected proposals as well as accepted changes; do not
+expand into an open-ended search. Keep the normal API unless an explicit new
+contract is proposed and documented. Commit the result of each area separately.
+Fresh control measurements determine gains; historical timings are context only.
+The archived Python runtime and benchmark fixture match main at ea4d20d58. The
+current local native build is reused in both control and candidate processes;
+its digest is recorded with the new results.
