@@ -17,7 +17,9 @@
   The app reads the environment directly; `.env.example` records its setup.
 - Treat `State` as browser input. Keep secrets on the server and check
   authorization before returning private data or performing writes.
-- After changes, run `uv run pytest`; the local checks live in `tests/test_app.py`.
+- After changes, follow the README environment setup, run
+  `uv run citry --app app.citry_app:citry_app check`, then run `uv run pytest`.
+  The local tests live in `tests/test_app.py`.
 - For template, CSS, Events, or host changes, run the README server command
   and check the page in a browser. Verify the help button, search results,
   input focus, and browser console and network errors.

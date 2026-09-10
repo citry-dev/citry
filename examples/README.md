@@ -54,7 +54,10 @@ private data or write operations.
 ## How these projects are maintained
 
 Each project has its own `pyproject.toml`, lock file, README, application code,
-and tests. CI copies each project to a temporary directory and runs its tests.
+and tests. Each also includes a GitHub Actions workflow that checks Citry
+templates and runs pytest after you copy the project to your own repository.
+Its README shows the same local commands. Citry's monorepo CI copies each
+project to a temporary directory and runs its template checks and tests.
 For web projects, it starts the server and clicks through the interactions in
 a real browser. For the standalone starter, it opens the generated HTML file.
 The web starters cover Alpine and Citry Events; the standalone starter covers

@@ -199,6 +199,7 @@ Each entry records at least:
 | `path` | Repository-relative project root below `examples/`. |
 | `host` | `none`, `fastapi`, `django`, `flask`, `asgi`, or `wsgi` initially. |
 | `python` | Supported Python constraint for the project. |
+| `check` | Required shell-free argument vector for registry-aware Citry template checks. |
 | `test` | Shell-free argument vector for the project-local test command. |
 | `serve` | Shell-free argument vector with a `{port}` placeholder; absent for standalone. |
 | `page_path` | HTTP path whose response is the complete page. |
@@ -408,6 +409,7 @@ Every project contains:
 README.md
 pyproject.toml
 uv.lock
+.github/workflows/check.yml
 .env.example        # web projects only
 src/ or host-native application files
 tests/
@@ -699,6 +701,23 @@ owns a stable visual contract. It is not a substitute for semantic browser
 assertions.
 
 ### 8.6 CI placement
+
+Every project includes `.github/workflows/check.yml` for readers who copy the
+project, including hidden directories, to their own repository root. It runs
+on pushes and pull requests with read-only repository permissions, installs
+locked dependencies, checks templates through the project's Citry app, then
+runs pytest. The workflow supplies fixed test-only secrets where the app needs
+them; Django also receives `DJANGO_SETTINGS_MODULE=config.settings`. Project
+READMEs show the same local check command and any required environment setup.
+
+GitHub does not run these nested workflows inside the Citry monorepo. The
+shared qualifier runs each cataloged `check` command before its `test` command
+in the clean project copy. A failing check stops qualification before tests or
+browser startup. Django settings are scoped to that project's environment.
+Catalog loading rejects a missing or malformed `check` command, and clean-copy
+validation rejects a missing project workflow. Archive tests verify that the
+workflow travels with the copied project.
+
 
 Example qualification should have a dedicated Python workflow or dedicated
 jobs with path filters that include:
