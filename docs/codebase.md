@@ -1409,9 +1409,10 @@ from permission to update `main` or create a release tag.
 
 Package publication, tag creation, and GitHub Release creation run in separate
 jobs. The publication job verifies the exact public bytes and retains its release
-files as an immutable Actions artifact. A reusable job then uses the release App
-in `release-maintenance` to create the package's annotated tag. It reads the
-package version from the qualified source commit, requires that commit to remain
+files as an immutable Actions artifact. A separate job in each publisher then
+uses the release App in `release-maintenance` to create the package's annotated
+tag. Each tag job loads its environment secret and runs the shared Python helper.
+The helper reads the package version from the qualified source commit, requires that commit to remain
 on `main`, and executes only the current trusted workflow's helper code. The App
 key is available only in this tag job and the generated-site write job.
 
