@@ -39,6 +39,13 @@
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
     },
     {
+      "name": "tzdata",
+      "version": "2026.3",
+      "source": "pypi",
+      "filename": "tzdata-2026.3-py2.py3-none-any.whl",
+      "sha256": "dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931"
+    },
+    {
       "name": "citry",
       "version": "0.4.6",
       "source": "pypi",

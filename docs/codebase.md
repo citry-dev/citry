@@ -1226,8 +1226,9 @@ prepare release changes in the review working tree
        -> publish each dependency layer concurrently
        -> verify exact public bytes before starting the next layer
        -> create final tags, GitHub Releases, and Discord notifications
-  -> merge the generated documentation snapshot through its own PR
-  -> the main documentation workflow deploys the merged snapshot
+  -> verify public browser packages and build the documentation snapshot
+  -> the release App commits generated site files directly to main
+  -> the main documentation workflow deploys the updated site
 ```
 
 Prepare a release as follows:
@@ -1236,17 +1237,15 @@ Prepare a release as follows:
    changelog, and published README. If Citry Core changes, update Citry's exact
    Core pin in the same release commit. If citry-lsp changes, update the VS Code
    extension's `citry.lspVersion` only when that extension should ship too.
-2. Run `uv lock` when Python workspace metadata changed. Prepare browser
-   runtime coordinates before qualification. Keep the deployed
+2. Run `uv lock` when Python workspace metadata changed. Keep
    `docs_site/static/playground/runtime.json` on compatible public packages
-   until the new packages are published; pushing `main` also deploys the site.
-   Activate the prepared coordinates in a follow-up site commit after checking
-   the public artifacts. PyPI packages use an exact distribution filename and SHA-256,
-   not a URL copied from an already-public release. Python qualification sets
-   `SOURCE_DATE_EPOCH=315532800`, so release archives do not depend on checkout
-   mtimes. Use that same environment value when prebuilding a selected browser
-   wheel and recording its hash. Qualification compares the committed pin with
-   its retained wheel whenever the playground selects the candidate version.
+   during qualification. After publication, the documentation release workflow
+   reads the package versions from the immutable Citry release source and
+   updates this JSON from the published release inventories. It verifies the
+   downloaded wheel bytes and dependencies, then runs the published-runtime
+   browser tests before committing the new pins. Pyodide and unrelated package
+   pins stay unchanged. An unavailable or incompatible wheel stops this update;
+   the deployed site keeps its existing runtime.
 3. Sweep version references deliberately. Update live metadata and pins, but
    do not rewrite historical changelogs, dated research, fixtures, or unrelated
    versions merely because the number matches.
@@ -1277,12 +1276,13 @@ Prepare a release as follows:
    workers promote only the retained candidate bytes, verify the registry,
    create the annotated final tag and GitHub Release, and send the appropriate
    Discord event.
-8. Verify the resulting public packages and GitHub Releases. A Citry release
-   starts the documentation snapshot workflow after its GitHub Release exists.
-   The workflow pushes a snapshot branch and provides a pull-request link in its
-   run summary. A maintainer opens the PR, waits for Check, and merges it; the
-   main-push documentation workflow then deploys the snapshot. This keeps
-   documentation review outside the package publication critical path.
+8. Verify the resulting public packages and GitHub Releases. When Citry is selected,
+   the controller starts the documentation workflow after all selected packages
+   have been published. The
+   workflow verifies the browser runtime and builds the version snapshot. A
+   separate job uses the dedicated release App to commit only generated
+   documentation and runtime pins directly to `main`. That push starts the
+   normal site deployment. No follow-up PR or browser-runtime tag is needed.
 
 The controller derives ordering from selected-package constraints. Citry waits
 for a selected Citry Core because it pins Core exactly. citry-lsp and citry-ui
@@ -1303,7 +1303,8 @@ existing release asset.
 
 If publication created the GitHub Release but failed to start documentation
 or Discord, recover that remaining step directly. Rerunning package
-publication does not resend these dispatches for an existing Release. For a
+publication does not resend Discord for an existing Release. The controller
+retries documentation dispatch after successful publication. For a
 missing documentation snapshot, run:
 
 ```sh
@@ -1361,20 +1362,47 @@ that consume versioned protocols must still validate those schemas.
 
 ### Main branch and release permissions
 
-Every update to `main` goes through a pull request, including maintainer and
-bot changes. The branch rules require the `check` job, an up-to-date branch,
-and resolved review conversations; they block deletion and force pushes.
-There are no direct-push bypass actors. Zero approving reviews are required
-while the repository has one maintainer, so that maintainer can merge their
-own PR after checks pass. This provides a PR history, not independent approval
-against compromise of that maintainer's account.
+Development updates to `main` require a pull request, the `check` job, an
+up-to-date branch, and resolved review conversations. Zero approving reviews
+are required while the repository has one maintainer, so that maintainer can
+merge their own PR after checks pass. This provides a PR history, not
+independent approval against compromise of that maintainer's account.
 
-The `pypi` and `vscode-marketplaces` environments must allow the exact `main`
-branch for the release controller's publication jobs. Branch restrictions are
-configured in GitHub settings, outside workflow files. Permission to use an
-environment is separate from permission to update `main` or create a release
-tag. Keep those boundaries separate; a general Actions bypass would let
-workflows on other repository branches cross the main-branch restriction.
+Generated release site updates use a dedicated GitHub App as the only bypass
+actor for the PR and status-check rules. A separate ruleset blocks deletion and
+force pushes without bypass actors. GitHub's App bypass applies to the branch;
+the trusted workflow enforces the file restriction. The write job accepts only
+`docs_site/versions/` and `docs_site/static/playground/runtime.json`, after the
+build and browser checks pass. If `main` advances during generation, the job
+fails and must be rerun against the new base. It never rebases unvalidated
+output or force-pushes.
+
+Configure the release identity once before enabling this workflow:
+
+1. Create an organization-owned GitHub App with repository **Contents: write**
+   and install it only on `citry-dev/citry`. Give it no organization permissions
+   or webhook. Keep it separate from the Dependabot relock App.
+2. In the `release-maintenance` environment, add variable `RELEASE_APP_ID` and
+   secret `RELEASE_APP_PRIVATE_KEY`. Under **Deployment branches and tags**,
+   select **Selected branches and tags** and allow only the exact **branch**
+   `main`, with no tag rules. Keep the
+   private key out of repository-wide, organization-wide, and Dependabot secrets.
+3. Add this App alone as an always-allowed bypass actor for the exact-main PR
+   and status-check ruleset. Keep deletion and force-push protection in a
+   separate ruleset with no bypass. Ordinary users and `github-actions` receive
+   no bypass.
+
+The build job has only the read token and no release environment. A fresh write
+job accesses `release-maintenance`, mints a short-lived repository-scoped App
+installation token, and copies the successful build's generated artifact. It
+runs no release-tag code or package installation. The App push starts normal
+main CI and docs deployment. Missing credentials fail the job; there is no
+fallback to a maintainer token or a general Actions bypass.
+
+The `pypi` and `vscode-marketplaces` environments allow the exact `main` branch
+for publication jobs. Environment restrictions are configured in GitHub
+settings, outside workflow files. Permission to use an environment is separate
+from permission to update `main` or create a release tag.
 
 The current protected tag rules grant creation to the maintainer account, not
 the default Actions token. If a publication worker stops at tag creation after
@@ -1385,11 +1413,6 @@ public files must match exactly; never rebuild or replace them during recovery.
 A dedicated release identity needs its own narrowly scoped tag permission before
 these protected-tag releases can complete unattended. Track that decision in
 [issue 46](https://github.com/citry-dev/citry/issues/46).
-
-The documentation release workflow pushes a separate snapshot branch and
-prints a link to open its PR. A maintainer opens and merges that PR using their
-own account. The workflow neither needs permission to approve PRs nor bypasses
-main's rules. Merging the snapshot starts the normal documentation deployment.
 
 ### The `review` branch holds work that has not been read yet
 
@@ -1404,9 +1427,9 @@ source-control panel doubles as the worklist:
   commit as a recovery point.
 - **Reading a file through means committing it on `review`.** The commit is the
   audit record of what has been read.
-- **Do not pull generated commits into `review`.** Documentation snapshot PRs
-  carry generated files into `main`. Verify their release source and build
-  checks, then let local `main` fetch the merged commits without copying those
+- **Do not pull generated commits into `review`.** The release workflow
+  commits generated snapshots to `main`. Verify their release source and build
+  checks, then let local `main` fetch those commits without copying those
   generated files into the unread-work ledger.
 
 **`review` never merges into `main`, in either direction.** The gate works by
@@ -1812,7 +1835,7 @@ commits.
 
 The permanent browser build tuple lives in
 `packages/py/citry_core/pyodide-build.json`. Its Pyodide and Python versions
-must match `docs_site/static/playground/runtime.json`. The release commit pins
+must match `docs_site/static/playground/runtime.json`. The release site update pins
 the PyPI project, version, filename, and SHA-256 for that browser wheel. The
 worker resolves its public URL at runtime and accepts it only when PyPI reports
 the expected filename and digest. Keep the deployed pin on public packages
@@ -1831,8 +1854,8 @@ retained for 30 days.
 
 Promotion safely extracts and re-verifies that exact pair, publishes it to
 PyPI, verifies the complete public filename and SHA-256 inventory, creates the
-annotated `citry@<version>` tag and GitHub Release, and starts the documentation
-snapshot workflow. There is no staging tag, example-lock rewrite, or second
+annotated `citry@<version>` tag and GitHub Release. The controller starts the
+documentation update after all selected packages finish. There is no staging tag, example-lock rewrite, or second
 release commit. The parallel exact-commit examples workflow tests clean copies
 with candidate overlays; checked-in compatible public locks move only when
 their own requirements change.

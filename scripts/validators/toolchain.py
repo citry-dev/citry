@@ -362,7 +362,6 @@ def check() -> list[str]:
         "candidate-citry-core-wheel",
         "contains(inputs.workspace_dependencies, 'citry-core')",
         "RELEASE_TAG: citry@${{ needs.verify-version.outputs.version }}",
-        "gh workflow run repo--docs-release.yml",
         "scripts/verify_playground_release.py",
     ):
         if marker not in citry_publish:
@@ -374,7 +373,7 @@ def check() -> list[str]:
     if "  push:\n    tags:" in docs_release:
         errors.append("Citry docs release must be dispatched by the Citry publisher, not by a manually pushed tag")
     release_gate = "Require the completed Citry GitHub Release"
-    snapshot = "Build the version snapshot and prepare its pull request branch"
+    snapshot = "Build the version snapshot"
     for marker in (
         release_gate,
         'gh api "repos/$GITHUB_REPOSITORY/releases/tags/$REF_NAME"',
@@ -387,6 +386,8 @@ def check() -> list[str]:
 
     candidate_workflow = _RELEASE_CANDIDATE_WORKFLOW.read_text(encoding="utf-8")
     release_workflow = _RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    if "gh workflow run repo--docs-release.yml" not in release_workflow:
+        errors.append("The release controller must start site updates after publishing all packages")
     for marker in (
         "python scripts/release.py plan",
         "python scripts/release.py qualify",

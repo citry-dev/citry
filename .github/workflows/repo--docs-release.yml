@@ -1,7 +1,5 @@
-# Build documentation from an immutable release tag and push the generated
-# snapshot to a separate branch. The release maintainer opens and merges its PR;
-# repo--docs-deploy.yml publishes the merged snapshot from main.
-# The workflow does not bypass main's pull-request requirement.
+# Build an immutable release snapshot and verify public browser packages.
+# A separate main-only job commits generated files with the release App.
 name: Release docs
 
 on:
@@ -33,10 +31,12 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Only the canonical repo prepares snapshot branches; forks skip it.
-    if: github.repository == 'citry-dev/citry'
+    # Only the canonical main workflow can prepare release updates.
+    if: github.repository == 'citry-dev/citry' && github.ref == 'refs/heads/main'
     permissions:
-      contents: write # to push the generated snapshot branch
+      contents: read
+    outputs:
+      base_sha: ${{ steps.base.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,21 +44,17 @@ jobs:
           submodules: recursive
           # Full history so per-page git dates (sitemap <lastmod>, article
           # published/modified, footer "last updated") are accurate, and so
-          # main can be fetched as the base for a snapshot branch.
+          # the release tag can be opened by build-tag.
           fetch-depth: 0
           ref: main
+          persist-credentials: false
 
       - name: Require the documentation release controller from main
         run: test "$GITHUB_REF" = "refs/heads/main"
 
-      # Manual recovery can be dispatched while the UI is showing another ref.
-      # Always base the snapshot branch on the current default branch; the
-      # immutable release source itself is opened separately by `build-tag`.
-      - name: Check out the default branch as the snapshot base
-        run: |
-          git fetch origin main
-          git checkout -B main origin/main
-          git submodule update --init --recursive
+      - name: Record the source main commit
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
@@ -93,7 +89,7 @@ jobs:
       - name: Install the workspace with docs + social-card extras
         run: >-
           uv sync --locked --package citry-monorepo --package citry
-          --package citry-ui --extra docs --extra social-cards
+          --package citry-ui --extra docs --extra social-cards --group e2e
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -143,27 +139,85 @@ jobs:
           echo "::error::the final GitHub Release $REF_NAME did not complete"
           exit 1
 
-      - name: Configure git identity for the snapshot commit
-        run: |
-          git config user.name "citry-docs-bot"
-          git config user.email "citry-docs-bot@users.noreply.github.com"
+      - name: Update the browser runtime from published release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ inputs.release_tag }}
+        run: >-
+          uv run --no-sync python scripts/update_playground_runtime.py
+          --source-ref "$REF_NAME"
+          --runtime docs_site/static/playground/runtime.json
 
-      - name: Build the version snapshot and prepare its pull request branch
+      - name: Test the published browser runtime
+        run: >-
+          uv run --no-sync pytest docs_site/tests/e2e/test_playground_e2e.py
+          -k published_runtime
+
+      - name: Build the version snapshot
         env:
           REF_NAME: ${{ inputs.release_tag }}
         run: |
-          VERSION="${REF_NAME#citry@}"
           uv run --no-sync python -m docs_site build-tag "$REF_NAME"
           uv run --no-sync python -m docs_site versions-check
-          git add docs_site/versions/
-          if git diff --cached --quiet; then
-            echo "The version snapshot is already on main." >> "$GITHUB_STEP_SUMMARY"
-          else
-            SNAPSHOT_BRANCH="docs/release-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            git switch -c "$SNAPSHOT_BRANCH"
-            git commit -m "docs: build $VERSION"
-            git push origin "HEAD:refs/heads/$SNAPSHOT_BRANCH"
-            echo "Snapshot prepared from $REF_NAME." >> "$GITHUB_STEP_SUMMARY"
-            echo "Open and merge a [pull request](https://github.com/$GITHUB_REPOSITORY/compare/main...$SNAPSHOT_BRANCH?expand=1)." >> "$GITHUB_STEP_SUMMARY"
-            echo "The main deployment workflow publishes the snapshot after merge." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain the verified generated files
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-site-update
+          retention-days: 7
+          include-hidden-files: true
+          path: |
+            docs_site/versions/
+            docs_site/static/playground/runtime.json
+
+  commit:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release-maintenance
+    permissions:
+      contents: read
+    steps:
+      - name: Mint the dedicated release App token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: citry
+          permission-contents: write
+
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Require the main commit that was validated
+        env:
+          BASE_SHA: ${{ needs.build.outputs.base_sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$BASE_SHA" ]; then
+            echo "::error::main advanced during generation; rerun Release docs"
+            exit 1
           fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-site-update
+          path: generated-site
+
+      - name: Commit only generated documentation and runtime pins
+        env:
+          REF_NAME: ${{ inputs.release_tag }}
+        run: |
+          python scripts/apply_release_site_update.py generated-site
+          git add -- docs_site/versions/ docs_site/static/playground/runtime.json
+          if git diff --cached --quiet; then
+            echo "The release site update is already on main." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "citry-release[bot]"
+          git config user.email "citry-release[bot]@users.noreply.github.com"
+          git commit -m "docs: publish site updates for $REF_NAME"
+          git push origin HEAD:refs/heads/main
+          echo "Committed verified site updates; the main docs workflow deploys them." >> "$GITHUB_STEP_SUMMARY"
