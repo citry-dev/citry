@@ -25,7 +25,7 @@ from scripts.discord_release import (  # noqa: E402
     [
         ("citry@0.4.5", "announcements"),
         ("citry-ui@0.3.0", "announcements"),
-        ("vscode-citry@0.1.2", "announcements"),
+        ("vscode-citry@0.1.2", "development"),
         ("citry-lsp@0.1.3", "development"),
         ("citry-core@1.7.0", "development"),
         ("pygments-citry@0.2.1", "development"),
