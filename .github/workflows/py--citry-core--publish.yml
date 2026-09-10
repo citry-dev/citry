@@ -590,8 +590,11 @@ jobs:
     permissions:
       actions: read
       attestations: write
-      contents: write
+      contents: read
       id-token: write
+    outputs:
+      closeout_id: ${{ steps.closeout.outputs.artifact-id }}
+      closeout_digest: ${{ steps.closeout.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -672,28 +675,88 @@ jobs:
             if [ "$attempt" = 20 ]; then exit 1; fi
             sleep 5
           done
-      - name: Create or verify the final annotated tag
+      - name: Prepare the verified GitHub Release files
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
-            test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
-          else
-            git tag -a "$RELEASE_TAG" "$RELEASE_COMMIT" -m "Release $RELEASE_TAG"
-            git push origin "refs/tags/$RELEASE_TAG"
-          fi
+          mkdir release-closeout
+          cp dist/*.whl dist/*.tar.gz verified/release-inventory.json verified/qualification-provenance.json release-closeout/
+      - name: Retain the verified release files for closeout
+        id: closeout
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-closeout-${{ github.run_attempt }}
+          path: release-closeout/*
+          if-no-files-found: error
+          retention-days: 7
+
+  tag:
+    name: Create or verify the final annotated tag
+    needs: [verify-version, release]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/repo--release-tag.yml
+    with:
+      package: citry-core
+      release_commit: ${{ inputs.release_commit }}
+      release_tag: citry-core@${{ needs.verify-version.outputs.version }}
+
+  closeout:
+    name: Create the GitHub Release and notify
+    needs: [verify-version, release, tag]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RELEASE_TAG: citry-core@${{ needs.verify-version.outputs.version }}
+      RELEASE_COMMIT: ${{ inputs.release_commit }}
+      RELEASE_VERSION: ${{ needs.verify-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download the exact verified closeout archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.release.outputs.closeout_id }}
+        run: |
+          curl --fail --location --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+            --output closeout.zip
+      - name: Verify the transferred release files
+        env:
+          ARTIFACT_DIGEST: ${{ needs.release.outputs.closeout_digest }}
+        run: >-
+          python -m scripts.release_closeout
+          --archive closeout.zip --artifact-digest "$ARTIFACT_DIGEST"
+          --release-commit "$RELEASE_COMMIT" --version "$RELEASE_VERSION"
+          --output-dir release-assets
+      - name: Verify existing GitHub Release state
+        id: public-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python -m scripts.verify_github_release
+          --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+          --assets-dir release-assets --github-output "$GITHUB_OUTPUT"
       - name: Create the GitHub Release
         if: steps.public-state.outputs.release_exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create "$RELEASE_TAG"
-          dist/* verified/release-inventory.json verified/qualification-provenance.json
-          --repo "$GITHUB_REPOSITORY"
-          --title "$RELEASE_TAG"
-          --verify-tag
-          --generate-notes
+          gh release create "$RELEASE_TAG" release-assets/*
+          --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG"
+          --verify-tag --generate-notes
+      - name: Verify the completed GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python -m scripts.verify_github_release
+          --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+          --assets-dir release-assets --require-existing
       - name: Start the Discord release notification
         if: steps.public-state.outputs.release_exists != 'true'
         env:

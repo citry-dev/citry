@@ -1404,15 +1404,46 @@ for publication jobs. Environment restrictions are configured in GitHub
 settings, outside workflow files. Permission to use an environment is separate
 from permission to update `main` or create a release tag.
 
-The current protected tag rules grant creation to the maintainer account, not
-the default Actions token. If a publication worker stops at tag creation after
-verifying public files, the authorized maintainer verifies the full public
-inventory against the candidate, creates the annotated tag at the candidate's
-exact commit, and restarts the controller with the same candidate ID. Existing
-public files must match exactly; never rebuild or replace them during recovery.
-A dedicated release identity needs its own narrowly scoped tag permission before
-these protected-tag releases can complete unattended. Track that decision in
-[issue 46](https://github.com/citry-dev/citry/issues/46).
+Package publication, tag creation, and GitHub Release creation run in separate
+jobs. The publication job verifies the exact public bytes and retains its release
+files as an immutable Actions artifact. A reusable job then uses the release App
+in `release-maintenance` to create the package's annotated tag. It reads the
+package version from the qualified source commit, requires that commit to remain
+on `main`, and executes only the current trusted workflow's helper code. The App
+key is available only in this tag job and the generated-site write job.
+
+Tag creation protection covers all six package namespaces and allows only the
+release App to create tags. A separate rule blocks tag updates and deletion
+without bypass actors. An existing annotated tag pointing at the expected commit
+is accepted. A lightweight tag, different target, or network failure stops the
+job. The helper never moves, deletes, or force-pushes a tag.
+
+After tag creation, a fresh job verifies the transferred artifact digest, file
+inventory and qualified commit before attaching those files to the GitHub
+Release. It uses the ordinary Actions token and has neither publishing credentials
+nor the release App key. It sends a Discord notification only for a newly created
+Release. A failure after publication can be recovered by rerunning the controller
+with the same candidate: public packages must still match exactly, and matching
+annotated tags and complete Releases with byte-matching assets are accepted. A
+draft, incomplete or mismatched Release stops for deliberate reconciliation; the
+workflow does not overwrite it. Existing Python Releases may also contain publish
+attestation files: these are accepted only when their bytes match GitHub metadata,
+their contents match PyPI provenance, and they identify the expected package file
+and digest. Recover a failed Discord notification through its own workflow after
+the Release exists.
+
+The publishing environments permit only the exact `main` branch, with no tag
+allowances. The `release_security` validator checks job dependencies, fixed
+publishing environments, trusted helper checkout refs, artifact verification and
+App-key placement. This detects mistakes in reviewed workflow changes; the GitHub
+environment policies are the independent boundary against modified branch
+workflows. Recheck those external policies and App permissions after changing the
+release process.
+
+Independent PR and deployment approvals will be enabled when the maintainer team
+grows; [issue 112](https://github.com/citry-dev/citry/issues/112) tracks that change.
+The current sole-maintainer process requires no second approver. Administrator
+control over repository settings remains an explicit trust boundary.
 
 ### The `review` branch holds work that has not been read yet
 
