@@ -485,8 +485,7 @@ class TestCoreArtifactReplay:
         regions = [region for region in snapshot.physical_regions if region.state == RegionState.CAPTURED]
 
         assert leaf_renders == 1
-        assert html.count("one") == 2
-        assert "two" not in html
+        assert re.findall(r">\s*(one|two)\s*<", html) == ["one", "one"]
         assert len(cached_ids) == 2
         assert len(leaf_instances) == 2
         assert {record.logical_parent_render_id for record in leaf_instances} == {page_id}

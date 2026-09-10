@@ -17,7 +17,6 @@ from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 
-from packaging.markers import default_environment
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name, parse_wheel_filename
@@ -29,10 +28,7 @@ except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
     import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 
-try:
-    from scripts.verify_playground_release import PlaygroundReleaseError, verify_runtime_pin
-except ModuleNotFoundError:
-    from verify_playground_release import PlaygroundReleaseError, verify_runtime_pin
+from scripts.verify_playground_release import PlaygroundReleaseError, verify_runtime_pin
 
 PACKAGES = {"citry-core": "citry_core", "citry": "citry", "citry-ui": "citry_ui"}
 FIELDS = {"citry-core": "core_version", "citry": "version", "citry-ui": "ui_version"}
@@ -100,23 +96,22 @@ def public_wheel(name: str, version: str, artifact: dict[str, Any]) -> bytes:
 
 def verify_dependencies(runtime: dict[str, Any], wheels: dict[str, bytes]) -> None:
     """Check wheel identities and requirements against the complete pinned runtime."""
-    pins = {canonicalize_name(item["name"]): item["version"] for item in runtime["packages"]}
+    pins: dict[str, str] = {canonicalize_name(item["name"]): item["version"] for item in runtime["packages"]}
     python = runtime["pyodide"]["python"]
-    environment = default_environment()
-    environment.update(
-        python_full_version=python,
-        python_version=".".join(python.split(".")[:2]),
-        implementation_name="cpython",
-        implementation_version=python,
-        platform_python_implementation="CPython",
-        os_name="posix",
-        sys_platform="emscripten",
-        platform_machine="wasm32",
-        platform_system="Emscripten",
-        platform_release="",
-        platform_version="",
-        extra="",
-    )
+    environment = {
+        "python_full_version": python,
+        "python_version": ".".join(python.split(".")[:2]),
+        "implementation_name": "cpython",
+        "implementation_version": python,
+        "platform_python_implementation": "CPython",
+        "os_name": "posix",
+        "sys_platform": "emscripten",
+        "platform_machine": "wasm32",
+        "platform_system": "Emscripten",
+        "platform_release": "",
+        "platform_version": "",
+        "extra": "",
+    }
     for name, content in wheels.items():
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             paths = [path for path in archive.namelist() if path.endswith(".dist-info/METADATA")]

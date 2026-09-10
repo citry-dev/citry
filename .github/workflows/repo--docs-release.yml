@@ -144,7 +144,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ inputs.release_tag }}
         run: >-
-          uv run --no-sync python scripts/update_playground_runtime.py
+          uv run --no-sync python -m scripts.update_playground_runtime
           --source-ref "$REF_NAME"
           --runtime docs_site/static/playground/runtime.json
 
