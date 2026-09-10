@@ -1,15 +1,22 @@
 # Design: rendering benchmarks (citry vs django-components vs Django)
 
-**Status (2026-09-09): phases 1-3 are built and Jinja2 covers both scenarios.**
-The published chart now uses a balanced five-configuration rendering comparison,
-including the public `Component.simple` opt-in. Ordinary Citry measures 32.710 ms
-warmed and the selected simple page 23.849 ms, versus Django 11.277 ms,
-django-components 52.867 ms and Jinja2 6.967 ms. The configurations emit different
+**Status (2026-09-10): phases 1-3 are built and Jinja2 covers both scenarios.**
+The retained publication measurement covers five configurations, including
+ordinary Citry and a configuration using the public `Component.simple` opt-in.
+The public chart shows four series: Django, django-components, Jinja2 and one
+optimized `Citry*` series. Its asterisk points to the
+[performance guide](../../docs_site/content/advanced/performance.md), which
+explains the simple and pure optimizations. The configurations emit different
 output and provide different component behavior. See the current results in
 [`benchmarks/README.md`](../../benchmarks/README.md) and the retained
-[publication report](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260909.json).
+[publication report](https://github.com/citry-dev/citry/blob/37007427bc7157085f8ce4d55ff73155d873764f/benchmarks/results/publication-20260910-release-0.5.0.json).
 The historical measurements below retain their original methods. Phase 4 (asv)
 and the remaining phase 5 engines are not part of this refresh.
+
+Two proposed designs extend this work: [framework interaction benchmarks](framework_interaction_benchmarks.md)
+cover server rendering and browser readiness, while [AI development benchmarks](ai_development_benchmarks.md)
+cover agent-assisted implementation tasks. Both are future work, with no new
+benchmark implementation or results claimed.
 
 This document
 specifies how citry measures its template-rendering performance against
