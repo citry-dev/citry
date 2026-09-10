@@ -22,6 +22,7 @@ class ExampleProject:
     path: Path
     host: str
     python: str
+    check: tuple[str, ...]
     test: tuple[str, ...]
     profile: str
     docs: tuple[str, ...]
@@ -64,6 +65,9 @@ def load_catalog(path: Path = CATALOG_PATH) -> tuple[ExampleProject, ...]:
         relative = Path(raw["path"])
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError(f"{project_id}: path must stay under examples/")
+        check = _command(raw.get("check"), "check", project_id)
+        if check is None:
+            raise ValueError(f"{project_id}: check command is required")
         projects.append(
             ExampleProject(
                 id=project_id,
@@ -71,6 +75,7 @@ def load_catalog(path: Path = CATALOG_PATH) -> tuple[ExampleProject, ...]:
                 path=relative,
                 host=raw["host"],
                 python=raw["python"],
+                check=check,
                 test=_command(raw.get("test"), "test", project_id) or (),
                 build=_command(raw.get("build"), "build", project_id),
                 serve=_command(raw.get("serve"), "serve", project_id),

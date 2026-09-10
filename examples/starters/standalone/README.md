@@ -53,9 +53,17 @@ This README remains the source for installation and render commands.
 
 ## Test the project
 
+Check component templates with the app registry, then run the tests:
+
 ```console
+uv run citry --app app.citry_app:citry_app check
 uv run pytest
 ```
+
+[The included GitHub Actions workflow](.github/workflows/check.yml) runs
+these checks on pushes and pull requests when you copy this project, including
+its hidden directories, to the root of your own repository. It installs the
+locked dependencies before checking templates and running tests.
 
 ## Remove the environment, test cache, and build
 

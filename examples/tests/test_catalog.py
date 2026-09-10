@@ -205,3 +205,24 @@ def test_port_placeholder_is_resolved_without_shell_interpolation() -> None:
 
 def test_qualification_commands_keep_the_candidate_install() -> None:
     assert project_environment()["UV_NO_SYNC"] == "1"
+
+
+def test_projects_ship_the_documented_lint_and_test_workflow() -> None:
+    for project in load_catalog():
+        command = " ".join(project.check)
+        assert project.check == ("uv", "run", "citry", "--app", EXPECTED_CITRY_APPS[project.id], "check")
+        workflow = project.source.joinpath(".github/workflows/check.yml").read_text(encoding="utf-8")
+        assert "on: [push, pull_request]" in workflow
+        assert "permissions:\n  contents: read" in workflow
+        assert "run: uv sync --frozen --dev" in workflow
+        assert workflow.index(f"run: {command}") < workflow.index("run: uv run pytest")
+        if project.host == "django":
+            assert "DJANGO_SETTINGS_MODULE: config.settings" in workflow
+            assert "DJANGO_SECRET_KEY:" in workflow
+        elif project.id in ENVIRONMENT_EXAMPLES:
+            assert "CITRY_SECRET:" in workflow
+        readme = project.source.joinpath("README.md").read_text(encoding="utf-8")
+        assert command in readme
+        assert "(.github/workflows/check.yml)" in readme
+        if project.kind == "starter":
+            assert command in project.source.joinpath("AGENTS.md").read_text(encoding="utf-8")

@@ -14,8 +14,10 @@
 - Keep the generated document self-contained. Alpine interactions run locally;
   Python finishes when the render command exits.
 - Keep secrets and private data out of rendered HTML and browser data.
-- After changes, run `uv run pytest` (tests live in `tests/test_standalone.py`)
-  and `uv run python -m app.render` to produce `_build/index.html`.
+- After changes, follow the README environment setup, run
+  `uv run citry --app app.citry_app:citry_app check`, then run `uv run pytest`
+  (tests live in `tests/test_standalone.py`) and `uv run python -m app.render`
+  to produce `_build/index.html`.
 - For template, CSS, or browser behavior changes, open `_build/index.html`
   in a browser. Check the help button, rendered layout, console errors, and
   that the page works without network requests.

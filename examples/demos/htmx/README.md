@@ -42,9 +42,17 @@ The locked project uses Citry 0.4.6.
 
 ## Test it
 
+Check component templates with the app registry, then run the tests:
+
 ```console
+uv run citry --app app.citry_app:citry_app check
 uv run pytest
 ```
+
+[The included GitHub Actions workflow](.github/workflows/check.yml) runs
+these checks on pushes and pull requests when you copy this project, including
+its hidden directories, to the root of your own repository. It installs the
+locked dependencies before checking templates and running tests.
 
 Citry's repository checks also copy the project to a temporary directory,
 start the server, and run all three interactions in a real browser.

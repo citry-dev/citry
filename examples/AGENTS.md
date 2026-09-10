@@ -13,7 +13,7 @@ These rules apply to every complete project under `examples/`.
   standalone starter deliberately has no Events transport.
 - Keep data deterministic and make the default run independent of external
   services, CDNs, and network APIs.
-- Run the project-local tests and the applicable shared qualification profile
+- Run the README Citry template check, the project-local tests and the applicable shared qualification profile
   after a change.
 - Update `examples/catalog.toml`, the project README, dependency lock, and
   discovery links when their claims change.

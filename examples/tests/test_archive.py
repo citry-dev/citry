@@ -18,7 +18,7 @@ def test_archive_is_deterministic_and_contains_only_project_inventory(tmp_path, 
     with tarfile.open(first, "r:gz") as archive:
         names = archive.getnames()
         # Copiers and archive readers must receive the same setup instructions.
-        instructions = ["README.md"]
+        instructions = ["README.md", ".github/workflows/check.yml"]
         if project.kind == "starter":
             instructions.extend(("AGENTS.md", "CLAUDE.md"))
         for relative in instructions:

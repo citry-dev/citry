@@ -86,7 +86,7 @@ def project_environment() -> dict[str, str]:
 def copy_project(project: ExampleProject, root: Path) -> Path:
     destination = root / project.id
     shutil.copytree(project.source, destination, ignore=COPY_IGNORES)
-    for required in ("README.md", "pyproject.toml", "uv.lock", "tests"):
+    for required in ("README.md", "pyproject.toml", "uv.lock", "tests", ".github/workflows/check.yml"):
         if not (destination / required).exists():
             raise RuntimeError(f"{project.id}: copied project is missing {required}")
     return destination
@@ -814,6 +814,10 @@ def qualify_project(
     browser: str | None,
     timeout: float,
 ) -> None:
+    environment = environment.copy()
+    if project.host == "django":
+        environment["DJANGO_SETTINGS_MODULE"] = "config.settings"
+    run_checked(project.check, project_dir, environment)
     run_checked(project.test, project_dir, environment)
     if project.build is not None:
         run_checked(project.build, project_dir, environment)

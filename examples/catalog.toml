@@ -4,6 +4,7 @@ schema = 1
 id = "starter-standalone"
 kind = "starter"
 path = "starters/standalone"
+check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "none"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -15,6 +16,7 @@ docs = ["/getting-started/installation/", "/syntax/alpine/"]
 id = "starter-fastapi"
 kind = "starter"
 path = "starters/fastapi"
+check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "fastapi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -28,6 +30,7 @@ docs = ["/getting-started/fastapi/", "/web-frameworks/#fastapi-and-starlette"]
 id = "starter-django"
 kind = "starter"
 path = "starters/django"
+check = ["uv", "run", "citry", "--app", "project_explorer.citry_app:citry_app", "check"]
 host = "django"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -41,6 +44,7 @@ docs = ["/web-frameworks/#django", "/security/#protect-event-posts-from-csrf"]
 id = "starter-flask"
 kind = "starter"
 path = "starters/flask"
+check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "flask"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -54,6 +58,7 @@ docs = ["/web-frameworks/#flask", "/events/"]
 id = "starter-asgi"
 kind = "starter"
 path = "starters/asgi"
+check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "asgi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -67,6 +72,7 @@ docs = ["/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
 id = "starter-wsgi"
 kind = "starter"
 path = "starters/wsgi"
+check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "wsgi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -80,6 +86,7 @@ docs = ["/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
 id = "demo-project-board"
 kind = "demo"
 path = "demos/project_board"
+check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "fastapi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -93,6 +100,7 @@ docs = ["/examples/", "/events/"]
 id = "demo-htmx"
 kind = "demo"
 path = "demos/htmx"
+check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "fastapi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
