@@ -6668,3 +6668,29 @@ Independent post-measurement review reproduced all paired statistics, source
 identities, 48 captured snapshot vectors and retained manifests. Separate prose
 review confirmed that rejection, rather than an accepted speedup, follows from
 the reported uncertainty.
+
+### Follow-up 3: named slots and static JavaScript
+
+ExpansionPanel and Form account for 33 calls. Their static JavaScript factory
+registrations and instance-independent data methods suggest a broader template
+contract, but their named slots still need to preserve browser scope. The single
+candidate hoists identical static JavaScript and lowers one named slot through
+the current simple default-content mechanism. Tags is excluded because its data
+method reads instance slot state.
+
+A minimal browser witness rejects this mechanism in Chromium, Firefox and WebKit.
+Ordinary supplied content reads the caller's state and its button increments the
+caller counter. The candidate reads the receiver's state and increments the
+receiver counter. Both variants activate without browser errors, so successful
+activation or matching visible HTML would not establish correctness.
+
+No timing was performed, no runtime change is proposed and no second candidate
+was tried. This does not rule out a separate lightweight browser identity design;
+it proves that removing these boundaries through the tested lowering loses a
+required behavior. Independent technical review reran the same witness in all
+three browsers and checked the retained source hashes. Separate prose review
+confirmed the bounded rejection.
+
+Evidence: [plan](../../benchmarks/performance_followups/slot_js_plan.md),
+[witness](../../benchmarks/performance_followups/slot_js_witness.py),
+[results](../../benchmarks/results/performance-render/followups/slot-js-witness.json).

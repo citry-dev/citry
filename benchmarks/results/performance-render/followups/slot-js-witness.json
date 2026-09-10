@@ -1,0 +1,125 @@
+{
+  "candidate": "caller-owned named-content lowering with hoisted static Alpine registration",
+  "scope": "one named outlet manually lowered to current simple default content; not a general implementation",
+  "expected": {
+    "supplied_owner": "caller",
+    "receiver_owner": "receiver",
+    "after_supplied_click": {
+      "caller": "1",
+      "receiver": "0"
+    },
+    "after_receiver_click": {
+      "caller": "1",
+      "receiver": "1"
+    },
+    "errors": []
+  },
+  "browsers": {
+    "chromium": {
+      "control": {
+        "supplied_owner": "caller",
+        "receiver_owner": "receiver",
+        "after_supplied_click": {
+          "caller": "1",
+          "receiver": "0"
+        },
+        "after_receiver_click": {
+          "caller": "1",
+          "receiver": "1"
+        },
+        "errors": []
+      },
+      "candidate": {
+        "supplied_owner": "receiver",
+        "receiver_owner": "receiver",
+        "after_supplied_click": {
+          "caller": "0",
+          "receiver": "1"
+        },
+        "after_receiver_click": {
+          "caller": "0",
+          "receiver": "2"
+        },
+        "errors": []
+      }
+    },
+    "firefox": {
+      "control": {
+        "supplied_owner": "caller",
+        "receiver_owner": "receiver",
+        "after_supplied_click": {
+          "caller": "1",
+          "receiver": "0"
+        },
+        "after_receiver_click": {
+          "caller": "1",
+          "receiver": "1"
+        },
+        "errors": []
+      },
+      "candidate": {
+        "supplied_owner": "receiver",
+        "receiver_owner": "receiver",
+        "after_supplied_click": {
+          "caller": "0",
+          "receiver": "1"
+        },
+        "after_receiver_click": {
+          "caller": "0",
+          "receiver": "2"
+        },
+        "errors": []
+      }
+    },
+    "webkit": {
+      "control": {
+        "supplied_owner": "caller",
+        "receiver_owner": "receiver",
+        "after_supplied_click": {
+          "caller": "1",
+          "receiver": "0"
+        },
+        "after_receiver_click": {
+          "caller": "1",
+          "receiver": "1"
+        },
+        "errors": []
+      },
+      "candidate": {
+        "supplied_owner": "receiver",
+        "receiver_owner": "receiver",
+        "after_supplied_click": {
+          "caller": "0",
+          "receiver": "1"
+        },
+        "after_receiver_click": {
+          "caller": "0",
+          "receiver": "2"
+        },
+        "errors": []
+      }
+    }
+  },
+  "browser_versions": {
+    "chromium": "151.0.7922.34",
+    "firefox": "153.0",
+    "webkit": "26.5"
+  },
+  "control_passed": true,
+  "candidate_preserves_contract": false,
+  "document_sha256": {
+    "/control": "de758c04ab0b6b331529398fd0e8e8f0d1339f94ce5af3d994047b1c62e3f29f",
+    "/candidate": "f2ec53d6a71ff2dee068d767083675c11a33a79cbee7aa5af312959bc95ac0e7"
+  },
+  "source_sha256": {
+    "benchmarks/performance_followups/slot_js_witness.py": "33ff9eda9138ba9f4362a1198a812a2d71dcab3cf0e706aa59b6cd7db67f9b08",
+    "benchmarks/performance_followups/slot_js_plan.md": "77353d77e82954de9564f436f82ff4d86fb19ad79b967d3a1dde656a926918ce",
+    "packages/py/citry/citry/_simple_runtime.py": "846c4286d9463ffea24a8f36eacf37763a63c1a732ce491e1a2d4d1daaaad782",
+    "packages/py/citry/citry/_simple_declarations.py": "f847c078307f83b26d8ebd2ed2a34bd071ea3a43919828c373b1380ceb9ff6e2",
+    "packages/py/citry/citry/component_render.py": "8d4f6c47b2d10301bb1bd39f4967d494ff3222e460e893f8f4192a3093c36396",
+    "packages/py/citry/citry/nodes/__init__.py": "089f3d015d196c530c918eb6a311adc37ec832973d6250529eb676ada41d0df9",
+    "packages/py/citry/citry/ext/dependencies/extension.py": "fcfd7efcc3ea46a460f4bbfef87d862153506c5af580e2b68293b1a1e29bf994",
+    "packages/py/citry/tests/e2e/test_alpine_slot_scope_e2e.py": "6ca226a420d0bb3e9eaa95fe5b7d4b750799427d232cbaf33c69229e7e3caf69"
+  },
+  "native_sha256": "a4f2430612277e22e99a657f43902feb8198a6cec471eb01180e811a791c9500"
+}
