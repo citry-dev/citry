@@ -1,0 +1,63 @@
+schema_version: 1
+family: skeleton
+
+components: [CSkeleton]
+
+inputs:
+  - id: cskeleton-server-inputs
+    component: CSkeleton
+    channel: server
+    column_widths: [fit, 15rem, 8rem, auto]
+    entries:
+      - {id: kind, name: kind, type: {display: '"rect" | "text" | "circle"', interfaces: [CSkeletonKind]}, default: {kind: literal, value: rect}, effect: Selects primitive geometry.}
+      - {id: lines, name: lines, type: 'int (1..100)', default: {kind: literal, value: 1}, effect: Renders one or more text lines; values above one require text kind.}
+      - {id: animation, name: animation, type: {display: '"pulse" | "wave" | "none"', interfaces: [CSkeletonAnimation]}, default: {kind: literal, value: pulse}, effect: Selects CSS-only motion. Reduced-motion always disables it.}
+      - {id: width, name: width, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the root width to one CSS length or percentage.}
+      - {id: height, name: height, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the primitive or line height to one CSS length or percentage.}
+      - {id: last-line-width, name: last_line_width, type: str, default: {kind: literal, value: 70%}, effect: Sets the final line width when multiple text lines render.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with `attrs`.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles before direct dimension inputs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted root attributes without replacing decorative semantics, children, reflections, focus, or Citry runtime fields.'}
+
+slots: []
+events: []
+methods: []
+
+css:
+  - id: cskeleton-css-variables
+    component: CSkeleton
+    entries:
+      - {id: width, name: --cui-skeleton-width, type: length-or-percentage, purpose: Root or line-group width., default: 'Kind-derived 100% or 3rem.'}
+      - {id: height, name: --cui-skeleton-height, type: length-or-percentage, purpose: Root or line height., default: 'Kind-derived 6rem, 0.75em, or 3rem.'}
+      - {id: radius, name: --cui-skeleton-radius, type: length, purpose: Primitive corners., default: 'Kind-derived 0.5rem, 999px, or 50%.'}
+      - {id: background, name: --cui-skeleton-background, type: color, purpose: Resting placeholder surface., default: Scheme-derived neutral.}
+      - {id: highlight, name: --cui-skeleton-highlight, type: color, purpose: Wave highlight., default: Translucent white.}
+      - {id: gap, name: --cui-skeleton-gap, type: length, purpose: Text line gap., default: 0.5em}
+      - {id: duration, name: --cui-skeleton-duration, type: time, purpose: Pulse or wave cycle., default: 1.5s}
+      - {id: last-line-width, name: --cui-skeleton-last-line-width, type: length-or-percentage, purpose: Final text-line width., default: Input-derived 70%.}
+
+attributes:
+  - id: cskeleton-attributes
+    component: CSkeleton
+    entries:
+      - {id: data-kind, name: data-kind, element: Root, type: '"rect" | "text" | "circle"', meaning: Reflects primitive geometry.}
+      - {id: data-animation, name: data-animation, element: Root, type: '"pulse" | "wave" | "none"', meaning: Reflects requested motion.}
+      - {id: aria-hidden, name: aria-hidden, element: Root, type: '"true"', meaning: Keeps decorative placeholder geometry out of the accessibility tree.}
+
+selectors:
+  - id: cskeleton-selectors
+    component: CSkeleton
+    entries:
+      - {id: skeleton, selector: '[data-citry-ui-part="skeleton"]', element: Root span, purpose: Stable primitive and attrs destination.}
+      - {id: line, selector: '[data-citry-ui-part="line"]', element: Text line span, purpose: Stable direct child in text mode.}
+
+interfaces:
+  - id: skeleton-type-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: kind, name: CSkeletonKind, definition: 'Literal["rect", "text", "circle"]'}
+      - {id: animation, name: CSkeletonAnimation, definition: 'Literal["pulse", "wave", "none"]'}
+
+translations: []

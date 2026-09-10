@@ -1,0 +1,236 @@
+schema_version: 1
+family: command-palette
+
+components:
+  - CCommandPalette
+
+inputs:
+  - id: ccommand-palette-server-inputs
+    component: CCommandPalette
+    channel: server
+    column_widths: [fit, 18rem, 11rem, auto]
+    entries:
+      - {id: entries, name: entries, type: {display: 'Sequence[CCommandPaletteEntry]', interfaces: [CCommandPaletteEntry]}, default: {kind: required}, effect: 'Snapshots and validates ordered command, group, and separator records.'}
+      - {id: label, name: label, type: non-whitespace str, default: {kind: required}, effect: Supplies the visible Dialog title and accessible name.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the Dialog identity and bases owned relationship IDs.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Selects initial server and uncontrolled Dialog visibility.}
+      - {id: query, name: query, type: str, default: {kind: literal, value: ''}, effect: Seeds the exact search text without server-side filtering.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables activation and force-closes an open palette.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Wraps active Arrow navigation at the first and last eligible command.}
+      - {id: close-on-action, name: close_on_action, type: bool, default: {kind: literal, value: true}, effect: Sets the root action-close default that each command may override.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CCommandPaletteSize]}, default: {kind: literal, value: md}, effect: Selects coordinated surface width and control density.}
+      - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Search commands}, effect: Supplies visible search-input placeholder text.}
+      - {id: search-label, name: search_label, type: non-whitespace str, default: {kind: literal, value: Search commands}, effect: Supplies the visually hidden native label for the search input.}
+      - {id: empty-label, name: empty_label, type: non-whitespace str, default: {kind: literal, value: No commands found}, effect: Supplies the empty live-status fallback when the empty slot is omitted.}
+      - {id: close-label, name: close_label, type: non-whitespace str, default: {kind: literal, value: Close command palette}, effect: Supplies the built-in close Button accessible name.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the native Dialog and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the native Dialog and merges them with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed native Dialog attributes without replacing owned semantics or state.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed search-input attributes without replacing Form, value, focus, or ARIA ownership.'}
+
+  - id: ccommand-palette-client-inputs
+    component: CCommandPalette
+    channel: client
+    column_widths: [fit, 18rem, 18rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control from committed visibility; null has the same effect., effect: Controls native Dialog visibility while supplied as a Boolean.}
+      - {id: query, name: query, type: 'string | null', omitted: Releases control from the last accepted internal query fallback; null has the same effect., effect: Controls exact input text and filtering while supplied as a string.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the immutable server input., effect: Controls activation and forced closure.}
+      - {id: loop, name: loop, type: boolean, omitted: Uses the immutable server input., effect: Controls Arrow navigation wrapping.}
+      - {id: close-on-action, name: closeOnAction, type: boolean, omitted: Uses the immutable server input., effect: Controls the root action-close default.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CCommandPaletteSize]}, omitted: Uses the immutable server input., effect: Controls coordinated surface width and density.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Omission selects no visibility callback; null clears the last valid callback., effect: Receives user-authored and forced visibility requests.}
+      - {id: on-query-change, name: onQueryChange, type: function, omitted: Omission selects no query callback; null clears the last valid callback., effect: Receives committed user input and accepted-close reset requests.}
+      - {id: on-action, name: onAction, type: function, omitted: Omission selects no command callback; null clears the last valid callback., effect: Receives one eligible command activation before optional close.}
+
+slots:
+  - id: ccommand-palette-slots
+    component: CCommandPalette
+    entries:
+      - {id: activator, name: activator, required: false, data: '{activator_attrs: dict[str, object], activator_disabled: bool}', fallback: None. Bind the complete mapping to one ordinary native activator; for CButton also bind activator_disabled through disabled.}
+      - {id: item-start, name: item_start, required: false, data: {display: CCommandPaletteItemSlotData, interfaces: [CCommandPaletteItemSlotData]}, fallback: None. Output is inert and accessibility-hidden visual decoration.}
+      - {id: item-end, name: item_end, required: false, data: {display: CCommandPaletteItemSlotData, interfaces: [CCommandPaletteItemSlotData]}, fallback: Escaped shortcut text when supplied. Output is inert and accessibility-hidden.}
+      - {id: empty, name: empty, required: false, data: '{}', fallback: Escaped empty_label text. Output is inert and cannot contain interactive content.}
+
+events:
+  - id: ccommand-palette-events
+    component: CCommandPalette
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CCommandPaletteOpenChangeDetail) => void', interfaces: [CCommandPaletteOpenChangeDetail]}
+        trigger: Activator, Escape, outside dismissal, close Button, action, native close, disabled transition, ancestor close, or owner request changes visibility.
+        detail: {display: '{reason, controlled, source}', interfaces: [CCommandPaletteOpenChangeDetail]}
+        behavior: Uncontrolled state commits before notification. Controlled state remains authoritative and may decline an ordinary close by retaining true.
+      - id: on-query-change
+        name: onQueryChange
+        signature: {display: '(requestedQuery: string, detail: CCommandPaletteQueryChangeDetail) => void', interfaces: [CCommandPaletteQueryChangeDetail]}
+        trigger: A noncomposing user edit settles or an accepted close clears a nonempty query.
+        detail: {display: '{reason, closeReason, controlled, source}', interfaces: [CCommandPaletteQueryChangeDetail]}
+        behavior: Controlled input is request-only and restores every observable surface when the owner declines. Accepted close clears the internal fallback once.
+      - id: on-action
+        name: onAction
+        signature: {display: '(value: string, detail: CCommandPaletteActionDetail) => void', interfaces: [CCommandPaletteActionDetail]}
+        trigger: An enabled visible active command receives unmodified Enter or an eligible option receives a plain click.
+        detail: {display: '{query, source, item, event, closeOnAction}', interfaces: [CCommandPaletteActionDetail]}
+        behavior: Runs synchronously before optional close; return values are ignored and an exception stops the close transaction.
+
+methods: []
+
+css:
+  - id: ccommand-palette-css-variables
+    component: CCommandPalette
+    entries:
+      - {id: cui-command-palette-backdrop, name: --cui-command-palette-backdrop, type: color, purpose: Native modal backdrop., default: Theme overlay color.}
+      - {id: cui-command-palette-background, name: --cui-command-palette-background, type: color, purpose: Dialog surface background., default: Theme surface color.}
+      - {id: cui-command-palette-foreground, name: --cui-command-palette-foreground, type: color, purpose: Primary text., default: Theme foreground.}
+      - {id: cui-command-palette-muted, name: --cui-command-palette-muted, type: color, purpose: Descriptions and shortcut hints., default: Theme muted foreground.}
+      - {id: cui-command-palette-border-color, name: --cui-command-palette-border-color, type: color, purpose: 'Surface, input, and row boundaries.', default: Theme border color.}
+      - {id: cui-command-palette-active-background, name: --cui-command-palette-active-background, type: color, purpose: Active option background., default: Theme subtle accent.}
+      - {id: cui-command-palette-active-foreground, name: --cui-command-palette-active-foreground, type: color, purpose: Active option text., default: Theme accent foreground.}
+      - {id: cui-command-palette-danger, name: --cui-command-palette-danger, type: color, purpose: Danger command text., default: Theme danger color.}
+      - {id: cui-command-palette-radius, name: --cui-command-palette-radius, type: length, purpose: Surface corner radius., default: 0.875rem}
+      - {id: cui-command-palette-shadow, name: --cui-command-palette-shadow, type: shadow, purpose: Modal elevation., default: Theme overlay shadow.}
+      - {id: cui-command-palette-inline-size, name: --cui-command-palette-inline-size, type: length, purpose: Preferred Dialog width., default: Size-derived.}
+      - {id: cui-command-palette-max-block-size, name: --cui-command-palette-max-block-size, type: length, purpose: Viewport-constrained Dialog height., default: 'calc(100dvb - 2rem)'}
+      - {id: cui-command-palette-padding, name: --cui-command-palette-padding, type: length, purpose: Outer surface spacing., default: 0.75rem}
+      - {id: cui-command-palette-gap, name: --cui-command-palette-gap, type: length, purpose: Gap between surface regions., default: 0.5rem}
+      - {id: cui-command-palette-input-block-size, name: --cui-command-palette-input-block-size, type: length, purpose: Search-control height., default: Size-derived.}
+      - {id: cui-command-palette-row-min-block-size, name: --cui-command-palette-row-min-block-size, type: length, purpose: Command row minimum height., default: 'Size-derived; at least 2.75rem.'}
+      - {id: cui-command-palette-row-padding-inline, name: --cui-command-palette-row-padding-inline, type: length, purpose: Command row horizontal inset., default: 0.75rem}
+      - {id: cui-command-palette-group-gap, name: --cui-command-palette-group-gap, type: length, purpose: Spacing between command groups., default: 0.5rem}
+      - {id: cui-command-palette-focus-ring, name: --cui-command-palette-focus-ring, type: color, purpose: Visible keyboard focus ring., default: Theme focus color.}
+
+attributes:
+  - id: ccommand-palette-dialog-attributes
+    component: CCommandPalette
+    entries:
+      - {id: id, name: id, element: Native Dialog, type: supplied or generated string, meaning: Identifies the palette and bases all owned relationships.}
+      - {id: open, name: open, element: Native Dialog, type: present | absent, meaning: Native Dialog visibility; enhanced open uses showModal.}
+      - {id: data-open, name: data-open, element: Native Dialog, type: present | absent, meaning: Mirrors effective committed visibility.}
+      - {id: data-disabled, name: data-disabled, element: Native Dialog, type: present | absent, meaning: Mirrors effective palette disabledness.}
+      - {id: data-size, name: data-size, element: Native Dialog, type: {display: '"sm" | "md" | "lg"', interfaces: [CCommandPaletteSize]}, meaning: Mirrors effective surface width and density.}
+      - {id: data-empty, name: data-empty, element: Native Dialog, type: present | absent, meaning: Mirrors whether filtering exposes zero command results.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Native Dialog, type: owned title IDREF, meaning: Names the modal from its visible title.}
+  - id: ccommand-palette-input-attributes
+    component: CCommandPalette
+    entries:
+      - {id: type, name: type, element: Search input, type: '"text"', meaning: Avoids divergent native search Escape and clear behavior.}
+      - {id: role, name: role, element: Search input, type: '"combobox"', meaning: Exposes editable command filtering.}
+      - {id: aria-autocomplete, name: aria-autocomplete, element: Search input, type: '"list"', meaning: Announces list filtering without completing the input value.}
+      - {id: aria-controls, name: aria-controls, element: Search input, type: owned listbox IDREF, meaning: References the result collection.}
+      - {id: aria-expanded, name: aria-expanded, element: Search input, type: '"true" | "false"', meaning: Mirrors effective result-surface visibility.}
+      - {id: aria-activedescendant, name: aria-activedescendant, element: Search input, type: eligible owned option IDREF | absent, meaning: Exposes internal active navigation while DOM focus stays in the input.}
+      - {id: disabled, name: disabled, element: Search input, type: present | absent, meaning: Keeps server fallback and effective disabled state natively safe.}
+  - id: ccommand-palette-command-attributes
+    component: CCommandPalette
+    entries:
+      - {id: option-role, name: role, element: Command row, type: '"option"', meaning: Exposes one callback-only command candidate.}
+      - {id: aria-selected, name: aria-selected, element: Command row, type: '"true" | "false"', meaning: Mirrors transient active-descendant state rather than an application value.}
+      - {id: aria-disabled, name: aria-disabled, element: Command row, type: '"true" | absent', meaning: Exposes an unavailable command.}
+      - {id: data-active, name: data-active, element: Command row, type: present | absent, meaning: Mirrors internal active state.}
+      - {id: data-disabled, name: data-disabled, element: Command row, type: present | absent, meaning: Mirrors immutable command disabledness.}
+      - {id: data-intent, name: data-intent, element: Command row, type: {display: '"default" | "danger"', interfaces: [CCommandPaletteIntent]}, meaning: Mirrors immutable visual intent.}
+  - id: ccommand-palette-group-attributes
+    component: CCommandPalette
+    entries:
+      - {id: group-role, name: role, element: Command group, type: '"group"', meaning: Groups commands under one visible label.}
+      - {id: group-aria-labelledby, name: aria-labelledby, element: Command group, type: owned group-label IDREF, meaning: Names the group from its visible label.}
+
+selectors:
+  - id: ccommand-palette-selectors
+    component: CCommandPalette
+    entries:
+      - {id: command-palette, selector: '[data-citry-ui-part="command-palette"]', element: Native Dialog, purpose: 'Modal owner and class_, style, and attrs destination.'}
+      - {id: command-palette-surface, selector: '[data-citry-ui-part="command-palette-surface"]', element: Surface section, purpose: Contains every visual palette region.}
+      - {id: command-palette-header, selector: '[data-citry-ui-part="command-palette-header"]', element: Header, purpose: Lays out the title and close Button.}
+      - {id: command-palette-title, selector: '[data-citry-ui-part="command-palette-title"]', element: Heading, purpose: Provides visible Dialog name.}
+      - {id: command-palette-close, selector: '[data-citry-ui-part="command-palette-close"]', element: Button, purpose: Closes the current palette through shared Dialog policy.}
+      - {id: command-palette-search, selector: '[data-citry-ui-part="command-palette-search"]', element: Search landmark, purpose: Owns the native label and editable combobox.}
+      - {id: command-palette-search-label, selector: '[data-citry-ui-part="command-palette-search-label"]', element: Native label, purpose: Supplies the search input accessible name.}
+      - {id: command-palette-input, selector: '[data-citry-ui-part="command-palette-input"]', element: Text input, purpose: Owns query editing and active-descendant navigation.}
+      - {id: command-palette-listbox, selector: '[data-citry-ui-part="command-palette-listbox"]', element: Listbox, purpose: Owns visible command options and labelled groups.}
+      - {id: command-palette-command, selector: '[data-citry-ui-part="command-palette-command"]', element: Option row, purpose: Shows one callback-only command and its state.}
+      - {id: command-palette-group, selector: '[data-citry-ui-part="command-palette-group"]', element: Group section, purpose: Groups visible command options.}
+      - {id: command-palette-group-label, selector: '[data-citry-ui-part="command-palette-group-label"]', element: Group label, purpose: Names one visible group.}
+      - {id: command-palette-separator, selector: '[data-citry-ui-part="command-palette-separator"]', element: Accessibility-hidden hr, purpose: Separates visible top-level regions.}
+      - {id: command-palette-empty, selector: '[data-citry-ui-part="command-palette-empty"]', element: Live status, purpose: Announces and displays the empty result.}
+      - {id: command-palette-item-start, selector: '[data-citry-ui-part="command-palette-item-start"]', element: Inert leading wrapper, purpose: Displays accessibility-hidden visual decoration.}
+      - {id: command-palette-item-end, selector: '[data-citry-ui-part="command-palette-item-end"]', element: Inert trailing wrapper, purpose: Displays accessibility-hidden decoration or shortcut text.}
+
+interfaces:
+  - id: ccommand-palette-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: command-palette-entry, name: CCommandPaletteEntry, definition: 'CCommandPaletteCommand | CCommandPaletteGroup | CCommandPaletteSeparator'}
+      - {id: command-palette-intent, name: CCommandPaletteIntent, definition: 'Literal["default", "danger"]'}
+      - {id: command-palette-size, name: CCommandPaletteSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: command-palette-action-source, name: CCommandPaletteActionSource, definition: 'Literal["keyboard", "click"]'}
+      - {id: command-palette-open-reason, name: CCommandPaletteOpenReason, definition: 'Literal["trigger", "escape", "outside", "close-button", "action", "native", "disabled", "ancestor", "owner"]'}
+      - {id: command-palette-query-reason, name: CCommandPaletteQueryReason, definition: 'Literal["input", "close"]'}
+  - id: ccommand-palette-command-record
+    kind: record
+    name: CCommandPaletteCommand
+    entries:
+      - {id: value, name: value, type: non-whitespace str, meaning: Globally unique opaque application command identity.}
+      - {id: label, name: label, type: non-whitespace str, meaning: Visible owned command label and accessible name.}
+      - {id: description, name: description, type: 'str | None', meaning: Optional visible owned supporting description.}
+      - {id: keywords, name: keywords, type: 'tuple[str, ...]', meaning: Immutable search-only aliases; default is empty.}
+      - {id: shortcut, name: shortcut, type: 'str | None', meaning: Optional accessibility-hidden visual hint with no listener; default is null.}
+      - {id: disabled, name: disabled, type: bool, meaning: Immutable unavailable state; default is false.}
+      - {id: close-on-action, name: close_on_action, type: 'bool | None', meaning: Optional per-command close override; null uses the root policy.}
+      - {id: intent, name: intent, type: {display: CCommandPaletteIntent, interfaces: [CCommandPaletteIntent]}, meaning: Visual default or danger emphasis; default is default.}
+  - id: ccommand-palette-group-record
+    kind: record
+    name: CCommandPaletteGroup
+    entries:
+      - {id: label, name: label, type: non-whitespace str, meaning: Visible accessible group label.}
+      - {id: commands, name: commands, type: 'tuple[CCommandPaletteCommand, ...]', meaning: Nonempty immutable command tuple; groups never nest.}
+  - {id: ccommand-palette-separator-record, kind: record, name: CCommandPaletteSeparator, entries: []}
+  - id: ccommand-palette-item-slot-data
+    kind: record
+    name: CCommandPaletteItemSlotData
+    entries:
+      - {id: value, name: value, type: str, meaning: Stable command identity.}
+      - {id: label, name: label, type: str, meaning: Owned command label.}
+      - {id: description, name: description, type: 'str | None', meaning: Optional owned description.}
+      - {id: keywords, name: keywords, type: 'tuple[str, ...]', meaning: Immutable search aliases.}
+      - {id: shortcut, name: shortcut, type: 'str | None', meaning: Optional visual shortcut hint.}
+      - {id: disabled, name: disabled, type: bool, meaning: Immutable command disabledness.}
+      - {id: close-on-action, name: close_on_action, type: bool, meaning: Effective command close policy after the root fallback.}
+      - {id: intent, name: intent, type: {display: CCommandPaletteIntent, interfaces: [CCommandPaletteIntent]}, meaning: Immutable visual intent.}
+  - id: ccommand-palette-open-change-detail
+    kind: record
+    name: CCommandPaletteOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: {display: CCommandPaletteOpenReason, interfaces: [CCommandPaletteOpenReason]}, meaning: Cause of the requested or committed visibility change.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client Boolean owns desired visibility.}
+      - {id: source, name: source, type: 'object | null', meaning: Connected owned origin when one remains available.}
+  - id: ccommand-palette-query-change-detail
+    kind: record
+    name: CCommandPaletteQueryChangeDetail
+    entries:
+      - {id: reason, name: reason, type: {display: CCommandPaletteQueryReason, interfaces: [CCommandPaletteQueryReason]}, meaning: User input or accepted-close reset.}
+      - {id: close-reason, name: closeReason, type: {display: 'CCommandPaletteOpenReason | null', interfaces: [CCommandPaletteOpenReason]}, meaning: Accepted close cause for reset; null for ordinary input.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client string owns effective query text.}
+      - {id: source, name: source, type: 'object | null', meaning: Owned input or accepted close origin when available.}
+  - id: ccommand-palette-action-detail
+    kind: record
+    name: CCommandPaletteActionDetail
+    entries:
+      - {id: query, name: query, type: string, meaning: Exact accepted effective query at activation time.}
+      - {id: source, name: source, type: {display: CCommandPaletteActionSource, interfaces: [CCommandPaletteActionSource]}, meaning: Keyboard Enter or accepted click-handler path.}
+      - {id: item, name: item, type: object, meaning: Exact owned option Element.}
+      - {id: event, name: event, type: object, meaning: Triggering native browser event.}
+      - {id: close-on-action, name: closeOnAction, type: boolean, meaning: Effective close policy for this action.}
+
+translations:
+  - id: ccommand-palette-translations
+    component: CCommandPalette
+    entries:
+      - {id: placeholder, key: citry-ui-command-palette-placeholder, purpose: Provides the search-field hint., variables: None, override: '`placeholder` input', updates: '$c-tr updates `placeholder`.'}
+      - {id: search-label, key: citry-ui-command-palette-search-label, purpose: Labels the command search field., variables: None, override: '`search_label` input', updates: '$c-tr updates text content.'}
+      - {id: empty, key: citry-ui-command-palette-empty, purpose: Reports that no commands match., variables: None, override: '`empty_label` input or `empty` slot', updates: '$c-tr updates fallback text.'}
+      - {id: close, key: citry-ui-command-palette-close, purpose: Names the palette close control., variables: None, override: '`close_label` input', updates: '$c-tr updates `aria-label`.'}

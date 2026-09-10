@@ -1,0 +1,158 @@
+schema_version: 1
+family: drawer
+
+components:
+  - CDrawer
+
+inputs:
+  - id: cdrawer-server-inputs
+    component: CDrawer
+    channel: server
+    column_widths: [fit, 12rem, 8rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets native identity and title/description/activator relationships.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets server-visible initial state; valid client `open` controls later state.}
+      - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Shows the built-in close Button and permits passive dismissal.}
+      - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Permits Escape/platform cancel when dismissible.}
+      - {id: close-on-outside, name: close_on_outside, type: bool, default: {kind: literal, value: true}, effect: Permits a press beginning and ending on the backdrop when dismissible.}
+      - id: initial-focus
+        name: initial_focus
+        type: {display: '"auto" | "title"', interfaces: [CDrawerInitialFocus]}
+        default: {kind: literal, value: auto}
+        effect: Preserves native autofocus/focus steps or focuses the visible title.
+      - id: placement
+        name: placement
+        type: {display: '"inline-start" | "inline-end" | "block-start" | "block-end"', interfaces: [CDrawerPlacement]}
+        default: {kind: literal, value: inline-end}
+        effect: Chooses the logical viewport edge. Block-end is the bottom-Sheet path in horizontal writing.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg" | "full"', interfaces: [CDrawerSize]}
+        default: {kind: literal, value: md}
+        effect: Sets the viewport-safe extent along the opening axis.
+      - id: scroll
+        name: scroll
+        type: {display: '"body" | "drawer"', interfaces: [CDrawerScroll]}
+        default: {kind: literal, value: body}
+        effect: Scrolls only task content or the complete Drawer surface.
+      - {id: close-label, name: close_label, type: non-empty str, default: {kind: literal, value: Close}, effect: Names the built-in close Button.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Merges consumer classes onto the native Dialog.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Merges consumer inline styles onto the native Dialog.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native Dialog, ARIA, Alpine, and data attributes without replacing owned state or structure.'}
+
+  - id: cdrawer-client-inputs
+    component: CDrawer
+    channel: client
+    column_widths: [fit, 12rem, 12rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases to uncontrolled ownership from the committed state. `null` is equivalent., effect: Controls visibility while supplied as a Boolean. Invalid values report once and release control.}
+      - {id: dismissible, name: dismissible, type: boolean, omitted: Uses the server fallback., effect: Controls built-in close visibility and passive dismissal.}
+      - {id: close-on-escape, name: closeOnEscape, type: boolean, omitted: Uses the server fallback., effect: Controls Escape/platform cancel.}
+      - {id: close-on-outside, name: closeOnOutside, type: boolean, omitted: Uses the server fallback., effect: Controls backdrop-press dismissal.}
+      - {id: initial-focus, name: initialFocus, type: {display: '"auto" | "title"', interfaces: [CDrawerInitialFocus]}, omitted: Uses the server fallback., effect: Controls focus placement on the next opening.}
+      - {id: placement, name: placement, type: {display: '"inline-start" | "inline-end" | "block-start" | "block-end"', interfaces: [CDrawerPlacement]}, omitted: Uses the server fallback., effect: Controls `data-placement` and edge geometry without reopening.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg" | "full"', interfaces: [CDrawerSize]}, omitted: Uses the server fallback., effect: Controls `data-size` and responsive extent.}
+      - {id: scroll, name: scroll, type: {display: '"body" | "drawer"', interfaces: [CDrawerScroll]}, omitted: Uses the server fallback., effect: Controls `data-scroll` and overflow behavior.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: Receives ordinary visibility requests and non-rejectable forced close notices.}
+
+slots:
+  - id: cdrawer-slots
+    component: CDrawer
+    entries:
+      - {id: activator, name: activator, required: false, data: {display: '{activator_attrs: dict[str, object]}', interfaces: [CDrawerActivatorSlotData]}, fallback: No activator.}
+      - {id: title, name: title, required: true, data: {display: '{}', interfaces: [CDrawerTitleSlotData]}, fallback: none}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CDrawerDescriptionSlotData]}, fallback: No `aria-describedby` relationship.}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CDrawerDefaultSlotData]}, fallback: none}
+      - {id: actions, name: actions, required: false, data: {display: '{close_attrs: dict[str, object]}', interfaces: [CDrawerActionsSlotData]}, fallback: omitted}
+      - {id: close, name: close, required: false, data: {display: '{}', interfaces: [CDrawerCloseSlotData]}, fallback: Built-in multiplication-sign glyph.}
+
+events:
+  - id: cdrawer-events
+    component: CDrawer
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CDrawerOpenChangeDetail) => void', interfaces: [CDrawerOpenChangeDetail]}
+        trigger: An owned trigger, close control, action, Escape, outside press, native close, or structural safety close changes or requests visibility.
+        detail: {display: '{reason: "trigger" | "close-button" | "action" | "escape" | "outside" | "native" | "ancestor", controlled: boolean, forced: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CDrawerOpenChangeDetail]}
+        behavior: Uncontrolled ordinary requests commit first. Controlled ordinary requests wait for the owner. Forced safety/native closures commit first and cannot be declined.
+
+methods: []
+
+css:
+  - id: cdrawer-css-variables
+    component: CDrawer
+    entries:
+      - {id: cui-drawer-backdrop, name: --cui-drawer-backdrop, type: color, purpose: Modal backdrop., default: rgb(15 23 42 / 58%)}
+      - {id: cui-drawer-background, name: --cui-drawer-background, type: color, purpose: Surface background., default: Canvas}
+      - {id: cui-drawer-foreground, name: --cui-drawer-foreground, type: color, purpose: Surface text., default: CanvasText}
+      - {id: cui-drawer-border-color, name: --cui-drawer-border-color, type: color, purpose: Inner-edge boundary., default: Subtle CanvasText mix.}
+      - {id: cui-drawer-shadow, name: --cui-drawer-shadow, type: shadow, purpose: Edge elevation., default: 0 1.5rem 4rem rgb(15 23 42 / 28%)}
+      - {id: cui-drawer-extent, name: --cui-drawer-extent, type: length, purpose: Extent along the opening axis., default: Size-derived; 28rem at md.}
+      - {id: cui-drawer-padding, name: --cui-drawer-padding, type: length, purpose: Region padding before safe-area augmentation., default: 1.25rem}
+      - {id: cui-drawer-gap, name: --cui-drawer-gap, type: length, purpose: Region spacing., default: 1rem}
+      - {id: cui-drawer-radius, name: --cui-drawer-radius, type: length, purpose: Inner-edge corners., default: 0.875rem}
+      - {id: cui-drawer-close-size, name: --cui-drawer-close-size, type: length, purpose: Built-in close target., default: 2.5rem}
+      - {id: cui-drawer-close-radius, name: --cui-drawer-close-radius, type: length, purpose: Built-in close corners., default: 0.5rem}
+
+attributes:
+  - id: cdrawer-attributes
+    component: CDrawer
+    entries:
+      - {id: data-open, name: data-open, element: Native Drawer Dialog, type: present | absent, meaning: Mirrors effective visible state.}
+      - {id: data-placement, name: data-placement, element: Native Drawer Dialog, type: logical placement, meaning: Mirrors the effective viewport edge.}
+      - {id: data-size, name: data-size, element: Native Drawer Dialog, type: '"sm" | "md" | "lg" | "full"', meaning: Mirrors effective extent.}
+      - {id: data-scroll, name: data-scroll, element: Native Drawer Dialog, type: '"body" | "drawer"', meaning: Mirrors effective overflow policy.}
+
+selectors:
+  - id: cdrawer-selectors
+    component: CDrawer
+    entries:
+      - {id: drawer, selector: '[data-citry-ui-part="drawer"]', element: Native Dialog, purpose: Modal root and attrs destination.}
+      - {id: surface, selector: '[data-citry-ui-part="surface"]', element: Surface, purpose: Edge-filling visual surface.}
+      - {id: header, selector: '[data-citry-ui-part="header"]', element: Header, purpose: Title and close layout.}
+      - {id: title, selector: '[data-citry-ui-part="title"]', element: Title, purpose: Visible accessible name.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Description, purpose: Optional described-by content.}
+      - {id: close, selector: '[data-citry-ui-part="close"]', element: Close Button, purpose: Built-in dismissal.}
+      - {id: body, selector: '[data-citry-ui-part="body"]', element: Body, purpose: Primary task content.}
+      - {id: actions, selector: '[data-citry-ui-part="actions"]', element: Actions, purpose: Optional explicit actions.}
+
+interfaces:
+  - id: cdrawer-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: initial-focus, name: CDrawerInitialFocus, definition: 'Literal["auto", "title"]'}
+      - {id: placement, name: CDrawerPlacement, definition: 'Literal["inline-start", "inline-end", "block-start", "block-end"]'}
+      - {id: size, name: CDrawerSize, definition: 'Literal["sm", "md", "lg", "full"]'}
+      - {id: scroll, name: CDrawerScroll, definition: 'Literal["body", "drawer"]'}
+  - id: activator-slot-data
+    kind: record
+    name: CDrawerActivatorSlotData
+    entries:
+      - {id: activator-attrs, name: activator_attrs, type: 'dict[str, object]', meaning: Owned trigger marker plus dialog relationship attributes.}
+  - {id: title-slot-data, kind: record, name: CDrawerTitleSlotData, entries: []}
+  - {id: description-slot-data, kind: record, name: CDrawerDescriptionSlotData, entries: []}
+  - {id: default-slot-data, kind: record, name: CDrawerDefaultSlotData, entries: []}
+  - id: actions-slot-data
+    kind: record
+    name: CDrawerActionsSlotData
+    entries:
+      - {id: close-attrs, name: close_attrs, type: 'dict[str, object]', meaning: Explicit-close marker; Button value becomes the return value.}
+  - {id: close-slot-data, kind: record, name: CDrawerCloseSlotData, entries: []}
+  - id: open-change-detail
+    kind: record
+    name: CDrawerOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: '"trigger" | "close-button" | "action" | "escape" | "outside" | "native" | "ancestor"', meaning: Request or safety-close reason.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client `open` currently owns state.}
+      - {id: forced, name: forced, type: boolean, meaning: True for a non-rejectable structural or external-native closure.}
+      - {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the transition.}
+      - {id: return-value, name: returnValue, type: string, meaning: Explicit action/native Dialog Form result; otherwise empty.}
+
+translations:
+  - id: cdrawer-translations
+    component: CDrawer
+    entries:
+      - {id: close, key: citry-ui-drawer-close, purpose: Names the generated close control., variables: None, override: '`close_label` input or `close` slot', updates: '$c-tr updates `aria-label`.'}

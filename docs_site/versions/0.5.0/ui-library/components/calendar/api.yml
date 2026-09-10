@@ -1,0 +1,174 @@
+schema_version: 1
+family: calendar
+
+components:
+  - CCalendar
+
+inputs:
+  - id: ccalendar-server-inputs
+    component: CCalendar
+    channel: server
+    column_widths: [fit, 18rem, 16rem, auto]
+    entries:
+      - {id: value, name: value, type: {display: 'CCalendarDate | None', interfaces: [CCalendarDate]}, default: {kind: literal, value: null}, effect: Sets the initial/reset selected canonical date or empty value.}
+      - {id: visible-date, name: visible_date, type: {display: 'CCalendarDate | None', interfaces: [CCalendarDate]}, default: {kind: derived, display: Selected date or today.}, effect: Sets the initially visible calendar month; otherwise uses value or today.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native fallback input Form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native fallback input with an external Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the public fallback input ID and the prefix for owned IDs.}
+      - {id: min, name: min, type: {display: 'CCalendarDate | None', interfaces: [CCalendarDate]}, default: {kind: literal, value: null}, effect: Sets the inclusive minimum selectable canonical date.}
+      - {id: max, name: max, type: {display: 'CCalendarDate | None', interfaces: [CCalendarDate]}, default: {kind: literal, value: null}, effect: Sets the inclusive maximum selectable canonical date.}
+      - {id: unavailable-dates, name: unavailable_dates, type: 'Sequence[CCalendarDate]', default: {kind: derived, display: '()'}, effect: Marks at most 4096 unique in-range dates focusable but unavailable.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native empty-value validity outside Field; Field owns it inside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks interaction and Form participation outside Field; Form disabledness also wins.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Keeps a focusable submitted value while blocking selection changes.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds application invalid state to revealed native validity.}
+      - {id: first-day-of-week, name: first_day_of_week, type: 'Literal[1, 2, 3, 4, 5, 6, 7] | None', default: {kind: literal, value: null}, effect: Overrides the locale week start using ISO Monday 1 through Sunday 7.}
+      - {id: show-adjacent-days, name: show_adjacent_days, type: bool, default: {kind: literal, value: true}, effect: Shows selectable dates from neighboring months in leading and trailing cells.}
+      - {id: fixed-weeks, name: fixed_weeks, type: bool, default: {kind: literal, value: true}, effect: Uses six stable week rows instead of the natural month row count.}
+      - {id: label, name: label, type: str, default: {kind: literal, value: Calendar}, effect: Names a standalone calendar; Field supplies the name when composed.}
+      - {id: previous-label, name: previous_label, type: str, default: {kind: literal, value: Previous month}, effect: Names the previous-month button.}
+      - {id: next-label, name: next_label, type: str, default: {kind: literal, value: Next month}, effect: Names the next-month button.}
+      - {id: unavailable-message, name: unavailable_message, type: str, default: {kind: literal, value: Choose an available date.}, effect: Supplies native custom validity when a formerly selected date becomes unavailable.}
+      - {id: variant, name: variant, type: {display: '"outline" | "plain"', interfaces: [CCalendarVariant]}, default: {kind: literal, value: outline}, effect: Selects bordered or unframed treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CCalendarSize]}, default: {kind: literal, value: md}, effect: Selects coordinated cell navigation and text sizing.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root group and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root group and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned roles state IDs or runtime markers.}
+
+  - id: ccalendar-client-inputs
+    component: CCalendar
+    channel: client
+    column_widths: [fit, 18rem, 18rem, auto]
+    entries:
+      - {id: value, name: value, type: 'canonical string | null', omitted: Releases control at the latest accepted value., effect: Controls the selected date while supplied.}
+      - {id: visible-date, name: visibleDate, type: canonical string, omitted: Releases visible-month control at its latest accepted month., effect: Controls the month containing this date while supplied.}
+      - {id: min, name: min, type: 'canonical string | null', omitted: Uses the server minimum., effect: Replaces or removes the inclusive minimum.}
+      - {id: max, name: max, type: 'canonical string | null', omitted: Uses the server maximum., effect: Replaces or removes the inclusive maximum.}
+      - {id: unavailable-dates, name: unavailableDates, type: canonical string array, omitted: Uses the server sequence., effect: Replaces the bounded unavailable-date set.}
+      - {id: required, name: required, type: boolean, omitted: Uses server or Field state., effect: Controls standalone required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or owner state., effect: Controls navigation selection and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or owner state., effect: Controls focusable nonmutable state.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server or Field state., effect: Controls application invalid state.}
+      - {id: first-day-of-week, name: firstDayOfWeek, type: '1 | 2 | 3 | 4 | 5 | 6 | 7 | null', omitted: Uses the server input., effect: Replaces or restores the locale week start.}
+      - {id: show-adjacent-days, name: showAdjacentDays, type: boolean, omitted: Uses the server input., effect: Controls neighboring-month cell visibility.}
+      - {id: fixed-weeks, name: fixedWeeks, type: boolean, omitted: Uses the server input., effect: Controls six-row versus natural-row layout.}
+      - {id: variant, name: variant, type: {display: CCalendarVariant, interfaces: [CCalendarVariant]}, omitted: Uses the server input., effect: Controls presentation.}
+      - {id: size, name: size, type: {display: CCalendarSize, interfaces: [CCalendarSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic selection callback., effect: Receives pointer keyboard or reset selection requests.}
+      - {id: on-visible-date-change, name: onVisibleDateChange, type: function, omitted: No semantic month callback., effect: Receives button keyboard or selection-driven month requests.}
+
+slots: []
+
+events:
+  - id: ccalendar-events
+    component: CCalendar
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: {display: '(value: string | null, detail: CCalendarValueChangeDetail) => void', interfaces: [CCalendarValueChangeDetail]}
+        trigger: A pointer or keyboard selection requests a new date or the owning Form resets.
+        detail: {display: '{value, previousValue, controlled, source, sourceEvent}', interfaces: [CCalendarValueChangeDetail]}
+        behavior: Uncontrolled selection commits before notification and emits native input/change; controlled selection is request-only.
+      - id: on-visible-date-change
+        name: onVisibleDateChange
+        signature: {display: '(visibleDate: string, detail: CCalendarVisibleDateChangeDetail) => void', interfaces: [CCalendarVisibleDateChangeDetail]}
+        trigger: Navigation or focus crossing a month requests another visible calendar month.
+        detail: {display: '{visibleDate, previousVisibleDate, controlled, source, sourceEvent}', interfaces: [CCalendarVisibleDateChangeDetail]}
+        behavior: Uncontrolled navigation commits before notification; controlled navigation waits for its owner.
+
+methods: []
+
+css:
+  - id: ccalendar-css-variables
+    component: CCalendar
+    entries:
+      - {id: background, name: --cui-calendar-background, type: color, purpose: Root and native fallback background., default: Canvas}
+      - {id: foreground, name: --cui-calendar-foreground, type: color, purpose: Root foreground., default: CanvasText}
+      - {id: border-color, name: --cui-calendar-border-color, type: color, purpose: Root fallback and cell border., default: Mixed CanvasText.}
+      - {id: focus-color, name: --cui-calendar-focus-color, type: color, purpose: Navigation and day focus outline., default: Highlight}
+      - {id: selected-background, name: --cui-calendar-selected-background, type: color, purpose: Selected day background and border., default: Highlight}
+      - {id: selected-foreground, name: --cui-calendar-selected-foreground, type: color, purpose: Selected day text., default: HighlightText}
+      - {id: today-color, name: --cui-calendar-today-color, type: color, purpose: Today marker border., default: LinkText}
+      - {id: adjacent-color, name: --cui-calendar-adjacent-color, type: color, purpose: Weekdays and neighboring-month dates., default: Muted CanvasText.}
+      - {id: unavailable-color, name: --cui-calendar-unavailable-color, type: color, purpose: Unavailable date text., default: GrayText}
+      - {id: radius, name: --cui-calendar-radius, type: length, purpose: Root corner radius., default: 0.75rem}
+      - {id: padding, name: --cui-calendar-padding, type: length, purpose: Root inset., default: 0.75rem}
+      - {id: gap, name: --cui-calendar-gap, type: length, purpose: Header grid and cell spacing., default: 0.25rem}
+      - {id: cell-size, name: --cui-calendar-cell-size, type: length, purpose: Day cell minimum target size., default: 2.5rem}
+      - {id: navigation-size, name: --cui-calendar-navigation-size, type: length, purpose: Previous and next button size., default: 2.5rem}
+      - {id: font-size, name: --cui-calendar-font-size, type: length, purpose: Root text size., default: 1rem}
+      - {id: invalid-border-color, name: --cui-calendar-invalid-border-color, type: color, purpose: Invalid root border., default: Theme error.}
+
+attributes:
+  - id: ccalendar-root-attributes
+    component: CCalendar
+    entries:
+      - {id: data-required, name: data-required, element: Root group, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root group, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root group, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root group, type: present | absent, meaning: Mirrors application or revealed native invalidity.}
+      - {id: data-empty, name: data-empty, element: Root group, type: present | absent, meaning: Marks no selected canonical value.}
+      - {id: data-variant, name: data-variant, element: Root group, type: {display: CCalendarVariant, interfaces: [CCalendarVariant]}, meaning: Mirrors visual treatment.}
+      - {id: data-size, name: data-size, element: Root group, type: {display: CCalendarSize, interfaces: [CCalendarSize]}, meaning: Mirrors coordinated sizing.}
+  - id: ccalendar-day-attributes
+    component: CCalendar
+    entries:
+      - {id: data-date, name: data-date, element: Date gridcell, type: canonical date, meaning: Identifies the exact ISO domain date.}
+      - {id: data-selected, name: data-selected, element: Date gridcell, type: present | absent, meaning: Marks the committed selected date.}
+      - {id: data-today, name: data-today, element: Date gridcell, type: present | absent, meaning: Marks today in the effective provider time zone.}
+      - {id: data-outside, name: data-outside, element: Date gridcell, type: present | absent, meaning: Marks a neighboring-month date or blank.}
+      - {id: data-unavailable, name: data-unavailable, element: Date gridcell, type: present | absent, meaning: Marks a focusable date that selection rejects.}
+
+selectors:
+  - id: ccalendar-selectors
+    component: CCalendar
+    entries:
+      - {id: calendar, selector: '[data-citry-ui-part="calendar"]', element: Root group, purpose: State reflections root attrs and styling destination.}
+      - {id: header, selector: '[data-citry-ui-part="header"]', element: Header div, purpose: Navigation and localized heading layout.}
+      - {id: previous, selector: '[data-citry-ui-part="previous"]', element: Button, purpose: Requests the previous calendar month.}
+      - {id: heading, selector: '[data-citry-ui-part="heading"]', element: Live h2, purpose: Announces the localized visible month and year.}
+      - {id: next, selector: '[data-citry-ui-part="next"]', element: Button, purpose: Requests the next calendar month.}
+      - {id: grid, selector: '[data-citry-ui-part="grid"]', element: Table grid, purpose: Owns localized weekdays and roving date cells.}
+      - {id: weekday-row, selector: '[data-citry-ui-part="weekday-row"]', element: Header row, purpose: Owns the seven localized weekday headers.}
+      - {id: weekday, selector: '[data-citry-ui-part="weekday"]', element: Column header, purpose: Displays abbreviated and full localized weekday names.}
+      - {id: week, selector: '[data-citry-ui-part="week"]', element: Grid row, purpose: Groups one locale-ordered week.}
+      - {id: day, selector: '[data-citry-ui-part="day"]', element: Gridcell, purpose: Exact roving focus selection and day-state hook.}
+      - {id: fallback-input, selector: '[data-citry-ui-part="fallback-input"]', element: Native Date input, purpose: Form reset validity and no-JavaScript transport.}
+
+interfaces:
+  - id: ccalendar-aliases
+    kind: aliases
+    entries:
+      - {id: date, name: CCalendarDate, definition: 'date | str'}
+      - {id: variant, name: CCalendarVariant, definition: 'Literal["outline", "plain"]'}
+      - {id: size, name: CCalendarSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: change-source, name: CCalendarChangeSource, definition: 'Literal["pointer", "keyboard", "button", "value", "reset"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - id: ccalendar-value-change-detail
+    kind: record
+    name: CCalendarValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'string | null', meaning: Requested selected canonical date or empty state.}
+      - {id: previous-value, name: previousValue, type: 'string | null', meaning: Effective selected date before the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns committed selection.}
+      - {id: source, name: source, type: {display: CCalendarChangeSource, interfaces: [CCalendarChangeSource]}, meaning: Pointer keyboard value or reset cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native interaction event when one exists.}
+  - id: ccalendar-visible-change-detail
+    kind: record
+    name: CCalendarVisibleDateChangeDetail
+    entries:
+      - {id: visible-date, name: visibleDate, type: string, meaning: Requested canonical date inside the new visible month.}
+      - {id: previous-visible-date, name: previousVisibleDate, type: string, meaning: Visible canonical date before the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client visibleDate owns the visible month.}
+      - {id: source, name: source, type: {display: CCalendarChangeSource, interfaces: [CCalendarChangeSource]}, meaning: Button keyboard selection value or reset cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native interaction event when one exists.}
+
+translations:
+  - id: ccalendar-translations
+    component: CCalendar
+    entries:
+      - {id: label, key: citry-ui-calendar-label, purpose: Names a standalone root group and its native fallback., variables: none, override: '`label` or root `attrs` aria-label/aria-labelledby', updates: '`$c-tr` updates both stable aria-label destinations.'}
+      - {id: previous-month, key: citry-ui-calendar-previous-month, purpose: Names the previous-month button., variables: none, override: '`previous_label`', updates: '`$c-tr` updates the stable aria-label destination.'}
+      - {id: next-month, key: citry-ui-calendar-next-month, purpose: Names the next-month button., variables: none, override: '`next_label`', updates: '`$c-tr` updates the stable aria-label destination.'}
+      - {id: unavailable, key: citry-ui-calendar-unavailable, purpose: Supplies custom native validity when a selected date becomes unavailable., variables: none, override: '`unavailable_message`', updates: '`i18n.bind()` updates the browser-owned validity message.'}

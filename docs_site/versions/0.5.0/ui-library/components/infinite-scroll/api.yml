@@ -1,0 +1,109 @@
+schema_version: 1
+family: infinite-scroll
+components: [CInfiniteScroll]
+
+inputs:
+  - id: cinfinite-scroll-server-inputs
+    component: CInfiniteScroll
+    channel: server
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID.}
+      - {id: aria-label, name: aria_label, type: 'str | None', default: {kind: literal, value: null}, effect: Names the root and gives it region semantics.}
+      - {id: has-more, name: has_more, type: bool, default: {kind: literal, value: true}, effect: Controls whether another page exists.}
+      - {id: loading, name: loading, type: bool, default: {kind: literal, value: false}, effect: Shows pending state and suppresses requests.}
+      - {id: error, name: error, type: bool, default: {kind: literal, value: false}, effect: Shows error state while changing the action to Retry and pausing automatic observation.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables requests and the action.}
+      - {id: auto, name: auto, type: bool, default: {kind: literal, value: true}, effect: Enables Intersection Observer requests when a callback exists and no loading error disabled or end state blocks them.}
+      - {id: root-margin, name: root_margin, type: str, default: {kind: literal, value: '0px 0px 240px 0px'}, effect: Sets the observer prefetch margin.}
+      - {id: threshold, name: threshold, type: float, default: {kind: literal, value: 0}, effect: Sets a finite observer threshold from zero through one.}
+      - {id: action-name, name: action_name, type: 'str | None', default: {kind: literal, value: null}, effect: Makes the action a named submit button when supplied.}
+      - {id: action-value, name: action_value, type: str, default: {kind: literal, value: load-more}, effect: Sets the submit button value.}
+      - {id: load-more-label, name: load_more_label, type: str, default: {kind: literal, value: Load more}, effect: Overrides Load more text.}
+      - {id: retry-label, name: retry_label, type: str, default: {kind: literal, value: Try again}, effect: Overrides Retry text.}
+      - {id: loading-label, name: loading_label, type: str, default: {kind: literal, value: Loading more results}, effect: Overrides pending status text.}
+      - {id: error-label, name: error_label, type: str, default: {kind: literal, value: More results could not be loaded}, effect: Overrides error status text.}
+      - {id: end-label, name: end_label, type: str, default: {kind: literal, value: No more results}, effect: Overrides end status text.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes.}
+  - id: cinfinite-scroll-client-inputs
+    component: CInfiniteScroll
+    channel: client
+    entries:
+      - {id: has-more, name: hasMore, type: boolean, omitted: Uses the server value., effect: Reactively controls whether another page exists.}
+      - {id: loading, name: loading, type: boolean, omitted: Uses the server value., effect: Reactively controls pending state.}
+      - {id: error, name: error, type: boolean, omitted: Uses the server value., effect: Reactively controls retry state.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables requests.}
+      - {id: auto, name: auto, type: boolean, omitted: Uses the server value., effect: Reactively enables observation.}
+      - {id: on-load-more, name: onLoadMore, type: function, omitted: The observer stays inactive and the native button remains available., effect: Receives each load request and may return a Promise.}
+
+slots:
+  - id: cinfinite-scroll-slots
+    component: CInfiniteScroll
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CInfiniteScrollDefaultSlotData]}, fallback: Empty result content.}
+
+events:
+  - id: cinfinite-scroll-events
+    component: CInfiniteScroll
+    entries:
+      - {id: load-more, name: onLoadMore, signature: {display: '(detail: CInfiniteScrollLoadDetail) => void | Promise<void>', interfaces: [CInfiniteScrollLoadDetail]}, trigger: An enabled action is activated or its observed sentinel intersects., detail: {display: '{reason, sourceEvent}', interfaces: [CInfiniteScrollLoadDetail]}, behavior: Requests data without mutating result content or submitting from the observer.}
+
+methods: []
+
+css:
+  - id: cinfinite-scroll-css
+    component: CInfiniteScroll
+    entries:
+      - {id: gap, name: --cui-infinite-scroll-gap, type: length, purpose: Gap among content status action and sentinel., default: 0.875rem}
+      - {id: border, name: --cui-infinite-scroll-action-border, type: complete border, purpose: Action boundary., default: Adaptive 1px neutral}
+      - {id: surface, name: --cui-infinite-scroll-action-surface, type: color, purpose: Action surface., default: Canvas}
+      - {id: radius, name: --cui-infinite-scroll-action-radius, type: length, purpose: Action corners., default: 0.625rem}
+      - {id: focus, name: --cui-infinite-scroll-focus, type: color, purpose: Action focus ring., default: Highlight}
+      - {id: muted, name: --cui-infinite-scroll-muted, type: color, purpose: Status text., default: Adaptive muted CanvasText}
+
+attributes:
+  - id: cinfinite-scroll-attributes
+    component: CInfiniteScroll
+    entries:
+      - {id: aria-busy, name: aria-busy, element: Content, type: true | false, meaning: Reflects loading without delaying sibling status announcements.}
+      - {id: data-loading, name: data-loading, element: Root, type: present | absent, meaning: Reflects loading.}
+      - {id: data-error, name: data-error, element: Root, type: present | absent, meaning: Reflects visible retry state.}
+      - {id: data-end, name: data-end, element: Root, type: present | absent, meaning: Reflects exhausted results.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present | absent, meaning: Reflects disabled requests.}
+      - {id: data-auto, name: data-auto, element: Root, type: present | absent, meaning: Reflects observation preference.}
+
+selectors:
+  - id: cinfinite-scroll-selectors
+    component: CInfiniteScroll
+    entries:
+      - {id: root, selector: '[data-citry-ui-part="infinite-scroll"]', element: Root, purpose: Request boundary and state destination.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: Content div, purpose: Server-owned results.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Polite status, purpose: Pending error and end announcements.}
+      - {id: action, selector: '[data-citry-ui-part="action"]', element: Native button, purpose: Explicit Load more or Retry path.}
+      - {id: sentinel, selector: '[data-citry-ui-part="sentinel"]', element: Hidden span, purpose: Intersection observation target.}
+
+interfaces:
+  - id: cinfinite-scroll-aliases
+    kind: aliases
+    entries:
+      - {id: reason, name: CInfiniteScrollReason, definition: 'Literal["button", "intersection", "retry"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: cinfinite-scroll-default-slot-data, kind: record, name: CInfiniteScrollDefaultSlotData, entries: []}
+  - id: cinfinite-scroll-load-detail
+    kind: record
+    name: CInfiniteScrollLoadDetail
+    entries:
+      - {id: reason, name: reason, type: {display: CInfiniteScrollReason, interfaces: [CInfiniteScrollReason]}, meaning: Button intersection or retry request source.}
+      - {id: source-event, name: sourceEvent, type: 'object | None', meaning: Native click Event or null for intersection.}
+
+translations:
+  - id: cinfinite-scroll-translations
+    component: CInfiniteScroll
+    entries:
+      - {id: load-more, key: citry-ui-infinite-scroll-load-more, purpose: Labels the ordinary load action., variables: None., override: '`load_more_label`', updates: Stable `$c-tr` text.}
+      - {id: retry, key: citry-ui-infinite-scroll-retry, purpose: Labels the retry action., variables: None., override: '`retry_label`', updates: Stable `$c-tr` text.}
+      - {id: loading, key: citry-ui-infinite-scroll-loading, purpose: Announces a pending request., variables: None., override: '`loading_label`', updates: Stable `$c-tr` text.}
+      - {id: error, key: citry-ui-infinite-scroll-error, purpose: Announces a failed request., variables: None., override: '`error_label`', updates: Stable `$c-tr` text.}
+      - {id: end, key: citry-ui-infinite-scroll-end, purpose: Announces exhausted results., variables: None., override: '`end_label`', updates: Stable `$c-tr` text.}

@@ -1,0 +1,110 @@
+schema_version: 1
+family: pagination
+components: [CPagination]
+
+inputs:
+  - id: cpagination-server-inputs
+    component: CPagination
+    channel: server
+    column_widths: [fit, 15rem, 7rem, auto]
+    entries:
+      - {id: pages, name: pages, type: int, default: {kind: required}, effect: Sets the finite page count; must be at least 1.}
+      - {id: page, name: page, type: int, default: {kind: literal, value: 1}, effect: Sets the current page between 1 and pages.}
+      - {id: href, name: href, type: 'str | None', default: {kind: literal, value: null}, effect: 'Creates native links by replacing a required `{page}` placeholder; None creates client-owned Buttons.'}
+      - {id: siblings, name: siblings, type: int, default: {kind: literal, value: 1}, effect: Keeps this many pages on either side of the current page.}
+      - {id: boundaries, name: boundaries, type: int, default: {kind: literal, value: 1}, effect: Keeps this many pages at both sequence edges.}
+      - {id: show-controls, name: show_controls, type: bool, default: {kind: literal, value: true}, effect: Renders previous and next controls.}
+      - {id: show-edges, name: show_edges, type: bool, default: {kind: literal, value: false}, effect: Renders first and last controls.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables all Button-mode controls and removes link navigation.}
+      - {id: variant, name: variant, type: {display: '"soft" | "outline" | "plain"', interfaces: [CPaginationVariant]}, default: {kind: literal, value: soft}, effect: Selects visual treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CPaginationSize]}, default: {kind: literal, value: md}, effect: Selects control geometry.}
+      - {id: label, name: label, type: str, default: {kind: literal, value: Pagination}, effect: Names the navigation landmark.}
+      - {id: page-label, name: page_label, type: str, default: {kind: literal, value: 'Page {page}'}, effect: 'Labels numbered controls; must contain `{page}`.'}
+      - {id: previous-label, name: previous_label, type: str, default: {kind: literal, value: Previous page}, effect: Labels the previous control.}
+      - {id: next-label, name: next_label, type: str, default: {kind: literal, value: Next page}, effect: Labels the next control.}
+      - {id: first-label, name: first_label, type: str, default: {kind: literal, value: First page}, effect: Labels the first control.}
+      - {id: last-label, name: last_label, type: str, default: {kind: literal, value: Last page}, effect: Labels the last control.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted nav attributes without replacing naming, children, focus ownership, or runtime fields.'}
+  - id: cpagination-client-inputs
+    component: CPagination
+    channel: client
+    entries:
+      - {id: page, name: page, type: 'number | undefined', omitted: Uses the server input., effect: Controls and rebuilds the current compact range while supplied.}
+      - {id: disabled, name: disabled, type: 'boolean | undefined', omitted: Uses the server input., effect: Overrides local disabled state while valid and supplied.}
+      - {id: variant, name: variant, type: '"soft" | "outline" | "plain" | undefined', omitted: Uses the server input., effect: Overrides visual treatment.}
+      - {id: size, name: size, type: '"sm" | "md" | "lg" | undefined', omitted: Uses the server input., effect: Overrides control geometry.}
+      - {id: on-page-change, name: onPageChange, type: '((page: number, detail: CPaginationChangeDetail) => void) | undefined', omitted: Uses the server input., effect: Runs before accepted Button state changes or native link navigation.}
+
+slots: []
+events:
+  - id: cpagination-events
+    component: CPagination
+    entries:
+      - {id: on-page-change, name: onPageChange, signature: {display: '(page: number, detail: CPaginationChangeDetail) => void', interfaces: [CPaginationChangeDetail]}, trigger: Enabled noncurrent control activation., detail: {display: '{page, previousPage, kind, sourceEvent}', interfaces: [CPaginationChangeDetail]}, behavior: Reports the target before Button state change or link navigation; preventing sourceEvent prevents a link.}
+methods: []
+
+css:
+  - id: cpagination-css-variables
+    component: CPagination
+    entries:
+      - {id: cui-pagination-gap, name: --cui-pagination-gap, type: length, purpose: Control gap., default: 0.35rem}
+      - {id: cui-pagination-control-size, name: --cui-pagination-control-size, type: length, purpose: Minimum control width and height., default: Size-derived.}
+      - {id: cui-pagination-radius, name: --cui-pagination-radius, type: length, purpose: Control radius., default: 0.55rem}
+      - {id: cui-pagination-foreground, name: --cui-pagination-foreground, type: color, purpose: Resting foreground., default: CanvasText}
+      - {id: cui-pagination-background, name: --cui-pagination-background, type: color, purpose: Resting background., default: transparent}
+      - {id: cui-pagination-border-color, name: --cui-pagination-border-color, type: color, purpose: Outline border., default: Nested-scheme border color.}
+      - {id: cui-pagination-current-background, name: --cui-pagination-current-background, type: color, purpose: Current-page background., default: Nested-scheme blue.}
+      - {id: cui-pagination-current-foreground, name: --cui-pagination-current-foreground, type: color, purpose: Current-page foreground., default: Contrasting nested-scheme color.}
+      - {id: cui-pagination-disabled-opacity, name: --cui-pagination-disabled-opacity, type: number, purpose: Disabled opacity., default: '0.5'}
+      - {id: cui-pagination-focus-ring, name: --cui-pagination-focus-ring, type: color, purpose: Keyboard focus outline., default: Highlight}
+
+attributes:
+  - id: cpagination-attributes
+    component: CPagination
+    entries:
+      - {id: aria-current, name: aria-current, element: Current page control, type: '"page"', meaning: Identifies the current page.}
+      - {id: data-current, name: data-current, element: Current page control, type: present-or-absent, meaning: Public current-page styling hook.}
+      - {id: data-page, name: data-page, element: Control, type: integer-string, meaning: Target page.}
+      - {id: data-kind, name: data-kind, element: Control, type: '"page" | "previous" | "next" | "first" | "last"', meaning: Control job.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present-or-absent, meaning: Present while navigation is disabled.}
+      - {id: data-variant, name: data-variant, element: Root, type: '"soft" | "outline" | "plain"', meaning: Visual treatment.}
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg"', meaning: Control geometry.}
+
+selectors:
+  - id: cpagination-selectors
+    component: CPagination
+    entries:
+      - {id: data-citry-ui-part-pagination, selector: '[data-citry-ui-part="pagination"]', element: nav root, purpose: Stable root and attrs destination.}
+      - {id: data-citry-ui-part-list, selector: '[data-citry-ui-part="list"]', element: ul, purpose: Stable list layout.}
+      - {id: data-citry-ui-part-control, selector: '[data-citry-ui-part="control"]', element: link or Button, purpose: Stable interactive target.}
+      - {id: data-citry-ui-part-ellipsis, selector: '[data-citry-ui-part="ellipsis"]', element: inert span, purpose: Stable omitted-range marker.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-pagination-variant, name: CPaginationVariant, definition: 'Literal["soft", "outline", "plain"]'}
+      - {id: input-type-aliases-pagination-size, name: CPaginationSize, definition: 'Literal["sm", "md", "lg"]'}
+  - id: cpagination-change-detail
+    kind: record
+    name: CPaginationChangeDetail
+    entries:
+      - {id: page, name: page, type: number, meaning: Requested page.}
+      - {id: previous-page, name: previousPage, type: number, meaning: Current page before activation.}
+      - {id: kind, name: kind, type: '"page" | "previous" | "next" | "first" | "last"', meaning: Activated control job.}
+      - {id: source-event, name: sourceEvent, type: Event, meaning: Native click event; prevent it to stop a link.}
+
+translations:
+  - id: cpagination-translations
+    component: CPagination
+    entries:
+      - {id: label, key: citry-ui-pagination-label, purpose: Names the pagination navigation landmark., variables: None, override: '`label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: page, key: citry-ui-pagination-page, purpose: Names each numbered page control., variables: 'page: str', override: '`page_label` input', updates: '$c-tr handles server controls; recreated controls use a fixed server-translated pattern without client i18n and `i18n.bind()` with it.'}
+      - {id: previous, key: citry-ui-pagination-previous, purpose: Names the previous-page control., variables: None, override: '`previous_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}
+      - {id: next, key: citry-ui-pagination-next, purpose: Names the next-page control., variables: None, override: '`next_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}
+      - {id: first, key: citry-ui-pagination-first, purpose: Names the first-page control., variables: None, override: '`first_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}
+      - {id: last, key: citry-ui-pagination-last, purpose: Names the last-page control., variables: None, override: '`last_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}
