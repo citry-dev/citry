@@ -1,31 +1,5 @@
-# Release the documentation for a new Citry version: build that version's snapshot,
-# commit it into docs_site/versions/ on the default branch (the committed-versions
-# model, matching the committed docs_site/versions/versions.json), then assemble
-# the full multi-version site and deploy it to GitHub Pages.
-#
-# This is the release counterpart to repo--docs-deploy.yml (which redeploys the
-# current site on every push to main). The Citry publisher dispatches it after
-# the package, tag, and GitHub Release are public. It may also be rerun manually.
-#
-# Operating notes:
-#   - Pages deploys are gated by the github-pages environment's deployment branch
-#     policy. This workflow is dispatched on `main` and checks out the immutable
-#     release tag separately, so that policy must allow `main`.
-#   - This workflow deploys the site itself rather than leaving it to the
-#     main-push deploy in repo--docs-deploy.yml, because the snapshot commit below
-#     is pushed with the default GITHUB_TOKEN, and a GITHUB_TOKEN push starts no
-#     further workflow runs.
-#   - The commit-back pushes to the default branch with the default GITHUB_TOKEN
-#     (contents: write), which works while that branch is unprotected. Protecting
-#     it means passing a GitHub App token or a PAT with contents: write to
-#     actions/checkout `token:` (django-components' release-docs.yml shows the
-#     create-github-app-token shape).
-#   - Every built snapshot is committed to the repo, matching the committed
-#     docs_site/versions/versions.json.
-#   - A release snapshot is built in a detached worktree at the exact tag commit.
-#     The default branch checkout only receives the generated snapshot and builds
-#     the current root site, so later main changes cannot leak into versioned
-#     documentation.
+# Build an immutable release snapshot and verify public browser packages.
+# A separate main-only job commits generated files with the release App.
 name: Release docs
 
 on:
@@ -36,16 +10,13 @@ on:
         required: true
         type: string
 
-# Serialize with the main-push deploy (repo--docs-deploy.yml) through the shared
-# "pages" group so two Pages deploys never overlap; never cancel an in-progress
-# publish. The commit-back below carries [skip ci], so it does not re-trigger the
-# main-push deploy.
+# Serialize snapshot preparation without cancelling a running build.
 concurrency:
-  group: "pages"
+  group: release-docs
   cancel-in-progress: false
 
 env:
-  # Snapshot/root builds need only the workspace MSRV. Keep it fixed so release
+  # Snapshot builds need only the workspace MSRV. Keep it fixed so release
   # docs reuse the same citry-core cache as the ordinary Pages workflows.
   RUSTUP_TOOLCHAIN: "1.96.0"
   SCCACHE_GHA_ENABLED: "true"
@@ -60,32 +31,30 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Only the canonical repo commits snapshots and deploys; forks skip it.
-    if: github.repository == 'citry-dev/citry'
+    # Only the canonical main workflow can prepare release updates.
+    if: github.repository == 'citry-dev/citry' && github.ref == 'refs/heads/main'
     permissions:
-      contents: write # to commit the built version snapshot back to the default branch
+      contents: read
+    outputs:
+      base_sha: ${{ steps.base.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
           # Initialize the vendored Ruff submodule (a build/runtime dependency)
           submodules: recursive
           # Full history so per-page git dates (sitemap <lastmod>, article
-          # published/modified, footer "last updated") are accurate, and so the
-          # default branch can be checked out and pushed to below.
+          # published/modified, footer "last updated") are accurate, and so
+          # the release tag can be opened by build-tag.
           fetch-depth: 0
           ref: main
+          persist-credentials: false
 
       - name: Require the documentation release controller from main
         run: test "$GITHUB_REF" = "refs/heads/main"
 
-      # Manual recovery can be dispatched while the UI is showing another ref.
-      # Always put the commit-back checkout on the current default branch; the
-      # immutable release source itself is opened separately by `build-tag`.
-      - name: Check out the default branch for the snapshot commit
-        run: |
-          git fetch origin main
-          git checkout -B main origin/main
-          git submodule update --init --recursive
+      - name: Record the source main commit
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
@@ -115,12 +84,12 @@ jobs:
           cache-on-failure: true
 
       # `social-cards` adds Playwright so the per-page OG images render during the
-      # assemble step's root build. The site imports Citry and Citry UI, but not
+      # snapshot preparation. The site imports Citry and Citry UI, but not
       # the LSP workspace package.
       - name: Install the workspace with docs + social-card extras
         run: >-
           uv sync --locked --package citry-monorepo --package citry
-          --package citry-ui --extra docs --extra social-cards
+          --package citry-ui --extra docs --extra social-cards --group e2e
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -170,52 +139,85 @@ jobs:
           echo "::error::the final GitHub Release $REF_NAME did not complete"
           exit 1
 
-      - name: Configure git identity for the commit-back
-        run: |
-          git config user.name "citry-docs-bot"
-          git config user.email "citry-docs-bot@users.noreply.github.com"
+      - name: Update the browser runtime from published release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ inputs.release_tag }}
+        run: >-
+          uv run --no-sync python -m scripts.update_playground_runtime
+          --source-ref "$REF_NAME"
+          --runtime docs_site/static/playground/runtime.json
 
-      # Build the tagged version's snapshot into docs_site/versions/<version>/,
-      # validate the whole version tree (versions-check), and commit it to the
-      # default branch. The [skip ci] on the commit stops repo--docs-deploy.yml
-      # from also firing on this push.
-      - name: Build & commit the version snapshot
+      - name: Test the published browser runtime
+        run: >-
+          uv run --no-sync pytest docs_site/tests/e2e/test_playground_e2e.py
+          -k published_runtime
+
+      - name: Build the version snapshot
         env:
           REF_NAME: ${{ inputs.release_tag }}
         run: |
-          VERSION="${REF_NAME#citry@}"
-          echo "Releasing docs version: $VERSION from exact tag $REF_NAME"
           uv run --no-sync python -m docs_site build-tag "$REF_NAME"
           uv run --no-sync python -m docs_site versions-check
-          git add docs_site/versions/
-          if git diff --cached --quiet; then
-            echo "No version changes to commit (already built)."
-          else
-            git commit -m "docs: build $VERSION [skip ci]"
-            git push origin main
-          fi
 
-      # Assemble the deploy artifact into ./site: the current version at the root
-      # plus every committed versions/ snapshot (including the one just built)
-      # mounted under /v/.
-      - name: Assemble the site
-        run: uv run --no-sync python -m docs_site assemble
-
-      - name: Upload the Pages artifact
-        uses: actions/upload-pages-artifact@v5
+      - name: Retain the verified generated files
+        uses: actions/upload-artifact@v7
         with:
-          path: site
+          name: release-site-update
+          retention-days: 7
+          include-hidden-files: true
+          path: |
+            docs_site/versions/
+            docs_site/static/playground/runtime.json
 
-  deploy:
+  commit:
     needs: build
     runs-on: ubuntu-latest
+    environment: release-maintenance
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: read
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - name: Mint the dedicated release App token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: citry
+          permission-contents: write
+
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Require the main commit that was validated
+        env:
+          BASE_SHA: ${{ needs.build.outputs.base_sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$BASE_SHA" ]; then
+            echo "::error::main advanced during generation; rerun Release docs"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-site-update
+          path: generated-site
+
+      - name: Commit only generated documentation and runtime pins
+        env:
+          REF_NAME: ${{ inputs.release_tag }}
+        run: |
+          python scripts/apply_release_site_update.py generated-site
+          git add -- docs_site/versions/ docs_site/static/playground/runtime.json
+          if git diff --cached --quiet; then
+            echo "The release site update is already on main." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "citry-release[bot]"
+          git config user.email "citry-release[bot]@users.noreply.github.com"
+          git commit -m "docs: publish site updates for $REF_NAME"
+          git push origin HEAD:refs/heads/main
+          echo "Committed verified site updates; the main docs workflow deploys them." >> "$GITHUB_STEP_SUMMARY"

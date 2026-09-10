@@ -43,3 +43,11 @@ jobs:
           --repository "$GITHUB_REPOSITORY"
           --publication-id "$GITHUB_RUN_ID"
           --candidate-run-id "$CANDIDATE_RUN_ID"
+      - name: Start site updates after every package is published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_TAG=$(python -c 'import json; c=json.load(open("candidate/release-candidate.json")); print(next((p["tag"] for p in c["packages"] if p["key"] == "citry"), ""))')
+          if [ -n "$RELEASE_TAG" ]; then
+            gh workflow run repo--docs-release.yml --ref main -f "release_tag=$RELEASE_TAG"
+          fi

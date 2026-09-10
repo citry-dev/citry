@@ -353,11 +353,6 @@ jobs:
           --title "$RELEASE_TAG"
           --verify-tag
           --generate-notes
-      - name: Start the documentation release
-        if: steps.public-state.outputs.release_exists != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run repo--docs-release.yml --ref main -f "release_tag=$RELEASE_TAG"
       - name: Start the Discord release notification
         if: steps.public-state.outputs.release_exists != 'true'
         env:
