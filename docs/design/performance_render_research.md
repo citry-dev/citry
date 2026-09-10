@@ -6579,3 +6579,53 @@ Fresh control measurements determine gains; historical timings are context only.
 The archived Python runtime and benchmark fixture match main at ea4d20d58. The
 current local native build is reused in both control and candidate processes;
 its digest is recorded with the new results.
+
+### Follow-up 1: remaining presentation declarations
+
+The existing public API qualifies twelve of the thirteen screened declarations:
+MenuList, Table, Breadcrumbs, TabsStatic, ProjectStatusUpdates,
+ProjectOutputBadge, ProjectOutputs, ProjectOutputsSummary, ProjectInfo,
+ProjectNotes, Navbar and ProjectPage. ListComponent remains ordinary because its
+named `empty` slot outlet violates the simple contract. This is application configuration, not
+a new runtime optimization or broader API.
+
+The group accounts for 31 component calls. Simple ProjectPage adds one transparent
+TemplateRoot, so generated identities decrease by 30, from 146 to 116. The four
+ownership snapshots per observed render agree: component invocations and render
+queue entries fall from 144 to 114, source locations from 468 to 438, while fills
+remain 205 and physical regions remain 119. All 34 authored template-data methods
+still execute, making 325 calls in the separately observed render. Callbacks were
+not instrumented during timing. Every timed Citry output passes content, manifest
+and graph-count checks; simple's documented identity/hook differences remain.
+
+| Variant | Mean warm wall ms | Mean warm CPU ms | Median actual second-render ms |
+| --- | ---: | ---: | ---: |
+| Released three-class simple configuration | 22.863 | 22.863 | 22.963 |
+| Twelve additional eligible declarations | 22.138 | 22.138 | 22.040 |
+| Existing Django reference | 10.969 | 10.969 | 11.086 |
+
+The group saves 0.724 ms / 3.17% in warmed renders. Every one of the six balanced
+blocks improves in both wall and CPU time. The paired wall-time 95% interval is
+0.604 to 0.845 ms; the CPU interval is 0.604 to 0.844 ms. The change passes the
+predeclared configuration-gain criterion. The actual second-render medians are
+descriptive, based on six observations per variant, not the warmed estimate.
+
+An initial measurement stopped because a newly added Django raw-output equality
+assertion rejected its deliberate random CSRF token. No result from that aborted
+run is used. The final method retains the established Django timing reference and
+limits strict output verification to Citry; Django also uses time-relative text.
+
+This leaves approximately a 2.02x gap to Django in this workload. Removing more
+identity records alone is unlikely to close it. No runtime source, release
+artifact or published benchmark graph changed in this experiment.
+
+Evidence: [method](../../benchmarks/performance_followups/plan.md),
+[qualification](../../benchmarks/results/performance-render/followups/presentation-qualification.json),
+[timing and captures](../../benchmarks/results/performance-render/followups/presentation-timing.json).
+
+Independent technical review reproduced the timing arithmetic, source and native
+hashes, retained ownership snapshots and manifests. Separate prose review
+verified the reported scope and corrected the rounded CPU interval. Full
+per-render callback and timed manifest checks are enforced by worker assertions;
+the report retains the qualification callback vector and untimed captures, not
+every per-render record.
