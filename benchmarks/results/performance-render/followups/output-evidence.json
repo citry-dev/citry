@@ -1,0 +1,24 @@
+{
+  "outcome": "rejected before timing: merge-hook contract differs",
+  "tests": {
+    "files": [
+      "test_component_simple.py",
+      "test_component_pure.py",
+      "test_transparent_placements.py"
+    ],
+    "passed": 74
+  },
+  "source_hashes": {
+    "benchmarks/performance_followups/output_plan.md": "b2060ec326229c39d92797c38b682dd480ed81234ae4f3f9f83fc73b89d96f46",
+    "benchmarks/performance_followups/output_buffer.py": "d2bcbdca1cb922ee1c3c8d7ec746a4d3d67ed6eabffe569d5321c31d1625fed5",
+    "benchmarks/performance_followups/output_merge_witness.py": "de385e21491cd6005b664ecb8119c9bab908f9241d00b556e1f538fd7fbd34b8",
+    "benchmarks/performance_followups/presentation.py": "55171486a32592791103a632c3cb52b0177c2afc39c23cead4d06fde6fbcaf96",
+    "benchmarks/simple_api_probe/timing.py": "cde324b410d70862f3b30196c95a57c7cb197184c2d1963f1963723bb994aebb",
+    "benchmarks/results/performance-render/followups/output-qualification.json": "7adf07b0bfbdfbea338a82ca99693581367c7128c8f7a077aea56bc3b21564a8",
+    "benchmarks/results/performance-render/followups/output-merge-witness.json": "784cb03bb97779b1ca18809787b5efa4dde9b49d22cd63ba7e92f4ed341aad21",
+    "packages/py/citry/citry/component_render.py": "8d4f6c47b2d10301bb1bd39f4967d494ff3222e460e893f8f4192a3093c36396",
+    "packages/py/citry/citry/_simple_runtime.py": "846c4286d9463ffea24a8f36eacf37763a63c1a732ce491e1a2d4d1daaaad782",
+    "packages/py/citry/citry/nodes/__init__.py": "089f3d015d196c530c918eb6a311adc37ec832973d6250529eb676ada41d0df9",
+    "packages/py/citry_core/citry_core/_rust.cpython-314-darwin.so": "a4f2430612277e22e99a657f43902feb8198a6cec471eb01180e811a791c9500"
+  }
+}

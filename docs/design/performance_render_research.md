@@ -6694,3 +6694,40 @@ confirmed the bounded rejection.
 Evidence: [plan](../../benchmarks/performance_followups/slot_js_plan.md),
 [witness](../../benchmarks/performance_followups/slot_js_witness.py),
 [results](../../benchmarks/results/performance-render/followups/slot-js-witness.json).
+
+### Follow-up 4: one output buffer under deferred simple scheduling
+
+This candidate revisits text emission under the released deferred simple API.
+It joins conditional and loop text in one parts buffer while retaining top-level
+SimpleRender boundaries, ordinary child components, slots and physical regions.
+It preserves component data-callback scheduling and does not cache attribute values. Transparent callers
+and tracing retain their existing walker.
+
+The complete benchmark passes fixed-ID raw HTML equality, all captured ownership
+snapshots, manifests and 325 authored callbacks. All 74 tests across simple, pure
+and transparent placement pass. The initial observation-only assertion covered
+projected content rather than raw HTML; independent review caught that gap and
+qualification now includes the separate raw comparison.
+
+A targeted extension witness nevertheless falsifies the proposed contract. An
+ordinary child inside a conditional inside a simple loop normally merges into
+its loop context. Flattening the output removes that intermediate context from
+the scheduler: five merge callbacks become three, and the child merge targets
+lose the current loop values 1 and 2. This changes the public merge hook beyond
+the proposed restriction on interior part shapes.
+
+The candidate is rejected before timing. A separate representation retaining merge
+relationships could be investigated later, but is outside these four attempts.
+No runtime change or performance gain is claimed. Independent technical and
+separate prose review checked the counterexample and the qualification limits.
+
+Evidence: [plan](../../benchmarks/performance_followups/output_plan.md),
+[qualification](../../benchmarks/results/performance-render/followups/output-qualification.json),
+[merge witness](../../benchmarks/results/performance-render/followups/output-merge-witness.json),
+[source identities](../../benchmarks/results/performance-render/followups/output-evidence.json).
+
+The four authorized avenues are now complete. Only the additional public simple
+configuration established a reproducible workload gain (0.724 ms / 3.17%). The
+dynamic-element timing was inconclusive; the named-slot/JS and output-buffer
+candidates failed distinct correctness contracts before timing. These findings
+remain in the research branch, with no further optimization attempts scheduled.
