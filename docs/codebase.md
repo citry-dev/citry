@@ -1365,11 +1365,13 @@ that consume versioned protocols must still validate those schemas.
 Development updates to `main` require a pull request, the `check` job, an
 up-to-date branch, and resolved review conversations. Zero approving reviews
 are required while the repository has one maintainer, so that maintainer can
-merge their own PR after checks pass. This provides a PR history, not
-independent approval against compromise of that maintainer's account.
+merge their own PR after checks pass. `JuroOravec` also has a **For pull requests
+only** bypass to merge selected PRs without waiting for checks. This does not
+permit direct pushes to `main`. The PR history remains, but the sole-maintainer
+process does not provide independent approval.
 
-Generated release site updates use a dedicated GitHub App as the only bypass
-actor for the PR and status-check rules. A separate ruleset blocks deletion and
+Generated release site updates use a dedicated GitHub App as the only always-allowed
+bypass actor for the PR and status-check rules. A separate ruleset blocks deletion and
 force pushes without bypass actors. GitHub's App bypass applies to the branch;
 the trusted workflow enforces the file restriction. The write job accepts only
 `docs_site/versions/` and `docs_site/static/playground/runtime.json`, after the
@@ -1389,8 +1391,8 @@ Configure the release identity once before enabling this workflow:
    private key out of repository-wide, organization-wide, and Dependabot secrets.
 3. Add this App alone as an always-allowed bypass actor for the exact-main PR
    and status-check ruleset. Keep deletion and force-push protection in a
-   separate ruleset with no bypass. Ordinary users and `github-actions` receive
-   no bypass.
+   separate ruleset with no bypass. Give `JuroOravec` only the pull-request bypass
+   described above. Other users and `github-actions` receive no bypass.
 
 The build job has only the read token and no release environment. A fresh write
 job accesses `release-maintenance`, mints a short-lived repository-scoped App
