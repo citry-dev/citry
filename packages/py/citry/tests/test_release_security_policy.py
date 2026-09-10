@@ -39,7 +39,7 @@ def test_qualification_cannot_use_publish_environment(workflows):
 def test_tag_cannot_execute_historical_release_code(workflows):
     _change(
         workflows,
-        "repo--release-tag.yml",
+        "py--citry--publish.yml",
         lambda value: value["jobs"]["tag"]["steps"][0]["with"].update(ref="${{ inputs.release_commit }}"),
     )
     assert any("trusted workflow source" in error for error in check(workflows))
@@ -54,14 +54,14 @@ def test_publisher_cannot_read_release_app_key(workflows):
     assert any("outside its isolated write job" in error for error in check(workflows))
 
 
-def test_tag_cannot_expose_a_workflow_dispatch_trigger(workflows):
-    _change(workflows, "repo--release-tag.yml", lambda value: value[True].update(workflow_dispatch={}))
-    assert any("only workflow_call" in error for error in check(workflows))
+def test_tag_requires_its_own_release_environment(workflows):
+    _change(workflows, "py--citry--publish.yml", lambda value: value["jobs"]["tag"].pop("environment"))
+    assert any("isolated release environment" in error for error in check(workflows))
 
 
 def test_unregistered_workflow_cannot_create_protected_tags(workflows):
     path = workflows / ".github/workflows/unregistered.yml"
-    path.write_text(yaml.safe_dump({"jobs": {"tag": {"uses": "./.github/workflows/repo--release-tag.yml"}}}))
+    path.write_text(yaml.safe_dump({"jobs": {"tag": {"steps": [{"run": "python -m scripts.release_tag create"}]}}}))
     assert any("outside the package publishers" in error for error in check(workflows))
 
 

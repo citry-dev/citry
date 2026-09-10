@@ -7,8 +7,11 @@ import yaml  # type: ignore[import-untyped]
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGES = ("citry-core", "citry", "citry-lsp", "citry-ui", "pygments-citry", "vscode-citry")
-TAG_WORKFLOW = "repo--release-tag.yml"
-APP_JOBS = {(TAG_WORKFLOW, "tag"), ("repo--docs-release.yml", "commit")}
+PUBLISHERS = {
+    ("vscode--citry--publish.yml" if package == "vscode-citry" else f"py--{package}--publish.yml"): package
+    for package in PACKAGES
+}
+APP_JOBS = {(filename, "tag") for filename in PUBLISHERS} | {("repo--docs-release.yml", "commit")}
 
 
 def check(root: Path = ROOT) -> list[str]:
@@ -18,18 +21,13 @@ def check(root: Path = ROOT) -> list[str]:
     workflows: dict[str, Any] = {}
     for path in directory.glob("*.yml"):
         workflows[path.name] = yaml.safe_load(path.read_text())
-    publishers = {
-        ("vscode--citry--publish.yml" if package == "vscode-citry" else f"py--{package}--publish.yml"): package
-        for package in PACKAGES
-    }
+    publishers = PUBLISHERS
     for filename, workflow in workflows.items():
         for name, job in workflow.get("jobs", {}).items():
             environment = job.get("environment")
             if isinstance(environment, dict):
                 environment = environment.get("name")
-            if job.get("uses") == f"./.github/workflows/{TAG_WORKFLOW}" and (
-                filename not in publishers or name != "tag"
-            ):
+            if "scripts.release_tag" in str(job) and (filename not in publishers or name != "tag"):
                 errors.append(f"{filename}:{name} calls protected tag creation outside the package publishers")
             if environment in ("pypi", "vscode-marketplaces") and (filename not in publishers or name != "release"):
                 errors.append(f"{filename}:{name} has a publishing environment outside its publication job")
@@ -45,17 +43,30 @@ def check(root: Path = ROOT) -> list[str]:
             errors.append(f"{filename} publication must use {expected_environment}")
         if release.get("permissions", {}).get("contents") != "read":
             errors.append(f"{filename} publication must not write repository contents")
-        if tag.get("uses") != f"./.github/workflows/{TAG_WORKFLOW}" or "release" not in tag.get("needs", []):
+        if tag.get("uses") or "release" not in tag.get("needs", []):
             errors.append(f"{filename} must create its tag only after verified publication")
-        if tag.get("if") or tag.get("secrets"):
+        if tag.get("if") != "github.ref == 'refs/heads/main'" or tag.get("secrets"):
             errors.append(f"{filename} tag creation must use successful dependencies and its own environment secrets")
         if (
-            tag.get("with", {}).get("release_commit") != "${{ inputs.release_commit }}"
-            or tag.get("with", {}).get("release_tag") != package + "@${{ needs.verify-version.outputs.version }}"
+            tag.get("env", {}).get("RELEASE_COMMIT") != "${{ inputs.release_commit }}"
+            or tag.get("env", {}).get("RELEASE_TAG") != package + "@${{ needs.verify-version.outputs.version }}"
         ):
             errors.append(f"{filename} tag creation must use the published source identity")
-        if tag.get("with", {}).get("package") != package:
+        if tag.get("env", {}).get("PACKAGE") != package:
             errors.append(f"{filename} must pass its fixed package identity to tag creation")
+        if tag.get("environment") != "release-maintenance" or tag.get("permissions") != {"contents": "read"}:
+            errors.append(f"{filename} tag creation must use its isolated release environment and read token")
+        tag_checkouts = [
+            step for step in tag.get("steps", []) if str(step.get("uses", "")).startswith("actions/checkout@")
+        ]
+        if (
+            len(tag_checkouts) != 1
+            or tag_checkouts[0].get("with", {}).get("ref") != "${{ github.sha }}"
+            or tag_checkouts[0].get("with", {}).get("persist-credentials") is not False
+        ):
+            errors.append(f"{filename} tag creation must execute trusted workflow source without saved credentials")
+        if "scripts.release_tag validate" not in str(tag) or "scripts.release_tag create" not in str(tag):
+            errors.append(f"{filename} tag creation must validate the immutable package identity")
         if not {"release", "tag"}.issubset(closeout.get("needs", [])) or closeout.get("environment"):
             errors.append(
                 f"{filename} closeout must follow publication and tag creation without publishing credentials"
@@ -71,16 +82,4 @@ def check(root: Path = ROOT) -> list[str]:
             errors.append(f"{filename} closeout must verify the transferred artifact digest")
         if str(closeout).count("scripts.verify_github_release") != 2 or "--require-existing" not in str(closeout):
             errors.append(f"{filename} must verify existing and newly created GitHub Release assets")
-    workflow = workflows.get(TAG_WORKFLOW, {})
-    events = workflow.get("on", workflow.get(True, {}))
-    if not isinstance(events, dict) or set(events) != {"workflow_call"}:
-        errors.append("Protected tag creation must expose only workflow_call")
-    job = workflow.get("jobs", {}).get("tag", {})
-    if job.get("environment") != "release-maintenance" or job.get("if") != "github.ref == 'refs/heads/main'":
-        errors.append("Protected tag creation must use the main-only release environment")
-    checkouts = [step for step in job.get("steps", []) if str(step.get("uses", "")).startswith("actions/checkout@")]
-    if len(checkouts) != 1 or checkouts[0].get("with", {}).get("ref") != "${{ github.sha }}":
-        errors.append("Protected tag creation must execute trusted workflow source")
-    if "scripts.release_tag validate" not in str(job) or "scripts.release_tag create" not in str(job):
-        errors.append("Protected tag creation must validate the immutable package identity")
     return errors

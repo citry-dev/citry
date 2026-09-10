@@ -689,15 +689,43 @@ jobs:
           retention-days: 7
 
   tag:
-    name: Create or verify the final annotated tag
     needs: [verify-version, release]
     permissions:
       contents: read
-    uses: ./.github/workflows/repo--release-tag.yml
-    with:
-      package: citry-core
-      release_commit: ${{ inputs.release_commit }}
-      release_tag: citry-core@${{ needs.verify-version.outputs.version }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release-maintenance
+    env:
+      PACKAGE: citry-core
+      RELEASE_COMMIT: ${{ inputs.release_commit }}
+      RELEASE_TAG: citry-core@${{ needs.verify-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate the package source and existing tag before requesting write access
+        run: >-
+          python -m scripts.release_tag validate
+          --package "$PACKAGE" --release-commit "$RELEASE_COMMIT"
+          --release-tag "$RELEASE_TAG"
+      - name: Mint the dedicated release App token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: citry
+          permission-contents: write
+      - name: Create or verify the final annotated tag
+        env:
+          RELEASE_APP_TOKEN: ${{ steps.app.outputs.token }}
+        run: >-
+          python -m scripts.release_tag create
+          --package "$PACKAGE" --release-commit "$RELEASE_COMMIT"
+          --release-tag "$RELEASE_TAG"
 
   closeout:
     name: Create the GitHub Release and notify
