@@ -1,0 +1,135 @@
+schema_version: 1
+family: radio
+
+components:
+  - CRadioGroup
+  - CRadio
+
+inputs:
+  - id: cradio-group-server-inputs
+    component: CRadioGroup
+    channel: server
+    column_widths: [fit, 16rem, 7rem, auto]
+    entries:
+      - {id: name, name: name, type: str, default: {kind: required}, effect: Sets the required shared native radio-group and FormData name.}
+      - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: Sets initial checked value; it must match one Radio value; None leaves the group unselected.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates every Radio with an external native Form ID.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native same-name group validation; CField owns it when composed.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Disables the native fieldset; CField and CForm remain dominant.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets explicit invalid styling and ARIA; CField owns it when composed.}
+      - {id: orientation, name: orientation, type: {display: '"vertical" | "horizontal"', interfaces: [CRadioOrientation]}, default: {kind: literal, value: vertical}, effect: Selects stacked or wrapping inline layout without replacing native keyboard behavior.}
+      - {id: variant, name: variant, type: {display: '"solid" | "outline"', interfaces: [CRadioVariant]}, default: {kind: literal, value: solid}, effect: Selects checked-control treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CRadioSize]}, default: {kind: literal, value: md}, effect: Sets control and text scale.}
+      - {id: label-pos, name: label_pos, type: {display: '"start" | "end"', interfaces: [CRadioLabelPos]}, default: {kind: literal, value: end}, effect: Places item labels before or after controls.}
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the fieldset ID.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds fieldset classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds fieldset inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting metadata and targeted Alpine attributes to the fieldset.}
+  - id: cradio-group-client-inputs
+    component: CRadioGroup
+    channel: client
+    column_widths: [fit, 16rem, 7rem, auto]
+    entries:
+      - {id: value, name: value, type: 'string | null', omitted: Releases control to native selection., effect: Controls one known value or no selection; omission releases control.}
+      - {id: required, name: required, type: boolean, omitted: Uses the server or Field fallback., effect: Controls native required state outside Field.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server or Field/Form fallback., effect: Controls local disabled state outside Field; Form disabled stays dominant.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses the server or Field fallback., effect: Controls explicit invalid state outside Field.}
+      - {id: orientation, name: orientation, type: '"vertical" | "horizontal"', omitted: Uses the server fallback., effect: Controls the public layout reflection.}
+      - {id: variant, name: variant, type: '"solid" | "outline"', omitted: Uses the server fallback., effect: Controls checked-control treatment.}
+      - {id: size, name: size, type: '"sm" | "md" | "lg"', omitted: Uses the server fallback., effect: Controls public size.}
+      - {id: label-pos, name: label_pos, type: '"start" | "end"', omitted: Uses the server fallback., effect: Controls label placement.}
+  - id: cradio-server-inputs
+    component: CRadio
+    channel: server
+    column_widths: [fit, 16rem, 7rem, auto]
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Sets unique canonical option and submitted value.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables this native Radio without disabling siblings.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds item wrapper classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds item wrapper inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting attributes to the item wrapper.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting native metadata and event listeners to the Radio input.}
+
+slots:
+  - id: cradio-group-slots
+    component: CRadioGroup
+    entries:
+      - {id: label, name: label, required: false, data: {display: '{}', interfaces: [CRadioGroupLabelSlotData]}, fallback: Missing standalone label raises; the slot is forbidden under CField.}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CRadioGroupDefaultSlotData]}, fallback: Missing fill raises before rendering.}
+  - id: cradio-slots
+    component: CRadio
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CRadioDefaultSlotData]}, fallback: Missing visible label raises before rendering.}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CRadioDescriptionSlotData]}, fallback: Description wrapper and relationship are omitted.}
+
+events: []
+methods: []
+
+css:
+  - id: cradio-css-variables
+    component: CRadioGroup
+    entries:
+      - {id: cui-radio-group-gap, name: --cui-radio-group-gap, type: length, purpose: Spacing between items., default: 0.75rem.}
+      - {id: cui-radio-active-color, name: --cui-radio-active-color, type: color, purpose: Checked border/fill/dot., default: Scheme-aware primary.}
+      - {id: cui-radio-border-color, name: --cui-radio-border-color, type: color, purpose: Unchecked border., default: Scheme-aware neutral.}
+      - {id: cui-radio-background, name: --cui-radio-background, type: color, purpose: Native control background., default: Canvas.}
+      - {id: cui-radio-foreground, name: --cui-radio-foreground, type: color, purpose: Labels and inherited text., default: CanvasText.}
+      - {id: cui-radio-focus-color, name: --cui-radio-focus-color, type: color, purpose: Keyboard focus ring., default: Highlight.}
+      - {id: cui-radio-invalid-color, name: --cui-radio-invalid-color, type: color, purpose: Invalid control border., default: Scheme-aware danger.}
+      - {id: cui-radio-control-size, name: --cui-radio-control-size, type: length, purpose: Radio control box., default: Size-derived length.}
+      - {id: cui-radio-item-gap, name: --cui-radio-item-gap, type: length, purpose: Control-to-body spacing., default: 0.55rem.}
+      - {id: cui-radio-label-gap, name: --cui-radio-label-gap, type: length, purpose: Label-to-description spacing., default: 0.2rem.}
+      - {id: cui-radio-disabled-opacity, name: --cui-radio-disabled-opacity, type: number, purpose: Disabled item opacity., default: 0.52.}
+
+attributes:
+  - id: cradio-group-attributes
+    component: CRadioGroup
+    entries:
+      - {id: disabled, name: disabled, element: Fieldset, type: boolean present or absent, meaning: Native group disabled state.}
+      - {id: aria-invalid, name: aria-invalid, element: Fieldset, type: '"true" or absent', meaning: Effective explicit or native invalid state.}
+      - {id: data-value, name: data-value, element: Fieldset, type: canonical string or absent, meaning: Current checked option value.}
+      - {id: data-required, name: data-required, element: Fieldset, type: boolean present or absent, meaning: Effective native-required request.}
+      - {id: data-disabled, name: data-disabled, element: Fieldset, type: boolean present or absent, meaning: Effective group disabled state.}
+      - {id: data-invalid, name: data-invalid, element: Fieldset, type: boolean present or absent, meaning: Effective invalid state.}
+      - {id: data-orientation, name: data-orientation, element: Fieldset, type: '"vertical" | "horizontal"', meaning: Effective layout.}
+      - {id: data-variant, name: data-variant, element: Fieldset, type: '"solid" | "outline"', meaning: Effective selected-control treatment.}
+      - {id: data-size, name: data-size, element: Fieldset, type: '"sm" | "md" | "lg"', meaning: Effective size.}
+      - {id: data-label-pos, name: data-label-pos, element: Fieldset, type: '"start" | "end"', meaning: Effective label placement.}
+  - id: cradio-attributes
+    component: CRadio
+    entries:
+      - {id: checked, name: checked, element: Native input, type: boolean present or absent, meaning: Server default checkedness; current checkedness is the native property.}
+      - {id: disabled, name: disabled, element: Native input, type: boolean present or absent, meaning: Item-local disabledness.}
+      - {id: name, name: name, element: Native input, type: nonempty string, meaning: Shared Group name.}
+      - {id: value, name: value, element: Native input, type: canonical string, meaning: Unique option/FormData value.}
+      - {id: data-checked, name: data-checked, element: Item wrapper, type: boolean present or absent, meaning: Mirrors current native checkedness for styling.}
+      - {id: data-disabled, name: data-disabled, element: Item wrapper, type: boolean present or absent, meaning: Mirrors effective native disabledness.}
+
+selectors:
+  - id: radio-selectors
+    component: CRadioGroup
+    entries:
+      - {id: radio-group, selector: '[data-citry-ui-part="radio-group"]', element: Native fieldset, purpose: Group root and attrs destination.}
+      - {id: legend, selector: '[data-citry-ui-part="legend"]', element: Native legend, purpose: Standalone group label.}
+      - {id: radio, selector: '[data-citry-ui-part="radio"]', element: Item wrapper, purpose: Radio attrs destination.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native radio input, purpose: Input attrs destination.}
+      - {id: body, selector: '[data-citry-ui-part="body"]', element: Item text wrapper, purpose: Label and description layout.}
+      - {id: label, selector: '[data-citry-ui-part="label"]', element: Native label, purpose: Visible option name and activation target.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Description span, purpose: Optional item guidance.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: orientation, name: CRadioOrientation, definition: 'Literal["vertical", "horizontal"]'}
+      - {id: variant, name: CRadioVariant, definition: 'Literal["solid", "outline"]'}
+      - {id: size, name: CRadioSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: label-pos, name: CRadioLabelPos, definition: 'Literal["start", "end"]'}
+  - {id: group-default, kind: record, name: CRadioGroupDefaultSlotData, entries: []}
+  - {id: group-label, kind: record, name: CRadioGroupLabelSlotData, entries: []}
+  - {id: radio-default, kind: record, name: CRadioDefaultSlotData, entries: []}
+  - {id: radio-description, kind: record, name: CRadioDescriptionSlotData, entries: []}
+
+translations: []

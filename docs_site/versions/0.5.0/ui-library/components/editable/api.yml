@@ -1,0 +1,156 @@
+schema_version: 1
+family: editable
+
+components:
+  - CEditable
+
+inputs:
+  - id: ceditable-server-inputs
+    component: CEditable
+    channel: server
+    column_widths: [fit, 14rem, 9rem, auto]
+    entries:
+      - {id: value, name: value, type: str, default: {kind: literal, value: ''}, effect: Sets the initial committed and native form value.}
+      - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Click to edit}, effect: Supplies author-localized empty preview and Input text.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native Input with a Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native Input identity.}
+      - {id: editing, name: editing, type: bool, default: {kind: literal, value: false}, effect: Sets initial edit mode.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native required validity outside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Disables editing and form contribution.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Preserves submission while preventing editing.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds owner-supplied invalid presentation.}
+      - {id: max-length, name: max_length, type: 'int | None', default: {kind: literal, value: null}, effect: Sets native maximum length.}
+      - {id: autocomplete, name: autocomplete, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native autocomplete hint.}
+      - {id: inputmode, name: inputmode, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native virtual-keyboard hint.}
+      - {id: submit-mode, name: submit_mode, type: {display: '"enter" | "blur" | "both" | "explicit"', interfaces: [CEditableSubmitMode]}, default: {kind: literal, value: both}, effect: Selects commit triggers.}
+      - {id: select-on-focus, name: select_on_focus, type: bool, default: {kind: literal, value: true}, effect: Selects the draft when editing begins.}
+      - {id: action-position, name: action_position, type: {display: '"inside" | "outside"', interfaces: [CEditableActionPosition]}, default: {kind: literal, value: inside}, effect: Places edit actions inside the Input at inline-end or outside it.}
+      - {id: edit-label, name: edit_label, type: str, default: {kind: literal, value: Edit}, effect: Names the pencil Button.}
+      - {id: submit-label, name: submit_label, type: str, default: {kind: literal, value: Save}, effect: Names the confirm Button.}
+      - {id: cancel-label, name: cancel_label, type: str, default: {kind: literal, value: Cancel}, effect: Names the cancel Button.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CEditableVariant]}, default: {kind: literal, value: outline}, effect: Selects surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CEditableSize]}, default: {kind: literal, value: md}, effect: Selects Input and action geometry.}
+      - {id: class, name: class_, type: 'CClassValue | None', default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: 'CStyleValue | None', default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting root attributes.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted native Input attributes and relationships.}
+      - {id: preview-attrs, name: preview_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting preview attributes.}
+  - id: ceditable-client-inputs
+    component: CEditable
+    channel: client
+    column_widths: [fit, 14rem, 12rem, auto]
+    entries:
+      - {id: value, name: value, type: 'string | null', omitted: Releases control to the committed value., effect: Controls the committed value while supplied.}
+      - {id: editing, name: editing, type: 'boolean | null', omitted: Releases control to committed edit mode., effect: Controls view or edit mode while supplied.}
+      - {id: required, name: required, type: bool, omitted: Uses the server or Field fallback., effect: Reactively changes required validity.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server or Field fallback., effect: Reactively disables editing.}
+      - {id: readonly, name: readonly, type: bool, omitted: Uses the server or Field fallback., effect: Reactively prevents editing while preserving submission.}
+      - {id: invalid, name: invalid, type: bool, omitted: Uses the server or Field fallback., effect: Reactively changes invalid presentation.}
+      - {id: submit-mode, name: submitMode, type: CEditableSubmitMode, omitted: Uses the server value., effect: Reactively changes commit triggers.}
+      - {id: select-on-focus, name: selectOnFocus, type: bool, omitted: Uses the server value., effect: Reactively changes entry selection.}
+      - {id: action-position, name: actionPosition, type: CEditableActionPosition, omitted: Uses the server value., effect: Reactively places the actions inside or outside.}
+      - {id: variant, name: variant, type: CEditableVariant, omitted: Uses the server value., effect: Reactively changes treatment.}
+      - {id: size, name: size, type: CEditableSize, omitted: Uses the server value., effect: Reactively changes geometry.}
+      - {id: on-value-change, name: onValueChange, type: '((value: string, detail: CEditableValueChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives commit and reset requests.}
+      - {id: on-edit-change, name: onEditChange, type: '((editing: boolean, detail: CEditableEditChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives mode requests and forced closes.}
+
+slots: []
+
+events:
+  - id: ceditable-events
+    component: CEditable
+    entries:
+      - {id: value-change, name: onValueChange, signature: {display: '(value: string, detail: CEditableValueChangeDetail) => void', interfaces: [CEditableValueChangeDetail]}, trigger: Submit blur or reset request., detail: {display: '{value, previousValue, controlled, source, sourceEvent}', interfaces: [CEditableValueChangeDetail]}, behavior: Commits immediately when uncontrolled and waits for owner acceptance when controlled.}
+      - {id: edit-change, name: onEditChange, signature: {display: '(editing: boolean, detail: CEditableEditChangeDetail) => void', interfaces: [CEditableEditChangeDetail]}, trigger: Edit submit cancel blur reset or safety transition., detail: {display: '{editing, reason, controlled, forced, source}', interfaces: [CEditableEditChangeDetail]}, behavior: Controlled requests notify without changing mode; forced safety transitions always close.}
+
+methods: []
+
+css:
+  - id: ceditable-css-variables
+    component: CEditable
+    entries:
+      - {id: background, name: --cui-editable-background, type: color, purpose: Preview and Input surface., default: Canvas}
+      - {id: foreground, name: --cui-editable-foreground, type: color, purpose: Primary text., default: CanvasText}
+      - {id: border-color, name: --cui-editable-border-color, type: color, purpose: Surface border., default: scheme-aware border}
+      - {id: hover-border-color, name: --cui-editable-hover-border-color, type: color, purpose: Hover border., default: scheme-aware strong border}
+      - {id: focus-color, name: --cui-editable-focus-color, type: color, purpose: Focus outline., default: Highlight}
+      - {id: invalid-border-color, name: --cui-editable-invalid-border-color, type: color, purpose: Invalid border., default: scheme-aware red}
+      - {id: muted-color, name: --cui-editable-muted-color, type: color, purpose: Empty preview foreground., default: scheme-aware muted}
+      - {id: action-background, name: --cui-editable-action-background, type: color, purpose: Action Button surface., default: CanvasText mix}
+      - {id: action-foreground, name: --cui-editable-action-foreground, type: color, purpose: Action Button foreground., default: CanvasText}
+      - {id: radius, name: --cui-editable-radius, type: length, purpose: Surface corners., default: 0.5rem}
+      - {id: height, name: --cui-editable-height, type: length, purpose: Minimum surface height., default: size-derived}
+      - {id: padding, name: --cui-editable-padding, type: length, purpose: Surface padding., default: size-derived}
+      - {id: action-size, name: --cui-editable-action-size, type: length, purpose: Action Button square size., default: size-derived}
+      - {id: gap, name: --cui-editable-gap, type: length, purpose: Action and outside-layout gap., default: 0.375rem}
+
+attributes:
+  - id: ceditable-attributes
+    component: CEditable
+    entries:
+      - {id: data-editing, name: data-editing, element: Root, type: present-or-absent, meaning: Mirrors effective edit mode.}
+      - {id: data-empty, name: data-empty, element: Root, type: present-or-absent, meaning: Mirrors an empty committed value.}
+      - {id: data-required, name: data-required, element: Root, type: present-or-absent, meaning: Mirrors required validity.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present-or-absent, meaning: Mirrors effective disabled state.}
+      - {id: data-readonly, name: data-readonly, element: Root, type: present-or-absent, meaning: Mirrors read-only state.}
+      - {id: data-invalid, name: data-invalid, element: Root, type: present-or-absent, meaning: Mirrors external or native invalid state.}
+      - {id: data-submit-mode, name: data-submit-mode, element: Root, type: CEditableSubmitMode, meaning: Reflects commit behavior.}
+      - {id: data-action-position, name: data-action-position, element: Root, type: CEditableActionPosition, meaning: Reflects action placement.}
+      - {id: data-variant, name: data-variant, element: Root, type: CEditableVariant, meaning: Reflects treatment.}
+      - {id: data-size, name: data-size, element: Root, type: CEditableSize, meaning: Reflects geometry.}
+      - {id: aria-invalid, name: aria-invalid, element: Native Input, type: 'true or absent', meaning: Mirrors external or native invalid state.}
+      - {id: aria-describedby, name: aria-describedby, element: Native Input, type: IDREF list or absent, meaning: Merges Field and trusted description relationships.}
+      - {id: aria-errormessage, name: aria-errormessage, element: Native Input, type: IDREF list or absent, meaning: Merges active Field and trusted error relationships.}
+
+selectors:
+  - id: ceditable-selectors
+    component: CEditable
+    entries:
+      - {id: root, selector: '[data-citry-ui-part="root"]', element: Root div, purpose: Stable root and state surface.}
+      - {id: preview, selector: '[data-citry-ui-part="preview"]', element: Preview div, purpose: View-mode surface.}
+      - {id: preview-value, selector: '[data-citry-ui-part="preview-value"]', element: Preview span, purpose: Committed or placeholder text.}
+      - {id: edit-action, selector: '[data-citry-ui-part="edit-action"]', element: Button, purpose: Enters edit mode.}
+      - {id: edit-surface, selector: '[data-citry-ui-part="edit-surface"]', element: Div, purpose: Input and edit action layout.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native Input, purpose: Draft focus form and validity owner.}
+      - {id: actions, selector: '[data-citry-ui-part="actions"]', element: Span, purpose: Confirm and cancel layout.}
+      - {id: submit-action, selector: '[data-citry-ui-part="submit-action"]', element: Button, purpose: Commits the draft.}
+      - {id: cancel-action, selector: '[data-citry-ui-part="cancel-action"]', element: Button, purpose: Discards the draft.}
+
+interfaces:
+  - id: ceditable-aliases
+    kind: aliases
+    entries:
+      - {id: action-position, name: CEditableActionPosition, definition: 'Literal["inside", "outside"]'}
+      - {id: submit-mode, name: CEditableSubmitMode, definition: 'Literal["enter", "blur", "both", "explicit"]'}
+      - {id: variant, name: CEditableVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CEditableSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: value-source, name: CEditableValueSource, definition: 'Literal["submit", "blur", "reset"]'}
+      - {id: edit-reason, name: CEditableEditReason, definition: 'Literal["edit", "submit", "cancel", "blur", "reset", "disabled", "readonly", "invalid"]'}
+  - id: ceditable-value-detail
+    kind: record
+    name: CEditableValueChangeDetail
+    entries:
+      - {id: value, name: value, type: string, meaning: Requested value.}
+      - {id: previous-value, name: previousValue, type: string, meaning: Previous committed value.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client value owns the channel.}
+      - {id: source, name: source, type: CEditableValueSource, meaning: Commit source.}
+      - {id: source-event, name: sourceEvent, type: 'Event | None', meaning: Native source event when present.}
+  - id: ceditable-edit-detail
+    kind: record
+    name: CEditableEditChangeDetail
+    entries:
+      - {id: editing, name: editing, type: bool, meaning: Requested or forced mode.}
+      - {id: reason, name: reason, type: CEditableEditReason, meaning: Mode reason.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client editing owns the channel.}
+      - {id: forced, name: forced, type: bool, meaning: Whether safety made closure nonrejectable.}
+      - {id: source, name: source, type: 'EventTarget | None', meaning: Native source or safety owner.}
+
+translations:
+  - id: ceditable-translations
+    component: CEditable
+    entries:
+      - {id: click-to-edit, key: citry-ui-editable-click-to-edit, purpose: Supplies empty preview text and the editor placeholder., variables: None, override: '`placeholder` input', updates: '`i18n.bind()` updates every stateful destination.'}
+      - {id: edit, key: citry-ui-editable-edit, purpose: Names the edit control., variables: None, override: '`edit_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: save, key: citry-ui-editable-save, purpose: Names the save control., variables: None, override: '`submit_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: cancel, key: citry-ui-editable-cancel, purpose: Names the cancel control., variables: None, override: '`cancel_label` input', updates: '$c-tr updates `aria-label`.'}

@@ -1,0 +1,103 @@
+schema_version: 1
+family: date-input
+
+components:
+  - CDateInput
+
+inputs:
+  - id: cdate-input-server-inputs
+    component: CDateInput
+    channel: server
+    column_widths: [fit, 17rem, 15rem, auto]
+    entries:
+      - {id: value, name: value, type: {display: 'CDateInputValue | None', interfaces: [CDateInputValue]}, default: {kind: literal, value: null}, effect: Sets the initial/reset exact date or empty value.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native Form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the input with an external native Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the public native input ID.}
+      - {id: min, name: min, type: {display: 'CDateInputValue | None', interfaces: [CDateInputValue]}, default: {kind: literal, value: null}, effect: Sets the inclusive native minimum date.}
+      - {id: max, name: max, type: {display: 'CDateInputValue | None', interfaces: [CDateInputValue]}, default: {kind: literal, value: null}, effect: Sets the inclusive native maximum date.}
+      - {id: step, name: step, type: int, default: {kind: literal, value: 1}, effect: Sets the exact positive native day step.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native empty-value validity outside Field; Field owns it inside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks interaction and Form participation outside Field; Form disabledness also wins.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Keeps a focusable submitted value while blocking native edits.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds application invalid state to revealed native validity.}
+      - {id: autocomplete, name: autocomplete, type: 'str | None', default: {kind: literal, value: null}, effect: Sets a native autofill hint such as bday.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CDateInputVariant]}, default: {kind: literal, value: outline}, effect: Selects outer native-control treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CDateInputSize]}, default: {kind: literal, value: md}, effect: Selects coordinated sizing.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the native root and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the native root and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed native attributes without replacing owned identity state constraints or runtime markers.}
+
+  - id: cdate-input-client-inputs
+    component: CDateInput
+    channel: client
+    column_widths: [fit, 17rem, 18rem, auto]
+    entries:
+      - {id: value, name: value, type: 'canonical string | null', omitted: Releases control at the latest accepted value., effect: Controls the exact native value while supplied.}
+      - {id: min, name: min, type: 'canonical string | null', omitted: Uses the server minimum., effect: Replaces or removes the inclusive minimum.}
+      - {id: max, name: max, type: 'canonical string | null', omitted: Uses the server maximum., effect: Replaces or removes the inclusive maximum.}
+      - {id: step, name: step, type: positive integer, omitted: Uses the server step., effect: Replaces the native day step.}
+      - {id: required, name: required, type: boolean, omitted: Uses server or Field state., effect: Controls standalone required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or owner state., effect: Controls interaction and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or owner state., effect: Controls focusable nonmutable state.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server or Field state., effect: Controls application invalid state.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CDateInputVariant]}, omitted: Uses the server input., effect: Controls presentation.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CDateInputSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
+
+slots: []
+events: []
+methods: []
+
+css:
+  - id: cdate-input-css-variables
+    component: CDateInput
+    entries:
+      - {id: background, name: --cui-date-input-background, type: color, purpose: Native control background., default: Canvas}
+      - {id: foreground, name: --cui-date-input-foreground, type: color, purpose: Native date text and indicator foreground., default: CanvasText}
+      - {id: border-color, name: --cui-date-input-border-color, type: color, purpose: Resting border., default: Mixed CanvasText.}
+      - {id: hover-border-color, name: --cui-date-input-hover-border-color, type: color, purpose: Hover border., default: Stronger mixed CanvasText.}
+      - {id: focus-color, name: --cui-date-input-focus-color, type: color, purpose: Focus border and outline., default: Highlight}
+      - {id: invalid-border-color, name: --cui-date-input-invalid-border-color, type: color, purpose: Invalid border., default: Theme error.}
+      - {id: disabled-background, name: --cui-date-input-disabled-background, type: color, purpose: Disabled background., default: Muted Canvas.}
+      - {id: radius, name: --cui-date-input-radius, type: length, purpose: Outer corner radius., default: 0.5rem}
+      - {id: height, name: --cui-date-input-height, type: length, purpose: Minimum block size., default: 2.5rem}
+      - {id: inline-padding, name: --cui-date-input-inline-padding, type: length, purpose: Logical inline inset., default: 0.75rem}
+      - {id: block-padding, name: --cui-date-input-block-padding, type: length, purpose: Logical block inset., default: 0.5rem}
+      - {id: font-size, name: --cui-date-input-font-size, type: length, purpose: Date text size., default: 1rem}
+      - {id: min-inline-size, name: --cui-date-input-min-inline-size, type: length, purpose: Preferred minimum width before container clamping., default: 10rem}
+
+attributes:
+  - id: cdate-input-root-attributes
+    component: CDateInput
+    entries:
+      - {id: type, name: type, element: Native root input, type: '"date"', meaning: Selects browser-owned calendar-date editing and picker behavior.}
+      - {id: value, name: value, element: Native root input, type: canonical date | absent, meaning: Carries the initial/reset date.}
+      - {id: min, name: min, element: Native root input, type: canonical date | absent, meaning: Sets inclusive native minimum validity.}
+      - {id: max, name: max, element: Native root input, type: canonical date | absent, meaning: Sets inclusive native maximum validity.}
+      - {id: step, name: step, element: Native root input, type: positive integer, meaning: Sets the day step grid.}
+      - {id: aria-invalid, name: aria-invalid, element: Native root input, type: '"true" | absent', meaning: Mirrors application or revealed native invalidity.}
+      - {id: data-empty, name: data-empty, element: Native root input, type: present | absent, meaning: Mirrors an empty canonical value.}
+      - {id: data-required, name: data-required, element: Native root input, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Native root input, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Native root input, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Native root input, type: present | absent, meaning: Mirrors application or revealed native invalidity.}
+      - {id: data-variant, name: data-variant, element: Native root input, type: {display: CDateInputVariant, interfaces: [CDateInputVariant]}, meaning: Mirrors visual treatment.}
+      - {id: data-size, name: data-size, element: Native root input, type: {display: CDateInputSize, interfaces: [CDateInputSize]}, meaning: Mirrors coordinated sizing.}
+
+selectors:
+  - id: cdate-input-selectors
+    component: CDateInput
+    entries:
+      - {id: date-input, selector: '[data-citry-ui-part="date-input"]', element: Native root input, purpose: Stable styling state Form focus event and attrs destination.}
+
+interfaces:
+  - id: cdate-input-aliases
+    kind: aliases
+    entries:
+      - {id: value, name: CDateInputValue, definition: 'date | str'}
+      - {id: variant, name: CDateInputVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CDateInputSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+
+translations: []

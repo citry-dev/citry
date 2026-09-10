@@ -1,0 +1,158 @@
+schema_version: 1
+family: time-picker
+
+components:
+  - CTimePicker
+
+inputs:
+  - id: ctime-picker-server-inputs
+    component: CTimePicker
+    channel: server
+    column_widths: [fit, 18rem, 16rem, auto]
+    entries:
+      - {id: value, name: value, type: {display: 'CTimePickerTime | None', interfaces: [CTimePickerTime]}, default: {kind: literal, value: null}, effect: Sets the initial and reset canonical time or empty value and must be an available option.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native transport Form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native transport with an external Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the public no-JavaScript input or enhanced Button ID and owned ID prefix.}
+      - {id: min, name: min, type: {display: 'CTimePickerTime | None', interfaces: [CTimePickerTime]}, default: {kind: literal, value: null}, effect: Sets the inclusive first selectable time and may begin a wrapped interval.}
+      - {id: max, name: max, type: {display: 'CTimePickerTime | None', interfaces: [CTimePickerTime]}, default: {kind: literal, value: null}, effect: Sets the inclusive last selectable time and may end a wrapped interval.}
+      - {id: step, name: step, type: int, default: {kind: literal, value: 900}, effect: Generates choices at an exact interval of at least 300 seconds when options is absent.}
+      - {id: options, name: options, type: 'Sequence[CTimePickerTime] | None', default: {kind: literal, value: null}, effect: Supplies one through 288 unique exact choices in server order instead of generated intervals.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native empty-value validity outside Field; Field owns it inside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks opening selection clearing and Form participation outside Field; Form disabledness also wins.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Keeps the picker focusable and submitted but blocks value changes.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds application invalid state to revealed native validity.}
+      - {id: clearable, name: clearable, type: bool, default: {kind: literal, value: true}, effect: Shows a clear action for an optional non-empty writable value.}
+      - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Permits Escape outside and focus-outside close requests.}
+      - {id: placement, name: placement, type: {display: CPopoverPlacement, interfaces: [CPopoverPlacement]}, default: {kind: literal, value: bottom-start}, effect: Sets the preferred logical Popover placement.}
+      - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: true}, effect: Makes the Popover at least as wide as the visible control.}
+      - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose a time}, effect: Supplies visible empty-state text when explicitly overridden.}
+      - {id: picker-label, name: picker_label, type: str, default: {kind: literal, value: Choose time}, effect: Names the popup Listbox and empty trigger when explicitly overridden.}
+      - {id: change-label, name: change_label, type: str, default: {kind: literal, value: 'Change time, {time}'}, effect: Formats a selected trigger name and must retain the time placeholder when explicitly overridden.}
+      - {id: clear-label, name: clear_label, type: str, default: {kind: literal, value: Clear time}, effect: Names the clear Button when explicitly overridden.}
+      - {id: unavailable-message, name: unavailable_message, type: str, default: {kind: literal, value: Choose an available time.}, effect: Supplies native custom validity if a selected value is unavailable.}
+      - {id: variant, name: variant, type: {display: CTimePickerVariant, interfaces: [CTimePickerVariant]}, default: {kind: literal, value: outline}, effect: Selects outline filled or plain field treatment.}
+      - {id: size, name: size, type: {display: CTimePickerSize, interfaces: [CTimePickerSize]}, default: {kind: literal, value: md}, effect: Selects coordinated control and text sizing.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned state identity or runtime markers.}
+
+  - id: ctime-picker-client-inputs
+    component: CTimePicker
+    channel: client
+    column_widths: [fit, 18rem, 18rem, auto]
+    entries:
+      - {id: value, name: value, type: 'canonical string | null', omitted: Releases control at the latest committed value., effect: Controls selected and submitted time while supplied.}
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control at the latest committed visibility., effect: Controls popup visibility while supplied.}
+      - {id: required, name: required, type: boolean, omitted: Uses server or Field state., effect: Controls standalone required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or owner state., effect: Controls interaction and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or owner state., effect: Controls focusable nonmutable state.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server or Field state., effect: Controls application invalid state.}
+      - {id: clearable, name: clearable, type: boolean, omitted: Uses the server input., effect: Controls the optional clear action.}
+      - {id: dismissible, name: dismissible, type: boolean, omitted: Uses the server input., effect: Controls passive popup dismissal.}
+      - {id: placement, name: placement, type: {display: CPopoverPlacement, interfaces: [CPopoverPlacement]}, omitted: Uses the server input., effect: Controls preferred logical placement.}
+      - {id: match-width, name: matchWidth, type: boolean, omitted: Uses the server input., effect: Controls trigger-width matching.}
+      - {id: variant, name: variant, type: {display: CTimePickerVariant, interfaces: [CTimePickerVariant]}, omitted: Uses the server input., effect: Controls field presentation.}
+      - {id: size, name: size, type: {display: CTimePickerSize, interfaces: [CTimePickerSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic value callback., effect: Receives option clear native and reset value requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic visibility callback., effect: Receives trigger selection dismissal reset and forced-close requests.}
+
+slots: []
+
+events:
+  - id: ctime-picker-events
+    component: CTimePicker
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: {display: '(value: string | null, detail: CTimePickerValueChangeDetail) => void', interfaces: [CTimePickerValueChangeDetail]}
+        trigger: Listbox selection clear reset or native fallback editing requests another value.
+        detail: {display: '{value, previousValue, controlled, source, sourceEvent}', interfaces: [CTimePickerValueChangeDetail]}
+        behavior: Uncontrolled user commits emit native input/change; controlled requests wait for the owner.
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(open: boolean, detail: CTimePickerOpenChangeDetail) => void', interfaces: [CTimePickerOpenChangeDetail]}
+        trigger: Trigger selection clear reset Escape outside focus-outside native or forced layer changes request visibility.
+        detail: {display: '{reason, controlled, forced, source}', interfaces: [CTimePickerOpenChangeDetail]}
+        behavior: Uncontrolled requests commit before notification; controlled requests wait except forced safety closure.
+
+methods: []
+
+css:
+  - id: ctime-picker-css-variables
+    component: CTimePicker
+    entries:
+      - {id: background, name: --cui-time-picker-background, type: color, purpose: Visible control and clear background., default: Canvas or variant-derived.}
+      - {id: foreground, name: --cui-time-picker-foreground, type: color, purpose: Text and icon color., default: CanvasText}
+      - {id: border-color, name: --cui-time-picker-border-color, type: color, purpose: Visible control and clear boundary., default: Mixed CanvasText.}
+      - {id: invalid-border-color, name: --cui-time-picker-invalid-border-color, type: color, purpose: Revealed invalid control boundary., default: Theme error.}
+      - {id: focus-color, name: --cui-time-picker-focus-color, type: color, purpose: Control and clear focus outline., default: Highlight}
+      - {id: radius, name: --cui-time-picker-radius, type: length, purpose: Visible control and clear corner radius., default: 0.625rem}
+      - {id: min-block-size, name: --cui-time-picker-min-block-size, type: length, purpose: Minimum interactive control height., default: 2.5rem}
+      - {id: padding-inline, name: --cui-time-picker-padding-inline, type: length, purpose: Visible control inline inset., default: 0.75rem}
+      - {id: gap, name: --cui-time-picker-gap, type: length, purpose: Visible value and icon gap., default: 0.5rem}
+      - {id: list-max-block-size, name: --cui-time-picker-list-max-block-size, type: length, purpose: Maximum scrollable option-list height., default: 18rem}
+
+attributes:
+  - id: ctime-picker-root-attributes
+    component: CTimePicker
+    entries:
+      - {id: data-empty, name: data-empty, element: Root, type: present | absent, meaning: Marks no committed canonical value.}
+      - {id: data-open, name: data-open, element: Root, type: present | absent, meaning: Mirrors effective popup visibility.}
+      - {id: data-required, name: data-required, element: Root, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root, type: present | absent, meaning: Mirrors application unavailable or revealed native invalidity.}
+      - {id: data-variant, name: data-variant, element: Root, type: {display: CTimePickerVariant, interfaces: [CTimePickerVariant]}, meaning: Mirrors visual treatment.}
+      - {id: data-size, name: data-size, element: Root, type: {display: CTimePickerSize, interfaces: [CTimePickerSize]}, meaning: Mirrors coordinated sizing.}
+      - {id: data-enhanced, name: data-enhanced, element: Root, type: present | absent, meaning: Marks completed custom control activation.}
+
+selectors:
+  - id: ctime-picker-selectors
+    component: CTimePicker
+    entries:
+      - {id: time-picker, selector: '[data-citry-ui-part="time-picker"]', element: Root div, purpose: State reflection attrs and styling destination.}
+      - {id: fallback-input, selector: '[data-citry-ui-part="fallback-input"]', element: Native Time input, purpose: No-JavaScript control and enhanced Form reset validity transport.}
+      - {id: enhanced-control, selector: '[data-citry-ui-part="enhanced-control"]', element: Layout div, purpose: Groups the Popover activator and optional clear action.}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Native Button, purpose: Full-width popup activator and enhanced public focus target.}
+      - {id: value, selector: '[data-citry-ui-part="value"]', element: Span, purpose: Displays localized selected time or placeholder.}
+      - {id: clear, selector: '[data-citry-ui-part="clear"]', element: Native Button, purpose: Requests an empty optional value.}
+
+interfaces:
+  - id: ctime-picker-aliases
+    kind: aliases
+    entries:
+      - {id: time, name: CTimePickerTime, definition: 'time | str'}
+      - {id: variant, name: CTimePickerVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CTimePickerSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: value-source, name: CTimePickerValueChangeSource, definition: 'Literal["option", "clear", "reset", "native"]'}
+      - {id: popover-placement, name: CPopoverPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - id: ctime-picker-value-change-detail
+    kind: record
+    name: CTimePickerValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'string | null', meaning: Requested selected canonical time or empty state.}
+      - {id: previous-value, name: previousValue, type: 'string | null', meaning: Effective time before the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns the commit.}
+      - {id: source, name: source, type: {display: CTimePickerValueChangeSource, interfaces: [CTimePickerValueChangeSource]}, meaning: Option clear reset or native cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native interaction event when one exists.}
+  - id: ctime-picker-open-change-detail
+    kind: record
+    name: CTimePickerOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: trigger | selection | clear | reset | escape | outside | focus-outside | native | ancestor | modal, meaning: Exact request or forced-close cause.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client open owns ordinary visibility commits.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether ancestor or modal safety required closure.}
+      - {id: source, name: source, type: 'object | null', meaning: Associated browser source when one exists.}
+
+translations:
+  - id: ctime-picker-translations
+    component: CTimePicker
+    entries:
+      - {id: placeholder, key: citry-ui-time-picker-placeholder, purpose: Displays the empty control value., variables: none, override: '`placeholder`', updates: 'Parent i18n subscription calls `tr()` because the same destination later displays formatted times.'}
+      - {id: label, key: citry-ui-time-picker-label, purpose: Names the popup Listbox and empty trigger., variables: none, override: '`picker_label`', updates: '`$c-tr` updates the stable title; parent subscription updates the dynamic trigger name.'}
+      - {id: change, key: citry-ui-time-picker-change, purpose: Names a selected trigger., variables: '`time: str` localized by a time display profile', override: '`change_label` containing `{time}`', updates: 'Parent i18n subscription recomputes the formatted value and calls `tr()`.'}
+      - {id: clear, key: citry-ui-time-picker-clear, purpose: Names the optional clear Button., variables: none, override: '`clear_label`', updates: '`$c-tr` updates the stable aria-label destination.'}
+      - {id: unavailable, key: citry-ui-time-picker-unavailable, purpose: Supplies native custom validity when the value is unavailable., variables: none, override: '`unavailable_message`', updates: '`i18n.bind()` updates the browser-owned validity message.'}

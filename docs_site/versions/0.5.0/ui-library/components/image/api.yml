@@ -1,0 +1,160 @@
+schema_version: 1
+family: image
+
+components:
+  - CImage
+
+inputs:
+  - id: cimage-server-inputs
+    component: CImage
+    channel: server
+    column_widths: [fit, 17rem, 13rem, auto]
+    entries:
+      - {id: src, name: src, type: str, default: {kind: required}, effect: Sets the required nonempty escaped fallback image URL.}
+      - {id: alt, name: alt, type: str, default: {kind: required}, effect: Sets the required native text alternative; an exact empty string is an intentional decorative choice.}
+      - {id: width, name: width, type: positive int, default: {kind: required}, effect: Sets native intrinsic width and reserves geometry; bool is rejected.}
+      - {id: height, name: height, type: positive int, default: {kind: required}, effect: Sets native intrinsic height and reserves geometry; bool is rejected.}
+      - {id: srcset, name: srcset, type: 'str | None', default: {kind: literal, value: null}, effect: Adds native responsive candidates; width descriptors require sizes.}
+      - {id: sizes, name: sizes, type: 'str | None', default: {kind: literal, value: null}, effect: Adds native image source sizes; auto sizes require lazy loading.}
+      - {id: sources, name: sources, type: 'Sequence[CImageSource]', default: {kind: derived, display: '()'}, effect: Snapshots up to 32 ordered source records and emits picture only when nonempty.}
+      - {id: loading, name: loading, type: {display: '"eager" | "lazy"', interfaces: [CImageLoading]}, default: {kind: literal, value: eager}, effect: Selects the native loading hint.}
+      - {id: decoding, name: decoding, type: {display: '"auto" | "sync" | "async"', interfaces: [CImageDecoding]}, default: {kind: literal, value: auto}, effect: Selects the native decoding hint.}
+      - {id: fetch-priority, name: fetch_priority, type: {display: '"auto" | "high" | "low"', interfaces: [CImageFetchPriority]}, default: {kind: literal, value: auto}, effect: Selects native fetchpriority; the application owns scarcity policy.}
+      - {id: cross-origin, name: cross_origin, type: {display: 'CImageCrossOrigin | None', interfaces: [CImageCrossOrigin]}, default: {kind: literal, value: null}, effect: Selects anonymous or credentialed native CORS mode.}
+      - {id: referrer-policy, name: referrer_policy, type: {display: 'CImageReferrerPolicy | None', interfaces: [CImageReferrerPolicy]}, default: {kind: literal, value: null}, effect: Selects the native image request referrer policy.}
+      - {id: fit, name: fit, type: {display: '"contain" | "cover" | "fill" | "none" | "scale-down"', interfaces: [CImageFit]}, default: {kind: literal, value: contain}, effect: Sets effective object fit and the root mirror.}
+      - {id: position, name: position, type: str, default: {kind: literal, value: '50% 50%'}, effect: Sets validated object-position text; the browser owns final CSS grammar.}
+      - {id: draggable, name: draggable, type: bool, default: {kind: literal, value: false}, effect: Sets the exact native draggable reflection.}
+      - {id: on-status-change, name: onStatusChange, type: 'browser callback | None', default: {kind: literal, value: null}, effect: Sets the owner-local normalized status callback.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles and merges them with attrs before owned style fallbacks.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed neutral-root attributes and isolated-scope native listeners.}
+      - {id: img-attrs, name: img_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed native image attributes and load or error listeners without replacing owned resources, semantics, dimensions, or policy.'}
+
+  - id: cimage-client-inputs
+    component: CImage
+    channel: client
+    column_widths: [fit, 16rem, 15rem, auto]
+    entries:
+      - {id: src, name: src, type: str, omitted: Uses the immutable server baseline; null has the same effect., effect: Replaces the fallback URL and begins a new request generation.}
+      - {id: alt, name: alt, type: str, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates the native alternative without creating a second semantic owner.}
+      - {id: width, name: width, type: positive integer, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates native intrinsic width.}
+      - {id: height, name: height, type: positive integer, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates native intrinsic height.}
+      - {id: srcset, name: srcset, type: 'string | null', omitted: Uses the immutable server baseline., effect: Updates final-image candidates and begins a new request generation when effective selection metadata changes.}
+      - {id: sizes, name: sizes, type: 'string | null', omitted: Uses the immutable server baseline., effect: Updates final-image sizes and request selection.}
+      - {id: loading, name: loading, type: {display: '"eager" | "lazy"', interfaces: [CImageLoading]}, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates the native loading hint without fabricating settlement.}
+      - {id: decoding, name: decoding, type: {display: '"auto" | "sync" | "async"', interfaces: [CImageDecoding]}, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates the native decoding hint.}
+      - {id: fetch-priority, name: fetchPriority, type: {display: '"auto" | "high" | "low"', interfaces: [CImageFetchPriority]}, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates native fetch priority.}
+      - {id: cross-origin, name: crossOrigin, type: {display: 'CImageCrossOrigin | null', interfaces: [CImageCrossOrigin]}, omitted: Uses the immutable server baseline., effect: Updates or clears native CORS mode before a resource write.}
+      - {id: referrer-policy, name: referrerPolicy, type: {display: 'CImageReferrerPolicy | null', interfaces: [CImageReferrerPolicy]}, omitted: Uses the immutable server baseline., effect: Updates or clears native referrer policy before a resource write.}
+      - {id: fit, name: fit, type: {display: '"contain" | "cover" | "fill" | "none" | "scale-down"', interfaces: [CImageFit]}, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates object fit and the root reflection.}
+      - {id: position, name: position, type: string, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates validated object-position text.}
+      - {id: draggable, name: draggable, type: boolean, omitted: Uses the immutable server baseline; null has the same effect., effect: Updates native draggable.}
+      - {id: on-status-change, name: onStatusChange, type: function, omitted: Uses the server callback., effect: Replaces the owner-local normalized status callback; null clears it.}
+
+slots:
+  - id: cimage-slots
+    component: CImage
+    entries:
+      - {id: placeholder, name: placeholder, required: false, data: none, fallback: No custom loading layer; native pending rendering remains visible.}
+      - {id: fallback, name: fallback, required: false, data: none, fallback: No custom error layer; native broken-image rendering and alt remain visible.}
+
+events:
+  - id: cimage-events
+    component: CImage
+    entries:
+      - id: status-change
+        name: onStatusChange
+        signature: {display: '(detail: CImageStatusChangeDetail) => void', interfaces: [CImageStatusChangeDetail]}
+        trigger: Initial loading ownership, a new accepted request generation, cached completion, or matching trusted native success or error settlement for a selected currentSrc change.
+        detail: {display: '{status, src, current_src, natural_width, natural_height}', interfaces: [CImageStatusChangeDetail]}
+        behavior: Runs after native attributes and public mirrors synchronize; it is not cancelable and stale generations cannot notify.
+
+methods: []
+
+css:
+  - id: cimage-css-variables
+    component: CImage
+    entries:
+      - {id: aspect-ratio, name: --cui-image-aspect-ratio, type: positive CSS ratio or auto, purpose: Overrides the rendered native image ratio without changing intrinsic metadata., default: auto}
+      - {id: fit, name: --cui-image-fit, type: object-fit value, purpose: Overrides the effective fit input for pixels inside the media box., default: Effective fit input}
+      - {id: position, name: --cui-image-position, type: object-position value, purpose: Overrides effective pixel position inside the media box., default: Effective position input}
+      - {id: radius, name: --cui-image-radius, type: length or percentage, purpose: Media box corner radius., default: 'var(--cui-radius-md)'}
+      - {id: background, name: --cui-image-background, type: color or image, purpose: Loading and native contain-area background., default: transparent}
+      - {id: fallback-color, name: --cui-image-fallback-color, type: color, purpose: Visual fallback foreground., default: 'var(--cui-color-muted-fg)'}
+      - {id: fallback-background, name: --cui-image-fallback-background, type: color or image, purpose: Visual fallback background., default: 'var(--cui-color-muted-bg)'}
+
+attributes:
+  - id: cimage-root-attributes
+    component: CImage
+    entries:
+      - {id: data-status, name: data-status, element: Image root, type: {display: '"loading" | "loaded" | "error"', interfaces: [CImageStatus]}, meaning: Mirrors the last accepted normalized status after readiness; a silent browser candidate change does not invent settlement.}
+      - {id: data-fit, name: data-fit, element: Image root, type: {display: '"contain" | "cover" | "fill" | "none" | "scale-down"', interfaces: [CImageFit]}, meaning: Mirrors effective configured fit before a public CSS variable override.}
+      - {id: data-has-placeholder, name: data-has-placeholder, element: Image root, type: present | absent, meaning: Reports whether placeholder slot content exists.}
+      - {id: data-has-fallback, name: data-has-fallback, element: Image root, type: present | absent, meaning: Reports whether fallback slot content exists.}
+      - {id: readiness, name: data-citry-image-initialized, element: Image root, type: present | absent, meaning: Marks a live settled runtime owner; the copyable attribute alone is not authority.}
+  - id: cimage-native-attributes
+    component: CImage
+    entries:
+      - {id: alt, name: alt, element: Native img, type: string, meaning: Required native alternative text and sole image semantic name.}
+      - {id: width, name: width, element: Native img or source, type: positive integer, meaning: Native intrinsic width metadata.}
+      - {id: height, name: height, element: Native img or source, type: positive integer, meaning: Native intrinsic height metadata.}
+      - {id: src, name: src, element: Native img, type: nonempty URL string, meaning: Required fallback request URL.}
+      - {id: srcset, name: srcset, element: Native img or source, type: native candidate string, meaning: Browser-owned responsive candidate set.}
+      - {id: sizes, name: sizes, element: Native img or source, type: native sizes string, meaning: Browser-owned rendered-size hint.}
+      - {id: media, name: media, element: Native source, type: media query string, meaning: Browser-owned art-direction discriminator.}
+      - {id: type, name: type, element: Native source, type: image MIME essence, meaning: Browser-owned format discriminator.}
+      - {id: loading, name: loading, element: Native img, type: {display: '"eager" | "lazy"', interfaces: [CImageLoading]}, meaning: Native request scheduling hint.}
+      - {id: decoding, name: decoding, element: Native img, type: {display: '"auto" | "sync" | "async"', interfaces: [CImageDecoding]}, meaning: Native decode scheduling hint.}
+      - {id: fetchpriority, name: fetchpriority, element: Native img, type: {display: '"auto" | "high" | "low"', interfaces: [CImageFetchPriority]}, meaning: Native relative fetch-priority hint.}
+      - {id: crossorigin, name: crossorigin, element: Native img, type: {display: '"anonymous" | "use-credentials" | absent', interfaces: [CImageCrossOrigin]}, meaning: Native CORS request mode.}
+      - {id: referrerpolicy, name: referrerpolicy, element: Native img, type: {display: 'CImageReferrerPolicy | absent', interfaces: [CImageReferrerPolicy]}, meaning: Native request referrer policy.}
+      - {id: draggable, name: draggable, element: Native img, type: '"true" | "false"', meaning: Exact native drag reflection.}
+      - {id: slot-hidden, name: hidden, element: Placeholder or fallback wrapper, type: present in server output, meaning: Keeps custom visual layers from obscuring native no-JavaScript output.}
+      - {id: slot-aria-hidden, name: aria-hidden, element: Placeholder or fallback wrapper, type: '"true"', meaning: Keeps visual slot copy out of the accessibility tree.}
+      - {id: slot-inert, name: inert, element: Placeholder or fallback wrapper, type: present, meaning: Prevents visual slot descendants from becoming interaction surfaces.}
+
+selectors:
+  - id: cimage-selectors
+    component: CImage
+    entries:
+      - {id: image-root, selector: '[data-citry-ui-part="image-root"]', element: Neutral root span, purpose: 'Lifecycle owner and class_, style, and attrs destination.'}
+      - {id: picture, selector: '[data-citry-ui-part="picture"]', element: Native picture, purpose: Ordered responsive source-selection context present only when sources is nonempty.}
+      - {id: image, selector: '[data-citry-ui-part="image"]', element: Sole native img, purpose: Semantic and request owner plus img_attrs destination.}
+      - {id: placeholder, selector: '[data-citry-ui-part="placeholder"]', element: Inert visual span, purpose: Optional loading-only visual layer.}
+      - {id: fallback, selector: '[data-citry-ui-part="fallback"]', element: Inert visual span, purpose: Optional error-only visual layer.}
+
+interfaces:
+  - id: cimage-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: fit, name: CImageFit, definition: 'Literal["contain", "cover", "fill", "none", "scale-down"]'}
+      - {id: loading, name: CImageLoading, definition: 'Literal["eager", "lazy"]'}
+      - {id: decoding, name: CImageDecoding, definition: 'Literal["auto", "sync", "async"]'}
+      - {id: fetch-priority, name: CImageFetchPriority, definition: 'Literal["auto", "high", "low"]'}
+      - {id: cross-origin, name: CImageCrossOrigin, definition: 'Literal["anonymous", "use-credentials"]'}
+      - {id: referrer-policy, name: CImageReferrerPolicy, definition: 'Literal["no-referrer", "no-referrer-when-downgrade", "origin", "origin-when-cross-origin", "same-origin", "strict-origin", "strict-origin-when-cross-origin", "unsafe-url"]'}
+      - {id: status, name: CImageStatus, definition: 'Literal["loading", "loaded", "error"]'}
+  - id: cimage-source
+    kind: record
+    name: CImageSource
+    entries:
+      - {id: srcset, name: srcset, type: str, meaning: Required native candidate string for one ordered source.}
+      - {id: media, name: media, type: 'str | None', meaning: Optional native media discriminator.}
+      - {id: type, name: type, type: 'str | None', meaning: Optional image MIME essence discriminator.}
+      - {id: sizes, name: sizes, type: 'str | None', meaning: Optional native source sizes; required for width descriptors.}
+      - {id: width, name: width, type: 'positive int | None', meaning: Optional native source width paired with height.}
+      - {id: height, name: height, type: 'positive int | None', meaning: Optional native source height paired with width.}
+  - id: cimage-status-change-detail
+    kind: record
+    name: CImageStatusChangeDetail
+    entries:
+      - {id: status, name: status, type: {display: CImageStatus, interfaces: [CImageStatus]}, meaning: 'Accepted normalized loading, loaded, or error state at callback time.'}
+      - {id: src, name: src, type: string, meaning: Current authored fallback URL snapshot.}
+      - {id: current-src, name: current_src, type: string, meaning: 'Browser-selected absolute URL snapshot, which may be sensitive.'}
+      - {id: natural-width, name: natural_width, type: integer, meaning: 'Native selected resource width, including zero for pending, error, or valid zero-size resources.'}
+      - {id: natural-height, name: natural_height, type: integer, meaning: 'Native selected resource height, including zero for pending, error, or valid zero-size resources.'}
+
+translations: []

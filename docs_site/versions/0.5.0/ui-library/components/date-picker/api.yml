@@ -1,0 +1,166 @@
+schema_version: 1
+family: date-picker
+
+components:
+  - CDatePicker
+
+inputs:
+  - id: cdate-picker-server-inputs
+    component: CDatePicker
+    channel: server
+    column_widths: [fit, 18rem, 16rem, auto]
+    entries:
+      - {id: value, name: value, type: {display: 'CDatePickerDate | None', interfaces: [CDatePickerDate]}, default: {kind: literal, value: null}, effect: Sets the initial and reset canonical date or empty value.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native transport Form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native transport with an external Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the public no-JavaScript input or enhanced Button ID and owned ID prefix.}
+      - {id: min, name: min, type: {display: 'CDatePickerDate | None', interfaces: [CDatePickerDate]}, default: {kind: literal, value: null}, effect: Sets the inclusive minimum selectable date.}
+      - {id: max, name: max, type: {display: 'CDatePickerDate | None', interfaces: [CDatePickerDate]}, default: {kind: literal, value: null}, effect: Sets the inclusive maximum selectable date.}
+      - {id: unavailable-dates, name: unavailable_dates, type: 'Sequence[CDatePickerDate]', default: {kind: derived, display: '()'}, effect: Marks at most 4096 unique dates focusable but unavailable.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native empty-value validity outside Field; Field owns it inside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks opening selection clearing and Form participation outside Field; Form disabledness also wins.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Keeps the picker focusable and submitted but blocks value changes.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds application invalid state to revealed native validity.}
+      - {id: clearable, name: clearable, type: bool, default: {kind: literal, value: true}, effect: Shows a clear action for an optional non-empty writable value.}
+      - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Permits Escape outside and focus-outside close requests.}
+      - {id: placement, name: placement, type: {display: CPopoverPlacement, interfaces: [CPopoverPlacement]}, default: {kind: literal, value: bottom-start}, effect: Sets the preferred logical Popover placement.}
+      - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: true}, effect: Makes the Popover at least as wide as the visible control.}
+      - {id: first-day-of-week, name: first_day_of_week, type: 'Literal[1, 2, 3, 4, 5, 6, 7] | None', default: {kind: literal, value: null}, effect: Overrides the locale week start using ISO Monday 1 through Sunday 7.}
+      - {id: show-adjacent-days, name: show_adjacent_days, type: bool, default: {kind: literal, value: true}, effect: Shows selectable neighboring-month dates in the Calendar.}
+      - {id: fixed-weeks, name: fixed_weeks, type: bool, default: {kind: literal, value: true}, effect: Uses six stable Calendar rows instead of the natural month row count.}
+      - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose a date}, effect: Supplies visible empty-state text when explicitly overridden.}
+      - {id: picker-label, name: picker_label, type: str, default: {kind: literal, value: Choose date}, effect: Names the popup dialog and empty trigger when explicitly overridden.}
+      - {id: change-label, name: change_label, type: str, default: {kind: literal, value: 'Change date, {date}'}, effect: Formats a selected trigger name and must retain the date placeholder when explicitly overridden.}
+      - {id: clear-label, name: clear_label, type: str, default: {kind: literal, value: Clear date}, effect: Names the clear Button when explicitly overridden.}
+      - {id: unavailable-message, name: unavailable_message, type: str, default: {kind: literal, value: Choose an available date.}, effect: Supplies native custom validity if a selected date becomes unavailable.}
+      - {id: variant, name: variant, type: {display: CDatePickerVariant, interfaces: [CDatePickerVariant]}, default: {kind: literal, value: outline}, effect: Selects outline filled or plain field treatment.}
+      - {id: size, name: size, type: {display: CDatePickerSize, interfaces: [CDatePickerSize]}, default: {kind: literal, value: md}, effect: Selects coordinated control and text sizing.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned state identity or runtime markers.}
+
+  - id: cdate-picker-client-inputs
+    component: CDatePicker
+    channel: client
+    column_widths: [fit, 18rem, 18rem, auto]
+    entries:
+      - {id: value, name: value, type: 'canonical string | null', omitted: Releases control at the latest committed value., effect: Controls selected and submitted date while supplied.}
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control at the latest committed visibility., effect: Controls popup visibility while supplied.}
+      - {id: min, name: min, type: 'canonical string | null', omitted: Uses the server minimum., effect: Replaces or removes the inclusive minimum.}
+      - {id: max, name: max, type: 'canonical string | null', omitted: Uses the server maximum., effect: Replaces or removes the inclusive maximum.}
+      - {id: unavailable-dates, name: unavailableDates, type: canonical string array, omitted: Uses the server sequence., effect: Replaces the bounded unavailable-date set.}
+      - {id: required, name: required, type: boolean, omitted: Uses server or Field state., effect: Controls standalone required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or owner state., effect: Controls interaction and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or owner state., effect: Controls focusable nonmutable state.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server or Field state., effect: Controls application invalid state.}
+      - {id: clearable, name: clearable, type: boolean, omitted: Uses the server input., effect: Controls the optional clear action.}
+      - {id: dismissible, name: dismissible, type: boolean, omitted: Uses the server input., effect: Controls passive popup dismissal.}
+      - {id: placement, name: placement, type: {display: CPopoverPlacement, interfaces: [CPopoverPlacement]}, omitted: Uses the server input., effect: Controls preferred logical placement.}
+      - {id: match-width, name: matchWidth, type: boolean, omitted: Uses the server input., effect: Controls trigger-width matching.}
+      - {id: first-day-of-week, name: firstDayOfWeek, type: '1 | 2 | 3 | 4 | 5 | 6 | 7 | null', omitted: Uses the server input., effect: Replaces or restores locale week start.}
+      - {id: show-adjacent-days, name: showAdjacentDays, type: boolean, omitted: Uses the server input., effect: Controls neighboring-month cell visibility.}
+      - {id: fixed-weeks, name: fixedWeeks, type: boolean, omitted: Uses the server input., effect: Controls six-row versus natural Calendar layout.}
+      - {id: variant, name: variant, type: {display: CDatePickerVariant, interfaces: [CDatePickerVariant]}, omitted: Uses the server input., effect: Controls field presentation.}
+      - {id: size, name: size, type: {display: CDatePickerSize, interfaces: [CDatePickerSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic value callback., effect: Receives Calendar clear native and reset value requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic visibility callback., effect: Receives trigger selection dismissal reset and forced-close requests.}
+
+slots: []
+
+events:
+  - id: cdate-picker-events
+    component: CDatePicker
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: {display: '(value: string | null, detail: CDatePickerValueChangeDetail) => void', interfaces: [CDatePickerValueChangeDetail]}
+        trigger: Calendar selection clear reset or native fallback editing requests another value.
+        detail: {display: '{value, previousValue, controlled, source, sourceEvent}', interfaces: [CDatePickerValueChangeDetail]}
+        behavior: Uncontrolled user commits emit native input/change; controlled requests wait for the owner.
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(open: boolean, detail: CDatePickerOpenChangeDetail) => void', interfaces: [CDatePickerOpenChangeDetail]}
+        trigger: Trigger selection clear reset Escape outside focus-outside native or forced layer changes request visibility.
+        detail: {display: '{reason, controlled, forced, source}', interfaces: [CDatePickerOpenChangeDetail]}
+        behavior: Uncontrolled requests commit before notification; controlled requests wait except forced safety closure.
+
+methods: []
+
+css:
+  - id: cdate-picker-css-variables
+    component: CDatePicker
+    entries:
+      - {id: background, name: --cui-date-picker-background, type: color, purpose: Visible control and clear background., default: Canvas or variant-derived.}
+      - {id: foreground, name: --cui-date-picker-foreground, type: color, purpose: Text and icon color., default: CanvasText}
+      - {id: border-color, name: --cui-date-picker-border-color, type: color, purpose: Visible control and clear boundary., default: Mixed CanvasText.}
+      - {id: invalid-border-color, name: --cui-date-picker-invalid-border-color, type: color, purpose: Revealed invalid control boundary., default: Theme error.}
+      - {id: focus-color, name: --cui-date-picker-focus-color, type: color, purpose: Control and clear focus outline., default: Highlight}
+      - {id: radius, name: --cui-date-picker-radius, type: length, purpose: Visible control and clear corner radius., default: 0.625rem}
+      - {id: min-block-size, name: --cui-date-picker-min-block-size, type: length, purpose: Minimum interactive control height., default: 2.5rem}
+      - {id: padding-inline, name: --cui-date-picker-padding-inline, type: length, purpose: Visible control inline inset., default: 0.75rem}
+      - {id: gap, name: --cui-date-picker-gap, type: length, purpose: Visible value and icon gap., default: 0.5rem}
+
+attributes:
+  - id: cdate-picker-root-attributes
+    component: CDatePicker
+    entries:
+      - {id: data-empty, name: data-empty, element: Root, type: present | absent, meaning: Marks no committed canonical value.}
+      - {id: data-open, name: data-open, element: Root, type: present | absent, meaning: Mirrors effective popup visibility.}
+      - {id: data-required, name: data-required, element: Root, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root, type: present | absent, meaning: Mirrors application unavailable or revealed native invalidity.}
+      - {id: data-variant, name: data-variant, element: Root, type: {display: CDatePickerVariant, interfaces: [CDatePickerVariant]}, meaning: Mirrors visual treatment.}
+      - {id: data-size, name: data-size, element: Root, type: {display: CDatePickerSize, interfaces: [CDatePickerSize]}, meaning: Mirrors coordinated sizing.}
+      - {id: data-enhanced, name: data-enhanced, element: Root, type: present | absent, meaning: Marks completed custom control activation.}
+
+selectors:
+  - id: cdate-picker-selectors
+    component: CDatePicker
+    entries:
+      - {id: date-picker, selector: '[data-citry-ui-part="date-picker"]', element: Root div, purpose: State reflections root attrs and styling destination.}
+      - {id: fallback-input, selector: '[data-citry-ui-part="fallback-input"]', element: Native Date input, purpose: No-JavaScript control and enhanced Form reset validity transport.}
+      - {id: enhanced-control, selector: '[data-citry-ui-part="enhanced-control"]', element: Layout div, purpose: Groups the Popover activator and optional clear action.}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Native Button, purpose: Full-width popup activator and enhanced public focus target.}
+      - {id: value, selector: '[data-citry-ui-part="value"]', element: Span, purpose: Displays localized selected date or placeholder.}
+      - {id: icon, selector: '[data-citry-ui-part="icon"]', element: Hidden decorative SVG, purpose: Identifies the calendar affordance.}
+      - {id: clear, selector: '[data-citry-ui-part="clear"]', element: Native Button, purpose: Requests an empty optional value.}
+
+interfaces:
+  - id: cdate-picker-aliases
+    kind: aliases
+    entries:
+      - {id: date, name: CDatePickerDate, definition: 'date | str'}
+      - {id: variant, name: CDatePickerVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CDatePickerSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: value-source, name: CDatePickerValueChangeSource, definition: 'Literal["calendar", "clear", "reset", "native"]'}
+      - {id: popover-placement, name: CPopoverPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - id: cdate-picker-value-change-detail
+    kind: record
+    name: CDatePickerValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'string | null', meaning: Requested selected canonical date or empty state.}
+      - {id: previous-value, name: previousValue, type: 'string | null', meaning: Effective date before the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns the commit.}
+      - {id: source, name: source, type: {display: CDatePickerValueChangeSource, interfaces: [CDatePickerValueChangeSource]}, meaning: Calendar clear reset or native cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native interaction event when one exists.}
+  - id: cdate-picker-open-change-detail
+    kind: record
+    name: CDatePickerOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: trigger | selection | clear | reset | escape | outside | focus-outside | native | ancestor | modal, meaning: Exact request or forced-close cause.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client open owns ordinary visibility commits.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether ancestor or modal safety required closure.}
+      - {id: source, name: source, type: 'object | null', meaning: Associated browser source when one exists.}
+
+translations:
+  - id: cdate-picker-translations
+    component: CDatePicker
+    entries:
+      - {id: placeholder, key: citry-ui-date-picker-placeholder, purpose: Displays the empty control value., variables: none, override: '`placeholder`', updates: 'Parent i18n subscription calls `tr()` because the same destination later displays formatted dates.'}
+      - {id: label, key: citry-ui-date-picker-label, purpose: Names the popup and empty trigger., variables: none, override: '`picker_label`', updates: '`$c-tr` updates the stable title; parent subscription updates the dynamic trigger name.'}
+      - {id: change, key: citry-ui-date-picker-change, purpose: Names a selected trigger., variables: '`date: str` localized by `citry-ui-date-picker-display`', override: '`change_label` containing `{date}`', updates: 'Parent i18n subscription recomputes the formatted value and calls `tr()`.'}
+      - {id: clear, key: citry-ui-date-picker-clear, purpose: Names the optional clear Button., variables: none, override: '`clear_label`', updates: '`$c-tr` updates the stable aria-label destination.'}
+      - {id: unavailable, key: citry-ui-date-picker-unavailable, purpose: Supplies native custom validity when a selected date becomes unavailable., variables: none, override: '`unavailable_message`', updates: '`i18n.bind()` updates the browser-owned validity message.'}
