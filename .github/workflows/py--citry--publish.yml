@@ -154,6 +154,11 @@ jobs:
         with:
           name: raw-citry-distributions
           path: dist
+      - uses: actions/download-artifact@v8
+        if: contains(inputs.workspace_dependencies, 'citry-core')
+        with:
+          name: candidate-citry-core-wheel
+          path: core-dist
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
@@ -161,11 +166,18 @@ jobs:
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           version: ${{ env.UV_VERSION }}
-      - name: Verify and stage the closed release pair
+      - name: Verify and stage with public dependencies
+        if: ${{ !contains(inputs.workspace_dependencies, 'citry-core') }}
         run: >-
           python scripts/verify_citry_distribution.py
           --dist-dir dist
-          --skip-install-smoke
+          --stage-output-dir verified
+      - name: Verify and stage with the selected Core dependency
+        if: contains(inputs.workspace_dependencies, 'citry-core')
+        run: >-
+          python scripts/verify_citry_distribution.py
+          --dist-dir dist
+          --core-wheel "$(find core-dist -name '*.whl' -print -quit)"
           --stage-output-dir verified
       - name: Verify the predeclared playground wheel when this version is selected
         run: >-
