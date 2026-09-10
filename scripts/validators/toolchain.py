@@ -374,7 +374,7 @@ def check() -> list[str]:
     if "  push:\n    tags:" in docs_release:
         errors.append("Citry docs release must be dispatched by the Citry publisher, not by a manually pushed tag")
     release_gate = "Require the completed Citry GitHub Release"
-    snapshot = "Build & commit the version snapshot"
+    snapshot = "Build the version snapshot and prepare its pull request branch"
     for marker in (
         release_gate,
         'gh api "repos/$GITHUB_REPOSITORY/releases/tags/$REF_NAME"',

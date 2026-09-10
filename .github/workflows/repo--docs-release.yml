@@ -1,31 +1,7 @@
-# Release the documentation for a new Citry version: build that version's snapshot,
-# commit it into docs_site/versions/ on the default branch (the committed-versions
-# model, matching the committed docs_site/versions/versions.json), then assemble
-# the full multi-version site and deploy it to GitHub Pages.
-#
-# This is the release counterpart to repo--docs-deploy.yml (which redeploys the
-# current site on every push to main). The Citry publisher dispatches it after
-# the package, tag, and GitHub Release are public. It may also be rerun manually.
-#
-# Operating notes:
-#   - Pages deploys are gated by the github-pages environment's deployment branch
-#     policy. This workflow is dispatched on `main` and checks out the immutable
-#     release tag separately, so that policy must allow `main`.
-#   - This workflow deploys the site itself rather than leaving it to the
-#     main-push deploy in repo--docs-deploy.yml, because the snapshot commit below
-#     is pushed with the default GITHUB_TOKEN, and a GITHUB_TOKEN push starts no
-#     further workflow runs.
-#   - The commit-back pushes to the default branch with the default GITHUB_TOKEN
-#     (contents: write), which works while that branch is unprotected. Protecting
-#     it means passing a GitHub App token or a PAT with contents: write to
-#     actions/checkout `token:` (django-components' release-docs.yml shows the
-#     create-github-app-token shape).
-#   - Every built snapshot is committed to the repo, matching the committed
-#     docs_site/versions/versions.json.
-#   - A release snapshot is built in a detached worktree at the exact tag commit.
-#     The default branch checkout only receives the generated snapshot and builds
-#     the current root site, so later main changes cannot leak into versioned
-#     documentation.
+# Build documentation from an immutable release tag and push the generated
+# snapshot to a separate branch. The release maintainer opens and merges its PR;
+# repo--docs-deploy.yml publishes the merged snapshot from main.
+# The workflow does not bypass main's pull-request requirement.
 name: Release docs
 
 on:
@@ -36,16 +12,13 @@ on:
         required: true
         type: string
 
-# Serialize with the main-push deploy (repo--docs-deploy.yml) through the shared
-# "pages" group so two Pages deploys never overlap; never cancel an in-progress
-# publish. The commit-back below carries [skip ci], so it does not re-trigger the
-# main-push deploy.
+# Serialize snapshot preparation without cancelling a running build.
 concurrency:
-  group: "pages"
+  group: release-docs
   cancel-in-progress: false
 
 env:
-  # Snapshot/root builds need only the workspace MSRV. Keep it fixed so release
+  # Snapshot builds need only the workspace MSRV. Keep it fixed so release
   # docs reuse the same citry-core cache as the ordinary Pages workflows.
   RUSTUP_TOOLCHAIN: "1.96.0"
   SCCACHE_GHA_ENABLED: "true"
@@ -60,18 +33,18 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Only the canonical repo commits snapshots and deploys; forks skip it.
+    # Only the canonical repo prepares snapshot branches; forks skip it.
     if: github.repository == 'citry-dev/citry'
     permissions:
-      contents: write # to commit the built version snapshot back to the default branch
+      contents: write # to push the generated snapshot branch
     steps:
       - uses: actions/checkout@v7
         with:
           # Initialize the vendored Ruff submodule (a build/runtime dependency)
           submodules: recursive
           # Full history so per-page git dates (sitemap <lastmod>, article
-          # published/modified, footer "last updated") are accurate, and so the
-          # default branch can be checked out and pushed to below.
+          # published/modified, footer "last updated") are accurate, and so
+          # main can be fetched as the base for a snapshot branch.
           fetch-depth: 0
           ref: main
 
@@ -79,9 +52,9 @@ jobs:
         run: test "$GITHUB_REF" = "refs/heads/main"
 
       # Manual recovery can be dispatched while the UI is showing another ref.
-      # Always put the commit-back checkout on the current default branch; the
+      # Always base the snapshot branch on the current default branch; the
       # immutable release source itself is opened separately by `build-tag`.
-      - name: Check out the default branch for the snapshot commit
+      - name: Check out the default branch as the snapshot base
         run: |
           git fetch origin main
           git checkout -B main origin/main
@@ -115,7 +88,7 @@ jobs:
           cache-on-failure: true
 
       # `social-cards` adds Playwright so the per-page OG images render during the
-      # assemble step's root build. The site imports Citry and Citry UI, but not
+      # snapshot preparation. The site imports Citry and Citry UI, but not
       # the LSP workspace package.
       - name: Install the workspace with docs + social-card extras
         run: >-
@@ -170,52 +143,27 @@ jobs:
           echo "::error::the final GitHub Release $REF_NAME did not complete"
           exit 1
 
-      - name: Configure git identity for the commit-back
+      - name: Configure git identity for the snapshot commit
         run: |
           git config user.name "citry-docs-bot"
           git config user.email "citry-docs-bot@users.noreply.github.com"
 
-      # Build the tagged version's snapshot into docs_site/versions/<version>/,
-      # validate the whole version tree (versions-check), and commit it to the
-      # default branch. The [skip ci] on the commit stops repo--docs-deploy.yml
-      # from also firing on this push.
-      - name: Build & commit the version snapshot
+      - name: Build the version snapshot and prepare its pull request branch
         env:
           REF_NAME: ${{ inputs.release_tag }}
         run: |
           VERSION="${REF_NAME#citry@}"
-          echo "Releasing docs version: $VERSION from exact tag $REF_NAME"
           uv run --no-sync python -m docs_site build-tag "$REF_NAME"
           uv run --no-sync python -m docs_site versions-check
           git add docs_site/versions/
           if git diff --cached --quiet; then
-            echo "No version changes to commit (already built)."
+            echo "The version snapshot is already on main." >> "$GITHUB_STEP_SUMMARY"
           else
-            git commit -m "docs: build $VERSION [skip ci]"
-            git push origin main
+            SNAPSHOT_BRANCH="docs/release-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git switch -c "$SNAPSHOT_BRANCH"
+            git commit -m "docs: build $VERSION"
+            git push origin "HEAD:refs/heads/$SNAPSHOT_BRANCH"
+            echo "Snapshot prepared from $REF_NAME." >> "$GITHUB_STEP_SUMMARY"
+            echo "Open and merge a [pull request](https://github.com/$GITHUB_REPOSITORY/compare/main...$SNAPSHOT_BRANCH?expand=1)." >> "$GITHUB_STEP_SUMMARY"
+            echo "The main deployment workflow publishes the snapshot after merge." >> "$GITHUB_STEP_SUMMARY"
           fi
-
-      # Assemble the deploy artifact into ./site: the current version at the root
-      # plus every committed versions/ snapshot (including the one just built)
-      # mounted under /v/.
-      - name: Assemble the site
-        run: uv run --no-sync python -m docs_site assemble
-
-      - name: Upload the Pages artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5

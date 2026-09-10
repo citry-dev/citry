@@ -1216,7 +1216,7 @@ workers and must not be run by hand.
 
 ```text
 prepare release changes in the review working tree
-  -> copy the reviewed changes to main
+  -> copy the reviewed changes to a promotion branch and merge its PR
   -> Prepare release candidate runs automatically
        -> determine which manifest versions do not have final tags
        -> qualify all selected packages concurrently
@@ -1226,7 +1226,8 @@ prepare release changes in the review working tree
        -> publish each dependency layer concurrently
        -> verify exact public bytes before starting the next layer
        -> create final tags, GitHub Releases, and Discord notifications
-  -> Citry documentation snapshots deploy separately
+  -> merge the generated documentation snapshot through its own PR
+  -> the main documentation workflow deploys the merged snapshot
 ```
 
 Prepare a release as follows:
@@ -1249,8 +1250,8 @@ Prepare a release as follows:
 3. Sweep version references deliberately. Update live metadata and pins, but
    do not rewrite historical changelogs, dated research, fixtures, or unrelated
    versions merely because the number matches.
-4. Verify and copy the intended changes to `main` with the clean-worktree
-   procedure below. A qualifying candidate is created automatically when the
+4. Verify and copy the intended changes to a promotion branch, then merge its
+   pull request into `main` using the clean-worktree procedure below. A qualifying candidate is created automatically when the
    release surfaces change. To retry candidate preparation or make an explicit
    selection, run **Prepare release candidate** with `auto` or a comma-separated
    list such as `citry-core,citry,citry-lsp,vscode-citry`.
@@ -1277,9 +1278,11 @@ Prepare a release as follows:
    create the annotated final tag and GitHub Release, and send the appropriate
    Discord event.
 8. Verify the resulting public packages and GitHub Releases. A Citry release
-   explicitly starts the documentation snapshot workflow after its GitHub
-   Release exists, so documentation deployment does not hold the package
-   publication critical path open.
+   starts the documentation snapshot workflow after its GitHub Release exists.
+   The workflow pushes a snapshot branch and provides a pull-request link in its
+   run summary. A maintainer opens the PR, waits for Check, and merges it; the
+   main-push documentation workflow then deploys the snapshot. This keeps
+   documentation review outside the package publication critical path.
 
 The controller derives ordering from selected-package constraints. Citry waits
 for a selected Citry Core because it pins Core exactly. citry-lsp and citry-ui
@@ -1356,6 +1359,38 @@ Citry UI, the LSP and example applications declare a minimum Citry version
 without an upper bound. Version checks accept later Citry versions; integrations
 that consume versioned protocols must still validate those schemas.
 
+### Main branch and release permissions
+
+Every update to `main` goes through a pull request, including maintainer and
+bot changes. The branch rules require the `check` job, an up-to-date branch,
+and resolved review conversations; they block deletion and force pushes.
+There are no direct-push bypass actors. Zero approving reviews are required
+while the repository has one maintainer, so that maintainer can merge their
+own PR after checks pass. This provides a PR history, not independent approval
+against compromise of that maintainer's account.
+
+The `pypi` and `vscode-marketplaces` environments must allow the exact `main`
+branch for the release controller's publication jobs. Branch restrictions are
+configured in GitHub settings, outside workflow files. Permission to use an
+environment is separate from permission to update `main` or create a release
+tag. Keep those boundaries separate; a general Actions bypass would let
+workflows on other repository branches cross the main-branch restriction.
+
+The current protected tag rules grant creation to the maintainer account, not
+the default Actions token. If a publication worker stops at tag creation after
+verifying public files, the authorized maintainer verifies the full public
+inventory against the candidate, creates the annotated tag at the candidate's
+exact commit, and restarts the controller with the same candidate ID. Existing
+public files must match exactly; never rebuild or replace them during recovery.
+A dedicated release identity needs its own narrowly scoped tag permission before
+these protected-tag releases can complete unattended. Track that decision in
+[issue 46](https://github.com/citry-dev/citry/issues/46).
+
+The documentation release workflow pushes a separate snapshot branch and
+prints a link to open its PR. A maintainer opens and merges that PR using their
+own account. The workflow neither needs permission to approve PRs nor bypasses
+main's rules. Merging the snapshot starts the normal documentation deployment.
+
 ### The `review` branch holds work that has not been read yet
 
 Releases go out from `main`, but not everything committed has been read line by
@@ -1369,10 +1404,10 @@ source-control panel doubles as the worklist:
   commit as a recovery point.
 - **Reading a file through means committing it on `review`.** The commit is the
   audit record of what has been read.
-- **Do not pull generated commits into `review`.** The docs release pushes a
-  `docs: build <version> [skip ci]` commit to `main` carrying the version
-  snapshot. Let local `main` fetch those and leave `review` alone; nobody
-  reviews generated output.
+- **Do not pull generated commits into `review`.** Documentation snapshot PRs
+  carry generated files into `main`. Verify their release source and build
+  checks, then let local `main` fetch the merged commits without copying those
+  generated files into the unread-work ledger.
 
 **`review` never merges into `main`, in either direction.** The gate works by
 having `HEAD` point at an old tree, so the two branches diverging is what makes
@@ -1384,21 +1419,23 @@ files, and `git merge -s ours` is worse: it records "deliberately discard main's
 changes", so a later merge the other way would revert content on `main` to
 `review`'s older copies.
 
-A release therefore never comes from `review`. Assemble it in a throwaway
-worktree of `main` instead:
+A release therefore never comes from `review`. Assemble it on a promotion
+branch based on current `main`:
 
 ```bash
 git fetch origin main --tags
-git worktree add ../citry-release main
-git -C ../citry-release merge --ff-only origin/main
+git worktree add -b release/package-update ../citry-release origin/main
 # Apply the explicit promotion manifest, inspect, test, and commit here.
-git -C ../citry-release push origin main
+git -C ../citry-release push -u origin release/package-update
+gh pr create --base main --head release/package-update
+# Merge after the required checks pass, then remove the clean worktree.
 git worktree remove ../citry-release
 ```
 
 If a clean `main` worktree already exists, reuse it only after verifying that
 it has no staged, modified, deleted, or untracked files and fast-forwarding it
-to `origin/main`. Do not force-remove a dirty worktree.
+to `origin/main`. Create and switch to a promotion branch before applying any
+changes there. Do not force-remove a dirty worktree.
 
 Use this promotion sequence:
 
@@ -1406,10 +1443,10 @@ Use this promotion sequence:
    the `review`, local `main`, `origin/main`, and `reviewed-baseline` SHAs plus
    the current status. Read-only inspection is allowed, but do not stage,
    commit, merge, rebase, reset, or move any ref from this worktree.
-2. Fetch `origin/main` and tags, record the fetched `origin/main` SHA, then
-   create or update the clean `main` worktree with `--ff-only`. If local `main`
-   cannot fast-forward, stop and reconcile the unexpected state rather than
-   merging either branch or discarding work.
+2. Fetch `origin/main` and tags, record the fetched SHA, then create a clean
+   promotion branch and worktree from that commit. Keep local `main` tracking
+   the remote through fast-forward updates; reconcile any unexpected divergence
+   before proceeding.
 3. Write an explicit promotion manifest before copying anything. It has three
    inputs:
 
@@ -1428,21 +1465,23 @@ Use this promotion sequence:
    including generated version snapshots and release records. Preserve every
    such main-only path unless the manifest explicitly names its exact deletion.
    Conversely, when a maintainer deliberately removes a main-only path, apply
-   that exact deletion in the `main` worktree even though `review` cannot show
+   that exact deletion in the promotion worktree even though `review` cannot show
    it as `D` in `git status`.
 5. Copy only the manifest's named existing files and apply only its named
    deletions. Confirm the source worktree did not change during the copy. In the
-   `main` worktree, inspect `git status`, `git diff --check`, the name/status and
+   promotion worktree, inspect `git status`, `git diff --check`, the name/status and
    stat summaries, and the complete diff. Stop on an unexpected path or byte
    difference.
 6. Run the agreed integration gate, stage only the manifest, inspect the staged
-   diff again, and commit on local `main`. If a necessary fix is made in the
+   diff again, and commit on the promotion branch. If a necessary fix is made in the
    release worktree, mirror it into the original working tree before finishing.
-7. Fetch `origin/main` again immediately before pushing. Require it still to be
-   the recorded base commit; if it moved, stop and rebuild the promotion on the
-   new fast-forwarded base. Push `main` normally and let non-fast-forward
-   rejection protect the remote. Never force-push `main`.
-8. Verify the remote SHA and required CI/deployment result. Remove the
+7. Push the promotion branch and open a pull request targeting `main`. Fetch
+   current `main` and incorporate any intervening changes on the promotion
+   branch; resolve conflicts and rerun affected checks before merging. The
+   required Check must pass against an up-to-date base. Never push directly or
+   force-push to `main`.
+8. Merge the PR and fast-forward local `main` to the resulting remote commit.
+   Verify the remote SHA and required CI/deployment result. Remove the
    throwaway worktree only after it is clean. Recheck that the original
    worktree is still on the recorded `review` SHA with its index, working files,
    and untracked files intact.
@@ -1461,7 +1500,7 @@ Prepare candidates on `main`, then publish through **Release qualified
 packages** using the successful candidate run ID. Package workflows are
 internal workers; final tags are created after publication.
 
-The throwaway `main` worktree preserves the arrangement automatically. Keep the
+The promotion worktree preserves the arrangement automatically. Keep the
 original `review` worktree's branch pointer, index, and files unchanged before,
 during, and after the promotion; `review` continues to point at its recorded
 pre-promotion baseline, so every unread modification and untracked file remains
