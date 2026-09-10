@@ -21,6 +21,7 @@ dev = [
     "maturin>=1.10.2",
     "ruff>=0.10.0",
     "mypy>=1.0.0",
+    "pyyaml>=6.0",
     # Repository scripts parse package manifests on Python 3.10.
     "tomli>=2.0; python_version < '3.11'",
 ]

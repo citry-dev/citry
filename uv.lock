@@ -428,6 +428,7 @@ social-cards = [
 dev = [
     { name = "maturin" },
     { name = "mypy" },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
@@ -454,6 +455,7 @@ provides-extras = ["docs", "social-cards"]
 dev = [
     { name = "maturin", specifier = ">=1.10.2" },
     { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.10.0" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
 ]

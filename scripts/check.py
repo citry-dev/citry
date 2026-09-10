@@ -199,7 +199,7 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
         # but tracing them makes their run several times slower without adding
         # useful coverage. The version matrix also runs them without coverage.
         *([("pytest qualification", _qualification_pytest_command())] if profile == "full" else []),
-        ("validators", [sys.executable, "scripts/validate.py"]),
+        ("validators", [*uvr, "python", "scripts/validate.py"]),
     ]
 
 

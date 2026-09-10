@@ -7,7 +7,8 @@ descriptions, empty when the invariant holds. Validators are discovered
 automatically, so adding one is just dropping a new `<name>.py` file in that
 directory (files whose name starts with `_` are skipped).
 
-Run directly, or as the `validators` phase of scripts/check.py.
+Run with `uv run --no-sync python scripts/validate.py`, or as the
+`validators` phase of scripts/check.py, to use the workspace dependencies.
 """
 
 import importlib.util
