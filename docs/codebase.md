@@ -409,7 +409,7 @@ python scripts/check.py --profile full
 python scripts/check.py --profile fast --reporter agent
 
 # Run only the custom validators (fast; no compiling or tests).
-python scripts/validate.py
+uv run --no-sync python scripts/validate.py
 ```
 
 `check.py` only checks; it never edits files. It assumes the workspace is set
