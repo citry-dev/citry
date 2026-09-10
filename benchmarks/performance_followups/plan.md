@@ -51,3 +51,52 @@ directly with the older retained native build's historical measurements.
 Post-measurement editorial note: the named-slot clarification above was added
 after measurement during independent review. The report retains the hash of the
 method text used for measurement; this clarification changes no procedure.
+
+## 2. Dynamic HTML without a component and slot outlet
+
+Prior art: `components/dynamic.py` computes validated opening/closing strings
+around one default slot; `ComponentNode.render` records an invocation, collects
+slots and queues that built-in. Static tag choices already compile to literal
+HTML. `component_dynamic.md` and `test_component_dynamic.py` define ordered
+attribute merging, tag validation, void-body errors and attribute hooks.
+`_simple_runtime.py` already establishes a caller-owned template contract, but
+the built-in's instance callback cannot opt into that API.
+
+The one candidate specializes eligible existing ComponentNode instances when
+created, without changing grammar, AST or compiler output. Dynamic tag and
+attribute resolution still use current inputs. It reuses the built-in's actual
+attribute formatter and the ordinary body walker. Calls with explicit fills or
+morph metadata stay on the existing path; programmatic built-in calls also stay
+ordinary. No native or ABI work is involved.
+
+This is an experimental contract change: these selected built-in invocations
+lose independent identity, component hooks and slot-outlet hooks. Attribute hooks
+still receive the authoring component. Body evaluation happens while walking the
+caller rather than after scheduling the built-in. Do not promote this as a
+transparent implementation optimization. Plain HTML node semantics are the
+proposed contract; general component semantics are the control.
+
+Qualification must preserve projected application content, valid manifests and
+all authored callback counts, with only DynamicElement component calls removed.
+Check dynamic tag changes, escaping and void rejection directly. A whole-page
+failure rejects this candidate before timing. If qualification passes, use six
+balanced paired fresh-process blocks with matched hash seeds, 80 warmed renders,
+retained outputs and wall/CPU intervals. There is no build-complexity floor, but
+any saving must be reported alongside the explicit contract costs. No fallback
+variation or second candidate will be tried in this avenue.
+
+Additional contract difference found during review: a non-void element's whitespace-only body is
+preserved as ordinary HTML content; the existing component slot collector drops
+it. This is observable output, not just an ownership change. Nested dynamic
+elements also use Python body recursion. Both control and candidate passed depths
+20, 40 and 60; both hit the existing generated-Python nesting limit at depth100.
+This checks the tested envelope, not unbounded recursion safety or equivalent
+behavior under a lower user-selected recursion limit.
+
+Post-measurement wording clarification from independent review: attribute hooks,
+not just child-body expressions, execute earlier while walking the caller. The
+recorded method hash identifies the text frozen for measurement. No measurement
+procedure or prototype implementation changed after the run.
+
+The exact text used for attempt2 is retained as `dynamic-method-measured.md`
+beside its timing report, including the wording before review clarifications.

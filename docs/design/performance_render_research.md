@@ -6629,3 +6629,42 @@ verified the reported scope and corrected the rounded CPU interval. Full
 per-render callback and timed manifest checks are enforced by worker assertions;
 the report retains the qualification callback vector and untimed captures, not
 every per-render record.
+
+### Follow-up 2: render dynamic HTML directly
+
+The research prototype treats eligible `<c-element>` calls as caller-owned HTML
+nodes. It resolves the current tag and attributes with existing helpers and walks
+children directly. Explicit fills, morph metadata and programmatic calls retain
+the ordinary path. This removes all 15 DynamicElement instances in this page,
+reducing source locations 468 to 408, fills 205 to 175 and physical regions 119
+to 104. Application content, manifest validation and all 325 authored callbacks
+pass; all 74 tests in `test_component_dynamic.py` also pass under the prototype.
+
+This changes the contract: eligible calls lose component identity and component
+and slot hooks. Attribute hooks and child expressions run earlier while walking
+the caller. Non-void whitespace-only children are preserved, whereas the default
+slot collector discards them. Both implementations rendered nesting depths 20,
+40 and 60; both failed at depth 100 through the existing generated-Python nesting
+limit. These checks do not establish arbitrary nesting safety.
+
+The six fresh-process blocks measured 22.964 ms for the control and 22.642 ms for
+the candidate, with Django at 11.071 ms. The paired mean saving was 0.322 ms
+(1.40%), but one block regressed by 1.896 ms. The wall-time 95% interval spans
+-0.836 to 1.479 ms; CPU likewise crosses zero. Five of six positive blocks do not
+meet the predeclared consistency criterion. No block is discarded and no second
+candidate is tried. This experiment establishes no reproducible performance gain
+and is not promoted to runtime or public API.
+
+Independent pre-measurement review walked ownership, provides, dependency
+collection and child scheduling. It identified the whitespace and earlier
+attribute-hook differences recorded above. The measurement preserves all raw
+observations and checks every timed Citry output after timing.
+
+Evidence: [candidate](../../benchmarks/performance_followups/dynamic_element.py),
+[qualification](../../benchmarks/results/performance-render/followups/dynamic-qualification.json),
+[timing](../../benchmarks/results/performance-render/followups/dynamic-timing.json).
+
+Independent post-measurement review reproduced all paired statistics, source
+identities, 48 captured snapshot vectors and retained manifests. Separate prose
+review confirmed that rejection, rather than an accepted speedup, follows from
+the reported uncertainty.
