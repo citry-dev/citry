@@ -31,7 +31,7 @@ class ReleaseRoute:
 RELEASE_ROUTES = (
     ReleaseRoute("citry@", "announcements", "py--citry--publish.yml"),
     ReleaseRoute("citry-ui@", "announcements", "py--citry-ui--publish.yml"),
-    ReleaseRoute("vscode-citry@", "announcements", "vscode--citry--publish.yml"),
+    ReleaseRoute("vscode-citry@", "development", "vscode--citry--publish.yml"),
     ReleaseRoute("citry-lsp@", "development", "py--citry-lsp--publish.yml"),
     ReleaseRoute("citry-core@", "development", "py--citry-core--publish.yml"),
     ReleaseRoute("pygments-citry@", "development", "py--pygments-citry--publish.yml"),
