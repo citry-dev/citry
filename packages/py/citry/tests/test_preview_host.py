@@ -1,6 +1,7 @@
 """Command-owned preview hosting preserves the ordinary application's route table."""
 
 import asyncio
+import errno
 import socket
 import threading
 from urllib.request import ProxyHandler, build_opener
@@ -113,10 +114,11 @@ def test_port_conflict_preserves_mount_and_releases_claim():
         occupied.bind(("127.0.0.1", 0))
         occupied.listen()
         with (
-            pytest.raises(OSError, match="Address already in use"),
+            pytest.raises(OSError) as caught,  # noqa: PT011 - assert portable socket codes below.
             PreviewServer(engine, (), port=occupied.getsockname()[1]),
         ):
             pass
+        assert caught.value.errno == errno.EADDRINUSE or getattr(caught.value, "winerror", None) == 10048
     assert engine.mounted_prefix == "/application"
     with PreviewServer(engine, ()):
         pass
