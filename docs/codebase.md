@@ -554,6 +554,40 @@ selected in the same plan. This qualifies the unreleased pair concurrently.
 During promotion, the controller still publishes and verifies Core before it
 starts Citry, whose public dependency must then resolve to those exact bytes.
 
+### Pull request cancellation and targeted diagnostics
+
+Each pull-request workflow uses a concurrency group containing the workflow
+name and pull-request number. A newer run cancels an older run for the same
+pull request. Push and manual runs use their unique run IDs, so this policy
+does not interrupt or replace them.
+
+Use [`py--diagnostic.yml`](../.github/workflows/py--diagnostic.yml) to reproduce
+one Python failure on a selected hosted OS and supported Python version. In the
+GitHub Actions UI, open **Python diagnostic**, choose **Run workflow**, select
+the branch or tag, then set `runner_os`, `python_version`, and one file or node
+ID from the ordinary non-browser Python test suite in `pytest_target`. The
+target is passed to pytest as one literal argument, so this workflow does not
+accept multiple targets or extra pytest options. Its workspace installation
+does not include the optional browser, documentation, or benchmark dependency
+groups.
+
+The equivalent command-line dispatch is:
+
+```bash
+gh workflow run py--diagnostic.yml \
+  --ref review \
+  -f runner_os=macos-latest \
+  -f python_version=3.14 \
+  -f pytest_target='packages/py/citry/tests/test_server_reload.py::test_development_server_hot_reloads_assets_and_restarts_python[django]'
+```
+
+Start CI investigation with the narrowest failing node ID, and repeat that
+target while diagnosing. After the fix passes focused local checks, run
+`python scripts/check.py --profile full` once at the final integration
+boundary and let the ordinary pull-request workflows provide the required
+matrix and browser evidence. A green diagnostic run is supporting evidence;
+it does not replace the full gate.
+
 ### Adding a codebase-wide tooling package
 
 To add a new tooling dependency (like a linter, formatter, or test utility) that should be available across the entire codebase:
