@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry"
-version = "0.5.0"
+version = "0.5.1"
 requires-python = ">=3.10, <4.0"
 description = "Fully typed frontend framework for Python with server events and Alpine.js, inspired by Vue and Livewire"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
@@ -40,7 +40,7 @@ dependencies = [
     # Pinned to one exact version, not a range. The runtime node classes in
     # `citry.nodes` read the source citry-core's compiler emits, so the two
     # move together: raise this in the same change that releases citry-core.
-    "citry-core==1.7.0",
+    "citry-core==1.7.1",
     # Deliberately wide. Citry uses only `ObjectProxy` and `__wrapped__`, and
     # wrapt keeps `ObjectProxy` working across its 2.0 rewrite, so both major
     # lines serve. Raising the floor would force wrapt 2 on every installation
@@ -100,6 +100,7 @@ dev = [
     "django>=5.2; python_version >= '3.12'",
     "pydantic>=2.13.4", # test-only: components may use Pydantic Kwargs/Slots
     "fastapi>=0.141.1",  # test-only: FastAPI contrib tests (Starlette TestClient)
+    "uvicorn>=0.49",  # test-only: real-server reload and PreviewServer integration
     # Starlette's TestClient moved to httpx2 and deprecates the httpx transport,
     # so the warning it emits is a real instruction rather than noise.
     "httpx2>=2.10.0",  # test-only: the transport Starlette's TestClient uses
@@ -111,8 +112,6 @@ dev = [
 e2e = [
     "playwright>=1.62.0",
     "pytest-playwright>=0.9.0",
-    "uvicorn>=0.49",  # command-owned Preview server browser integration
-
 ]
 # Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
 # a deliberate re-baseline; skipped when absent (tests/conftest.py).

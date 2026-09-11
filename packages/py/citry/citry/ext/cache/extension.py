@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._nested_declarations import _compose_nested_declaration_class
 from citry.cache import _normalize_ttl
-from citry.constness import const_value
+from citry.constness import Const, _mapping_value_is_const, const_value
 from citry.extension import Extension
 from citry.util.misc import to_dict
 
@@ -251,7 +251,14 @@ class CacheExtension(Extension):
                     f"slots[{effective_slots[0]!r}]",
                     f"component {type(component).__name__} has effective Slot content from {names}",
                 )
-            vary: object = dict(kwargs)
+            # The automatic key is renderer-owned, so reattach transient
+            # markers from the side metadata to keep Const and live inputs
+            # distinct in the canonical encoder. A custom vary callback sees
+            # only the ordinary ``kwargs`` values above.
+            vary: object = {
+                name: Const(value) if _mapping_value_is_const(component._kwargs_const, name) else value
+                for name, value in kwargs.items()
+            }
         else:
             vary = vary_method(kwargs, slots)
 

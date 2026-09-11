@@ -1696,7 +1696,11 @@ degradation contract in section 3.4.1.
 
     In VS Code, a version-bound virtual JavaScript document delegates ordinary
     JavaScript completion, hover, and definition to the installed JavaScript
-    provider. Citry adds exact `JsData` roots, component `data` and `scope`
+    provider. Browser projections include explicit source mappings because
+    Python string decoding and indentation removal change character offsets.
+    The client maps provider ranges through these runs before applying edits;
+    unmapped positions and spans crossing concatenated literals yield no result.
+    Citry adds exact `JsData` roots, component `data` and `scope`
     members, public Events `State` members through `$state` and callback
     `state`, static client props, and server-event origins. Shared assets keep
     only contracts proven for every owner, and synchronized Python source is
@@ -1775,7 +1779,12 @@ degradation contract in section 3.4.1.
     Citry binding keys have their own parser-backed intelligence. An `@c-*`
     base explains which open DOM event triggers the named Python handler. A
     `:c-*` base shows the public State field's Python type and description and
-    navigates to its exact declaration. Modifier completion follows the
+    navigates to its exact declaration. Attribute-name completion offers the
+    owner's public State fields from the `:c-` prefix and replaces only the
+    base name, preserving existing modifiers and handler values. The checker
+    and LSP report `citry.browser.unknown-state-field` on the field-name range
+    when the public namespace is known. Unknown ownership or stale schema
+    evidence withholds these field-specific answers. Modifier completion follows the
     runtime's channel-specific tables: event bindings offer event flags and
     key/timing filters, State bindings offer update-event and timing filters,
     and `@c-poll` offers representative whole-second intervals. Modifier
@@ -1788,6 +1797,20 @@ degradation contract in section 3.4.1.
     JavaScript signature, a concise explanation, and a canonical documentation
     link. This covers `$component`, each proven destructured context binding,
     and Citry Alpine magics such as `$sendEvent`, `$loading`, and `$error`.
+
+    Callback parameters and their aliases navigate to their authored binding
+    declarations using OXC's resolved reference identities. Owning a hover or
+    definition does not suppress JavaScript-provider member completion. The
+    portable `analyze_component_members()` API records static member accesses
+    against those same bindings, including captured closure references,
+    optional accesses, and simple string-literal keys. Dynamic keys, escaped
+    keys without an exact token range, defaulted parameters, and reassigned
+    owners are omitted. The shared checker and LSP report
+    `citry.component-js.unknown-data-member` only when every consumer's `JsData`
+    schema or inferred `js_data()` return shape is closed. Open, unavailable,
+    and stale source contracts produce no unknown-member error. General
+    JavaScript diagnostics are not forwarded into embedded source by this
+    integration; Citry publishes its own cross-language findings there.
     Literal server-event completion works from an empty or partial string in
     `sendEvent`, `$sendEvent`, `$loading`, and `$error`, using the same handler
     contract as diagnostics and navigation.

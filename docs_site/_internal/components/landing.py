@@ -2170,6 +2170,7 @@ class LandingPage(Component):
 
       .landing-hero__copy {
         min-width: 0;
+        margin-top: -2rem;
       }
 
       .landing-hero__code {
@@ -2221,7 +2222,7 @@ class LandingPage(Component):
 
       .landing-hero__lede {
         max-width: 43rem;
-        margin: 2rem 0 0;
+        margin: 1.5rem 0 0;
         color: var(--landing-muted);
         font-size: clamp(1.12rem, 2vw, 1.4rem);
         line-height: 1.62;
@@ -2531,6 +2532,55 @@ class LandingPage(Component):
         color: var(--landing-muted);
         font-size: 1.1rem;
         line-height: 1.7;
+      }
+
+      .landing-extension-story {
+        max-width: 54rem;
+        margin: clamp(2.5rem, 6vw, 5rem) auto 0;
+        padding: clamp(1.5rem, 4vw, 2.5rem);
+        border: 1px solid var(--landing-line);
+        border-left: 0.3rem solid var(--landing-blue);
+        border-radius: 0.9rem;
+        background: var(--landing-panel-solid);
+        box-shadow: 0 2rem 6rem rgb(18 48 84 / 8%);
+      }
+
+      .landing-extension-story blockquote {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        color: var(--landing-ink);
+        font-size: clamp(0.95rem, 1.4vw, 1.08rem);
+        font-style: italic;
+        line-height: 1.65;
+      }
+
+      .landing-extension-story blockquote p,
+      .landing-extension-story__attribution,
+      .landing-extension-story__attribution p {
+        margin: 0;
+      }
+
+      .landing-extension-story__attribution {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 1.25rem;
+        color: var(--landing-muted);
+        font-size: 0.9rem;
+        font-weight: 650;
+      }
+
+      .landing-extension-story__avatar {
+        width: 2.5rem;
+        height: 2.5rem;
+        border: 1px solid var(--landing-line);
+        border-radius: 50%;
+        object-fit: cover;
+      }
+
+      .landing-extension-story__attribution a {
+        color: inherit;
       }
 
       .landing-proof-grid,
@@ -4057,6 +4107,7 @@ class LandingPage(Component):
 
         .landing-hero__copy {
           width: 100%;
+          margin-top: 0;
         }
 
         .landing-content .landing-hero h1 {

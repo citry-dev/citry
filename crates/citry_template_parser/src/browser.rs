@@ -11,12 +11,13 @@ use std::str::FromStr;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrowFunctionBody, AssignmentExpression, AssignmentTarget, CallExpression,
-    Expression, FormalParameters, Function, ObjectExpression, ObjectPropertyKind,
+    ComputedMemberExpression, Expression, FormalParameters, Function, ObjectExpression,
+    ObjectPropertyKind, StaticMemberExpression,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_semantic::{Scoping, SemanticBuilder, SymbolId};
-use oxc_span::{GetSpan, SourceType};
+use oxc_span::{GetSpan, SourceType, Span};
 use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 
 /// The grammar expected for one authored browser-expression host.
@@ -80,6 +81,134 @@ pub struct BrowserComponentAnalysis {
     pub references: Vec<BrowserReference>,
     pub bindings: Vec<BrowserComponentBinding>,
     pub scope_writes: Vec<BrowserScopeWrite>,
+}
+
+/// One static member of a proven, unreassigned component context binding.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct BrowserComponentMember {
+    pub context_name: String,
+    pub member_name: String,
+    pub owner_start: usize,
+    pub owner_end: usize,
+    pub member_start: usize,
+    pub member_end: usize,
+}
+
+/// Static component members with exact authored UTF-8 byte ranges.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowserComponentMemberAnalysis {
+    pub valid: bool,
+    pub members: Vec<BrowserComponentMember>,
+}
+
+/// Find direct context members, including references captured by closures.
+///
+/// Invalid JavaScript returns no records. Dynamic keys, escaped bracket keys,
+/// defaulted context bindings, and bindings assigned anywhere are omitted
+/// because their target or exact authored key cannot be established here.
+pub fn analyze_component_members(source: &str) -> BrowserComponentMemberAnalysis {
+    let invalid = || BrowserComponentMemberAnalysis {
+        valid: false,
+        members: Vec::new(),
+    };
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, source, SourceType::default()).parse();
+    if !parsed.diagnostics.is_empty() {
+        return invalid();
+    }
+    let built = SemanticBuilder::new_compiler()
+        .with_build_nodes(true)
+        .with_check_syntax_error(true)
+        .build(&parsed.program);
+    if !built.diagnostics.is_empty() {
+        return invalid();
+    }
+    let scoping = built.semantic.scoping();
+    let mut initializers = ComponentVisitor::new(scoping, true);
+    initializers.visit_program(&parsed.program);
+    // A symbol's writes may run in another closure or branch. Exclude the
+    // entire binding rather than infer execution order from source positions.
+    initializers.bindings.retain(|binding| {
+        binding.direct
+            && matches!(binding.name.as_str(), "data" | "scope" | "state" | "props")
+            && !scoping
+                .get_resolved_references(binding.symbol_id)
+                .any(|reference| reference.is_write())
+    });
+    let mut visitor = ComponentMemberVisitor {
+        source,
+        scoping,
+        bindings: &initializers.bindings,
+        members: Vec::new(),
+    };
+    visitor.visit_program(&parsed.program);
+    visitor
+        .members
+        .sort_by_key(|member| (member.owner_start, member.member_start, member.member_end));
+    visitor.members.dedup();
+    BrowserComponentMemberAnalysis {
+        valid: true,
+        members: visitor.members,
+    }
+}
+
+struct ComponentMemberVisitor<'source, 'semantic, 'bindings> {
+    source: &'source str,
+    scoping: &'semantic Scoping,
+    bindings: &'bindings [ComponentBindingCandidate],
+    members: Vec<BrowserComponentMember>,
+}
+
+impl ComponentMemberVisitor<'_, '_, '_> {
+    fn push(&mut self, object: &Expression<'_>, name: &str, span: Span) {
+        let Some(identifier) = object.without_parentheses().get_identifier_reference() else {
+            return;
+        };
+        let symbol = self
+            .scoping
+            .get_reference(identifier.reference_id())
+            .symbol_id();
+        let Some(binding) = self
+            .bindings
+            .iter()
+            .find(|binding| Some(binding.symbol_id) == symbol)
+        else {
+            return;
+        };
+        self.members.push(BrowserComponentMember {
+            context_name: binding.name.clone(),
+            member_name: name.to_string(),
+            owner_start: identifier.span.start as usize,
+            owner_end: identifier.span.end as usize,
+            member_start: span.start as usize,
+            member_end: span.end as usize,
+        });
+    }
+}
+
+impl<'a> Visit<'a> for ComponentMemberVisitor<'_, '_, '_> {
+    fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
+        self.push(
+            &member.object,
+            member.property.name.as_str(),
+            member.property.span,
+        );
+        walk::walk_static_member_expression(self, member);
+    }
+
+    fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
+        // Only unescaped string keys have a one-to-one key range suitable for
+        // editor diagnostics; computed expressions remain the JS provider's job.
+        if let Expression::StringLiteral(literal) = &member.expression {
+            let span = Span::new(literal.span.start + 1, literal.span.end - 1);
+            if self.source.get(span.start as usize..span.end as usize)
+                == Some(literal.value.as_str())
+            {
+                self.push(&member.object, literal.value.as_str(), span);
+            }
+        }
+        walk::walk_computed_member_expression(self, member);
+    }
 }
 
 /// Parse one Alpine expression/statement and return its exact free roots.
@@ -171,7 +300,7 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
         };
     }
     let semantic = built.semantic;
-    let mut visitor = ComponentVisitor::new(semantic.scoping());
+    let mut visitor = ComponentVisitor::new(semantic.scoping(), false);
     visitor.visit_program(&parsed.program);
     visitor.scope_writes.sort_by(|left, right| {
         (left.name_start, left.name_end, &left.name).cmp(&(
@@ -251,6 +380,7 @@ pub fn analyze_component_scope_writes(source: &str) -> Vec<BrowserScopeWrite> {
 
 struct ComponentVisitor<'semantic> {
     scoping: &'semantic Scoping,
+    require_proven_initializer: bool,
     initializer_ranges: Vec<(usize, usize)>,
     bindings: Vec<ComponentBindingCandidate>,
     scope_writes: Vec<BrowserScopeWrite>,
@@ -268,9 +398,10 @@ impl<'a> Visit<'a> for ComponentVisitor<'_> {
 }
 
 impl<'semantic> ComponentVisitor<'semantic> {
-    fn new(scoping: &'semantic Scoping) -> Self {
+    fn new(scoping: &'semantic Scoping, require_proven_initializer: bool) -> Self {
         Self {
             scoping,
+            require_proven_initializer,
             initializer_ranges: Vec::new(),
             bindings: Vec::new(),
             scope_writes: Vec::new(),
@@ -299,6 +430,28 @@ impl<'semantic> ComponentVisitor<'semantic> {
                 self.collect_function(function);
             }
             Expression::ObjectExpression(object) => {
+                // A later duplicate, spread, or computed key can replace init.
+                // Member errors require one statically selected callback.
+                if self.require_proven_initializer {
+                    let mut init_count = 0;
+                    for property in &object.properties {
+                        let Some(property) = property.as_property() else {
+                            return;
+                        };
+                        let Some(name) = property.key.static_name() else {
+                            return;
+                        };
+                        if name == "init" {
+                            init_count += 1;
+                            if property.kind != oxc_ast::ast::PropertyKind::Init {
+                                return;
+                            }
+                        }
+                    }
+                    if init_count != 1 {
+                        return;
+                    }
+                }
                 for property in &object.properties {
                     let Some(property) = property.as_property() else {
                         continue;
@@ -352,6 +505,7 @@ struct ComponentBindingCandidate {
     start: usize,
     end: usize,
     symbol_id: SymbolId,
+    direct: bool,
 }
 
 fn component_context_bindings(params: &FormalParameters<'_>) -> Vec<ComponentBindingCandidate> {
@@ -374,6 +528,10 @@ fn component_context_bindings(params: &FormalParameters<'_>) -> Vec<ComponentBin
                 start: span.start as usize,
                 end: span.end as usize,
                 symbol_id: identifier.symbol_id(),
+                direct: matches!(
+                    property.value,
+                    oxc_ast::ast::BindingPattern::BindingIdentifier(_)
+                ),
             })
         })
         .collect()

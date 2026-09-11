@@ -1,6 +1,14 @@
 # Release notes
 
-## Unreleased
+## v1.7.1
+
+_11 Sep 2026_
+
+### Added
+
+- Analyze static callback member accesses with exact JavaScript binding
+  identities and source ranges through `analyze_component_members()`
+  ([#113](https://github.com/citry-dev/citry/issues/113)).
 
 ## v1.7.0
 

@@ -17,9 +17,11 @@ from lsprotocol import types
 from citry import LspPosition, LspRange
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
+    BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_PROP,
     BROWSER_UNKNOWN_COMPONENT_PROP,
     BROWSER_UNKNOWN_SERVER_EVENT,
+    BROWSER_UNKNOWN_STATE_FIELD,
     I18N_ARGUMENT_INVALID,
     I18N_CATALOG_INVALID,
     I18N_UNKNOWN_MESSAGE,
@@ -33,6 +35,7 @@ from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineLintConsumer,
     BrowserBinding,
+    BrowserComponentBinding,
     BrowserComponentPropsUse,
     BrowserExpression,
     BrowserObjectProperty,
@@ -65,6 +68,8 @@ from citry.analysis import (
     browser_literal_calls,
     browser_literal_wire_type,
     browser_member_at,
+    browser_state_binding_target_errors,
+    browser_state_bindings,
     build_inferred_template_shadow,
     build_schema_template_shadow,
     component_name_match,
@@ -75,6 +80,7 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_csp_compatibility,
     lint_unknown_alpine_variables,
+    lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
     merge_json_wire_types,
@@ -104,6 +110,7 @@ from citry_lsp.regions import (
     JsRegion,
     MessagesRegion,
     TemplateRegion,
+    TemplateSourceMap,
     css_region_at_position,
     discover_python_css_regions,
     discover_python_js_regions,
@@ -391,8 +398,16 @@ class _ExpressionShadowConsumer:
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectionSourceMapping:
+    """One decoded text run and its exact location in authored source."""
+
+    source_range: types.Range
+    virtual_range: types.Range
+
+
+@dataclass(frozen=True, slots=True)
 class BrowserProjection:
-    """One virtual JavaScript document plus its exact authored source copy."""
+    """One virtual JavaScript document and mappings to authored source."""
 
     source: str
     position: types.Position
@@ -400,6 +415,7 @@ class BrowserProjection:
     virtual_range: types.Range
     owned_root_names: tuple[str, ...] = ()
     citry_owns_position: bool = False
+    source_mappings: tuple[ProjectionSourceMapping, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         """Return the private client payload without changing LSP protocol v1."""
@@ -410,6 +426,10 @@ class BrowserProjection:
             "virtualRange": _range_dict(self.virtual_range),
             "ownedRootNames": list(self.owned_root_names),
             "citryOwnsPosition": self.citry_owns_position,
+            "sourceMappings": [
+                {"sourceRange": _range_dict(mapping.source_range), "virtualRange": _range_dict(mapping.virtual_range)}
+                for mapping in self.source_mappings
+            ],
         }
 
 
@@ -1098,6 +1118,18 @@ def browser_diagnostics(
         parsed = document.parsed.get(region.key)
         if parsed is None:
             continue
+        # Target restrictions depend on markup, so report them even before
+        # an application registry can establish the State field schema.
+        for target_error in browser_state_binding_target_errors(parsed.template, parse_nested=parser):
+            diagnostics.append(
+                _browser_diagnostic(
+                    region,
+                    target_error.start_index,
+                    target_error.end_index,
+                    BROWSER_INVALID_STATE_BINDING_TARGET,
+                    detail=target_error.message,
+                )
+            )
         for directive in browser_i18n_binding_directives(parsed.template, parse_nested=parser):
             if directive.error is None:
                 continue
@@ -1183,6 +1215,20 @@ def browser_diagnostics(
                     source="citry",
                 )
             )
+        state_roots = _current_state_key_roots(consumers, document, project, open_documents)
+        if state_roots is not None:
+            state_names = {root.name for root in state_roots}
+            for binding in browser_state_bindings(parsed.template, parse_nested=parser):
+                if binding.name not in state_names:
+                    diagnostics.append(
+                        _browser_diagnostic(
+                            region,
+                            binding.start_index,
+                            binding.end_index,
+                            BROWSER_UNKNOWN_STATE_FIELD,
+                            name=binding.name,
+                        )
+                    )
         event_contract = _event_contract(consumers, document, project, open_documents)
         if event_contract is not None:
             for expression in expressions:
@@ -1230,6 +1276,18 @@ def browser_diagnostics(
             )
     for js_region in document.js_regions:
         js_consumers = _js_consumers(document, js_region, project, open_documents)
+        data_names = _closed_js_asset_data_names(document, js_region, project, open_documents)
+        for member_finding in lint_unknown_component_js_members(js_region.source_map.template_source, data_names):
+            diagnostics.append(
+                types.Diagnostic(
+                    range=_range(js_region.source_map.map_range(member_finding.start_index, member_finding.end_index)),
+                    message=member_finding.message,
+                    severity=types.DiagnosticSeverity.Error,
+                    code=member_finding.code,
+                    code_description=types.CodeDescription(diagnostic_documentation_url(member_finding.code)),
+                    source="citry",
+                )
+            )
         js_lint_consumers = _component_js_lint_consumers(js_consumers, project)
         if js_lint_consumers is not None:
             for component_finding in lint_unknown_component_js_variables(
@@ -1621,6 +1679,7 @@ def browser_projection(
             _range(document_range_for_offsets(source, virtual_start, virtual_end)),
             owned_names,
             owns_position,
+            _browser_source_mappings(region.source_map, expression.start_index, expression.source, prefix),
         )
 
     js_region = document.js_region_at(position)
@@ -1688,7 +1747,67 @@ def browser_projection(
             state_roots,
             component_js=True,
         ),
+        _browser_source_mappings(js_region.source_map, 0, authored, prefix),
     )
+
+
+def _browser_source_mappings(
+    source_map: TemplateSourceMap, parser_start: int, authored: str, prefix: str
+) -> tuple[ProjectionSourceMapping, ...]:
+    """Preserve indentation and escape boundaries when mapping JavaScript results."""
+    parser_end = parser_start + len(authored.encode("utf-8"))
+    # A result crossing literal delimiters cannot be applied as one source edit.
+    if not source_map.range_is_unambiguous(parser_start, parser_end):
+        return ()
+    virtual = _position(document_range_for_offsets(prefix, len(prefix), len(prefix)).start)
+    if not authored:
+        return (
+            ProjectionSourceMapping(
+                _range(source_map.map_range(parser_start, parser_start)), types.Range(virtual, virtual)
+            ),
+        )
+    mappings: list[ProjectionSourceMapping] = []
+    parser_offset = parser_start
+    # Keep CRLF together: its midpoint is not a valid editor position.
+    for match in re.finditer(r"\r\n|[\s\S]", authored):
+        character = match.group()
+        byte_end = parser_offset + len(character.encode("utf-8"))
+        source_range = _range(source_map.map_range(parser_offset, byte_end))
+        virtual_end = (
+            types.Position(virtual.line + 1, 0)
+            if character in {"\r\n", "\r", "\n"}
+            else types.Position(virtual.line, virtual.character + len(character.encode("utf-16-le")) // 2)
+        )
+        current = ProjectionSourceMapping(source_range, types.Range(virtual, virtual_end))
+        # Coalesce unchanged characters on a line; keep escapes and removed
+        # indentation separate so clients never infer a constant file offset.
+        if mappings and _linear_mapping_width(current) is not None:
+            previous = mappings[-1]
+            if (
+                _linear_mapping_width(previous) is not None
+                and previous.source_range.end == source_range.start
+                and previous.virtual_range.end == virtual
+            ):
+                mappings[-1] = ProjectionSourceMapping(
+                    types.Range(previous.source_range.start, source_range.end),
+                    types.Range(previous.virtual_range.start, virtual_end),
+                )
+            else:
+                mappings.append(current)
+        else:
+            mappings.append(current)
+        parser_offset = byte_end
+        virtual = virtual_end
+    return tuple(mappings)
+
+
+def _linear_mapping_width(mapping: ProjectionSourceMapping) -> int | None:
+    source = mapping.source_range
+    virtual = mapping.virtual_range
+    if source.start.line != source.end.line or virtual.start.line != virtual.end.line:
+        return None
+    source_width = source.end.character - source.start.character
+    return source_width if source_width == virtual.end.character - virtual.start.character else None
 
 
 def html_projection(
@@ -2794,6 +2913,9 @@ def completion_result(
     event_result = _browser_event_completion_result(document, position, project, open_documents)
     if event_result is not None:
         return event_result
+    state_result = _citry_state_key_completion_result(document, position, project, open_documents)
+    if state_result is not None:
+        return state_result
     modifier_result = _citry_binding_modifier_completion_result(document, position)
     if modifier_result is not None:
         return modifier_result
@@ -3328,6 +3450,15 @@ def references(
     include_declaration: bool = False,
 ) -> list[types.Location] | None:
     """Return references to one proven template root or lexical binding."""
+    component_binding = _component_js_binding_at(document, position)
+    if component_binding is not None:
+        js_region, binding = component_binding
+        spans = binding.references
+        if include_declaration:
+            spans = ((binding.start_index, binding.end_index), *spans)
+        return [
+            types.Location(document.uri, _range(js_region.source_map.map_range(start, end))) for start, end in spans
+        ]
     browser_binding_references = _browser_binding_reference_locations(
         document,
         position,
@@ -3440,6 +3571,9 @@ def declaration(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> types.Location | list[types.Location] | None:
     """Navigate to the authored origin of one proven template variable."""
+    component_binding_location = _component_js_binding_origin(document, position)
+    if component_binding_location is not None:
+        return component_binding_location
     state_binding_locations = _citry_state_binding_origin_locations(
         document,
         position,
@@ -3484,6 +3618,9 @@ def definition(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> types.Location | list[types.Location] | None:
     """Navigate to an exact catalog or lexical declaration when provable."""
+    component_binding_location = _component_js_binding_origin(document, position)
+    if component_binding_location is not None:
+        return component_binding_location
     i18n_use = _i18n_use_at(document, position, project)
     if i18n_use is not None:
         i18n_location = _i18n_definition(i18n_use, project, open_documents, document)
@@ -7654,6 +7791,54 @@ def _js_consumer_is_current(
     return True
 
 
+def _closed_js_asset_data_names(
+    document: DocumentState,
+    region: JsRegion,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> frozenset[str] | None:
+    """Only diagnose absent data fields when every owner's namespace is closed."""
+    documents = dict(open_documents or {})
+    documents[document.uri] = document
+    consumers = _js_consumers(document, region, project, documents)
+    roots = _js_asset_data_roots(document, region, project, documents)
+    if not consumers or roots is None or project.source_analysis is None:
+        return None
+    for component in consumers:
+        schema = component.schemas.js_data
+        if schema.kind == "fields":
+            if schema.namespace_policy != "closed":
+                return None
+            # Field additions, inheritance, or a validation-library policy edit
+            # can change whether missing names are errors before registry reload.
+            schema_chain = project.source_analysis.js_schema_resolution_chain(component)
+            if schema_chain is None:
+                return None
+            for candidate in schema_chain:
+                source = _python_source(candidate.source_file, document, documents)
+                if (
+                    source is None
+                    or python_class_resolution_signature(source, candidate.qualname) != candidate.resolution
+                ):
+                    return None
+        elif schema.kind == "absent":
+            # A partial return analysis may prove some fields without proving
+            # that all other names are invalid.
+            chain = project.source_analysis.js_data_chain(component)
+            if not chain:
+                return None
+            owner = chain[-1]
+            source = _python_source(owner.source_file, document, documents)
+            if source is None:
+                return None
+            shape = analyze_js_data_source(source, owner.qualname)
+            if shape is None or shape.completeness != "closed":
+                return None
+        else:
+            return None
+    return frozenset(root.name for root in roots)
+
+
 def _js_asset_data_roots(
     document: DocumentState,
     region: JsRegion,
@@ -7904,6 +8089,40 @@ _COMPONENT_CONTEXT_SPECS = {
         f"{_BROWSER_APIS_URL}#component",
     ),
 }
+
+
+def _component_js_binding_at(
+    document: DocumentState,
+    position: types.Position,
+) -> tuple[JsRegion, BrowserComponentBinding] | None:
+    """Resolve the actual callback binding, including aliases and captured references."""
+    region = document.js_region_at(position)
+    if region is None:
+        return None
+    parser_index = region.source_map.parser_index_at(_citry_position(position))
+    if parser_index is None:
+        return None
+    # OXC identity excludes a same-named parameter in a nested or sibling function.
+    analysis = analyze_browser_component_source(region.source_map.template_source)
+    if not analysis.valid:
+        return None
+    for binding in analysis.bindings:
+        for start, end in ((binding.start_index, binding.end_index), *binding.references):
+            if start <= parser_index <= end:
+                return region, binding
+    return None
+
+
+def _component_js_binding_origin(document: DocumentState, position: types.Position) -> types.Location | None:
+    """Keep callback navigation in the authored JavaScript parameter list."""
+    resolved = _component_js_binding_at(document, position)
+    if resolved is None:
+        return None
+    region, binding = resolved
+    return types.Location(
+        document.uri,
+        _range(region.source_map.map_range(binding.start_index, binding.end_index)),
+    )
 
 
 def _browser_api_hover(
@@ -8240,6 +8459,55 @@ def _browser_event_origin_locations(
         return ()
     _region, name, _start, _end, contract = resolved
     return contract.get(name, ())
+
+
+def _citry_state_key_completion_result(
+    document: DocumentState,
+    position: types.Position,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> CompletionResult | None:
+    """Complete public State names while preserving the binding's modifiers and value."""
+    region = document.region_at(position)
+    if region is None:
+        return None
+    parser_index = region.source_map.parser_index_at(_citry_position(position))
+    if parser_index is None:
+        return None
+    source = region.source_map.template_source
+    cursor = parser_char_index(source, parser_index)
+    chain = _unfinished_start_tag_chain(source[:cursor])
+    if not chain:
+        return None
+    tag_start, _tag_name, _tag_text = chain[-1]
+    context, attribute_position = _attribute_completion_context(document, region, source, tag_start, cursor)
+    if not attribute_position or context is None or not context.authored_name.startswith(":c-"):
+        return None
+    relative_cursor = cursor - context.start_index
+    base_name = context.authored_name.split(".", 1)[0]
+    if not 3 <= relative_cursor <= len(base_name):
+        return None
+    # Replace the whole base even when completion starts midway through a typo,
+    # so the suffix and any existing handler remain exactly as authored.
+    edit_range = _mapped_template_range(region, source, context.start_index, context.start_index + len(base_name))
+    if edit_range is None:
+        return CompletionResult((), is_incomplete=True)
+    consumers = _template_consumers(document, region, project, open_documents)
+    roots = _current_state_key_roots(consumers, document, project, open_documents)
+    prefix = context.authored_name[3:relative_cursor]
+    return CompletionResult(
+        tuple(
+            types.CompletionItem(
+                label=f":c-{root.name}",
+                kind=types.CompletionItemKind.Field,
+                detail="Citry public State field",
+                text_edit=types.TextEdit(edit_range, f":c-{root.name}"),
+            )
+            for root in sorted(roots or (), key=lambda item: item.name)
+            if root.name.startswith(prefix)
+        ),
+        is_incomplete=True,
+    )
 
 
 def _citry_binding_modifier_completion_result(
@@ -8658,6 +8926,26 @@ def _js_data_member_reference_locations(
     if include_declaration:
         found.extend(_js_data_root_locations(root, open_documents))
     return list(_sorted_locations(found))
+
+
+def _current_state_key_roots(
+    consumers: tuple[ComponentRecord, ...],
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[_JsDataRoot, ...] | None:
+    """Prove the complete public namespace is current before completing or rejecting keys."""
+    if not consumers or project.source_analysis is None:
+        return None
+    for component in consumers:
+        chain = project.source_analysis.state_resolution_chain(component)
+        if chain is None:
+            return None
+        for candidate in chain:
+            source = _python_source(candidate.source_file, document, open_documents)
+            if source is None or python_class_resolution_signature(source, candidate.qualname) != candidate.resolution:
+                return None
+    return _shared_state_roots(consumers, document, project, open_documents)
 
 
 def _shared_state_roots(

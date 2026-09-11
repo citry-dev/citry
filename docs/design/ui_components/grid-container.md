@@ -151,8 +151,8 @@ because it would be inactive and misleading.
 | Input | Type | Default | Effect |
 |---|---|---|---|
 | `tag` | `CGridTag` | `"div"` | selects the native root |
-| `cols` | `int` | `1` | base equal column count, from 1 through 12 |
-| `sm`, `md`, `lg`, `xl`, `xxl` | `int | None` | `None` | override the count at and above that breakpoint |
+| `cols` | `int | ASCII decimal str` | `1` | base equal column count, from 1 through 12 |
+| `sm`, `md`, `lg`, `xl`, `xxl` | `int | ASCII decimal str | None` | `None` | override the count at and above that breakpoint |
 | `min_col` | `str | None` | `None` | selects intrinsic auto-fit mode with one positive CSS length |
 | `gap` | `CLayoutGap` | `"md"` | selects row and column gap |
 | `class_`, `style`, `attrs` | shared root styling/attributes | `None` | customize the one root |
@@ -167,14 +167,14 @@ responsive count so there is exactly one track-sizing owner.
 | Input | Type | Default | Effect |
 |---|---|---|---|
 | `tag` | `CGridItemTag` | `"div"` | selects the native root |
-| `span` | `int` | `1` | base column span, from 1 through 12 |
-| `sm`, `md`, `lg`, `xl`, `xxl` | `int | None` | `None` | override span at and above that breakpoint |
+| `span` | `int | ASCII decimal str` | `1` | base column span, from 1 through 12 |
+| `sm`, `md`, `lg`, `xl`, `xxl` | `int | ASCII decimal str | None` | `None` | override span at and above that breakpoint |
 | `class_`, `style`, `attrs` | shared root styling/attributes | `None` | customize the one root |
 
-Static template decimal attributes are accepted because the template syntax
-is intentionally concise: `sm="2"`. Python and dynamic template expressions
-must supply integers, not numeric strings or Booleans. Missing breakpoint
-values inherit the nearest earlier value.
+Every server surface accepts an integer or an ASCII decimal string such as
+`"2"` for a column count or span. Citry normalizes strings to integers before
+applying the 1 through 12 range check. Booleans and other strings are rejected.
+Missing breakpoint values inherit the nearest earlier value.
 
 There are no client inputs and no JavaScript. Runtime-derived responsive
 layout uses classes or CSS rules, not `$c-props`.
@@ -326,12 +326,12 @@ Caller-owned mappings are copied before validation. Direct choice/length
 strings are converted to exact plain strings; trusted-string subclasses do
 not bypass validation.
 
-Render raises deterministically for unknown choices; Boolean/non-integer,
-below-1, or above-12 counts; dynamic/Python numeric strings; malformed,
-zero/negative, or unsupported `min_col`; intrinsic/fixed conflicts; fluid with
-a non-default size; non-Boolean `fluid`; non-mapping attrs; and owned/runtime/
-structural attributes. Slot children and spans relative to a particular
-parent are not inspected.
+Render raises deterministically for unknown choices; Boolean values; counts
+that are neither integers nor ASCII decimal strings; counts below 1 or above
+12; malformed, zero/negative, or unsupported `min_col`; intrinsic/fixed
+conflicts; fluid with a non-default size; non-Boolean `fluid`; non-mapping
+attrs; and owned/runtime/structural attributes. Slot children and spans
+relative to a particular parent are not inspected.
 
 ## 16. Assets and performance
 

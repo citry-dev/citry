@@ -7,18 +7,26 @@ constant parts of a template, and the cache that stores the results.
 # ruff: noqa: ANN
 
 import gc
+import json
+import re
 import subprocess
 import sys
 import textwrap
+from collections import namedtuple
+from dataclasses import InitVar, dataclass, field
+from pathlib import Path
+from typing import NamedTuple
 from weakref import ref
 
 import pytest
 
-from citry import Citry, Component, Const, const_value, is_const
+from citry import Citry, Component, Const, Extension, const_value, constness, is_const
 from citry.constness import (
     _MAX_UNROLL_ITERATIONS,
     _UNFREEZABLE,
     ConstBodyCache,
+    _ConstMapping,
+    _overlay_const_mapping,
     extract_const_vars,
     freeze_const,
     precompute_const_parts,
@@ -75,6 +83,1133 @@ finally:
     def test_const_value_passthrough_for_plain(self):
         assert const_value(3) == 3
         assert const_value("hi") == "hi"
+
+
+class TestConstUserBoundaries:
+    def test_component_methods_receive_ordinary_values(self):
+        sentinel = object()
+
+        def function():
+            return "called"
+
+        seen = []
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                true: bool
+                false: bool
+                none: None
+                sentinel: object
+                name: str
+                function: object
+
+            def template_data(self, kwargs, slots):
+                seen.append(
+                    (
+                        kwargs.true is True,
+                        kwargs.false is False,
+                        kwargs.none is None,
+                        kwargs.sentinel is sentinel,
+                        type(kwargs.name) is str,
+                        re.fullmatch(r"[a-z]+", kwargs.name).group(),
+                        Path("root") / kwargs.name,
+                        ",".join((kwargs.name, "tail")),  # noqa: FLY002 - exact-type API regression
+                        json.dumps({"name": kwargs.name}),
+                        callable(kwargs.function),
+                        kwargs.function(),
+                    )
+                )
+                return {}
+
+            template = """
+                ok
+            """.strip()
+
+        Probe(
+            true=Const(True),  # noqa: FBT003
+            false=Const(False),  # noqa: FBT003
+            none=Const(None),
+            sentinel=Const(sentinel),
+            name=Const("leaf"),
+            function=Const(function),
+        ).render()
+
+        assert seen == [
+            (True, True, True, True, True, "leaf", Path("root/leaf"), "leaf,tail", '{"name": "leaf"}', True, "called")
+        ]
+
+    def test_template_literal_and_const_variable_reach_child_callback_plain(self):
+        seen = []
+        c = Citry()
+
+        class Child(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                seen.append((kwargs["literal"] is True, kwargs["variable"] is True))
+                return {"literal": Const(kwargs["literal"]), "variable": Const(kwargs["variable"])}
+
+            template = """
+                {{ literal }}:{{ variable }}
+            """.strip()
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-Child c-literal="True" c-variable="value" />
+            """.strip()
+
+        assert Page(value=Const(True)).render().serialize() == "True:True"  # noqa: FBT003
+        assert seen == [(True, True)]
+
+    def test_callback_returning_original_same_name_input_restores_constness(self):
+        source = {"value": "same"}
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return kwargs
+
+            template = """
+                {{ value }}
+            """.strip()
+
+        assert Card(value=Const(source["value"])).render().serialize() == "same"
+        assert ["same"] in c._const_body_cache.values()
+
+    def test_callback_renaming_an_original_input_does_not_restore_constness(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"renamed": kwargs["value"]}
+
+            template = """
+                {{ renamed }}
+            """.strip()
+
+        assert Card(value=Const("same")).render().serialize() == "same"
+        (body,) = c._const_body_cache.values()
+        assert any(isinstance(item, ExprNode) for item in body)
+
+    def test_callback_returning_equal_distinct_value_does_not_restore_constness(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"value": list(kwargs["value"])}
+
+            template = """
+                {{ value }}
+            """.strip()
+
+        assert Card(value=Const([1, 2])).render().serialize() == "[1, 2]"
+        (body,) = c._const_body_cache.values()
+        assert any(isinstance(item, ExprNode) for item in body)
+
+    def test_nested_marker_added_to_ordinary_container_remains_for_next_data_callback(self):
+        seen = []
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                kwargs["items"].append(Const("added"))
+                return kwargs
+
+            def js_data(self, kwargs, slots):
+                seen.append((kwargs["items"][-1], is_const(kwargs["items"][-1])))
+
+            template = """
+                ok
+            """.strip()
+
+        Card(items=[]).render()
+        assert seen == [("added", True)]
+
+    def test_same_interned_custom_output_uses_the_accepted_identity_rule(self):
+        source = {"value": "same"}
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"value": source["value"]}
+
+            template = """
+                {{ value }}
+            """.strip()
+
+        assert Card(value=Const("same")).render().serialize() == "same"
+        assert ["same"] in c._const_body_cache.values()
+        source["value"] = "changed"
+        assert Card(value=Const("same")).render().serialize() == "changed"
+
+    def test_explicit_const_on_custom_output_preserves_precomputation(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"value": Const(kwargs["value"])}
+
+            template = """
+                {{ value }}
+            """.strip()
+
+        assert Card(value=Const("same")).render().serialize() == "same"
+        assert ["same"] in c._const_body_cache.values()
+
+    def test_explicit_const_added_to_returned_kwargs_preserves_precomputation(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                kwargs["added"] = Const("constant")
+                return kwargs
+
+            template = """
+                {{ added }}
+            """.strip()
+
+        assert Card().render().serialize() == "constant"
+        assert ["constant"] in c._const_body_cache.values()
+
+    def test_expression_evaluate_unwraps_direct_marked_mapping(self):
+        sentinel = object()
+        node = ExprNode(None, (0, 0), "value is sentinel", ("value", "sentinel"))
+
+        assert node.evaluate({"value": Const(sentinel), "sentinel": sentinel}) is True
+
+    def test_marked_roots_preserve_aliases_and_cycles_without_converting_an_unmarked_alias(self):
+        shared = [Const("leaf")]
+        cyclic = [shared]
+        cyclic.append(cyclic)
+        seen = []
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                seen.append(
+                    (
+                        kwargs["first"] is kwargs["second"],
+                        kwargs["first"] is not kwargs["ordinary"],
+                        kwargs["first"][0] == "leaf",
+                        not is_const(kwargs["first"][0]),
+                        is_const(kwargs["ordinary"][0]),
+                        kwargs["cycle"][1] is kwargs["cycle"],
+                    )
+                )
+                return {}
+
+            template = """
+                ok
+            """.strip()
+
+        Probe(first=Const(shared), second=Const(shared), ordinary=shared, cycle=Const(cyclic)).render()
+        assert seen == [(True, True, True, True, True, True)]
+
+    def test_marker_unwrapping_does_not_consult_an_opaque_target_class(self):
+        class Opaque:
+            @property
+            def __class__(self):
+                raise RuntimeError("opaque class consulted")
+
+        class UnhashableMeta(type):
+            __hash__ = None
+
+        class UnhashableOpaque(metaclass=UnhashableMeta):
+            pass
+
+        target = Opaque()
+        unhashable_target = UnhashableOpaque()
+
+        values = _ConstMapping({"value": Const(target), "nested": [unhashable_target]})
+
+        assert values["value"] is target
+        assert values["nested"][0] is unhashable_target
+
+    def test_plain_cycle_is_not_copied(self):
+        cyclic = []
+        cyclic.append(cyclic)
+        seen = []
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                seen.append(kwargs["cycle"] is cyclic)
+                return {}
+
+            template = """
+                ok
+            """.strip()
+
+        Probe(cycle=cyclic).render()
+        assert seen == [True]
+
+    def test_ordinary_builtin_graph_skips_the_alias_converter_even_with_a_nested_marker(self, monkeypatch):
+        original_scanner = constness._ConstGraphScanner
+        scanner_calls = 0
+
+        def tracking_scanner():
+            nonlocal scanner_calls
+            scanner_calls += 1
+            return original_scanner()
+
+        monkeypatch.setattr(constness, "_ConstGraphScanner", tracking_scanner)
+        cyclic = []
+        cyclic.append(cyclic)
+
+        nested = [{"value": Const("manual")}]
+        plain = _ConstMapping({"cycle": cyclic, "nested": nested})
+
+        assert plain["cycle"] is cyclic
+        assert plain["nested"] is nested
+        assert is_const(plain["nested"][0]["value"])
+        assert scanner_calls == 0
+
+        shared = [Const("marked")]
+        marked = _ConstMapping({"first": Const(shared), "second": Const(shared)})
+
+        assert marked["first"] is marked["second"]
+        assert marked["first"] == ["marked"]
+        assert scanner_calls == 1
+
+    def test_marked_immutable_cycle_fails_deterministically(self):
+        mutable = []
+        cyclic = (mutable, Const("leaf"))
+        mutable.append(cyclic)
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+            template = """
+                ok
+            """.strip()
+
+        with pytest.raises(ValueError, match="cyclic tuple or frozenset"):
+            Probe(value=Const(cyclic)).render()
+
+    def test_bulk_mapping_update_preserves_aliases(self):
+        shared = [Const(True)]  # noqa: FBT003
+        values = _ConstMapping()
+
+        values.update({"first": Const(shared), "second": Const(shared)})
+
+        assert values["first"] is values["second"]
+        assert values["first"] == [True]
+
+    def test_mapping_update_preserves_duplicate_and_caller_list_semantics(self):
+        marked = Const(1)
+        pairs = [("value", marked), ("value", 2)]
+        values = _ConstMapping({"old": Const(0)})
+
+        values.update(pairs, extra=Const(3))
+
+        assert pairs == [("value", marked), ("value", 2)]
+        assert values == {"old": 0, "value": 2, "extra": 3}
+        assert extract_const_vars(values)[0] == {"old": 0, "extra": 3}
+
+        values.update([("value", 2), ("value", Const(1))])
+        assert extract_const_vars(values)[0] == {"old": 0, "value": 1, "extra": 3}
+
+    def test_mapping_update_normalizes_all_marked_roots_before_publishing(self):
+        mutable = []
+        cyclic = (mutable, Const("leaf"))
+        mutable.append(cyclic)
+        values = _ConstMapping({"stable": Const(1)})
+
+        with pytest.raises(ValueError, match="cyclic tuple or frozenset"):
+            values.update({"new": Const(cyclic), "stable": 2})
+
+        assert values == {"stable": 1}
+        assert extract_const_vars(values)[0] == {"stable": 1}
+
+    def test_mapping_update_snapshots_an_exact_dict_before_marked_conversion(self):
+        updates = {}
+
+        class MutatingKey:
+            active = False
+
+            def __hash__(self):
+                if self.active:
+                    updates["later"] = Const("changed")
+                    updates["injected"] = Const("extra")
+                return 1
+
+        key = MutatingKey()
+        graph = {Const(key): Const("leaf")}
+        updates.update({"graph": Const(graph), "later": Const("old")})
+        key.active = True
+        values = _ConstMapping()
+
+        values.update(updates)
+
+        assert set(values) == {"graph", "later"}
+        assert list(values["graph"].values()) == ["leaf"]
+        assert values["later"] == "old"
+        assert extract_const_vars(values)[0]["later"] == "old"
+
+    def test_marked_overlay_is_normalized_before_copying_its_parent_scope(self):
+        parent = _ConstMapping({"keep": Const("before")})
+
+        class MutatingKey:
+            active = False
+
+            def __hash__(self):
+                if self.active:
+                    parent["keep"] = "after"
+                return 1
+
+        key = MutatingKey()
+        graph = {Const(key): Const("leaf")}
+        key.active = True
+
+        overlaid = _overlay_const_mapping(parent, {"graph": Const(graph)})
+
+        assert overlaid["keep"] == "after"
+        assert list(overlaid["graph"].values()) == ["leaf"]
+        assert extract_const_vars(overlaid)[0] == {}
+
+    def test_overlay_subclass_uses_the_generic_merge_path(self):
+        class CustomCopyMapping(_ConstMapping):
+            def copy(self):
+                return {"custom": 1}
+
+        parent = CustomCopyMapping({"keep": Const("before")})
+
+        overlaid = _overlay_const_mapping(parent, {"new": 2})
+
+        assert overlaid == {"keep": "before", "new": 2}
+        assert extract_const_vars(overlaid)[0] == {"keep": "before"}
+
+    def test_mapping_copy_is_isolated_and_self_update_clears_provenance(self):
+        source = _ConstMapping({"value": Const(1)})
+
+        copied = source.copy()
+        copied["value"] = 2
+
+        assert extract_const_vars(source)[0] == {"value": 1}
+        assert extract_const_vars(copied)[0] == {}
+
+        source.update(source)
+        assert source == {"value": 1}
+        assert extract_const_vars(source)[0] == {}
+
+    def test_mapping_mutators_keep_const_metadata_in_sync(self):
+        values = _ConstMapping({"value": Const(1)})
+
+        values["value"] = 2
+        assert extract_const_vars(values)[0] == {}
+
+        values.setdefault("default", Const(3))
+        assert extract_const_vars(values)[0] == {"default": 3}
+        values.update({"default": 4})
+        assert extract_const_vars(values)[0] == {}
+
+        values |= {"merged": Const(5)}
+        assert extract_const_vars(values)[0] == {"merged": 5}
+        assert values.pop("merged") == 5
+        assert extract_const_vars(values)[0] == {}
+
+        values["deleted"] = Const(6)
+        del values["deleted"]
+        assert extract_const_vars(values)[0] == {}
+
+        values["last"] = Const(6)
+        assert values.popitem() == ("last", 6)
+        values["clear"] = Const(7)
+        values.clear()
+        assert extract_const_vars(values)[0] == {}
+
+    def test_marked_default_and_factory_are_plain_before_post_init(self):
+        seen = []
+        c = Citry()
+
+        def make_false():
+            return Const(False)  # noqa: FBT003
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                flag: bool = Const(True)  # noqa: FBT003
+                made: bool = field(default_factory=make_false)
+
+                def __post_init__(self):
+                    seen.append((self.flag is True, self.made is False))
+
+            template = """
+                {{ flag }}:{{ made }}
+            """
+
+        assert Probe().render().serialize().strip() == "True:False"
+        assert seen == [(True, True)]
+
+    def test_default_factory_mutation_keeps_supplied_alias_and_nested_marker(self):
+        shared = []
+        seen = []
+        c = Citry()
+
+        def make_default():
+            shared.append(Const("leaf"))
+            return shared
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                supplied: list
+                defaulted: list = field(default_factory=make_default)
+
+                def __post_init__(self):
+                    seen.append((self.supplied is self.defaulted, is_const(self.supplied[-1])))
+
+            template = """
+                ok
+            """.strip()
+
+        Probe(supplied=shared).render()
+        assert seen == [(True, True)]
+
+    def test_inert_marked_default_factory_recursively_unwraps_its_marked_root(self):
+        seen = []
+        c = Citry()
+
+        def make_items():
+            return Const([Const("leaf")])
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                items: list = field(default_factory=make_items)
+
+            def template_data(self, kwargs, slots):
+                seen.append((type(kwargs.items) is list, type(kwargs.items[0]) is str))
+                return {"items": kwargs.items}
+
+            template = """
+                {{ items[0] }}
+            """
+
+        Probe().render()
+        Probe().render()
+        assert seen == [(True, True), (True, True)]
+        (body,) = c._const_body_cache.values()
+        assert all(not isinstance(item, ExprNode) for item in body)
+
+    def test_init_false_defaults_are_plain_before_post_init_and_rendered(self):
+        seen = []
+        calls = 0
+        c = Citry()
+
+        def make_label():
+            nonlocal calls
+            calls += 1
+            return Const("factory")
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                fixed: str = field(init=False, default=Const("default"))
+                made: str = field(init=False, default_factory=make_label)
+
+                def __post_init__(self):
+                    seen.append((type(self.fixed) is str, type(self.made) is str))
+
+            template = """
+                {{ fixed }}:{{ made }}
+            """
+
+        assert Probe().render().serialize().strip() == "default:factory"
+        assert seen == [(True, True)]
+        assert calls == 1
+
+    def test_init_var_marked_default_is_plain_and_not_template_data(self):
+        seen = []
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                value: str = "visible"
+                transient: InitVar[bool] = Const(True)  # noqa: FBT003
+
+                def __post_init__(self, transient):
+                    seen.append(transient is True)
+
+            template = """
+                {{ value }}
+            """
+
+        assert Probe().render().serialize().strip() == "visible"
+        assert seen == [True]
+
+    def test_custom_dataclass_constructor_keeps_its_own_default_semantics(self):
+        c = Citry()
+
+        @dataclass(init=False)
+        class Inputs:
+            value: str = "declared"
+
+            def __init__(self):
+                self.value = "custom"
+
+        class Probe(Component):
+            citry = c
+            Kwargs = Inputs
+
+            template = """
+                {{ value }}
+            """
+
+        assert Probe().render().serialize().strip() == "custom"
+
+    def test_transforming_schema_renders_the_actual_constructed_fields(self):
+        c = Citry()
+
+        class UpperTuple(namedtuple("InputBase", "value")):  # noqa: PYI024
+            __slots__ = ()
+
+            def __new__(cls, value):
+                return super().__new__(cls, value.upper())
+
+        class UpperDescriptor:
+            def __get__(self, obj, owner=None):
+                return "default" if obj is None else obj.__dict__["_value"]
+
+            def __set__(self, obj, value):
+                obj.__dict__["_value"] = value.upper()
+
+        @dataclass
+        class UpperFields:
+            value: str = UpperDescriptor()
+
+        class TupleProbe(Component):
+            citry = c
+            Kwargs = UpperTuple
+
+            template = """
+                {{ value }}
+            """
+
+        class FieldsProbe(Component):
+            citry = c
+            Kwargs = UpperFields
+
+            template = """
+                {{ value }}
+            """
+
+        for probe in (TupleProbe, FieldsProbe):
+            instance = probe._create_instance(kwargs={"value": "lower"})
+            assert instance.kwargs.value == "LOWER"
+            assert probe(value="lower").render().serialize().strip() == "LOWER"
+
+    def test_custom_namedtuple_constructor_cannot_expose_a_marker(self):
+        seen = []
+        c = Citry()
+
+        class MarkerTuple(namedtuple("TupleBase", "flag")):  # noqa: PYI024
+            __slots__ = ()
+
+            def __new__(cls, flag):
+                return super().__new__(cls, Const(flag))
+
+        class Probe(Component):
+            citry = c
+            Kwargs = MarkerTuple
+
+            def template_data(self, kwargs, slots):
+                seen.append(kwargs.flag is True)
+                return {"flag": kwargs.flag}
+
+            template = """
+                {{ flag }}
+            """
+
+        assert Probe(flag=True).render().serialize().strip() == "True"
+        assert seen == [True]
+
+    def test_read_only_schema_field_cannot_expose_a_marker(self):
+        c = Citry()
+
+        @dataclass(init=False)
+        class Inputs:
+            flag: bool
+
+            def __init__(self, flag):
+                self._flag = Const(flag)
+
+            @property
+            def flag(self):
+                return self._flag
+
+        class Probe(Component):
+            citry = c
+            Kwargs = Inputs
+
+            template = """
+                {{ flag }}
+            """
+
+        with pytest.raises(TypeError, match="produced a Const value in a read-only field"):
+            Probe(flag=True).render()
+
+    def test_template_data_schema_uses_actual_fields_and_excludes_init_vars(self):
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            class TemplateData:
+                label: str = field(init=False, default="extra")
+                transient: InitVar[str] = "not-a-field"
+
+            def template_data(self, kwargs, slots):
+                return {}
+
+            template = """
+                {{ label }}
+            """
+
+        assert Probe().render().serialize().strip() == "extra"
+
+    def test_typed_default_mapping_snapshots_current_schema_fields(self):
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                value: str
+
+            class Cache:
+                enabled = True
+
+                def vary(self, kwargs, slots):
+                    self.component.kwargs.value = "changed"
+
+            template = """
+                {{ value }}
+            """
+
+        assert Probe(value=Const("initial")).render().serialize().strip() == "changed"
+
+    def test_namedtuple_marked_default_is_plain_in_callback(self):
+        seen = []
+        c = Citry()
+
+        class Inputs(NamedTuple):
+            flag: bool = Const(True)  # noqa: FBT003
+
+        class Probe(Component):
+            citry = c
+            Kwargs = Inputs
+
+            def template_data(self, kwargs, slots):
+                seen.append(kwargs.flag is True)
+                return {"flag": Const(kwargs.flag)}
+
+            template = """
+                {{ flag }}
+            """
+
+        assert Probe().render().serialize().strip() == "True"
+        assert seen == [True]
+
+    def test_input_hooks_pass_plain_values_and_explicit_writes_reestablish_constness(self):
+        seen = []
+
+        class First(Extension):
+            name = "first"
+
+            def on_component_input(self, ctx):
+                seen.append(ctx.kwargs["flag"] is True)
+                ctx.kwargs["label"] = Const("fixed")
+
+        class Second(Extension):
+            name = "second"
+
+            def on_component_input(self, ctx):
+                seen.append(type(ctx.kwargs["label"]) is str)
+
+        app = Citry(extensions=[First, Second])
+
+        class Probe(Component):
+            citry = app
+            template = """
+                {{ label }}
+            """.strip()
+
+        assert Probe(flag=Const(True)).render().serialize() == "fixed"  # noqa: FBT003
+        assert seen == [True, True]
+        assert ["fixed"] in app._const_body_cache.values()
+
+    def test_nested_marker_inserted_by_input_hook_remains_for_next_hook(self):
+        seen = []
+
+        class First(Extension):
+            name = "first"
+
+            def on_component_input(self, ctx):
+                ctx.kwargs["items"].append(Const("added"))
+
+        class Second(Extension):
+            name = "second"
+
+            def on_component_input(self, ctx):
+                seen.append((ctx.kwargs["items"][-1], is_const(ctx.kwargs["items"][-1])))
+
+        app = Citry(extensions=[First, Second])
+
+        class Probe(Component):
+            citry = app
+            template = """
+                ok
+            """.strip()
+
+        Probe(items=[]).render()
+        assert seen == [("added", True)]
+
+    def test_root_marker_inserted_through_dict_bypass_is_consumed_before_next_hook(self):
+        seen = []
+
+        class First(Extension):
+            name = "first"
+
+            def on_component_input(self, ctx):
+                dict.__setitem__(ctx.kwargs, "items", Const([Const("added")]))
+
+        class Second(Extension):
+            name = "second"
+
+            def on_component_input(self, ctx):
+                seen.append((type(ctx.kwargs["items"]) is list, type(ctx.kwargs["items"][0]) is str))
+
+        app = Citry(extensions=[First, Second])
+
+        class Probe(Component):
+            citry = app
+            template = """
+                {{ items[0] }}
+            """.strip()
+
+        assert Probe().render().serialize() == "added"
+        assert seen == [(True, True)]
+
+    def test_input_hook_const_candidate_survives_a_later_ordinary_write(self):
+        candidate = []
+
+        class First(Extension):
+            name = "first"
+
+            def on_component_input(self, ctx):
+                ctx.kwargs["value"] = Const(candidate)
+
+        class Second(Extension):
+            name = "second"
+
+            def on_component_input(self, ctx):
+                ctx.kwargs["value"] = []
+
+        app = Citry(extensions=[First, Second])
+
+        class Probe(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"value": candidate}
+
+            template = """
+                {{ value }}
+            """.strip()
+
+        assert Probe().render().serialize() == "[]"
+        (body,) = app._const_body_cache.values()
+        assert all(not isinstance(item, ExprNode) for item in body)
+
+    def test_data_hooks_pass_plain_values_and_explicit_write_marks_output(self):
+        seen = []
+
+        class First(Extension):
+            name = "first"
+
+            def on_component_data(self, ctx):
+                ctx.template_data["label"] = Const("fixed")
+
+        class Second(Extension):
+            name = "second"
+
+            def on_component_data(self, ctx):
+                seen.append(type(ctx.template_data["label"]) is str)
+
+        app = Citry(extensions=[First, Second])
+
+        class Probe(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {}
+
+            template = """
+                {{ label }}
+            """.strip()
+
+        assert Probe().render().serialize() == "fixed"
+        assert seen == [True]
+        assert ["fixed"] in app._const_body_cache.values()
+
+    def test_marked_data_and_global_roots_are_plain_before_data_hooks(self):
+        seen = []
+
+        class Observe(Extension):
+            name = "observe"
+
+            def on_component_data(self, ctx):
+                seen.append(
+                    tuple(
+                        (type(values[name]) is list, type(values[name][0]) is str)
+                        for values, name in (
+                            (ctx.template_data, "template"),
+                            (ctx.template_data, "global_items"),
+                            (ctx.js_data, "js"),
+                            (ctx.css_data, "css"),
+                        )
+                    )
+                )
+
+        app = Citry(
+            extensions=[Observe],
+            template_globals={"global_items": Const([Const("global")])},
+        )
+
+        class Probe(Component):
+            citry = app
+
+            class TemplateData:
+                template: list
+
+            def template_data(self, kwargs, slots):
+                return {"template": Const([Const("template")])}
+
+            def js_data(self, kwargs, slots):
+                return {"js": Const([Const("js")])}
+
+            def css_data(self, kwargs, slots):
+                return {"css": Const([Const("css")])}
+
+            template = """
+                {{ template[0] }}:{{ global_items[0] }}
+            """.strip()
+
+        assert Probe().render().serialize() == "template:global"
+        assert seen == [((True, True), (True, True), (True, True), (True, True))]
+
+    def test_ordinary_data_hook_write_clears_const_metadata(self):
+        values = iter(("first", "second"))
+
+        class Replace(Extension):
+            name = "replace"
+
+            def on_component_data(self, ctx):
+                ctx.template_data["label"] = next(values)
+
+        app = Citry(extensions=[Replace])
+
+        class Probe(Component):
+            citry = app
+            template = """
+                {{ label }}
+            """.strip()
+
+        assert Probe(label=Const("original")).render().serialize() == "first"
+        assert Probe(label=Const("original")).render().serialize() == "second"
+
+    def test_data_hook_returning_original_same_name_input_restores_constness(self):
+        original = "original value that is kept by identity"
+
+        class Restore(Extension):
+            name = "restore"
+
+            def on_component_data(self, ctx):
+                ctx.template_data["label"] = ctx.component.raw_kwargs["label"]
+
+        app = Citry(extensions=[Restore])
+
+        class Probe(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {}
+
+            template = """
+                {{ label }}
+            """.strip()
+
+        assert Probe(label=Const(original)).render().serialize() == original
+        assert [original] in app._const_body_cache.values()
+
+    def test_custom_schema_transformation_discards_input_metadata(self):
+        seen = []
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                label: str
+
+                def __post_init__(self):
+                    seen.append(type(self.label) is str)
+                    self.label = self.label.upper()
+
+            template = """
+                {{ label }}
+            """.strip()
+
+        assert Probe(label=Const("value")).render().serialize() == "VALUE"
+        assert seen == [True]
+        (body,) = c._const_body_cache.values()
+        assert any(isinstance(item, ExprNode) for item in body)
+
+    def test_original_input_returned_after_schema_transformation_restores_constness(self):
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+
+            class Kwargs:
+                label: str
+
+                def __post_init__(self):
+                    self.label = self.label.upper()
+
+            def template_data(self, kwargs, slots):
+                return {"label": self.raw_kwargs["label"]}
+
+            template = """
+                {{ label }}
+            """.strip()
+
+        assert Probe(label=Const("original value")).render().serialize() == "original value"
+        assert ["original value"] in c._const_body_cache.values()
+
+    def test_const_global_overridden_by_dynamic_data_stays_dynamic(self):
+        calls = []
+        app = Citry(template_globals={"value": Const(lambda: "global")})
+
+        class Probe(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                def value():
+                    calls.append(None)
+                    return len(calls)
+
+                return {"value": value}
+
+            template = """
+                {{ value() }}
+            """.strip()
+
+        assert Probe().render().serialize() == "1"
+        assert Probe().render().serialize() == "2"
+
+    def test_default_mapping_preserves_constness_through_child_chain(self):
+        app = Citry()
+
+        class Leaf(Component):
+            citry = app
+            template = """
+                {{ value }}
+            """.strip()
+
+        class Middle(Component):
+            citry = app
+            template = """
+                <c-Leaf c-value="value" />
+            """.strip()
+
+        class Page(Component):
+            citry = app
+            template = """
+                <c-Middle c-value="value" />
+            """.strip()
+
+        assert Page(value=Const("fixed")).render().serialize() == "fixed"
+        assert ["fixed"] in app._const_body_cache.values()
+
+    def test_dynamic_selector_preserves_known_literal_input_metadata(self):
+        app = Citry()
+
+        class Target(Component):
+            citry = app
+            template = """
+                {{ value }}
+            """.strip()
+
+        class Page(Component):
+            citry = app
+            template = """
+                <c-component is="Target" value="fixed" />
+            """.strip()
+
+        assert Page().render().serialize() == "fixed"
+        assert ["fixed"] in app._const_body_cache.values()
+
+    def test_simple_callback_receives_recursively_plain_marked_root_and_restores_same_input(self):
+        seen = []
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+            simple = True
+
+            @staticmethod
+            def template_data(kwargs, _slots):
+                seen.append((type(kwargs["items"]) is list, type(kwargs["items"][0]) is str))
+                return {"items": kwargs["items"]}
+
+            template = """
+                {{ items[0] }}
+            """.strip()
+
+        assert Probe(items=Const([Const("leaf")])).render().serialize() == "leaf"
+        assert seen == [(True, True)]
+
+    def test_simple_default_mapping_exposes_plain_values(self):
+        c = Citry()
+
+        class Probe(Component):
+            citry = c
+            simple = True
+            template = """
+                {{ flag is True }}
+            """.strip()
+
+        assert Probe(flag=Const(True)).render().serialize() == "True"  # noqa: FBT003
 
     def test_repr_is_transparent(self):
         # repr forwards to the wrapped value: the engine marks template
@@ -150,9 +1285,6 @@ class TestConstFlow:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
-
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_const_signature_keys_the_cache(self):
@@ -161,9 +1293,6 @@ class TestConstFlow:
         class Card(Component):
             citry = c
             template = "<p>{{ cols }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
 
         # Different const values -> different signatures -> two cache entries.
         Card(cols=Const(3)).render()
@@ -181,9 +1310,6 @@ class TestConstFlow:
             citry = c
             template = "<p>hi</p>"  # uses no variables
 
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
-
         # The template never reads `cols`, so its const values cannot affect
         # the body: both renders share one cache entry (the empty signature).
         Card(cols=Const(3)).render()
@@ -197,9 +1323,6 @@ class TestConstFlow:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
-
         # Plain (non-Const) values do not enter the signature, so both renders
         # share the empty signature and a single cache entry.
         Card(cols=3).render()
@@ -212,9 +1335,6 @@ class TestConstFlow:
         class Card(Component):
             citry = c
             template = "<p>{{ rows }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return {"rows": kwargs["rows"]}
 
         # Equal lists (distinct objects) share one canonical key.
         Card(rows=Const([1, 2, 3])).render()
@@ -230,9 +1350,6 @@ class TestConstFlow:
             citry = c
             template = "<p>{{ obj.x }}</p>"
 
-            def template_data(self, kwargs, slots):
-                return {"obj": kwargs["obj"]}
-
         # The value cannot be keyed, so it is demoted to dynamic: both renders
         # share the empty signature, and the expression re-evaluates each time.
         assert Card(obj=Const(_Unhashable(1))).render().serialize() == '<p data-cid-c1="">1</p>'
@@ -245,9 +1362,6 @@ class TestConstFlow:
         class Card(Component):
             citry = c
             template = "<p>{{ v }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return {"v": kwargs["v"]}
 
         assert Card(v=Const(True)).render().serialize() == '<p data-cid-c1="">True</p>'  # noqa: FBT003
         assert Card(v=Const(1)).render().serialize() == '<p data-cid-c2="">1</p>'
@@ -274,9 +1388,6 @@ class TestConstPrecompute:
             citry = c
             template = "<p>{{ cols }}</p>"
 
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
-
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
         (body,) = c._const_body_cache.values()
         assert body == ["<p>3</p>"]
@@ -287,9 +1398,6 @@ class TestConstPrecompute:
         class Card(Component):
             citry = c
             template = "<p>{{ cols }} and {{ other }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"], "other": kwargs["other"]}
 
         # Two renders share the const signature but differ in the dynamic input.
         assert Card(cols=Const(3), other="x").render().serialize() == '<p data-cid-c1="">3 and x</p>'
@@ -309,9 +1417,6 @@ class TestConstPrecompute:
             citry = c
             template = "<p>{{ v }}</p>"
 
-            def template_data(self, kwargs, slots):
-                return {"v": kwargs["v"]}
-
         assert Card(v=Const("<b>")).render().serialize() == '<p data-cid-c1="">&lt;b&gt;</p>'
 
     def test_const_none_precomputes_to_empty(self):
@@ -320,9 +1425,6 @@ class TestConstPrecompute:
         class Card(Component):
             citry = c
             template = "<p>{{ v }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return {"v": kwargs["v"]}
 
         assert Card(v=Const(None)).render().serialize() == '<p data-cid-c1=""></p>'
         assert Card(v=None).render().serialize() == '<p data-cid-c2=""></p>'
@@ -333,9 +1435,6 @@ class TestConstPrecompute:
         class Card(Component):
             citry = c
             template = '<c-if cond="cols > 2">big</c-if><c-else>small</c-else>'
-
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
 
         assert Card(cols=Const(3)).render().serialize() == "big"
         assert Card(cols=Const(1)).render().serialize() == "small"
@@ -350,9 +1449,6 @@ class TestConstPrecompute:
             citry = c
             template = '<c-if cond="cols > 2">big</c-if>'
 
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
-
         assert Card(cols=Const(1)).render().serialize() == ""
         (body,) = c._const_body_cache.values()
         assert body == []
@@ -363,9 +1459,6 @@ class TestConstPrecompute:
         class Card(Component):
             citry = c
             template = '<c-if cond="cols > 2">big</c-if><c-else>small</c-else>'
-
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}
 
         assert Card(cols=3).render().serialize() == "big"
         assert Card(cols=1).render().serialize() == "small"
@@ -379,9 +1472,6 @@ class TestConstPrecompute:
         class Card(Component):
             citry = c
             template = '<c-if cond="show">{{ label }}: {{ count }}</c-if>'
-
-            def template_data(self, kwargs, slots):
-                return {"show": kwargs["show"], "label": kwargs["label"], "count": kwargs["count"]}
 
         out = Card(show=Const(True), label=Const("n"), count=7).render().serialize()  # noqa: FBT003
         assert out == "n: 7"
@@ -412,9 +1502,6 @@ class TestConstPrecompute:
             citry = c
             template = '<c-Box><c-fill name="s">{{ msg }}</c-fill></c-Box>'
 
-            def template_data(self, kwargs, slots):
-                return {"msg": kwargs["msg"], "k": kwargs["k"]}
-
         # Same const signature, different fills: the cached Box body must keep
         # the SlotNode so each render picks up its own fill.
         assert "one" in Page(msg="one", k=Const(1)).render().serialize()
@@ -437,9 +1524,6 @@ class TestConstPrecompute:
         class Holder(Component):
             citry = c
             template = "<div>{{ content }}</div>"
-
-            def template_data(self, kwargs, slots):
-                return {"content": kwargs["content"]}
 
         # Rendering an element mints per-render state (a fresh component id),
         # so the expression must stay dynamic even though its input is const.
@@ -470,9 +1554,6 @@ class TestTemplateLiteralConst:
             citry = c
             template = "<p>{{ age }}</p>"
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         class Page(Component):
             citry = c
             template = '<c-Card age="30" />'
@@ -488,9 +1569,6 @@ class TestTemplateLiteralConst:
             citry = c
             template = "<p>{{ age }}</p>"
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         class Page(Component):
             citry = c
             template = "<c-Card age=30 />"
@@ -504,9 +1582,6 @@ class TestTemplateLiteralConst:
         class Card(Component):
             citry = c
             template = "<p>{{ compact }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         class Page(Component):
             citry = c
@@ -524,9 +1599,6 @@ class TestTemplateLiteralConst:
             citry = c
             template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         class Page(Component):
             citry = c
             template = '<c-Card c-age="30" />'
@@ -534,15 +1606,47 @@ class TestTemplateLiteralConst:
         assert Page().render().serialize() == "adult"
         assert ["adult"] in c._const_body_cache.values()
 
+    def test_template_expression_wraps_only_its_result_after_plain_arguments_are_evaluated(self):
+        seen = []
+
+        def add(left, right):
+            seen.append((type(left) is int, type(right) is int))
+            return left + right
+
+        c = Citry(template_globals={"add": Const(add)})
+
+        class Card(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                seen.append(
+                    (
+                        type(kwargs["items"]) is list,
+                        all(type(item) is int for item in kwargs["items"]),
+                        type(kwargs["total"]) is int,
+                    )
+                )
+                return kwargs
+
+            template = """
+                {{ items }}:{{ total }}
+            """.strip()
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-Card c-items="[1, 2]" c-total="add(1, 2)" />
+            """.strip()
+
+        assert Page().render().serialize() == "[1, 2]:3"
+        assert seen == [(True, True), (True, True, True)]
+
     def test_zero_variable_container_literal_unrolls_child_loop(self):
         c = Citry()
 
         class Items(Component):
             citry = c
             template = '<c-for each="i in items">[{{ i * mult }}]</c-for>'
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         class Page(Component):
             citry = c
@@ -566,9 +1670,6 @@ class TestTemplateLiteralConst:
         class Card(Component):
             citry = c
             template = "<p>{{ age }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         class Page(Component):
             citry = c
@@ -604,9 +1705,6 @@ class TestExpressionConstPropagation:
             citry = c
             template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         class Page(Component):
             citry = c
             template = '<c-Card c-age="base + 1" />'
@@ -625,9 +1723,6 @@ class TestExpressionConstPropagation:
         class Card(Component):
             citry = c
             template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         class Page(Component):
             citry = c
@@ -652,9 +1747,6 @@ class TestExpressionConstPropagation:
             citry = c
             template = "<span>{{ label }}</span>"
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         class Page(Component):
             citry = c
             template = '<c-for each="i in items"><c-Card c-label="prefix + \'!\'" /></c-for>'
@@ -670,12 +1762,7 @@ class TestExpressionConstPropagation:
 
 
 class TestConstThroughTypedKwargs:
-    def test_marker_survives_the_typed_kwargs_view(self):
-        # The auto-converted dataclass Kwargs stores values as-is, so the
-        # marker flows whether template_data reads the typed view or the raw
-        # dict. (A typed-Kwargs implementation that copies or coerces values,
-        # for example a user-supplied Pydantic model, may strip the marker;
-        # the value then safely renders as dynamic.)
+    def test_default_typed_kwargs_mapping_preserves_const_metadata(self):
         c = Citry()
 
         class Card(Component):
@@ -684,9 +1771,6 @@ class TestConstThroughTypedKwargs:
 
             class Kwargs:
                 cols: int
-
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs.cols}
 
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
         (body,) = c._const_body_cache.values()
@@ -705,9 +1789,6 @@ class TestConstThroughTypedKwargs:
 
             class Kwargs:
                 cols: int = Const(3)
-
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs.cols}
 
         assert Card().render().serialize() == '<p data-cid-c1="">3</p>'
         assert Card(cols=5).render().serialize() == '<p data-cid-c2="">5</p>'
@@ -746,9 +1827,6 @@ class TestConstPrecomputeInsideKeptNodes:
             citry = c
             template = '<c-if cond="show">{{ label }}: {{ n }}</c-if><c-else>{{ label }} off</c-else>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         # `show` and `n` are dynamic, `label` is const: the IfNode stays, but
         # the const expression inside each branch precomputes to text.
         assert Card(show=True, label=Const("x"), n=7).render().serialize() == "x: 7"
@@ -771,9 +1849,6 @@ class TestConstPrecomputeInsideKeptNodes:
             citry = c
             template = '<c-if cond="show"><c-if cond="big">L</c-if><c-else>S</c-else>{{ n }}</c-if>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         # The outer condition is dynamic; the inner one is const, so inside
         # the rebuilt outer branch the inner if is decided and inlined.
         assert Card(show=True, big=Const(True), n=1).render().serialize() == "L1"  # noqa: FBT003
@@ -789,9 +1864,6 @@ class TestConstPrecomputeInsideKeptNodes:
         class Card(Component):
             citry = c
             template = '<c-for each="i in items">[{{ prefix }}{{ i }}]</c-for>'
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         # `items` is dynamic, so the loop stays; the const `prefix` inside the
         # body precomputes (it is the same on every iteration), while the loop
@@ -872,9 +1944,6 @@ class TestConstPrecomputeInsideSlotContent:
                 "</c-Card>"
             )
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         out1 = Page(heading=Const("Dash"), greeting="hi").render().serialize()
         out2 = Page(heading=Const("Dash"), greeting="yo").render().serialize()
         assert "<p>hi</p>" in out1
@@ -901,9 +1970,6 @@ class TestConstPrecomputeInsideSlotContent:
             citry = c
             template = '<c-Card><c-fill name="body">x<c-if cond="wide">WIDE</c-if></c-fill></c-Card>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         assert Page(wide=Const(True)).render().serialize() == "xWIDE"  # noqa: FBT003
         (page_body,) = [b for b in c._const_body_cache.values() if isinstance(b[0], ComponentNode)]
         (fill,) = page_body[0].body
@@ -919,9 +1985,6 @@ class TestConstPrecomputeInsideSlotContent:
         class Page(Component):
             citry = c
             template = '<c-Box><c-fill name="s" data="d">{{ d.x }}-{{ k }}</c-fill></c-Box>'
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         # The fill's own `d` variable is per-invocation slot data, so the
         # expression using it stays live; the const `k` precomputes and merges.
@@ -989,9 +2052,6 @@ class TestConstPrecomputeInsideSlotContent:
             citry = c
             template = "<c-Box>{{ k }}</c-Box>"
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         assert Page(k=Const("K")).render().serialize() == '<b data-cid-c2="" data-cid-c1="">K</b>'
         (page_body,) = [b for b in c._const_body_cache.values() if not isinstance(b[0], str)]
         assert page_body[0].body == ["K"]
@@ -1002,9 +2062,6 @@ class TestConstPrecomputeInsideSlotContent:
         class Card(Component):
             citry = c
             template = '<c-slot name="title">{{ label }}</c-slot>'
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         # Unfilled: the fallback renders, and with `label` const its
         # expression precomputed inside the kept SlotNode.
@@ -1026,9 +2083,6 @@ class TestConstPrecomputeUnroll:
             citry = c
             template = '<ul><c-for each="i in items">{{ i }},</c-for></ul>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         assert Card(items=Const([1, 2, 3])).render().serialize() == '<ul data-cid-c1="">1,2,3,</ul>'
         (body,) = c._const_body_cache.values()
         assert len(body) == 3
@@ -1044,9 +2098,6 @@ class TestConstPrecomputeUnroll:
             citry = c
             template = '<c-for each="i in items">{{ i }}</c-for>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         assert Card(items=Const([1])).render().serialize() == "1"
         with pytest.raises(RuntimeError, match=r"Cannot define variable 'i'.*Variable shadowing is not allowed"):
             Card(items=Const([1]), i="outer").render().serialize()
@@ -1054,24 +2105,24 @@ class TestConstPrecomputeUnroll:
         assert len(c._const_body_cache) == 2
 
     def test_unrolled_loop_checks_context_mutated_earlier_in_same_render(self):
-        c = Citry()
-        data = {"items": Const([1, 2])}
+        class MutatingExtension(Extension):
+            name = "mutating"
 
-        def mutate():
-            data["i"] = "late"
-            return ""
+            def on_component_data(self, ctx):
+                def mutate():
+                    ctx.template_data["i"] = "late"
+                    return ""
 
-        data["mutate"] = mutate
+                ctx.template_data["mutate"] = mutate
+
+        c = Citry(extensions=[MutatingExtension])
 
         class Card(Component):
             citry = c
             template = '{{ mutate() }}<c-for each="i in items">{{ i }}</c-for>'
 
-            def template_data(self, kwargs, slots):
-                return data
-
         with pytest.raises(RuntimeError, match=r"Cannot define variable 'i'.*Variable shadowing is not allowed"):
-            Card().render().serialize()
+            Card(items=Const([1, 2])).render().serialize()
 
         (body,) = c._const_body_cache.values()
         assert isinstance(body[0], ExprNode)
@@ -1085,9 +2136,6 @@ class TestConstPrecomputeUnroll:
             citry = c
             template = '<c-for each="i in items"><c-if cond="i > 1">{{ i }}!</c-if></c-for><c-empty>none</c-empty>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         assert Card(items=Const([1, 2, 3])).render().serialize() == "2!3!"
         assert Card(items=Const([])).render().serialize() == "none"
         bodies = c._const_body_cache.values()
@@ -1099,9 +2147,6 @@ class TestConstPrecomputeUnroll:
         class Card(Component):
             citry = c
             template = '<c-for each="i in items">.</c-for>'
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         n = _MAX_UNROLL_ITERATIONS + 1
         out = Card(items=Const(range(n))).render().serialize()
@@ -1121,9 +2166,6 @@ class TestConstPrecomputeUnroll:
             citry = c
             template = '<c-for each="i in items">{{ i }}</c-for>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         # The loop body is statically precomputable, but the value is an element,
         # which must render fresh per render: the unroll backs out and the
         # loop stays dynamic.
@@ -1142,9 +2184,6 @@ class TestConstPrecomputeUnroll:
             citry = c
             template = '<c-for each="i in items">{{ i }}</c-for>'
 
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
-
         assert Card(items=[1, 2]).render().serialize() == "12"
         (body,) = c._const_body_cache.values()
         assert not isinstance(body[0], str)
@@ -1157,9 +2196,6 @@ class TestConstPrecomputeErrors:
         class Card(Component):
             citry = c
             template = '<p>{{ cfg["missing"] }}</p>'
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         # Precomputing must not raise: the failing expression stays a dynamic node
         # and the error surfaces through the normal render path, every render.
@@ -1176,9 +2212,6 @@ class TestConstPrecomputeErrors:
         class Card(Component):
             citry = c
             template = "<c-if cond=\"cfg['missing']\">a</c-if>"
-
-            def template_data(self, kwargs, slots):
-                return dict(kwargs)
 
         with pytest.raises(KeyError):
             Card(cfg=Const({"a": 1})).render().serialize()

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender
+from citry.constness import _overlay_const_mapping
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -80,9 +81,7 @@ def render_compiled_body(
     if not isinstance(body, CompiledBody):
         raise TypeError("render_compiled_body() requires a CompiledBody handle.")
     _validate_context(body, context)
-    variables = dict(context.variables)
-    if variables_overlay is not None:
-        variables.update(variables_overlay)
+    variables = _overlay_const_mapping(context.variables, variables_overlay or {})
     child_context = CitryContext(
         variables=variables,
         extra=context.extra,
@@ -109,9 +108,7 @@ def collect_compiled_body_fills(
     if not isinstance(body, CompiledBody):
         raise TypeError("collect_compiled_body_fills() requires a CompiledBody handle.")
     _validate_context(body, context)
-    variables = dict(context.variables)
-    if variables_overlay is not None:
-        variables.update(variables_overlay)
+    variables = _overlay_const_mapping(context.variables, variables_overlay or {})
     child_context = CitryContext(
         variables=variables,
         extra=context.extra,

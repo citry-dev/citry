@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from array import array
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from typing import Protocol
@@ -79,15 +80,22 @@ class MessagesRegion:
 class StandaloneTemplateSourceMap:
     """Map a complete `citry-html` document directly to LSP positions."""
 
-    __slots__ = ("_byte_boundaries", "_line_starts", "template_source")
+    __slots__ = ("_byte_boundaries", "_line_starts", "_utf16_prefix", "template_source")
 
     def __init__(self, source: str) -> None:
         self.template_source = source
         boundaries = [0]
+        utf16_prefix = array("I" if len(source) <= 0x7FFFFFFF else "Q", [0])
         for char in source:
             boundaries.append(boundaries[-1] + len(char.encode("utf-8")))
+            utf16_prefix.append(utf16_prefix[-1] + (2 if ord(char) > 0xFFFF else 1))
         self._byte_boundaries = tuple(boundaries)
+        self._utf16_prefix = utf16_prefix
         self._line_starts = _line_starts(source)
+
+    def _position_at(self, offset: int) -> LspPosition:
+        line = bisect_right(self._line_starts, offset) - 1
+        return LspPosition(line, self._utf16_prefix[offset] - self._utf16_prefix[self._line_starts[line]])
 
     def map_range(self, start_index: int, end_index: int) -> LspRange:
         start = _byte_boundary(self._byte_boundaries, start_index)
@@ -96,8 +104,8 @@ class StandaloneTemplateSourceMap:
             msg = "end_index precedes start_index"
             raise ValueError(msg)
         return LspRange(
-            _offset_to_lsp(self.template_source, self._line_starts, start),
-            _offset_to_lsp(self.template_source, self._line_starts, end),
+            self._position_at(start),
+            self._position_at(end),
         )
 
     def range_is_unambiguous(self, start_index: int, end_index: int) -> bool:
@@ -308,9 +316,17 @@ def document_range_for_offsets(source: str, start: int, end: int) -> LspRange:
 
 def _line_starts(source: str) -> tuple[int, ...]:
     starts = [0]
-    for index, char in enumerate(source):
-        if char == "\n":
-            starts.append(index + 1)
+    index = 0
+    while index < len(source):
+        if source[index] == "\r":
+            index += 2 if index + 1 < len(source) and source[index + 1] == "\n" else 1
+            starts.append(index)
+            continue
+        if source[index] == "\n":
+            index += 1
+            starts.append(index)
+            continue
+        index += 1
     return tuple(starts)
 
 

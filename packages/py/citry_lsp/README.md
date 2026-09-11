@@ -17,7 +17,7 @@ Install the server in the same Python environment as the Citry project:
 python -m pip install citry-lsp
 ```
 
-The server requires Citry 0.4.5 or newer and Python 3.10 through 3.14. It checks
+The server requires Citry 0.5.1 or newer and Python 3.10 through 3.14. It checks
 catalog and protocol schemas for compatibility. It installs
 the compatible Citry runtime, pygls, and the supported `ty` analyzer
 automatically.
@@ -93,11 +93,18 @@ Registry mode adds:
 - `TemplateData`, `JsData`, and `CssData` checks across Python, templates,
   Alpine expressions, JavaScript, and CSS;
 - Events handler and `$c-props` checks;
+- public State-field completion in `:c-*` binding names, with errors on unknown fields;
+- callback-parameter navigation and errors on unknown `data` members when
+  `JsData` or a complete `js_data()` return analysis determines the fields;
 - Fluent message, key, argument, formatter, and translation navigation;
 - project lint settings and component-aware diagnostics.
 
 Each workspace folder should run its own server process so it can use that
 folder's Python interpreter and registry target.
+
+Unknown-field checks wait until the component and its schema are known.
+Dynamic JavaScript keys and open data schemas remain unchecked. Ordinary
+JavaScript member completion in VS Code uses its installed JavaScript provider.
 
 ## Type-aware template expressions
 
@@ -122,8 +129,8 @@ operation. Stale or malformed client responses produce no edit.
 
 ## Compatibility
 
-The server advertises language-server version 0.1.4, component catalog v1, and
-client protocol v1. It accepts Citry 0.4.5 and newer without a version upper
+The server advertises language-server version 0.1.7, component catalog v1, and
+client protocol v1. It accepts Citry 0.5.1 and newer without a version upper
 bound, and checks the catalog and client protocol contracts before returning
 registry-backed results.
 

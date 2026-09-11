@@ -39,6 +39,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Final
 
+from citry.constness import _const_mapping, _ConstMapping
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -66,7 +68,9 @@ class CitryContext:
 
     Attributes:
         variables: The per-component template variables (the ``template_data``
-            output). Read by nodes when evaluating expressions.
+            output). Read by nodes when evaluating expressions. Values are
+            ordinary Python objects; the private mapping stores any Const
+            promise separately by variable name.
         component: The ``Component`` instance currently rendering. Gives a node
             access to the component tree (its ``citry`` registry for resolving
             child component names, and its ``parent``/``root`` linkage). The
@@ -106,7 +110,13 @@ class CitryContext:
         template_record: CitryTemplate | None = None,
         _simple_scope: SimpleScope | None = None,
     ) -> None:
-        self.variables = variables if variables is not None else {}
+        self.variables = (
+            variables
+            if isinstance(variables, _ConstMapping)
+            else _const_mapping(variables)
+            if variables is not None
+            else _ConstMapping()
+        )
         self.extra = extra if extra is not None else {}
         self.component = component
         self.ownership = ownership

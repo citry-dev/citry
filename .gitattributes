@@ -63,3 +63,6 @@ docs/design/i18n_research/span_parser/fixtures/adversarial.ftl whitespace=-blank
 
 # The generated performance chart preserves SVG path spacing.
 docs/design/assets/performance_render_retained_gains.svg whitespace=-blank-at-eol
+
+# Generated benchmark charts preserve Matplotlib's SVG path spacing.
+benchmarks/agent_usage/results/*/charts/*.svg whitespace=-blank-at-eol

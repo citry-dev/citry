@@ -19,6 +19,7 @@ from citry import Citry, ComponentLibrary
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
 from citry._component_introspection import _loaded_python_file
 from citry._linting import _component_lint_variable_owners
+from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _inspect_schema_class
 from citry.analysis import (
     python_application_lint_variable_range,
@@ -162,10 +163,24 @@ def _source_analysis(
                 "template_data": {"resolution_chain": template_data_chain},
                 "css_data": {"resolution_chain": css_data_chain},
                 "js_data": {"resolution_chain": js_data_chain},
+                "js_schema": {
+                    "resolution_chain": _schema_resolution_chain(selected_class, engine, "JsData")
+                    if selected_class
+                    else None
+                },
                 "template_asset": {"resolution_chain": template_asset_chain},
                 "css_asset": {"resolution_chain": css_asset_chain},
                 "js_asset": {"resolution_chain": js_asset_chain},
-                "events": _event_sources(selected_class) if selected_class else {"handlers": None, "state": None},
+                "events": (
+                    {
+                        **_event_sources(selected_class),
+                        "state_resolution": {
+                            "resolution_chain": _schema_resolution_chain(selected_class, engine, "State")
+                        },
+                    }
+                    if selected_class
+                    else {"handlers": None, "state": None, "state_resolution": {"resolution_chain": None}}
+                ),
                 "template_lint": {
                     "variables": _component_lint_sources(
                         selected_class,
@@ -177,6 +192,49 @@ def _source_analysis(
             }
         )
     return {"version": _SOURCE_ANALYSIS_VERSION, "components": components}
+
+
+def _schema_resolution_chain(
+    component_class: type,
+    engine: Citry,
+    schema_name: Literal["State", "JsData"],
+) -> list[dict[str, str]] | None:
+    """Snapshot classes that can change schema fields, policy, or inheritance."""
+    mro = _static_class_mro(component_class)
+    candidates = [
+        candidate
+        for index, candidate in enumerate(mro)
+        if candidate is not object and not _is_materialized_library_wrapper(candidate, mro, index, engine)
+    ]
+    # Field origins alone miss a base that only supplies schema policy, and an
+    # empty schema still needs its component bases checked for later additions.
+    for declaration in _active_nested_class_declarations(component_class, schema_name):
+        if not isinstance(declaration.value, type):
+            return None
+        candidates.extend(candidate for candidate in _static_class_mro(declaration.value) if candidate is not object)
+    records: dict[tuple[str, str], dict[str, str]] = {}
+    for candidate in candidates:
+        module = _safe_class_text(candidate, "__module__")
+        qualname = _safe_class_text(candidate, "__qualname__")
+        source_file = _loaded_python_file(candidate)
+        if module is None or qualname is None or "<locals>" in qualname or source_file is None:
+            return None
+        source = _python_source(source_file)
+        if source is None:
+            return None
+        # Normalize editable component bodies through their top-level owner,
+        # including when this candidate is the nested Card.State declaration.
+        owner = qualname.split(".", 1)[0]
+        resolution = python_class_resolution_signature(source, owner)
+        if resolution is None:
+            return None
+        records[(source_file.as_posix(), owner)] = {
+            "module": module,
+            "qualname": owner,
+            "file": source_file.as_posix(),
+            "resolution": resolution,
+        }
+    return list(records.values()) or None
 
 
 def _event_sources(component_class: type) -> dict[str, object]:

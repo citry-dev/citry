@@ -25,12 +25,12 @@ inputs:
     column_widths: [fit, 15rem, 7rem, auto]
     entries:
       - {id: tag, name: tag, type: {display: '"div" | "main" | "section" | "article" | "ul" | "ol"', interfaces: [CGridTag]}, default: {kind: literal, value: div}, effect: Selects the native Grid root without adding semantics.}
-      - {id: cols, name: cols, type: int, default: {kind: literal, value: 1}, effect: Sets the equal base column count from 1 through 12.}
-      - {id: sm, name: sm, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `40rem` and wider.}
-      - {id: md, name: md, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `48rem` and wider.}
-      - {id: lg, name: lg, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `64rem` and wider.}
-      - {id: xl, name: xl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `80rem` and wider.}
-      - {id: xxl, name: xxl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `96rem` and wider.}
+      - {id: cols, name: cols, type: 'int | ASCII decimal str', default: {kind: literal, value: 1}, effect: Sets the equal base column count from 1 through 12.}
+      - {id: sm, name: sm, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `40rem` and wider.}
+      - {id: md, name: md, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `48rem` and wider.}
+      - {id: lg, name: lg, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `64rem` and wider.}
+      - {id: xl, name: xl, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `80rem` and wider.}
+      - {id: xxl, name: xxl, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides equal columns at `96rem` and wider.}
       - {id: min-col, name: min_col, type: 'str | None', default: {kind: literal, value: null}, effect: 'Uses intrinsic auto-fit columns with one positive `px`, `rem`, `em`, `ch`, viewport-width, or viewport-height length; cannot be combined with fixed/responsive counts.'}
       - {id: gap, name: gap, type: {display: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', interfaces: [CLayoutGap]}, default: {kind: literal, value: md}, effect: Selects row and column gap from `0` through `1.5rem`.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
@@ -42,12 +42,12 @@ inputs:
     column_widths: [fit, 15rem, 7rem, auto]
     entries:
       - {id: tag, name: tag, type: {display: '"div" | "main" | "section" | "article" | "aside" | "li"', interfaces: [CGridItemTag]}, default: {kind: literal, value: div}, effect: Selects the native Grid item root without adding semantics.}
-      - {id: span, name: span, type: int, default: {kind: literal, value: 1}, effect: Sets the base column span from 1 through 12.}
-      - {id: sm, name: sm, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `40rem` and wider.}
-      - {id: md, name: md, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `48rem` and wider.}
-      - {id: lg, name: lg, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `64rem` and wider.}
-      - {id: xl, name: xl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `80rem` and wider.}
-      - {id: xxl, name: xxl, type: 'int | None', default: {kind: literal, value: null}, effect: Overrides the span at `96rem` and wider.}
+      - {id: span, name: span, type: 'int | ASCII decimal str', default: {kind: literal, value: 1}, effect: Sets the base column span from 1 through 12.}
+      - {id: sm, name: sm, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides the span at `40rem` and wider.}
+      - {id: md, name: md, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides the span at `48rem` and wider.}
+      - {id: lg, name: lg, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides the span at `64rem` and wider.}
+      - {id: xl, name: xl, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides the span at `80rem` and wider.}
+      - {id: xxl, name: xxl, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides the span at `96rem` and wider.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}

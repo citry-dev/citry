@@ -12,6 +12,11 @@ from citry._i18n_directives import (
     parse_i18n_binding_name,
 )
 from citry._json_wire import JsonWireType
+from citry._state_binding_targets import (
+    _custom_update_event_error,
+    _element_of,
+    _validate_binding_target,
+)
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
     HtmlAttrKind,
@@ -20,6 +25,9 @@ from citry_core.template_parser import (
 )
 from citry_core.template_parser import (
     analyze_browser_source as analyze_browser_source_rust,
+)
+from citry_core.template_parser import (
+    analyze_component_members as analyze_component_members_rust,
 )
 from citry_core.template_parser import (
     analyze_component_scope_writes as analyze_component_scope_writes_rust,
@@ -104,6 +112,18 @@ class BrowserMember:
 
     owner: str
     name: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserComponentMember:
+    """One static member whose owner resolves to a callback context binding."""
+
+    context_name: str
+    name: str
+    owner_start_index: int
+    owner_end_index: int
     start_index: int
     end_index: int
 
@@ -201,6 +221,24 @@ class BrowserDeclarativeEvent:
     """One literal handler name authored in an ``@c-*`` or ``:c-*`` binding."""
 
     name: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserStateBinding:
+    """One ``:c-*`` State field with UTF-8 offsets excluding modifiers and prefix."""
+
+    name: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserStateBindingTargetError:
+    """An unsupported State binding target with UTF-8 offsets covering its attribute key."""
+
+    message: str
     start_index: int
     end_index: int
 
@@ -398,6 +436,118 @@ def browser_declarative_events(
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
+def browser_state_binding_target_errors(
+    template: Template,
+    *,
+    parse_nested: Callable[[str], Template] = parse_template,
+) -> tuple[BrowserStateBindingTargetError, ...]:
+    """Report statically invalid State binding targets without requiring a loaded app."""
+    found: list[BrowserStateBindingTargetError] = []
+    _collect_state_target_errors(template, found, parse_nested=parse_nested, base_index=0)
+    return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
+
+
+def _collect_state_target_errors(
+    template: Template,
+    found: list[BrowserStateBindingTargetError],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        attrs = node.start_tag.attrs
+        target = _element_of(
+            node.start_tag.name.content,
+            [(attr.key.content, None if attr.inner_value is None else attr.inner_value.content) for attr in attrs],
+        )
+        for attr in attrs:
+            key = attr.key.content
+            if key.startswith(":c-") and key[3:].split(".", 1)[0]:
+                two_way = attr.inner_value is not None and bool(attr.inner_value.content.strip())
+                message = None
+                try:
+                    kind = _validate_binding_target(
+                        target, binding_mode="two-way" if two_way else "one-way", attr_name=key
+                    )
+                    if (
+                        kind == "custom"
+                        and two_way
+                        and not any(part.startswith("on:") and part[3:] for part in key.split(".")[1:])
+                    ):
+                        message = _custom_update_event_error(target.tag_name, key)
+                except ValueError as exc:
+                    message = str(exc)
+                if message is not None:
+                    found.append(
+                        BrowserStateBindingTargetError(
+                            message, base_index + attr.key.start_index, base_index + attr.key.end_index
+                        )
+                    )
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_state_target_errors(
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_state_target_errors(body, found, parse_nested=parse_nested, base_index=base_index)
+
+
+def browser_state_bindings(
+    template: Template,
+    *,
+    parse_nested: Callable[[str], Template] = parse_template,
+) -> tuple[BrowserStateBinding, ...]:
+    """Extract State keys from parsed template attributes, including nested templates."""
+    found: list[BrowserStateBinding] = []
+    _collect_state_bindings(template, found, parse_nested=parse_nested, base_index=0)
+    return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
+
+
+def _collect_state_bindings(
+    template: Template,
+    found: list[BrowserStateBinding],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        for attr in node.start_tag.attrs:
+            # Only the field segment belongs to this diagnostic; modifiers have
+            # their own grammar and an unfinished prefix has no field to check.
+            if attr.key.content.startswith(":c-"):
+                name = attr.key.content[3:].split(".", 1)[0]
+                if name:
+                    start = base_index + attr.key.start_index + 3
+                    found.append(BrowserStateBinding(name, start, start + len(name.encode("utf-8"))))
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_state_bindings(
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_state_bindings(body, found, parse_nested=parse_nested, base_index=base_index)
+
+
 def browser_bindings(
     template: Template,
     *,
@@ -428,6 +578,19 @@ def browser_component_scope_writes(source: str) -> tuple[BrowserScopeWrite, ...]
         )
         for name, name_start, name_end, value_start, value_end in analyze_component_scope_writes_rust(source)
         if 0 <= name_start < name_end <= len(encoded) and 0 <= value_start <= value_end <= len(encoded)
+    )
+
+
+def browser_component_members(source: str) -> tuple[BrowserComponentMember, ...]:
+    """Return static property accesses on unchanged component callback parameters."""
+    valid, members = analyze_component_members_rust(source)
+    if not valid:
+        return ()
+    size = len(source.encode("utf-8"))
+    return tuple(
+        BrowserComponentMember(context, name, owner_start, owner_end, start, end)
+        for context, name, owner_start, owner_end, start, end in members
+        if 0 <= owner_start < owner_end <= size and 0 <= start < end <= size
     )
 
 
@@ -2063,6 +2226,7 @@ __all__ = [
     "BrowserBinding",
     "BrowserCompletion",
     "BrowserComponentBinding",
+    "BrowserComponentMember",
     "BrowserComponentPropsUse",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
@@ -2082,11 +2246,13 @@ __all__ = [
     "BrowserProp",
     "BrowserScopeWrite",
     "BrowserSourceAnalysis",
+    "BrowserStateBinding",
     "analyze_browser_component_source",
     "analyze_browser_expression",
     "browser_bindings",
     "browser_client_prop_accepts",
     "browser_completion_at",
+    "browser_component_members",
     "browser_component_prop_uses",
     "browser_component_props",
     "browser_component_scope_writes",
@@ -2103,5 +2269,6 @@ __all__ = [
     "browser_literal_wire_type",
     "browser_member_at",
     "browser_member_literal_calls",
+    "browser_state_bindings",
     "python_event_handler_coordinates",
 ]

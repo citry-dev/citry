@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const vscode = require("vscode");
+const { exerciseBrowser } = require("./browser.cjs");
 const expectedVersion = require("../../package.json").version;
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -130,6 +131,9 @@ async function run() {
 	assert.ok(labels.has("c-if"));
 	assert.ok(labels.has("c-for"));
 	assert.ok(labels.has("c-slot"));
+	if (process.env.CITRY_VSCODE_SMOKE_BROWSER === "1") {
+		await exerciseBrowser(folder);
+	}
 	if (process.env.CITRY_VSCODE_SMOKE_FORMATTING === "1") {
 		await exerciseFormatting(folder);
 	}

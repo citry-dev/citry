@@ -6,6 +6,7 @@ import ast
 import hashlib
 import re
 import unicodedata
+from array import array
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
@@ -21,6 +22,7 @@ from citry._browser_expressions import (
     BrowserBinding,
     BrowserCompletion,
     BrowserComponentBinding,
+    BrowserComponentMember,
     BrowserComponentPropsUse,
     BrowserComponentSourceAnalysis,
     BrowserDeclarativeEvent,
@@ -38,11 +40,14 @@ from citry._browser_expressions import (
     BrowserProp,
     BrowserScopeWrite,
     BrowserSourceAnalysis,
+    BrowserStateBinding,
+    BrowserStateBindingTargetError,
     analyze_browser_component_source,
     analyze_browser_expression,
     browser_bindings,
     browser_client_prop_accepts,
     browser_completion_at,
+    browser_component_members,
     browser_component_prop_uses,
     browser_component_props,
     browser_component_scope_writes,
@@ -59,12 +64,15 @@ from citry._browser_expressions import (
     browser_literal_wire_type,
     browser_member_at,
     browser_member_literal_calls,
+    browser_state_binding_target_errors,
+    browser_state_bindings,
 )
 from citry._browser_expressions import (
     python_event_handler_coordinates as _python_event_handler_coordinates,
 )
 from citry._diagnostic_catalog import (
     ALPINE_UNKNOWN_VARIABLE,
+    COMPONENT_JS_UNKNOWN_DATA_MEMBER,
     COMPONENT_JS_UNKNOWN_VARIABLE,
     CSP_INCOMPATIBLE_BROWSER_CODE,
     FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
@@ -283,7 +291,7 @@ class ComponentJsLintConsumer:
 
 @dataclass(frozen=True, slots=True)
 class ComponentJsLintFinding:
-    """Report one OXC-proven free name inside a `$component` initializer."""
+    """Report one invalid name inside a `$component` initializer."""
 
     name: str
     message: str
@@ -646,6 +654,59 @@ def lint_unknown_component_js_variables(
     return tuple(findings)
 
 
+_JSON_OBJECT_MEMBERS = frozenset(
+    {
+        "constructor",
+        "__defineGetter__",
+        "__defineSetter__",
+        "hasOwnProperty",
+        "__lookupGetter__",
+        "__lookupSetter__",
+        "isPrototypeOf",
+        "propertyIsEnumerable",
+        "toString",
+        "valueOf",
+        "__proto__",
+        "toLocaleString",
+    }
+)
+
+
+def lint_unknown_component_js_members(
+    source: str,
+    known_data_names: frozenset[str] | None,
+) -> tuple[ComponentJsLintFinding, ...]:
+    """
+    Check static callback data members against a proven closed namespace.
+
+    Args:
+        source: Authored component JavaScript.
+        known_data_names: Fields available to every owner, or None when the
+            namespace is open or cannot be established.
+
+    Returns:
+        Errors on unknown field names. Dynamic keys, shadowed bindings, and
+        reassigned callback parameters are excluded by the JavaScript analyzer.
+
+    """
+    if known_data_names is None:
+        return ()
+    return tuple(
+        ComponentJsLintFinding(
+            name=member.name,
+            message=render_diagnostic(COMPONENT_JS_UNKNOWN_DATA_MEMBER, name=member.name),
+            code=COMPONENT_JS_UNKNOWN_DATA_MEMBER,
+            severity="error",
+            start_index=member.start_index,
+            end_index=member.end_index,
+        )
+        for member in browser_component_members(source)
+        # The browser decodes data with JSON.parse, so ordinary Object.prototype
+        # members remain available even when no JSON field declares them.
+        if member.context_name == "data" and member.name not in known_data_names | _JSON_OBJECT_MEMBERS
+    )
+
+
 def _identifier_identity(name: str) -> str:
     """Join parser tokens and Python schema fields by normalized identifier identity."""
     return unicodedata.normalize("NFKC", name)
@@ -1005,6 +1066,7 @@ class PythonTemplateSourceMap:
     _literal_parts: tuple[_LiteralPart, ...]
     _line_starts: tuple[int, ...]
     _normalization_changed: bool
+    _utf16_prefix: array[int]
     _units: tuple[_MappedChar, ...]
     template_source: str
 
@@ -1016,6 +1078,7 @@ class PythonTemplateSourceMap:
         "_literal_parts",
         "_normalization_changed",
         "_units",
+        "_utf16_prefix",
         "template_source",
     )
 
@@ -1037,6 +1100,10 @@ class PythonTemplateSourceMap:
         object.__setattr__(source_map, "_empty_anchor", empty_anchor)
         object.__setattr__(source_map, "_literal_parts", literal_parts)
         object.__setattr__(source_map, "_line_starts", _line_starts(host_source))
+        utf16_prefix = array("I" if len(host_source) <= 0x7FFFFFFF else "Q", [0])
+        for char in host_source:
+            utf16_prefix.append(utf16_prefix[-1] + (2 if ord(char) > 0xFFFF else 1))
+        object.__setattr__(source_map, "_utf16_prefix", utf16_prefix)
         byte_boundaries = [0]
         for unit in normalized_units:
             try:
@@ -1047,6 +1114,10 @@ class PythonTemplateSourceMap:
             byte_boundaries.append(byte_boundaries[-1] + byte_length)
         object.__setattr__(source_map, "_byte_boundaries", tuple(byte_boundaries))
         return source_map
+
+    def _position_at(self, offset: int) -> LspPosition:
+        line = bisect_right(self._line_starts, offset) - 1
+        return LspPosition(line, self._utf16_prefix[offset] - self._utf16_prefix[self._line_starts[line]])
 
     def __setattr__(self, name: str, value: object) -> None:
         msg = f"{type(self).__name__} is immutable"
@@ -1305,8 +1376,8 @@ class PythonTemplateSourceMap:
             host_end = self._left_host_offset(end_boundary)
 
         return LspRange(
-            start=_lsp_position(self._host_source, self._line_starts, host_start),
-            end=_lsp_position(self._host_source, self._line_starts, host_end),
+            start=self._position_at(host_start),
+            end=self._position_at(host_end),
         )
 
     def range_is_unambiguous(self, start_index: int, end_index: int) -> bool:
@@ -3807,6 +3878,7 @@ __all__ = [
     "BrowserBinding",
     "BrowserCompletion",
     "BrowserComponentBinding",
+    "BrowserComponentMember",
     "BrowserComponentPropsUse",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
@@ -3824,6 +3896,8 @@ __all__ = [
     "BrowserProp",
     "BrowserScopeWrite",
     "BrowserSourceAnalysis",
+    "BrowserStateBinding",
+    "BrowserStateBindingTargetError",
     "ComponentJsLintConsumer",
     "ComponentJsLintFinding",
     "ComponentNameMatch",
@@ -3868,6 +3942,7 @@ __all__ = [
     "browser_bindings",
     "browser_client_prop_accepts",
     "browser_completion_at",
+    "browser_component_members",
     "browser_component_prop_uses",
     "browser_component_props",
     "browser_component_scope_writes",
@@ -3884,6 +3959,8 @@ __all__ = [
     "browser_literal_wire_type",
     "browser_member_at",
     "browser_member_literal_calls",
+    "browser_state_binding_target_errors",
+    "browser_state_bindings",
     "build_inferred_template_shadow",
     "build_schema_template_shadow",
     "component_name_match",
@@ -3899,6 +3976,7 @@ __all__ = [
     "json_wire_type_from_expression",
     "lint_csp_compatibility",
     "lint_unknown_alpine_variables",
+    "lint_unknown_component_js_members",
     "lint_unknown_component_js_variables",
     "lint_unknown_template_variables",
     "merge_json_wire_types",

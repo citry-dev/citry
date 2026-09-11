@@ -1,0 +1,5 @@
+{
+  "cards": {"expected_tests": 6},
+  "browser": {"expected_tests": 3},
+  "events": {"expected_tests": 3}
+}

@@ -15,6 +15,7 @@ if (!extensionDevelopmentPath || !workspace || !python) {
 }
 
 await runTests({
+	vscodeExecutablePath: process.env.CITRY_VSCODE_EXECUTABLE,
 	version: process.env.CITRY_VSCODE_TEST_VERSION ?? "1.101.0",
 	extensionDevelopmentPath:
 		prettierExtensionPath === undefined
@@ -27,6 +28,7 @@ await runTests({
 		CITRY_VSCODE_EXPECT_UNAVAILABLE: process.env.CITRY_VSCODE_EXPECT_UNAVAILABLE,
 		CITRY_VSCODE_SMOKE_FORMATTING: process.env.CITRY_VSCODE_SMOKE_FORMATTING,
 		CITRY_VSCODE_SMOKE_FORMATTING_FIXTURE: process.env.CITRY_VSCODE_SMOKE_FORMATTING_FIXTURE,
+		CITRY_VSCODE_SMOKE_BROWSER: process.env.CITRY_VSCODE_SMOKE_BROWSER,
 	},
 	launchArgs: [
 		path.resolve(workspace),

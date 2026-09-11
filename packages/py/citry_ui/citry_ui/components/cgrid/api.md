@@ -46,7 +46,10 @@ use the normal `c-` expression prefix:
 </c-CGrid>
 ```
 
-Python uses integers: `CGrid(sm=2, lg=desktop_cols)`.
+Column counts and spans accept integers or ASCII decimal strings from static
+attributes, dynamic expressions, and Python composition. Citry normalizes a
+decimal string to an integer, then applies the same 1 through 12 range check.
+For example, Python can use `CGrid(sm=2, lg=desktop_cols)`.
 
 ## Build asymmetric layouts
 

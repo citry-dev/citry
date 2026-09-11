@@ -2,7 +2,22 @@
 
 All notable changes to `citry-lsp` are documented here.
 
-## Unreleased
+## [0.1.7] - 2026-09-11
+
+### Added
+
+- Complete public State fields after `:c-` and report unknown binding fields
+  ([#99](https://github.com/citry-dev/citry/issues/99)).
+- Navigate JavaScript callback parameters to their authored declarations and
+  report unknown `data` members for declared or fully inferred data schemas
+  ([#113](https://github.com/citry-dev/citry/issues/113)).
+
+### Fixed
+
+- Report State bindings on unsupported elements and input types, including in
+  syntax-only mode.
+- Preserve authored positions for JavaScript suggestions inside indented
+  Python strings.
 
 ## [0.1.4] - 2026-09-09
 

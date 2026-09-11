@@ -10,3 +10,4 @@ dist/**
 *.vsix
 images/**
 !images/icon.png
+.vscode-test/**

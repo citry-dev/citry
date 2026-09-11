@@ -39,6 +39,7 @@ from citry_core.template_parser.parse import parse_diagnostic, parse_template
 
 analyze_browser_source = _rust.template_parser.analyze_browser_source
 analyze_component_scope_writes = _rust.template_parser.analyze_component_scope_writes
+analyze_component_members = _rust.template_parser.analyze_component_members
 analyze_component_source = _rust.template_parser.analyze_component_source
 
 # AST types (re-exported from Rust)
@@ -79,6 +80,7 @@ __all__ = [
     "analyze_browser_source",
     "analyze_component_scope_writes",
     "analyze_component_source",
+    "analyze_component_members",
     "parse_template",
     "parse_diagnostic",
     "compile_template",

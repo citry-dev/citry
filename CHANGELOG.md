@@ -1,6 +1,27 @@
 # Release notes
 
-## Unreleased
+## v0.5.1
+
+_11 Sep 2026_
+
+### Changed
+
+- Component callbacks and expression evaluation receive ordinary Python values
+  instead of `Const` proxy objects. Citry retains constant-input optimization
+  internally when a callback returns the same object under the same name;
+  renamed or replaced stable outputs can use `Const` explicitly.
+
+### Fixed
+
+- Static component inputs now work with Python identity checks and libraries
+  that require actual built-in values
+  ([#107](https://github.com/citry-dev/citry/issues/107)).
+- `citry check` reports State bindings on unsupported elements and input types,
+  and reports unknown public State fields and handlers
+  ([#99](https://github.com/citry-dev/citry/issues/99)).
+- `citry check` validates `$component` callback data members against declared
+  or inferred JavaScript data schemas
+  ([#113](https://github.com/citry-dev/citry/issues/113)).
 
 ## v0.5.0
 

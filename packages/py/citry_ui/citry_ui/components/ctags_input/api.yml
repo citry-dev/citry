@@ -21,7 +21,7 @@ inputs:
       - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds owner-supplied invalid presentation outside Field.}
       - {id: placeholder, name: placeholder, type: 'str | None', default: {kind: literal, value: null}, effect: Sets editor placeholder text.}
       - {id: delimiters, name: delimiters, type: 'Sequence[str]', default: {kind: derived, display: '(",",)'}, effect: Sets unique server-only single-code-point token separators.}
-      - {id: max-tags, name: max_tags, type: 'int | None', default: {kind: literal, value: null}, effect: Limits later additions to a positive maximum without removing existing tags.}
+      - {id: max-tags, name: max_tags, type: 'positive int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Limits later additions to a positive maximum without removing existing tags.}
       - {id: autocomplete, name: autocomplete, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the editor autocomplete hint.}
       - {id: inputmode, name: inputmode, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the editor virtual-keyboard hint.}
       - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CTagsInputVariant]}, default: {kind: literal, value: outline}, effect: Selects the control treatment.}

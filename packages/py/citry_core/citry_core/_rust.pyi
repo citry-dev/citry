@@ -449,6 +449,10 @@ class template_parser:
         mode: str,
     ) -> tuple[bool, list[tuple[str, int, int]]]: ...
     @staticmethod
+    def analyze_component_members(
+        input: str,
+    ) -> tuple[bool, list[tuple[str, str, int, int, int, int]]]: ...
+    @staticmethod
     def analyze_component_scope_writes(
         input: str,
     ) -> list[tuple[str, int, int, int, int]]: ...

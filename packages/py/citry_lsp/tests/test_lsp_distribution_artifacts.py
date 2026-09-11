@@ -23,7 +23,7 @@ from scripts.verify_citry_lsp_distribution import (  # noqa: E402
     verify_wheel,
 )
 
-RELEASE_VERSION = "0.1.4"
+RELEASE_VERSION = distribution_verifier.package_version()
 
 
 def _write_wheel(path: Path, *, extra: str | None = None) -> None:

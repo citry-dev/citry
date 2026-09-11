@@ -11,9 +11,16 @@ boost: 2
 # The complete frontend stack for Python.
 
 <p class="landing-hero__lede">
-Citry is a free, open source <strong>HTML-first component framework</strong> for Python web
-applications. From server-rendered HTML to browser behavior and back to a Python
-handler, one component holds all of it. No second application, no separate build.
+Citry is a free, open source <strong>HTML-first frontend framework</strong> for Python web
+applications.
+</p>
+<p class="landing-hero__lede">
+HTML, JS, CSS, event endpoints, server state, translations... one component holds all of it.
+
+</p>
+<p class="landing-hero__lede">
+No NPM, no NodeJS build, no server-browser API
+hassle.
 </p>
 
 <div class="landing-actions">
@@ -43,6 +50,7 @@ handler, one component holds all of it. No second application, no separate build
   path="docs_site/snippets/landing/product_card.py"
   language="citry"
 />
+
 </div>
 </div>
 </section>
@@ -72,6 +80,7 @@ handler, one component holds all of it. No second application, no separate build
   video_id="d3nPqvDdNB0"
   title="50-minute Citry and Django code-along"
 />
+
 </section>
 
 <section class="landing-section" id="proof" markdown="1">

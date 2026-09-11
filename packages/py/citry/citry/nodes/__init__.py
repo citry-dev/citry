@@ -102,7 +102,14 @@ from citry.client_directives import (
     is_client_props_key,
     resolve_component_tag_client_binding_value,
 )
-from citry.constness import Const, const_value, is_const
+from citry.constness import (
+    Const,
+    _const_mapping,
+    _ConstMapping,
+    _mapping_value_is_const,
+    _overlay_const_mapping,
+    const_value,
+)
 from citry.ownership import (
     AlpineHandlerClientBindingPayload,
     CitryDomEventClientBindingPayload,
@@ -461,7 +468,7 @@ class _TemplateSlotContent:
             if self._fallback_var is not None:
                 overlay[self._fallback_var] = ctx.fallback
             render_context = CitryContext(
-                variables={**context.variables, **overlay},
+                variables=_overlay_const_mapping(context.variables, overlay),
                 extra=context.extra,
                 component=context.component,
                 provides=provides,
@@ -641,7 +648,8 @@ class ExprNode(Node):
         """
         if self._eval is None:
             self._eval = compile_expr(self.expr, sandboxed=sandboxed)
-        return self._eval(variables)
+        plain_variables = variables if isinstance(variables, _ConstMapping) else _const_mapping(variables)
+        return self._eval(plain_variables)
 
     @override
     def render(self, context: CitryContext) -> RenderPart:
@@ -1265,7 +1273,7 @@ def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
         # Read live variables in order without allocating a generator for each input.
         for name in attr.used_vars:
             try:
-                if not is_const(context.variables.get(name)):
+                if not _mapping_value_is_const(context.variables, name):
                     return False
             except StopIteration as error:
                 # Callers expect callback StopIteration to surface as RuntimeError.
@@ -1512,9 +1520,12 @@ class ComponentNode(Node):
         change either, so it is constant too. ``_kwarg_is_const`` is the single
         rule that decides this. The marking happens here, where a value becomes
         a component input, and nowhere else, so values used as names or keys
-        (slot/fill names, provide keys) stay plain. The marker is applied fresh
-        on each render, so a mutable literal (a list) is still a new object
-        every render; equal values still land on the same cache entry.
+        (slot/fill names, provide keys) stay plain. This is a transient
+        renderer transport marker: component construction consumes it into a
+        plain value plus name provenance before hooks or callbacks run. It is
+        applied fresh on each render, so a mutable literal (a list) is still a
+        new object every render; equal values still land on the same cache
+        entry.
         """
         if self._has_plain_component_inputs:
             plain_kwargs: dict[str, Any] = {}
@@ -1951,7 +1962,7 @@ class ForNode(Node):
         for values in self._iter_eval(context.variables):
             count += 1
             child = CitryContext(
-                variables={**context.variables, **dict(zip(targets, values, strict=True))},
+                variables=_overlay_const_mapping(context.variables, dict(zip(targets, values, strict=True))),
                 extra=context.extra,
                 component=context.component,
                 provides=context.provides,

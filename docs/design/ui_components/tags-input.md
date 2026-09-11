@@ -190,7 +190,7 @@ Python inputs appear in this order:
 | `invalid` | `bool | None` | `None` | reactive config | visual/server invalidity; Field owns it when nested |
 | `placeholder` | `str | None` | `None` | reactive config | editor placeholder |
 | `delimiters` | `Sequence[str]` | `(",",)` | structural server-only | unique single Unicode scalars; no whitespace, controls, CR, LF, or NUL |
-| `max_tags` | `int | None` | `None` | reactive config | positive integer; initial value may not exceed it |
+| `max_tags` | `positive int | ASCII decimal str | None` | `None` | reactive config | decimal strings normalize to integers; initial value may not exceed the result |
 | `autocomplete` | `str | None` | `None` | reactive config | editor hint |
 | `inputmode` | `str | None` | `None` | reactive config | editor hint |
 | `variant` | `CTagsInputVariant` | `"outline"` | reactive presentation | `outline`, `filled`, or `plain` |

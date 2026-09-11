@@ -122,6 +122,9 @@ toolbar roles.
 `outline`, `filled`, and `plain` variants combine with `sm`, `md`, and `lg`
 sizes. Long values wrap inside the control. `max_tags` blocks only later
 additions when the current collection is already at or above the maximum.
+The server input accepts a positive integer or ASCII decimal string from a
+component tag, dynamic expression, or Python composition and normalizes it to
+an integer.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctags_input/snippets/variants_and_sizes.py" title="Variants, sizes, and boundary states" />
 

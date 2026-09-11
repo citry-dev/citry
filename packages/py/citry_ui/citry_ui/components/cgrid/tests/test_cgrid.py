@@ -129,6 +129,21 @@ def test_static_template_decimal_inputs_stay_concise():
     assert '<article class="cui-grid-item"' in html
 
 
+def test_python_decimal_string_counts_use_the_same_normalization():
+    html = _render(
+        CGrid(
+            cols="2",
+            sm="3",
+            slots={"default": CGridItem(span="2", md="3", slots={"default": "Minerals"})},
+        )
+    )
+
+    assert 'data-cols="2"' in html
+    assert 'data-cols-sm="3"' in html
+    assert 'data-span="2"' in html
+    assert 'data-span-md="3"' in html
+
+
 def test_responsive_values_are_snapshotted_into_private_inline_properties():
     html = _render(CGrid(cols=2, sm=3, lg=5, slots={"default": CGridItem(span=2, md=4)}))
 
@@ -161,8 +176,8 @@ def test_intrinsic_mode_uses_one_plain_length_and_no_count_snapshot():
         ({"cols": 0}, ValueError, "between 1 and 12"),
         ({"cols": 13}, ValueError, "between 1 and 12"),
         ({"cols": True}, TypeError, "must be an integer"),
-        ({"cols": "2"}, TypeError, "must be an integer"),
-        ({"sm": "2"}, TypeError, "must be an integer or None"),
+        ({"cols": "two"}, TypeError, "must be an integer"),
+        ({"sm": "2.5"}, TypeError, "must be an integer or None"),
         ({"min_col": 12}, TypeError, "must be a string or None"),
         ({"min_col": "0rem"}, ValueError, "one positive"),
         ({"min_col": "-1rem"}, ValueError, "one positive"),
@@ -187,7 +202,7 @@ def test_grid_rejects_invalid_and_conflicting_inputs(kwargs, error, match):
         ({"span": 0}, ValueError, "between 1 and 12"),
         ({"span": 13}, ValueError, "between 1 and 12"),
         ({"span": False}, TypeError, "must be an integer"),
-        ({"md": "4"}, TypeError, "must be an integer or None"),
+        ({"md": "4.5"}, TypeError, "must be an integer or None"),
         ({"tag": "nav"}, ValueError, "tag must be one of"),
     ],
 )
