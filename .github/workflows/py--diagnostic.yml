@@ -1,0 +1,69 @@
+# Run one ordinary non-browser Python test target for focused diagnosis.
+name: Python diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_os:
+        description: Hosted runner operating system
+        required: true
+        default: ubuntu-latest
+        type: choice
+        options:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+      python_version:
+        description: Supported Python version
+        required: true
+        default: "3.14"
+        type: choice
+        options:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
+      pytest_target:
+        description: One ordinary non-browser Python test file or node ID
+        required: true
+        default: packages/py/citry/tests/test_server_reload.py
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ inputs.runner_os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the workspace
+        run: uv sync --locked --all-packages
+
+      - name: Run selected pytest target serially
+        shell: bash
+        env:
+          PYTEST_TARGET: ${{ inputs.pytest_target }}
+        run: uv run --no-sync pytest --durations 30 -- "$PYTEST_TARGET"
