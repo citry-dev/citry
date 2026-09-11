@@ -228,9 +228,6 @@ def _development_server(host: str, app_root: Path, log_file: Path) -> Iterator[_
     if host == "django":
         pytest.importorskip("django", reason="the Django reload regression needs Django")
         environment["DJANGO_SETTINGS_MODULE"] = "server_app"
-        # Keep requests on the server thread so this reload test does not depend
-        # on per-request thread scheduling. The real WSGI handler and autoreloader
-        # supervisor still run, including worker restarts.
         command = [
             sys.executable,
             "-m",
@@ -238,7 +235,6 @@ def _development_server(host: str, app_root: Path, log_file: Path) -> Iterator[_
             "runserver",
             f"127.0.0.1:{port}",
             "--skip-checks",
-            "--nothreading",
         ]
     else:
         pytest.importorskip("fastapi", reason="the Uvicorn reload regression needs FastAPI")
