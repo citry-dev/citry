@@ -29,8 +29,13 @@ def test_fast_and_full_profiles_keep_browser_tests_outside_the_gate() -> None:
     assert fast[fast.index("-m") + 1] == "not e2e and not qualification"
     assert full[full.index("-m") + 1] == "not e2e and not qualification"
     for command in (fast, full):
+        assert command[command.index("--ignore") + 1] == "packages/py/citry/tests/test_server_reload.py"
         assert command[command.index("-n") + 1] == "4"
         assert command[command.index("--dist") + 1] == "loadfile"
+    reload_servers = fast_phases["pytest reload servers"]
+    assert reload_servers[-3:] == ["packages/py/citry/tests/test_server_reload.py", "--durations", "10"]
+    assert "-n" not in reload_servers
+    assert full_phases["pytest reload servers"] == reload_servers
     assert "--cov" not in fast
     assert "--cov" in full
     assert "pytest qualification" not in fast_phases

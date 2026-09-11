@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import BinaryIO
 
-_RELOAD_TIMEOUT = 30.0
+_RELOAD_TIMEOUT = 10.0
 _RELOADER_BASELINE_DELAY = 0.6
 
 

@@ -164,10 +164,17 @@ jobs:
       - name: Install the workspace
         run: uv sync --locked --all-packages
 
+      - name: Run real-server reload tests serially
+        run: >-
+          uv run --no-sync pytest
+          packages/py/citry/tests/test_server_reload.py
+          --durations 10
+
       - name: Run Python tests
         run: >-
           uv run --no-sync pytest
           -m "not e2e"
+          --ignore packages/py/citry/tests/test_server_reload.py
           -n 4
           --dist loadfile
           --durations 30
