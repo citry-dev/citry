@@ -66,6 +66,9 @@ on:
       - ".gitmodules"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 jobs:
   i18n-release-qualification:
     runs-on: ubuntu-latest

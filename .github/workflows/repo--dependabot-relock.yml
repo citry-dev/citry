@@ -26,6 +26,9 @@ on:
       - "pyproject.toml"
       - "packages/py/*/pyproject.toml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 permissions:
   contents: read # the push uses the App/PAT token, not GITHUB_TOKEN
   pull-requests: write # for the fallback comment via GITHUB_TOKEN
