@@ -312,7 +312,7 @@ like [translations with Fluent](/i18n/),
 
 If you're coming from Django or django-components, you can migrate gradually. You don't need to rewrite the whole frontend in one go.
 
-[Joey Jurjens](https://github.com/joeyjurjens){: target="\_blank" rel="noopener"}
+[Joey Jürjens](https://github.com/joeyjurjens){: target="\_blank" rel="noopener"}
 has built
 [citry-django](https://github.com/joeyjurjens/citry-django){: target="\_blank" rel="noopener"},
 a package
@@ -339,6 +339,11 @@ has the setup instructions, including an optional integration for django-compone
 citry-django adds the ability to mix the template languages. That gives you a
 way to adopt Citry gradually while continuing to use the Django parts of your
 application.
+
+When you are ready to port components, follow the
+[django-components migration guide](/guides/migrate-from-django-components/).
+It covers the template, Python, asset, extension, and testing changes and
+includes a checklist you can give to a coding agent.
 
 This is different from Citry's own [Django integration](/web-frameworks/#django), which handles serving components and event routes.
 

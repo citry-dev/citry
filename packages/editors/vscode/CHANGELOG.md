@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.1.6 - 2026-09-11
+
+- Use Citry LSP 0.1.7 to complete and validate public State bindings and report
+  unsupported controls
+  ([#99](https://github.com/citry-dev/citry/issues/99)).
+- Show and correctly insert JavaScript suggestions inside indented component
+  strings.
+- Keep JavaScript member completion available when Citry supplies hover or
+  navigation for the same name, including `$component` callback data
+  ([#113](https://github.com/citry-dev/citry/issues/113)).
 
 ## 0.1.3 - 2026-09-09
 

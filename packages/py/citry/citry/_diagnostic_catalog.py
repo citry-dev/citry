@@ -19,6 +19,9 @@ JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 ALPINE_UNKNOWN_VARIABLE = 'citry.alpine.unknown-variable'
 CSP_INCOMPATIBLE_BROWSER_CODE = 'citry.csp.incompatible-browser-code'
 COMPONENT_JS_UNKNOWN_VARIABLE = 'citry.component-js.unknown-variable'
+COMPONENT_JS_UNKNOWN_DATA_MEMBER = 'citry.component-js.unknown-data-member'
+BROWSER_INVALID_STATE_BINDING_TARGET = 'citry.browser.invalid-state-binding-target'
+BROWSER_UNKNOWN_STATE_FIELD = 'citry.browser.unknown-state-field'
 BROWSER_UNKNOWN_SERVER_EVENT = 'citry.browser.unknown-server-event'
 BROWSER_UNKNOWN_COMPONENT_PROP = 'citry.browser.unknown-component-prop'
 BROWSER_MISSING_COMPONENT_PROP = 'citry.browser.missing-component-prop'
@@ -86,6 +89,22 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                                'when': 'Citry can prove both the authored value type and the static '
                                                        '$component({props}) type, and the value cannot satisfy that '
                                                        'prop.'},
+ 'citry.browser.invalid-state-binding-target': {'code': 'citry.browser.invalid-state-binding-target',
+                                                'constant': 'BROWSER_INVALID_STATE_BINDING_TARGET',
+                                                'defaultSeverity': 'error',
+                                                'documentationPath': '/ide/diagnostics/#citry.browser.invalid-state-binding-target',
+                                                'examples': [{'language': 'citry-html',
+                                                              'source': '<head :c-query></head>',
+                                                              'title': 'Binding on a non-control element'}],
+                                                'messages': {'default': '{detail}'},
+                                                'parameters': {'detail': 'Explanation of the unsupported binding '
+                                                                         'target.'},
+                                                'summary': 'A State binding is attached to an element or input type '
+                                                           'that cannot support it.',
+                                                'surfaces': ['check', 'lsp'],
+                                                'title': 'Invalid State binding target',
+                                                'when': 'A statically known target cannot hold a bound value or '
+                                                        'support the requested binding direction or update event.'},
  'citry.browser.missing-component-prop': {'code': 'citry.browser.missing-component-prop',
                                           'constant': 'BROWSER_MISSING_COMPONENT_PROP',
                                           'defaultSeverity': 'error',
@@ -143,6 +162,24 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                         'when': 'An Alpine expression or component JavaScript calls sendEvent, '
                                                 '$sendEvent, $loading, or $error with an unknown non-empty string '
                                                 'literal, or a declarative @c-* binding names an unknown handler.'},
+ 'citry.browser.unknown-state-field': {'code': 'citry.browser.unknown-state-field',
+                                       'constant': 'BROWSER_UNKNOWN_STATE_FIELD',
+                                       'defaultSeverity': 'error',
+                                       'documentationPath': '/ide/diagnostics/#citry.browser.unknown-state-field',
+                                       'examples': [{'language': 'citry-html',
+                                                     'source': '<input :c-missing_field.debounce="refresh">',
+                                                     'title': 'Unknown field in a State binding'}],
+                                       'messages': {'default': "State field '{name}' is not a public field of this "
+                                                               'component.'},
+                                       'parameters': {'name': 'Authored State field name, without prefix or '
+                                                              'modifiers.'},
+                                       'summary': 'A State binding names a field that the owning component does not '
+                                                  'expose publicly.',
+                                       'surfaces': ['check', 'lsp'],
+                                       'title': 'Unknown State binding field',
+                                       'when': 'A :c-* binding names a field absent from a known public State schema. '
+                                               'Bindings with unknown component ownership or an unknown State schema '
+                                               'are not checked.'},
  'citry.check.python-source-unreadable': {'code': 'citry.check.python-source-unreadable',
                                           'constant': 'CHECK_PYTHON_SOURCE_UNREADABLE',
                                           'defaultSeverity': 'error',
@@ -245,6 +282,26 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                         'title': 'Invalid template declaration value',
                                         'when': 'Component.template is not a string, or Component.template_file is '
                                                 'neither a string nor a pathlib.Path.'},
+ 'citry.component-js.unknown-data-member': {'code': 'citry.component-js.unknown-data-member',
+                                            'constant': 'COMPONENT_JS_UNKNOWN_DATA_MEMBER',
+                                            'defaultSeverity': 'error',
+                                            'documentationPath': '/ide/diagnostics/#citry.component-js.unknown-data-member',
+                                            'examples': [{'language': 'javascript',
+                                                          'source': '$component(({ data }) => {\n'
+                                                                    '  console.log(data.missing_field);\n'
+                                                                    '});',
+                                                          'title': 'Unknown field in callback data'}],
+                                            'messages': {'default': "JavaScript data field '{name}' is not available "
+                                                                    'in this component.'},
+                                            'parameters': {'name': 'Authored JavaScript data field name.'},
+                                            'summary': 'A callback accesses a data field that is absent from the '
+                                                       "component's known JavaScript data schema.",
+                                            'surfaces': ['check', 'lsp'],
+                                            'title': 'Unknown component JavaScript data member',
+                                            'when': "A static member access on the $component callback's data binding "
+                                                    'names a field absent from a closed JsData schema or a complete '
+                                                    'inferred js_data() return shape. Dynamic keys and unknown or open '
+                                                    'schemas are not checked.'},
  'citry.component-js.unknown-variable': {'code': 'citry.component-js.unknown-variable',
                                          'configurableSeverity': True,
                                          'constant': 'COMPONENT_JS_UNKNOWN_VARIABLE',

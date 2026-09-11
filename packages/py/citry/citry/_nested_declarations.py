@@ -160,6 +160,7 @@ def _convert_to_slotted_dataclass(
     qualname = _static_class_attribute(provenance_class, "__qualname__")
     if owner is not None and isinstance(qualname, str):
         qualname = f"{qualname}.{name or _safe_class_text(user_cls, '__name__') or 'Schema'}"
+    const_defaults: dict[str, Any] = {}
     shell_namespace: dict[str, Any] = {
         "__annotations__": annotations,
         "__module__": module if isinstance(module, str) else "citry.component",
@@ -172,9 +173,30 @@ def _convert_to_slotted_dataclass(
     for field_name in annotations:
         default = inspect.getattr_static(user_cls, field_name, MISSING)
         if isinstance(default, Field):
+            from citry.constness import (  # noqa: PLC0415 - declaration conversion precedes component import completion
+                _plain_schema_default,
+                _schema_default_factory,
+                is_const,
+            )
+
             # dataclass() deletes an authored ``field(...)`` marker after it
             # consumes it, so the generated shell needs its own reference.
-            shell_namespace[field_name] = copy(default)
+            copied_default = copy(default)
+            if default.default is not MISSING:
+                if is_const(default.default):
+                    const_defaults[field_name] = _plain_schema_default(default.default)
+                copied_default.default = _plain_schema_default(default.default)
+            if default.default_factory is not MISSING and not default.init:
+                copied_default.default_factory = _schema_default_factory(field_name, default.default_factory)
+            shell_namespace[field_name] = copied_default
+        elif default is not MISSING:
+            from citry.constness import _plain_schema_default, is_const  # noqa: PLC0415
+
+            if is_const(default):
+                const_defaults[field_name] = _plain_schema_default(default)
+            shell_namespace[field_name] = _plain_schema_default(default)
+    if const_defaults:
+        shell_namespace["_citry_const_schema_defaults"] = const_defaults
 
     shell = new_class(
         _safe_class_text(user_cls, "__name__") or "Schema",

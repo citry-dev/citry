@@ -13,8 +13,8 @@ inputs:
       - {id: name, name: name, type: 'non-empty str | None', default: {kind: literal, value: null}, effect: Sets the native submitted name; an unnamed Textarea contributes no `FormData` entry.}
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Uses the Field control ID when composed, otherwise sets or generates native identity.'}
       - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets LF-normalized, escaped native child text as the initial value and reset default.'}
-      - {id: rows, name: rows, type: 'positive int', default: {kind: literal, value: 4}, effect: Sets the initial visible line count.}
-      - {id: cols, name: cols, type: 'positive int | None', default: {kind: literal, value: null}, effect: Sets the native preferred character width and is required by hard wrapping; CSS still owns rendered inline size.}
+      - {id: rows, name: rows, type: 'positive int | ASCII decimal str', default: {kind: literal, value: 4}, effect: Sets the initial visible line count.}
+      - {id: cols, name: cols, type: 'positive int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Sets the native preferred character width and is required by hard wrapping; CSS still owns rendered inline size.}
       - id: wrap
         name: wrap
         type: {display: '"soft" | "hard"', interfaces: [CTextareaWrap]}

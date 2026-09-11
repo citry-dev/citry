@@ -120,9 +120,10 @@ areas:
         section_style: true
         items:
           - { title: Web frameworks, path: /web-frameworks/, needs_review: true }
-          - { title: Use Citry with HTMX, path: /guides/htmx/ }
+          - { title: Use Citry with HTMX, path: /guides/htmx/, needs_review: true }
           - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
           - { title: Hot reload, path: /guides/dev-server/, needs_review: true }
+          - { title: Migrate from django-components, path: /guides/migrate-from-django-components/, needs_review: true }
           - { title: Migrate from Component.View, path: /guides/migrate-from-component-view/, needs_review: true }
           - { title: Migrate from django-unicorn, path: /guides/migrate-from-django-unicorn/, needs_review: true }
           - { title: Migrate from Tetra, path: /guides/migrate-from-tetra/, needs_review: true }

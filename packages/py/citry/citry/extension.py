@@ -43,6 +43,7 @@ from citry._nested_declarations import (
     _compose_nested_declaration_class,
     _get_nested_class_declarations,
 )
+from citry.constness import _const_mapping, _ConstMapping, _refresh_const_mapping
 from citry.introspection import (
     ComponentExtensionInfo,
     ComponentInfo,
@@ -1783,15 +1784,21 @@ class ExtensionManager:
         # component, so the allocation is worth avoiding on the construction path.
         if not self.has_hook("on_component_input"):
             return
-        self.emit(
-            "on_component_input",
-            OnComponentInputContext(
-                citry=self.citry,
-                component=component,
-                kwargs=component.raw_kwargs,
-                slots=component.raw_slots,
-            ),
-        )
+        for extension in self._extensions_with_hook("on_component_input"):
+            extension.on_component_input(
+                OnComponentInputContext(
+                    citry=self.citry,
+                    component=component,
+                    kwargs=component.raw_kwargs,
+                    slots=component.raw_slots,
+                )
+            )
+            if isinstance(component.raw_kwargs, _ConstMapping):
+                _refresh_const_mapping(component.raw_kwargs)
+            else:
+                component.raw_kwargs = _const_mapping(component.raw_kwargs)
+            raw_kwargs = cast("_ConstMapping", component.raw_kwargs)
+            component._const_candidates.update(raw_kwargs._const_values)
 
     def on_component_data(
         self,
@@ -1820,6 +1827,9 @@ class ExtensionManager:
             ordered.append(i18n)
         for extension in ordered:
             extension.on_component_data(ctx)
+            for values in (template_data, js_data, css_data):
+                if isinstance(values, _ConstMapping):
+                    _refresh_const_mapping(values)
 
     def on_render_context_merge(self, parent_context: CitryContext, child_context: CitryContext) -> None:
         self.emit(

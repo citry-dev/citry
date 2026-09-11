@@ -592,7 +592,7 @@ To enable two-way binding, add a value part to the `:c-` attribute, <br/>eg `:c-
 
 The `:c-` attribute needs an element that holds a value: an `<input>`, `<textarea>`,
 `<select>`, or a custom element. Anything else is an error when the template
-loads:
+loads. The editor also reports statically known unsupported targets.
 
 `<select multiple>` is supported in both directions. Its State field is a
 `list[str]`; Citry reads every selected option and writes the list back by

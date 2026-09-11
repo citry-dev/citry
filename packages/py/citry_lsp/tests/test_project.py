@@ -7,15 +7,18 @@ import json
 import os
 import subprocess
 import threading
+from importlib.metadata import requires
 from textwrap import dedent
 
 import pytest
+from packaging.requirements import Requirement
 
 from citry import Citry
 from citry_lsp import app_worker
 from citry_lsp import project as project_module
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.project import SourceAnalysisIndex, load_project, load_project_async
+from citry_lsp.protocol import MINIMUM_CITRY_VERSION
 
 
 @pytest.mark.asyncio
@@ -625,7 +628,7 @@ def test_worker_protocol_and_version_mismatches_degrade(tmp_path, monkeypatch):
     assert "contains unsupported fields" in messages[4]
     assert "protocol mismatch" in messages[5]
     assert "template lint component ids do not match" in messages[6]
-    assert "requires a valid version" in messages[7]
+    assert "this server requires Citry" in messages[7]
     assert "schema 999 is unsupported" in messages[8]
 
 
@@ -640,7 +643,8 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
             "css_asset": {"resolution_chain": None},
             "js_data": {"resolution_chain": None},
             "js_asset": {"resolution_chain": None},
-            "events": {"handlers": [], "state": []},
+            "js_schema": {"resolution_chain": None},
+            "events": {"handlers": [], "state": [], "state_resolution": {"resolution_chain": None}},
             "template_data": {"resolution_chain": None},
             "template_asset": {"resolution_chain": None},
             "template_lint": {"variables": []},
@@ -653,6 +657,8 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
     assert all(index.template_data_chain(component) is None for component in catalog.components)
     assert all(index.template_asset_chain(component) is None for component in catalog.components)
     assert all(index.state_fields(component) == () for component in catalog.components)
+    assert all(index.state_resolution_chain(component) is None for component in catalog.components)
+    assert all(index.js_schema_resolution_chain(component) is None for component in catalog.components)
     with pytest.raises(ValueError, match="do not match"):
         SourceAnalysisIndex({"version": 1, "components": components[:-1]}, catalog)
     with pytest.raises(ValueError, match="duplicate"):
@@ -673,6 +679,26 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
     ]
     with pytest.raises(ValueError, match="relative State source"):
         SourceAnalysisIndex(invalid_state, catalog)
+
+    invalid_resolution = json.loads(json.dumps(valid))
+    invalid_resolution["components"][0]["events"]["state_resolution"] = {"resolution_chain": []}
+    with pytest.raises(ValueError, match="invalid state_resolution resolution chain"):
+        SourceAnalysisIndex(invalid_resolution, catalog)
+
+    invalid_js_schema = json.loads(json.dumps(valid))
+    invalid_js_schema["components"][0]["js_schema"] = {"resolution_chain": []}
+    with pytest.raises(ValueError, match="invalid js_schema resolution chain"):
+        SourceAnalysisIndex(invalid_js_schema, catalog)
+
+    # Older private worker payloads remain readable, but cannot prove a closed
+    # State namespace without the optional source snapshots.
+    older_payload = json.loads(json.dumps(valid))
+    for component in older_payload["components"]:
+        component["events"].pop("state_resolution")
+        component.pop("js_schema")
+    older_index = SourceAnalysisIndex(older_payload, catalog)
+    assert all(older_index.state_resolution_chain(component) is None for component in catalog.components)
+    assert all(older_index.js_schema_resolution_chain(component) is None for component in catalog.components)
 
     payload = {
         "ok": True,
@@ -712,7 +738,10 @@ def test_source_analysis_declines_non_function_template_data_without_invoking_it
     assert state.source_analysis.template_data_chain(card) is None
 
 
-@pytest.mark.parametrize("version", ["0.4.5", "0.5.0", "0.6.0", "1.0.0", "9.0.0"])
+@pytest.mark.parametrize(
+    "version",
+    [".".join(map(str, MINIMUM_CITRY_VERSION)), "0.6.0", "1.0.0", "9.0.0"],
+)
 def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkeypatch, version):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "version_app.py").write_text(
@@ -728,3 +757,33 @@ def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkey
     state = project_module._project_from_worker_output(tmp_path, "version_app:engine", 0, json.dumps(payload), "")
     assert state.status.mode == "syntax-only"
     assert "schema 999 is unsupported" in state.status.message
+
+
+@pytest.mark.parametrize("version", ["0.4.5", "0.5.0", "development"])
+def test_older_patch_versions_decline_registry_results(tmp_path, monkeypatch, version):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "minimum_version_app.py").write_text(
+        "from citry import Citry\nengine = Citry(autodiscover=False)\n",
+        encoding="utf-8",
+    )
+    payload = app_worker._run("minimum_version_app:engine", tmp_path)
+    payload["catalog"]["citry_version"] = version
+    state = project_module._project_from_worker_output(
+        tmp_path, "minimum_version_app:engine", 0, json.dumps(payload), ""
+    )
+    assert state.status.mode == "syntax-only"
+    assert state.status.registry_ready is False
+    minimum = ".".join(map(str, MINIMUM_CITRY_VERSION))
+    assert f"requires Citry {minimum} or newer" in state.status.message
+
+
+def test_runtime_compatibility_matches_the_declared_dependency_floor():
+    requirements = [Requirement(value) for value in requires("citry-lsp")]
+    requirement = next(value for value in requirements if value.name == "citry")
+    minimum = ".".join(map(str, MINIMUM_CITRY_VERSION))
+    assert str(requirement.specifier) == f">={minimum}"
+    assert project_module._supported_citry_version(minimum)
+    assert project_module._supported_citry_version(f"{minimum}+local")
+    assert project_module._supported_citry_version(f"{minimum}.post1")
+    assert not project_module._supported_citry_version(f"{minimum}rc1")
+    assert not project_module._supported_citry_version(f"{minimum}.dev1")

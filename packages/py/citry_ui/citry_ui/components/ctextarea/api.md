@@ -43,6 +43,11 @@ Outside `CField`, provide a native label or an accessible name yourself:
 keeps the control within its container. `horizontal` and `both` deliberately
 allow the browser resize handle to exceed a narrow container.
 
+Server `rows` and `cols` accept positive integers or ASCII decimal strings
+from component tags, dynamic expressions, and Python composition. Citry
+normalizes decimal strings to integers before applying the positive range
+check.
+
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/ctextarea/snippets/rows_and_resize.py"
   title="Choose rows and resize behavior"

@@ -94,7 +94,7 @@ def test_expected_release_inventory_is_closed_and_includes_the_browser_wheel() -
 def test_package_version_falls_back_without_python_311_tomllib(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(distribution_verifier, "_tomllib", None)
 
-    assert distribution_verifier.package_version() == "1.7.0"
+    assert distribution_verifier.package_version() == "1.7.1"
 
 
 def test_pyodide_build_config_owns_the_exact_wheel_name() -> None:
@@ -243,6 +243,7 @@ def test_staged_bundle_requires_the_recorded_artifact_bytes(
         encoding="utf-8",
     )
     monkeypatch.setattr(distribution_verifier, "expected_release_filenames", lambda _version: {wheel.name})
+    monkeypatch.setattr(distribution_verifier, "package_version", lambda: "1.7.0")
     monkeypatch.setattr(distribution_verifier, "verify_wheel", lambda _path, **_kwargs: artifact_report)
 
     assert verify_staged_bundle(bundle)["artifacts"] == [artifact_report]

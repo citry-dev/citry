@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from citry import LibraryComponent, SlotInput, const_value, is_const, merge_attrs
+from citry import LibraryComponent, SlotInput, const_value, merge_attrs
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -118,9 +118,9 @@ def _track_count(
     raw = const_value(value)
     if raw is None and optional:
         return None
-    # Flat static template syntax deliberately supports ``sm="2"``. Python
-    # and dynamic template expressions remain int-only.
-    if is_const(value) and isinstance(raw, str) and raw.isascii() and raw.isdecimal():
+    # Component callbacks receive ordinary values without their source
+    # provenance, so accept the same concise decimal spelling from every API.
+    if isinstance(raw, str) and raw.isascii() and raw.isdecimal():
         raw = int(raw)
     if isinstance(raw, bool) or not isinstance(raw, int):
         expected = "an integer or None" if optional else "an integer"
@@ -267,12 +267,12 @@ class CGrid(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         tag: CGridTag = "div"
-        cols: int = 1
-        sm: int | None = None
-        md: int | None = None
-        lg: int | None = None
-        xl: int | None = None
-        xxl: int | None = None
+        cols: int | str = 1
+        sm: int | str | None = None
+        md: int | str | None = None
+        lg: int | str | None = None
+        xl: int | str | None = None
+        xxl: int | str | None = None
         min_col: str | None = None
         gap: CLayoutGap = "md"
         class_: CClassValue | None = None
@@ -344,12 +344,12 @@ class CGridItem(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         tag: CGridItemTag = "div"
-        span: int = 1
-        sm: int | None = None
-        md: int | None = None
-        lg: int | None = None
-        xl: int | None = None
-        xxl: int | None = None
+        span: int | str = 1
+        sm: int | str | None = None
+        md: int | str | None = None
+        lg: int | str | None = None
+        xl: int | str | None = None
+        xxl: int | str | None = None
         class_: CClassValue | None = None
         style: CStyleValue | None = None
         attrs: Mapping[str, object] | None = None

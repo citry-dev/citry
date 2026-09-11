@@ -1,0 +1,4 @@
+*
+!Dockerfile
+!requirements.lock
+!record_versions.py

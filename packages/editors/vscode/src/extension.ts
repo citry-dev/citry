@@ -55,6 +55,9 @@ import {
 	delegatedCompletionResolveCount,
 	delegatedProviderTimeoutMs,
 	linearlyMappedProjectionPosition,
+	type ProjectionRangeMapper,
+	type ProjectionSourceMapping,
+	prepareProjectionRangeMapper,
 	projectionTimeoutMs,
 	virtualDocumentTimeoutMs,
 	withTimeout,
@@ -147,6 +150,7 @@ interface FormatMetadata {
 }
 
 interface ProviderProjectionResponse {
+	sourceMappings?: ProjectionSourceMapping[];
 	source: string;
 	position: { line: number; character: number };
 	sourceRange: {
@@ -1260,6 +1264,7 @@ class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentPro
 }
 
 interface MappedProviderRequest {
+	sourceRangeMapper?: ProjectionRangeMapper | null;
 	projection: ProviderProjectionResponse;
 	sourceDocument: vscode.TextDocument;
 	sourceVersion: number;
@@ -1301,8 +1306,9 @@ function registerBrowserLanguageProviders(): vscode.Disposable[] {
 					const request = await trace.stage("projection-and-virtual-document", () =>
 						browserProviderRequest(document, position, token, trace),
 					);
-					if (request === undefined || request.projection.citryOwnsPosition) {
-						trace.finish(request?.projection.citryOwnsPosition === true ? "citry-owned" : "no-projection");
+					// Exact-name hover ownership does not imply that Citry supplies member completions.
+					if (request === undefined) {
+						trace.finish("no-projection");
 						return undefined;
 					}
 					const result = await trace.stage("delegated-provider", () =>
@@ -1661,6 +1667,21 @@ function mapProviderDefinition(
 }
 
 function mapProviderRange(range: vscode.Range, request: MappedProviderRequest): vscode.Range | undefined {
+	if (request.projection.sourceMappings !== undefined) {
+		// All items in this response share immutable document versions and the same source copies.
+		if (request.sourceRangeMapper === undefined) {
+			request.sourceRangeMapper =
+				prepareProjectionRangeMapper(
+					request.sourceDocument.getText(),
+					request.virtualDocument.getText(),
+					request.projection.sourceMappings,
+				) ?? null;
+		}
+		const mapped = request.sourceRangeMapper?.(range);
+		if (mapped === undefined || !protocolRange(request.projection.virtualRange).contains(range)) return undefined;
+		const result = protocolRange(mapped);
+		return protocolRange(request.projection.sourceRange).contains(result) ? result : undefined;
+	}
 	const virtual = protocolRange(request.projection.virtualRange);
 	if (!virtual.contains(range.start) || !virtual.contains(range.end)) {
 		return undefined;

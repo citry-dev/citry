@@ -212,6 +212,15 @@ def test_structural_input_validation_is_fail_fast(extra: str, data: dict[str, ob
         _render(_tags(extra), data)
 
 
+def test_dynamic_decimal_string_max_tags_uses_the_same_normalization() -> None:
+    html = _render(
+        _tags('c-max_tags="limit"'),
+        {"label": {"aria-label": "Labels"}, "limit": "2"},
+    )
+
+    assert 'data-citry-ui-part="tags-input"' in html
+
+
 def test_messages_validate_exact_placeholders_and_render_text_safely() -> None:
     messages = CTagsInputMessages(remove_label="Delete {value}")
     html = _render(

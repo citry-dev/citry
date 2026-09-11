@@ -107,6 +107,42 @@ Do not subtract the microbenchmark from navigation latency and label the remaind
 Stack-level measurements use actual request and event paths with rendering inside
 the measured transaction, not pre-rendered strings prepared by the harness.
 
+## HTML and network sizes
+
+Record sizes alongside each experiment, not just timing:
+
+| Measure | Definition |
+| --- | --- |
+| Server HTML output size | UTF-8 byte length of the fully serialized HTML emitted by an HTML renderer, before transfer compression. A shell is labeled as a shell. |
+| Final browser HTML size | UTF-8 byte length of the document type plus serialized document element at readiness, after initial activation and after each measured update. Capture outside the timed interval. This is a representation of the final DOM, not browser memory usage or necessarily the original response bytes. |
+| Total initial page payload | Sum every response body needed to reach initial readiness: document HTML, separate JSON/data responses, JS, CSS and other required assets, plus server-to-browser bootstrap messages on persistent connections. Report request count and a per-resource breakdown alongside the total. |
+| Server-action request size | Sum browser-to-server request bodies or application messages attributable to the action, including additional requests, retries and required control messages. |
+| Server-action response size | Sum server-to-browser response bodies or application messages needed to apply the final correlated revision and return to readiness. An acknowledgement alone is not the complete response. |
+
+For network payloads report both decoded application bytes and actual encoded
+body/message bytes after negotiated compression. Report headers, protocol framing
+and transport overhead separately where measurable; distinguish body totals from
+wire totals. Do not mix differently defined byte counters across frameworks.
+Count each transferred response once: HTML containing inline JSON or JavaScript
+already includes those bytes. Multiple requests for the same resource still count
+as multiple transfers. Cached resources contribute their actual transferred bytes
+in that cache profile, with the logical resource size recorded separately.
+
+The final-DOM serialization rule is shared by every adapter and retains framework
+attributes, comments and scripts. Record the exact serializer and encoding.
+HTML serialization does not capture live input properties, listeners, canvas
+pixels or all shadow DOM contents; check those behaviors separately and inventory
+shadow roots if used. Take comparable full-document snapshots after updates,
+while reporting the smaller transmitted update independently.
+
+Correlate HTTP requests and socket messages with the operation and readiness
+window. If batched messages include unrelated work, retain the complete batch
+and identify that contribution rather than inventing exact attribution. Report
+background traffic during the window separately, plus an observed total including
+it. Late requests required by the scenario mean readiness was declared too early;
+optional post-readiness work is listed separately. Required initial data fetched
+through JSON or sockets must never disappear from the page-load total.
+
 ## Shared interface and data contract
 
 Start with a framework-neutral specification, fixtures and browser assertions.
@@ -169,44 +205,55 @@ subtract clocks from different browser sessions. Server-local monotonic duration
 can be attached as diagnostics. Timer precision and foreground-tab policy are
 recorded. [High Resolution Time specification, current draft](https://www.w3.org/TR/hr-time-3/)
 
-A readiness marker is a candidate endpoint, not sufficient evidence. Each
-adapter must provide both a lifecycle signal and a behavioral verifier:
+Initial loading and server actions are separate measured flows:
 
-1. The correlated revision and required UI state are present. The adapter's
-   completion signal occurs after its relevant commit/morph and initialization,
-   not merely after the response arrives.
-2. A real browser click or keyboard action on an updated control exercises its
-   framework-installed handler. The prescribed follow-up action reaches the
-   server and exposes the expected correlated acknowledgement in the UI. Use
-   this same server-backed probe in every stack; do not replace it with direct
-   handler invocation, a synthetic marker or a benchmark-only listener.
-3. Assert value, focus/selection, disabled/validation state and required sibling
-   preservation. Reject stale responses, duplicate event processing and errors.
+1. **Initial readiness:** start at navigation/request and stop when the required
+   interface is present, framework runtime and dependencies have loaded, required
+   initialization/hydration and component callbacks have completed, and its
+   handlers are attached and able to respond. For Citry this includes Citry and
+   Alpine activation; for a Vue hydration configuration it includes hydration
+   and relevant initialization. Include required asynchronous initialization;
+   unrelated polling or future user actions do not keep the interval open.
+2. **Server-action readiness:** establish initial readiness before starting the
+   trial. Start the clock at the actual UI action, before framework handling.
+   Include client queuing, the server event or REST request, server processing,
+   all response messages, DOM updates and any required reinitialization. Stop
+   when the correlated new revision is applied and the affected UI can respond
+   again. An optimistic update or acknowledgement before the final UI update
+   cannot end the interval.
 
-Record two distinct endpoints: the adapter's `ready_candidate` mark and
-`behavior_verified` after the follow-up action succeeds. The headline operational
-"verified interactive" endpoint is the latter and **includes the additional
-probe interaction and its round trip**. Also publish the original action's
-revision-commit latency, probe start, probe duration and candidate mark so this
-measurement cannot be mistaken for a single-request latency or the earliest
-physically possible interaction. A candidate mark is only a qualified diagnostic;
-do not backdate behavioral proof to that mark. The probe starts promptly through
-the same harness procedure, with its scheduling delay retained in the trace.
+Each adapter defines a `ready` signal from the relevant lifecycle and pending
+work, with the exact required callbacks and async work documented per scenario.
+This signal is the timing endpoint. Capture the correlated revision and required
+initialization/pending-work state synchronously with its timestamp. Later checks
+must not validate an early signal merely because initialization finished before
+the check ran. There is no additional server-backed action inside either measured
+interval. Record DOM commit separately where observable, so initialization after
+insertion is visible. Final HTML snapshots taken after timing must still match
+the recorded revision, before any verification action changes the page.
 
-For initial loading, report navigation-start and request-start to both endpoints,
-and time to correct visible content separately. For an update, report original
-trusted event-start to acknowledged revision commit and to verified interactivity.
-First event after load, warm repeated events and post-reconnect events are separate.
-This convention makes the extra proof cost explicit and avoids falsely fast
-results from unbound fresh controls.
+Qualify the signal in separate correctness runs: immediately after it fires,
+exercise real controls and check handlers, state, focus, selection and sibling
+preservation. A server-backed verification action may be used in those runs,
+but its duration is not part of readiness latency. Such checks validate the
+adapter's endpoint; they do not establish the earliest possible interactive
+instant. Record signal limitations explicitly. In timed runs, collect correctness
+observations after stopping the timer and reject incorrect outcomes rather than
+allowing an early signal to produce a favorable result.
+
+For initial loading, report navigation-start and request-start to readiness,
+and time to correct visible content separately. For an update, report event-start
+to correlated DOM commit and to readiness. First event after load, warm repeated
+events and post-reconnect events are separate cases. Begin every event trial only
+after the prior operation has finished and the UI is ready.
 
 HTMX exposes after-swap and after-settle signals; Alpine has initialization
 hooks. React/Vue commits and the Python-driven client protocols require their
 own adapter signals. None of these signals alone proves every nested control is
 usable. `load`, DOMContentLoaded, network-idle and one or two animation frames
 are likewise insufficient. Animation-frame callbacks are scheduled before a
-repaint; report any paint-settlement approximation separately from verified
-interaction. [HTMX events](https://htmx.org/events/),
+repaint; report any paint-settlement approximation separately from
+framework readiness. [HTMX events](https://htmx.org/events/),
 [Alpine lifecycle](https://alpinejs.dev/essentials/lifecycle),
 [HTML animation-frame processing](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#animation-frames)
 
@@ -219,8 +266,8 @@ overhead are fixed and measured in a separate instrumentation check.
 ## Attribution without inventing an additive breakdown
 
 Collect browser marks for event dispatch, outbound message, response/body or
-correlated message completion, DOM commit, candidate readiness and behavioral
-proof. Record navigation/resource timing for document and asset fetching. Record
+correlated message completion, DOM commit and readiness. Record navigation/resource
+timing for document and asset fetching. Record
 server-local routing, state decode, queue/lock wait, domain/DB work, template or
 layout generation, serialization and response construction, where available.
 Unavailable phases are `unobserved`, not zero.
@@ -320,7 +367,8 @@ Citry configuration, avoid ranking every pair from noisy estimates, and do not
 extend sampling until a preferred winner appears.
 
 Use fixed, profile-specific deadlines, initially proposed as 30 seconds for
-navigation/proof and 10 seconds for each event or proof action. Qualify these in
+initial readiness and 10 seconds for each server-action readiness interval.
+Correctness-only verification actions have separate deadlines. Qualify these in
 the pilot and freeze them. Keep timeouts, HTTP errors, browser errors, wrong state,
 missing acknowledgements, disconnected sessions and retries in the denominator
 and raw records. Report timeouts as failures/right-censored latency observations,
@@ -345,7 +393,7 @@ protocol and cache settings, excluded features and the exact analysis script.
 Implement one HTTP stack and one persistent-connection stack first to qualify
 the common harness. Then add the remaining nominated frameworks without changing
 the completion contract. Separate reports show Python HTML cost, navigation to
-verified interaction, event to revision commit, event to verified interaction,
+readiness, event to revision commit, event to readiness,
 payload and failure rates. No combined score hides architectural differences.
 
 An independent technical and prose review must check adapters, instrumentation

@@ -20,9 +20,11 @@ from citry._class_introspection import (
 from citry._component_introspection import _loaded_python_file
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
+    BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_PROP,
     BROWSER_UNKNOWN_COMPONENT_PROP,
     BROWSER_UNKNOWN_SERVER_EVENT,
+    BROWSER_UNKNOWN_STATE_FIELD,
     CHECK_PYTHON_SOURCE_UNREADABLE,
     CHECK_TEMPLATE_DECLARATION,
     CHECK_TEMPLATE_FILE_NOT_FOUND,
@@ -62,11 +64,14 @@ from citry.analysis import (
     browser_i18n_profile_calls,
     browser_literal_calls,
     browser_literal_wire_type,
+    browser_state_binding_target_errors,
+    browser_state_bindings,
     discover_python_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_csp_compatibility,
     lint_unknown_alpine_variables,
+    lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
 )
@@ -611,6 +616,31 @@ def _check_template(
                 end_column=end_column,
             )
         )
+    for target_error in browser_state_binding_target_errors(template, parse_nested=nested_parser):
+        findings.append(
+            _browser_template_finding(
+                source.origin,
+                source.content,
+                target_error.start_index,
+                target_error.end_index,
+                BROWSER_INVALID_STATE_BINDING_TARGET,
+                detail=target_error.message,
+            )
+        )
+    state_names = _shared_state_names(source.consumers)
+    if state_names is not None:
+        for binding in browser_state_bindings(template, parse_nested=nested_parser):
+            if binding.name not in state_names:
+                findings.append(
+                    _browser_template_finding(
+                        source.origin,
+                        source.content,
+                        binding.start_index,
+                        binding.end_index,
+                        BROWSER_UNKNOWN_STATE_FIELD,
+                        name=binding.name,
+                    )
+                )
     event_names = _shared_event_names(source.consumers)
     if event_names is not None:
         for expression in browser_hosts:
@@ -1700,6 +1730,22 @@ def _check_browser_source(
         )
         for finding in lint_unknown_component_js_variables(source.content, consumers)
     ]
+    # Shared assets must have a closed data contract for every consumer before
+    # a missing key becomes an error; runtime-only shapes remain unchecked.
+    findings.extend(
+        _browser_source_finding(
+            source.origin,
+            source.content,
+            finding.start_index,
+            finding.end_index,
+            finding.code,
+            finding.message,
+            finding.severity,
+        )
+        for finding in lint_unknown_component_js_members(
+            source.content, _shared_js_data_names(engine, source.consumers)
+        )
+    )
     expression = BrowserExpression(
         source.content,
         0,
@@ -1721,6 +1767,25 @@ def _check_browser_source(
         return findings
     findings.extend(_unknown_event_findings(source.origin, source.content, expression, event_names))
     return findings
+
+
+def _shared_js_data_names(engine: Citry, consumers: list[type[Component]]) -> frozenset[str] | None:
+    """Return fields available to every owner, declining open or unknown data."""
+    if not consumers:
+        return None
+    names: list[frozenset[str]] = []
+    for component in consumers:
+        schema = engine.inspect_component(component).schemas.js_data
+        if schema.kind == "fields" and schema.namespace_policy == "closed":
+            names.append(frozenset(field.name for field in schema.fields))
+        elif schema.kind == "absent":
+            analyzed = _disk_js_data_shape(component)
+            if analyzed is None or analyzed[2].completeness != "closed":
+                return None
+            names.append(frozenset(root.name for root in analyzed[2].roots))
+        else:
+            return None
+    return frozenset.intersection(*names)
 
 
 def _browser_source_finding(
@@ -1747,6 +1812,20 @@ def _browser_source_finding(
         end_line=end[0],
         end_column=end[1],
     )
+
+
+def _shared_state_names(consumers: list[type[Component]]) -> frozenset[str] | None:
+    """Keep only public State fields accepted by every known template owner."""
+    if not consumers:
+        return None
+    names: list[set[str]] = []
+    for component in consumers:
+        info = _component_events_info(component)
+        names.append(set(info.state_meta.public) if info is not None and info.state_meta is not None else set())
+    common = names[0]
+    for candidate in names[1:]:
+        common.intersection_update(candidate)
+    return frozenset(common)
 
 
 def _shared_event_names(consumers: list[type[Component]]) -> frozenset[str] | None:

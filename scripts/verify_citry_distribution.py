@@ -40,7 +40,7 @@ MAX_WHEEL_BYTES: Final = 1_100 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
     'playwright>=1.62.0; extra == "ext-preview"',
-    "citry-core==1.7.0",
+    "citry-core==1.7.1",
     "wrapt>=1.16",
     "markupsafe>=2.1",
     "typing-extensions>=4.10",

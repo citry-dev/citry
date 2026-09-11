@@ -149,8 +149,8 @@ Python inputs:
 | `name` | `str | None` | `None` | structural server-only | non-empty native submitted name; `None` creates the only unnamed-control path |
 | `id` | `str | None` | Field ID or generated | structural server-only | non-empty/no-ASCII-whitespace native identity, matching `CInput`, without breaking Field ownership |
 | `value` | `str | None` | `None` | initial value | de-trusts `str` subclasses and rejects other `__html__` objects; sets escaped child text, initial current value, and reset default after LF normalization |
-| `rows` | positive `int` | `4` | reactive presentation fallback | initial visible line count; client input may override the current `rows` property |
-| `cols` | positive `int | None` | `None` | structural server-only | native preferred characters per line and required width for `wrap="hard"`; CSS still owns rendered inline size |
+| `rows` | positive `int | ASCII decimal str` | `4` | reactive presentation fallback | initial visible line count; client input may override the current `rows` property |
+| `cols` | positive `int | ASCII decimal str | None` | `None` | structural server-only | native preferred characters per line and required width for `wrap="hard"`; CSS still owns rendered inline size |
 | `wrap` | `soft | hard` | `soft` | structural server-only | controls whether form submission inserts implementation-defined wrapping line feeds; `hard` requires `cols` |
 | `required` | `bool | None` | Field value or `False` | standalone reactive fallback | valid only outside `CField` |
 | `disabled` | `bool | None` | Field/Form value or `False` | standalone reactive fallback | valid only outside `CField`; disabled Form always wins |
@@ -230,7 +230,8 @@ Invariants:
 - read-only Textarea remains focusable/selectable and is barred from native
   constraint validation; disabled Textarea is not submitted;
 - Field owns state when present, and disabled Form always dominates;
-- `rows` and `cols` reject Boolean values even though Python `bool` is an `int`;
+- server `rows` and `cols` normalize ASCII decimal strings to integers and
+  reject Boolean values and other strings;
 - `wrap="hard"` without positive `cols` fails before rendering; and
 - no behavior measures layout or rewrites height.
 

@@ -78,6 +78,7 @@ from citry.assets import reset_files as _reset_files_impl
 from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
 from citry.citry_element import CitryElement, _ElementMorphMetadata
+from citry.constness import _const_mapping, _ConstMapping, _construct_data_schema, _restore_const_identities
 from citry.ext.dependencies import get_dependencies as _get_dependencies_impl
 from citry.introspection import _new_definition_id
 from citry.library_component import (
@@ -904,6 +905,12 @@ class Component(metaclass=ComponentMeta):
     of typing.
     """
 
+    _kwargs_const: _ConstMapping
+    """Internal per-name Const promises retained for the base template-data mapping."""
+
+    _const_candidates: dict[str, Any]
+    """Original plain objects from explicitly marked component inputs."""
+
     slots: Any
     """The resolved slot fills, with every value normalized to a ``Slot``.
 
@@ -1014,7 +1021,12 @@ class Component(metaclass=ComponentMeta):
         # instance), so run them through `to_dict`. The outer `dict(...)`
         # copies, so mutations during one render never leak back into a
         # CitryElement that may be rendered again.
-        raw_kwargs: dict[str, Any] = dict(to_dict(kwargs)) if kwargs is not None else {}
+        if kwargs is None:
+            raw_kwargs = _ConstMapping()
+        else:
+            kwargs_mapping = to_dict(kwargs)
+            raw_kwargs = _const_mapping(kwargs_mapping, preserve=kwargs_mapping)
+        self._const_candidates = dict(raw_kwargs._const_values)
         # Slot inputs (strings, functions, elements, renders, Slot instances)
         # additionally normalize to `Slot` values; `normalize_slot_fills`
         # builds a fresh dict, so the copy is preserved.
@@ -1055,9 +1067,22 @@ class Component(metaclass=ComponentMeta):
         """Normalize hook-mutated slots and publish both typed inputs atomically."""
         cls = type(self)
         raw_slots = normalize_slot_fills(self.raw_slots, component_name=cls.__name__) if self.raw_slots else {}
-        typed_kwargs = cls.Kwargs(**self.raw_kwargs) if cls.Kwargs is not None else self.raw_kwargs
+        typed_kwargs, kwargs_const = _construct_data_schema(
+            self.raw_kwargs,
+            cls.Kwargs,
+            provenance_only=True,
+        )
+        # An input hook or schema default may establish a newer explicit
+        # promise for a name. Keep original candidates too: final template data
+        # may deliberately return that original object after an intermediate
+        # schema transformation.
+        raw_kwargs = cast("_ConstMapping", self.raw_kwargs)
+        self._const_candidates.update(raw_kwargs._const_values)
+        self._const_candidates.update(kwargs_const._const_values)
+        _restore_const_identities(kwargs_const, self._const_candidates)
         typed_slots = cls.Slots(**raw_slots) if cls.Slots is not None else raw_slots
         self.raw_slots = raw_slots
+        self._kwargs_const = kwargs_const
         self.kwargs = typed_kwargs
         self.slots = typed_slots
 
@@ -1079,6 +1104,15 @@ class Component(metaclass=ComponentMeta):
         declared ``TemplateData`` validates and normalizes it either way.
         Schema defaults and coercions are materialized in the mapping that the
         template's expressions see.
+
+        An input whose outer value was marked with ``Const`` reaches ``kwargs``
+        as an ordinary Python value; exact builtin containers under that marker
+        are cleaned recursively. Ordinary containers are not searched for
+        manually nested markers. The base method keeps known const inputs in
+        renderer metadata; validating or transforming schemas may discard that
+        metadata. An override retains an input promise when its final same-name
+        output is the recorded input object; renamed or replaced stable outputs
+        need an explicit ``Const`` marker.
 
         A returned variable wins over a ``template_globals`` entry of the same
         name, so an input shadows a same-named global (globals act as

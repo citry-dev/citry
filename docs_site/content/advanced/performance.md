@@ -134,9 +134,14 @@ Citry marks them for you:
 <c-Grid c-columns="1 + 2" c-breakpoints="[480, 900]" />
 ```
 
-The same applies to an expression attribute with no variable references. You
-only need `Const(...)` for a value passed from Python or forwarded through a
-template variable.
+The same applies to an expression attribute with no variable references. Citry
+also forwards the optimization through a direct expression attribute when all
+of that expression's variables are known constant.
+
+Citry evaluates an expression before marking its complete result as the child
+input. In `c-total="add(1, 2)"`, the arguments remain ordinary integers. When
+every referenced variable, including `add`, is known constant, Citry marks the
+evaluated result at the child-input root.
 
 ## Make a default constant
 
@@ -160,38 +165,108 @@ class Grid(Component):
 `Grid()` uses the constant default. `Grid(columns=4)` receives an ordinary
 dynamic value unless the caller passes `Const(4)`.
 
-## Inspect a marker at an exact-type boundary
+## Mark stable output from a custom callback
 
-Most component code can treat a marked value like the value inside it. When a
-library must pass an exact built-in type to another API, use
-[`is_const`][citry.is_const] to detect the marker and
-[`const_value`][citry.const_value] to retrieve its value:
+Citry consumes the markers it adds automatically and an explicit `Const(...)`
+at the root of each component input or output. Those values reach component
+kwargs, data callbacks, hooks, and template expressions as ordinary Python
+values. Citry keeps the optimization metadata separately, so identity checks,
+`type()` checks, JSON serialization, path operations, and standard-library
+APIs work normally for the values Citry prepares.
+
+The base `template_data` method returns the component kwargs. Citry knows that
+this mapping preserves each name and value, so the earlier `Metric` and `Grid`
+examples keep their known const inputs without an override.
+
+A custom `template_data` callback can run arbitrary Python, so Citry does not
+infer constness from equal values. It does preserve a marked input when the
+final output has the same key and is the exact same ordinary object:
 
 ```python
-from citry import const_value, is_const
-
-
-if is_const(columns):
-    columns = const_value(columns)
+def template_data(self, kwargs, slots):
+    return {
+        "label": kwargs.label,
+    }
 ```
 
-These helpers are mainly for component and extension authors. Application
-templates normally do not need them.
+If the caller supplied `label=Const(value)` and the input schema preserves
+`value`'s identity, this direct pass-through keeps its promise when the final
+output still has that identity. Citry compares after the output schema and data
+hooks. The same rule applies to `return kwargs`: each same-key input keeps its
+known constness when both schema stages retained the recorded object.
 
-## Know where the marker stops
+Renamed or replaced outputs are dynamic unless the callback makes a new
+promise. Mark them only when the result will stay stable:
 
-In templates and ordinary Python operations, a marked value usually behaves
-like the value inside it. A few boundaries need care:
+```python
+def template_data(self, kwargs, slots):
+    return {
+        "heading": Const(kwargs.label),
+        "value": Const(kwargs.value.strip()),
+    }
+```
 
-- A transformation such as `title.upper()` returns a new, unmarked value.
-- A coercing model, including a Pydantic `Kwargs` model, may create a new value
-  and remove the marker.
-- APIs that require an exact built-in type can reject the proxy. For example,
-  `json.dumps()` rejects marked values and `getattr()` rejects a marked
-  attribute name. Convert to the required plain value first, or mark the final
-  result instead.
-- A custom unhashable object that Citry cannot turn into a stable cache key is
-  rendered normally.
+Citry uses Python's `is` identity test. Normal singleton and interning behavior
+therefore applies: a recomputed immutable value can count as the same object
+when Python reuses its identity.
+
+Schemas that validate, coerce, or otherwise transform data do not inherit the
+input's optimization by name alone. A same-key field can keep it by retaining
+the exact input object; otherwise the final named field needs an explicit
+`Const(...)` promise. Citry normalizes marked defaults and factories on its
+generated dataclasses, but it does not assume how arbitrary schema-owned
+factories behave.
+
+Citry consumes each output marker before a template expression reads its
+value.
+
+## Use marker helpers before rendering
+
+[`is_const`][citry.is_const] and
+[`const_value`][citry.const_value] remain useful when your own code handles a
+manually marked value before passing it to Citry:
+
+```python
+from citry import Const, const_value, is_const
+
+
+marked = Const("status")
+if is_const(marked):
+    plain = const_value(marked)
+```
+
+The manual marker is a Python proxy until Citry consumes it. Like other proxy
+objects, it cannot preserve identity with the wrapped object, and an API that
+requires an actual built-in value may reject it. Call `const_value()` before
+handing such a value directly to that API.
+
+Citry recursively unwraps a value only when its outermost object is `Const`:
+`Const([Const(1)])` reaches component code as `[1]`. This cleanup follows exact
+builtin containers. An ordinary container is left alone, so `[Const(1)]` still
+contains a marker. Unwrap a manually nested marker at the point where your code
+uses it:
+
+```python
+from operator import add
+
+from citry import Const, const_value
+
+
+items = [Const(1)]
+total = add(const_value(items[0]), 2)
+```
+
+Calling `add(items[0], 2)` would pass the proxy to `add`. This also applies to
+a marker inserted into an ordinary container by component or extension code.
+
+Root markers supplied together in one normalization operation are converted
+together, preserving aliases between those roots. When marked and unmarked
+fields share a graph that must be rebuilt, the marked value can become a
+separate cleaned graph; the unmarked original stays unchanged. Citry does not
+inspect attributes or contents inside custom objects. Marker cycles encountered
+beneath an outer `Const` raise `ValueError`, and a marked graph that requires
+rebuilding a cyclic tuple or frozenset may also be rejected. A custom
+unhashable object that cannot form a stable cache key renders normally.
 
 Do not mark a one-shot generator. Precomputing can consume it, leaving later
 work with an exhausted iterator. Use a stable list or tuple instead.

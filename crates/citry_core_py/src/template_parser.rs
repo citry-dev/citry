@@ -11,6 +11,7 @@ use pyo3::prelude::*;
 
 use citry_template_parser::browser::{
     BrowserAnalysisMode, analyze_browser_source as analyze_browser_source_rust,
+    analyze_component_members as analyze_component_members_rust,
     analyze_component_scope_writes as analyze_component_scope_writes_rust,
     analyze_component_source as analyze_component_source_rust,
 };
@@ -200,6 +201,31 @@ pub fn analyze_component_source(input: &str) -> ComponentSourceAnalysis {
                     write.name_end,
                     write.value_start,
                     write.value_end,
+                )
+            })
+            .collect(),
+    )
+}
+
+type ComponentMemberAnalysis = (bool, Vec<(String, String, usize, usize, usize, usize)>);
+
+/// Return proven context members and their exact authored UTF-8 byte ranges.
+#[pyfunction]
+pub fn analyze_component_members(input: &str) -> ComponentMemberAnalysis {
+    let analysis = analyze_component_members_rust(input);
+    (
+        analysis.valid,
+        analysis
+            .members
+            .into_iter()
+            .map(|member| {
+                (
+                    member.context_name,
+                    member.member_name,
+                    member.owner_start,
+                    member.owner_end,
+                    member.member_start,
+                    member.member_end,
                 )
             })
             .collect(),

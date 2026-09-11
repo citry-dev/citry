@@ -12,11 +12,11 @@ values reuse the cached result and skip all of that work.
 
 How the pieces in this module fit together:
 
-- ``Const`` is the marker. It is a transparent wrapper (a ``wrapt.ObjectProxy``
-  subclass): it behaves exactly like the value inside, so user code and
-  template expressions never notice it, while the engine can still ask
-  ``is_const(x)``. The marker stays on the value as it travels into child
-  components, so each component along the way gets the optimization too.
+- ``Const`` is the call-site marker. Citry consumes it at component and data
+  boundaries, passes the ordinary value to user code and template expressions,
+  and records the promise separately by variable name. The private proxy is
+  only transport; Python identity checks and APIs that require actual built-in
+  values cannot be made transparent by an object proxy.
 - ``extract_const_vars`` looks at a component's template variables, picks out
   the ``Const``-marked ones, and builds a **cache key** from their names and
   values (``freeze_const`` turns each value into a stable, dict-key-safe
@@ -50,24 +50,23 @@ Guidance for using ``Const``:
   ``Kwargs``: ``cols: int = Const(3)``. When the kwarg is omitted, the marked
   default is used and optimized; when passed, the live value renders as
   usual.
-- **The marker flows through plain containers and dataclasses.** The
-  auto-converted ``Kwargs`` dataclass stores values as-is, so reading the
-  typed view keeps the marker. A validating model (a Pydantic ``Kwargs``)
-  accepts a marked input but produces a new value, stripping the marker; the
-  value then safely renders un-optimized. To keep const-ness with a
-  validating model, read the marked value from ``raw_kwargs``.
-- **Transformations drop the marker.** ``Const("hi")`` passed through
-  unchanged stays const; ``kwargs["title"].upper()`` returns a plain value.
-  Mark the final value if it is the transformed form that is stable.
-- **A few C-level APIs reject the marker.** The marker is a proxy object, and
-  some built-ins demand the exact built-in type rather than something that
-  behaves like it. ``getattr(obj, name)`` raises ``TypeError`` when ``name``
-  is a marked string, and ``json.dumps(value)`` fails on a marked value (or
-  one nested in the data it serializes). Pass the real value to such an API,
-  e.g. ``str(name)`` for an attribute name, or mark the already-serialized
-  result instead of the input. Citry's own ``class``/``style`` handling
-  unwraps internally, so marked values in templates are fine; the gap is your
-  own ``template_data`` calling these APIs directly.
+- **The default mapping preserves the promise.** When a component uses the
+  base ``template_data``, Citry knows that each kwarg keeps its name and carries
+  its input provenance into the template and through child-component bindings.
+- **Custom data callbacks retain direct forwarding.** A marked input keeps its
+  promise when the callback's final output has the same name and is the same
+  object. Mark renamed or replaced stable results explicitly, for example
+  ``return {"title": Const(kwargs.title.upper())}``.
+- **An outer marker owns its exact builtin value graph.** At a boundary, an
+  outer ``Const`` marker triggers recursive removal of nested markers in exact
+  builtin containers, with aliases and mutable cycles preserved. Boundary
+  normalization leaves ordinary containers untouched, even if a caller
+  manually placed ``Const`` inside one. Citry does not inspect arbitrary object
+  attributes. A marked graph that requires rebuilding a cyclic tuple or
+  frozenset raises ``ValueError`` rather than publishing a corrupt graph.
+- **Custom schemas validate plain inputs.** Their outputs recover an input
+  promise only when the final same-name object identity survives, or establish
+  one with an explicit ``Const`` marker.
 
 Example:
     Mark an input constant::
@@ -75,10 +74,9 @@ Example:
         from citry import Component, Const
 
         class Card(Component):
-            template = "<p>{{ cols }}</p>"
-
-            def template_data(self, kwargs, slots):
-                return {"cols": kwargs["cols"]}  # the marker flows through
+            template = '''
+                <p>{{ cols }}</p>
+            '''
 
         Card(cols=Const(3)).render()
 
@@ -87,26 +85,36 @@ Example:
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Iterable, Mapping
+from contextvars import ContextVar
+from dataclasses import MISSING, fields, is_dataclass
+from functools import lru_cache
+from inspect import signature
 from threading import RLock
-from typing import TYPE_CHECKING, Any, Final, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, Final, TypeAlias, TypeVar, cast
 from weakref import ref
 
 import wrapt
+from typing_extensions import Self
 
-from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.component_like import ComponentLike
 from citry.slots import Slot
 from citry.util.html import escape
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection, Mapping
+    from collections.abc import Callable, Collection
     from weakref import ReferenceType
 
+    from citry.citry_context import CitryContext
     from citry.component import Component
     from citry.nodes import BodyItem, ElementAttrsNode, ElementKeyNode, ExprNode, FillNode, ForNode, IfNode
 
 _T = TypeVar("_T")
+_schema_factory_consts: ContextVar[dict[str, Any] | None] = ContextVar(
+    "citry_schema_factory_consts",
+    default=None,
+)
 
 
 # #########################################################
@@ -116,14 +124,16 @@ _T = TypeVar("_T")
 
 class _ConstProxy(wrapt.ObjectProxy):
     """
-    A transparent marker that a value is constant across renders.
+    Transport marker for a value promised constant across renders.
 
-    Behaves exactly like the wrapped value: arithmetic, attribute and item
-    access, method calls, comparisons, ``str``, and ``repr`` (forwarded, so a
-    marked value inside a container reprs identically to the plain value;
-    the engine marks template literals without the user opting in, so reprs
-    must not betray the marker in user-visible output). Use through the
-    public ``Const`` name; detect with ``is_const(x)``.
+    Common operations delegate to the wrapped value, but Python does not let
+    a proxy preserve identity or satisfy every API that requires an actual
+    built-in value. Citry therefore removes an exact outer marker before
+    component callbacks and expressions execute, recursively cleaning its
+    exact builtin value graph. It does not search ordinary containers for a
+    manually nested marker.
+    Use it through the public ``Const`` name; detect an unconsumed marker with
+    ``is_const(x)``.
     """
 
     # The memoized cache key, set by ``freeze_const`` on first use. The
@@ -153,8 +163,21 @@ def is_const(value: Any) -> bool:
     return isinstance(value, _ConstProxy)
 
 
+def _is_const_marker(value: Any) -> bool:
+    """Detect Citry's exact transport marker without consulting an opaque object's ``__class__``."""
+    return type(value) is _ConstProxy
+
+
+def _is_builtin_container(value: Any) -> bool:
+    """Detect traversable exact builtins without invoking an opaque type's equality."""
+    value_type = type(value)
+    return (
+        value_type is dict or value_type is list or value_type is tuple or value_type is set or value_type is frozenset
+    )
+
+
 def const_value(value: Any) -> Any:
-    """Unwrap nested markers; leave unmarked values unchanged and reject cycles with ``ValueError``."""
+    """Unwrap outer marker layers; leave plain values unchanged and reject marker cycles."""
     # Forwarding a constant through another constant input can add a marker layer.
     # Exact-type consumers need the underlying value, regardless of that depth.
     if isinstance(value, _ConstProxy):
@@ -171,6 +194,678 @@ def const_value(value: Any) -> Any:
             seen.add(marker_id)
             value = value.__wrapped__
     return value
+
+
+class _ConstGraphScanner:
+    """Find markers in exact builtin containers without following opaque objects."""
+
+    def __init__(self) -> None:
+        self._nodes: dict[int, Any] = {}
+        self._reverse: dict[int, set[int]] = {}
+        self._direct: set[int] = set()
+        self._reachable: set[int] = set()
+        self._dirty = False
+
+    def contains_marker(self, value: Any) -> bool:
+        if _is_const_marker(value):
+            return True
+        if not _is_builtin_container(value):
+            return False
+        value_id = id(value)
+        if value_id not in self._nodes:
+            self._collect(value)
+        if self._dirty:
+            reachable = set(self._direct)
+            pending = list(reachable)
+            while pending:
+                child_id = pending.pop()
+                for parent_id in self._reverse.get(child_id, ()):
+                    if parent_id not in reachable:
+                        reachable.add(parent_id)
+                        pending.append(parent_id)
+            self._reachable = reachable
+            self._dirty = False
+        return value_id in self._reachable
+
+    def _collect(self, root: Any) -> None:
+        pending = [root]
+        while pending:
+            value = pending.pop()
+            value_id = id(value)
+            if value_id in self._nodes:
+                continue
+            self._nodes[value_id] = value
+            children = value.items() if type(value) is dict else value
+            flattened = (part for pair in children for part in pair) if type(value) is dict else children
+            for child in flattened:
+                if _is_const_marker(child):
+                    self._direct.add(value_id)
+                    continue
+                if _is_builtin_container(child):
+                    child_id = id(child)
+                    self._reverse.setdefault(child_id, set()).add(value_id)
+                    pending.append(child)
+            self._dirty = True
+
+
+class _ConstGraphConverter:
+    """Remove markers while preserving converted aliases and mutable cycles."""
+
+    def __init__(self, scanner: _ConstGraphScanner) -> None:
+        self._scanner = scanner
+        self._memo: dict[int, Any] = {}
+        self._active_immutable: set[int] = set()
+
+    def convert(self, value: Any) -> Any:
+        marker_chain: set[int] = set()
+        while _is_const_marker(value):
+            marker_id = id(value)
+            if marker_id in marker_chain:
+                raise ValueError("Const markers contain a cycle.")
+            marker_chain.add(marker_id)
+            value = value.__wrapped__
+
+        value_type = type(value)
+        if not _is_builtin_container(value) or not self._scanner.contains_marker(value):
+            return value
+
+        value_id = id(value)
+        if value_id in self._active_immutable:
+            raise ValueError("Const markers require rebuilding a cyclic tuple or frozenset.")
+        if value_id in self._memo:
+            return self._memo[value_id]
+
+        if value_type is list:
+            converted_list: list[Any] = []
+            self._memo[value_id] = converted_list
+            converted_list.extend(self.convert(item) for item in value)
+            return converted_list
+        if value_type is dict:
+            converted_dict: dict[Any, Any] = {}
+            self._memo[value_id] = converted_dict
+            converted_dict.update((self.convert(key), self.convert(item)) for key, item in value.items())
+            return converted_dict
+        if value_type is set:
+            converted_set: set[Any] = set()
+            self._memo[value_id] = converted_set
+            converted_set.update(self.convert(item) for item in value)
+            return converted_set
+
+        self._active_immutable.add(value_id)
+        try:
+            converted_items = tuple(self.convert(item) for item in value)
+            converted: Any = converted_items if value_type is tuple else frozenset(converted_items)
+        finally:
+            self._active_immutable.remove(value_id)
+        self._memo[value_id] = converted
+        return converted
+
+
+def _unwrap_const_graph(values: Iterable[Any]) -> list[Any]:
+    """Recursively unwrap exact marked roots together, leaving ordinary roots untouched."""
+    roots = list(values)
+    marked_indexes: list[int] = []
+    marked_roots: list[Any] = []
+    for index, value in enumerate(roots):
+        if not _is_const_marker(value):
+            continue
+        root = value
+        first_marker_id = id(root)
+        root = root.__wrapped__
+        if type(root) is _ConstProxy:
+            marker_chain = {first_marker_id}
+            while type(root) is _ConstProxy:
+                marker_id = id(root)
+                if marker_id in marker_chain:
+                    raise ValueError("Const markers contain a cycle.")
+                marker_chain.add(marker_id)
+                root = root.__wrapped__
+        marked_indexes.append(index)
+        marked_roots.append(root)
+
+    if not marked_indexes:
+        return roots
+    if not any(_is_builtin_container(root) for root in marked_roots):
+        for index, root in zip(marked_indexes, marked_roots, strict=True):
+            roots[index] = root
+        return roots
+
+    scanner = _ConstGraphScanner()
+    # Only an explicitly marked outer root owns recursive conversion. Build
+    # one graph for all such roots so their aliases and mutable cycles survive.
+    for root in marked_roots:
+        if _is_builtin_container(root):
+            scanner.contains_marker(root)
+    converter = _ConstGraphConverter(scanner)
+    for index, root in zip(marked_indexes, marked_roots, strict=True):
+        roots[index] = converter.convert(root)
+    return roots
+
+
+def _plain_schema_default(value: Any) -> Any:
+    """Remove markers from one renderer-owned schema default before construction."""
+    return _unwrap_const_graph((value,))[0]
+
+
+def _schema_default_factory(name: str, factory: Callable[[], Any]) -> Callable[[], Any]:
+    """Wrap a generated-schema factory so post-init code receives an ordinary value."""
+
+    def make_default() -> Any:
+        value = factory()
+        plain = _plain_schema_default(value)
+        collected = _schema_factory_consts.get()
+        if collected is not None and _is_const_marker(value):
+            collected[name] = plain
+        return plain
+
+    return make_default
+
+
+class _ConstMapping(dict[str, Any]):
+    """Private plain-value mapping with const provenance stored beside its entries."""
+
+    __slots__ = ("_const_values",)
+
+    def __init__(
+        self,
+        values: Mapping[str, Any] | Iterable[tuple[str, Any]] = (),
+        *,
+        const_values: Mapping[str, Any] | None = None,
+    ) -> None:
+        dict.__init__(self)
+        self._const_values: dict[str, Any] = {}
+        if type(values) is tuple and not values:
+            return
+        if type(values) is dict or type(values) is _ConstMapping:
+            if not values:
+                return
+            source = cast("dict[str, Any]", values)
+            dict.update(self, source)
+            marked: list[tuple[str, Any]] | None = None
+            for name, value in dict.items(source):
+                if _is_const_marker(value):
+                    if marked is None:
+                        marked = []
+                    marked.append((name, value))
+            if const_values is not None:
+                self._const_values.update((name, self[name]) for name in const_values if dict.__contains__(self, name))
+            if marked is not None:
+                plain_marked_roots = _unwrap_const_graph(value for _, value in marked)
+                for (name, _original), plain in zip(marked, plain_marked_roots, strict=True):
+                    dict.__setitem__(self, name, plain)
+                    self._const_values[name] = plain
+            return
+        if isinstance(values, Mapping):
+            if not values:
+                return
+            pairs = list(cast("Mapping[str, Any]", values).items())
+        else:
+            pairs = list(cast("Iterable[tuple[str, Any]]", values))
+            if not pairs:
+                return
+        marked_values: list[Any] | None = None
+        for _name, value in pairs:
+            if _is_const_marker(value):
+                if marked_values is None:
+                    marked_values = []
+                marked_values.append(value)
+        if marked_values is None:
+            dict.update(self, pairs)
+            if const_values is not None:
+                self._const_values.update((name, self[name]) for name, _ in pairs if name in const_values)
+            return
+        plain_marked_values = iter(_unwrap_const_graph(marked_values))
+        for name, original in pairs:
+            plain = next(plain_marked_values) if _is_const_marker(original) else original
+            dict.__setitem__(self, name, plain)
+            if _is_const_marker(original) or (const_values is not None and name in const_values):
+                self._const_values[name] = plain
+            else:
+                self._const_values.pop(name, None)
+
+    def __setitem__(self, name: str, value: Any) -> None:
+        plain = _unwrap_const_graph((value,))[0] if _is_const_marker(value) else value
+        dict.__setitem__(self, name, plain)
+        if _is_const_marker(value):
+            self._const_values[name] = plain
+        else:
+            self._const_values.pop(name, None)
+
+    def __delitem__(self, name: str) -> None:
+        dict.__delitem__(self, name)
+        self._const_values.pop(name, None)
+
+    def clear(self) -> None:
+        dict.clear(self)
+        self._const_values.clear()
+
+    def copy(self) -> _ConstMapping:
+        copied = dict.__new__(_ConstMapping)
+        dict.__init__(copied, self)
+        copied._const_values = dict(self._const_values)
+        return copied
+
+    def pop(self, name: str, *default: Any) -> Any:
+        if len(default) > 1:
+            raise TypeError(f"pop expected at most 2 arguments, got {len(default) + 1}")
+        if name in self:
+            self._const_values.pop(name, None)
+        if default:
+            return dict.pop(self, name, default[0])
+        return dict.pop(self, name)
+
+    def popitem(self) -> tuple[str, Any]:
+        name, value = dict.popitem(self)
+        self._const_values.pop(name, None)
+        return name, value
+
+    def setdefault(self, name: str, default: Any = None) -> Any:
+        if name in self:
+            return self[name]
+        self[name] = default
+        return self[name]
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        if len(args) > 1:
+            raise TypeError(f"update expected at most 1 argument, got {len(args)}")
+        if args and not kwargs and (type(args[0]) is dict or type(args[0]) is _ConstMapping):
+            source = cast("dict[str, Any]", args[0])
+            if not source:
+                return
+            marked: list[tuple[str, Any]] | None = None
+            for name, value in dict.items(source):
+                if _is_const_marker(value):
+                    if marked is None:
+                        marked = []
+                    marked.append((name, value))
+            if marked is None:
+                dict.update(self, source)
+                if self._const_values:
+                    for name in dict.keys(source):
+                        self._const_values.pop(name, None)
+                return
+            snapshot_pairs = list(dict.items(source))
+            plain_marked_roots = iter(_unwrap_const_graph(value for _, value in marked))
+            for name, original in snapshot_pairs:
+                plain = next(plain_marked_roots) if _is_const_marker(original) else original
+                dict.__setitem__(self, name, plain)
+                if _is_const_marker(original):
+                    self._const_values[name] = plain
+                else:
+                    self._const_values.pop(name, None)
+            return
+        pairs: list[tuple[str, Any]] = []
+        if args:
+            source = args[0]
+            pairs.extend(source.items() if hasattr(source, "keys") else source)
+        pairs.extend(kwargs.items())
+        marked_values: list[Any] | None = None
+        for _name, value in pairs:
+            if _is_const_marker(value):
+                if marked_values is None:
+                    marked_values = []
+                marked_values.append(value)
+        if marked_values is None:
+            dict.update(self, pairs)
+            if self._const_values:
+                for name, _value in pairs:
+                    self._const_values.pop(name, None)
+            return
+        plain_marked_values = iter(_unwrap_const_graph(marked_values))
+        for name, original in pairs:
+            plain = next(plain_marked_values) if _is_const_marker(original) else original
+            dict.__setitem__(self, name, plain)
+            if _is_const_marker(original):
+                self._const_values[name] = plain
+            else:
+                self._const_values.pop(name, None)
+
+    # Typeshed compares dict.__ior__ to the generic dict.__or__ overloads;
+    # this private string-keyed subclass accepts the same runtime inputs.
+    def __ior__(self, other: Any) -> Self:  # type: ignore[override,misc]
+        self.update(other)
+        return self
+
+
+def _const_mapping(
+    values: Mapping[str, Any] | Iterable[tuple[str, Any]],
+    *,
+    preserve: Mapping[str, Any] | None = None,
+) -> _ConstMapping:
+    """Build a plain-value mapping, optionally retaining trusted name provenance."""
+    preserved = preserve._const_values if isinstance(preserve, _ConstMapping) else None
+    return _ConstMapping(values, const_values=preserved)
+
+
+def _refresh_const_mapping(values: _ConstMapping) -> None:
+    """Consume exact root markers inserted through a mapping bypass."""
+    if not values:
+        return
+    marked: list[tuple[str, Any]] | None = None
+    for name, value in values.items():
+        if _is_const_marker(value):
+            if marked is None:
+                marked = []
+            marked.append((name, value))
+    if marked is None:
+        return
+    converted = _unwrap_const_graph(value for _, value in marked)
+    for (name, _original), plain in zip(marked, converted, strict=True):
+        dict.__setitem__(values, name, plain)
+        values._const_values[name] = plain
+
+
+def _merge_const_mappings(*values: Mapping[str, Any]) -> _ConstMapping:
+    """Merge renderer-owned mappings with rightmost values and provenance winning."""
+    merged = _ConstMapping()
+    for mapping in values:
+        for name, value in mapping.items():
+            dict.__setitem__(merged, name, value)
+            if isinstance(mapping, _ConstMapping) and name in mapping._const_values:
+                merged._const_values[name] = value
+            else:
+                merged._const_values.pop(name, None)
+    # Every input was normalized at its external boundary. This renderer-owned
+    # merge neither calls user code nor introduces new values.
+    return merged
+
+
+def _overlay_const_mapping(values: Mapping[str, Any], overlay: Mapping[str, Any]) -> _ConstMapping:
+    """Copy trusted variables and add new dynamic bindings from a renderer scope."""
+    if type(values) is _ConstMapping and (type(overlay) is dict or type(overlay) is _ConstMapping):
+        source = cast("dict[str, Any]", overlay)
+        if not any(_is_const_marker(value) for value in dict.values(source)):
+            merged = values.copy()
+            dict.update(merged, source)
+            if merged._const_values:
+                for name in dict.keys(source):
+                    merged._const_values.pop(name, None)
+            return merged
+    # Marked roots can run arbitrary key hashing while their containers are
+    # rebuilt. Normalize them before snapshotting the surrounding scope.
+    dynamic_overlay = _const_mapping(overlay)
+    dynamic_overlay._const_values.clear()
+    return _merge_const_mappings(values, dynamic_overlay)
+
+
+def _mapping_value_is_const(values: Mapping[str, Any], name: str) -> bool:
+    """Return whether one named mapping entry has separately tracked provenance."""
+    return isinstance(values, _ConstMapping) and name in values._const_values
+
+
+def _restore_const_identities(values: _ConstMapping, candidates: Mapping[str, Any]) -> None:
+    """Restore same-name provenance when a final value is the marked input object."""
+    for name, original in candidates.items():
+        if name in values and values[name] is original:
+            values._const_values[name] = values[name]
+
+
+# Schema classes can be defined inside request or test scopes, so bound these
+# hot-path predicates rather than retaining every class for the process life.
+@lru_cache(maxsize=256)
+def _schema_is_inert_dataclass(schema: type) -> bool:
+    """Whether Citry knows that named constructor inputs remain the same fields."""
+    if not is_dataclass(schema) or schema.__dict__.get("_citry_synthesized_declaration") is not True:
+        return False
+    init = getattr(schema, "__init__", None)
+    code = getattr(init, "__code__", None)
+    if code is None or code.co_filename != "<string>":
+        return False
+    if any("__post_init__" in base.__dict__ for base in schema.__mro__):
+        return False
+    if schema.__new__ is not object.__new__ or schema.__getattribute__ is not object.__getattribute__:
+        return False
+    params = getattr(schema, "__dataclass_params__", None)
+    return schema.__setattr__ is object.__setattr__ or getattr(params, "frozen", False)
+
+
+@lru_cache(maxsize=256)
+def _schema_is_inert_namedtuple(schema: type) -> bool:
+    """Whether ``schema`` is the standard immutable named-tuple adapter."""
+    if not issubclass(schema, tuple) or not isinstance(getattr(schema, "_fields", None), tuple):
+        return False
+    constructor = schema.__dict__.get("__new__")
+    code = getattr(constructor, "__code__", None)
+    return (
+        code is not None
+        and code.co_filename == "<string>"
+        and code.co_name == "<lambda>"
+        and schema.__getattribute__ is tuple.__getattribute__
+    )
+
+
+def _schema_has_generated_dataclass_init(schema: type) -> bool:
+    """Whether dataclasses generated this schema's keyword constructor."""
+    constructor = schema.__dict__.get("__init__")
+    code = getattr(constructor, "__code__", None)
+    return code is not None and code.co_filename == "<string>"
+
+
+def _is_classvar_field(field: Any) -> bool:
+    """Whether one private dataclass field record represents a ClassVar."""
+    return getattr(getattr(field, "_field_type", None), "name", None) == "_FIELD_CLASSVAR"
+
+
+def _add_schema_defaults(
+    constructor_values: _ConstMapping,
+    schema: type,
+    dataclass_fields: dict[str, Any],
+) -> _ConstMapping:
+    """Materialize defaults whose generated dataclass constructor is safe to emulate."""
+    missing_fields = [
+        field
+        for field in dataclass_fields.values()
+        if field.init and not _is_classvar_field(field) and field.name not in constructor_values
+    ]
+    if any(field.default_factory is not MISSING for field in missing_fields):
+        # Reject missing/unknown arguments before evaluating a factory that
+        # the generated constructor would otherwise never reach.
+        signature(schema).bind(**constructor_values)
+
+    default_pairs: list[tuple[str, Any]] = []
+    for field in missing_fields:
+        if field.default is not MISSING:
+            default_pairs.append((field.name, field.default))
+        elif field.default_factory is not MISSING:
+            default_pairs.append((field.name, field.default_factory()))
+    if not default_pairs:
+        return constructor_values
+    with_defaults = constructor_values.copy()
+    with_defaults.update(default_pairs)
+    return with_defaults
+
+
+def _add_marked_model_defaults(constructor_values: _ConstMapping, schema: type) -> _ConstMapping:
+    """Pass declared Pydantic marker defaults as plain values into validation."""
+    model_fields = getattr(schema, "model_fields", None)
+    if not isinstance(model_fields, dict):
+        model_fields = getattr(schema, "__fields__", None)
+    if not isinstance(model_fields, dict):
+        return constructor_values
+
+    default_pairs: list[tuple[str, Any]] = []
+    for name, field in model_fields.items():
+        if name in constructor_values:
+            continue
+        default = getattr(field, "default", MISSING)
+        if default is MISSING:
+            continue
+        if _is_const_marker(default):
+            default_pairs.append((name, default))
+    if not default_pairs:
+        return constructor_values
+    with_defaults = constructor_values.copy()
+    with_defaults.update(default_pairs)
+    return with_defaults
+
+
+def _construct_data_schema(
+    values: Mapping[str, Any],
+    schema: type | None,
+    *,
+    provenance_only: bool = False,
+) -> tuple[Any, _ConstMapping]:
+    """
+    Construct one data schema from plain inputs and return its named metadata view.
+
+    With ``provenance_only``, a proven inert schema may return constructor
+    provenance without rebuilding the actual field mapping; the base data
+    callback snapshots those fields later. Other callers receive the schema's
+    normalized, authoritative named output.
+    """
+    normalized = values if isinstance(values, _ConstMapping) else _const_mapping(values)
+    if schema is None:
+        return normalized, normalized
+
+    # Schema constructors receive ``**`` values and cannot mutate the mapping,
+    # so keep the normalized mapping until adding an omitted default requires
+    # a renderer-owned copy.
+    constructor_values = normalized
+    dataclass_fields = getattr(schema, "__dataclass_fields__", None)
+    schema_namedtuple_fields = getattr(schema, "_fields", None)
+    if isinstance(dataclass_fields, dict):
+        generated_init = _schema_has_generated_dataclass_init(schema)
+        if generated_init:
+            constructor_values = _add_schema_defaults(constructor_values, schema, dataclass_fields)
+            if schema.__dict__.get("_citry_synthesized_declaration") is not True:
+                marked_read_only_default = next(
+                    (
+                        field
+                        for field in dataclass_fields.values()
+                        if not field.init and not _is_classvar_field(field) and _is_const_marker(field.default)
+                    ),
+                    None,
+                )
+                if marked_read_only_default is not None:
+                    msg = (
+                        f"Schema {schema.__qualname__}.{marked_read_only_default.name} uses Const as an init=False "
+                        "default; use a plain default or a Citry-generated input declaration."
+                    )
+                    raise TypeError(msg)
+        else:
+            marked_field = next(
+                (
+                    field
+                    for field in dataclass_fields.values()
+                    if not _is_classvar_field(field) and _is_const_marker(field.default)
+                ),
+                None,
+            )
+            if marked_field is not None:
+                msg = (
+                    f"Schema {schema.__qualname__}.{marked_field.name} uses Const as a default with a custom "
+                    "constructor; pass an ordinary default or use a generated dataclass constructor."
+                )
+                raise TypeError(msg)
+
+    elif issubclass(schema, tuple) and isinstance(schema_namedtuple_fields, tuple):
+        namedtuple_fields = cast("tuple[str, ...]", schema_namedtuple_fields)
+        namedtuple_defaults = getattr(schema, "_field_defaults", {})
+        default_pairs = [
+            (name, namedtuple_defaults[name])
+            for name in namedtuple_fields
+            if name not in constructor_values and name in namedtuple_defaults
+        ]
+        if default_pairs:
+            constructor_values = constructor_values.copy()
+            constructor_values.update(default_pairs)
+    else:
+        constructor_values = _add_marked_model_defaults(constructor_values, schema)
+
+    factory_consts: dict[str, Any] = {}
+    token = _schema_factory_consts.set(factory_consts)
+    try:
+        instance = schema(**constructor_values)
+    finally:
+        _schema_factory_consts.reset(token)
+
+    inert_schema = _schema_is_inert_dataclass(schema) or _schema_is_inert_namedtuple(schema)
+    if inert_schema and provenance_only:
+        # This mapping transports provenance by field name. The base data
+        # callback snapshots the instance's actual fields later, so it must
+        # not use these constructor values as the rendered field view.
+        output = constructor_values
+    else:
+        output = _normalize_data_schema_instance(
+            instance,
+            schema,
+            preserve=constructor_values if inert_schema else None,
+            require_plain_instance=True,
+        )
+    # A factory or custom schema may create a root marker itself. Remove that
+    # wrapper from the typed field before any component callback can inspect it.
+    if inert_schema:
+        declared_consts = getattr(schema, "_citry_const_schema_defaults", ())
+        if output is not constructor_values:
+            for name in constructor_values._const_values:
+                if name in output:
+                    output._const_values[name] = output[name]
+        if declared_consts or factory_consts:
+            inert_namedtuple_fields = cast("tuple[str, ...]", getattr(schema, "_fields", ()))
+            instance_field_names = (
+                {field.name for field in fields(schema)} if is_dataclass(schema) else set(inert_namedtuple_fields)
+            )
+            for name in (*declared_consts, *factory_consts):
+                if name in instance_field_names and name not in normalized:
+                    value = getattr(instance, name)
+                    if name not in output:
+                        dict.__setitem__(output, name, value)
+                    output._const_values[name] = value
+    custom_namedtuple_fields = cast("tuple[str, ...] | None", getattr(schema, "_fields", None))
+    if (
+        not inert_schema
+        and issubclass(schema, tuple)
+        and custom_namedtuple_fields is not None
+        and any(_is_const_marker(getattr(instance, name)) for name in custom_namedtuple_fields)
+    ):
+        # A custom NamedTuple constructor may have inserted markers. Bypass
+        # that constructor once to publish the same schema type with the
+        # already-normalized field values before component callbacks run.
+        rebuilt = tuple.__new__(schema, tuple(output[name] for name in custom_namedtuple_fields))
+        source_attrs = getattr(instance, "__dict__", None)
+        rebuilt_attrs = getattr(rebuilt, "__dict__", None)
+        if isinstance(source_attrs, dict) and isinstance(rebuilt_attrs, dict):
+            rebuilt_attrs.update(source_attrs)
+        instance = rebuilt
+    return instance, output
+
+
+def _normalize_data_schema_instance(
+    instance: Any,
+    schema: type,
+    *,
+    preserve: _ConstMapping | None = None,
+    require_plain_instance: bool = False,
+) -> _ConstMapping:
+    """
+    Return a named view with each exact root marker consumed.
+
+    ``require_plain_instance`` also guarantees that subsequent component code
+    can read a plain value from each root-marked field on the instance itself.
+    A read-only field created by arbitrary schema code cannot be repaired
+    without inspecting private state, so that unsupported shape raises
+    ``TypeError``. Ordinary containers are not searched for nested markers.
+    """
+    from citry.util.misc import to_dict  # noqa: PLC0415 - avoids the module initialization cycle
+
+    named_values = to_dict(instance)
+    marked_names = {name for name, value in named_values.items() if _is_const_marker(value)}
+    output = _const_mapping(
+        named_values,
+        preserve=preserve if _schema_is_inert_dataclass(schema) or _schema_is_inert_namedtuple(schema) else None,
+    )
+    namedtuple_instance = isinstance(instance, tuple) and isinstance(getattr(type(instance), "_fields", None), tuple)
+    for name in marked_names:
+        try:
+            object.__setattr__(instance, name, output[name])
+        except (AttributeError, TypeError) as error:
+            if require_plain_instance and not namedtuple_instance:
+                msg = (
+                    f"Schema {schema.__qualname__}.{name} produced a Const value in a read-only field; "
+                    "return an ordinary value from the schema instead."
+                )
+                raise TypeError(msg) from error
+    return output
 
 
 # #########################################################
@@ -220,7 +915,7 @@ def freeze_const(value: Any) -> Any:
     part of the contract). The ``_self_`` prefix is wrapt's convention for
     storing an attribute on the wrapper itself instead of the wrapped value.
     """
-    if isinstance(value, _ConstProxy):
+    if _is_const_marker(value):
         try:
             return value._self_frozen
         except AttributeError:
@@ -234,7 +929,7 @@ def freeze_const(value: Any) -> Any:
 
 def _freeze_plain(value: Any) -> Any:
     """The uncached freeze. Containers recurse through ``freeze_const``."""
-    while isinstance(value, _ConstProxy):
+    while _is_const_marker(value):
         value = value.__wrapped__
     if isinstance(value, dict):
         pairs = tuple((freeze_const(k), freeze_const(v)) for k, v in value.items())
@@ -267,7 +962,7 @@ def extract_const_vars(
 
     Returns ``(const_vars, signature)``:
 
-    - ``const_vars``: name -> value (still wrapped in ``Const``) for every
+    - ``const_vars``: name -> ordinary value for every
       variable that is marked const AND could be turned into a cache key.
       ``precompute_const_parts`` evaluates against this mapping when it pre-computes the
       constant parts of the template.
@@ -282,21 +977,23 @@ def extract_const_vars(
     ``used_vars``, when given, is the set of variables the template actually
     uses; const variables outside it are left out the same way. They cannot
     affect the output, so keying on them would only create duplicate cache
-    entries. (They stay ``Const``-marked in ``variables``, so they still
-    flow down to child components.) Leaving a variable out is always safe:
-    it just renders normally.
+    entries. The renderer retains their separate name provenance for child
+    component bindings. Leaving a variable out is always safe: it just renders
+    normally.
     """
     const_vars: dict[str, Any] = {}
     items: list[tuple[str, Any]] = []
     for name, value in variables.items():
-        if not is_const(value):
+        marked = isinstance(variables, _ConstMapping) and name in variables._const_values
+        if not marked and not _is_const_marker(value):
             continue
         if used_vars is not None and name not in used_vars:
             continue
-        frozen = freeze_const(value)
+        plain = _unwrap_const_graph((value,))[0] if _is_const_marker(value) else value
+        frozen = freeze_const(plain)
         if frozen is _UNFREEZABLE:
             continue
-        const_vars[name] = value
+        const_vars[name] = plain
         items.append((name, frozen))
     return const_vars, frozenset(items)
 
@@ -546,9 +1243,9 @@ def precompute_const_parts(
     would find it exhausted either way), so this is the same misuse,
     surfacing one render earlier.
 
-    ``const_vars`` maps the const template variables to their values (still
-    wrapped in ``Const``; the wrapper behaves like the value), as produced by
-    ``extract_const_vars``. With no const variables the pass still precomputes
+    ``const_vars`` maps the const template-variable names to ordinary values,
+    as produced by ``extract_const_vars`` from the renderer's side metadata.
+    With no const variables the pass still precomputes
     expressions that use no variables at all and joins static strings.
 
     ``visible_names`` is the complete set of names in the live render context.
@@ -564,7 +1261,12 @@ def precompute_const_parts(
     root_visible_names = frozenset(const_vars if visible_names is None else visible_names)
     # Precompute-time evaluation must use the same sandbox mode as the live render, so
     # a node's evaluator is compiled once in the right mode (see _precompute_expr).
-    precompute_context = CitryContext(variables=dict(const_vars), sandboxed=sandboxed)
+    from citry.citry_context import CitryContext  # noqa: PLC0415 - context imports const mapping helpers
+
+    precompute_context = CitryContext(
+        variables=_ConstMapping(const_vars, const_values=const_vars),
+        sandboxed=sandboxed,
+    )
     return _precompute_into(
         body,
         const_names,

@@ -12,12 +12,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
+from packaging.version import InvalidVersion, Version
+
 from citry import TemplateAnalysis
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
     CATALOG_SCHEMA_VERSION,
-    MINIMUM_CITRY_SERIES,
+    MINIMUM_CITRY_VERSION,
     ProjectStatus,
 )
 
@@ -374,7 +376,9 @@ class SourceAnalysisIndex:
         "_events",
         "_js_asset",
         "_js_data",
+        "_js_schema",
         "_state",
+        "_state_resolution",
         "_template_asset",
         "_template_data",
         "_template_lint",
@@ -396,6 +400,8 @@ class SourceAnalysisIndex:
         js_asset: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         events: dict[str, tuple[SourceEventRecord, ...] | None] = {}
         state: dict[str, tuple[SourceStateFieldRecord, ...] | None] = {}
+        state_resolution: dict[str, tuple[SourceClassRecord, ...] | None] = {}
+        js_schema: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         template_lint: dict[str, dict[str, SourceLintRecord]] = {}
         for raw_component in raw_components:
             (
@@ -408,6 +414,8 @@ class SourceAnalysisIndex:
                 js_asset_chain,
                 event_handlers,
                 state_fields,
+                state_chain,
+                js_schema_chain,
                 lint_variables,
             ) = _source_component(raw_component)
             if definition_id in template_data:
@@ -420,6 +428,8 @@ class SourceAnalysisIndex:
             js_asset[definition_id] = js_asset_chain
             events[definition_id] = event_handlers
             state[definition_id] = state_fields
+            state_resolution[definition_id] = state_chain
+            js_schema[definition_id] = js_schema_chain
             template_lint[definition_id] = lint_variables
         expected = {component.definition_id for component in catalog.components}
         if set(template_data) != expected:
@@ -432,6 +442,8 @@ class SourceAnalysisIndex:
         self._js_asset = js_asset
         self._events = events
         self._state = state
+        self._state_resolution = state_resolution
+        self._js_schema = js_schema
         self._template_lint = template_lint
 
     def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
@@ -462,6 +474,14 @@ class SourceAnalysisIndex:
         """Return exact effective server-event handler origins."""
         return self._events.get(component.definition_id)
 
+    def js_schema_resolution_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return source signatures needed to trust the loaded JsData schema policy."""
+        return self._js_schema.get(component.definition_id)
+
+    def state_resolution_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return the loaded source signatures needed to treat State as a closed schema."""
+        return self._state_resolution.get(component.definition_id)
+
     def state_fields(self, component: ComponentRecord) -> tuple[SourceStateFieldRecord, ...] | None:
         """Return public browser-visible State fields with authored origins."""
         return self._state.get(component.definition_id)
@@ -483,9 +503,11 @@ def _source_component(
     tuple[SourceClassRecord, ...] | None,
     tuple[SourceEventRecord, ...] | None,
     tuple[SourceStateFieldRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
     dict[str, SourceLintRecord],
 ]:
-    if type(value) is not dict or set(value) != {
+    if type(value) is not dict or set(value) - {"js_schema"} != {
         "definition_id",
         "css_data",
         "css_asset",
@@ -509,6 +531,7 @@ def _source_component(
         _source_resolution_chain(value.get("css_asset"), definition_id, "css_asset"),
         _source_resolution_chain(value.get("js_asset"), definition_id, "js_asset"),
         *_source_event_info(value.get("events"), definition_id),
+        _source_resolution_chain(value["js_schema"], definition_id, "js_schema") if "js_schema" in value else None,
         _source_lint_variables(value.get("template_lint"), definition_id),
     )
 
@@ -516,8 +539,15 @@ def _source_component(
 def _source_event_info(
     value: object,
     definition_id: str,
-) -> tuple[tuple[SourceEventRecord, ...] | None, tuple[SourceStateFieldRecord, ...] | None]:
-    if type(value) is not dict or set(value) != {"handlers", "state"}:
+) -> tuple[
+    tuple[SourceEventRecord, ...] | None,
+    tuple[SourceStateFieldRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
+]:
+    if type(value) is not dict or set(value) not in (
+        {"handlers", "state"},
+        {"handlers", "state", "state_resolution"},
+    ):
         raise ValueError(f"source analysis for {definition_id!r} has invalid events metadata")
     raw_handlers = value.get("handlers")
     raw_state = value.get("state")
@@ -605,6 +635,9 @@ def _source_event_info(
     return (
         tuple(handlers) if raw_handlers is not None else None,
         tuple(state_fields) if raw_state is not None else None,
+        _source_resolution_chain(value["state_resolution"], definition_id, "state_resolution")
+        if "state_resolution" in value
+        else None,
     )
 
 
@@ -890,13 +923,12 @@ def _project_from_worker_output(
             raise ValueError(msg)
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
-    series = _version_series(catalog.citry_version)
-    if series is None or series < MINIMUM_CITRY_SERIES:
-        expected = ".".join(str(part) for part in MINIMUM_CITRY_SERIES)
+    if not _supported_citry_version(catalog.citry_version):
+        expected = ".".join(str(part) for part in MINIMUM_CITRY_VERSION)
         return _failure(
             workspace,
             app,
-            f"Citry {catalog.citry_version} requires a valid version in series {expected} or newer.",
+            f"Citry {catalog.citry_version} is unsupported; this server requires Citry {expected} or newer.",
             environment_file=environment_file,
             citry_version=catalog.citry_version,
             catalog_schema_version=catalog.schema_version,
@@ -1100,12 +1132,12 @@ def _target_status_message(value: object) -> str | None:
     )
 
 
-def _version_series(version: str) -> tuple[int, int] | None:
+def _supported_citry_version(version: str) -> bool:
+    """Apply the dependency's complete version floor, including prerelease ordering."""
     try:
-        major, minor, *_ = version.split(".")
-        return int(major), int(minor)
-    except (TypeError, ValueError):
-        return None
+        return Version(version) >= Version(".".join(str(part) for part in MINIMUM_CITRY_VERSION))
+    except InvalidVersion:
+        return False
 
 
 __all__ = [

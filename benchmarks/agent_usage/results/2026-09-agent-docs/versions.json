@@ -1,0 +1,15 @@
+{
+  "python": "3.12.14",
+  "node": "v22.23.2",
+  "npm": "10.9.8",
+  "codex": "codex-cli 0.153.4",
+  "packages": {
+    "citry": "0.4.6",
+    "citry_core": "1.6.1",
+    "fastapi": "0.141.1",
+    "uvicorn": "0.52.4",
+    "pytest": "9.1.1",
+    "httpx": "0.28.1",
+    "playwright": "1.62.0"
+  }
+}

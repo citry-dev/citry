@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.2] - 2026-09-11
+
+### Fixed
+
+- Grid column counts and spans, Textarea rows and columns, and TagsInput
+  maximums now accept ASCII decimal strings consistently from static and
+  dynamic component inputs and Python composition
+  ([#107](https://github.com/citry-dev/citry/issues/107)).
+
 ## [0.2.1] - 2026-09-09
 
 ### Changed
@@ -73,6 +82,7 @@
   Citry's client runtime, and localize built-in labels through the bundled
   catalog.
 
+[0.2.2]: https://github.com/citry-dev/citry/releases/tag/citry-ui%400.2.2
 [0.2.1]: https://github.com/citry-dev/citry/releases/tag/citry-ui%400.2.1
 [0.2.0]: https://github.com/citry-dev/citry/releases/tag/citry-ui%400.2.0
 [0.1.0]: https://github.com/citry-dev/citry/releases/tag/citry-ui%400.1.0

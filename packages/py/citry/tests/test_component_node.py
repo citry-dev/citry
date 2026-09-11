@@ -15,6 +15,7 @@ import pytest
 
 from citry import Citry, Component, NotRegistered
 from citry.citry_context import CitryContext
+from citry.constness import _ConstMapping
 from citry.nodes import ComponentNode, ExprHtmlAttr, _kwarg_is_const
 
 
@@ -575,25 +576,31 @@ class TestComponentNodeBody:
         assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">x</span></main>'
 
 
-@pytest.mark.parametrize("failure_site", ["lookup", "classification"])
-def test_constness_preserves_stop_iteration_from_variable_checks(failure_site):
+def test_constness_preserves_stop_iteration_from_metadata_lookup():
     error = StopIteration("variable check failed")
 
-    class FailingLookup(dict):
-        def get(self, *_args, **_kwargs):
+    class FailingMetadata(dict):
+        def __contains__(self, _name):
             raise error
 
-    class FailingClassification:
-        @property
-        def __class__(self):
-            raise error
-
-    values = FailingLookup() if failure_site == "lookup" else {"value": FailingClassification()}
+    values = _ConstMapping({"value": 1})
+    values._const_values = FailingMetadata()
     context = CitryContext(variables=values)
     attr = ExprHtmlAttr("", (0, 0), "c-value", "value", ("value",))
     with pytest.raises(RuntimeError, match=r"^generator raised StopIteration$") as raised:
         _kwarg_is_const(attr, context)
     assert raised.value.__cause__ is error
+
+
+def test_constness_does_not_classify_ordinary_variable_values():
+    class FailingClassification:
+        @property
+        def __class__(self):
+            raise StopIteration("variable classification should not run")
+
+    attr = ExprHtmlAttr("", (0, 0), "c-value", "value", ("value",))
+
+    assert not _kwarg_is_const(attr, CitryContext(variables={"value": FailingClassification()}))
 
 
 def test_constness_preserves_stop_iteration_while_obtaining_variable_iterator():

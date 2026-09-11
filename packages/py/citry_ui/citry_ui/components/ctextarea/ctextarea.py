@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from markupsafe import escape
 
-from citry import LibraryComponent, Markup, const_value, is_const
+from citry import LibraryComponent, Markup, const_value
 from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
@@ -86,21 +86,18 @@ def _plain_choice(input_name: str, value: object, allowed: tuple[str, ...]) -> s
 
 
 def _positive_integer(input_name: str, value: object) -> int:
-    # Static component attributes arrive as constant strings, so accept their
-    # HTML-style decimal spelling while Python composition remains int-only.
+    # Accept the HTML-style decimal spelling consistently across component
+    # tags and Python composition.
     raw_value = const_value(value)
-    if is_const(value) and isinstance(raw_value, str) and raw_value.isascii() and raw_value.isdecimal():
-        parsed = int(raw_value)
-        if parsed > 0:
-            return parsed
-        value = parsed
-    if not isinstance(value, int) or isinstance(value, bool):
-        msg = f"CTextarea {input_name} must be a positive integer, got {value!r}."
+    if isinstance(raw_value, str) and raw_value.isascii() and raw_value.isdecimal():
+        raw_value = int(raw_value)
+    if not isinstance(raw_value, int) or isinstance(raw_value, bool):
+        msg = f"CTextarea {input_name} must be a positive integer, got {raw_value!r}."
         raise TypeError(msg)
-    if value <= 0:
-        msg = f"CTextarea {input_name} must be greater than zero, got {value!r}."
+    if raw_value <= 0:
+        msg = f"CTextarea {input_name} must be greater than zero, got {raw_value!r}."
         raise ValueError(msg)
-    return value
+    return raw_value
 
 
 def _validate_attrs(attrs: Mapping[str, object] | None) -> None:
@@ -136,8 +133,8 @@ class CTextarea(LibraryComponent):
         name: str | None = None
         id: str | None = None
         value: str | None = None
-        rows: int = 4
-        cols: int | None = None
+        rows: int | str = 4
+        cols: int | str | None = None
         wrap: CTextareaWrap = "soft"
         required: bool | None = None
         disabled: bool | None = None

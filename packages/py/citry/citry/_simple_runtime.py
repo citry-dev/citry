@@ -10,6 +10,12 @@ from citry._pure import pure_body_lookup, store_pure_body
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, DeferredComponent, _render_slot_value, _render_value
+from citry.constness import (
+    _const_mapping,
+    _construct_data_schema,
+    _merge_const_mappings,
+    _restore_const_identities,
+)
 from citry.nodes import (
     ComponentNode,
     ElementAttrsNode,
@@ -249,8 +255,16 @@ def render_simple(element: SimpleElement) -> SimpleRender:
     cls = element.comp_cls
     declaration: SimpleDeclaration = cls._citry_simple_declaration
     compiled, body, has_outlet = _prepared_template(cls)
-    raw_kwargs = dict(to_dict(element.kwargs))
-    kwargs = declaration.kwargs_schema(**raw_kwargs) if declaration.kwargs_schema is not None else raw_kwargs
+    element_kwargs = to_dict(element.kwargs)
+    raw_kwargs = _const_mapping(element_kwargs, preserve=element_kwargs)
+    const_candidates = dict(raw_kwargs._const_values)
+    kwargs, kwargs_const = _construct_data_schema(
+        raw_kwargs,
+        declaration.kwargs_schema,
+        provenance_only=True,
+    )
+    const_candidates.update(kwargs_const._const_values)
+    _restore_const_identities(kwargs_const, const_candidates)
     raw_slots = {"default": element.content.as_slot()} if element.content is not None else {}
     # Template hooks and kwargs adapters can execute Python. Check after them,
     # immediately before calling the constrained slot constructor.
@@ -259,9 +273,18 @@ def render_simple(element: SimpleElement) -> SimpleRender:
     data = declaration.callback(kwargs, slots) if declaration.callback is not None else kwargs
     if isawaitable(data) or isgenerator(data) or isasyncgen(data):
         raise TypeError(f"Component {cls.__name__} uses simple=True; template_data must return synchronous data.")
-    data = _normalize_data(data, declaration.data_schema)
+    data = _normalize_data(
+        data,
+        declaration.data_schema,
+        preserve=kwargs_const if declaration.callback is None else None,
+    )
+    _restore_const_identities(data, const_candidates)
     if cls.citry.template_globals or _render_globals.get():
-        data = {**cls.citry.template_globals, **(_render_globals.get() or {}), **data}
+        data = _merge_const_mappings(
+            _const_mapping(cls.citry.template_globals),
+            _const_mapping(_render_globals.get() or {}),
+            data,
+        )
     caller = element.caller
     context = CitryContext(
         variables=data,

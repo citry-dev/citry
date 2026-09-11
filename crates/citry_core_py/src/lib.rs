@@ -36,8 +36,8 @@ use crate::template_formatter::{
     prepare_embedded_format, python_expression_provider,
 };
 use crate::template_parser::{
-    analyze_browser_source, analyze_component_scope_writes, analyze_component_source,
-    compile_template, parse_template,
+    analyze_browser_source, analyze_component_members, analyze_component_scope_writes,
+    analyze_component_source, compile_template, parse_template,
 };
 
 /// Singular Python API that brings together all the other Rust crates.
@@ -124,6 +124,10 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
         analyze_component_source,
+        &template_parser_mod
+    )?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(
+        analyze_component_members,
         &template_parser_mod
     )?)?;
     // AST classes

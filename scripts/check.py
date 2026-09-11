@@ -34,6 +34,7 @@ _TAIL_LINES = 60
 _HEARTBEAT_SECONDS = 30.0
 
 CheckProfile = Literal["fast", "full"]
+_RELOAD_TEST_PATH = "packages/py/citry/tests/test_server_reload.py"
 
 
 def _crate_flags() -> list[str]:
@@ -54,6 +55,8 @@ def _pytest_command(profile: CheckProfile) -> list[str]:
         "pytest",
         "-m",
         "not e2e and not qualification",
+        "--ignore",
+        _RELOAD_TEST_PATH,
         "-n",
         "4",
         "--dist",
@@ -66,6 +69,11 @@ def _pytest_command(profile: CheckProfile) -> list[str]:
         # not pay its instrumentation cost on every edit.
         command.extend(["--cov", "--cov-report=term-missing:skip-covered"])
     return command
+
+
+def _reload_server_pytest_command() -> list[str]:
+    """Run real development-server subprocesses outside the xdist pool."""
+    return ["uv", "run", "--no-sync", "pytest", _RELOAD_TEST_PATH, "--durations", "10"]
 
 
 def _qualification_pytest_command() -> list[str]:
@@ -191,9 +199,12 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
             "vscode-extension",
             ["pnpm", "--dir", "packages/editors/vscode", "run", "check"],
         ),
+        # Real development-server supervisors are sensitive to CPU starvation,
+        # so exercise them before the four-worker portable suite starts.
+        ("pytest reload servers", _reload_server_pytest_command()),
         # Browser tests have their own four-worker CI lane. Excluding them by
         # marker keeps this command identical whether Playwright is installed or
-        # not, while xdist makes the large portable suite use all four CI CPUs.
+        # not, while xdist makes the rest of the portable suite use all four CPUs.
         ("pytest", _pytest_command(profile)),
         # These deep stress proofs are part of the full integration boundary,
         # but tracing them makes their run several times slower without adding

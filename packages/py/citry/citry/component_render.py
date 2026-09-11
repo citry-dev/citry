@@ -36,7 +36,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 from dataclasses import replace
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from citry._pure import (
     PureBodyPlan,
@@ -61,7 +61,18 @@ from citry.citry_render import (
 from citry.citry_template import CitryTemplate, DeclaredSlot
 from citry.client_directives import CLIENT_PROPS_ATTR, validate_client_props_target
 from citry.component_like import ComponentLike, _component_like_render_scope, _resolve_component_like
-from citry.constness import const_value, extract_const_vars, precompute_const_parts
+from citry.constness import (
+    _const_mapping,
+    _ConstMapping,
+    _construct_data_schema,
+    _merge_const_mappings,
+    _normalize_data_schema_instance,
+    _refresh_const_mapping,
+    _restore_const_identities,
+    const_value,
+    extract_const_vars,
+    precompute_const_parts,
+)
 from citry.ext.cache.errors import CacheArtifactError, _CacheRevisionChanged
 from citry.ext.cache.extension import CacheExtension, _CacheHit, _CacheMissPlan
 from citry.ext.cache.replay import _replay_component_artifact, _replay_fragment_artifact
@@ -1204,7 +1215,19 @@ def _render_one(
     #    produces its result fresh each render, and the default returns the
     #    component's own kwargs, which __init__ already copied per render
     #    (raw_kwargs), so the result is never shared across renders.
-    tpl_data = _normalize_data(component.template_data(component.kwargs, component.slots), comp_cls.TemplateData)
+    # Component imports this render module lazily, so the cycle is settled here.
+    from citry.component import Component as ComponentBase  # noqa: PLC0415
+
+    template_data_callback = component.template_data
+    default_template_data = (
+        getattr(template_data_callback, "__func__", None) is ComponentBase.template_data
+        and getattr(template_data_callback, "__self__", None) is component
+    )
+    tpl_data = _normalize_data(
+        template_data_callback(component.kwargs, component.slots),
+        comp_cls.TemplateData,
+        preserve=component._kwargs_const if default_template_data else None,
+    )
     js_data = _normalize_data(component.js_data(component.kwargs, component.slots), comp_cls.JsData)
     css_data = _normalize_data(component.css_data(component.kwargs, component.slots), comp_cls.CssData)
 
@@ -1219,7 +1242,11 @@ def _render_one(
     instance_globals = citry_instance.template_globals
     render_globals = _render_globals.get()
     if instance_globals or render_globals:
-        tpl_data = {**instance_globals, **(render_globals or {}), **tpl_data}
+        tpl_data = _merge_const_mappings(
+            _const_mapping(instance_globals),
+            _const_mapping(render_globals or {}),
+            tpl_data,
+        )
 
     context.variables = tpl_data
 
@@ -1227,6 +1254,7 @@ def _render_one(
     #     tree-wide state into ``context.extra`` (e.g. the dependencies
     #     extension's render records).
     extensions.on_component_data(component, context, tpl_data, js_data, css_data)
+    _restore_const_identities(tpl_data, component._const_candidates)
 
     # 5. ``provides`` are the entries this component inherited plus any
     #    provide or block changes it registered during template_data; a new
@@ -1295,8 +1323,9 @@ def _render_one(
     #    per component class (cached on the class).
     #
     #    Then the Const optimization kicks in. extract_const_vars() collects
-    #    the template variables wrapped in Const() ("same value on every
-    #    render") and turns them into a cache key. The first render with a
+    #    the template variables whose names retain a Const promise in the
+    #    renderer's side metadata and turns them into a cache key. The values
+    #    themselves are ordinary Python objects. The first render with a
     #    given set of Const values builds the node list and runs precompute_const_parts()
     #    on it, which does the work that depends only on those values right
     #    away: e.g. "{{ cols }}" with cols=Const(3) becomes the text "3", and
@@ -1967,23 +1996,60 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
     set_template_position_error_message(err, source, position, component_name, origin)
 
 
-def _normalize_data(maybe_data: Any, schema_cls: type | None) -> dict[str, Any]:
+def _normalize_data(
+    maybe_data: Any,
+    schema_cls: type | None,
+    *,
+    preserve: _ConstMapping | None = None,
+) -> _ConstMapping:
     """
-    Normalize one data method's result to a plain dict and validate it.
+    Normalize and validate one data method's result as a named mapping.
 
     The result of ``template_data()`` / ``js_data()`` / ``css_data()`` may be
     a dict, a NamedTuple, or the component's typed dataclass, so convert with
     ``to_dict``. When the component declares the matching schema class
     (``TemplateData``/``JsData``/``CssData``), constructing
     ``schema_cls(**data)`` raises on invalid input and materializes schema
-    defaults and coercions. Convert that validated instance back to a shallow
-    dict so every downstream consumer observes the declared schema result.
+    defaults and coercions. Convert that validated instance to a named mapping
+    so every downstream consumer observes the declared schema result.
+    ``preserve`` is supplied only for the renderer-owned base kwargs mapping;
+    transforming schemas do not inherit const provenance. A callback that
+    forwards a marked input under the same name may recover that provenance at
+    the final template boundary. An exact outer ``Const`` in callback output
+    establishes provenance directly and consumes nested markers inside its
+    exact builtin value graph. Ordinary containers are not searched for
+    manually nested markers.
     """
-    data: dict[str, Any] = to_dict(maybe_data) if maybe_data is not None else {}
+    if maybe_data is None:
+        data = _ConstMapping()
+    elif schema_cls is None and maybe_data is preserve:
+        # The base untyped template_data returns the raw kwargs mapping itself.
+        # Keep its historical live-sharing behavior with later data callbacks.
+        shared = cast("_ConstMapping", preserve)
+        _refresh_const_mapping(shared)
+        return shared
+    elif schema_cls is None and preserve is not None:
+        # The base typed template_data returns its schema instance. Snapshot
+        # its current fields now: renderer callbacks may have updated the
+        # instance since input construction, while js/css callbacks that run
+        # after this point must not update the template-data snapshot.
+        return _const_mapping(to_dict(maybe_data), preserve=preserve)
+    elif schema_cls is None and preserve is None and isinstance(maybe_data, _ConstMapping):
+        # An arbitrary callback returning kwargs remains a live shared mapping,
+        # and its ordinary writes have already invalidated inherited metadata.
+        # Retain any still-valid same-name promise and any explicit Const the
+        # callback assigned to the mapping.
+        _refresh_const_mapping(maybe_data)
+        return maybe_data
+    else:
+        data = _const_mapping(to_dict(maybe_data), preserve=preserve)
+
     if schema_cls is None:
         return data
-    validated = maybe_data if isinstance(maybe_data, schema_cls) else schema_cls(**data)
-    return to_dict(validated)
+    if isinstance(maybe_data, schema_cls):
+        return _normalize_data_schema_instance(maybe_data, schema_cls, preserve=data)
+    _validated, normalized = _construct_data_schema(data, schema_cls)
+    return normalized
 
 
 def _merge_dependencies(into: CitryContext, source: CitryContext) -> None:

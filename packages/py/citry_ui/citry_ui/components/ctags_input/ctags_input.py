@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 from typing import Any, ClassVar, Literal, TypedDict, cast, overload
 
-from citry import LibraryComponent, const_value, is_const
+from citry import LibraryComponent, const_value
 from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import CClassValue, CStyleValue, get_html_form_owner, merge_root_attrs, pop_html_attr
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
@@ -282,7 +282,7 @@ def _positive_integer(name: str, value: object) -> int | None:
     raw = const_value(value)
     if raw is None:
         return None
-    if is_const(value) and isinstance(raw, str) and raw.isascii() and raw.isdecimal():
+    if isinstance(raw, str) and raw.isascii() and raw.isdecimal():
         value = int(raw)
     else:
         value = raw
@@ -392,7 +392,7 @@ class CTagsInput(LibraryComponent):
         invalid: bool | None = None
         placeholder: str | None = None
         delimiters: Sequence[str] = (",",)
-        max_tags: int | None = None
+        max_tags: int | str | None = None
         autocomplete: str | None = None
         inputmode: str | None = None
         variant: CTagsInputVariant = "outline"

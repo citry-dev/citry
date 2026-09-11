@@ -100,6 +100,14 @@ def test_textarea_accepts_static_template_numeric_attributes():
     assert 'wrap="hard"' in root
 
 
+def test_textarea_accepts_python_decimal_string_dimensions():
+    root = _root(_render(CTextarea(rows="6", cols="48", wrap="hard")))
+
+    assert 'rows="6"' in root
+    assert 'cols="48"' in root
+    assert 'wrap="hard"' in root
+
+
 @pytest.mark.parametrize(
     ("kwargs", "error", "message"),
     [

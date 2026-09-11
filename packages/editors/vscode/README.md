@@ -141,6 +141,11 @@ The same connection extends into the browser layer:
 
 - `JsData` or inferred `js_data()` keys type Alpine expressions
   and component JavaScript.
+- Callback `data` members complete through the JavaScript provider; unknown
+  fields are errors when the component's data schema is known and closed.
+- Callback parameters navigate to their declarations in the JavaScript source.
+- Typing `:c-` offers public State fields and unknown binding fields are errors
+  when the owning State schema is known.
 - Events state and literal server-handler names complete and navigate to
   Python.
 - `CssData`/`css_data()` keys complete inside `var(--...)` and navigate to their producer.
@@ -252,7 +257,7 @@ Status** and check these first:
 - `citry.app`, when set, imports successfully from the workspace.
 - `citry.envFile`, when set, exists and supplies any variables required before
   importing `citry.app`.
-- Citry 0.4.5 or newer and `citry-lsp` 0.1.4 or newer are installed together.
+- Citry 0.5.1 or newer and `citry-lsp` 0.1.7 or newer are installed together.
 
 Pylance can turn a string into an f-string when `{` is typed if
 `python.analysis.autoFormatStrings` is enabled. Citry never reverses deliberate

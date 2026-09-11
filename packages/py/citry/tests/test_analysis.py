@@ -440,3 +440,12 @@ class TestDiscoverPythonTemplates:
         recovered = discover_python_templates(source, recover_incomplete=True)
         assert recovered.valid_python is False
         assert recovered.regions[0].source_map.template_source == "<c-panel />"
+
+
+def test_source_map_long_unicode_lines_keep_utf16_columns():
+    line = "aé😀" * 2000
+    source = 'value = """' + line + "\r\n" + line + '"""'
+    source_map = PythonTemplateSourceMap.from_ast(source, _assigned_string(source))
+    line_bytes = len(line.encode("utf-8"))
+    assert source_map.map_range(line_bytes - 4, line_bytes) == LspRange(LspPosition(0, 8009), LspPosition(0, 8011))
+    assert source_map.map_range(line_bytes + 1, line_bytes + 2) == LspRange(LspPosition(1, 0), LspPosition(1, 1))

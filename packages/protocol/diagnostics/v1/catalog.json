@@ -187,6 +187,63 @@
       "documentationPath": "/ide/diagnostics/#citry.component-js.unknown-variable"
     },
     {
+      "code": "citry.component-js.unknown-data-member",
+      "constant": "COMPONENT_JS_UNKNOWN_DATA_MEMBER",
+      "title": "Unknown component JavaScript data member",
+      "summary": "A callback accesses a data field that is absent from the component's known JavaScript data schema.",
+      "when": "A static member access on the $component callback's data binding names a field absent from a closed JsData schema or a complete inferred js_data() return shape. Dynamic keys and unknown or open schemas are not checked.",
+      "defaultSeverity": "error",
+      "surfaces": ["check", "lsp"],
+      "parameters": { "name": "Authored JavaScript data field name." },
+      "messages": { "default": "JavaScript data field '{name}' is not available in this component." },
+      "examples": [
+        {
+          "title": "Unknown field in callback data",
+          "language": "javascript",
+          "source": "$component(({ data }) => {\n  console.log(data.missing_field);\n});"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.component-js.unknown-data-member"
+    },
+    {
+      "code": "citry.browser.invalid-state-binding-target",
+      "constant": "BROWSER_INVALID_STATE_BINDING_TARGET",
+      "title": "Invalid State binding target",
+      "summary": "A State binding is attached to an element or input type that cannot support it.",
+      "when": "A statically known target cannot hold a bound value or support the requested binding direction or update event.",
+      "defaultSeverity": "error",
+      "surfaces": ["check", "lsp"],
+      "parameters": { "detail": "Explanation of the unsupported binding target." },
+      "messages": { "default": "{detail}" },
+      "examples": [
+        {
+          "title": "Binding on a non-control element",
+          "language": "citry-html",
+          "source": "<head :c-query></head>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.invalid-state-binding-target"
+    },
+    {
+      "code": "citry.browser.unknown-state-field",
+      "constant": "BROWSER_UNKNOWN_STATE_FIELD",
+      "title": "Unknown State binding field",
+      "summary": "A State binding names a field that the owning component does not expose publicly.",
+      "when": "A :c-* binding names a field absent from a known public State schema. Bindings with unknown component ownership or an unknown State schema are not checked.",
+      "defaultSeverity": "error",
+      "surfaces": ["check", "lsp"],
+      "parameters": { "name": "Authored State field name, without prefix or modifiers." },
+      "messages": { "default": "State field '{name}' is not a public field of this component." },
+      "examples": [
+        {
+          "title": "Unknown field in a State binding",
+          "language": "citry-html",
+          "source": "<input :c-missing_field.debounce=\"refresh\">"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.unknown-state-field"
+    },
+    {
       "code": "citry.browser.unknown-server-event",
       "constant": "BROWSER_UNKNOWN_SERVER_EVENT",
       "title": "Unknown server event",

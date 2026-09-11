@@ -36,7 +36,7 @@ class-definition time, so the built-ins cannot be shared).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from citry.attrs import format_attrs, merge_attrs
 from citry.citry_element import CitryElement
@@ -48,7 +48,7 @@ from citry.client_directives import (
 )
 from citry.component import Component
 from citry.component_registry import _VALID_NAME_RE, NotRegistered
-from citry.constness import const_value
+from citry.constness import _ConstMapping, _restore_const_identities, const_value
 from citry.util.html import Markup
 from citry_core.template_parser import HTML_VOID_ELEMENTS
 
@@ -106,7 +106,8 @@ def make_dynamic_component(citry_instance: Citry) -> type[Component]:
             kwargs: Any,  # noqa: ARG002
             slots: Any,  # noqa: ARG002
         ) -> dict[str, Any]:
-            data = dict(self.raw_kwargs)
+            data = cast("_ConstMapping", self.raw_kwargs.copy())
+            _restore_const_identities(data, self._kwargs_const._const_values)
             comp_cls = _resolve_component(self, const_value(data.pop("is", None)))
             if comp_cls.simple:
                 return {"target": _simple_selector_target(self, comp_cls, data)}

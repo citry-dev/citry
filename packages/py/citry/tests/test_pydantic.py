@@ -289,17 +289,40 @@ class TestPydanticComponentData:
 
 
 class TestPydanticConstInterplay:
-    def test_validation_strips_the_marker_from_the_typed_view(self):
-        # Pydantic validation produces new (coerced) values, so the typed
-        # view loses the Const marker: the value safely renders as dynamic.
-        # Validation itself accepts the transparent proxy.
+    def test_marked_default_is_plain_before_validation(self):
+        seen = []
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            class Kwargs(BaseModel):
+                model_config = ConfigDict(validate_default=True)
+                flag: bool = Const(True)  # noqa: FBT003
+
+                @pydantic.field_validator("flag", mode="before")
+                @classmethod
+                def record_input(cls, value):
+                    seen.append((type(value) is bool, value is True))
+                    return value
+
+            template = """
+                {{ flag }}
+            """
+
+        assert Card().render().serialize().strip() == "True"
+        assert seen == [(True, True)]
+
+    def test_coerced_kwargs_and_custom_output_remain_plain_and_dynamic(self):
+        # Citry removes the input marker before Pydantic validation. The typed
+        # field is ordinary, and coercion replaces the marked input object, so
+        # the custom callback's result stays dynamic.
         c = Citry()
 
         seen: dict = {}
 
         class Card(Component):
             citry = c
-            template = "<p>{{ cols }}</p>"
 
             class Kwargs(BaseModel):
                 cols: int
@@ -308,26 +331,32 @@ class TestPydanticConstInterplay:
                 seen["typed_is_const"] = is_const(kwargs.cols)
                 return {"cols": kwargs.cols}
 
-        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
+            template = """
+                <p>{{ cols }}</p>
+            """.strip()
+
+        assert Card(cols=Const("3")).render().serialize() == '<p data-cid-c1="">3</p>'
         assert seen["typed_is_const"] is False
         (body,) = c._const_body_cache.values()
         assert any(isinstance(item, ExprNode) for item in body)
 
-    def test_raw_kwargs_keep_the_marker(self):
-        # The documented pattern for const-ness with a validating Kwargs
-        # model: read the marked value from raw_kwargs.
+    def test_raw_kwargs_are_plain_and_same_input_mapping_restores_constness(self):
         c = Citry()
 
         class Card(Component):
             citry = c
-            template = "<p>{{ cols }}</p>"
 
             class Kwargs(BaseModel):
                 cols: int
 
             def template_data(self, kwargs, slots):
+                assert self.raw_kwargs["cols"] == 3
+                assert not is_const(self.raw_kwargs["cols"])
                 return {"cols": self.raw_kwargs["cols"]}
 
+            template = """
+                <p>{{ cols }}</p>
+            """.strip()
+
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
-        (body,) = c._const_body_cache.values()
-        assert body == ["<p>3</p>"]
+        assert ["<p>3</p>"] in c._const_body_cache.values()

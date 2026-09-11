@@ -74,3 +74,13 @@ def test_position_lookup_skips_invalid_utf16_positions():
         region.source_map.parser_index_at(LspPosition(-1, 0))
     with pytest.raises(ValueError, match="outside the document line"):
         region.source_map.parser_index_at(LspPosition(0, 99))
+
+
+def test_standalone_long_unicode_lines_and_crlf_boundaries():
+    line = "aé😀" * 2000
+    source_map = standalone_region(line + "\r\n" + line).source_map
+    end = len(line.encode("utf-8"))
+    assert source_map.map_range(end - 4, end) == LspRange(LspPosition(0, 7998), LspPosition(0, 8000))
+    assert source_map.map_range(end, end + 1) == LspRange(LspPosition(0, 8000), LspPosition(0, 8001))
+    assert source_map.map_range(end + 1, end + 2) == LspRange(LspPosition(0, 8001), LspPosition(1, 0))
+    assert source_map.map_range(end + 2, end + 3) == LspRange(LspPosition(1, 0), LspPosition(1, 1))
