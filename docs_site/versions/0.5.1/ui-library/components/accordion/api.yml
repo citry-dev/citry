@@ -1,0 +1,208 @@
+schema_version: 1
+family: accordion
+
+components:
+  - CAccordion
+  - CAccordionItem
+
+inputs:
+  - id: caccordion-server-inputs
+    component: CAccordion
+    channel: server
+    column_widths: [fit, 16rem, 9rem, auto]
+    entries:
+      - {id: value, name: value, type: 'str | Sequence[str] | None', default: {kind: literal, value: null}, effect: 'Sets initial expansion. Single mode accepts one value; multiple mode accepts a duplicate-free sequence.'}
+      - {id: multiple, name: multiple, type: bool, default: {kind: literal, value: false}, effect: Uses an ordered array value and allows several panels to remain open.}
+      - {id: collapsible, name: collapsible, type: bool, default: {kind: literal, value: true}, effect: 'Allows the open item to close in single mode. Multiple mode always remains collapsible.'}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: 'Disables every trigger without closing panels. An enclosing disabled Form or fieldset remains dominant.'}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Wraps optional Arrow Up and Arrow Down focus navigation.}
+      - id: variant
+        name: variant
+        type: {display: '"outline" | "soft" | "separated" | "plain"', interfaces: [CAccordionVariant]}
+        default: {kind: literal, value: outline}
+        effect: Selects connected border, quiet surface, separated card, or divider treatment.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CAccordionSize]}
+        default: {kind: literal, value: md}
+        effect: Selects title, indicator, action, and panel geometry.
+      - {id: indicator, name: indicator, type: bool, default: {kind: literal, value: true}, effect: Shows the owned decorative chevron.}
+      - id: indicator-pos
+        name: indicator_pos
+        type: {display: '"start" | "end"', interfaces: [CAccordionIndicatorPos]}
+        default: {kind: literal, value: end}
+        effect: Places the chevron at the logical start or end of every trigger.
+      - id: heading-level
+        name: heading_level
+        type: {display: 'Literal[2, 3, 4, 5, 6]', interfaces: [CAccordionHeadingLevel]}
+        default: {kind: literal, value: 3}
+        effect: Chooses the native heading level for every direct item.
+      - {id: region, name: region, type: bool, default: {kind: literal, value: false}, effect: 'Adds `role="region"` and trigger-based naming to every panel. Use selectively to avoid landmark proliferation.'}
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the root ID and stable trigger/panel ID prefix.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned root attributes. Accordion semantics, focus, alternate visibility or overlay ownership, public mirrors, structure, and runtime namespaces are reserved.'}
+
+  - id: caccordion-client-inputs
+    component: CAccordion
+    channel: client
+    column_widths: [fit, 16rem, 14rem, auto]
+    entries:
+      - {id: value, name: value, type: 'string | null; string[] | null in multiple mode', omitted: 'Releases client control and preserves the current valid browser state.', effect: Controls expansion with the mode-dependent public shape.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No callback., effect: Receives accepted activation and structural-removal requests.}
+      - {id: collapsible, name: collapsible, type: boolean, omitted: Uses the server input., effect: Controls whether the open single item may close.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls group disabledness below native Form or fieldset ownership.}
+      - {id: loop, name: loop, type: boolean, omitted: Uses the server input., effect: Controls Arrow-key wrapping.}
+      - id: variant
+        name: variant
+        type: {display: '"outline" | "soft" | "separated" | "plain"', interfaces: [CAccordionVariant]}
+        omitted: Uses the server input.
+        effect: Controls visual treatment.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CAccordionSize]}
+        omitted: Uses the server input.
+        effect: Controls geometry.
+      - {id: indicator, name: indicator, type: boolean, omitted: Uses the server input., effect: Controls chevron visibility.}
+      - id: indicator-position
+        name: indicatorPosition
+        type: {display: '"start" | "end"', interfaces: [CAccordionIndicatorPos]}
+        omitted: Uses the server input.
+        effect: Controls logical chevron placement.
+
+  - id: caccordion-item-server-inputs
+    component: CAccordionItem
+    channel: server
+    column_widths: [fit, 16rem, 9rem, auto]
+    entries:
+      - {id: value, name: value, type: non-empty str, default: {kind: required}, effect: 'Supplies stable item identity. Values must be unique within the nearest Accordion.'}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables this trigger without closing its panel.}
+      - {id: actions-label, name: actions_label, type: 'non-whitespace str | None', default: {kind: literal, value: null}, effect: 'Names the optional action group and emits its owned `group` role; requires actions.'}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds item-root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds item-root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned item-root attributes.}
+      - {id: heading-attrs, name: heading_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned native-heading attributes.}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned native-button attributes and event listeners. Button semantics, activation ownership, and state are reserved.'}
+      - {id: panel-attrs, name: panel_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned panel attributes. Visibility, region semantics, ID, and state are reserved.'}
+      - {id: actions-attrs, name: actions_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned action-wrapper attributes. Requires actions; group naming and focus/live-region ownership are reserved.'}
+
+  - id: caccordion-item-client-inputs
+    component: CAccordionItem
+    channel: client
+    column_widths: [fit, 12rem, 14rem, auto]
+    entries:
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls this item's disabledness below group and native fieldset ownership.}
+
+slots:
+  - id: caccordion-slots
+    component: CAccordion
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CAccordionDefaultSlotData]}, fallback: 'None. Requires one or more direct CAccordionItem components.'}
+  - id: caccordion-item-slots
+    component: CAccordionItem
+    entries:
+      - {id: title, name: title, required: true, data: {display: '{}', interfaces: [CAccordionItemTitleSlotData]}, fallback: 'None. Renders inside the native trigger and accepts noninteractive phrasing content.'}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CAccordionItemDefaultSlotData]}, fallback: 'None. Renders as always-mounted panel flow content.'}
+      - {id: actions, name: actions, required: false, data: {display: '{}', interfaces: [CAccordionItemActionsSlotData]}, fallback: No adjacent action wrapper.}
+
+events:
+  - id: caccordion-events
+    component: CAccordion
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: '(value: string | null | string[], detail: CAccordionValueChangeDetail) => void'
+        trigger: Accepted trigger activation or one batched structural-removal fallback. Initial state and owner prop updates are excluded.
+        detail: '{value, previousValue, itemValue: string | null, removedValues: string[], expanded: boolean, source: "activation" | "removal"}'
+        behavior: 'Runs before an uncontrolled commit. Controlled Accordion waits for `value`; return values do not cancel the request.'
+
+methods: []
+
+css:
+  - id: caccordion-css-variables
+    component: CAccordion
+    entries:
+      - {id: background, name: --cui-accordion-background, type: color, purpose: Connected root and item surface., default: '`Canvas`'}
+      - {id: foreground, name: --cui-accordion-foreground, type: color, purpose: Title and panel foreground., default: '`CanvasText`'}
+      - {id: border-color, name: --cui-accordion-border-color, type: color, purpose: Root item and divider boundary., default: 22% current-color mix.}
+      - {id: border-width, name: --cui-accordion-border-width, type: length, purpose: Stable border geometry., default: 1px}
+      - {id: radius, name: --cui-accordion-radius, type: length, purpose: Group and separated-item corners., default: 0.75rem}
+      - {id: gap, name: --cui-accordion-gap, type: length, purpose: Separated-item gap., default: 0.75rem}
+      - {id: shadow, name: --cui-accordion-shadow, type: shadow, purpose: Separated-item elevation., default: Scheme-derived shadow.}
+      - {id: trigger-background, name: --cui-accordion-trigger-background, type: color, purpose: Resting trigger background., default: transparent}
+      - {id: trigger-hover-background, name: --cui-accordion-trigger-hover-background, type: color, purpose: Enabled hover background., default: 8% current-color mix.}
+      - {id: trigger-open-background, name: --cui-accordion-trigger-open-background, type: color, purpose: Expanded trigger background., default: 9% LinkText mix.}
+      - {id: trigger-open-color, name: --cui-accordion-trigger-open-color, type: color, purpose: Expanded title and chevron foreground., default: '`LinkText`'}
+      - {id: focus-color, name: --cui-accordion-focus-color, type: color, purpose: Trigger focus ring., default: '`Highlight`'}
+      - {id: indicator-color, name: --cui-accordion-indicator-color, type: color, purpose: Chevron foreground., default: currentColor}
+      - {id: trigger-padding-inline, name: --cui-accordion-trigger-padding-inline, type: length, purpose: Trigger inline inset., default: Size-derived.}
+      - {id: trigger-padding-block, name: --cui-accordion-trigger-padding-block, type: length, purpose: Trigger block inset., default: Size-derived.}
+      - {id: panel-padding-inline, name: --cui-accordion-panel-padding-inline, type: length, purpose: Panel-body inline inset., default: Size-derived.}
+      - {id: panel-padding-block, name: --cui-accordion-panel-padding-block, type: length, purpose: Panel-body block inset., default: Size-derived.}
+      - {id: actions-gap, name: --cui-accordion-actions-gap, type: length, purpose: Adjacent action spacing., default: 0.5rem}
+      - {id: duration, name: --cui-accordion-duration, type: time, purpose: Panel and chevron transition duration., default: 180ms}
+      - {id: easing, name: --cui-accordion-easing, type: easing, purpose: Panel and chevron transition curve., default: ease-out}
+
+attributes:
+  - id: caccordion-attributes
+    component: CAccordion
+    entries:
+      - {id: data-variant, name: data-variant, element: Root, type: '"outline" | "soft" | "separated" | "plain"', meaning: Mirrors effective visual treatment.}
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg"', meaning: Mirrors effective geometry.}
+      - {id: data-multiple, name: data-multiple, element: Root, type: present | absent, meaning: Present in structural multiple mode.}
+      - {id: data-collapsible, name: data-collapsible, element: Root, type: present | absent, meaning: 'Present while open items may close; always present in multiple mode.'}
+      - {id: data-disabled-root, name: data-disabled, element: Root, type: present | absent, meaning: Mirrors browser-effective group disabledness.}
+      - {id: data-loop, name: data-loop, element: Root, type: present | absent, meaning: Present while Arrow navigation wraps.}
+      - {id: data-indicator, name: data-indicator, element: Root, type: present | absent, meaning: Present while chevrons are visible.}
+      - {id: data-indicator-pos, name: data-indicator-pos, element: Root, type: '"start" | "end"', meaning: Mirrors logical chevron placement.}
+      - {id: id-root, name: id, element: Root, type: str, meaning: Uses the supplied root ID or a generated instance ID.}
+  - id: caccordion-item-attributes
+    component: CAccordionItem
+    entries:
+      - {id: data-state, name: data-state, element: 'Item, trigger, and panel', type: '"open" | "closed"', meaning: Mirrors committed expansion.}
+      - {id: data-disabled-item, name: data-disabled, element: 'Item and trigger', type: present | absent, meaning: Mirrors browser-effective item disabledness.}
+      - {id: data-value, name: data-value, element: Item, type: str, meaning: Exposes canonical item identity for styling and inspection.}
+      - {id: aria-expanded, name: aria-expanded, element: Trigger, type: '"true" | "false"', meaning: Exposes native expansion state.}
+      - {id: aria-disabled, name: aria-disabled, element: Trigger, type: 'absent | "true"', meaning: Marks an otherwise enabled open trigger that cannot collapse.}
+      - {id: disabled, name: disabled, element: Trigger, type: present | absent, meaning: 'Present for component-owned group or item disabledness. A native fieldset can also disable the trigger without adding this attribute.'}
+      - {id: generated-ids, name: id, element: 'Trigger and panel', type: generated str, meaning: Derives a stable relationship pair from the root ID and canonical item value.}
+      - {id: aria-controls, name: aria-controls, element: Trigger, type: panel IDREF, meaning: Identifies the panel controlled by this trigger.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Panel, type: 'absent | trigger IDREF', meaning: Names a region panel from its trigger only when region mode is enabled.}
+      - {id: aria-hidden, name: aria-hidden, element: Panel, type: 'absent | "true"', meaning: Present while the panel is collapsed.}
+      - {id: inert, name: inert, element: Panel, type: present | absent, meaning: Removes collapsed panel descendants from focus and interaction.}
+      - {id: hidden-panel, name: hidden, element: Panel, type: present | absent, meaning: Removes a settled collapsed panel from rendering.}
+      - {id: hidden-indicator, name: hidden, element: Indicator wrapper, type: present | absent, meaning: Removes the chevron when indicator is disabled.}
+      - {id: role, name: role, element: Panel, type: 'absent | "region"', meaning: Present with aria-labelledby only when region mode is enabled.}
+
+selectors:
+  - id: caccordion-selectors
+    component: CAccordion
+    entries:
+      - {id: accordion, selector: '[data-citry-ui-part="accordion"]', element: Root div, purpose: 'Group surface and class/style/attrs destination.'}
+      - {id: accordion-item, selector: '[data-citry-ui-part="accordion-item"]', element: Item root div, purpose: Keyed item surface and item attrs destination.}
+      - {id: accordion-header, selector: '[data-citry-ui-part="accordion-header"]', element: Header row div, purpose: Heading and adjacent-action layout.}
+      - {id: accordion-heading, selector: '[data-citry-ui-part="accordion-heading"]', element: Native h2-h6, purpose: Document-outline heading and heading_attrs destination.}
+      - {id: accordion-trigger, selector: '[data-citry-ui-part="accordion-trigger"]', element: Native button, purpose: Expansion control and trigger_attrs destination.}
+      - {id: accordion-title, selector: '[data-citry-ui-part="accordion-title"]', element: Trigger title span, purpose: Visible title and accessible-name content.}
+      - {id: accordion-indicator, selector: '[data-citry-ui-part="accordion-indicator"]', element: Decorative span, purpose: Owned chevron wrapper.}
+      - {id: accordion-actions, selector: '[data-citry-ui-part="accordion-actions"]', element: Optional adjacent-action div, purpose: Action layout naming and actions_attrs destination.}
+      - {id: accordion-panel, selector: '[data-citry-ui-part="accordion-panel"]', element: Controlled panel div, purpose: Visibility region semantics and panel_attrs destination.}
+      - {id: accordion-body, selector: '[data-citry-ui-part="accordion-body"]', element: Panel-body div, purpose: Content inset and overflow-neutral surface.}
+
+interfaces:
+  - id: accordion-type-aliases
+    kind: aliases
+    entries:
+      - {id: accordion-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: accordion-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: accordion-variant, name: CAccordionVariant, definition: 'Literal["outline", "soft", "separated", "plain"]'}
+      - {id: accordion-size, name: CAccordionSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: accordion-indicator-pos, name: CAccordionIndicatorPos, definition: 'Literal["start", "end"]'}
+      - {id: accordion-heading-level, name: CAccordionHeadingLevel, definition: 'Literal[2, 3, 4, 5, 6]'}
+      - {id: accordion-value-change-detail, name: CAccordionValueChangeDetail, definition: '{value: string | null | string[], previousValue: string | null | string[], itemValue: string | null, removedValues: string[], expanded: boolean, source: "activation" | "removal"}'}
+  - {id: accordion-slot-data, kind: record, name: CAccordionDefaultSlotData, entries: []}
+  - {id: accordion-item-title-slot-data, kind: record, name: CAccordionItemTitleSlotData, entries: []}
+  - {id: accordion-item-default-slot-data, kind: record, name: CAccordionItemDefaultSlotData, entries: []}
+  - {id: accordion-item-actions-slot-data, kind: record, name: CAccordionItemActionsSlotData, entries: []}
+
+translations: []

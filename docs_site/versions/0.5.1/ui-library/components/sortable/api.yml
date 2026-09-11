@@ -1,0 +1,144 @@
+schema_version: 1
+family: sortable
+
+components: [CSortable, CSortableItem]
+
+inputs:
+  - id: csortable-server-inputs
+    component: CSortable
+    channel: server
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID and bases stable Item IDs.}
+      - {id: order, name: order, type: 'Sequence[str] | None', default: {kind: literal, value: null}, effect: Sets a full unique initial permutation; declaration order wins when omitted.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Submits one hidden native entry per Item in accepted order.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates hidden inputs with an external Form ID.}
+      - {id: layout, name: layout, type: {display: CSortableLayout, interfaces: [CSortableLayout]}, default: {kind: literal, value: vertical}, effect: Selects vertical horizontal or responsive-grid collision and layout.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables all handles and form contribution.}
+      - {id: size, name: size, type: {display: CSortableSize, interfaces: [CSortableSize]}, default: {kind: literal, value: md}, effect: Selects handle and Item density.}
+      - {id: label, name: label, type: str, default: {kind: literal, value: Reorder items}, effect: Overrides the localized ordered-list accessible name.}
+      - {id: handle-label, name: handle_label, type: str, default: {kind: literal, value: 'Move {item}'}, effect: Overrides each localized handle name and must retain item.}
+      - {id: instructions-label, name: instructions_label, type: str, default: {kind: literal, value: Press Space or Enter to pick up. Use arrow keys to move. Press Space or Enter to drop or Escape to cancel.}, effect: Overrides hidden keyboard instructions.}
+      - {id: picked-up-label, name: picked_up_label, type: str, default: {kind: literal, value: 'Picked up {item}, position {position} of {total}'}, effect: Overrides pickup announcements and must retain item position and total.}
+      - {id: moved-label, name: moved_label, type: str, default: {kind: literal, value: 'Moved {item} to position {position} of {total}'}, effect: Overrides movement announcements and must retain item position and total.}
+      - {id: dropped-label, name: dropped_label, type: str, default: {kind: literal, value: 'Dropped {item} at position {position} of {total}'}, effect: Overrides drop announcements and must retain item position and total.}
+      - {id: cancelled-label, name: cancelled_label, type: str, default: {kind: literal, value: 'Cancelled moving {item}. Position restored to {position} of {total}'}, effect: Overrides cancellation announcements and must retain item position and total.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned semantics or runtime markers.}
+  - id: csortable-client-inputs
+    component: CSortable
+    channel: client
+    entries:
+      - {id: order, name: order, type: 'string[] | null', omitted: Omission or null releases control., effect: Controls the complete accepted permutation.}
+      - {id: layout, name: layout, type: '"vertical" | "horizontal" | "grid"', omitted: Uses the server value., effect: Reactively changes layout and keyboard axes.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server value., effect: Reactively disables interaction and form entries.}
+      - {id: on-order-change, name: onOrderChange, type: function, omitted: No component callback runs., effect: Receives pointer keyboard and reset requests.}
+  - id: csortable-item-server-inputs
+    component: CSortableItem
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies stable nonempty unique identity and submitted value.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the plain Item name used by handles and announcements.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Keeps the Item fixed while preserving it in the order.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the rendered Item.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the rendered Item.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed Item attributes.}
+
+slots:
+  - id: csortable-slots
+    component: CSortable
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CSortableDefaultSlotData]}, fallback: None; accepts only Item declarations.}
+  - id: csortable-item-slots
+    component: CSortableItem
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{value, label, disabled, index}', interfaces: [CSortableItemSlotData]}, fallback: Plain label text.}
+      - {id: handle, name: handle, required: false, data: {display: '{value, label, disabled, index}', interfaces: [CSortableItemSlotData]}, fallback: A neutral drag-grip glyph inside the owned Button.}
+
+events:
+  - id: csortable-events
+    component: CSortable
+    entries:
+      - {id: order-change, name: onOrderChange, signature: {display: '(order: string[], detail: CSortableOrderChangeDetail) => void', interfaces: [CSortableOrderChangeDetail]}, trigger: A completed pointer keyboard reset or client reconciliation proposes another order., detail: {display: '{order, previousOrder, value, fromIndex, toIndex, source, controlled, sourceEvent}', interfaces: [CSortableOrderChangeDetail]}, behavior: Uncontrolled state commits first; controlled state requests and restores accepted order.}
+
+methods: []
+
+css:
+  - id: csortable-css-variables
+    component: CSortable
+    entries:
+      - {id: gap, name: --cui-sortable-gap, type: length, purpose: Space between Items., default: 0.625rem}
+      - {id: columns, name: --cui-sortable-columns, type: grid-template-columns, purpose: Responsive grid tracks., default: 'repeat(auto-fit, minmax(12rem, 1fr))'}
+      - {id: surface, name: --cui-sortable-item-surface, type: color, purpose: Item surface., default: Canvas}
+      - {id: border, name: --cui-sortable-item-border, type: complete border, purpose: Item and handle divider., default: Adaptive 1px neutral}
+      - {id: radius, name: --cui-sortable-item-radius, type: length, purpose: Item and placeholder corners., default: 0.625rem}
+      - {id: shadow, name: --cui-sortable-item-shadow, type: box-shadow, purpose: Moving Item elevation., default: Adaptive soft shadow}
+      - {id: handle-size, name: --cui-sortable-handle-size, type: length, purpose: Minimum handle size., default: 2.75rem}
+      - {id: focus, name: --cui-sortable-focus, type: color, purpose: Handle focus and placeholder accent., default: Highlight}
+      - {id: disabled-opacity, name: --cui-sortable-disabled-opacity, type: number, purpose: Disabled Item opacity., default: '0.55'}
+
+attributes:
+  - id: csortable-attributes
+    component: CSortable
+    entries:
+      - {id: data-layout, name: data-layout, element: Root, type: {display: CSortableLayout, interfaces: [CSortableLayout]}, meaning: Reflects current layout and collision profile.}
+      - {id: data-size, name: data-size, element: Root, type: {display: CSortableSize, interfaces: [CSortableSize]}, meaning: Reflects density.}
+      - {id: data-disabled, name: data-disabled, element: Root and disabled Items, type: present | absent, meaning: Reflects effective unavailability.}
+      - {id: data-dragging, name: data-dragging, element: Root, type: present | absent, meaning: Marks any active pointer or keyboard move.}
+      - {id: data-moving, name: data-moving, element: Item, type: present | absent, meaning: Marks the actively moved Item.}
+      - {id: data-value, name: data-value, element: Item, type: string, meaning: Exposes stable Item identity.}
+
+selectors:
+  - id: csortable-selectors
+    component: CSortable
+    entries:
+      - {id: sortable, selector: '[data-citry-ui-part="sortable"]', element: Root div, purpose: Theme and reflected-state destination.}
+      - {id: items, selector: '[data-citry-ui-part="items"]', element: Ordered list, purpose: 'Named collection, layout, and accepted DOM order.'}
+      - {id: item, selector: '[data-citry-ui-part="item"]', element: One Item, purpose: Stable Item customization.}
+      - {id: handle, selector: '[data-citry-ui-part="handle"]', element: Native Button, purpose: Pointer touch keyboard and focus owner.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: Item content div, purpose: Consumer presentation wrapper.}
+      - {id: placeholder, selector: '[data-citry-ui-part="placeholder"]', element: Temporary list item, purpose: Proposed pointer drop position.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Polite live region, purpose: Reorder announcements.}
+
+interfaces:
+  - id: csortable-aliases
+    kind: aliases
+    entries:
+      - {id: layout, name: CSortableLayout, definition: 'Literal["vertical", "horizontal", "grid"]'}
+      - {id: size, name: CSortableSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: change-source, name: CSortableChangeSource, definition: 'Literal["pointer", "keyboard", "reset", "client"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - {id: csortable-default-slot-data, kind: record, name: CSortableDefaultSlotData, entries: []}
+  - id: csortable-item-slot-data
+    kind: record
+    name: CSortableItemSlotData
+    entries:
+      - {id: value, name: value, type: str, meaning: Stable Item value.}
+      - {id: label, name: label, type: str, meaning: Plain accessible label.}
+      - {id: disabled, name: disabled, type: bool, meaning: Declared disabled state.}
+      - {id: index, name: index, type: int, meaning: Initial zero-based accepted index.}
+  - id: csortable-order-change-detail
+    kind: record
+    name: CSortableOrderChangeDetail
+    entries:
+      - {id: order, name: order, type: 'list[str]', meaning: Requested or committed order.}
+      - {id: previous-order, name: previousOrder, type: 'list[str]', meaning: Accepted order before the move.}
+      - {id: value, name: value, type: str, meaning: Moved Item value.}
+      - {id: from-index, name: fromIndex, type: int, meaning: Previous zero-based index.}
+      - {id: to-index, name: toIndex, type: int, meaning: Proposed zero-based index.}
+      - {id: source, name: source, type: {display: CSortableChangeSource, interfaces: [CSortableChangeSource]}, meaning: Pointer keyboard reset or client cause.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client order owns accepted state.}
+      - {id: source-event, name: sourceEvent, type: 'object | None', meaning: Native source Event or null.}
+
+translations:
+  - id: csortable-translations
+    component: CSortable
+    entries:
+      - {id: label, key: citry-ui-sortable-label, purpose: Names the collection., variables: None., override: '`label`', updates: Stable `$c-tr` attribute.}
+      - {id: handle, key: citry-ui-sortable-handle, purpose: Names each handle., variables: 'item: str', override: '`handle_label` with `{item}`', updates: Stable reactive `$c-tr` attribute.}
+      - {id: instructions, key: citry-ui-sortable-instructions, purpose: Explains keyboard operation., variables: None., override: '`instructions_label`', updates: Server HTML; instructions do not change while a move is active.}
+      - {id: picked-up, key: citry-ui-sortable-picked-up, purpose: Announces pickup., variables: 'item: str; position: str; total: str', override: '`picked_up_label`', updates: One-shot `i18n.tr()` live-region output.}
+      - {id: moved, key: citry-ui-sortable-moved, purpose: Announces a proposed position., variables: 'item: str; position: str; total: str', override: '`moved_label`', updates: One-shot `i18n.tr()` live-region output.}
+      - {id: dropped, key: citry-ui-sortable-dropped, purpose: Announces accepted drop., variables: 'item: str; position: str; total: str', override: '`dropped_label`', updates: One-shot `i18n.tr()` live-region output.}
+      - {id: cancelled, key: citry-ui-sortable-cancelled, purpose: Announces cancellation and restored position., variables: 'item: str; position: str; total: str', override: '`cancelled_label`', updates: One-shot `i18n.tr()` live-region output.}

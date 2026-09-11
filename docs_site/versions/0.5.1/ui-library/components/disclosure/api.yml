@@ -1,0 +1,162 @@
+schema_version: 1
+family: disclosure
+
+components:
+  - CDisclosure
+
+inputs:
+  - id: cdisclosure-server-inputs
+    component: CDisclosure
+    channel: server
+    column_widths: [fit, 16rem, 9rem, auto]
+    entries:
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the initial committed expansion and the uncontrolled server fallback.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables the native trigger without changing expansion. CForm and native fieldset disabledness remain dominant.}
+      - id: variant
+        name: variant
+        type: {display: '"outline" | "soft" | "plain"', interfaces: [CDisclosureVariant]}
+        default: {kind: literal, value: outline}
+        effect: Selects bordered, quiet filled, or transparent treatment.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CDisclosureSize]}
+        default: {kind: literal, value: md}
+        effect: Selects title, trigger, panel, and indicator geometry.
+      - {id: indicator, name: indicator, type: bool, default: {kind: literal, value: true}, effect: Shows the owned decorative chevron.}
+      - id: indicator-pos
+        name: indicator_pos
+        type: {display: '"start" | "end"', interfaces: [CDisclosureIndicatorPos]}
+        default: {kind: literal, value: end}
+        effect: Places the chevron at the logical start or end of the trigger.
+      - id: heading-level
+        name: heading_level
+        type: {display: 'Literal[2, 3, 4, 5, 6]', interfaces: [CDisclosureHeadingLevel]}
+        default: {kind: literal, value: 3}
+        effect: Chooses the native heading tag.
+      - {id: region, name: region, type: bool, default: {kind: literal, value: false}, effect: Adds one trigger-named region landmark to the panel. Use selectively.}
+      - {id: actions-label, name: actions_label, type: 'non-whitespace str | None', default: {kind: literal, value: null}, effect: Names the optional actions group and requires the actions slot.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the root ID and stable trigger/panel ID pair.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned root attributes. Presence may be owned only for the complete root.}
+      - {id: heading-attrs, name: heading_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted unowned native-heading attributes.}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned Button attributes and native listeners. Identity, semantics, state, alternate activation, and popup ownership are reserved.'}
+      - {id: panel-attrs, name: panel_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned panel attributes. Identity, region semantics, and presence are reserved.'}
+      - {id: actions-attrs, name: actions_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned action-wrapper attributes and requires actions. Group naming, presence, and overlay ownership are reserved.'}
+
+  - id: cdisclosure-client-inputs
+    component: CDisclosure
+    channel: client
+    column_widths: [fit, 13rem, 14rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control and commits the retained uncontrolled or server baseline. null has the same effect., effect: Controls expansion while supplied as a Boolean.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Omission or null selects no component callback., effect: Receives accepted native-trigger requests before an uncontrolled commit.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls local disabledness below native Form or fieldset ownership.}
+      - {id: variant, name: variant, type: {display: '"outline" | "soft" | "plain"', interfaces: [CDisclosureVariant]}, omitted: Uses the server input., effect: Controls visual treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CDisclosureSize]}, omitted: Uses the server input., effect: Controls geometry.}
+      - {id: indicator, name: indicator, type: boolean, omitted: Uses the server input., effect: Controls chevron visibility.}
+      - {id: indicator-position, name: indicatorPosition, type: {display: '"start" | "end"', interfaces: [CDisclosureIndicatorPos]}, omitted: Uses the server input., effect: Controls logical chevron placement.}
+
+slots:
+  - id: cdisclosure-slots
+    component: CDisclosure
+    entries:
+      - {id: title, name: title, required: true, data: {display: '{}', interfaces: [CDisclosureTitleSlotData]}, fallback: "None. Uses the guide's exact text/image/decorative-SVG allowlist and requires nonempty structural text."}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CDisclosureDefaultSlotData]}, fallback: "None. Accepts standard flow content and resolved Citry components but rejects native dialog, CDialog, CDrawer, raw popovers, unresolved custom elements, customized built-ins, and authored shadow hosts."}
+      - {id: actions, name: actions, required: false, data: {display: '{}', interfaces: [CDisclosureActionsSlotData]}, fallback: "No adjacent actions wrapper. Uses the default boundary and also rejects nested Disclosure or Accordion roots."}
+
+events:
+  - id: cdisclosure-events
+    component: CDisclosure
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(open: boolean, detail: CDisclosureOpenChangeDetail) => void', interfaces: [CDisclosureOpenChangeDetail]}
+        trigger: An enabled native trigger activation requests the opposite expansion state.
+        detail: {display: '{open: boolean, previousOpen: boolean, source: "activation", controlled: boolean}', interfaces: [CDisclosureOpenChangeDetail]}
+        behavior: Runs before an uncontrolled commit. A controlled Disclosure waits for open; return values do not cancel.
+
+methods: []
+
+css:
+  - id: cdisclosure-css-variables
+    component: CDisclosure
+    entries:
+      - {id: background, name: --cui-disclosure-background, type: color, purpose: Root surface., default: Canvas}
+      - {id: foreground, name: --cui-disclosure-foreground, type: color, purpose: Title and panel foreground., default: CanvasText}
+      - {id: border-color, name: --cui-disclosure-border-color, type: color, purpose: Outline boundary., default: Scheme-derived current-color mix.}
+      - {id: border-width, name: --cui-disclosure-border-width, type: length, purpose: Stable border geometry., default: 1px}
+      - {id: radius, name: --cui-disclosure-radius, type: length, purpose: Root corner radius., default: 0.75rem}
+      - {id: trigger-background, name: --cui-disclosure-trigger-background, type: color, purpose: Resting trigger surface., default: transparent}
+      - {id: trigger-hover-background, name: --cui-disclosure-trigger-hover-background, type: color, purpose: Enabled hover surface., default: Current-color mix.}
+      - {id: trigger-open-background, name: --cui-disclosure-trigger-open-background, type: color, purpose: Expanded trigger surface., default: Accent mix.}
+      - {id: trigger-open-color, name: --cui-disclosure-trigger-open-color, type: color, purpose: Expanded title and indicator., default: Scheme blue.}
+      - {id: focus-color, name: --cui-disclosure-focus-color, type: color, purpose: Trigger focus ring., default: Highlight}
+      - {id: indicator-color, name: --cui-disclosure-indicator-color, type: color, purpose: Chevron foreground., default: currentColor}
+      - {id: trigger-padding-inline, name: --cui-disclosure-trigger-padding-inline, type: length, purpose: Logical trigger inset., default: Size-derived.}
+      - {id: trigger-padding-block, name: --cui-disclosure-trigger-padding-block, type: length, purpose: Block trigger inset., default: Size-derived.}
+      - {id: panel-padding-inline, name: --cui-disclosure-panel-padding-inline, type: length, purpose: Logical body inset., default: Size-derived.}
+      - {id: panel-padding-block, name: --cui-disclosure-panel-padding-block, type: length, purpose: Block body inset., default: Size-derived.}
+      - {id: actions-gap, name: --cui-disclosure-actions-gap, type: length, purpose: Adjacent action spacing., default: 0.5rem}
+      - {id: duration, name: --cui-disclosure-duration, type: time, purpose: Panel and indicator transition., default: 180ms}
+      - {id: easing, name: --cui-disclosure-easing, type: easing, purpose: Panel and indicator transition curve., default: ease-out}
+
+attributes:
+  - id: cdisclosure-attributes
+    component: CDisclosure
+    entries:
+      - {id: data-variant, name: data-variant, element: Root, type: '"outline" | "soft" | "plain"', meaning: Mirrors effective treatment.}
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg"', meaning: Mirrors effective geometry.}
+      - {id: data-state, name: data-state, element: 'Root, trigger, and panel', type: '"open" | "closed"', meaning: Mirrors committed expansion.}
+      - {id: data-disabled, name: data-disabled, element: 'Root and trigger', type: present | absent, meaning: Mirrors browser-effective trigger disabledness.}
+      - {id: data-indicator, name: data-indicator, element: Root, type: present | absent, meaning: Present while the chevron is shown.}
+      - {id: data-indicator-pos, name: data-indicator-pos, element: Root, type: '"start" | "end"', meaning: Mirrors logical chevron placement.}
+      - {id: id-root, name: id, element: Root, type: str, meaning: Uses the supplied root ID or a generated instance ID.}
+      - {id: generated-ids, name: id, element: 'Trigger and panel', type: generated str, meaning: Derives the stable relationship pair from the root ID.}
+      - {id: aria-expanded, name: aria-expanded, element: Trigger, type: '"true" | "false"', meaning: Exposes native expansion state.}
+      - {id: aria-controls, name: aria-controls, element: Trigger, type: panel IDREF, meaning: Identifies the controlled panel.}
+      - {id: disabled, name: disabled, element: Trigger, type: present | absent, meaning: Present for component-owned disabledness; a native fieldset can also disable without adding this attribute.}
+      - {id: role-region, name: role, element: Panel, type: 'absent | "region"', meaning: Present only when region is enabled.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Panel, type: 'absent | trigger IDREF', meaning: Names an optional region from its trigger.}
+      - {id: aria-hidden, name: aria-hidden, element: Panel, type: 'absent | "true"', meaning: Present while closed.}
+      - {id: inert, name: inert, element: Panel, type: present | absent, meaning: Removes closed descendants from focus and interaction.}
+      - {id: hidden-panel, name: hidden, element: Panel, type: present | absent, meaning: Removes a settled closed panel from rendering.}
+      - {id: hidden-indicator, name: hidden, element: Indicator, type: present | absent, meaning: Removes the chevron when indicator is false.}
+
+selectors:
+  - id: cdisclosure-selectors
+    component: CDisclosure
+    entries:
+      - {id: disclosure, selector: '[data-citry-ui-part="disclosure"]', element: Root div, purpose: Surface and class/style/attrs destination.}
+      - {id: disclosure-header, selector: '[data-citry-ui-part="disclosure-header"]', element: Header div, purpose: Heading and adjacent-action layout.}
+      - {id: disclosure-heading, selector: '[data-citry-ui-part="disclosure-heading"]', element: Native h2-h6, purpose: Document-outline heading and heading_attrs destination.}
+      - {id: disclosure-trigger, selector: '[data-citry-ui-part="disclosure-trigger"]', element: Native Button, purpose: Expansion control and trigger_attrs destination.}
+      - {id: disclosure-title, selector: '[data-citry-ui-part="disclosure-title"]', element: Span, purpose: Structural title text wrapper.}
+      - {id: disclosure-indicator, selector: '[data-citry-ui-part="disclosure-indicator"]', element: Decorative span, purpose: Owned chevron wrapper.}
+      - {id: disclosure-actions, selector: '[data-citry-ui-part="disclosure-actions"]', element: Optional div, purpose: Adjacent actions and actions_attrs destination.}
+      - {id: disclosure-panel, selector: '[data-citry-ui-part="disclosure-panel"]', element: Controlled div, purpose: Always-mounted presence surface and panel_attrs destination.}
+      - {id: disclosure-body, selector: '[data-citry-ui-part="disclosure-body"]', element: Div, purpose: Panel content inset.}
+
+interfaces:
+  - id: cdisclosure-type-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: variant, name: CDisclosureVariant, definition: 'Literal["outline", "soft", "plain"]'}
+      - {id: size, name: CDisclosureSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: indicator-pos, name: CDisclosureIndicatorPos, definition: 'Literal["start", "end"]'}
+      - {id: heading-level, name: CDisclosureHeadingLevel, definition: 'Literal[2, 3, 4, 5, 6]'}
+  - {id: cdisclosure-title-slot-data, kind: record, name: CDisclosureTitleSlotData, entries: []}
+  - {id: cdisclosure-default-slot-data, kind: record, name: CDisclosureDefaultSlotData, entries: []}
+  - {id: cdisclosure-actions-slot-data, kind: record, name: CDisclosureActionsSlotData, entries: []}
+  - id: cdisclosure-open-change-detail
+    kind: record
+    name: CDisclosureOpenChangeDetail
+    entries:
+      - {id: open, name: open, type: boolean, meaning: Requested next expansion.}
+      - {id: previous-open, name: previousOpen, type: boolean, meaning: Committed expansion before the request.}
+      - {id: source, name: source, type: '"activation"', meaning: Native trigger activation source.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client Boolean owned state when requested.}
+
+translations: []

@@ -1,0 +1,149 @@
+schema_version: 1
+family: file-input
+
+components:
+  - CFileInput
+  - CDropTarget
+
+inputs:
+  - id: cfileinput-server-inputs
+    component: CFileInput
+    channel: server
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets exact native input identity or uses a generated ID.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native form field name.}
+      - {id: accept, name: accept, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native picker hint without validating files.}
+      - {id: capture, name: capture, type: {display: '"user" | "environment" | None', interfaces: [CFileInputCapture]}, default: {kind: literal, value: null}, effect: Sets the native media capture hint.}
+      - {id: multiple, name: multiple, type: bool, default: {kind: literal, value: false}, effect: Allows more than one native selected file.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets native required validity outside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets local disabledness outside Field; Form and fieldset still dominate.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Reflects an external invalid state outside Field.}
+      - {id: variant, name: variant, type: {display: '"outline" | "soft" | "plain"', interfaces: [CFileInputVariant]}, default: {kind: literal, value: outline}, effect: Selects the picker surface.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CFileInputSize]}, default: {kind: literal, value: md}, effect: Selects picker geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted native attributes without replacing owned file input semantics or state.}
+  - id: cdroptarget-server-inputs
+    component: CDropTarget
+    channel: server
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the exact native input accessible name and visible primary text.}
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the nested native input identity.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the nested native form field name.}
+      - {id: accept, name: accept, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native picker hint without validating dropped files.}
+      - {id: capture, name: capture, type: {display: '"user" | "environment" | None', interfaces: [CFileInputCapture]}, default: {kind: literal, value: null}, effect: Sets the native media capture hint.}
+      - {id: multiple, name: multiple, type: bool, default: {kind: literal, value: false}, effect: Keeps all dropped or selected files instead of only the first.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets native required validity.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Disables browse and drop locally.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Reflects external invalid state.}
+      - {id: variant, name: variant, type: {display: '"outline" | "soft" | "plain"', interfaces: [CFileInputVariant]}, default: {kind: literal, value: outline}, effect: Selects drop surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CFileInputSize]}, default: {kind: literal, value: md}, effect: Selects drop surface geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds label-root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds label-root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root label attributes.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds unrelated trusted attributes to the nested native input.}
+  - id: file-client-inputs
+    component: CFileInput
+    channel: client
+    entries:
+      - {id: accept, name: accept, type: str, omitted: Uses the server value., effect: Reactively changes the native picker hint.}
+      - {id: capture, name: capture, type: '"user" | "environment"', omitted: Uses the server value., effect: Reactively changes the native capture hint.}
+      - {id: multiple, name: multiple, type: bool, omitted: Uses the server value., effect: Reactively changes single or multiple selection.}
+      - {id: required, name: required, type: bool, omitted: Uses the server or Field value., effect: Reactively changes native required validity outside Field.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server or Field value., effect: Reactively changes local disabledness outside Field.}
+      - {id: invalid, name: invalid, type: bool, omitted: Uses the server or Field value., effect: Reactively reflects external invalidity outside Field.}
+      - {id: variant, name: variant, type: '"outline" | "soft" | "plain"', omitted: Uses the server value., effect: Reactively changes surface treatment.}
+      - {id: size, name: size, type: '"sm" | "md" | "lg"', omitted: Uses the server value., effect: Reactively changes geometry.}
+  - id: drop-target-client-inputs
+    component: CDropTarget
+    channel: client
+    entries:
+      - {id: accept, name: accept, type: str, omitted: Uses the server value., effect: Reactively changes the native picker hint.}
+      - {id: capture, name: capture, type: '"user" | "environment"', omitted: Uses the server value., effect: Reactively changes the native capture hint.}
+      - {id: multiple, name: multiple, type: bool, omitted: Uses the server value., effect: Reactively changes single or multiple selection and drop behavior.}
+      - {id: required, name: required, type: bool, omitted: Uses the server value., effect: Reactively changes native required validity.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server value., effect: Reactively changes local browse and drop disabledness.}
+      - {id: invalid, name: invalid, type: bool, omitted: Uses the server value., effect: Reactively reflects external invalidity.}
+      - {id: variant, name: variant, type: '"outline" | "soft" | "plain"', omitted: Uses the server value., effect: Reactively changes surface treatment.}
+      - {id: size, name: size, type: '"sm" | "md" | "lg"', omitted: Uses the server value., effect: Reactively changes geometry.}
+
+slots:
+  - id: cdroptarget-slots
+    component: CDropTarget
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CDropTargetDefaultSlotData]}, fallback: No supporting text. Content must be noninteractive phrasing content.}
+
+events: []
+
+methods: []
+
+css:
+  - id: file-input-css-variables
+    component: CFileInput
+    entries:
+      - {id: background, name: --cui-file-input-background, type: color, purpose: Picker or drop surface., default: Canvas or the soft surface mix.}
+      - {id: foreground, name: --cui-file-input-foreground, type: color, purpose: Text color., default: CanvasText}
+      - {id: border-color, name: --cui-file-input-border-color, type: color, purpose: Resting border., default: a 38 percent CanvasText mix}
+      - {id: active-color, name: --cui-file-input-active-color, type: color, purpose: Focus and drag emphasis., default: Highlight}
+      - {id: invalid-color, name: --cui-file-input-invalid-color, type: color, purpose: Invalid border., default: scheme-aware red}
+      - {id: radius, name: --cui-file-input-radius, type: length, purpose: Corner radius., default: 0.65rem}
+      - {id: padding, name: --cui-file-input-padding, type: padding, purpose: Drop surface padding., default: size-dependent}
+      - {id: min-height, name: --cui-file-input-min-height, type: length, purpose: Minimum control height., default: 'sm: 2.25rem; md: 2.75rem; lg: 3.25rem'}
+  - id: drop-target-css-variables
+    component: CDropTarget
+    entries:
+      - {id: background, name: --cui-file-input-background, type: color, purpose: Drop surface., default: Canvas or the soft surface mix.}
+      - {id: foreground, name: --cui-file-input-foreground, type: color, purpose: Text color., default: CanvasText}
+      - {id: border-color, name: --cui-file-input-border-color, type: color, purpose: Resting border., default: a 38 percent CanvasText mix}
+      - {id: active-color, name: --cui-file-input-active-color, type: color, purpose: Focus and drag emphasis., default: Highlight}
+      - {id: invalid-color, name: --cui-file-input-invalid-color, type: color, purpose: Invalid border., default: scheme-aware red}
+      - {id: radius, name: --cui-file-input-radius, type: length, purpose: Corner radius., default: 0.65rem}
+      - {id: padding, name: --cui-file-input-padding, type: padding, purpose: Drop surface padding., default: size-dependent}
+      - {id: min-height, name: --cui-file-input-min-height, type: length, purpose: Minimum drop surface height input., default: 'sm: 2.25rem; md: 2.75rem; lg: 3.25rem'}
+
+attributes:
+  - id: file-input-attributes
+    component: CFileInput
+    entries:
+      - {id: data-has-files, name: data-has-files, element: Styled root, type: present-or-absent, meaning: Present when the native FileList is nonempty.}
+      - {id: data-disabled, name: data-disabled, element: Styled root, type: present-or-absent, meaning: Mirrors effective native disabledness.}
+      - {id: data-required, name: data-required, element: Styled root, type: present-or-absent, meaning: Mirrors native required state.}
+      - {id: data-invalid, name: data-invalid, element: Styled root, type: present-or-absent, meaning: Mirrors external or native invalid state.}
+      - {id: data-variant, name: data-variant, element: Styled root, type: 'outline | soft | plain', meaning: Mirrors effective variant.}
+      - {id: data-size, name: data-size, element: Styled root, type: 'sm | md | lg', meaning: Mirrors effective size.}
+  - id: drop-target-attributes
+    component: CDropTarget
+    entries:
+      - {id: data-has-files, name: data-has-files, element: Root label, type: present-or-absent, meaning: Present when the nested native FileList is nonempty.}
+      - {id: data-dragging, name: data-dragging, element: Root label, type: present-or-absent, meaning: Present during an accepted file drag over the target.}
+      - {id: data-disabled, name: data-disabled, element: Root label, type: present-or-absent, meaning: Mirrors effective native disabledness.}
+      - {id: data-required, name: data-required, element: Root label, type: present-or-absent, meaning: Mirrors native required state.}
+      - {id: data-invalid, name: data-invalid, element: Root label, type: present-or-absent, meaning: Mirrors external or native invalid state.}
+      - {id: data-variant, name: data-variant, element: Root label, type: 'outline | soft | plain', meaning: Mirrors effective variant.}
+      - {id: data-size, name: data-size, element: Root label, type: 'sm | md | lg', meaning: Mirrors effective size.}
+
+selectors:
+  - id: file-input-selectors
+    component: CFileInput
+    entries:
+      - {id: file-input, selector: '[data-citry-ui-part="file-input"]', element: FileInput native input, purpose: Stable picker root.}
+  - id: drop-target-selectors
+    component: CDropTarget
+    entries:
+      - {id: drop-target, selector: '[data-citry-ui-part="drop-target"]', element: DropTarget label, purpose: Stable drop surface and root attrs destination.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: DropTarget native input, purpose: Stable native input destination.}
+      - {id: label, selector: '[data-citry-ui-part="label"]', element: DropTarget primary text, purpose: Stable visible label.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: DropTarget supporting content, purpose: Stable supporting content.}
+
+interfaces:
+  - id: file-input-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: capture, name: CFileInputCapture, definition: 'Literal["user", "environment"]'}
+      - {id: variant, name: CFileInputVariant, definition: 'Literal["outline", "soft", "plain"]'}
+      - {id: size, name: CFileInputSize, definition: 'Literal["sm", "md", "lg"]'}
+  - {id: drop-target-default-slot-data, kind: record, name: CDropTargetDefaultSlotData, entries: []}
+
+translations: []
