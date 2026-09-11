@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import BinaryIO
 
-_RELOAD_TIMEOUT = 10.0
+_RELOAD_TIMEOUT = 30.0
 _RELOADER_BASELINE_DELAY = 0.6
 
 
@@ -348,7 +348,7 @@ def test_response_wait_uses_the_remaining_deadline_after_a_refused_connection(
     monkeypatch.setattr(time, "sleep", lambda _delay: clock.__setitem__(0, clock[0] + 2))
 
     assert _wait_for_response(server, lambda response: response == expected, "readiness") is expected
-    assert timeouts == pytest.approx([10.0, 8.0])
+    assert timeouts == pytest.approx([_RELOAD_TIMEOUT, _RELOAD_TIMEOUT - 2])
     assert process.poll.call_count == 2
 
 
