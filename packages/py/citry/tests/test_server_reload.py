@@ -12,6 +12,7 @@ import time
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, build_opener
 
@@ -22,7 +23,6 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import BinaryIO
 
-_REQUEST_TIMEOUT = 0.5
 _RELOAD_TIMEOUT = 10.0
 _RELOADER_BASELINE_DELAY = 0.6
 
@@ -285,10 +285,10 @@ def _development_server(host: str, app_root: Path, log_file: Path) -> Iterator[_
         server.stop()
 
 
-def _request(base_url: str) -> _Response:
+def _request(base_url: str, *, timeout: float) -> _Response:
     opener = build_opener(ProxyHandler({}))
     try:
-        response = opener.open(base_url, timeout=_REQUEST_TIMEOUT)
+        response = opener.open(base_url, timeout=timeout)
     except HTTPError as exc:
         response = exc
     with response:
@@ -307,11 +307,14 @@ def _wait_for_response(
 ) -> _Response:
     deadline = time.monotonic() + _RELOAD_TIMEOUT
     last_observation = "no response"
-    while time.monotonic() < deadline:
+    while (remaining := deadline - time.monotonic()) > 0:
         if server.process.poll() is not None:
             break
         try:
-            response = _request(server.base_url)
+            # A server that has accepted the request may still be completing
+            # its first render. Give that request the remaining operation
+            # budget so polling cannot pile concurrent renders onto it.
+            response = _request(server.base_url, timeout=remaining)
         except (ConnectionError, OSError, URLError) as exc:
             last_observation = f"{type(exc).__name__}: {exc}"
         else:
@@ -321,6 +324,32 @@ def _wait_for_response(
         time.sleep(0.05)
     msg = f"Timed out waiting for {description}; last observation: {last_observation}\nServer log:\n{server.logs()}"
     raise AssertionError(msg)
+
+
+def test_response_wait_uses_the_remaining_deadline_after_a_refused_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = _Response(status=200, body="ready", pid=123)
+    process = MagicMock()
+    process.poll.return_value = None
+    server = _ServerProcess(process, "http://127.0.0.1:8000", MagicMock(), MagicMock())
+    clock = [100.0]
+    timeouts: list[float] = []
+
+    def request(base_url: str, *, timeout: float) -> _Response:
+        assert base_url == server.base_url
+        timeouts.append(timeout)
+        if len(timeouts) == 1:
+            raise URLError(ConnectionRefusedError())
+        return expected
+
+    monkeypatch.setattr(sys.modules[__name__], "_request", request)
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(time, "sleep", lambda _delay: clock.__setitem__(0, clock[0] + 2))
+
+    assert _wait_for_response(server, lambda response: response == expected, "readiness") is expected
+    assert timeouts == pytest.approx([10.0, 8.0])
+    assert process.poll.call_count == 2
 
 
 @pytest.mark.parametrize("host", ["django", "uvicorn"])
