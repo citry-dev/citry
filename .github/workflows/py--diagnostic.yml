@@ -24,6 +24,26 @@ on:
           - "3.12"
           - "3.13"
           - "3.14"
+      install_profile:
+        description: Package test dependencies to install
+        required: true
+        default: citry
+        type: choice
+        options:
+          - citry
+          - citry-core
+          - citry-lsp
+          - citry-ui
+          - pygments-citry
+          - full-workspace
+      core_wheel_mode:
+        description: Reuse the exact Citry Core wheel cache or rebuild through sccache
+        required: true
+        default: reuse
+        type: choice
+        options:
+          - reuse
+          - rebuild
       pytest_target:
         description: One ordinary non-browser Python test file or node ID
         required: true
@@ -36,34 +56,145 @@ permissions:
 jobs:
   test:
     runs-on: ${{ inputs.runner_os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
 
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: ${{ inputs.python_version }}
 
+      - name: Validate the selected pytest target
+        shell: bash
+        env:
+          INSTALL_PROFILE: ${{ inputs.install_profile }}
+          PYTEST_TARGET: ${{ inputs.pytest_target }}
+        run: >-
+          python scripts/python_diagnostic.py validate-target
+          --profile "$INSTALL_PROFILE"
+          --target "$PYTEST_TARGET"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      # The moving nightly is part of the wheel identity. Resolve the actual
+      # compiler before cache lookup so a newly published nightly cannot reuse
+      # artifacts produced by an older compiler under the same channel name.
       - name: Install Rust toolchain
+        if: ${{ inputs.install_profile != 'pygments-citry' }}
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Resolve Citry Core wheel identity
+        if: ${{ inputs.install_profile != 'pygments-citry' }}
+        id: core-identity
+        shell: bash
+        env:
+          RUNNER_ARCH: ${{ runner.arch }}
+          RUNNER_OS: ${{ runner.os }}
+        run: >-
+          python scripts/python_diagnostic.py cache-identity
+          --runner-os "$RUNNER_OS"
+          --runner-arch "$RUNNER_ARCH"
+          --runner-image "${ImageOS:?missing hosted image OS}/${ImageVersion:?missing hosted image version}"
+          --github-output "$GITHUB_OUTPUT"
 
-      - name: Install the workspace
-        run: uv sync --locked --all-packages
+      - name: Restore exact Citry Core wheel
+        if: ${{ inputs.install_profile != 'pygments-citry' && inputs.core_wheel_mode == 'reuse' }}
+        id: core-wheel
+        uses: actions/cache/restore@v6
+        with:
+          path: .diagnostic-cache/citry-core
+          key: ${{ steps.core-identity.outputs.cache_key }}
+
+      - name: Initialize native submodules
+        if: >-
+          ${{ inputs.install_profile != 'pygments-citry' &&
+              (inputs.core_wheel_mode == 'rebuild' || steps.core-wheel.outputs.cache-hit != 'true') }}
+        shell: bash
+        run: git submodule update --init --recursive
+
+      - name: Set up sccache for a Core wheel cache miss
+        if: >-
+          ${{ inputs.install_profile != 'pygments-citry' &&
+              (inputs.core_wheel_mode == 'rebuild' || steps.core-wheel.outputs.cache-hit != 'true') }}
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+
+      - name: Build Citry Core wheel
+        if: >-
+          ${{ inputs.install_profile != 'pygments-citry' &&
+              (inputs.core_wheel_mode == 'rebuild' || steps.core-wheel.outputs.cache-hit != 'true') }}
+        env:
+          CARGO_INCREMENTAL: "0"
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+        run: >-
+          uv build --locked --package citry-core --wheel
+          --out-dir .diagnostic-cache/citry-core
+
+      - name: Record built Core wheel identity
+        if: >-
+          ${{ inputs.install_profile != 'pygments-citry' &&
+              (inputs.core_wheel_mode == 'rebuild' || steps.core-wheel.outputs.cache-hit != 'true') }}
+        shell: bash
+        env:
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core-identity.outputs.cache_key }}
+        run: >-
+          python scripts/python_diagnostic.py record-wheel
+          --wheel-dir .diagnostic-cache/citry-core
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+
+      - name: Install selected diagnostic profile
+        shell: bash
+        env:
+          CORE_WHEEL_CACHE_KEY: ${{ steps.core-identity.outputs.cache_key }}
+          INSTALL_PROFILE: ${{ inputs.install_profile }}
+        run: >-
+          python scripts/python_diagnostic.py install-profile
+          --profile "$INSTALL_PROFILE"
+          --wheel-dir .diagnostic-cache/citry-core
+          --cache-key "$CORE_WHEEL_CACHE_KEY"
+
+      # The profile install verifies the manifest, installs the wheel, and
+      # imports its extension before this immutable cache entry is created.
+      # Saving before pytest preserves the build when diagnosis finds a failure.
+      - name: Save exact Citry Core wheel
+        if: >-
+          ${{ inputs.install_profile != 'pygments-citry' &&
+              inputs.core_wheel_mode == 'reuse' &&
+              steps.core-wheel.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: .diagnostic-cache/citry-core
+          key: ${{ steps.core-identity.outputs.cache_key }}
+
+      - name: Report diagnostic setup
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.core-wheel.outputs.cache-hit }}
+          CORE_WHEEL_MODE: ${{ inputs.core_wheel_mode }}
+          INSTALL_PROFILE: ${{ inputs.install_profile }}
+        run: |
+          if [[ "$INSTALL_PROFILE" == "pygments-citry" ]]; then
+            wheel_result="not required"
+          elif [[ "$CORE_WHEEL_MODE" == "rebuild" ]]; then
+            wheel_result="forced rebuild (sccache enabled)"
+          elif [[ "$CACHE_HIT" == "true" ]]; then
+            wheel_result="exact wheel cache hit"
+          else
+            wheel_result="wheel cache miss (built with sccache)"
+          fi
+          echo "Profile: $INSTALL_PROFILE; Citry Core: $wheel_result"
+          echo "### Python diagnostic setup" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Profile: \`$INSTALL_PROFILE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Citry Core: $wheel_result" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run selected pytest target serially
         shell: bash
         env:
           PYTEST_TARGET: ${{ inputs.pytest_target }}
-        run: uv run --no-sync pytest --durations 30 -- "$PYTEST_TARGET"
+        run: uv run --no-sync python -m pytest -m "not e2e" --durations 30 -- "$PYTEST_TARGET"

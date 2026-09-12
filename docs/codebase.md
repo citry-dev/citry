@@ -562,14 +562,27 @@ pull request. Push and manual runs use their unique run IDs, so this policy
 does not interrupt or replace them.
 
 Use [`py--diagnostic.yml`](../.github/workflows/py--diagnostic.yml) to reproduce
-one Python failure on a selected hosted OS and supported Python version. In the
-GitHub Actions UI, open **Python diagnostic**, choose **Run workflow**, select
-the branch or tag, then set `runner_os`, `python_version`, and one file or node
-ID from the ordinary non-browser Python test suite in `pytest_target`. The
-target is passed to pytest as one literal argument, so this workflow does not
-accept multiple targets or extra pytest options. Its workspace installation
-does not include the optional browser, documentation, or benchmark dependency
-groups.
+one Python failure on a selected hosted OS and supported Python version. Its
+default `citry` profile on `ubuntu-latest` installs Citry and Citry's test
+dependencies, plus the small root tooling group used by Citry's repository
+policy tests. Select `citry-core`, `citry-lsp`, `citry-ui`, or
+`pygments-citry` when the target belongs to another package. `full-workspace`
+installs every package's development environment for failures that depend on
+their interactions. None of the profiles installs browser, documentation, or
+benchmark dependency groups.
+
+A package profile installs that package's declared development dependencies.
+Tests for optional host integrations may skip when their optional host is not
+part of that profile. Select `full-workspace` when the missing host interaction
+is what the diagnostic needs to exercise.
+
+In the GitHub Actions UI, open **Python diagnostic**, choose **Run workflow**,
+select the branch or tag, then set `runner_os`, `python_version`,
+`install_profile`, `core_wheel_mode`, and `pytest_target`. The target must be
+an existing `test_*.py` file or node ID inside the selected package. The
+validator rejects browser and benchmark paths, cross-profile paths, path
+traversal, multiple targets, and pytest options. The validated value is passed
+to pytest as one literal argument, and pytest also excludes the `e2e` marker.
 
 The equivalent command-line dispatch is:
 
@@ -578,8 +591,39 @@ gh workflow run py--diagnostic.yml \
   --ref review \
   -f runner_os=macos-latest \
   -f python_version=3.14 \
+  -f install_profile=citry \
+  -f core_wheel_mode=reuse \
   -f pytest_target='packages/py/citry/tests/test_server_reload.py::test_development_server_hot_reloads_assets_and_restarts_python[django]'
 ```
+
+Profiles that import Citry Core tell `uv sync` to omit the editable Core
+package. Setup then installs the exact cached or newly built wheel. The wheel
+key includes the hosted runner image version, OS, and architecture; the full
+Python runtime and ABI; the resolved `rustc -Vv` and uv versions; and a digest
+of the tracked Cargo workspace, Rust sources, Ruff submodule commit, Core
+package contents, lockfiles, and toolchain configuration. The digest also
+covers the workflow and its setup helper, so a build-recipe change cannot reuse
+a wheel built by the previous recipe. There are no prefix restore keys: only
+an exact match can be installed. A manifest beside the wheel records its cache
+key, filename, and SHA-256 digest. Setup verifies all three, installs the
+wheel, and imports its extension before a new cache entry can be saved.
+
+On an exact wheel hit, the workflow skips submodule initialization and native
+compilation. On a miss, it initializes the Ruff submodule, enables the GitHub
+Actions backend for `sccache`, builds the wheel, records its manifest, and
+installs and imports it. In reuse mode, the workflow then saves the verified
+wheel before pytest runs. This timing preserves the build when the selected
+diagnostic test fails. `core_wheel_mode=rebuild` bypasses the wheel cache and
+exercises the native build through `sccache`; use it when the build itself is
+under investigation. The setup result appears in both the job log and job
+summary.
+
+GitHub scopes Actions caches by key, cache version, and branch. Repeated runs
+on one investigation branch can reuse that branch's exact wheel. A matching
+cache populated on the default branch is also available to other branches,
+but a wheel first saved on one feature branch is not a general cross-branch
+cache for sibling branches. Cache eviction can still turn a later run into a
+safe miss and rebuild.
 
 Start CI investigation with the narrowest failing node ID, and repeat that
 target while diagnosing. After the fix passes focused local checks, run
