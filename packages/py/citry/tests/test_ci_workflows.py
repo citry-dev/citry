@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+import re
+import shlex
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _WORKFLOWS = _REPO_ROOT / ".github" / "workflows"
@@ -130,11 +140,34 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
         "RUSTC_WRAPPER": "sccache",
         "SCCACHE_GHA_ENABLED": "true",
     }
-    assert "uv build --locked --package citry-core --wheel" in build["run"]
+    assert build["run"].splitlines() == [
+        "uv lock --check",
+        "uv build --package citry-core --wheel \\",
+        "  --out-dir .diagnostic-cache/citry-core",
+    ]
     assert steps["Set up sccache for a Core wheel cache miss"]["uses"] == (
         "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
     )
+    assert steps["Enable GitHub Actions-backed sccache"]["run"].splitlines() == [
+        'echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"',
+        'echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"',
+    ]
     assert steps["Initialize native submodules"]["run"] == "git submodule update --init --recursive"
+
+    uv = shutil.which("uv")
+    assert uv is not None
+    uv_build_help = subprocess.run([uv, "build", "--help"], check=True, capture_output=True, text=True).stdout
+    supported_build_options = set(
+        re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[a-z][a-z-]*)\b", uv_build_help)
+    )
+    build_command = " ".join(build["run"].splitlines()[1:]).replace("\\", "")
+    requested_build_options = {token for token in shlex.split(build_command) if token.startswith("--")}
+    assert requested_build_options <= supported_build_options
+
+    core_pyproject = tomllib.loads(
+        (_REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert core_pyproject["tool"]["maturin"]["locked"] is True
 
     save = steps["Save exact Citry Core wheel"]
     assert save["uses"] == "actions/cache/save@v6"

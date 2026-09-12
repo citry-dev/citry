@@ -124,6 +124,17 @@ jobs:
               (inputs.core_wheel_mode == 'rebuild' || steps.core-wheel.outputs.cache-hit != 'true') }}
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
 
+      # GITHUB_ENV makes the GitHub Actions cache settings available to both
+      # the native build and sccache's registered post step.
+      - name: Enable GitHub Actions-backed sccache
+        if: >-
+          ${{ inputs.install_profile != 'pygments-citry' &&
+              (inputs.core_wheel_mode == 'rebuild' || steps.core-wheel.outputs.cache-hit != 'true') }}
+        shell: bash
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+
       - name: Build Citry Core wheel
         if: >-
           ${{ inputs.install_profile != 'pygments-citry' &&
@@ -132,9 +143,10 @@ jobs:
           CARGO_INCREMENTAL: "0"
           RUSTC_WRAPPER: sccache
           SCCACHE_GHA_ENABLED: "true"
-        run: >-
-          uv build --locked --package citry-core --wheel
-          --out-dir .diagnostic-cache/citry-core
+        run: |
+          uv lock --check
+          uv build --package citry-core --wheel \
+            --out-dir .diagnostic-cache/citry-core
 
       - name: Record built Core wheel identity
         if: >-

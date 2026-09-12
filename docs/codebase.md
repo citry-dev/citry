@@ -618,6 +618,10 @@ exercises the native build through `sccache`; use it when the build itself is
 under investigation. The setup result appears in both the job log and job
 summary.
 
+The build first runs `uv lock --check` to verify the Python workspace lock.
+The Core package also sets `tool.maturin.locked = true`, so Cargo verifies and
+uses `Cargo.lock` while building the native extension.
+
 GitHub scopes Actions caches by key, cache version, and branch. Repeated runs
 on one investigation branch can reuse that branch's exact wheel. A matching
 cache populated on the default branch is also available to other branches,
