@@ -157,9 +157,7 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     uv = shutil.which("uv")
     assert uv is not None
     uv_build_help = subprocess.run([uv, "build", "--help"], check=True, capture_output=True, text=True).stdout
-    supported_build_options = set(
-        re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[a-z][a-z-]*)\b", uv_build_help)
-    )
+    supported_build_options = set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[a-z][a-z-]*)\b", uv_build_help))
     build_command = " ".join(build["run"].splitlines()[1:]).replace("\\", "")
     requested_build_options = {token for token in shlex.split(build_command) if token.startswith("--")}
     assert requested_build_options <= supported_build_options
