@@ -15,9 +15,9 @@
     "axe-core": "4.13.0",
     "bootstrap": "5.3.8",
     "lightningcss": "1.33.0",
-    "pyright": "1.1.413",
+    "pyright": "1.1.414",
     "tailwindcss": "4.3.3",
     "terser": "5.51.2",
-    "vnu-jar": "26.8.30"
+    "vnu-jar": "26.9.16"
   }
 }
