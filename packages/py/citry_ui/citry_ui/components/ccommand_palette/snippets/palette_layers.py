@@ -92,7 +92,7 @@ class PaletteLayers(Component):
           };
         },
         mounted() {
-          $nextTick(() => {
+          this.$nextTick(() => {
           const host=this.$refs.shadowHost;
           const fixture=this.$refs.shadowFixture;
           if (!host.shadowRoot && fixture) {

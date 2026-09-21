@@ -33,8 +33,20 @@ class ScrollAreaNativeCallback(Component):
           axis="both"
           aria_label="Event-scoped audit log"
           style="--cui-scroll-area-max-block-size: 13rem"
-          @scroll="$dispatch('scroll-area-native')"
-          @scrollend="$dispatch('scroll-area-settled')"
+          @scroll="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'scroll-area-native', {bubbles:true}
+              )
+            )
+          "
+          @scrollend="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'scroll-area-settled', {bubbles:true}
+              )
+            )
+          "
           :onScrollChange="(detail)=>{
               callbackCount += 1;
               lastInline = Math.round(detail.inlineOffset);
@@ -95,7 +107,7 @@ class ScrollAreaNativeCallback(Component):
           };
         },
         mounted() {
-          $nextTick(() => {
+          this.$nextTick(() => {
           const host = this.$refs.shadowHost;
           const fixture = this.$refs.shadowFixture;
           if (!host.shadowRoot && fixture) host.attachShadow({mode:'open'}).append(fixture);

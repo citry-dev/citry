@@ -19,8 +19,22 @@ class ScrollAreaActivityAndFocus(Component):
         <c-CScrollArea
           aria_label="Deployment activity"
           style="--cui-scroll-area-max-block-size: 15rem"
-          @focusin="$dispatch('activity-focus', `Focused ${$event.target.id}`)"
-          @focusout="$dispatch('activity-blur', `Left ${$event.target.id}`)"
+          @focusin="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'activity-focus',
+                {bubbles:true, detail:`Focused ${$event.target.id}`}
+              )
+            )
+          "
+          @focusout="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'activity-blur',
+                {bubbles:true, detail:`Left ${$event.target.id}`}
+              )
+            )
+          "
           :onScrollChange="(detail)=>
               last=`Block offset ${Math.round(detail.blockOffset)}`"
           id="deployment-activity"

@@ -400,7 +400,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
             },
             mounted() {
               window.addEventListener("keydown", this.handleShortcut);
-              $nextTick(() => {
+              this.$nextTick(() => {
                 const host = this.$refs.shadowHost;
                 const fixture = this.$refs.shadowFixture;
                 if (!host.shadowRoot && fixture) {

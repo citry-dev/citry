@@ -47,6 +47,11 @@ def _prepared_render(html: str) -> tuple[dict, str]:
     render_source = "\n".join(
         node.text for node in document.xpath("//script") if node.text and "function render(_ctx, _cache" in node.text
     )
+    definition_ids = {item["id"] for item in transport["manifest"]["definitions"]}
+    assert definition_ids
+    assert all(
+        f'window.CitryStableDefinitions["{definition_id}"]' in render_source for definition_id in definition_ids
+    )
     return transport, render_source
 
 

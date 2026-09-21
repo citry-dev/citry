@@ -82,12 +82,16 @@ def _landing_content_html(transport: dict) -> str:
     return record["html"]
 
 
-def _compiled_render_source(document: lxml_html.HtmlElement) -> str:
-    return "\n".join(
+def _prepared_definition_source(document: lxml_html.HtmlElement, transport: dict) -> str:
+    source = "\n".join(
         script.text
         for script in document.xpath("//script")
         if script.text and "function render(_ctx, _cache" in script.text
     )
+    definition_ids = {item["id"] for item in transport["manifest"]["definitions"]}
+    assert definition_ids
+    assert all(f'window.CitryStableDefinitions["{definition_id}"]' in source for definition_id in definition_ids)
+    return source
 
 
 def test_landing_layout_keeps_shared_header_and_omits_document_chrome() -> None:
@@ -97,7 +101,7 @@ def test_landing_layout_keeps_shared_header_and_omits_document_chrome() -> None:
         current_path="",
     )
     document, transport = _prepared_response(result.html)
-    render_source = _compiled_render_source(document)
+    render_source = _prepared_definition_source(document, transport)
     root = next(item for item in transport["manifest"]["occurrences"] if item["id"] == transport["manifest"]["rootId"])
     root_data = root["preparedData"]
     rendered_content = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
@@ -630,7 +634,7 @@ def test_social_links_point_at_one_set_of_urls() -> None:
 
     rows = content.xpath('.//div[contains(@class, "social-links")]')
     assert rows
-    render_source = _compiled_render_source(document)
+    render_source = _prepared_definition_source(document, transport)
     assert 'class: "social-links__link"' in render_source
     assert 'rel: "noopener"' in render_source
     for row in rows:

@@ -1,4 +1,4 @@
-"""A responsive, privacy-enhanced YouTube embed for authored docs pages."""
+"""A responsive, privacy-enhanced, click-to-load YouTube embed."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ _VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
 
 
 class YoutubeVideo(Component):
-    """``<c-youtube-video />`` renders a lazy-loaded YouTube player."""
+    """``<c-youtube-video />`` renders a lazy-loaded YouTube player facade."""
 
     transparent = True
 
@@ -38,16 +38,20 @@ class YoutubeVideo(Component):
         }
 
     template = """
-      <figure class="youtube-video">
-        <iframe
-          class="youtube-video__frame"
-          c-src="embed_url"
-          c-title="title"
-          loading="lazy"
-          referrerpolicy="strict-origin-when-cross-origin"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowfullscreen
-        ></iframe>
+      <figure
+        class="youtube-video"
+        c-data-youtube-embed-url="embed_url"
+        c-data-youtube-title="title"
+      >
+        <button
+          type="button"
+          class="youtube-video__facade"
+          data-youtube-load
+          c-aria-label="'Play ' + title + ' on YouTube'"
+        >
+          <span class="youtube-video__play" aria-hidden="true">▶</span>
+          <span>Play {{ title }}</span>
+        </button>
         <figcaption class="youtube-video__caption">
           <a c-href="watch_url" target="_blank" rel="noopener">
             Watch the {{ title }} on YouTube
