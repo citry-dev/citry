@@ -53,7 +53,7 @@ def _search_results_fragment(query: str = "") -> str:
         )
         for contact in contacts
     )
-    return _fragment(SearchResults(rows_html=rows, count=len(contacts)))
+    return _fragment(SearchResults(rows_html=rows, count=len(contacts), query=query))
 
 
 def _contact_or_404(contact_id: int) -> ContactView:

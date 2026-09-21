@@ -25,6 +25,7 @@ def test_page_serves_local_htmx_and_citry_scripts() -> None:
     assert 'id="contact-editor"' not in page.text
     assert 'id="search-results" class="fragment-host"' in page.text
     assert 'class="contact-results__summary" role="status"' in page.text
+    assert 'data-citry-activated="all"' in page.text
     assert "data-citry" in page.text
     assert stylesheet.status_code == 200
     assert "color-scheme: light" in stylesheet.text
@@ -47,6 +48,7 @@ def test_search_response_includes_component_html_and_dependencies() -> None:
     assert "Ada Lovelace" not in response.text
     assert 'class="contact-results__summary" role="status"' in response.text
     assert response.text.count("data-citry-vue-fragment") == 1
+    assert 'data-citry-activated="grace"' in response.text
     assert 'class="contact-row-host" id="contact-row-2"' in response.text
     assert "data-citry" in response.text
 

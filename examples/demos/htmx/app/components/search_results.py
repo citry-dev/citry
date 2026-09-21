@@ -8,6 +8,7 @@ class SearchResults(Component):
     class Kwargs:
         rows_html: Markup
         count: int
+        query: str = ""
 
     class Slots:
         pass
@@ -17,10 +18,11 @@ class SearchResults(Component):
             "rows_html": kwargs.rows_html,
             "count": kwargs.count,
             "summary": f"{kwargs.count} contact{'s' if kwargs.count != 1 else ''} found",
+            "activated": kwargs.query.strip().casefold() or "all",
         }
 
     template = """
-      <div class="contact-results" data-citry-activated="server">
+      <div class="contact-results" c-data-citry-activated="activated">
         <p class="contact-results__summary" role="status">{{ summary }}</p>
         <c-if cond="count">
           <ul class="contact-results__list">{{ rows_html }}</ul>
