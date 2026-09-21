@@ -1,5 +1,35 @@
 # Complete the Vue migration
 
+## Shipped Vue v1 contract
+
+The prepared Vue runtime is the only current Citry browser runtime. It owns
+mounted Citry Vue apps and the Events bridge; Alpine is retained in this
+document only where older migration notes explain a rejected or historical
+implementation.
+
+Events calls are serialized per app. Same-tick calls are intentionally sent as
+separate calls; `allowBatching` does not recreate the former Alpine same-tick
+batch/dependency scheduler. The Vue v1 runtime also makes no pre-runtime call
+queue promise. Page code must wait until the runtime and the target mounted
+app are ready before using `Citry.events`.
+
+The target surface is explicit and bounded: `render:<render-id>` addresses a
+mounted component occurrence, an `Element` inside an occurrence can address
+that occurrence for `Citry.events.send`, and prepared render actions may use
+`mark:<caller-render-id>:<name>` for a declared marker. Global target lookup
+must resolve exactly one mounted app and occurrence; zero and multiple matches
+reject. Arbitrary CSS selectors and `html`, `head`, and `body` replacements
+are outside the Vue v1 API.
+
+`Citry.events.applyActions(actions)` uses the same interpreter as a server
+result. When a mounted source is selected, it emits the documented
+`citry:events:before`, `after`, `error`, and `stale` lifecycle around the
+application, with `detail.event` set to `"__external__"`; `before` may cancel.
+Global-only actions retain their global behavior and do not acquire a mounted
+component lifecycle. A valid server result accepts its dequeued State
+transaction before action interpretation begins, so a later action failure
+cannot restore State that the server already consumed.
+
 ### Menu controller and declaration services
 
 Status: Menu passes 56 browser cases, ContextMenu passes 15, and SplitButton
@@ -174,8 +204,9 @@ State and pending values unchanged, suppress the send, report the binding
 failure once, and recover after a valid value. A shared guarded read/adoption
 helper now passes that regression test and the five-test affected browser
 selection. Independent re-review accepted the new guard and the literal
-control-binding implementation. Runtime-provided bindings remain a separate
-migration task.
+control-binding implementation. Runtime-provided bindings remain a separately
+tracked compatibility gap; they are not required by the shipped Vue v1
+contract for literal template bindings.
 
 Each value-holding element accepts one State binding. The prior contract
 allows several event handlers on an element but defines no behavior for several
@@ -511,8 +542,10 @@ generation contexts before callbacks. Mounted output includes the endpoint
 without loading an additional Events asset. Focused bridge and native browser
 checks cover these boundaries. Writable State and imperative sends also have
 focused native coverage. Literal control bindings are implemented and under
-review. Runtime-provided bindings, handler timing, polling and batching remain;
-keep these checks separate from benchmark timing and memory collection.
+review. Runtime-provided bindings, handler timing and polling remain under
+separate review; same-tick batching is intentionally outside the shipped Vue
+v1 contract. Keep these checks separate from benchmark timing and memory
+collection.
 
 Native Vue `$state` supports reactive reads and whole top-level field writes.
 Nested objects and arrays are deep read-only views: mutate by replacing the
@@ -546,25 +579,21 @@ The bridge remains lazy for an app whose initial snapshot has no Events
 instances and is installed before callbacks when a later snapshot first adds
 an Events context.
 
-Events acceptance must cover the existing scheduler and input-binding
-contracts as well as a clicked button. The previous Events implementation
-documents superseding older calls, handler timing, eligible-call batching,
-public State writes and polling. Port those remaining behaviors to native Vue
-instance identity and reactivity. The current bridge intentionally serializes
-calls and does not yet establish those scheduler guarantees. State behavior has
-separate focused coverage. Use the
-existing Events design and semantic tests to decide which behavior is retained
-and which requires an explicit migration rule; do not infer completion from
-successful single-action benchmarks.
+Events acceptance covers the retained input-binding and lifecycle contracts as
+well as a clicked button. The Vue v1 bridge intentionally serializes calls and
+does not promise same-tick batching or the former Alpine dependency scheduler;
+that is a deliberate migration rule rather than an unfinished optimization.
+State behavior, polling, timing and explicit target handling have their own
+focused coverage and remain subject to the relevant semantic tests.
 
 ### Events implementation order
 
-Scoped `$sendEvent` and authored `@c-*` bindings have native coverage. The
-unscoped `Citry.events` API, including `send` and `applyActions`, remains a
-separate migration task. A widget's server-revision test should exercise its
-authored button and wait for the accepted update; passing that test does not
-establish the unscoped API. Global element-based targeting also needs an
-explicit Vue addressing contract, rather than an assumed DOM ownership lookup.
+Scoped `$sendEvent`, authored `@c-*` bindings, and the unscoped
+`Citry.events` API (`send` and `applyActions`) use the native Vue bridge. A
+widget's server-revision test should exercise its authored button and wait for
+the accepted update; the global API has separate exact-target and lifecycle
+coverage. Global element-based targeting resolves through the mounted Vue
+registry and rejects zero or multiple app matches.
 
 Events integration follows three dependent stages. The existing contract
 in `events.md` remains the acceptance reference for timing, State writes,
@@ -679,16 +708,15 @@ client suite passed all 54 tests, including source/artifact freshness checks.
    identity. Loading/error views, lazy first-Events bridge creation, writable
    State and imperative sends have focused semantic tests. Literal control
    bindings are implemented and under review. Runtime-provided bindings,
-   handler timing, polling and batching still need implementation and tests.
+   handler timing and polling still need their separate implementation and
+   tests; same-tick batching is intentionally not a Vue v1 guarantee.
    Prepared bindings and native mount/unmount hooks identify their owners.
-3. Integrate component and explicit-marker targets through the Python encoder,
-   wire validation, browser coordinator, and authoring diagnostics together.
-   The encoder currently receives the selected target separately but prepares
-   its content using the caller's occurrence. Correct that distinction before
-   allowing a response to address another instance. Validate all immediate
-   targets and their overlap before publishing a group of changes; recheck
-   delayed targets when they execute. Arbitrary CSS selectors and document-shell
-   replacements remain outside the selected API.
+3. Keep component and explicit-marker targets consistent across the Python
+   encoder, wire validation, browser coordinator, and authoring diagnostics.
+   The selected target is distinct from the caller occurrence. Immediate
+   targets and their overlap are validated before publication, and delayed
+   targets are rechecked when they execute. Arbitrary CSS selectors and
+   document-shell replacements remain outside the selected API.
 
    A non-caller target needs an explicit mapping between its server render ID
    and its current Vue occurrence. Today that association is available through

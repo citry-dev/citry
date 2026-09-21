@@ -25,12 +25,21 @@
   const instanceRecords = new WeakMap();
   const publicEventsConfig = Object.create(null);
   const publicEventTransports = new Map();
-  let publicSend = (target, name, args, opts) => {
+  const publicTargetMatches = target => {
+    const matches = [];
     for (const app of apps.values()) {
       const source = app.resolvePublicTarget?.(target);
-      if (source) return app.publicSend?.(source, name, args, opts);
+      if (source) matches.push({app, source});
     }
-    return Promise.reject(new Error("Citry.events.send found no current mounted prepared Vue component for its target."));
+    return matches;
+  };
+  let publicSend = (target, name, args, opts) => {
+    const matches = publicTargetMatches(target);
+    if (matches.length === 0)
+      return Promise.reject(new Error("Citry.events.send found no current mounted prepared Vue component for its target."));
+    if (matches.length > 1)
+      return Promise.reject(new Error("Citry.events.send found multiple current mounted prepared Vue components for its target."));
+    return matches[0].app.publicSend?.(matches[0].source, name, args, opts);
   };
   let publicApplyActions = actions => {
     let checked;
@@ -50,13 +59,12 @@
       // component whose render response owns the marker.
       const marker = /^mark:([^:]+):/.exec(target);
       const lookup = marker ? `render:${marker[1]}` : target;
-      let owner;
-      for (const app of apps.values()) {
-        const source = app.resolvePublicTarget?.(lookup);
-        if (source) { owner = {app, source}; break; }
-      }
-      if (!owner) return Promise.reject(new Error(`Citry.events.applyActions target '${target}' is stale or retired.`));
-      owners.push(owner);
+      const matches = publicTargetMatches(lookup);
+      if (matches.length === 0)
+        return Promise.reject(new Error(`Citry.events.applyActions target '${target}' is stale or retired.`));
+      if (matches.length > 1)
+        return Promise.reject(new Error(`Citry.events.applyActions target '${target}' matches multiple mounted prepared Vue components.`));
+      owners.push(matches[0]);
     }
     if (owners.length) {
       const app = owners[0].app;

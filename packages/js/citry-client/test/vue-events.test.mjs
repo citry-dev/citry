@@ -435,6 +435,36 @@ test("synchronous target preflight failure commits no immediate State", async ()
   assert.equal(stateCommits, 0);
 });
 
+test("accepted State is not restored when a later response action fails", async () => {
+  const restored = [];
+  const committed = [];
+  const host = {
+    ...basicHost(),
+    takePendingState: () => ({ draft: "sent" }),
+    restorePendingState: (_source, updates) => restored.push(updates),
+    commitState(renderId, stateToken) {
+      committed.push([renderId, stateToken]);
+    },
+    async prepareRender() {
+      throw new Error("the later render action failed");
+    },
+    abortRender() {},
+  };
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) =>
+      resultResponse(JSON.parse(init.body), [
+        { action: "state", targetRenderId: "server_1", stateToken: "token_2" },
+        { action: "render", target: "render:server_1", swap: "morph", renderer: "vue-prepared/1", prepared: {} },
+      ]),
+  });
+
+  await assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), /later render/);
+  assert.deepEqual(committed, [["server_1", "token_2"]]);
+  assert.deepEqual(restored, []);
+});
+
 const contextFor = (id = "server_1") => ({
   serverRenderId: id,
   stateToken: null,
@@ -541,6 +571,107 @@ test("public action application keeps targetless events page-wide in a mixed act
   );
   assert.deepEqual(global, ["page-ready"]);
   assert.deepEqual(local, ["component-ready"]);
+});
+
+test("mounted public action application emits the ordinary lifecycle", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const lifecycle = [];
+  const host = {
+    ...basicHost(),
+    lifecycle(kind, actualSource, event, detail) {
+      lifecycle.push({ kind, source: actualSource, event, detail });
+      return true;
+    },
+    dispatchEvent() {},
+  };
+  const bridge = bridgeModule.createVueEventsBridge({ endpoint: "/events", host });
+
+  assert.equal(
+    await bridge.applyActions(
+      [
+        { action: "event", eventName: "component-ready", target: "render:server_1" },
+        { action: "data", value: 7 },
+      ],
+      source,
+    ),
+    7,
+  );
+  assert.deepEqual(
+    lifecycle.map((item) => item.kind),
+    ["before", "after"],
+  );
+  assert.equal(lifecycle[0].event, "__external__");
+  assert.deepEqual(lifecycle[1].detail, { ok: true });
+});
+
+test("mounted public action application reports cancellation and interpreter failures", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const cancelledLifecycle = [];
+  const cancelledHost = {
+    ...basicHost(),
+    lifecycle(kind, _source, event, detail) {
+      cancelledLifecycle.push([kind, event, detail]);
+      return kind !== "before";
+    },
+    dispatchEvent() {
+      throw new Error("cancelled action must not run");
+    },
+  };
+  const cancelled = bridgeModule.createVueEventsBridge({ endpoint: "/events", host: cancelledHost });
+  await assert.rejects(
+    cancelled.applyActions([{ action: "event", eventName: "cancelled", target: "render:server_1" }], source),
+    /cancelled by citry:events:before/,
+  );
+  assert.deepEqual(
+    cancelledLifecycle.map(([kind]) => kind),
+    ["before", "after"],
+  );
+  assert.deepEqual(cancelledLifecycle[1][2], { ok: false });
+
+  const failedLifecycle = [];
+  const failedHost = {
+    ...basicHost(),
+    lifecycle(kind, _source, event, detail) {
+      failedLifecycle.push([kind, event, detail]);
+      return true;
+    },
+    dispatchEvent() {
+      throw new Error("mounted action failed");
+    },
+  };
+  const failed = bridgeModule.createVueEventsBridge({ endpoint: "/events", host: failedHost });
+  await assert.rejects(
+    failed.applyActions([{ action: "event", eventName: "broken", target: "render:server_1" }], source),
+    /mounted action failed/,
+  );
+  assert.deepEqual(
+    failedLifecycle.map(([kind]) => kind),
+    ["before", "error", "after"],
+  );
+  assert.equal(failedLifecycle[1][1], "__external__");
+  assert.deepEqual(failedLifecycle[2][2], { ok: false });
+});
+
+test("mounted public action application reports stale delayed actions", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const lifecycle = [];
+  const host = {
+    ...basicHost(),
+    lifecycle(kind, _source, event, detail) {
+      lifecycle.push([kind, event, detail]);
+      return true;
+    },
+  };
+  const bridge = bridgeModule.createVueEventsBridge({ endpoint: "/events", host });
+  const applied = bridge.applyActions([{ action: "data", value: 7, delay: 0.03 }], source);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  bridge.retire(source);
+  await assert.rejects(applied, /stale or retired/);
+  assert.deepEqual(
+    lifecycle.map(([kind]) => kind),
+    ["before", "stale", "after"],
+  );
+  assert.equal(lifecycle[1][2].reason, "retired");
 });
 
 test("latestCallWins supersedes an active predecessor and drops its response", async () => {

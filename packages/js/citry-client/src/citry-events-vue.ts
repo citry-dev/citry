@@ -693,6 +693,13 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       result: checked.results[0],
     };
     state.acceptedEpoch += 1;
+    // The server has consumed the dequeued State draft once the complete
+    // response/result/target preflight succeeds.  Mark that transaction
+    // accepted before interpreting its actions: a later action may fail after
+    // an earlier State or Render action has already reached the browser, and
+    // restoring the draft in that case would resend data the server already
+    // processed.
+    if (preparedResult.result.ok) job.stateAccepted = true;
     return applyActions(
       preparedResult.result,
       input.source,
@@ -857,7 +864,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       input: { source, handler: "__external__" },
       acceptedRemount: false,
       activityFinished: true,
-      lifecycleStarted: false,
+      lifecycleStarted: true,
       external: true,
       callerRenderId: externalContext.serverRenderId,
       stateAccepted: true,
@@ -868,7 +875,24 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       reject() {},
     } satisfies Job;
     const prepared = options.host.preflightResult?.(result, source) ?? { result };
-    return applyActions(prepared.result, source, state, state.acceptedEpoch, job, prepared.renderPlan);
+    if (!lifecycle("before", source, job.input.handler)) {
+      const error = new VueEventCancellation("Citry Events applyActions was cancelled by citry:events:before.");
+      lifecycle("after", source, job.input.handler, { ok: false });
+      throw error;
+    }
+    try {
+      const value = await applyActions(prepared.result, source, state, state.acceptedEpoch, job, prepared.renderPlan);
+      lifecycle("after", source, job.input.handler, { ok: true });
+      return value;
+    } catch (error) {
+      if (error instanceof VueEventStale) {
+        lifecycle("stale", source, job.input.handler, { reason: error.reason });
+      } else if (!(error instanceof VueEventCancellation)) {
+        lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
+      }
+      lifecycle("after", source, job.input.handler, { ok: false });
+      throw error;
+    }
   };
 
   const retire = (source: VueEventSource, acceptedTransaction?: unknown): void => {

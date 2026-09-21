@@ -88,6 +88,50 @@ test("public applyActions validates the complete list before any targetless acti
   assert.equal(fixture.document.dispatched.length, 0);
 });
 
+test("global send and action targets reject zero or multiple mounted app matches", async () => {
+  const fixture = runtime();
+  const sourceA = { stableId: "a", generation: 1 };
+  const sourceB = { stableId: "b", generation: 1 };
+  let applied = 0;
+  const app = (source, target) => ({
+    resolvePublicTarget(value) {
+      return value === target ? source : null;
+    },
+    publicSend() {
+      return "sent";
+    },
+    publicApplyActions() {
+      applied += 1;
+      return "applied";
+    },
+  });
+
+  fixture.stable._apps.set("one", app(sourceA, "render:shared"));
+  await assert.rejects(
+    fixture.publicEvents.send("render:missing", "save"),
+    /found no current mounted prepared Vue component/,
+  );
+  await assert.rejects(
+    fixture.publicEvents.applyActions(
+      fixture.realm([{ action: "event", eventName: "ready", target: "render:missing" }]),
+    ),
+    /stale or retired/,
+  );
+
+  fixture.stable._apps.set("two", app(sourceB, "render:shared"));
+  await assert.rejects(
+    fixture.publicEvents.send("render:shared", "save"),
+    /found multiple current mounted prepared Vue components/,
+  );
+  await assert.rejects(
+    fixture.publicEvents.applyActions(
+      fixture.realm([{ action: "event", eventName: "ready", target: "render:shared" }]),
+    ),
+    /matches multiple mounted prepared Vue components/,
+  );
+  assert.equal(applied, 0);
+});
+
 const runtimeSpec = (id, overrides = {}) => ({
   id,
   event: "click",

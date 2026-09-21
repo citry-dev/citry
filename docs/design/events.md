@@ -2,17 +2,21 @@
 
 **Vue cutover:** browser lifecycle, component targeting, native event handlers
 and prepared revisions follow [`vue.md`](vue.md). The Events wire contract,
-State and transport remain specified here and in the protocol package;
-Alpine-specific integration sections below are historical background.
+State and transport remain specified here and in the protocol package. The
+Alpine integration sections below are historical research, not the shipped
+browser contract; where they conflict with the current Vue v1 contract below,
+the current contract and [`vue.md`](vue.md) win.
 Migration qualification is recorded in [`vue.md`](vue.md).
 
 **Status (2026-07-26): Events v1 is implemented but not yet frozen or
 released as the v1 beta.** The exact current wire contract is
 [`packages/protocol/events/v1/spec.md`](../../packages/protocol/events/v1/spec.md);
 this document owns the product and implementation design behind it. The current
-frontend-boundary source of truth is [`vue.md`](vue.md); this
-document remains normative for the Events protocol, State, actions,
-transport, and queue. The full
+frontend-boundary source of truth is [`vue.md`](vue.md), and the shipped Vue v1
+browser contract above is normative for the public browser API. This document
+remains normative for the Events protocol, State, actions, transport, and the
+shipped serial queue; the Alpine-specific sections below preserve historical
+design research and do not describe the current runtime. The full
 section-by-section maintainer readthrough completed 2026-07-07 (three
 review rounds overall), and the client-model round (nested anchor
 continuity, targeted renders, the event queue, the `#c-*` channel) was
@@ -86,6 +90,40 @@ and 9; the migration verdicts it fulfills are in
 The focused implemented CSRF ownership and usage guide is
 [`security_csrf.md`](security_csrf.md).
 Operating rules: [`/CLAUDE.md`](../../CLAUDE.md).
+
+## Shipped Vue v1 browser contract
+
+The current Citry browser runtime is the prepared Vue runtime. It owns the
+mounted Citry Vue apps and the Events bridge; it does not load or emulate
+Alpine. This section records the v1 behavior that is easy to confuse with the
+older Alpine design retained later in this document for historical context.
+
+The v1 client serializes calls through one app-wide queue. Same-tick calls are
+not coalesced into one envelope, and `allowBatching` does not promise the old
+Alpine same-tick batching or dependency scheduler. A page must wait for the
+runtime and mounted app before calling `Citry.events`; no pre-runtime call
+queue is part of the shipped Vue contract. The public methods reject until the
+runtime exposes the namespace and a target is mounted.
+
+Vue v1 targets are bounded and explicit. `render:<render-id>` addresses one
+mounted component occurrence; an `Element` inside a mounted occurrence can be
+used by `Citry.events.send`; and `mark:<caller-render-id>:<name>` addresses a
+declared marker for a prepared render action. Render IDs and marker names are
+validated, and a global target lookup must resolve exactly one mounted app and
+occurrence. Zero matches and multiple matches reject. Arbitrary CSS selectors,
+document-shell elements (`html`, `head`, and `body`), and direct mutation of
+unmanaged DOM are outside Vue v1.
+
+`Citry.events.applyActions(actions)` uses the same action interpreter as a
+server response. With a mounted source it emits `citry:events:before`, then
+`citry:events:after` with `{ok: true|false}`, and emits `citry:events:error`
+or `citry:events:stale` for the corresponding failure before `after`. Its
+`detail.event` is `"__external__"` because the call has no server handler
+name; a `before` listener may cancel it. Actions without a mounted source
+retain their global-only behavior and do not acquire a component lifecycle.
+Accepted result preflight also accepts the dequeued State transaction before
+action interpretation begins, so a later action failure cannot restore a
+draft that the server has already consumed.
 
 ---
 
@@ -1636,22 +1674,16 @@ Streams and htmx out-of-band swaps are the same shape):
 | `redirect` | `url` | Navigate the page. |
 | `url` | `url`, `mode` | History push or replace without navigation. `PushUrl` and `ReplaceUrl` are its two producers; the client accepts only exact `push` or `replace` modes, preserves `history.state`, and skips invalid or browser-rejected updates without interrupting later actions. |
 
-Targets: a plain string is a **CSS selector** and applies to **all
-matches** (`querySelectorAll`, so comma unions work natively; the
-all-matches rule is the field's unanimous answer, per Turbo's `targets`,
-htmx's out-of-band selector swaps, and Datastar). A selector matching
-nothing logs a zero-match warning instead of silently doing nothing. The
-optional `render:<render id>` form targets a specific rendered component occurrence
-(the elements carrying its `data-cid-<id>` marker); it is what the
-runtime uses for self-renders, and `render:` is a reserved prefix. Its ID uses
-the case-safe `^[a-z0-9_-]+$` render-ID grammar, and the same constraint
-applies to `state.targetRenderId`. The
-client rejects an unsafe suffix before constructing a `data-cid-*` selector.
-A selector that targets a non-component region makes
-that region's structure part of the page's contract; prefer instance
-targets where possible. Swaps: `morph`
-(default when the client advertises it), `replace`, `inner`, `append`,
-`prepend`, `remove`, `none`.
+Targets in the shipped Vue v1 client are explicit rather than CSS selectors.
+`render:<render id>` targets one mounted component occurrence, and a prepared
+render may use `mark:<caller-render-id>:<name>` for one declared marker owned by
+that caller. `state.targetRenderId` uses the same safe render-ID grammar,
+`^[a-z0-9_-]+$`. The client rejects an unsafe or unknown target before it
+mutates the page, and a global lookup rejects both zero matches and multiple
+matches across mounted Vue apps. Arbitrary CSS selectors and document-shell
+targets are not part of the Vue v1 contract. Swaps supported by the prepared
+Vue target are `morph` and the explicitly validated prepared variants; the
+older selector-wide swap matrix below is historical Alpine design material.
 
 **Ordering is faithful, including `redirect`.** Actions apply strictly
 in list order; the framework never reorders or drops them. Other
@@ -1813,7 +1845,12 @@ v2.
 
 ---
 
-## 5. The client API
+## 5. Historical Alpine client API and design record
+
+The following section records the former Alpine client design for migration
+history and prior-art context. It is not the shipped browser contract. Read
+the **Shipped Vue v1 browser contract** above for the current target, lifecycle,
+queue, and load-order rules.
 
 The pinned Alpine/Events bundles are served at the stable
 `ext/events/runtime.js` and `ext/events/runtime-csp.js` routes and injected
@@ -2416,16 +2453,17 @@ one job: listening for those application events.
 
 **Escape hatches outside component JS: the `Citry.events` global.** For
 page scripts, other libraries, and tests, the same capabilities exist
-unscoped on `Citry.events` (calls made before the runtime loads are
-queued by the bootstrap stub, per Load ordering below):
+unscoped on `Citry.events` in the historical design recorded below. The
+shipped Vue v1 runtime exposes the namespace only after runtime startup and
+does not promise a pre-runtime call queue; see the contract above.
 
 | Method | What it does | Scoped counterpart |
 |---|---|---|
-| `Citry.events.send(target, name, args?, opts?)` | Send an event to any instance on the page. `target` is an instance id or an Element inside one; the runtime resolves the instance's registry entry (class, token, pending updates, epoch) and dispatches over the configured transport. Same promise contract as the scoped form. | `sendEvent(name, args?, opts?)` on the `$component` payload and `$sendEvent` in Alpine expressions: the same call with the instance pre-bound. |
+| `Citry.events.send(target, name, args?, opts?)` | Send an event to one mounted occurrence. `target` is a `render:<id>` (or bare render ID) or an `Element` inside that occurrence; the runtime resolves its class, token, pending updates and epoch. A global lookup must find exactly one occurrence across mounted apps. | `sendEvent(name, args?, opts?)` on the `$component` payload and `$sendEvent` on the native Vue component instance: the same call with the instance pre-bound. |
 | `Citry.events.on(name, fn)` | Listen for server-dispatched events (`Dispatch` actions) under their raw name, from any instance; returns the unsubscribe function. Sugar over `document.addEventListener` that unwraps `e.detail`. | `onEvent(name, fn)` / `$onEvent(name, fn)`: the same, filtered to events targeting that instance. |
 | `Citry.events.configure(opts)` | Set page-wide runtime defaults once, from the host page; fields below. | None page-wide; a one-off override rides `sendEvent`'s `opts` (e.g. a per-call `timeout`). |
 | `Citry.events.registerTransport(name, impl)` | Register a transport under a name: `impl` is `{send(envelope) -> Promise<resultEnvelope>, subscribe?}` (`subscribe` is the v2 push half, 6.1). The built-in fetch transport registers through this same function; selection is `configure({transport: name})`. | None (transports are page-level by nature). |
-| `Citry.events.applyActions(actions)` | The action interpreter as a public entry point: apply a result envelope's `actions` array to the page, firing the same lifecycle events (4.3). Exposed for tests, custom transports, and pages that override what an action does. | None. |
+| `Citry.events.applyActions(actions)` | The action interpreter as a public entry point: apply a result envelope's `actions` array. With a mounted target it fires the same `before`/`after`/`error`/`stale` lifecycle as a server call, using `event: "__external__"`; global-only actions retain their global behavior without a component lifecycle. | None. |
 
 What `configure` actually configures, field by field:
 
@@ -2441,11 +2479,16 @@ bubbling DOM CustomEvents, all under the reserved `citry:` prefix:
 
 | Event | Fires | Extra `detail` fields |
 |---|---|---|
-| `citry:events:before` | Just before a call is sent. Cancellable: `e.preventDefault()` stops the send and rejects the caller's promise. | none |
-| `citry:events:after` | When a call settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
-| `citry:events:error` | When a call fails: a transport failure, an error result, or a timeout (5.6). | `error`: the `{status, code, message, fieldErrors?}` envelope (3.7) |
+| `citry:events:before` | Just before a call is sent, or before `Citry.events.applyActions` interprets actions for a mounted source. Cancellable: `e.preventDefault()` stops the send/application and rejects the caller's promise. | none |
+| `citry:events:after` | When a call or mounted-source `applyActions` settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
+| `citry:events:error` | When a call or mounted-source `applyActions` fails: a transport failure, an error result, an interpreter error, or a timeout (5.6). | `error`: the `{status, code, message, fieldErrors?}` envelope (3.7) |
 | `citry:events:swapped` | After a `render` action has updated the DOM. | `els`: the swapped-in root elements |
 | `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the version-skew prompt of 4.5 rides this same event under this reason; its default handling is the soft reload prompt). The `epoch` case in one line: a custom input sends on every keystroke through `sendEvent(..., {wait: false})`, you typed "ab" then "abc", "abc" answered first, and the slower "ab" response would overwrite newer results with older ones, so its application is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
+
+For the Vue v1 mounted-source `applyActions` path, a delayed action that
+loses its source is also reported as `citry:events:stale` and followed by
+`citry:events:after` with `{ok: false}`. A `before` cancellation reports
+`after` without `error` or `stale`.
 
 **How each drop settles.** Every dropped or cancelled call still
 settles its caller's promise (the R3 contract, 14.3.6). The drop
@@ -2523,29 +2566,17 @@ document.addEventListener("MyCard:saved", (e) => {
 });
 ```
 
-**Load ordering.** Fragment script execution order is not guaranteed, so
-the extension injects a compact inline bootstrap stub through the manifest
-(inline manifest scripts run synchronously during processing). The stub
-defines a queueing `Citry.events`: early `send`, `configure`,
-`registerTransport`, `on`, and instance-listener calls are retained, while
-early `send` and `applyActions` return promises that settle after the full
-runtime arrives. It also registers a context decorator via a hook on
-the dependencies manager, `Citry.manager.decorateContext(fn)`, the hook
-through which the events runtime adds its members
-(`state` / `loading` / `error` / `sendEvent` / `onEvent`; the `props` member of 5.5 rides
-the `$component` registration itself, extended in citry.js) to
-every `$component` payload object (substrate item 12.5).
+**Load ordering.** The Vue v1 runtime is delivered by the prepared
+serialization/bootstrap contract and exposes `Citry.events` only after the
+runtime is ready. Calls made before that point are not a promised queueing
+surface: page code must wait for the runtime and the relevant mounted app.
+Once exposed, the bridge creates a per-app serial queue for sends and applies
+actions in list order. This avoids claiming the old Alpine bootstrap replay,
+same-tick batching, or pre-runtime `applyActions` promises that the Vue client
+does not implement.
 
-Bootstrap replay has one intentional exception to FIFO order: every queued
-`registerTransport` declaration is installed in a first pass, then all other
-queued calls replay in their original relative order. Thus an early
-`configure({transport: name})` or `send` can select a custom transport whose
-registration appeared later in parser execution. Transport declarations do
-not represent work and return no promise; declaration-first replay makes the
-load-order race deterministic. Queued `applyActions` retains normal FIFO
-position in the second pass and keeps its promise contract.
-
-The spike (13.2) pinned three boot-order rules that make this
+The following is historical Alpine load-order research; it does not describe
+the shipped Vue v1 runtime. The spike (13.2) pinned three boot-order rules that make this
 race-proof, because citry.js processes manifest tags DURING page parse
 (parser insertions are mutations, delivered mid-parse):
 
