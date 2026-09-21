@@ -1,14 +1,9 @@
+const anchoredLayerRuntimeCompatible = globalThis[
+  Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+] === true;
 const anchoredLayerRuntime = globalThis[
   Symbol.for("citry-ui:anchored-layer-runtime")
 ];
-if (
-  anchoredLayerRuntime?.generation !== 3
-  || !anchoredLayerRuntime?.capabilities?.includes?.(
-    "ancestor-close-transaction-v1",
-  )
-) {
-  throw new Error("[citry-ui] anchored-layer runtime dependency did not load.");
-}
 
 const selectHandoffKey = Symbol.for("citry-ui:select-handoff");
 
@@ -23,6 +18,7 @@ $component({
     formService: {from: Symbol.for('citry-ui:form'), default: null},
   },
   onServerRender: ({component}) => {
+    if (!anchoredLayerRuntimeCompatible) return;
     const root = component.$el;
     if (!(root instanceof HTMLDivElement)) throw new Error('[citry-ui] CSelect root is invalid.');
     const data = component;

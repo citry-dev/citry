@@ -78,7 +78,7 @@ def test_popover_and_tooltip_emit_one_shared_anchored_runtime_dependency():
     html = str(Page())
 
     assert html.count("cannot replace an incompatible anchored-layer runtime") == 1
-    assert html.count("anchored-layer runtime dependency did not load") == 2
+    assert "anchored-layer runtime dependency did not load" not in html
 
 
 def test_popover_renders_semantic_top_layer_anatomy_and_typed_slot_data():

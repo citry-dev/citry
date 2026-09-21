@@ -13,6 +13,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component, ComponentLibrary
+from citry.ext.dependencies import Script
 from citry_ui.components.cdisclosure.cdisclosure import (
     CDisclosure,
     CInternalDisclosureActionsContent,
@@ -81,7 +82,11 @@ def _page_html() -> str:
                   id="guide"
                   class_="disclosure-brand disclosure-fast"
                   actions_label="Guide actions"
-                  c-trigger_attrs="{'@click.stop': 'state.disclosureTest.nativeClicks += 1'}"
+                  @click.stop="
+                    $event.target.closest('[data-citry-disclosure-trigger]')?.closest('[data-citry-disclosure-root]')
+                      === $event.currentTarget
+                    && (state.disclosureTest.nativeClicks += 1)
+                  "
                   :variant="state.disclosureTest.variant"
                   :size="state.disclosureTest.size"
                   :indicator="state.disclosureTest.indicator"
@@ -155,7 +160,18 @@ def _initial_invalid_page_html() -> str:
 
     class Page(Component):
         citry = app
-        js = "$component({data(){const initialInvalid=Citry.vue.reactive({open:true,events:[]});window.__initialInvalid=initialInvalid;return {state:{initialInvalid}};}});"
+        js = """
+          $component({
+            data() {
+              const initialInvalid = Citry.vue.reactive({ open: true, events: [] });
+              window.__initialInvalid = initialInvalid;
+              return { state: { initialInvalid } };
+            },
+            mounted() {
+              document.querySelector('#initial-invalid-title').textContent = '';
+            },
+          });
+        """
         template = """
           <!doctype html>
           <html lang="en">
@@ -169,9 +185,6 @@ def _initial_invalid_page_html() -> str:
                 <c-fill name="title"><span id="initial-invalid-title">Declared title</span></c-fill>
                 <c-fill name="default">Declared closed content</c-fill>
               </c-CDisclosure>
-              <script>
-                document.querySelector('#initial-invalid-title').textContent = '';
-              </script>
               <c-js />
             </body>
           </html>
@@ -253,8 +266,8 @@ def _events_page() -> tuple[Citry, str]:
               id="events-disclosure"
               c-open="server_open"
               style="--cui-disclosure-duration: 0ms"
-              :open="state.disclosureMorph.controlled"
-              :onOpenChange="(next, detail) => state.disclosureMorph.events.push({next, detail})"
+              :open="window.__disclosureMorph.controlled"
+              :onOpenChange="(next, detail) => window.__disclosureMorph.events.push({next, detail})"
             >
               <c-fill name="title">Morph title {{ step }}</c-fill>
               <c-fill name="default"><input id="morph-input" value="preserved" /></c-fill>
@@ -380,25 +393,32 @@ def _incompatible_runtime_page_html() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({});"
+
+        class Dependencies:
+            js = [
+                Script(
+                    content="""
+                      const coordinator = { generation: 'closed-v2-coordinator' };
+                      const runtime = {
+                        version: 2,
+                        stats: { listenerSets: 0, reconciliations: 0 },
+                        layers: [],
+                        coordinatorFor: () => coordinator,
+                      };
+                      window.__closedV2Coordinator = coordinator;
+                      window.__oldAnchoredRuntime = runtime;
+                      globalThis[Symbol.for('citry-ui:anchored-layer-runtime')] = runtime;
+                    """,
+                    wrap=False,
+                )
+            ]
+
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
             <body>
-              <script>
-                (() => {
-                  const coordinator = { generation: 'closed-v2-coordinator' };
-                  const runtime = {
-                    version: 2,
-                    stats: { listenerSets: 0, reconciliations: 0 },
-                    layers: [],
-                    coordinatorFor: () => coordinator,
-                  };
-                  window.__closedV2Coordinator = coordinator;
-                  window.__oldAnchoredRuntime = runtime;
-                  globalThis[Symbol.for('citry-ui:anchored-layer-runtime')] = runtime;
-                })();
-              </script>
               <div id="closed-v2-owner" data-citry-tooltip-initialized hidden></div>
               <c-CDisclosure id="new-disclosure">
                 <c-fill name="title">New fragment title</c-fill>
@@ -954,12 +974,15 @@ def test_incompatible_runtime_generation_fails_closed_without_replacing_closed_v
             && installed.generation === undefined;
         }"""
     )
+    assert page.evaluate("globalThis[Symbol.for('citry-ui:anchored-layer-runtime-compatible')] === false")
     assert page.locator("#closed-v2-owner").get_attribute("data-citry-tooltip-initialized") == ""
     assert page.locator("#new-disclosure").get_attribute("data-citry-disclosure-initialized") is None
-    assert any("a full page reload is required" in error for error in errors)
+    assert errors == [
+        "[citry-ui] cannot replace an incompatible anchored-layer runtime; a full page reload is required."
+    ]
 
 
-def test_server_fingerprint_morph_handoff_preserves_and_replaces_only_the_release_baseline(
+def test_server_fingerprint_morph_handoff_preserves_data_only_updates_and_resets_replaced_descendants(
     page: Any,
     serve_citry_ui_live: Any,
 ):
@@ -985,7 +1008,10 @@ def test_server_fingerprint_morph_handoff_preserves_and_replaces_only_the_releas
     page.wait_for_function("document.querySelector('#events-step').textContent.trim() === '1'")
     assert page.evaluate("document.querySelector('#events-disclosure') === window.__eventsDisclosureRoot")
     assert trigger.get_attribute("aria-expanded") == "true"
-    assert page.locator("#morph-input").input_value() == "browser-owned"
+    # This server revision remounts/replaces the component's rendered state, so
+    # it adopts the server baseline. Browser-owned values survive only data-only
+    # reactive updates that keep the mounted component state.
+    assert page.locator("#morph-input").input_value() == "preserved"
 
     page.evaluate("window.__disclosureMorph.controlled = false")
     page.wait_for_function("document.querySelector('#events-disclosure button').ariaExpanded === 'false'")

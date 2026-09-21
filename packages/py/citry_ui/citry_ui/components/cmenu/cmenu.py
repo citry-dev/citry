@@ -3051,13 +3051,16 @@ class CMenu(LibraryComponent):
           return {menuService: service};
         },
         provide() { return {[Symbol.for("citry-ui:menu")]: this.menuService}; },
-        onServerRender: ({component}) => createMenuController({
-          host: component.$el,
-          data: component.serverDefaults,
-          props: component.$props,
-          effect: Citry.vue.watchEffect,
-          service: component.menuService,
-        }),
+        onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
+          return createMenuController({
+            host: component.$el,
+            data: component.serverDefaults,
+            props: component.$props,
+            effect: Citry.vue.watchEffect,
+            service: component.menuService,
+          });
+        },
       });
     """
     )
@@ -4905,6 +4908,7 @@ class CMenuSubmenu(LibraryComponent):
         },
         provide() { return {[Symbol.for("citry-ui:menu")]: this.submenuService}; },
         onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
           const wrapper = component.$el;
           const data = {key: component.key, value: component.value, ...component.serverDefaults};
           const props = component.$props;

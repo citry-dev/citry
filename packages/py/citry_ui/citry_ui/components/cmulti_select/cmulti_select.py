@@ -700,6 +700,7 @@ class CMultiSelect(LibraryComponent):
           formService:{from:Symbol.for('citry-ui:form'),default:null},
         },
         onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
           const root=component.$refs.root;
           const data=new Proxy(component.serverDefaults,{get(target,key){return key in target?target[key]:component[key];}});
           const props=component.$props;

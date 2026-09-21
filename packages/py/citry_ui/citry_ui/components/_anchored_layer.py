@@ -5,6 +5,12 @@ from citry.ext.dependencies import Script
 _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
       const anchoredLayerRuntime = (() => {
         const runtimeKey = Symbol.for("citry-ui:anchored-layer-runtime");
+        const compatibilityKey = Symbol.for(
+          "citry-ui:anchored-layer-runtime-compatible",
+        );
+        const incompatibilityReportedKey = Symbol.for(
+          "citry-ui:anchored-layer-runtime-incompatibility-reported",
+        );
         const runtimeGeneration = 3;
         const ancestorCloseCapability = "ancestor-close-transaction-v1";
         const installed = globalThis[runtimeKey];
@@ -12,13 +18,19 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
           installed?.generation === runtimeGeneration
           && installed?.capabilities?.includes?.(ancestorCloseCapability)
         ) {
+          globalThis[compatibilityKey] = true;
           return installed;
         }
         if (installed !== undefined) {
-          throw new Error(
-            "[citry-ui] cannot replace an incompatible anchored-layer runtime; "
-              + "a full page reload is required.",
-          );
+          globalThis[compatibilityKey] = false;
+          if (!globalThis[incompatibilityReportedKey]) {
+            globalThis[incompatibilityReportedKey] = true;
+            console.error(
+              "[citry-ui] cannot replace an incompatible anchored-layer runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return installed;
         }
 
         const coordinators = new WeakMap();
@@ -789,6 +801,7 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
           },
         });
         globalThis[runtimeKey] = runtime;
+        globalThis[compatibilityKey] = true;
         return runtime;
       })();
 """
@@ -799,15 +812,10 @@ ANCHORED_LAYER_RUNTIME_DEPENDENCY = Script(
 )
 
 ANCHORED_LAYER_RUNTIME_JS = r"""
+      const anchoredLayerRuntimeCompatible = globalThis[
+        Symbol.for("citry-ui:anchored-layer-runtime-compatible")
+      ] === true;
       const anchoredLayerRuntime = globalThis[
         Symbol.for("citry-ui:anchored-layer-runtime")
       ];
-      if (
-        anchoredLayerRuntime?.generation !== 3
-        || !anchoredLayerRuntime?.capabilities?.includes?.(
-          "ancestor-close-transaction-v1",
-        )
-      ) {
-        throw new Error("[citry-ui] anchored-layer runtime dependency did not load.");
-      }
 """

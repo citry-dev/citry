@@ -348,6 +348,7 @@ class CPopover(LibraryComponent):
           onOpenChange: {},
         },
         onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
           const host = component.$el;
           const data = component;
           const props = component.$props;

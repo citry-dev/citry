@@ -327,6 +327,7 @@ class CTooltip(LibraryComponent):
           onOpenChange: {},
         },
         onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
           const host = component.$el;
           const data = component;
           const defaults = component.serverDefaults;

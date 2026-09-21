@@ -753,6 +753,7 @@ class CDisclosure(LibraryComponent):
         },
         inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
         onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
           const root = component.$el;
           const data = component;
           const defaults = data.serverDefaults;
