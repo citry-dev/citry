@@ -658,13 +658,28 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
         page.keyboard.press("Tab")
         if not edit_button.evaluate("element => element === document.activeElement"):
             raise AssertionError("Tab did not move from search to the first Edit button")
+        owned_stylesheet_selector = "style[data-citry-css-url],link[data-citry-css-url]"
+        styles_before_form = page.locator(owned_stylesheet_selector).evaluate_all(
+            "elements => elements.map(element => element.getAttribute('data-citry-css-url'))"
+        )
         page.keyboard.press("Enter")
         editor.get_by_role("heading", name="Edit Ada Lovelace").wait_for()
         grace.get_by_role("heading", name="Grace Hopper").wait_for()
         page.wait_for_function(
             "document.activeElement?.name === 'name' && document.activeElement.closest('#contact-row-1')"
         )
-        form_style = page.locator("link[rel='stylesheet'][href*='ContactForm_']")
+        editor.get_by_role("button", name="Cancel").wait_for(state="attached")
+        form_style_urls = page.locator(owned_stylesheet_selector).evaluate_all(
+            "(elements, before) => elements.map(element => element.getAttribute('data-citry-css-url'))"
+            ".filter(url => !before.includes(url))",
+            styles_before_form,
+        )
+        if len(form_style_urls) != 1:
+            raise AssertionError(
+                "Expected opening the ContactForm to attach exactly one new owned stylesheet, "
+                f"got {form_style_urls!r}"
+            )
+        form_style = page.locator(f'[data-citry-css-url="{form_style_urls[0]}"]')
         form_style.wait_for(state="attached")
         page.wait_for_function(
             "getComputedStyle(document.querySelector('#contact-row-1 .contact-form')).display === 'grid'"
