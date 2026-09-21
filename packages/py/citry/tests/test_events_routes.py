@@ -16,6 +16,7 @@ from decimal import Decimal
 import pytest
 
 from citry import Citry, Component
+from citry._vue import events as vue_events
 from citry.ext.events import actions, event
 from citry.ext.events.codecs import (
     EnvelopeCodec,
@@ -1329,6 +1330,53 @@ class TestRuntimeRoute:
         # The bundle's generated-file banner is its identifying marker
         # (observed from the built file; the versions behind it may move).
         assert "Citry interactive runtime. GENERATED FILE" in response.text
+
+
+class TestImmutableAssetRoutes:
+    def test_content_addressed_vue_assets_allow_opaque_origins_and_keep_cache_policy(self, monkeypatch):
+        c = _citry()
+        definition_digest = "a" * 64
+        style_digest = "b" * 64
+
+        monkeypatch.setattr(
+            vue_events,
+            "definition_bundle",
+            lambda _citry, digest: b"globalThis.__definitionLoaded = true;" if digest == definition_digest else None,
+        )
+        monkeypatch.setattr(
+            vue_events,
+            "style_asset",
+            lambda _citry, digest: b".asset { color: red; }" if digest == style_digest else None,
+        )
+
+        client = _mounted(c)
+        definition = client.get(f"/citry/ext/events/definitions/{definition_digest}.js")
+        style = client.get(f"/citry/ext/events/assets/{style_digest}.css")
+
+        for response, content_type, body in (
+            (definition, "text/javascript", b"globalThis.__definitionLoaded = true;"),
+            (style, "text/css", b".asset { color: red; }"),
+        ):
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith(content_type)
+            assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
+            assert response.headers["access-control-allow-origin"] == "*"
+            assert response.content == body
+
+    def test_asset_cors_does_not_reach_event_action_responses(self):
+        c = _citry()
+        greeter = _greeter(c)
+        response = _post_call(
+            _mounted(c),
+            greeter,
+            "quiet",
+            {"args": {}, "stateToken": _token(greeter)},
+            headers={"Origin": "https://evil.example"},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["results"][0]["error"]["code"] == "csrf_failed"
+        assert response.headers.get("access-control-allow-origin") is None
 
 
 class TestCompatMode:

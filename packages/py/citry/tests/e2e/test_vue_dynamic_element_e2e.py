@@ -1695,6 +1695,77 @@ def test_opaque_sandbox_skips_only_citry_owned_asset_integrity(page: Any) -> Non
     assert result[3]["error"] == "Citry Vue stylesheet failed to load: /owned.css"
 
 
+def test_opaque_sandbox_fetches_content_addressed_vue_assets_with_cors(page: Any, serve_live: Any) -> None:
+    """An opaque preview can read Citry's public definition and stylesheet assets."""
+    engine = Citry(secret="opaque-asset-cors-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class AssetPage(Component):
+        citry = engine
+
+        class Events:
+            def ping(self):
+                return None
+
+        template = """
+          <main class="asset-probe">ready</main>
+        """
+        css = """
+          .asset-probe { color: rgb(12, 34, 56); }
+        """
+
+    dispatcher_for(engine)
+    rendered = AssetPage().render().serialize()
+    asset_paths = sorted(
+        set(re.findall(r"/citry/ext/events/(?:definitions|assets)/[0-9a-f]{64}\.(?:js|css)", rendered))
+    )
+    assert any("/definitions/" in path for path in asset_paths)
+    assert any("/assets/" in path for path in asset_paths)
+
+    base = serve_live(engine, "<main>asset host</main>", "")
+    page.goto(base + "/")
+    result = page.evaluate(
+        """({base, paths}) => new Promise(resolve => {
+          const frame = document.createElement('iframe');
+          frame.setAttribute('sandbox', 'allow-scripts');
+          const timeout = window.setTimeout(() => {
+            window.removeEventListener('message', onMessage);
+            resolve({origin: 'timeout', results: []});
+          }, 5_000);
+          function onMessage(event) {
+            if (event.source !== frame.contentWindow || event.data?.type !== 'asset-cors-result') return;
+            window.clearTimeout(timeout);
+            window.removeEventListener('message', onMessage);
+            resolve(event.data);
+          }
+          window.addEventListener('message', onMessage);
+          const frameSource = `<!doctype html><script>
+            (async () => {
+              const results = [];
+              try {
+                for (const path of ${JSON.stringify(paths)}) {
+                  const response = await fetch(new URL(path, ${JSON.stringify(base)}), {credentials: 'omit'});
+                  results.push({path, ok: response.ok, type: response.type, body: await response.text()});
+                }
+                parent.postMessage({type: 'asset-cors-result', origin: location.origin, results}, '*');
+              } catch (error) {
+                parent.postMessage({type: 'asset-cors-result', origin: location.origin,
+                  results, error: String(error?.message || error)}, '*');
+              }
+            })();
+          </script>`;
+          frame.srcdoc = frameSource;
+          document.body.append(frame);
+        })""",
+        {"base": base, "paths": asset_paths},
+    )
+
+    assert result["origin"] == "null"
+    assert "error" not in result
+    assert all(item["ok"] and item["type"] == "cors" for item in result["results"])
+    assert any(".asset-probe" in item["body"] for item in result["results"] if item["path"].endswith(".css"))
+
+
 def test_terminal_app_releases_only_its_shared_stylesheet_reference(page: Any) -> None:
     vue_root = Path(__file__).parents[2] / "citry" / "_vue"
     html = (

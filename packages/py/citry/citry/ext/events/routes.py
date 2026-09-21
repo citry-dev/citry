@@ -105,6 +105,13 @@ MAX_ENVELOPE_BYTES = 1024 * 1024
 
 _JSON_CONTENT_TYPE = "application/json"
 _NO_STORE = ("Cache-Control", "no-store")
+_IMMUTABLE_ASSET_HEADERS = (
+    ("Cache-Control", "public, max-age=31536000, immutable"),
+    # These bytes are content addressed and carry no request credentials, so
+    # opaque preview frames can fetch the public asset without opening event
+    # or action responses to cross-origin reads.
+    ("Access-Control-Allow-Origin", "*"),
+)
 
 
 ################################################
@@ -219,7 +226,7 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         return RouteResponse(
             content.decode(),
             content_type="text/javascript",
-            headers=(("Cache-Control", "public, max-age=31536000, immutable"),),
+            headers=_IMMUTABLE_ASSET_HEADERS,
         )
 
     def serve_style_asset(_request: RouteRequest, *, digest: str) -> RouteResponse:
@@ -233,7 +240,7 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         return RouteResponse(
             content.decode(),
             content_type="text/css",
-            headers=(("Cache-Control", "public, max-age=31536000, immutable"),),
+            headers=_IMMUTABLE_ASSET_HEADERS,
         )
 
     # Each dispatch route is a sync/async pair: the plain handler is what the
