@@ -851,6 +851,15 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
                 </c-for>
             </section>
         """
+        js = """
+            $component({
+                updated() {
+                    if (!globalThis.__focusAwayDuringRender) return;
+                    globalThis.__focusAwayDuringRender = false;
+                    document.querySelector('#focus-sentinel')?.focus();
+                },
+            });
+        """
 
         def template_data(self, kwargs, slots):
             nonlocal target_render_id
@@ -865,6 +874,7 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
             <div>
                 <button id="reorder" @c-click="refresh">reorder</button>
                 <button id="remove-a" @c-click="remove_a">remove a</button>
+                <button id="focus-sentinel" type="button">focus sentinel</button>
             </div>
         """
 
@@ -908,6 +918,7 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
     page.wait_for_function(
         "() => [...document.querySelectorAll('#rows label')].map(label => label.dataset.key).join(',') === 'b,a'"
     )
+    page.wait_for_function("[...CitryStable._apps.values()][0].revision === 1", timeout=5000)
     assert [page.locator("#rows label").nth(index).get_attribute("data-key") for index in range(2)] == ["b", "a"]
     assert [page.locator(f'[data-key="{key}"] input').input_value() for key in ("a", "b")] == [
         "local-a",
@@ -921,6 +932,53 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
     })""")
         is True
     )
+
+    page.evaluate(
+        """() => {
+          const input = document.querySelector('[data-key="a"] input');
+          input.focus();
+          input.setSelectionRange(2, 6, 'backward');
+          document.querySelector('#reorder').dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        }"""
+    )
+    page.wait_for_function(
+        "[...CitryStable._apps.values()][0].revision === 2 && ![...CitryStable._apps.values()][0].busy",
+        timeout=5000,
+    )
+    focus_state = page.evaluate(
+        """() => {
+          const input = globalThis.__keyedRows.a.input;
+          const current = document.querySelector('[data-key="a"] input');
+          return {
+            sameNode: current === input,
+            focused: document.activeElement === current,
+            start: current.selectionStart,
+            end: current.selectionEnd,
+            direction: current.selectionDirection,
+          };
+        }"""
+    )
+    assert focus_state == {
+        "sameNode": True,
+        "focused": True,
+        "start": 2,
+        "end": 6,
+        "direction": "backward",
+    }
+
+    page.evaluate(
+        """() => {
+          document.querySelector('[data-key="a"] input').focus();
+          document.querySelector('[data-key="a"] input').setSelectionRange(1, 5);
+          globalThis.__focusAwayDuringRender = true;
+          document.querySelector('#reorder').dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        }"""
+    )
+    page.wait_for_function(
+        "[...CitryStable._apps.values()][0].revision === 3 && ![...CitryStable._apps.values()][0].busy",
+        timeout=3000,
+    )
+    assert page.evaluate("document.activeElement?.id") == "focus-sentinel"
 
     with page.expect_response("**/ext/events/call") as remove_response_info:
         page.locator("#remove-a").click()

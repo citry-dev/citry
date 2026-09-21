@@ -3603,6 +3603,54 @@
     }
   }
 
+  function captureFocusForPublication() {
+    const element = document.activeElement;
+    // Body/document focus is the browser's unfocused sentinel, so only retain a user control.
+    if (typeof HTMLElement !== "function" || !(element instanceof HTMLElement) ||
+        element === document.body || element === document.documentElement)
+      return null;
+    const snapshot = {element, selection: null};
+    const isTextControl = (typeof HTMLInputElement === "function" && element instanceof HTMLInputElement) ||
+      (typeof HTMLTextAreaElement === "function" && element instanceof HTMLTextAreaElement);
+    if (isTextControl) {
+      // Keyed moves can clear an active control's range while Vue temporarily detaches it.
+      const start = element.selectionStart, end = element.selectionEnd;
+      if (Number.isInteger(start) && Number.isInteger(end)) {
+        snapshot.selection = {
+          start,
+          end,
+          direction: typeof element.selectionDirection === "string" ? element.selectionDirection : null,
+        };
+      }
+    }
+    return snapshot;
+  }
+
+  function restoreFocusAfterPublication(snapshot) {
+    const element = snapshot?.element;
+    if (!element?.isConnected) return;
+    const current = document.activeElement;
+    const focusWasLost = current === null || current === document || current === document.body ||
+      current === document.documentElement;
+    // A user focus change wins over the focus that was captured for this render.
+    if (!focusWasLost && current !== element) return;
+    if (current !== element) {
+      try { element.focus({preventScroll: true}); }
+      catch (_) { return; }
+    }
+    const selection = snapshot.selection;
+    if (!selection || typeof element.setSelectionRange !== "function") return;
+    // Server data may shorten the value, so keep the old range inside its new bounds.
+    const length = typeof element.value === "string" ? element.value.length : 0;
+    const start = Math.min(selection.start, length), end = Math.min(selection.end, length);
+    try {
+      if (selection.direction === null) element.setSelectionRange(start, end);
+      else element.setSelectionRange(start, end, selection.direction);
+    } catch (_) {
+      // A control whose type changed during the render no longer accepts text ranges.
+    }
+  }
+
   async function applyEnvelope(appId, envelope, targetId = envelope.rootId, pluginTransaction = null) {
     const app = definitionRegistry(appId);
     if (app.busy) throw new Error("concurrent server render rejected");
@@ -3658,11 +3706,13 @@
       const nextLive = new Map([...app.occurrences].map(([id,item]) => [id, changedIds.has(id) || expectedRemountIds.has(id) ? {...item, serverData: V.reactive(clone(item.serverData))} : priorLive.get(id)]));
       // Removed instances keep their prior server data until Vue runs beforeUnmount in this flush.
       for (const id of removed) if (priorLive.has(id)) nextLive.set(id, priorLive.get(id));
+      const focusSnapshot = captureFocusForPublication();
       app.snapshot.value = nextLive;
       for (const item of staged) if (item.record && !item.added && !expectedRemountIds.has(item.action.id)) item.record.live.value = nextLive.get(item.action.id);
       for (const item of staged) if (item.record && item.serverShapeChanged && !item.added &&
           !expectedRemountIds.has(item.action.id)) item.component.$forceUpdate();
       await V.nextTick();
+      restoreFocusAfterPublication(focusSnapshot);
       if (app.terminal) throw new Error("render failed after prepared revision publication");
       if (!app.mounted.has(app.rootId) || [...app.mounted.keys()].some(id => !app.occurrences.has(id)) ||
           removed.some(id => app.mounted.has(id))) throw new Error("rendered occurrence set does not match prepared snapshot");
