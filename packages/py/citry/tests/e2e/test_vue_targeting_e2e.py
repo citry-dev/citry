@@ -363,7 +363,7 @@ def test_real_coordinator_persists_i18n_translation_into_plugin_preparation(page
           const occurrence=(id,renderId)=>({id,renderId,typeKey:'Root',definitionId,parentId:null,placementKey:null,
             serverData:{},preparedData:{calls:{},callRuns:{}},eventContext:{serverRenderId:renderId,stateToken:null,
               publicState:{},componentClassId:'Root',descriptor:{componentClassId:'Root',eventHandlers:{ping:{httpMethod:'POST'}}}}});
-          const definition={id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
             helperContract:helper,
             dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
           const extensions=id=>({i18n:{schemaVersion:1,payload:i18n(id),

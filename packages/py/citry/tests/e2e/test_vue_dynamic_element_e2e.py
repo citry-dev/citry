@@ -1512,10 +1512,10 @@ def test_external_prepared_asset_integrity_is_optional_and_identity_is_app_scope
             source:{kind:'external',url,attrs},lazyAllowed:true});
           const manifest=(app,id,attrs,url='/external.css',duplicateAttrs=null)=>({
             protocol:'citry-vue-prepared/1',appId:app,
-            revision:0,rootId:id,
+            revision:0,rootId:id,markers:[],
             occurrences:[{id,typeKey:'Root',definitionId:def,parentId:null,placementKey:null,serverData:{},preparedData:{calls:{}}}],
-            definitions:[{id:def,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',helperContract:helper,
-              dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}],
+            definitions:[{id:def,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',helperContract:helper,
+              dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],
             replacements:[],scripts:[],styles:[style(url,attrs),...(duplicateAttrs?[style(url,duplicateAttrs)]:[])],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],
             extensions:{probe:{schemaVersion:1,payload:{},templateContextNames:[]}}});
@@ -1565,10 +1565,10 @@ def test_terminal_app_releases_only_its_shared_stylesheet_reference(page: Any) -
           CitryStable.registerTypeOptions('Root',digest,{onServerRender({revision}){
             if(revision===1)throw new Error('intentional stylesheet cleanup failure');
           }});
-          const manifest=(appId,id)=>({protocol:'citry-vue-prepared/1',appId,revision:0,rootId:id,
+          const manifest=(appId,id)=>({protocol:'citry-vue-prepared/1',appId,revision:0,rootId:id,markers:[],
             occurrences:[{id,typeKey:'Root',definitionId,parentId:null,placementKey:null,serverData:{},preparedData:{calls:{}}}],
-            definitions:[{id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
-              helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}],
+            definitions:[{id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+              helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],
             replacements:[],scripts:[],styles:[{owner:{kind:'component',typeKey:'Root',occurrenceIds:[id]},
               source:{kind:'owned',url:'/shared.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css',sha256:digest},lazyAllowed:true}],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{}});
@@ -1634,14 +1634,14 @@ def test_extension_script_loader_retries_and_restarts_same_app_id(page: Any) -> 
           const occurrence=(revision)=>({id:'citryOccurrenceRoot',renderId:'server-root',typeKey:'Root',definitionId,
             parentId:null,placementKey:null,serverData:{revision},
             preparedData:{calls:{}},eventContext:{serverRenderId:'server-root',stateToken:'token'}});
-          const definition={id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
-            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]};
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
           const extension={schemaVersion:1,payload:{},templateContextNames:[]};
           const script=url=>({owner:{kind:'extension',extensionName:'probe'},source:{kind:'external',url,attrs:{}},
             lazyAllowed:true,registersOptions:false});
           const manifest=(revision,scripts=[])=>({protocol:'citry-vue-prepared/1',appId:'restartable',revision,
             ...(revision?{baseRevision:revision-1,updatedIds:['citryOccurrenceRoot']}:{rootId:'citryOccurrenceRoot'}),
-            rootId:'citryOccurrenceRoot',
+            rootId:'citryOccurrenceRoot',markers:[],
             occurrences:[occurrence(revision)],definitions:[definition],replacements:[],scripts,styles:[],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{probe:extension}});
           const start=async()=>CitryStable.startPrepared({manifest:manifest(0),host:'#host',tags:{Root:'c-root'},
@@ -1715,11 +1715,11 @@ def test_native_events_prepare_cancellation_releases_attempt_resources(page: Any
           const occurrence=()=>({id:'citryOccurrenceRoot',renderId:'server-root',typeKey:'Root',definitionId,
             parentId:null,placementKey:null,serverData:{},
             preparedData:{calls:{}},eventContext:{serverRenderId:'server-root',stateToken:'token'}});
-          const definition={id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
-            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]};
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
           const manifest=(revision,styles=[],phase='initial')=>({protocol:'citry-vue-prepared/1',appId:'events-app',
             revision,...(revision?{baseRevision:0,updatedIds:['citryOccurrenceRoot']}:{rootId:'citryOccurrenceRoot'}),
-            rootId:'citryOccurrenceRoot',
+            rootId:'citryOccurrenceRoot',markers:[],
             occurrences:[occurrence()],definitions:[definition],replacements:[],scripts:[],styles,
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],
             extensions:{probe:{schemaVersion:1,payload:{phase},templateContextNames:[]}}});
@@ -1815,13 +1815,13 @@ def test_disposed_events_commit_cannot_publish_into_reused_app_id(page: Any) -> 
           const occurrence=()=>({id:'citryOccurrenceRoot',renderId:'server-root',typeKey:'Root',definitionId,
             parentId:null,placementKey:null,serverData:{},
             preparedData:{calls:{}},eventContext:{serverRenderId:'server-root',stateToken:'token'}});
-          const definition={id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
-            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]};
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
           const style=url=>({owner:{kind:'component',typeKey:'Root',occurrenceIds:['citryOccurrenceRoot']},
             source:{kind:'external',url,attrs:{rel:'stylesheet'}},lazyAllowed:true});
           const manifest=(revision,url)=>({protocol:'citry-vue-prepared/1',appId:'reused-app',revision,
             ...(revision?{baseRevision:0,updatedIds:['citryOccurrenceRoot']}:{rootId:'citryOccurrenceRoot'}),
-            rootId:'citryOccurrenceRoot',occurrences:[occurrence()],
+            rootId:'citryOccurrenceRoot',markers:[],occurrences:[occurrence()],
             definitions:[definition],replacements:[],scripts:[],styles:[style(url)],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],
             extensions:{probe:{schemaVersion:1,payload:{},templateContextNames:[]}}});
@@ -1902,12 +1902,12 @@ def test_lazy_native_events_bridge_publishes_reactive_loading_and_error(page: An
           CitryStable.registerTypeOptions('Root',digest,{onServerRender({component,revision}){
             if(revision===1)window.__callbackSawBridge=window.__bridgeCreates===1&&component.$loading()===false
           }});
-          const definition={id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
-            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]};
+          const definition={id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+            helperContract:helper,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
           const occurrence=eventContext=>({id:'root',renderId:'server_1',typeKey:'Root',definitionId,
             parentId:null,placementKey:null,serverData:{},
             preparedData:{calls:{}},...(eventContext?{eventContext}:{})});
-          const base={protocol:'citry-vue-prepared/1',appId:'lazy-events-app',revision:0,rootId:'root',
+          const base={protocol:'citry-vue-prepared/1',appId:'lazy-events-app',revision:0,rootId:'root',markers:[],
             occurrences:[occurrence()],definitions:[definition],replacements:[],scripts:[],styles:[],
             typePolicies:[{typeKey:'Root',lazyAllowed:true}],extensions:{}};
           const handle=await CitryStable.startPrepared({manifest:base,host:'#host',tags:{Root:'c-root'},
