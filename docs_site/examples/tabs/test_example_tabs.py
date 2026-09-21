@@ -16,10 +16,12 @@ def _prepared_render(page_html: str) -> tuple[dict, str]:
     transport, _ = json.JSONDecoder().raw_decode(bootstrap.text[bootstrap.text.index(marker) + len(marker) :])
     assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
     definitions = transport["manifest"]["definitions"]
+    script_sources = [item["source"] for item in transport["manifest"]["scripts"] if item["source"]["kind"] == "owned"]
     bundles = []
-    for asset in definitions:
-        bundle = definition_bundle(default_citry, asset["sha256"])
-        assert bundle is not None, asset
+    assets = [*definitions, *script_sources]
+    for digest in dict.fromkeys(asset["sha256"] for asset in assets):
+        bundle = definition_bundle(default_citry, digest)
+        assert bundle is not None, digest
         bundles.append(bundle.decode())
     source = "\n".join(bundles)
     definition_ids = {item["id"] for item in definitions}
@@ -51,5 +53,5 @@ def test_tabs_example_page_renders() -> None:
     # Tabs and panels are connected for assistive technology, and the shipped
     # script supports the standard horizontal-tab keyboard controls.
     assert panel_rows[0]["citryAttrs0"]["aria-labelledby"] == tab_rows[0]["citryAttrs0"]["id"]
-    assert 'event.key === "ArrowRight"' in html
-    assert 'event.key === "Home"' in html
+    assert 'event.key === "ArrowRight"' in source
+    assert 'event.key === "Home"' in source
