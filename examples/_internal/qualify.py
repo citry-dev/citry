@@ -34,7 +34,11 @@ AXE_PATH = Path(__file__).resolve().parents[2] / "node_modules" / "axe-core" / "
 
 PAGE_SENTINELS = {
     "starter-web-v1": b"Project Explorer",
-    "demo-project-board-v1": b"Plan the product launch.",
+    # The Vue prepared renderer sends the document shell and mount host in the
+    # initial response.  The board content is materialized after the browser
+    # starts the prepared app, so use the shell's title as the server-readiness
+    # sentinel instead of content that is intentionally browser-rendered.
+    "demo-project-board-v1": b"Project Board | Citry demo",
     "demo-htmx-v1": b"HTMX + Citry patterns",
 }
 

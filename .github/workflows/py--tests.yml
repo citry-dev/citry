@@ -665,5 +665,5 @@ jobs:
           uv run --no-sync pytest
           packages/py/citry/tests/e2e/test_vue_events_default_e2e.py
           packages/py/citry/tests/e2e/test_vue_targeting_e2e.py
-          packages/py/citry/tests/e2e/test_i18n_client_e2e.py::test_one_hundred_message_switch_stays_atomic_and_within_the_commit_budget
+          packages/py/citry/tests/e2e/test_i18n_vue_formatting_e2e.py::test_vue_i18n_large_catalog_switch_stays_atomic
           --browser ${{ matrix.browser }}
