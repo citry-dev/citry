@@ -30,7 +30,7 @@ from .capture import (
     include_prepared_attribute,
     vue_render_active,
 )
-from .compiler import _ElementBindingDeclaration, _generated_vue_attr, _RuntimeEventDeclaration
+from .compiler import _ElementBindingDeclaration, _generated_event_args, _generated_vue_attr, _RuntimeEventDeclaration
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -291,7 +291,7 @@ class _Compiler:
                 modifiers.append(str(binding["key"]))
             suffix = "" if not modifiers else "." + ".".join(modifiers)
             args = binding["args"]
-            authored_args = "" if args is None else f", ({args})"
+            authored_args = _generated_event_args(args)
             attrs.append(
                 _generated_vue_attr(
                     f"v-on:{binding['event']}{suffix}",

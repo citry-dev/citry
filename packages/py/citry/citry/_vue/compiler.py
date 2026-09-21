@@ -41,6 +41,20 @@ def _generated_vue_attr(name: str, value: str) -> str:
     return f'{name}="{html.escape(value, quote=True)}"'
 
 
+def _generated_event_args(args: str | None) -> str:
+    """
+    Evaluate authored server-event arguments with the receiving element.
+
+    Vue's public ``$el`` is the current component root. Citry's ``@c-*``
+    contract has always made it the element that received the browser event,
+    including when the binding is authored on a component tag. Capture that
+    element before handing the event to the asynchronous Events bridge.
+    """
+    if args is None:
+        return ""
+    return f", (($el) => ({args}))($event.currentTarget)"
+
+
 class _LocalCallBindingDeclaration(TypedDict):
     kind: str
     name: str
@@ -682,7 +696,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                     suffix = "" if not modifiers else "." + ".".join(modifiers)
                     binding_id = str(binding["id"])
                     args = binding["args"]
-                    authored_args = "" if args is None else f", ({args})"
+                    authored_args = _generated_event_args(args)
                     attrs.append(
                         _generated_vue_attr(
                             f"v-on:{event}{suffix}",

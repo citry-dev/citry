@@ -37,6 +37,7 @@ from .compiler import (
     DefinitionCompileInput,
     _DynamicElementDeclaration,
     _ElementBindingDeclaration,
+    _generated_event_args,
     _generated_vue_attr,
     _LocalCallBindingDeclaration,
     _LocalCallDeclaration,
@@ -1215,9 +1216,19 @@ def assemble_typed_render(
                                 )
                             line, column = _line_column(str(component_binding.source), component_binding.span[0])
                             child_class = citry.get_component_by_class_id(child_type)
+                            # Component-tag Events are authored by the
+                            # lexical caller. A slot body can be physically
+                            # assembled while visiting its receiver (for
+                            # example CForm), but the handler still belongs to
+                            # the component that supplied that slot. Resolve
+                            # against the data owner instead of the physical
+                            # receiver so nested library components retain the
+                            # caller's Events contract.
+                            binding_owner_type = occurrence_types[data_owner_id]
+                            binding_owner_class = citry.get_component_by_class_id(binding_owner_type)
                             compiled_event = compile_citry_boundary_binding(
-                                events_extension.resolve(component_class),
-                                component_class.__name__,
+                                events_extension.resolve(binding_owner_class),
+                                binding_owner_class.__name__,
                                 f"c-{getattr(child_class, 'name', None) or child_class.__name__}",
                                 component_binding.key,
                                 component_binding.value,
@@ -1262,11 +1273,7 @@ def assemble_typed_render(
                                 raise UnsupportedPreparedView(
                                     "one prepared component event site has conflicting authored metadata"
                                 )
-                            authored_args = (
-                                ""
-                                if event_component_binding["args"] is None
-                                else f", ({event_component_binding['args']})"
-                            )
+                            authored_args = _generated_event_args(event_component_binding["args"])
                             generated_value = (
                                 f"$citryEvents.dispatchComponent('{component_binding_id}', $event{authored_args})"
                             )
@@ -2185,7 +2192,7 @@ def _event_directive_attrs(part: PreparedElementOpen | PreparedDynamicElementOpe
         if binding["key"] is not None:
             modifiers.append(str(binding["key"]))
         suffix = "" if not modifiers else "." + ".".join(modifiers)
-        authored_args = "" if binding["args"] is None else f", ({binding['args']})"
+        authored_args = _generated_event_args(binding["args"])
         attrs.append(
             _generated_vue_attr(
                 f"v-on:{event}{suffix}",

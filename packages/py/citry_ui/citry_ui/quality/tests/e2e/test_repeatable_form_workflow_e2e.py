@@ -160,9 +160,11 @@ def _workflow_page() -> tuple[Citry, str]:
                         #c-key="row['id'] + '-email-input'"
                         c-name="'contacts[' + row['id'] + '][email]'"
                         type="email"
-                        c-value="row['email']"
                         autocomplete="email"
-                        c-attrs="{'data-contact-email': row['id']}"
+                        c-attrs="{
+                          'data-contact-email': row['id'],
+                          'defaultValue': row['email'],
+                        }"
                       />
                     </c-fill>
                     <c-fill name="description">
