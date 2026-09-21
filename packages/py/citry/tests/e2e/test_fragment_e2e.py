@@ -48,7 +48,7 @@ def test_fragment_scripts_load_on_demand(page: Any, serve_live: Any) -> None:
     class Frag(Component):
         citry = c
         template = '<div class="frag">frag</div>'
-        js = "$component(({ els, data }) => { els[0].setAttribute('data-n', String(data.n)); });"
+        js = "$component(({ component }) => { component.$el.setAttribute('data-n', String(component.n)); });"
 
         def js_data(self, kwargs: Any, slots: Any) -> dict[str, int]:
             return {"n": 42}
@@ -72,8 +72,8 @@ def test_fragment_callback_waits_for_component_css(page: Any, serve_live: Any) -
         template = '<div class="css-readiness-probe">probe</div>'
         css = ".css-readiness-probe { color: rgb(31, 41, 55); }"
         js = """
-          $component(({ els }) => {
-            const root = els[0];
+          $component(({ component }) => {
+            const root = component.$el;
             root.dataset.callbackColor = getComputedStyle(root).color;
           });
         """

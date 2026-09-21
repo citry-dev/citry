@@ -29,7 +29,7 @@ def _build_page() -> type[Component]:
     class Widget(Component):
         citry = c
         template = '<div class="widget">hi</div>'
-        js = "$component(({ els, data }) => { els[0].setAttribute('data-label', data.label); });"
+        js = "$component(({ component }) => { component.$el.setAttribute('data-label', component.label); });"
         css = ".widget { color: var(--accent); }"
 
         def js_data(self, kwargs: Any, slots: Any) -> dict[str, str]:
@@ -179,9 +179,9 @@ def _build_no_data_js_page() -> type[Component]:
         js = """
           var citryE2eNoGlobalLeak = 123;
           document.querySelector('#immediate-marker').textContent = 'immediate';
-          $component(({ els, data }) => {
-            const root = els[0];
-            root.dataset.nullData = String(data === null);
+          $component(({ component }) => {
+            const root = component.$el;
+            root.dataset.nullData = String(Object.keys(component.$data).length === 0);
             root.querySelector('button').addEventListener('click', () => {
               root.querySelector('output').textContent = 'clicked';
             });
@@ -207,13 +207,13 @@ def _build_distinct_js_data_page() -> type[Component]:
           </section>
         """
         js = """
-          $component(({ els, data }) => {
-            const root = els[0];
-            root.dataset.name = data.name;
-            root.dataset.payload = JSON.stringify(data.meta);
+          $component(({ component }) => {
+            const root = component.$el;
+            root.dataset.name = component.name;
+            root.dataset.payload = JSON.stringify(component.meta);
             root.querySelector('button').addEventListener('click', () => {
               root.querySelector('output').textContent =
-                `${data.message}|${data.meta.count}|${data.meta.points[1][0]}`;
+                `${component.message}|${component.meta.count}|${component.meta.points[1][0]}`;
             });
           });
         """
