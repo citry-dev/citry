@@ -77,7 +77,7 @@ def _no_javascript_shell_html() -> str:
           </main>
         """
 
-    return str(FallbackPage())
+    return FallbackPage().render().serialize(security_javascript="omit")
 
 
 def test_command_palette_quality_search_control_action_form_ime_and_axe(page: Any) -> None:
@@ -123,14 +123,10 @@ def test_command_palette_quality_search_control_action_form_ime_and_axe(page: An
     )
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     assert controlled.evaluate("element => element.open") is True
-    # The controlled palette is a modal while it is open, so its backdrop makes
-    # controls outside the dialog inert. Trigger the checkbox's public DOM
-    # activation instead of reaching into Vue's component state (the old test
-    # used Alpine.$data for that shortcut).
+    # The open modal makes controls outside the dialog inert; activate the
+    # checkbox through its public DOM control.
     page.get_by_role("checkbox", name="Accept close").evaluate("element => element.click()")
-    page.wait_for_function(
-        "document.querySelector('.command-palette-quality input[type=checkbox]')?.checked"
-    )
+    page.wait_for_function("document.querySelector('.command-palette-quality input[type=checkbox]')?.checked")
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     page.wait_for_function("!document.querySelector('#quality-command-palette-controlled').open")
 
@@ -408,14 +404,23 @@ def test_command_palette_signed_retained_changed_replacement_and_two_restore_cyc
     assert page_errors == []
 
 
-def test_command_palette_no_javascript_leaves_the_interactive_shell_unmounted(browser: Any) -> None:
+def test_command_palette_no_javascript_keeps_readable_inert_native_fallback(browser: Any) -> None:
     context = browser.new_context(java_script_enabled=False)
     page = context.new_page()
     try:
         page.set_content(_no_javascript_shell_html(), wait_until="load")
-        shell = page.locator('div[id^="citry-vue-"]')
-        assert shell.count() == 1
-        assert shell.inner_html() == ""
-        assert page.locator("[data-citry-command-palette-host]").count() == 0
+        closed = page.locator("#quality-command-palette-no-js-closed")
+        assert closed.get_attribute("open") is None
+        assert closed.locator('[data-citry-ui-part="command-palette-title"]').text_content().strip() == (
+            "Closed fallback"
+        )
+        open_fallback = page.locator("#quality-command-palette-no-js-open")
+        assert open_fallback.get_attribute("open") == ""
+        assert open_fallback.locator('[data-citry-ui-part="command-palette-title"]').text_content().strip() == (
+            "Open readable fallback"
+        )
+        assert open_fallback.locator('[data-citry-ui-part="command-palette-input"]').is_disabled()
+        assert open_fallback.locator('[role="option"]').count() > 0
+        assert open_fallback.locator('[role="option"]').inner_text() == "Inspect readable fallback"
     finally:
         context.close()

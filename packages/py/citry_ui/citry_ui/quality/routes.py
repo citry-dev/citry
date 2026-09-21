@@ -242,8 +242,7 @@ class RenderedScenario:
 _PREPARED_BOOTSTRAP_RE = re.compile(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", re.DOTALL)
 
 
-# This helper packages the quality harness/CLI output for a standalone page;
-# it is deliberately kept here rather than becoming a second core serializer.
+# Keep standalone asset materialization local to the quality harness.
 def _inline_prepared_assets(html: str, app: Citry) -> str:
     """Inline mounted Vue assets while retaining the host transport URLs."""
     match = _PREPARED_BOOTSTRAP_RE.search(html)

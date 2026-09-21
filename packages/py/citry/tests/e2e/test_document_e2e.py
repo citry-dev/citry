@@ -400,15 +400,25 @@ def test_component_and_dependency_assets_execute_in_bucket_order(
     assert styles == {"color": "rgb(12, 34, 56)", "background": "rgb(210, 220, 230)"}
 
 
-def test_component_and_dependency_css_is_emitted_without_javascript(browser: Any, serve_document: Any) -> None:
-    html = _build_dependency_order_page("component", probe_first=False)().render().serialize(deps_strategy="document")
+def test_component_and_dependency_css_applies_without_javascript(browser: Any, serve_document: Any) -> None:
+    html = (
+        _build_dependency_order_page("component", probe_first=False)()
+        .render()
+        .serialize(
+            deps_strategy="document",
+            security_javascript="omit",
+        )
+    )
     context = browser.new_context(java_script_enabled=False)
     page = context.new_page()
     try:
         page.goto(serve_document(html))
-        styles = "\n".join(page.locator("style").all_text_contents())
-        assert ".alpha { color: rgb(12, 34, 56); }" in styles
-        assert ".alpha-dependency { background-color: rgb(210, 220, 230); }" in styles
+        styles = page.locator("#alpha").evaluate(
+            "element => ({"
+            "color: getComputedStyle(element).color, "
+            "background: getComputedStyle(element).backgroundColor})"
+        )
+        assert styles == {"color": "rgb(12, 34, 56)", "background": "rgb(210, 220, 230)"}
         assert page.evaluate("() => window.__assetOrder") is None
     finally:
         context.close()
