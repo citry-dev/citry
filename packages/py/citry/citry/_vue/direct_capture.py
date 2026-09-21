@@ -327,10 +327,7 @@ def _json_attribute_map(values: Mapping[str, object]) -> dict[str, object]:
 
 def _json_presence_attribute_map(values: Mapping[str, object]) -> dict[str, object]:
     """Encode internal presence-only root markers for Vue's object binding."""
-    return {
-        name: "" if (plain := _json_plain(value)) is True else plain
-        for name, value in values.items()
-    }
+    return {name: "" if (plain := _json_plain(value)) is True else plain for name, value in values.items()}
 
 
 def assemble_typed_render(

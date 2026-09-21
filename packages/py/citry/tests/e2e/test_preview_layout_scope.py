@@ -58,9 +58,7 @@ def test_component_page_layout_preserves_automatic_js_data(page, browser_name):
     renderer = PreviewRenderer(app.extensions.get_extension("preview"))
     with PreviewServer(app, preview_routes(renderer)) as server:
         page.goto(f"{server.base_url}/ext/preview/render/{Example.class_id}?variant=default")
-        page.wait_for_function(
-            "document.querySelector('section p')?.textContent === 'Automatic scope works'"
-        )
+        page.wait_for_function("document.querySelector('section p')?.textContent === 'Automatic scope works'")
         assert not page.locator("section p").is_visible()
         page.get_by_role("button", name="Toggle help").click()
         page.locator("section p").wait_for(state="visible")
