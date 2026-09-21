@@ -334,6 +334,13 @@ def test_scenario_preserves_the_same_render_contract_embedded_and_standalone(sce
     assert embedded_contract == standalone_contract
 
 
+def test_standalone_scenario_declares_a_data_favicon() -> None:
+    """Standalone audit pages must not make a host-root favicon request."""
+    standalone = render_scenario("button.states")
+
+    assert '<link rel="icon" href="data:image/svg+xml;base64,' in standalone
+
+
 def test_prepared_route_contract_rejects_changed_prepared_binding() -> None:
     """A route comparison must fail when a prepared call binding changes."""
     embedded = render_scenario("button.states", embedded=True)

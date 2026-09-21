@@ -178,6 +178,14 @@ _SCENARIO_FACTORIES = {
     "composition.ledger-dashboard": ledger_dashboard_component,
 }
 
+# Standalone quality pages are also audited outside a mounted host. Keep the
+# page self-contained so the browser does not probe the host root for a
+# favicon during the Lighthouse run.
+_PAGE_FAVICON_DATA_URI = (
+    "data:image/svg+xml;base64,"
+    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxIDEiPjxwYXRoIGZpbGw9IiMwMDAiIGQ9Ik0wIDBoMXYxSDB6Ii8+PC9zdmc+"
+)
+
 _PAGE_CSS = """
   :where(html) {
     color-scheme: light dark;
@@ -272,6 +280,7 @@ def build_scenario(
               <meta charset="utf-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
               <meta name="color-scheme" content="light dark" />
+              <link rel="icon" href="{_PAGE_FAVICON_DATA_URI}" />
               <title>{{{{ page_title }}}}</title>
               <c-css />
             </head>
