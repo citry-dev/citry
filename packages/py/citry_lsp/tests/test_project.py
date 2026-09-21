@@ -593,6 +593,14 @@ def test_worker_process_and_json_failures_degrade(tmp_path, monkeypatch):
     assert "status 2" in messages[3]
 
 
+def test_worker_missing_output_streams_degrade_as_a_structured_failure(tmp_path):
+    state = project_module._project_from_worker_output(tmp_path, "app:engine", 1, None, None)
+
+    assert state.status.mode == "syntax-only"
+    assert state.status.registry_ready is False
+    assert "without a response" in (state.status.message or "")
+
+
 def test_worker_protocol_and_version_mismatches_degrade(tmp_path, monkeypatch):
     engine = Citry(autodiscover=False)
     base = {

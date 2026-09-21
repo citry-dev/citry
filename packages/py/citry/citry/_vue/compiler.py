@@ -10,7 +10,9 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, NotRequired, Self, TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+from typing_extensions import NotRequired, Self
 
 from citry_core import _rust
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from functools import lru_cache
 from pathlib import Path
@@ -200,6 +201,26 @@ def _component_matching_state() -> ProjectState:
 
 def _syntax_state() -> ProjectState:
     return ProjectState(ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="syntax-only"))
+
+
+@lru_cache(maxsize=1)
+def _repository_tsc() -> Path | None:
+    """Find the repo-local TypeScript compiler when the Node workspace is installed."""
+    repository = Path(__file__).resolve().parents[4]
+    bin_dir = repository / "packages" / "js" / "citry-client" / "node_modules" / ".bin"
+    names = ("tsc.cmd", "tsc.exe", "tsc") if os.name == "nt" else ("tsc",)
+    for name in names:
+        candidate = bin_dir / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _require_repository_tsc() -> Path:
+    tsc = _repository_tsc()
+    if tsc is None:
+        pytest.skip("repo-local tsc is unavailable; install the Node workspace for this integration check")
+    return tsc
 
 
 @lru_cache(maxsize=1)
@@ -1695,8 +1716,7 @@ class Card(Component):
     assert projected_source != projection.source
     projected = tmp_path / "projection.js"
     projected.write_text("// @ts-check\n" + projected_source, encoding="utf8")
-    repository = Path(__file__).resolve().parents[4]
-    tsc = repository / "packages" / "js" / "citry-client" / "node_modules" / ".bin" / "tsc"
+    tsc = _require_repository_tsc()
     checked = subprocess.run(
         [
             str(tsc),
@@ -1830,8 +1850,7 @@ def test_open_inject_projection_keeps_explicit_options_and_accepts_unknown_keys(
     assert f"{known_inject} & Record<string | symbol," in projection.source
     projected = tmp_path / "open-inject.js"
     projected.write_text("// @ts-check\n" + projection.source, encoding="utf-8")
-    repository = Path(__file__).resolve().parents[4]
-    tsc = repository / "packages" / "js" / "citry-client" / "node_modules" / ".bin" / "tsc"
+    tsc = _require_repository_tsc()
     checked = subprocess.run(
         [
             str(tsc),
@@ -1897,8 +1916,7 @@ class Card(Component):
     assert "$i18n: CitryI18nService | null" in projection.source
     projected = tmp_path / "callback-i18n.js"
     projected.write_text("// @ts-check\n" + projection.source, encoding="utf-8")
-    repository = Path(__file__).resolve().parents[4]
-    tsc = repository / "packages" / "js" / "citry-client" / "node_modules" / ".bin" / "tsc"
+    tsc = _require_repository_tsc()
     checked = subprocess.run(
         [
             str(tsc),

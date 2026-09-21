@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from citry._vue.capture import PreparedElementOpen
 from citry.citry_render import CitryRender
 from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
+from citry.util.id import validate_render_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -93,7 +95,7 @@ class VueSerializationPlan:
     deferred_to_dependency_manager: bool = False
 
     def finalize(self, hooked_html: str) -> str:
-        """Validate the hook result and append executable assets after component Options."""
+        """Validate the hook result and place the prepared assets in the document."""
         validator = _HostValidator(self.host_id)
         validator.feed(hooked_html)
         validator.close()
@@ -143,7 +145,18 @@ class VueSerializationPlan:
             str(item.render()) if self.script_security is None else self.script_security.render(item)
             for item in scripts
         )
-        return hooked_html + rendered_styles + rendered
+        # Keep the same default placement contract as the ordinary dependency
+        # emitter.  Appending the assets after a complete document produces
+        # technically invalid HTML and can make the browser execute the
+        # bootstrap only after it has closed ``</html>``.  The helper also
+        # preserves the established prepend/append fallback for fragments.
+        from citry.ext.dependencies.emission import _insert_default  # noqa: PLC0415
+
+        if rendered_styles:
+            hooked_html = _insert_default(hooked_html, rendered_styles, kind="css")
+        if rendered:
+            hooked_html = _insert_default(hooked_html, rendered, kind="js")
+        return hooked_html
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,9 +370,20 @@ def prepare_vue_serialization(
     from citry._vue.events import default_events_producer, definition_bundle  # noqa: PLC0415
     from citry.ext.events.routes import EVENTS_RUNTIME_SRC, RUNTIME_PATH, _runtime_resource  # noqa: PLC0415
 
-    app_id = ctx.context.extra.setdefault("_vue_app_id", token_hex(16))
-    if type(app_id) is not str:
-        raise TypeError("Vue render-local app ID metadata must be a string.")
+    if "_vue_app_id" in ctx.context.extra:
+        app_id = ctx.context.extra["_vue_app_id"]
+        if type(app_id) is not str:
+            raise TypeError("Vue render-local app ID metadata must be a string.")
+    elif ctx.citry.id_generator is None:
+        app_id = token_hex(16)
+        ctx.context.extra["_vue_app_id"] = app_id
+    else:
+        # Reuse the same validation as component render IDs.  The explicit
+        # generator is a deterministic test/snapshot hook; hash its validated
+        # value so the app protocol keeps its existing fixed 32-hex shape.
+        generated = validate_render_id(ctx.citry.id_generator())
+        app_id = hashlib.sha256(generated.encode("utf-8")).hexdigest()[:32]
+        ctx.context.extra["_vue_app_id"] = app_id
     ctx.context.extra["_vue_style_app_id"] = app_id
     producer = default_events_producer(ctx.citry)
     from citry._vue.document import typed_document_shell  # noqa: PLC0415

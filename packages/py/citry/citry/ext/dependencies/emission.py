@@ -385,9 +385,19 @@ def _place_dependency_html(
     css_html: str,
 ) -> str:
     """Place already-rendered dependency tags using the established strategy."""
-    if ctx.deps_position in ("prepend", "append"):
+    # A native Vue plan has already moved the logical mount point into the
+    # document shell, and its runtime must execute while that document is
+    # still open.  Keep ordinary dependency calls' explicit prepend/append
+    # contract, but place this Vue-owned batch with the normal head/body
+    # rules.  Otherwise ``deps_position='append'`` would put the runtime
+    # after ``</html>`` before VueSerializationPlan.finalize adds its own
+    # definitions and bootstrap.
+    position = ctx.deps_position
+    if position in ("prepend", "append") and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True:
+        position = "smart"
+    if position in ("prepend", "append"):
         html = _blank(ctx.html, all_placeholder_texts)
-        if ctx.deps_position == "prepend":
+        if position == "prepend":
             return js_html + css_html + html
         return html + js_html + css_html
 

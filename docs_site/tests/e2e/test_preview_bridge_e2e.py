@@ -18,6 +18,7 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
+
 def _client_active_tabs_page() -> tuple[str, list[dict[str, str]]]:
     app = Citry(
         autodiscover=False,
@@ -104,9 +105,9 @@ def _client_active_tabs_page() -> tuple[str, list[dict[str, str]]]:
     # PreviewBridge serves playground-owned assets through its callback rather
     # than exposing the application's Citry mount directly. Keep this fixture
     # on the same channel so the test exercises the real prepared Vue startup.
-    from citry._vue.events import definition_bundle, style_asset  # noqa: PLC0415
-    from citry.ext.dependencies.emission import _runtime_js  # noqa: PLC0415
-    from docs_site._internal.static_deps import _prepared_owned_assets  # noqa: PLC0415
+    from citry._vue.events import definition_bundle, style_asset
+    from citry.ext.dependencies.emission import _runtime_js
+    from docs_site._internal.static_deps import _prepared_owned_assets
 
     assets = [
         {

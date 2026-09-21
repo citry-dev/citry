@@ -15,32 +15,35 @@ def test_project_filter_uses_all_visible_fields() -> None:
     assert find_projects("missing") == ()
 
 
-def test_document_contains_data_styles_scripts_and_local_alpine() -> None:
+def test_document_contains_prepared_vue_data_and_local_assets() -> None:
     document = render_document()
 
     assert "<!DOCTYPE html>" in document
     assert "Project Explorer" in document
     assert "Atlas" in document
-    assert "tipsOpen = !tipsOpen" in document
+    assert "_ctx.tipsOpen = !_ctx.tipsOpen" in document
+    assert "CitryStable.startPrepared(" in document
+    assert '"preparedData"' in document
     assert "<style" in document
     assert "<script" in document
     assert 'src="http' not in document
     assert 'href="http' not in document
     assert "/citry/" not in document
+    assert "</html><" not in document
 
 
 def test_document_is_deterministic() -> None:
     assert render_document() == render_document()
 
 
-def test_document_escapes_project_data(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_document_escapes_project_data_in_vue_json(monkeypatch: pytest.MonkeyPatch) -> None:
     def projects_with_markup() -> tuple[Project, ...]:
         return (Project("<script>alert(1)</script>", "Safe summary", "Active", "Python"),)
 
     monkeypatch.setattr("app.render.find_projects", projects_with_markup)
     document = render_document()
 
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in document
+    assert r"\u003cscript>alert(1)\u003c/script>" in document
     assert "<script>alert(1)</script>" not in document
 
 

@@ -874,12 +874,14 @@ def _project_from_worker_output(
     workspace: Path,
     app: str,
     returncode: int | None,
-    stdout: str,
-    stderr: str,
+    stdout: str | None,
+    stderr: str | None,
     *,
     environment_file: Path | None = None,
 ) -> ProjectState:
     """Validate one completed worker response for sync and async callers."""
+    stdout = stdout or ""
+    stderr = stderr or ""
     if not stdout.strip():
         detail = stderr.strip()
         message = f"App worker exited with status {returncode} without a response."
