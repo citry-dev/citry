@@ -1165,12 +1165,8 @@ class CCommandPalette(LibraryComponent):
           );
           host?.[ownerKey]?.transfer?.();
           const previous = host?.[handoffKey] ?? null;
-          if (previous?.timer !== null && previous?.timer !== undefined) {
-            clearTimeout(previous.timer);
-          }
           const abortPrevious = () => {
             if (!previous) return;
-            if (previous.timer !== null) clearTimeout(previous.timer);
             previous.abort();
             if (host[handoffKey] === previous) delete host[handoffKey];
           };
@@ -1407,7 +1403,10 @@ class CCommandPalette(LibraryComponent):
             && previous.documentOwner === host.ownerDocument
             && previous.actualRoot === actualRoot);
           if (previous && !retained) abortPrevious();
-          if (retained) delete host[handoffKey];
+          if (retained) {
+            previous.adopt();
+            delete host[handoffKey];
+          }
 
           const owner = { active: true, token: Symbol(), transfer: null };
           host[ownerKey] = owner;
@@ -2021,7 +2020,8 @@ class CCommandPalette(LibraryComponent):
             tasks.clear();
             watcher?.cleanup();
             listeners.splice(0).forEach((remove) => remove());
-            const canHandoff = host.isConnected
+            const canHandoff = !diagnose
+              && host.isConnected
               && host.ownerDocument === documentOwner
               && host.getRootNode() === actualRoot
               && dialog.isConnected
@@ -2034,6 +2034,7 @@ class CCommandPalette(LibraryComponent):
             const handedOff = controller.cleanup({ handoff: canHandoff });
             if (host[ownerKey] === owner) delete host[ownerKey];
             if (handedOff) {
+              let handoffObserver = null;
               const record = {
                 host,
                 dialog,
@@ -2054,7 +2055,16 @@ class CCommandPalette(LibraryComponent):
                 composing,
                 collection,
                 timer: null,
+                adopt() {
+                  if (this.timer !== null) {
+                    clearTimeout(this.timer);
+                    this.timer = null;
+                  }
+                  handoffObserver?.disconnect();
+                  handoffObserver = null;
+                },
                 abort() {
+                  this.adopt();
                   dialogRuntime.abortHandoff(dialog);
                   collection.cleanup();
                   host.removeAttribute(readyAttribute);
@@ -2062,6 +2072,16 @@ class CCommandPalette(LibraryComponent):
                   input.removeAttribute("aria-activedescendant");
                 },
               };
+              const handoffRoot = host.getRootNode();
+              handoffObserver = new MutationObserver(() => {
+                if (host.isConnected || host[handoffKey] !== record) return;
+                record.abort();
+                delete host[handoffKey];
+              });
+              handoffObserver.observe(
+                handoffRoot instanceof Document ? handoffRoot.documentElement : handoffRoot,
+                {childList: true, subtree: true},
+              );
               host[handoffKey] = record;
               record.timer = setTimeout(() => {
                 if (host[handoffKey] !== record || host[ownerKey]?.active) return;
