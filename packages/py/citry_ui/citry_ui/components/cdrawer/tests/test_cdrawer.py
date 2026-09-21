@@ -53,7 +53,7 @@ def test_drawer_renders_native_modal_anatomy_and_logical_configuration() -> None
     occurrence = _prepared_occurrence(html)
     attrs = occurrence["preparedData"]["citryAttrs0"]
     assert attrs["id"] == "field-note"
-    assert attrs["open"] == ""
+    assert attrs["open"] is True
     assert attrs["aria-labelledby"] == "field-note-title"
     assert attrs["aria-describedby"] == "field-note-description"
     assert attrs["data-placement"] == "block-end"
