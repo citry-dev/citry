@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -237,12 +239,103 @@ class RenderedScenario:
     html: str
 
 
+_PREPARED_BOOTSTRAP_RE = re.compile(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", re.DOTALL)
+
+
+# This helper packages the quality harness/CLI output for a standalone page;
+# it is deliberately kept here rather than becoming a second core serializer.
+def _inline_prepared_assets(html: str, app: Citry) -> str:
+    """Inline mounted Vue assets while retaining the host transport URLs."""
+    match = _PREPARED_BOOTSTRAP_RE.search(html)
+    if match is None:
+        return html
+
+    configuration = json.loads(match.group(1))
+    manifest = configuration["manifest"]
+    app_id = manifest["appId"]
+    configuration["loadInitialAssets"] = False
+
+    from citry._vue.events import definition_bundle, style_asset  # noqa: PLC0415
+    from citry.ext.dependencies.emission import _runtime_js  # noqa: PLC0415
+    from citry.ext.dependencies.types import Script, Style  # noqa: PLC0415
+
+    runtime_url = app.build_url("citry.js")
+    runtime_tag = str(Script(kind="core", content=_runtime_js(), wrap=False).render())
+    expected_runtime_tag = f'<script src="{runtime_url}"></script>'
+    if expected_runtime_tag not in html:
+        raise RuntimeError("A mounted quality scenario did not emit its expected Citry runtime tag.")
+    html = html.replace(expected_runtime_tag, runtime_tag, 1)
+
+    scripts: list[str] = []
+    emitted_script_sources: set[str] = set()
+    for digest in dict.fromkeys(item["sha256"] for item in manifest["definitions"]):
+        bundle = definition_bundle(app, digest)
+        if bundle is None:
+            raise RuntimeError("A prepared Vue definition bundle was not retained for standalone rendering.")
+        scripts.append(str(Script(kind="core", content=bundle.decode()).render()))
+    for asset in manifest["scripts"]:
+        source = asset["source"]
+        source_identity = json.dumps(source, allow_nan=False, separators=(",", ":"), sort_keys=True)
+        if source_identity in emitted_script_sources:
+            continue
+        emitted_script_sources.add(source_identity)
+        attrs = dict(source.get("attrs", {}))
+        if source["kind"] == "owned":
+            bundle = definition_bundle(app, source["sha256"])
+            if bundle is None:
+                raise RuntimeError("A prepared Vue script asset was not retained for standalone rendering.")
+            scripts.append(str(Script(kind="core", content=bundle.decode(), attrs=attrs).render()))
+        else:
+            scripts.append(str(Script(kind="core", url=source["url"], attrs=attrs).render()))
+
+    styles: list[str] = []
+    emitted_style_sources: set[str] = set()
+    for asset in manifest["styles"]:
+        source = asset["source"]
+        source_identity = json.dumps(source, allow_nan=False, separators=(",", ":"), sort_keys=True)
+        if source_identity in emitted_style_sources:
+            continue
+        emitted_style_sources.add(source_identity)
+        attrs = dict(source.get("attrs", {}))
+        attrs["data-citry-css-url"] = source["url"]
+        attrs["data-citry-vue-style-app"] = app_id
+        if source["kind"] == "owned":
+            body = style_asset(app, source["sha256"])
+            if body is None:
+                raise RuntimeError("A prepared Vue stylesheet was not retained for standalone rendering.")
+            styles.append(str(Style(kind="core", content=body.decode(), attrs=attrs).render()))
+        else:
+            styles.append(str(Style(kind="core", url=source["url"], attrs=attrs).render()))
+
+    html = html.replace("</head>", "".join(styles) + "</head>", 1)
+    match = _PREPARED_BOOTSTRAP_RE.search(html)
+    if match is None:  # pragma: no cover - the first match remains after tag insertion
+        raise RuntimeError("A prepared quality scenario bootstrap disappeared during standalone rendering.")
+    serialized = json.dumps(configuration, allow_nan=False, separators=(",", ":"), sort_keys=True).replace(
+        "<", "\\u003c"
+    )
+    html = html[: match.start(1)] + serialized + html[match.end(1) :]
+    bootstrap = "<script>(function() {\nCitryStable.startPrepared("
+    bootstrap_index = html.find(bootstrap)
+    if bootstrap_index < 0:  # pragma: no cover - every matched bootstrap has this framing
+        raise RuntimeError("A prepared quality scenario bootstrap has an unexpected wrapper.")
+    return html[:bootstrap_index] + "".join(scripts) + html[bootstrap_index:]
+
+
 def build_scenario(
     scenario_id: str,
     *,
     configure_app: Callable[[Citry], None] | None = None,
+    self_contained: bool = False,
 ) -> RenderedScenario:
-    """Build a complete scenario after an optional host configures Citry."""
+    """
+    Build a complete scenario after an optional host configures Citry.
+
+    The app uses ``/citry`` when the host has not configured a prefix, keeping
+    the default suitable for host routes and Lighthouse.  ``self_contained``
+    inlines prepared browser assets for documents loaded without that host,
+    while retaining the mounted Events transport URLs.
+    """
     scenario = scenario_by_id(scenario_id)
     if scenario.status is not ScenarioStatus.READY:
         msg = f"Citry UI scenario {scenario_id!r} is {scenario.status.value}; no route is available yet."
@@ -257,9 +350,8 @@ def build_scenario(
     if configure_app is not None:
         configure_app(app)
     if app.mounted_prefix is None:
-        # Standalone quality pages still contain Vue event components. Give
-        # them the same deterministic asset base as a mounted host so route
-        # rendering can exercise the complete browser contract.
+        # Host-route and Lighthouse pages need a deterministic asset base when
+        # no host has supplied one explicitly.
         app.set_mounted_prefix("/citry")
     scenario_component = factory(app)
 
@@ -296,13 +388,16 @@ def build_scenario(
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
             return {"page_title": f"{scenario.purpose} | Citry UI quality"}
 
-    return RenderedScenario(scenario=scenario, app=app, html=str(ScenarioPage()))
+    html = str(ScenarioPage())
+    if self_contained:
+        html = _inline_prepared_assets(html, app)
+    return RenderedScenario(scenario=scenario, app=app, html=html)
 
 
 def render_scenario(scenario_id: str, *, embedded: bool = False) -> str:
     """Render a ready scenario as a component fragment or complete page."""
     if not embedded:
-        return build_scenario(scenario_id).html
+        return build_scenario(scenario_id, self_contained=True).html
 
     scenario = scenario_by_id(scenario_id)
     if scenario.status is not ScenarioStatus.READY:

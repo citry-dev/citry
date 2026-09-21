@@ -5,7 +5,7 @@ from copy import deepcopy
 
 import pytest
 
-from citry_ui.quality.routes import render_scenario, renderable_scenario_ids
+from citry_ui.quality.routes import build_scenario, render_scenario, renderable_scenario_ids
 from citry_ui.quality.scenarios import SCENARIOS
 
 _PREPARED_RE = re.compile(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", re.DOTALL)
@@ -286,7 +286,9 @@ def _prepared_contract(configuration: dict[str, object], *, wrapper_type: str | 
         "endpoint": configuration.get("endpoint"),
         "eventBaseUrl": configuration.get("eventBaseUrl"),
         "host": "<vue-host>",
-        "loadInitialAssets": configuration["loadInitialAssets"],
+        # Mounted routes fetch these descriptors; standalone routes emit the
+        # same bytes inline and ask the runtime to adopt them.
+        "loadInitialAssets": "asset-delivery",
         "manifest": normalized_manifest,
         "tags": {key: value for key, value in configuration["tags"].items() if key in retained_types},
     }
@@ -318,7 +320,7 @@ def test_scenario_preserves_the_same_render_contract_embedded_and_standalone(sce
     assert "<!doctype html>" in standalone
     assert '<meta name="viewport"' in standalone
     assert f'data-citry-ui-scenario="{scenario_id}"' in standalone
-    assert "citry_ui" not in standalone
+    assert re.search(r'(?:src|href)="/citry/', standalone) is None
 
     embedded_prepared = _prepared_configuration(embedded)
     standalone_prepared = _prepared_configuration(standalone)
@@ -339,6 +341,30 @@ def test_standalone_scenario_declares_a_data_favicon() -> None:
     standalone = render_scenario("button.states")
 
     assert '<link rel="icon" href="data:image/svg+xml;base64,' in standalone
+
+
+def test_build_scenario_uses_the_default_mount_for_host_routes() -> None:
+    rendered = build_scenario("button.states")
+
+    assert rendered.app.mounted_prefix == "/citry"
+    assert 'src="/citry/citry.js"' in rendered.html
+
+
+def test_build_scenario_self_contained_mode_inlines_assets() -> None:
+    rendered = build_scenario("button.states", self_contained=True)
+
+    assert rendered.app.mounted_prefix == "/citry"
+    assert 'src="/citry/' not in rendered.html
+    assert 'href="/citry/' not in rendered.html
+    assert "Citry interactive runtime" in rendered.html
+
+
+def test_render_scenario_inlines_assets_for_standalone_documents() -> None:
+    standalone = render_scenario("button.states")
+
+    assert 'src="/citry/' not in standalone
+    assert 'href="/citry/' not in standalone
+    assert "Citry interactive runtime" in standalone
 
 
 def test_prepared_route_contract_rejects_changed_prepared_binding() -> None:
