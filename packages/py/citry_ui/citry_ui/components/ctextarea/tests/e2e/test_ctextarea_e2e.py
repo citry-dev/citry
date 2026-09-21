@@ -75,7 +75,7 @@ def test_vue_textarea_provider_input_focus_and_validation(page) -> None:
     assert errors == []
 
 
-def _textarea_page() -> str:
+def _textarea_page(*, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -164,7 +164,8 @@ def _textarea_page() -> str:
                 "hostile_placeholder": Markup('write "safely" <here>'),
             }
 
-    return str(Page())
+    page = Page().render()
+    return page.serialize(deps_strategy="ignore") if static_fallback else page.serialize()
 
 
 def _load(page) -> None:
@@ -188,6 +189,20 @@ def test_initial_value_parser_security_and_newline_contract(page):
     assert page.locator("#escaped-script").count() == 0
     assert page.locator("#hostile-value").get_attribute("placeholder") == 'write "safely" <here>'
     assert page.evaluate("window.__textareaPwned") is None
+
+
+def test_static_initial_value_parser_security_and_newline_contract(page):
+    page.set_content(_textarea_page(static_fallback=True), wait_until="load")
+
+    native = page.locator("#native-newlines")
+    assert native.input_value() == "\nfirst\nsecond\nthird"
+    assert native.evaluate("element => element.defaultValue") == "\nfirst\nsecond\nthird"
+    hostile = page.locator("#hostile-value")
+    assert hostile.input_value() == '</textarea><script id="escaped-script">bad()</script>'
+    assert hostile.evaluate("element => element.defaultValue") == (
+        '</textarea><script id="escaped-script">bad()</script>'
+    )
+    assert page.locator("#escaped-script").count() == 0
 
 
 def test_mirrored_controlled_input_preserves_middle_insertion_and_caret(page):

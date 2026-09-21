@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from secrets import token_hex
 from typing import TYPE_CHECKING, get_args
 
@@ -58,8 +59,9 @@ from citry.util.html import escape_to_str
 from citry_core.html_transform import mark_html
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
 
+    from citry._vue.leaf_program import PreparedStaticText
     from citry.citry_render import RenderPart
 
 # The attribute name the placeholders carry, and that mark_html splits the
@@ -81,6 +83,86 @@ _DOCUMENT_ROOT_RE = re.compile(
     r"\A\s*(?:\ufeff\s*)?(?:(?:<!--.*?-->)\s*)*(?:<!doctype\s+html(?:\s[^>]*)?>|<html(?:\s|>))",
     flags=re.IGNORECASE | re.DOTALL,
 )
+_TEXTAREA_OPEN_RE = re.compile(r"<textarea(?:\s|>)", re.IGNORECASE)
+
+_HTML_VOID_ELEMENTS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+)
+
+
+@dataclass(slots=True)
+class _PreparedElementState:
+    tag: str
+    has_content: bool = False
+
+
+class _PreparedMarkupTracker(HTMLParser):
+    """
+    Track prepared HTML nesting while materializing a static fallback.
+
+    Prepared Vue values are normally delivered to Vue as VNode data. Static
+    fallbacks instead pass through the browser's HTML parser, which drops the
+    first LF in a textarea. The tracker lets the serializer distinguish a
+    value that is the first textarea content from authored text already
+    present in that textarea without changing the prepared value itself.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.elements: list[_PreparedElementState] = []
+
+    @property
+    def current(self) -> _PreparedElementState | None:
+        return self.elements[-1] if self.elements else None
+
+    def mark_content(self, text: str) -> None:
+        if text and self.current is not None:
+            self.current.has_content = True
+
+    def consume(self, markup: str) -> None:
+        # Prepared static chunks end at authenticated node boundaries. Flush
+        # after each chunk so RCDATA text (which HTMLParser otherwise buffers
+        # until ``</textarea>``) is visible before the next prepared value.
+        super().feed(markup)
+        super().close()
+
+    def should_compensate_textarea_lf(self, value: object) -> bool:
+        return (
+            isinstance(value, str)
+            and value.startswith("\n")
+            and self.current is not None
+            and self.current.tag == "textarea"
+            and not self.current.has_content
+        )
+
+    def push_prepared(self, tag: str, *, is_void: bool) -> None:
+        if not is_void:
+            self.elements.append(_PreparedElementState(tag.casefold()))
+
+    def pop_prepared(self, tag: str) -> None:
+        normalized = tag.casefold()
+        for index in range(len(self.elements) - 1, -1, -1):
+            if self.elements[index].tag == normalized:
+                del self.elements[index:]
+                return
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: ARG002
+        self.push_prepared(tag, is_void=tag.casefold() in _HTML_VOID_ELEMENTS)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: ARG002
+        return
+
+    def handle_endtag(self, tag: str) -> None:
+        self.pop_prepared(tag)
+
+    def handle_data(self, data: str) -> None:
+        self.mark_content(data)
+
+    def handle_entityref(self, name: str) -> None:  # noqa: ARG002
+        self.mark_content("&")
+
+    def handle_charref(self, name: str) -> None:  # noqa: ARG002
+        self.mark_content("&")
 
 
 def _looks_like_document(html: str) -> bool:
@@ -387,6 +469,7 @@ def serialize_render_result(
         and root.render_target == "prepared"
         and bool(vue_analysis.runtime_requirements)
     )
+    vue_runtime_installed = vue_required and deps_strategy in {"document", "fragment"}
     # Pass 1 (top-down): build each component's HTML with its children still as
     # placeholders, add its markers, and work out which markers each child
     # inherits. An explicit stack keeps depth off the Python call stack.
@@ -428,7 +511,14 @@ def serialize_render_result(
             component_classes[render_frame.render_id] = render_frame.class_name or render_frame.class_id or "component"
 
         children: list[tuple[CitryRender, str]] = []
-        frame = _build_frame(render, children, placeholder_map, placeholder_nonce, omit_handler_marker)
+        frame = _build_frame(
+            render,
+            children,
+            placeholder_map,
+            placeholder_nonce,
+            omit_handler_marker,
+            compensate_textarea_lf=not vue_runtime_installed,
+        )
 
         # A render only gets its component's marker when it is that component's
         # root render; a transparent component's output (is_component_root
@@ -682,10 +772,30 @@ def _append_frame_parts(
     placeholder_map: dict[str, str],
     placeholder_nonce: str,
     omit_handler_marker: str | None,
+    compensate_textarea_lf: bool,
     out: list[str],
 ) -> None:
     """Append nested content iteratively while preserving child order."""
-    stack: list[Iterator[RenderPart]] = [iter(parts)]
+    stack: list[Iterator[RenderPart | PreparedStaticText]] = [iter(parts)]
+    tracker: _PreparedMarkupTracker | None = None
+
+    def activate_tracker(markup: str) -> _PreparedMarkupTracker | None:
+        nonlocal tracker
+        if compensate_textarea_lf and tracker is None and _TEXTAREA_OPEN_RE.search(markup):
+            tracker = _PreparedMarkupTracker()
+        return tracker
+
+    def activate_for_element(tag: str) -> _PreparedMarkupTracker | None:
+        nonlocal tracker
+        if compensate_textarea_lf and tracker is None and tag.casefold() == "textarea":
+            tracker = _PreparedMarkupTracker()
+        return tracker
+
+    def consume_markup(markup: str) -> None:
+        active = activate_tracker(markup)
+        if active is not None:
+            active.consume(markup)
+
     while stack:
         try:
             part = next(stack[-1])
@@ -694,6 +804,7 @@ def _append_frame_parts(
             continue
         if isinstance(part, str):
             out.append(part)
+            consume_markup(part)
         elif isinstance(part, RenderDecoration):
             part_frame = part.frame
             decoration_id = (
@@ -739,39 +850,73 @@ def _append_frame_parts(
             )
             from citry._vue.leaf_program import (  # noqa: PLC0415
                 PreparedLeafProgram,
+                PreparedStaticText,
                 static_leaf_parts,
                 typed_leaf_parts,
             )
 
             if isinstance(part, PreparedLeafProgram):
-                stack.append(
-                    iter(typed_leaf_parts(part) if omit_handler_marker is not None else static_leaf_parts(part))
-                )
+                if tracker is None:
+                    activate_tracker(part.fragment.template)
+                leaf_parts: Sequence[RenderPart | PreparedStaticText]
+                if omit_handler_marker is not None:
+                    leaf_parts = typed_leaf_parts(part)
+                elif tracker is None:
+                    leaf_parts = static_leaf_parts(part)
+                else:
+                    leaf_parts = static_leaf_parts(part, preserve_dynamic_text=True)
+                stack.append(iter(leaf_parts))
                 continue
 
             if isinstance(part, PreparedDynamicElementOpen):
                 formatted = str(format_attrs(part.attrs))
                 suffix = f" {formatted}" if formatted else ""
                 out.append(f"<{part.tag}{suffix}>")
+                if part.tag.casefold() == "textarea":
+                    activate_for_element(part.tag)
+                if tracker is not None:
+                    tracker.push_prepared(part.tag, is_void=part.is_void)
                 continue
             if isinstance(part, PreparedDynamicElementClose):
                 out.append(f"</{part.tag}>")
+                if tracker is not None:
+                    tracker.pop_prepared(part.tag)
                 continue
 
             if isinstance(part, PreparedSourceText):
                 out.append(part.text)
+                consume_markup(part.text)
                 continue
             if isinstance(part, PreparedStaticRun):
                 out.append(part.html)
+                consume_markup(part.html)
                 continue
             if isinstance(part, PreparedTextValue):
-                out.append(escape_to_str(part.value))
+                escaped = escape_to_str(part.value)
+                if tracker is not None and tracker.should_compensate_textarea_lf(part.value):
+                    out.append("\n")
+                out.append(escaped)
+                if tracker is not None:
+                    tracker.mark_content(escaped)
+                continue
+            if isinstance(part, PreparedStaticText):
+                # The leaf serializer preserves the provenance of dynamic
+                # text only for this static fallback pass. Keep that private
+                # marker out of the public prepared render data.
+                text = part.text
+                if tracker is not None and tracker.should_compensate_textarea_lf(text):
+                    out.append("\n")
+                out.append(text)
+                if tracker is not None:
+                    tracker.mark_content(text)
                 continue
             if isinstance(part, PreparedTrustedHtmlValue):
                 out.append(part.html)
+                consume_markup(part.html)
                 continue
             if isinstance(part, PreparedVerbatimHtml):
                 out.append(part.html)
+                consume_markup(part.html)
                 continue
             if isinstance(part, PreparedElementOpen):
                 from citry._vue.capture import format_prepared_element_attrs  # noqa: PLC0415
@@ -790,9 +935,15 @@ def _append_frame_parts(
                 # void ``<img/>``-style tags keep the slash here.
                 ending = "/>" if part.is_void and part.is_self_closing else ">"
                 out.append(f"<{part.tag}{suffix}{ending}")
+                if part.tag.casefold() == "textarea":
+                    activate_for_element(part.tag)
+                if tracker is not None:
+                    tracker.push_prepared(part.tag, is_void=part.is_void)
                 continue
             if isinstance(part, PreparedElementClose):
                 out.append(f"</{part.tag}>")
+                if tracker is not None:
+                    tracker.pop_prepared(part.tag)
                 continue
             # A DeferredComponent here means render() never resolved it.
             msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
@@ -805,6 +956,8 @@ def _build_frame(
     placeholder_map: dict[str, str],
     placeholder_nonce: str,
     omit_handler_marker: str | None,
+    *,
+    compensate_textarea_lf: bool,
 ) -> str:
     """
     Join one component's parts into an HTML string.
@@ -830,6 +983,7 @@ def _build_frame(
         placeholder_map=placeholder_map,
         placeholder_nonce=placeholder_nonce,
         omit_handler_marker=omit_handler_marker,
+        compensate_textarea_lf=compensate_textarea_lf,
         out=out,
     )
     return "".join(out)

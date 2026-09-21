@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TYPE_CHECKING, Literal, TypeVar, cast, overload
 
 from citry.attrs import _html_attr_identity, format_attrs
 from citry.citry_render import _VALUE_CONTEXT, CitryRender, RenderPart
@@ -58,6 +58,13 @@ class PreparedLeafProgram:
     resolved_opens: dict[tuple[int, int], PreparedElementOpen | dict[str, object]]
     cached_typed_parts: tuple[RenderPart, ...] | None = None
     cached_static_parts: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedStaticText:
+    """Escaped dynamic text retained while serializing a static fallback."""
+
+    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -831,12 +838,38 @@ def _source_target(name: str) -> str | None:
     return None
 
 
-def static_leaf_parts(value: PreparedLeafProgram) -> list[str]:
+@overload
+def static_leaf_parts(
+    value: PreparedLeafProgram,
+    *,
+    preserve_dynamic_text: Literal[False] = False,
+) -> Sequence[str]: ...
+
+
+@overload
+def static_leaf_parts(
+    value: PreparedLeafProgram,
+    *,
+    preserve_dynamic_text: Literal[True],
+) -> Sequence[str | PreparedStaticText]: ...
+
+
+def static_leaf_parts(
+    value: PreparedLeafProgram,
+    *,
+    preserve_dynamic_text: bool = False,
+) -> Sequence[str | PreparedStaticText]:
     """Materialize static HTML from the values already recorded by the program."""
-    if value.cached_static_parts is not None:
+    if value.cached_static_parts is not None and not preserve_dynamic_text:
         return list(value.cached_static_parts)
-    output: list[str] = []
-    _materialize(value.operations, value.prepared_data, value.resolved_opens, output)
+    output: list[str | PreparedStaticText] = []
+    _materialize(
+        value.operations,
+        value.prepared_data,
+        value.resolved_opens,
+        output,
+        preserve_dynamic_text=preserve_dynamic_text,
+    )
     return output
 
 
@@ -905,13 +938,16 @@ def _materialize(
     operations: tuple[object, ...],
     data: dict[str, object],
     resolved_opens: dict[tuple[int, int], PreparedElementOpen | dict[str, object]],
-    output: list[str],
+    output: list[str | PreparedStaticText],
+    *,
+    preserve_dynamic_text: bool = False,
 ) -> None:
     for operation in operations:
         if isinstance(operation, _Static):
             output.append(operation.html)
         elif isinstance(operation, _Text):
-            output.append(escape_to_str(data[operation.key]))
+            text = escape_to_str(data[operation.key])
+            output.append(PreparedStaticText(text) if preserve_dynamic_text else text)
         elif isinstance(operation, _Open):
             resolved = operation.static or resolved_opens[(id(data), id(operation))]
             if isinstance(resolved, dict):
@@ -939,7 +975,13 @@ def _materialize(
                 raise AssertionError("leaf branch selection changed type")
             selected = selected_value
             if selected >= 0:
-                _materialize(operation.branches[selected], data, resolved_opens, output)
+                _materialize(
+                    operation.branches[selected],
+                    data,
+                    resolved_opens,
+                    output,
+                    preserve_dynamic_text=preserve_dynamic_text,
+                )
         elif isinstance(operation, _For):
             records = data[operation.key]
             if not isinstance(records, list):
@@ -948,9 +990,21 @@ def _materialize(
                 for record in records:
                     if not isinstance(record, dict):
                         raise TypeError("leaf loop item changed type")
-                    _materialize(operation.body, record, resolved_opens, output)
+                    _materialize(
+                        operation.body,
+                        record,
+                        resolved_opens,
+                        output,
+                        preserve_dynamic_text=preserve_dynamic_text,
+                    )
             else:
-                _materialize(operation.empty, data, resolved_opens, output)
+                _materialize(
+                    operation.empty,
+                    data,
+                    resolved_opens,
+                    output,
+                    preserve_dynamic_text=preserve_dynamic_text,
+                )
         else:
             raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
 
