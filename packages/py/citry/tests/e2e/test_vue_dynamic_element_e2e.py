@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from dataclasses import dataclass, field
@@ -1541,6 +1542,157 @@ def test_external_prepared_asset_integrity_is_optional_and_identity_is_app_scope
         "validIntegrity": None,
         "malformedIntegrity": "invalid prepared asset source attributes",
     }
+
+
+def test_opaque_sandbox_skips_only_citry_owned_asset_integrity(page: Any) -> None:
+    """Opaque preview frames can load Citry-owned assets without weakening normal SRI."""
+    vue_root = Path(__file__).parents[2] / "citry" / "_vue"
+    definition_source = """
+      globalThis.CitryStableDefinitions = globalThis.CitryStableDefinitions || {};
+      globalThis.CitryStableDefinitions['asset-test-definition'] = {
+        render() {
+          return Vue.h('p', {id: 'owned-ready'}, globalThis.__ownedScriptLoaded ? 'ready' : 'missing');
+        },
+        target: 'ordinary-vnodes/1',
+        helperContract: globalThis.CitryStable.compilerRuntime.helperContract,
+        dynamicElements: [], directiveSignature: [], replacementSites: [], localCalls: [],
+        localCallRuns: [], opaqueHtmlSites: [], runtimeEventSites: [],
+      };
+    """
+    definition_digest = hashlib.sha256(definition_source.encode()).hexdigest()
+    page.route(
+        "http://citry.test/",
+        lambda route: route.fulfill(body="<main id='outer'></main>", content_type="text/html"),
+    )
+    page.route(
+        "http://citry.test/runtime.js",
+        lambda route: route.fulfill(
+            body=(vue_root / "runtime.js").read_text(encoding="utf-8"),
+            content_type="text/javascript",
+        ),
+    )
+    page.route(
+        "http://citry.test/definition.js",
+        lambda route: route.fulfill(body=definition_source, content_type="text/javascript"),
+    )
+    page.route(
+        "http://citry.test/owned.js",
+        lambda route: route.fulfill(
+            body="globalThis.__ownedScriptLoaded = true;",
+            content_type="text/javascript",
+        ),
+    )
+    page.route(
+        "http://citry.test/owned.css",
+        lambda route: route.fulfill(
+            body=":root { --owned-loaded: ready; }",
+            content_type="text/css",
+        ),
+    )
+    page.goto("http://citry.test/")
+    helper_contract = re.search(
+        r'const HELPER_CONTRACT = "([0-9a-f]+)"',
+        (vue_root / "client.js").read_text(encoding="utf-8"),
+    ).group(1)
+    result = page.evaluate(
+        """({definitionDigest, helperContract}) => {
+          const cases = [
+            {
+              name: 'opaque', sandbox: true,
+              definitionDigest: '0'.repeat(64), scriptDigest: '1'.repeat(64), styleDigest: '2'.repeat(64),
+              scripts: true, styles: true,
+            },
+            {
+              name: 'definition-sri', sandbox: false,
+              definitionDigest: 'f'.repeat(64), scriptDigest: '1'.repeat(64), styleDigest: '2'.repeat(64),
+              scripts: false, styles: false,
+            },
+            {
+              name: 'script-sri', sandbox: false,
+              definitionDigest, scriptDigest: 'f'.repeat(64), styleDigest: '2'.repeat(64),
+              scripts: true, styles: false,
+            },
+            {
+              name: 'style-sri', sandbox: false,
+              definitionDigest, scriptDigest: '1'.repeat(64), styleDigest: 'f'.repeat(64),
+              scripts: false, styles: true,
+            },
+          ];
+          const makeManifest = ({name, definitionDigest, scriptDigest, styleDigest, scripts, styles}) => {
+            const occurrenceId = `${name}-root`;
+            return {
+              protocol: 'citry-vue-prepared/1', appId: `asset-${name}`, revision: 0,
+              rootId: occurrenceId, markers: [],
+              occurrences: [{id: occurrenceId, typeKey: 'Root', definitionId: 'asset-test-definition',
+                parentId: null, placementKey: null, serverData: {}, preparedData: {calls: {}}}],
+              definitions: [{id: 'asset-test-definition', url: '/definition.js', sha256: definitionDigest,
+                target: 'ordinary-vnodes/1', helperContract,
+                dynamicElements: [], directiveSignature: [], replacementSites: [], localCalls: [],
+                localCallRuns: [], opaqueHtmlSites: [], runtimeEventSites: []}],
+              replacements: [],
+              scripts: scripts ? [{owner: {kind: 'component', typeKey: 'Root'},
+                source: {kind: 'owned', url: '/owned.js', sha256: scriptDigest},
+                lazyAllowed: true, registersOptions: false}] : [],
+              styles: styles ? [{owner: {kind: 'component', typeKey: 'Root', occurrenceIds: [occurrenceId]},
+                source: {kind: 'owned', url: '/owned.css', sha256: styleDigest, attrs: {rel: 'stylesheet'}},
+                lazyAllowed: true}] : [],
+              typePolicies: [{typeKey: 'Root', lazyAllowed: true}], extensions: {},
+            };
+          };
+          const frameSource = configuration => `<!doctype html><html><body><div id="host"></div>
+            <script src="http://citry.test/runtime.js"></script>
+            <script>
+              (async () => {
+                const report = (state, error) => parent.postMessage({type: 'citry-owned-integrity',
+                  name: ${JSON.stringify(configuration.name)}, state, error: error || null,
+                  ready: document.querySelector('#owned-ready')?.textContent || null,
+                  style: getComputedStyle(document.documentElement).getPropertyValue('--owned-loaded').trim()}, '*');
+                try {
+                  CitryStable.registerTypeOptions('Root', 'a'.repeat(64), {});
+                  await CitryStable.startPrepared({
+                    manifest: ${JSON.stringify(makeManifest(configuration))}, host: '#host', tags: {Root: 'c-root'},
+                    loadInitialAssets: true, allowLazyTypeAssets: true,
+                  });
+                  report('ready');
+                } catch (error) {
+                  report('error', String(error?.message || error));
+                }
+              })();
+            </script></body></html>`;
+          return new Promise(resolve => {
+            const output = new Map();
+            const listener = event => {
+              if (event.data?.type !== 'citry-owned-integrity' || output.has(event.data.name)) return;
+              output.set(event.data.name, event.data);
+              if (output.size === cases.length) {
+                window.removeEventListener('message', listener);
+                resolve(cases.map(({name}) => output.get(name)));
+              }
+            };
+            window.addEventListener('message', listener);
+            for (const configuration of cases) {
+              const frame = document.createElement('iframe');
+              if (configuration.sandbox) frame.setAttribute('sandbox', 'allow-scripts');
+              frame.srcdoc = frameSource(configuration);
+              document.body.append(frame);
+            }
+            window.setTimeout(() => {
+              window.removeEventListener('message', listener);
+              resolve(cases.map(({name}) => output.get(name) || {name, state: 'timeout'}));
+            }, 10_000);
+          });
+        }""",
+        {"definitionDigest": definition_digest, "helperContract": helper_contract},
+    )
+    assert result[0]["state"] == "ready"
+    assert result[0]["ready"] == "ready"
+    assert result[0]["style"] == "ready"
+    assert result[1]["state"] == "error"
+    assert result[1]["error"] == "Citry Vue definition failed to load: /definition.js"
+    assert result[2]["state"] == "error"
+    assert result[2]["error"] == "Citry Vue type script failed to load: /owned.js"
+    assert result[3]["state"] == "error"
+    assert result[3]["error"] == "Citry Vue stylesheet failed to load: /owned.css"
 
 
 def test_terminal_app_releases_only_its_shared_stylesheet_reference(page: Any) -> None:

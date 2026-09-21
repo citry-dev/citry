@@ -1787,6 +1787,13 @@ global.CitryVueFragments = CitryVueFragments;
     if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) throw new Error("invalid definition digest");
     return "sha256-" + btoa(String.fromCharCode(...value.match(/../g).map(part => parseInt(part, 16))));
   }
+  function canApplyOwnedIntegrity() {
+    // A sandboxed iframe without allow-same-origin has an opaque origin.  Its
+    // requests are cross-origin even when the URL points back to the hosting
+    // site, so browsers require CORS before they can validate SRI.  Explicit
+    // integrity supplied for an external asset is retained below.
+    return global.origin !== "null";
+  }
   function loadDefinition(asset, nonce) {
     if (global.CitryStableDefinitions?.[asset.id]) return Promise.resolve();
     const prior = loadedDefinitionUrls.get(asset.url);
@@ -1794,7 +1801,7 @@ global.CitryVueFragments = CitryVueFragments;
     const promise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = asset.url;
-      script.integrity = sriFromHex(asset.sha256);
+      if (canApplyOwnedIntegrity()) script.integrity = sriFromHex(asset.sha256);
       if (nonce) script.nonce = nonce;
       const finish = callback => {
         script.onload = null;
@@ -1910,7 +1917,9 @@ global.CitryVueFragments = CitryVueFragments;
       if (name.toLowerCase() === "nonce") throw new Error("prepared assets cannot replace the bootstrap nonce");
       if (value === true) element.setAttribute(name, ""); else if (value !== false) element.setAttribute(name, value);
     }
-    if (source.kind === "owned") element.integrity = sriFromHex(source.sha256);
+    if (source.kind === "owned" && canApplyOwnedIntegrity() &&
+        !Object.keys(attrs).some(name => name.toLowerCase() === "integrity"))
+      element.integrity = sriFromHex(source.sha256);
     if (nonce) element.nonce = nonce;
   }
   function styleRecordKey(appId, url) {
