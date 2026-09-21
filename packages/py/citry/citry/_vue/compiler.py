@@ -41,7 +41,7 @@ def _generated_vue_attr(name: str, value: str) -> str:
     return f'{name}="{html.escape(value, quote=True)}"'
 
 
-def _generated_event_args(args: str | None, *, el_expression: str = "$event.currentTarget") -> str:
+def _generated_event_args(args: object, *, el_expression: str = "$event.currentTarget") -> str:
     """
     Evaluate authored server-event arguments with an explicit Citry ``$el``.
 
@@ -54,6 +54,8 @@ def _generated_event_args(args: str | None, *, el_expression: str = "$event.curr
     """
     if args is None:
         return ""
+    if not isinstance(args, str):
+        raise TypeError("generated event arguments must be a string or None")
     return f", (($el) => ({args}))({el_expression})"
 
 
@@ -741,9 +743,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                         }
                     )
                 element_scope = (
-                    None
-                    if node.key_binding_key is None
-                    else _SlotKeyScope(f"preparedData.{node.key_binding_key}")
+                    None if node.key_binding_key is None else _SlotKeyScope(f"preparedData.{node.key_binding_key}")
                 )
                 element_stack.append((node.tag, element_scope))
                 if element_scope is not None:

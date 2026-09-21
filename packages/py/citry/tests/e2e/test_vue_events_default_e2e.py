@@ -997,9 +997,7 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
                 html: document.querySelector('#rows')?.innerHTML,
             })"""
         )
-        pytest.fail(
-            f"render ids: {render_ids}; page errors: {faults}; page state: {page_state}"
-        )
+        pytest.fail(f"render ids: {render_ids}; page errors: {faults}; page state: {page_state}")
     assert page.locator('[data-key="a"]').count() == 0
     assert page.locator('[data-key="b"] input').input_value() == "local-b"
     assert (

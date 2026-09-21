@@ -649,7 +649,7 @@ def assemble_typed_render(
                     supplied_fills[occurrence_id].append(fill)
                     output.append(
                         f'<slot name="{fill.site_id}"{context_binding_attrs}'
-                        f'{_slot_key_attr(_next_slot_key(slot_key_scopes))}></slot>'
+                        f"{_slot_key_attr(_next_slot_key(slot_key_scopes))}></slot>"
                     )
                 output.append("</template>")
 
@@ -851,13 +851,13 @@ def assemble_typed_render(
                         supplied_fills[receiver_owner].append(fill)
                         output.append(
                             f'<slot name="{site_id}"{context_binding_attrs}'
-                            f'{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>'
+                            f"{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>"
                         )
                     elif nested_template:
                         supplied_fills[output_owner].append(fill)
                         output.append(
                             f'<slot name="{site_id}"{context_binding_attrs}'
-                            f'{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>'
+                            f"{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>"
                         )
                     elif lexical_owner == output_owner:
                         _append_slot_outlet(
@@ -1467,10 +1467,7 @@ def assemble_typed_render(
                                 element_stack.pop()
                                 element_scope = element_key_scopes.pop()
                                 if element_scope is not None:
-                                    if (
-                                        not active_slot_key_scopes
-                                        or active_slot_key_scopes[-1] is not element_scope
-                                    ):
+                                    if not active_slot_key_scopes or active_slot_key_scopes[-1] is not element_scope:
                                         raise UnsupportedPreparedView(
                                             "prepared static key scope changed during text capture"
                                         )
@@ -1900,11 +1897,7 @@ def assemble_typed_render(
                         output.append(f"</{alias}>")
                     else:
                         dynamic_stack.append((part.tag, alias))
-                        element_scope = (
-                            None
-                            if key_key is None
-                            else _SlotKeyScope(f"preparedData.{key_key}")
-                        )
+                        element_scope = None if key_key is None else _SlotKeyScope(f"preparedData.{key_key}")
                         element_key_scopes.append(element_scope)
                         if element_scope is not None:
                             active_slot_key_scopes.append(element_scope)
