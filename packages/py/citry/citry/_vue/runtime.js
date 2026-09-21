@@ -1608,6 +1608,11 @@ global.CitryVueFragments = CitryVueFragments;
             throw new Error("Citry Events bridge is unavailable");
           return record.app.eventDispatchComponent(record, bindingId, emittedValue, authoredArgs);
         },
+        componentRoot(childId) {
+          if (typeof record.app.componentRoot !== "function")
+            throw new Error("Citry Events component-root bridge is unavailable");
+          return record.app.componentRoot(record, childId);
+        },
         controls(bindingIds) {
           if (bindingIds === "") return Object.freeze([]);
           if (typeof bindingIds !== "string") throw new TypeError("Citry control binding ids must be a string");
@@ -2275,6 +2280,7 @@ global.CitryVueFragments = CitryVueFragments;
     }
     definitionRegistry(appId).browserPlugins = [...plugins.values()].map(item => item.plugin);
     definitionRegistry(appId).initialPluginStages = [...plugins.values()];
+    const ownedApp = definitionRegistry(appId);
     const firstLiveElement = (vnode, seen = new Set()) => {
       if (!vnode || typeof vnode !== "object" || seen.has(vnode)) return null;
       seen.add(vnode);
@@ -2334,6 +2340,23 @@ global.CitryVueFragments = CitryVueFragments;
     };
     const componentContains = (component, element) =>
       liveRootElements(component).some(root => root === element || root.contains(element));
+    ownedApp.componentRoot = (record, childId) => {
+      if (record?.app !== ownedApp || ownedApp.mounted.get(record.occurrenceId)?.record !== record)
+        throw new Error("Citry component event source is stale or retired");
+      if (typeof childId !== "string" || childId.length === 0)
+        throw new TypeError("Citry component event child id must be a non-empty string");
+      const child = ownedApp.occurrences.get(childId);
+      if (!child || child.parentId !== record.occurrenceId)
+        throw new Error("Citry component event child is not a direct child of its source");
+      const mounted = ownedApp.mounted.get(childId);
+      if (!mounted || mounted.record.app !== ownedApp || mounted.record.occurrenceId !== childId)
+        throw new Error("Citry component event child is stale or retired");
+      const roots = liveRootElements(mounted.component);
+      const root = roots[0];
+      if (typeof Element !== "function" || !(root instanceof Element) || !root.isConnected)
+        throw new Error("Citry component event child has no live physical root");
+      return root;
+    };
     const sourceForElement = element => {
       if (typeof Element !== "function" || !(element instanceof Element) || !element.isConnected) return null;
       const candidates = [];
@@ -2369,7 +2392,6 @@ global.CitryVueFragments = CitryVueFragments;
         options = plugin.decorateTypeOptions(typeKey, options);
       componentTypes[typeKey] = defineTypeWithCallback(appId, typeKey, options);
     }
-    const ownedApp = definitionRegistry(appId);
     const cleanupEventAttempt = (attempt, reason = new Error("prepared Events render was cancelled")) => {
       if (!attempt || attempt.cleaned || attempt.published) return;
       attempt.aborted = true;

@@ -41,18 +41,20 @@ def _generated_vue_attr(name: str, value: str) -> str:
     return f'{name}="{html.escape(value, quote=True)}"'
 
 
-def _generated_event_args(args: str | None) -> str:
+def _generated_event_args(args: str | None, *, el_expression: str = "$event.currentTarget") -> str:
     """
-    Evaluate authored server-event arguments with the receiving element.
+    Evaluate authored server-event arguments with an explicit Citry ``$el``.
 
-    Vue's public ``$el`` is the current component root. Citry's ``@c-*``
-    contract has always made it the element that received the browser event,
-    including when the binding is authored on a component tag. Capture that
-    element before handing the event to the asynchronous Events bridge.
+    Native element listeners use Vue's event ``currentTarget``. Component
+    listeners are different: Vue invokes them from the parent render scope,
+    and an emitted payload may be an arbitrary value (including an ``Event``
+    whose ``currentTarget`` is ``null``). The component capture path therefore
+    supplies the child's physical root through an authenticated runtime
+    relationship instead of reading it from the payload.
     """
     if args is None:
         return ""
-    return f", (($el) => ({args}))($event.currentTarget)"
+    return f", (($el) => ({args}))({el_expression})"
 
 
 class _LocalCallBindingDeclaration(TypedDict):

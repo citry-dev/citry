@@ -2627,6 +2627,137 @@ def test_component_boundary_citry_event_dispatches_from_vue_child(page: Any, ser
     assert page.locator("#component-events").text_content() == "1", (faults, calls, page.content())
 
 
+def test_component_boundary_event_args_keep_child_el_and_native_current_target(
+    page: Any, serve_live: Any
+) -> None:
+    engine = Citry(secret="component-boundary-event-args", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class Child(Component):
+        citry = engine
+        template = '<button id="boundary-emitter" @click="emitChild">emit</button>'
+        js = """
+            $component({
+                methods: {
+                    emitChild(event) { this.$emit('change', event); },
+                },
+                mounted() {
+                    window.__boundaryMounted = true;
+                    window.addEventListener('citry-window-probe', event => this.$emit('window-change', event));
+                    document.addEventListener('citry-document-probe', event => this.$emit('document-change', event));
+                },
+            });
+        """
+
+    class Parent(Component):
+        citry = engine
+
+        js = """
+            $component({
+                methods: {
+                    eventTarget(event, current) {
+                        const target = current ? event?.currentTarget : event?.target;
+                        return target === window ? 'window' : target === document ? 'document' : target?.id || '';
+                    },
+                },
+            });
+        """
+
+        @dataclass
+        class BoundaryArgs:
+            el_id: str
+            event_type: str
+            target_kind: str
+            current_target_kind: str
+
+        template = """
+            <main>
+                <c-Child
+                    @c-change="capture({
+                        el_id: $el?.id || '',
+                        event_type: $event?.type || '',
+                        target_kind: eventTarget($event),
+                        current_target_kind: eventTarget($event, true),
+                    })"
+                    @c-window-change="capture({
+                        el_id: $el?.id || '',
+                        event_type: $event?.type || '',
+                        target_kind: eventTarget($event),
+                        current_target_kind: eventTarget($event, true),
+                    })"
+                    @c-document-change="capture({
+                        el_id: $el?.id || '',
+                        event_type: $event?.type || '',
+                        target_kind: eventTarget($event),
+                        current_target_kind: eventTarget($event, true),
+                    })"
+                />
+            </main>
+        """
+
+        class Events:
+            def capture(self, data: Parent.BoundaryArgs):
+                return None
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    requests: list[dict[str, Any]] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "request",
+        lambda request: requests.append(request.post_data_json)
+        if request.url.endswith("/ext/events/call") and request.post_data_json
+        else None,
+    )
+    page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
+    page.wait_for_function("() => window.__boundaryMounted === true")
+    assert page.locator("#boundary-emitter").count() == 1, (faults, page.content())
+
+    def wait_for_event(expected_calls: int) -> None:
+        page.wait_for_function("() => !CitryStable._apps.values().next().value.busy")
+        deadline = time.monotonic() + 5
+        while sum(len(request["calls"]) for request in requests) < expected_calls:
+            if time.monotonic() >= deadline:
+                break
+            page.wait_for_timeout(10)
+        assert sum(len(request["calls"]) for request in requests) >= expected_calls, (
+            faults,
+            requests,
+            page.content(),
+        )
+
+    page.evaluate("window.dispatchEvent(new Event('citry-window-probe'))")
+    wait_for_event(1)
+    page.evaluate("document.dispatchEvent(new Event('citry-document-probe'))")
+    wait_for_event(2)
+    page.locator("#boundary-emitter").click()
+    wait_for_event(3)
+
+    calls = [call for request in requests for call in request["calls"]]
+    assert [call["handlerName"] for call in calls] == ["capture", "capture", "capture"]
+    assert [call["args"] for call in calls] == [
+        {
+            "el_id": "boundary-emitter",
+            "event_type": "citry-window-probe",
+            "target_kind": "window",
+            "current_target_kind": "window",
+        },
+        {
+            "el_id": "boundary-emitter",
+            "event_type": "citry-document-probe",
+            "target_kind": "document",
+            "current_target_kind": "document",
+        },
+        {
+            "el_id": "boundary-emitter",
+            "event_type": "click",
+            "target_kind": "boundary-emitter",
+            "current_target_kind": "boundary-emitter",
+        },
+    ]
+    assert faults == [], (faults, page.content())
+
+
 def test_prepared_root_markers_and_css_variables_follow_physical_roots_across_revision(
     page: Any, serve_live: Any
 ) -> None:

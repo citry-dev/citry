@@ -1252,6 +1252,8 @@ def test_component_boundary_citry_event_compiles_to_vue_dispatch_metadata() -> N
     compile_input = assembly.compile_inputs[parent.definition_id]
     assert "v-on:change.prevent" in compile_input.template
     assert "$citryEvents.dispatchComponent" in compile_input.template
+    assert "$citryEvents.componentRoot(preparedData.calls." in compile_input.template
+    assert "$event.currentTarget" not in compile_input.template
     assert "{text: &quot;hello&quot;}" in compile_input.template
     assert [item["kind"] for item in compile_input.local_calls[0]["bindings"]] == ["event"]
     bindings = parent.prepared_data["eventBindings"]

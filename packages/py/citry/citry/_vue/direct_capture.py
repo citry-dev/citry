@@ -1318,7 +1318,10 @@ def assemble_typed_render(
                                 raise UnsupportedPreparedView(
                                     "one prepared component event site has conflicting authored metadata"
                                 )
-                            authored_args = _generated_event_args(event_component_binding["args"])
+                            authored_args = _generated_event_args(
+                                event_component_binding["args"],
+                                el_expression=f"$citryEvents.componentRoot(preparedData.calls.{local_id}.id)",
+                            )
                             generated_value = (
                                 f"$citryEvents.dispatchComponent('{component_binding_id}', $event{authored_args})"
                             )
