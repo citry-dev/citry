@@ -980,9 +980,11 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
     )
     assert page.evaluate("document.activeElement?.id") == "focus-sentinel"
 
-    with page.expect_response("**/ext/events/call") as remove_response_info:
-        page.locator("#remove-a").click()
-    remove_response = remove_response_info.value
+    page.locator("#remove-a").click()
+    page.wait_for_function(
+        "[...CitryStable._apps.values()][0].revision === 4 && ![...CitryStable._apps.values()][0].busy",
+        timeout=5000,
+    )
     try:
         page.wait_for_function(
             "() => [...document.querySelectorAll('#rows label')].map(label => label.dataset.key).join(',') === 'b'",
@@ -996,7 +998,6 @@ def test_events_render_targets_reorder_and_remove_keyed_v_model_children(page: A
             })"""
         )
         pytest.fail(
-            f"remove response {remove_response.status}: {remove_response.text()}; "
             f"render ids: {render_ids}; page errors: {faults}; page state: {page_state}"
         )
     assert page.locator('[data-key="a"]').count() == 0
