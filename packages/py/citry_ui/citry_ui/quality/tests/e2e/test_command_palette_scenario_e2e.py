@@ -123,11 +123,13 @@ def test_command_palette_quality_search_control_action_form_ime_and_axe(page: An
     )
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     assert controlled.evaluate("element => element.open") is True
-    page.evaluate(
-        """() => {
-          const owner = document.querySelector('#quality-command-palette-controlled').closest('article');
-          Alpine.$data(owner).acceptClose = true;
-        }"""
+    # The controlled palette is a modal while it is open, so its backdrop makes
+    # controls outside the dialog inert. Trigger the checkbox's public DOM
+    # activation instead of reaching into Vue's component state (the old test
+    # used Alpine.$data for that shortcut).
+    page.get_by_role("checkbox", name="Accept close").evaluate("element => element.click()")
+    page.wait_for_function(
+        "document.querySelector('.command-palette-quality input[type=checkbox]')?.checked"
     )
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     page.wait_for_function("!document.querySelector('#quality-command-palette-controlled').open")

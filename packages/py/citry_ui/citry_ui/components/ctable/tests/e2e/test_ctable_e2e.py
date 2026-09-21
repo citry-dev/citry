@@ -13,7 +13,10 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
+READY = """() => Boolean(
+  window.Citry?.events
+  && window.CitryStable?._apps?.size === 1
+)"""
 
 
 def _static_page() -> tuple[Citry, str]:

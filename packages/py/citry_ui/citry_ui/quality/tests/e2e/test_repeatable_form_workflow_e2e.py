@@ -13,7 +13,21 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
+READY = """() => {
+  const form = document.querySelector('#escalation-team-form');
+  const emails = [...document.querySelectorAll('[data-contact-email]')];
+  const roles = [...document.querySelectorAll('[data-contact-role]')];
+  return Boolean(
+    window.Citry?.events
+    && form?.hasAttribute('data-citry-form-initialized')
+    && emails.length === 2
+    && emails.every((input) => input.hasAttribute('data-citry-input-initialized'))
+    && roles.length === 2
+    && roles.every((input) => (
+      input.closest('[data-citry-combobox-root]')?.hasAttribute('data-citry-combobox-initialized')
+    ))
+  );
+}"""
 
 
 def _workflow_page() -> tuple[Citry, str]:
@@ -221,19 +235,20 @@ def _workflow_page() -> tuple[Citry, str]:
 
         js = """
           $component({
-            init: ({ els, data }) => {
-              const root = els[0];
-              if (!data.focusId) {
+            onServerRender: ({ component }) => {
+              const root = component.$el;
+              const focusId = component.focusId;
+              if (!focusId) {
                 return;
               }
               // A replacement component initializes before its new root is
               // necessarily connected. Wait for the browser commit before
               // focusing a newly added descendant.
               requestAnimationFrame(() => {
-                const target = data.focusId === "__add__"
+                const target = focusId === "__add__"
                   ? root.querySelector("[data-add-contact]")
                   : [...root.querySelectorAll("[data-contact-email]")]
-                    .find((input) => input.dataset.contactEmail === data.focusId);
+                    .find((input) => input.dataset.contactEmail === focusId);
                 target?.focus({ preventScroll: true });
               });
             },
