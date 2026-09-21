@@ -16,11 +16,15 @@ def test_page_and_citry_runtime_are_served() -> None:
 
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
-    assert "Plan the product launch." in page.text
-    assert "Map the onboarding journey" in page.text
-    assert "Mark complete" in page.text
-    assert "Move Map the onboarding journey to column" in page.text
-    assert "5 tasks shown" in page.text
+    # Interactive documents intentionally send a physical shell and a prepared
+    # Vue mount host.  The component tree is materialized by the browser after
+    # the runtime consumes this manifest; its final task text belongs to the
+    # browser qualification tests rather than this HTTP-shell test.
+    assert "<body" in page.text
+    assert '<div id="citry-vue-' in page.text
+    assert '"host":"#citry-vue-' in page.text
+    assert "CitryStable.startPrepared(" in page.text
+    assert "/citry/citry.js" in page.text
     assert "ext/events" in page.text
     assert runtime.status_code == 200
     assert runtime.headers["content-type"].startswith("text/javascript")

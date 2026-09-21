@@ -31,6 +31,7 @@
         onServerRender: ({component}) => {
           const root = component.$el;
           const data = component;
+          const server = component.serverDefaults;
           const props = component.$props;
           const i18n = component.$i18n;
           const input = root.querySelector('[data-citry-ui-part="input"]');
@@ -64,13 +65,13 @@
           const deferredTimers = new Set();
           const knownLabels = new Map();
           const maxKnownLabels = 1000;
-          let items = data.items;
+          let items = server.items;
           let visibleItems = [];
-          let selectedValue = data.value;
-          let query = data.inputValue;
-          let open = data.open;
+          let selectedValue = server.value;
+          let query = server.inputValue;
+          let open = server.open;
           let highlightedValue = null;
-          let querySelectionValue = data.inputValueExplicit ? null : data.value;
+          let querySelectionValue = data.inputValueExplicit ? null : server.value;
           let controlledValue = false;
           let controlledInput = false;
           let controlledOpen = false;
@@ -89,19 +90,19 @@
           let loader = null;
           let callbacks = {};
           let configuration = {
-            required: data.required,
-            disabled: data.disabled,
-            readonly: data.readonly,
-            invalid: data.invalid,
-            loading: data.loading,
-            clearable: data.clearable,
-            openOnFocus: data.openOnFocus,
-            autoHighlight: data.autoHighlight,
-            filter: data.filter,
-            minChars: data.minChars,
-            debounceMs: data.debounceMs,
-            variant: data.variant,
-            size: data.size,
+            required: server.required,
+            disabled: server.disabled,
+            readonly: server.readonly,
+            invalid: server.invalid,
+            loading: server.loading,
+            clearable: server.clearable,
+            openOnFocus: server.openOnFocus,
+            autoHighlight: server.autoHighlight,
+            filter: server.filter,
+            minChars: server.minChars,
+            debounceMs: server.debounceMs,
+            variant: server.variant,
+            size: server.size,
           };
           const ownsNode = (node) => (
             node instanceof Element
@@ -197,13 +198,13 @@
             return fallback;
           };
           const resolveChoice = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = props[name] === undefined ? server[name] : props[name];
             if (allowedValues[name].includes(value)) {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return server[name];
           };
           const resolveFunction = (name) => {
             const value = props[name];
@@ -879,14 +880,14 @@
               remoteError = false;
               nativeInvalid = false;
               if (!controlledValue) {
-                requestValue(data.value, items.find((item) => item.value === data.value) ?? null, "reset", nativeForm);
+                requestValue(server.value, items.find((item) => item.value === server.value) ?? null, "reset", nativeForm);
               } else {
                 hiddenInput.value = selectedValue ?? "";
               }
               if (!controlledInput) {
-                requestInputValue(data.inputValue, "reset", nativeForm, {
+                requestInputValue(server.inputValue, "reset", nativeForm, {
                   load: false,
-                  selectionValue: data.inputValueExplicit ? null : data.value,
+                  selectionValue: data.inputValueExplicit ? null : server.value,
                 });
               } else {
                 input.value = query;
@@ -938,24 +939,24 @@
               readonly = field.readonly;
               invalid = field.invalid;
             } else {
-              required = resolveBoolean("required", data.required);
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+              required = resolveBoolean("required", server.required);
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", server.disabled);
+              const readonlyFallback = data.inheritsReadonly && form ? form.readonly : server.readonly;
               readonly = resolveBoolean("readonly", readonlyFallback);
-              invalid = resolveBoolean("invalid", data.invalid);
+              invalid = resolveBoolean("invalid", server.invalid);
             }
             configuration = {
               required,
               disabled,
               readonly,
               invalid,
-              loading: resolveBoolean("loading", data.loading),
-              clearable: resolveBoolean("clearable", data.clearable),
-              openOnFocus: resolveBoolean("openOnFocus", data.openOnFocus),
-              autoHighlight: resolveBoolean("autoHighlight", data.autoHighlight),
+              loading: resolveBoolean("loading", server.loading),
+              clearable: resolveBoolean("clearable", server.clearable),
+              openOnFocus: resolveBoolean("openOnFocus", server.openOnFocus),
+              autoHighlight: resolveBoolean("autoHighlight", server.autoHighlight),
               filter: resolveChoice("filter"),
-              minChars: resolveInteger("minChars", data.minChars),
-              debounceMs: resolveInteger("debounceMs", data.debounceMs),
+              minChars: resolveInteger("minChars", server.minChars),
+              debounceMs: resolveInteger("debounceMs", server.debounceMs),
               variant: resolveChoice("variant"),
               size: resolveChoice("size"),
             };

@@ -35,7 +35,7 @@ def test_simple_content_under_transparent_owner_initializes_in_browser(
         citry = app
         simple = True
         template = """
-            <div><c-receiver><b x-data="{label: 'hello'}" x-text="label"></b></c-receiver></div>
+            <div><c-receiver><b>hello</b></c-receiver></div>
         """
 
     class Document(Component):
@@ -49,16 +49,5 @@ def test_simple_content_under_transparent_owner_initializes_in_browser(
     base = serve_live(app, Document(dynamic=dynamic, target=Box).render().serialize(), "")
     page.goto(base + "/")
     page.wait_for_function("window.receiverReady && document.querySelector('b').textContent === 'hello'")
-    assert page.evaluate("Citry.manager.ownership.revisions().length") == 1
-    assert (
-        page.evaluate(
-            """
-        () => {
-            const revision = Citry.manager.ownership.revisions()[0];
-            return Citry.manager.ownership.get(revision).graphs[0].componentInstances.length;
-        }
-        """
-        )
-        == 2
-    )
+    assert page.evaluate("() => CitryStable._apps.size") == 1
     assert errors == []

@@ -145,7 +145,7 @@ def _remote_page(
         citry = app
         js = """
           $component({data(){const remoteDemo=Citry.vue.reactive({
-            loading:false,disabled:false,readonly:false,inputValue:undefined,
+            loading:false,disabled:false,readonly:false,inputValue:undefined,show:true,
             loader:({query,signal,requestId})=>{
               window.__remoteRequests=window.__remoteRequests||[];
               const request={query,signal,requestId}; window.__remoteRequests.push(request);
@@ -168,33 +168,35 @@ def _remote_page(
               <c-css />
             </head>
             <body c-data-manual-requests="manual_requests">
-              <c-CCombobox
-                name="person_id"
-                c-options="initial_options"
-                c-value="initial_value"
-                c-open="initial_open"
-                c-min_chars="min_chars"
-                c-debounce_ms="0"
-                c-attrs="root_attrs"
-                :loading="state.remoteDemo.loading"
-                :disabled="state.remoteDemo.disabled"
-                :readonly="state.remoteDemo.readonly"
-                :inputValue="state.remoteDemo.inputValue"
-                :loadOptions="state.remoteDemo.loader"
-                :onLoadError="(error, detail) => {
-                    window.__remoteError = { message: error.message, detail };
-                  }"
-              >
-                <c-fill name="loading">
-                  Searching...
-                </c-fill>
-                <c-fill name="empty">
-                  No remote people.
-                </c-fill>
-                <c-fill name="error">
-                  Search failed.
-                </c-fill>
-              </c-CCombobox>
+              <template v-if="state.remoteDemo.show">
+                <c-CCombobox
+                  name="person_id"
+                  c-options="initial_options"
+                  c-value="initial_value"
+                  c-open="initial_open"
+                  c-min_chars="min_chars"
+                  c-debounce_ms="0"
+                  c-attrs="root_attrs"
+                  :loading="state.remoteDemo.loading"
+                  :disabled="state.remoteDemo.disabled"
+                  :readonly="state.remoteDemo.readonly"
+                  :inputValue="state.remoteDemo.inputValue"
+                  :loadOptions="state.remoteDemo.loader"
+                  :onLoadError="(error, detail) => {
+                      window.__remoteError = { message: error.message, detail };
+                    }"
+                >
+                  <c-fill name="loading">
+                    Searching...
+                  </c-fill>
+                  <c-fill name="empty">
+                    No remote people.
+                  </c-fill>
+                  <c-fill name="error">
+                    Search failed.
+                  </c-fill>
+                </c-CCombobox>
+              </template>
               <c-js />
             </body>
           </html>
@@ -821,28 +823,13 @@ def test_remote_error_recovers_and_does_not_render_exception_text(page):
     assert page.locator("[data-remote-combobox]").get_attribute("data-error") is None
 
 
-def test_remote_cleanup_aborts_pending_request_and_removes_document_listener(page):
+def test_remote_cleanup_aborts_pending_request_when_vue_unmounts(page):
     _load(page, _remote_page(manual_requests=True))
     input_value = page.get_by_role("combobox")
     input_value.fill("pending")
     page.wait_for_function("window.__remoteRequests?.length === 1")
-    page.evaluate(
-        """() => {
-          const root = document.querySelector('[data-remote-combobox]');
-          let start = root.previousSibling;
-          while (start && !(start.nodeType === Node.COMMENT_NODE && start.data.endsWith(':s'))) {
-            start = start.previousSibling;
-          }
-          let end = root.nextSibling;
-          while (end && !(end.nodeType === Node.COMMENT_NODE && end.data.endsWith(':e'))) {
-            end = end.nextSibling;
-          }
-          const range = document.createRange();
-          range.setStartBefore(start);
-          range.setEndAfter(end);
-          range.deleteContents();
-        }"""
-    )
+    page.evaluate("window.__remoteDemo.show = false")
+    page.wait_for_function("document.querySelector('[data-remote-combobox]') === null")
     page.wait_for_function("window.__remoteRequests[0].signal.aborted")
     _complete_remote_request(page, 0)
 

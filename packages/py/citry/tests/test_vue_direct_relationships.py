@@ -1782,7 +1782,7 @@ def test_dynamic_element_preserves_only_authored_bindings_unchanged_by_hooks() -
         render_prepared_direct(App())
 
 
-def test_prepared_hook_attributes_keep_html_boolean_presence_semantics() -> None:
+def test_prepared_hook_attributes_keep_json_boolean_semantics() -> None:
     class Rewrite(Extension):
         name = "rewrite_boolean_attrs"
 
@@ -1812,7 +1812,7 @@ def test_prepared_hook_attributes_keep_html_boolean_presence_semantics() -> None
         if type(value) is dict and value.get("data-value") == "kept"
     )
 
-    assert attr_values == {"data-value": "kept", "data-true": ""}
+    assert attr_values == {"data-value": "kept", "data-true": True}
     assert " hidden" in assembly.compile_inputs[occurrence.definition_id].template
 
 

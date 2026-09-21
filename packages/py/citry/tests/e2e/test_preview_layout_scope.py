@@ -1,4 +1,4 @@
-"""Component layouts preserve automatic Alpine data across their authored fills."""
+"""Component layouts preserve automatic Vue data across their authored fills."""
 
 import pytest
 
@@ -34,7 +34,7 @@ def test_component_page_layout_preserves_automatic_js_data(page, browser_name):
         template = """
             <section>
                 <button @click="helpOpen = !helpOpen">Toggle help</button>
-                <p x-show="helpOpen" x-text="notice"></p>
+                <p v-show="helpOpen" v-text="notice"></p>
             </section>
         """
 
@@ -59,7 +59,7 @@ def test_component_page_layout_preserves_automatic_js_data(page, browser_name):
     with PreviewServer(app, preview_routes(renderer)) as server:
         page.goto(f"{server.base_url}/ext/preview/render/{Example.class_id}?variant=default")
         page.wait_for_function(
-            "document.querySelector('section')?._x_dataStack?.[0]?.notice === 'Automatic scope works'"
+            "document.querySelector('section p')?.textContent === 'Automatic scope works'"
         )
         assert not page.locator("section p").is_visible()
         page.get_by_role("button", name="Toggle help").click()

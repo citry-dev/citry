@@ -314,15 +314,23 @@ def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
     raise TypeError(f"prepared Vue data must be strict JSON, got {type(value).__name__}")
 
 
-def _json_attribute_value(value: object) -> object:
-    """Encode one resolved HTML attribute with ``format_attrs`` semantics."""
-    plain = _json_plain(value)
-    return "" if plain is True else plain
-
-
 def _json_attribute_map(values: Mapping[str, object]) -> dict[str, object]:
-    """Encode a prepared HTML attribute map for Vue's object binding."""
-    return {name: _json_attribute_value(value) for name, value in values.items()}
+    """
+    Encode resolved HTML attributes for Vue's object binding.
+
+    Keep JSON booleans intact. Vue's object binding serializes a custom
+    attribute whose value is ``true`` as ``"true"``; converting it to the
+    empty string here would change the public prepared-attribute contract.
+    """
+    return {name: _json_plain(value) for name, value in values.items()}
+
+
+def _json_presence_attribute_map(values: Mapping[str, object]) -> dict[str, object]:
+    """Encode internal presence-only root markers for Vue's object binding."""
+    return {
+        name: "" if (plain := _json_plain(value)) is True else plain
+        for name, value in values.items()
+    }
 
 
 def assemble_typed_render(
@@ -1383,7 +1391,7 @@ def assemble_typed_render(
                                     "prepared root marker conflicts with an authored root attribute"
                                 )
                             attrs_key = data_key("Attrs", part.html, (0, len(part.html.encode())), data_owner_id)
-                            data_values[attrs_key] = _json_attribute_map(dict(root_markers))
+                            data_values[attrs_key] = _json_presence_attribute_map(dict(root_markers))
                             _append_static_root_projection(output, part.html, attrs_key, root_openings)
                         else:
                             output.append(part.html)
@@ -1645,7 +1653,10 @@ def assemble_typed_render(
                     )
                     prepared_key_binding = None
                     if element_attrs_key is not None:
-                        data_values[element_attrs_key] = _json_attribute_map(effective_data_attrs)
+                        serialized_attrs = _json_attribute_map(effective_data_attrs)
+                        if project_root_markers and root_markers and dom_depth == 0:
+                            serialized_attrs.update(_json_presence_attribute_map(dict(root_markers)))
+                        data_values[element_attrs_key] = serialized_attrs
                     if "key" in element_metadata:
                         prepared_key_binding = data_key("Key", part.source, part.span, data_owner_id)
                         data_values[prepared_key_binding] = _json_plain(element_metadata["key"])
@@ -1749,7 +1760,10 @@ def assemble_typed_render(
                                 "prepared root marker conflicts with a resolved dynamic root attribute"
                             )
                         dynamic_attrs.update(dict(root_markers))
-                    data_values[attrs_key] = _json_attribute_map(dynamic_attrs)
+                    serialized_attrs = _json_attribute_map(dynamic_attrs)
+                    if project_root_markers and root_markers and dom_depth == 0:
+                        serialized_attrs.update(_json_presence_attribute_map(dict(root_markers)))
+                    data_values[attrs_key] = serialized_attrs
                     projected_data_container("eventBindings")
                     projected_data_container("pollBindings")
                     projected_data_container("controlBindings")

@@ -118,54 +118,41 @@ jobs:
         run: uv run --no-sync python -m docs_site build --no-search --no-social-cards -o "$GITHUB_WORKSPACE/lhsite"
 
       - name: Render representative Citry UI qualification pages
-        shell: bash
         run: |
-          mkdir -p lhsite/__quality/citry-ui/orbit-access
-          mkdir -p lhsite/__quality/citry-ui/ledger-dashboard
-          uv run --no-sync python -m citry_ui.quality.routes \
-            composition.orbit-access \
-            --output lhsite/__quality/citry-ui/orbit-access/index.html
-          uv run --no-sync python -m citry_ui.quality.routes \
-            composition.ledger-dashboard \
-            --output lhsite/__quality/citry-ui/ledger-dashboard/index.html
-
-      - name: Add the exact Citry runtime to the Lighthouse site
-        shell: bash
-        run: |
-          mkdir -p lhsite/citry
-          cp packages/py/citry/citry/_vue/runtime.js lhsite/citry/citry.js
-          python3 - <<'PY'
-          from html.parser import HTMLParser
+          uv run --no-sync python - <<'PY'
           from pathlib import Path
-          from urllib.parse import urlsplit
 
-          class AssetParser(HTMLParser):
-              def __init__(self):
-                  super().__init__()
-                  self.references = []
-
-              def handle_starttag(self, _tag, attrs):
-                  for name, value in attrs:
-                      if name in {"href", "src"} and value:
-                          path = urlsplit(value).path
-                          if path.startswith("/citry/"):
-                              self.references.append(path)
-
-          pages = (
-              Path("lhsite/__quality/citry-ui/orbit-access/index.html"),
-              Path("lhsite/__quality/citry-ui/ledger-dashboard/index.html"),
+          from citry import citry as default_citry
+          from citry_ui.quality.routes import build_scenario
+          from docs_site._internal.static_deps import (
+              export_prepared_page_assets,
+              export_runtime,
+              validate_prepared_assets,
           )
-          missing = []
-          for page in pages:
-              parser = AssetParser()
-              parser.feed(page.read_text(encoding="utf-8"))
-              for reference in parser.references:
-                  target = Path("lhsite") / reference.removeprefix("/")
-                  if not target.is_file():
-                      missing.append(f"{page}: {reference}")
-          if missing:
-              raise SystemExit("Missing Citry UI Lighthouse assets:\n" + "\n".join(missing))
-          print("All /citry/ assets referenced by the representative pages exist under lhsite.")
+
+          output_dir = Path("lhsite")
+          pages = {
+              "composition.orbit-access": output_dir / "__quality/citry-ui/orbit-access/index.html",
+              "composition.ledger-dashboard": output_dir / "__quality/citry-ui/ledger-dashboard/index.html",
+          }
+
+          # Keep rendering and asset export in one process. The prepared
+          # manifest contains content-addressed definitions and styles that
+          # are retained by the app which rendered the page; a later process
+          # cannot reliably recover those in-memory artifacts.
+          for scenario_id, path in pages.items():
+              rendered = build_scenario(scenario_id)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(rendered.html, encoding="utf-8")
+              exported = export_prepared_page_assets(rendered.html, output_dir, rendered.app)
+              print(f"{scenario_id}: exported {len(exported)} prepared assets")
+
+          # The docs build already writes this runtime, but use the same helper
+          # here so the quality pages and the docs pages share the exact route
+          # implementation and events runtime.
+          export_runtime(output_dir, default_citry)
+          validate_prepared_assets(output_dir, default_citry)
+          print("Validated all prepared assets referenced by the Lighthouse site.")
           PY
 
       - name: Set up pnpm

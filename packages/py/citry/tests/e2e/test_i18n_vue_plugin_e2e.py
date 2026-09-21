@@ -293,6 +293,9 @@ def test_real_child_events_revision_retains_outer_i18n_and_replaces_callback_sco
             if(globalThis.__throwChildCleanup) throw Error('authored cleanup failure');
           };
         }});"""
+        # The callback binds this message at runtime, so declare it in the
+        # component catalog as required by the i18n compiler.
+        messages = "missing = Missing"
         State = ChildState
 
         class Events:
@@ -579,12 +582,12 @@ def test_start_prepared_disposes_plugin_when_install_fails(page: Any) -> None:
             rollbackRevision(){}, dispose(){ disposed += 1; },
           }));
           document.body.innerHTML='<div id="app"></div>';
-          const manifest = {protocol:'citry-vue-prepared/1',appId:'failure-app',revision:0,rootId:'root',
+          const manifest = {protocol:'citry-vue-prepared/1',appId:'failure-app',revision:0,rootId:'root',markers:[],
             occurrences:[{id:'root',typeKey:'Root',definitionId,parentId:null,placementKey:null,serverData:{},
               preparedData:{calls:{},selectedSlots:{}}}],
-            definitions:[{id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
+            definitions:[{id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
               helperContract:helperContract,
-              dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}],
+              dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],
             replacements:[],scripts:[],styles:[],typePolicies:[{typeKey:'Root',lazyAllowed:false}],
             extensions:{probe:{schemaVersion:1,payload:{},templateContextNames:[]}}};
           let message='';
@@ -631,15 +634,16 @@ def test_invalid_graph_and_type_policy_do_not_fetch_or_execute_definitions(page:
 """
             "          document.head.append=(...nodes)=>{for(const node of nodes)if(node.tagName==="
             "'SCRIPT')requested.push(node.src);return nativeAppend(...nodes)};\n"
-            "          const definition={id:'remote',url:'data:text/javascript,executed.push(1)',sh"
+            "          const definition={id:'remote',url:`/definitions/${digest}.js`,sh"
             "a256:digest,target:'ordinary-vnodes/1',\n"
             """            helperContract:helperContract,dynamicElements:[],
-            directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]};
+            directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]};
 """
             "          const occurrence={id:'root',typeKey:'Root',definitionId:'remote',parentId:nu"
             "ll,placementKey:null,serverData:{},preparedData:{calls:{},selectedSlots:{}}};\n"
             """\
-          const base=appId=>({protocol:'citry-vue-prepared/1',appId,revision:0,rootId:'root',occurrences:[occurrence],
+          const base=appId=>({protocol:'citry-vue-prepared/1',appId,revision:0,
+            rootId:'root',markers:[],occurrences:[occurrence],
             definitions:[definition],replacements:[],scripts:[],styles:[],typePolicies:[{typeKey:'Root',lazyAllowed:false}],extensions:{}});
           document.body.innerHTML='<div id="app"></div>';const messages=[];
 """
@@ -687,11 +691,11 @@ def test_start_prepared_isolates_plugin_inputs_and_unwinds_attempted_activation(
           for(const name of ['first','second','third']) CitryStable.registerBrowserPlugin(name,1,factory(name),[]);
           const extensions=Object.fromEntries(['first','second','third'].map(name=>[name,
             {schemaVersion:1,payload:{value:'original'},templateContextNames:[]} ]));
-          const manifest={protocol:'citry-vue-prepared/1',appId:'transaction-app',revision:0,rootId:'root',
+          const manifest={protocol:'citry-vue-prepared/1',appId:'transaction-app',revision:0,rootId:'root',markers:[],
             occurrences:[{id:'root',typeKey:'Root',definitionId,parentId:null,placementKey:null,serverData:{},preparedData:{calls:{},selectedSlots:{}}}],
-            definitions:[{id:definitionId,url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
+            definitions:[{id:definitionId,url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
               helperContract:helperContract,
-              dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}],
+              dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],
             replacements:[],scripts:[],styles:[],typePolicies:[{typeKey:'Root',lazyAllowed:false}],extensions};
           document.body.innerHTML='<div id="app"></div>';
           let message='';
@@ -735,11 +739,12 @@ def test_initial_postpublication_failure_disposes_without_rollback(page: Any) ->
             "');throw Error('commit failure')},\n"
             """\
             abortRevision(){log.push('abort')},rollbackRevision(){log.push('rollback')},dispose(){log.push('dispose')}}),[]);
-          const manifest={protocol:'citry-vue-prepared/1',appId:'published-failure',revision:0,rootId:'root',
+          const manifest={protocol:'citry-vue-prepared/1',appId:'published-failure',revision:0,
+            rootId:'root',markers:[],
             occurrences:[{id:'root',typeKey:'Root',definitionId:'definition',parentId:null,placementKey:null,serverData:{},preparedData:{calls:{},selectedSlots:{}}}],
-            definitions:[{id:'definition',url:'/unused.js',sha256:d,target:'ordinary-vnodes/1',
+            definitions:[{id:'definition',url:`/definitions/${d}.js`,sha256:d,target:'ordinary-vnodes/1',
               helperContract:helperContract,dynamicElements:[],
-              directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}],replacements:[],scripts:[],styles:[],
+              directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],replacements:[],scripts:[],styles:[],
             typePolicies:[{typeKey:'Root',lazyAllowed:false}],extensions:{probe:{schemaVersion:1,payload:{},templateContextNames:[]}}};
           document.body.innerHTML='<div id="app"></div>';let message='';
           try{await CitryStable.startPrepared({manifest,host:'#app',tags:{Root:'c-root'}})}
@@ -768,9 +773,10 @@ def test_revision_postpublication_callback_failure_disposes_plugin_once(page: An
             rollbackRevision(){log.push('rollback')},dispose(){log.push('dispose')}}),[]);
           const occurrence=value=>({id:'root',typeKey:'Root',definitionId:'definition',parentId:null,placementKey:null,
             serverData:{value},preparedData:{calls:{},selectedSlots:{}}});
-          const manifest={protocol:'citry-vue-prepared/1',appId:'revision-published-failure',revision:0,rootId:'root',
-            occurrences:[occurrence(0)],definitions:[{id:'definition',url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
-              helperContract,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}],
+          const manifest={protocol:'citry-vue-prepared/1',appId:'revision-published-failure',revision:0,
+            rootId:'root',markers:[],
+            occurrences:[occurrence(0)],definitions:[{id:'definition',url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
+              helperContract,dynamicElements:[],directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],
             replacements:[],scripts:[],styles:[],typePolicies:[{typeKey:'Root',lazyAllowed:false}],
             extensions:{probe:{schemaVersion:1,payload:{},templateContextNames:[]}}};
           document.body.innerHTML='<div id="app"></div>';
@@ -791,9 +797,9 @@ def test_revision_postpublication_callback_failure_disposes_plugin_once(page: An
         "message": "revision callback failure",
         "log": [
             "activate",
-            "callback:component,revision:0",
+            "callback:component,onEvent,revision:0",
             "commit",
-            "callback:component,revision:1",
+            "callback:component,onEvent,revision:1",
             "dispose",
         ],
         "apps": 0,
@@ -814,7 +820,8 @@ def test_revision_rejects_unbound_child_and_wrong_lexical_parent_before_mutation
             return Vue.h(Vue.resolveComponent('c-child'),{citryId:'child'});
           }},child:{...metadata(),render(){return Vue.h('span','child')}}};
           CitryStable.registerTypeOptions('Root',digest,{});CitryStable.registerTypeOptions('Child',digest,{});
-          const descriptor=(id,localCalls=[])=>({id,url:'/unused.js',sha256:digest,...metadata(localCalls)});
+          const descriptor=(id,localCalls=[])=>({id,url:`/definitions/${digest}.js`,sha256:digest,
+            ...metadata(localCalls),runtimeEventSites:[]});
 """
             "          const child={id:'child',typeKey:'Child',definitionId:'child',parentId:'root'"
             ",placementKey:'child',serverData:{},\n"
@@ -824,7 +831,7 @@ def test_revision_rejects_unbound_child_and_wrong_lexical_parent_before_mutation
             "',parentId:null,placementKey:null,\n"
             """            serverData:{},preparedData:{calls:{childCall:{id:'child',key:'child',parentId}},
               callRuns:{},selectedSlots:{}}});
-          const manifest={protocol:'citry-vue-prepared/1',appId:'topology-negatives',revision:0,
+          const manifest={protocol:'citry-vue-prepared/1',appId:'topology-negatives',revision:0,markers:[],
             rootId:'root',occurrences:[rootOccurrence('root'),child],
             definitions:[descriptor('root',[call]),descriptor('child')],replacements:[],scripts:[],styles:[],
             typePolicies:[{typeKey:'Root',lazyAllowed:false},{typeKey:'Child',lazyAllowed:false}],extensions:{}};
@@ -850,7 +857,7 @@ def test_revision_rejects_unbound_child_and_wrong_lexical_parent_before_mutation
     )
     assert result == {
         "rejected": [
-            "prepared local call does not match occurrence placement",
+            "prepared ordinary local call stable-type mismatch",
             "prepared occurrence has no local call binding",
         ],
         "revision": 0,
@@ -880,11 +887,11 @@ def test_prepared_stylesheets_are_owned_per_app_and_never_adopt_authored_links(
             '            <link id="second-style" rel="stylesheet" href="${url}" data-citry-css-url='
             '"${url}" data-citry-vue-style-app="second">`;\n'
             """          document.body.innerHTML='<div id="first"></div><div id="second"></div>';
-          const manifest=appId=>({protocol:'citry-vue-prepared/1',appId,revision:0,rootId:'root',
+          const manifest=appId=>({protocol:'citry-vue-prepared/1',appId,revision:0,rootId:'root',markers:[],
             occurrences:[{id:'root',typeKey:'Root',definitionId:'definition',parentId:null,placementKey:null,serverData:{},preparedData:{calls:{},selectedSlots:{}}}],
-            definitions:[{id:'definition',url:'/unused.js',sha256:digest,target:'ordinary-vnodes/1',
+            definitions:[{id:'definition',url:`/definitions/${digest}.js`,sha256:digest,target:'ordinary-vnodes/1',
               helperContract:helperContract,dynamicElements:[],
-              directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[]}],replacements:[],scripts:[],
+              directiveSignature:[],replacementSites:[],localCalls:[],localCallRuns:[],opaqueHtmlSites:[],runtimeEventSites:[]}],replacements:[],scripts:[],
             styles:[{lazyAllowed:false,owner:{kind:'component',typeKey:'Root',occurrenceIds:['root']},
               source:{kind:'external',url,attrs:{}}}],typePolicies:[{typeKey:'Root',lazyAllowed:false}],extensions:{}});
           const handles={};

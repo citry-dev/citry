@@ -790,6 +790,11 @@ def load_project(
             check=False,
             env=environment,
             text=True,
+            # app_worker writes its JSON envelope as UTF-8 explicitly.  Do
+            # not let Windows' active code page reinterpret non-ASCII catalog
+            # and source-analysis values before the protocol parser sees them.
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:

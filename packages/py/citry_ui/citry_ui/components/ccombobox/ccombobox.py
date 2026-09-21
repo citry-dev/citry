@@ -368,57 +368,59 @@ class CCombobox(LibraryComponent):
         caller_input_attrs = dict(kwargs.input_attrs or {})
         input_id = kwargs.id or (str(field.control_id) if field is not None else f"cui-combobox-{self.id}")
         return {
-            "items": [
-                {
-                    "value": option.value,
-                    "label": option.label,
-                    "description": option.description,
-                    "disabled": option.disabled,
-                }
-                for option in options
-            ],
-            "value": kwargs.value,
-            "inputValue": input_value,
+            "serverDefaults": {
+                "items": [
+                    {
+                        "value": option.value,
+                        "label": option.label,
+                        "description": option.description,
+                        "disabled": option.disabled,
+                    }
+                    for option in options
+                ],
+                "value": kwargs.value,
+                "inputValue": input_value,
+                "open": kwargs.open and len(input_value) >= kwargs.min_chars,
+                "required": bool(field.required)
+                if field is not None
+                else kwargs.required
+                if kwargs.required is not None
+                else False,
+                "disabled": bool(field.disabled)
+                if field is not None
+                else kwargs.disabled
+                if kwargs.disabled is not None
+                else False,
+                "readonly": bool(field.readonly)
+                if field is not None
+                else kwargs.readonly
+                if kwargs.readonly is not None
+                else bool(form.readonly)
+                if form is not None
+                else False,
+                "invalid": bool(field.invalid)
+                if field is not None
+                else kwargs.invalid
+                if kwargs.invalid is not None
+                else False,
+                "loading": kwargs.loading,
+                "clearable": kwargs.clearable,
+                "openOnFocus": kwargs.open_on_focus,
+                "autoHighlight": kwargs.auto_highlight,
+                "filter": kwargs.filter,
+                "minChars": kwargs.min_chars,
+                "debounceMs": kwargs.debounce_ms,
+                "variant": kwargs.variant,
+                "size": kwargs.size,
+            },
             "inputValueExplicit": kwargs.input_value is not None,
-            "open": kwargs.open and len(input_value) >= kwargs.min_chars,
-            "required": bool(field.required)
-            if field is not None
-            else kwargs.required
-            if kwargs.required is not None
-            else False,
-            "disabled": bool(field.disabled)
-            if field is not None
-            else kwargs.disabled
-            if kwargs.disabled is not None
-            else False,
-            "readonly": bool(field.readonly)
-            if field is not None
-            else kwargs.readonly
-            if kwargs.readonly is not None
-            else bool(form.readonly)
-            if form is not None
-            else False,
-            "invalid": bool(field.invalid)
-            if field is not None
-            else kwargs.invalid
-            if kwargs.invalid is not None
-            else False,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "loading": kwargs.loading,
-            "clearable": kwargs.clearable,
-            "openOnFocus": kwargs.open_on_focus,
-            "autoHighlight": kwargs.auto_highlight,
-            "filter": kwargs.filter,
-            "minChars": kwargs.min_chars,
-            "debounceMs": kwargs.debounce_ms,
             "requiredMessage": messages["required_message"],
             "openLabel": messages["open_label"],
             "closeLabel": messages["close_label"],
             "catalogRequiredMessage": messages["catalog_required_message"],
             "catalogOpenLabel": messages["catalog_open_label"],
             "catalogCloseLabel": messages["catalog_close_label"],
-            "variant": kwargs.variant,
-            "size": kwargs.size,
             "listboxId": f"{input_id}-listbox",
             "externalDescribedBy": caller_input_attrs.get("aria-describedby"),
             "externalErrorMessage": caller_input_attrs.get("aria-errormessage"),
