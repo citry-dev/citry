@@ -13,6 +13,8 @@ from pathlib import Path
 from lxml import html as lxml_html
 from pygments.lexers import get_lexer_by_name
 
+from citry import citry as default_citry
+from citry._vue.events import definition_bundle
 from docs_site._internal.build import configure_docs_globals
 from docs_site._internal.config import DocsConfig, config
 from docs_site._internal.pipeline import render_page
@@ -44,10 +46,14 @@ def _prepared_render(html: str) -> tuple[dict, str]:
     start = script.text.index(marker) + len(marker)
     transport, _ = json.JSONDecoder().raw_decode(script.text[start:])
     assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
-    render_source = "\n".join(
-        node.text for node in document.xpath("//script") if node.text and "function render(_ctx, _cache" in node.text
-    )
-    definition_ids = {item["id"] for item in transport["manifest"]["definitions"]}
+    definitions = transport["manifest"]["definitions"]
+    bundles = []
+    for asset in definitions:
+        bundle = definition_bundle(default_citry, asset["sha256"])
+        assert bundle is not None, asset
+        bundles.append(bundle.decode())
+    render_source = "\n".join(bundles)
+    definition_ids = {item["id"] for item in definitions}
     assert definition_ids
     assert all(
         f'window.CitryStableDefinitions["{definition_id}"]' in render_source for definition_id in definition_ids

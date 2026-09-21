@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 from lxml import html as lxml_html
 
+from citry import citry as default_citry
+from citry._vue.events import definition_bundle
 from docs_site._internal.components.landing import (
     _DEPTH_CASES,
     _EDITOR_MARKS,
@@ -82,13 +84,15 @@ def _landing_content_html(transport: dict) -> str:
     return record["html"]
 
 
-def _prepared_definition_source(document: lxml_html.HtmlElement, transport: dict) -> str:
-    source = "\n".join(
-        script.text
-        for script in document.xpath("//script")
-        if script.text and "function render(_ctx, _cache" in script.text
-    )
-    definition_ids = {item["id"] for item in transport["manifest"]["definitions"]}
+def _prepared_definition_source(transport: dict) -> str:
+    definitions = transport["manifest"]["definitions"]
+    bundles = []
+    for asset in definitions:
+        bundle = definition_bundle(default_citry, asset["sha256"])
+        assert bundle is not None, asset
+        bundles.append(bundle.decode())
+    source = "\n".join(bundles)
+    definition_ids = {item["id"] for item in definitions}
     assert definition_ids
     assert all(f'window.CitryStableDefinitions["{definition_id}"]' in source for definition_id in definition_ids)
     return source
@@ -101,7 +105,7 @@ def test_landing_layout_keeps_shared_header_and_omits_document_chrome() -> None:
         current_path="",
     )
     document, transport = _prepared_response(result.html)
-    render_source = _prepared_definition_source(document, transport)
+    render_source = _prepared_definition_source(transport)
     root = next(item for item in transport["manifest"]["occurrences"] if item["id"] == transport["manifest"]["rootId"])
     root_data = root["preparedData"]
     rendered_content = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
@@ -629,12 +633,12 @@ def test_each_advanced_capability_explains_itself_above_its_code() -> None:
 def test_social_links_point_at_one_set_of_urls() -> None:
     """The header, hero, and footer must not drift to different destinations."""
     source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    document, transport = _prepared_response(render_page(source, current_path="").html)
+    _, transport = _prepared_response(render_page(source, current_path="").html)
     content = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
 
     rows = content.xpath('.//div[contains(@class, "social-links")]')
     assert rows
-    render_source = _prepared_definition_source(document, transport)
+    render_source = _prepared_definition_source(transport)
     assert 'class: "social-links__link"' in render_source
     assert 'rel: "noopener"' in render_source
     for row in rows:
