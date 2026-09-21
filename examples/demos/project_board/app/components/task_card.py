@@ -61,7 +61,7 @@ class TaskCard(Component):
               c-aria-label="'Move ' + title + ' to column'"
               @change="
                 if ($event.target.value !== laneKey) {
-                  $el.dispatchEvent(new CustomEvent('board:move', { bubbles: true, detail: {
+                  $el.dispatchEvent(new window.CustomEvent('board:move', { bubbles: true, detail: {
                     taskId,
                     lane: $event.target.value,
                     focusControl: true,
@@ -84,7 +84,7 @@ class TaskCard(Component):
             class="task-card__toggle"
             type="button"
             @click="
-              $el.dispatchEvent(new CustomEvent('board:set-completed', { bubbles: true, detail: {
+              $el.dispatchEvent(new window.CustomEvent('board:set-completed', { bubbles: true, detail: {
                 taskId,
                 completed: !taskCompleted,
               }}))

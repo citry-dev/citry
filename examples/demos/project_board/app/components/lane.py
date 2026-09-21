@@ -56,7 +56,7 @@ class Lane(Component):
             taskId > 0 &&
             sourceLane !== laneKey
           ) {
-            $el.dispatchEvent(new CustomEvent('board:move', { bubbles: true, detail: {
+            $el.dispatchEvent(new window.CustomEvent('board:move', { bubbles: true, detail: {
               taskId,
               lane: laneKey,
               focusControl: false,

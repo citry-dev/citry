@@ -504,6 +504,9 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
         completed_keyboard_card.get_by_role("button", name="Reopen task").click()
         completed_keyboard_card.get_by_role("button", name="Mark complete").wait_for()
         completed_filter.uncheck()
+        # Let the accepted filter update settle before beginning the separate
+        # debounced search so the journey verifies each round trip independently.
+        page.get_by_text("5 tasks shown", exact=True).wait_for()
 
         search = page.get_by_role("searchbox", name="Search tasks")
         search.fill("keyboard")
@@ -521,15 +524,13 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
         title = page.get_by_role("textbox", name="Task title")
         title.fill("x")
         with page.expect_response(
-            lambda response: response.status == 422
-            and "/ext/events/" in response.url
-            and response.url.endswith("/add")
+            lambda response: response.status == 200 and response.url.endswith("/ext/events/call")
         ) as invalid_response_info:
             page.get_by_role("button", name="Add task").click()
+        invalid_result = invalid_response_info.value.json()["results"][0]
+        if invalid_result.get("ok") is not False or invalid_result.get("error", {}).get("status") != 422:
+            raise AssertionError(f"Invalid task title did not produce a semantic 422 result: {invalid_result!r}")
         page.get_by_text("Enter 4 to 80 characters.").wait_for()
-        expected_validation_response = f"422 {invalid_response_info.value.url}"
-        if expected_validation_response in http_errors:
-            http_errors.remove(expected_validation_response)
         if title.input_value() != "x":
             raise AssertionError("Validation failure did not preserve the typed title")
         if title.get_attribute("aria-invalid") != "true":
