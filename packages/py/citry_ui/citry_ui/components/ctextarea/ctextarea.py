@@ -121,6 +121,13 @@ def _encode_initial_value(value: str | None) -> Markup:
     normalized = _normalize_newlines(value or "")
     encoded = escape(normalized)
     if normalized.startswith("\n"):
+        # citry_ui is a first-party companion package. This branch exists
+        # solely to compensate for the HTML parser's initial textarea LF when
+        # serializing HTML; Vue creates the text VNode directly.
+        from citry._vue.capture import prepared_render_active, vue_render_active  # noqa: PLC0415
+
+        if prepared_render_active() or vue_render_active():
+            return encoded
         return Markup("\n") + encoded
     return encoded
 

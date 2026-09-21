@@ -81,6 +81,13 @@ def _textarea_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const textareaDemo=Citry.vue.reactive({
+            controlled:true,draft:'Moss and fern',immutable:'Fixed record',rows:4,
+            required:false,disabled:false,readonly:false,invalid:false,
+            variant:'outline',size:'md',resize:'vertical',
+          }); window.__textareaDemo=textareaDemo; return {state:{textareaDemo}};}});
+        """
         css = """
           :where(.textarea-brand) {
             --cui-textarea-background: rgb(241 250 244);

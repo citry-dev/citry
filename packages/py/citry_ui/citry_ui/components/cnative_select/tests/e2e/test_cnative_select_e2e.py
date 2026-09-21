@@ -90,6 +90,12 @@ def _native_select_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const nativeSelectDemo=Citry.vue.reactive({
+            value:'reef',immutable:'reef',nullValue:null,standaloneRequired:true,
+            standaloneVariant:'outline',unsupportedRequired:false,variant:'outline',size:'md',
+          }); window.__nativeSelectDemo=nativeSelectDemo; return {state:{nativeSelectDemo}};}});
+        """
         css = """
           :where(.select-brand) {
             --cui-native-select-background: rgb(232 248 248);
