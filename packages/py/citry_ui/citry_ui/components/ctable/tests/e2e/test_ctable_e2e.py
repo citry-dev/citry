@@ -150,7 +150,7 @@ def _static_page() -> tuple[Citry, str]:
     return app, str(Page())
 
 
-def _events_page() -> tuple[Citry, str]:
+def _events_page(*, controlled: bool = False) -> tuple[Citry, str]:
     app = Citry(secret="citry-ui-table-e2e", autodiscover=False)  # noqa: S106
     app.set_mounted_prefix("/citry")
     app.register_library(citry_ui)
@@ -205,6 +205,11 @@ def _events_page() -> tuple[Citry, str]:
             </c-CTable>
           </section>
         """
+
+        template = template.replace(
+            'c-defaultValue="cell.value"',
+            f'{"c-value" if controlled else "c-defaultValue"}="cell.value"',
+        )
 
         def template_data(self, kwargs, slots):
             all_rows = (
@@ -519,6 +524,51 @@ def test_events_reorder_preserves_a_focused_edit_and_removal_drops_the_keyed_row
     assert page.locator('[data-row-key="beta"]').count() == 0
     assert page.get_by_role("textbox", name="alpha quantity").count() == 1
     assert page.evaluate("document.activeElement?.isConnected") is True
+
+
+def test_events_reorder_keeps_controlled_value_authoritative_for_the_keyed_row(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    app, html = _events_page(controlled=True)
+    base = serve_citry_ui_live(app, html)
+    page.goto(base + "/")
+    page.wait_for_function(READY)
+
+    beta = page.get_by_role("textbox", name="beta quantity")
+    beta.fill("draft 27")
+    page.evaluate(
+        """() => {
+          window.__betaInput = document.querySelector('input[name=beta]');
+          window.__betaRow = document.querySelector('[data-row-key=beta]');
+        }"""
+    )
+    outcome = page.evaluate(
+        """() => Citry.events.send(document.querySelector('.advance'), 'advance', {}).then(
+          () => ({ ok: true }),
+          (error) => ({
+            ok: false,
+            code: error?.code,
+            message: error?.message,
+            detail: error?.detail,
+          }),
+        )"""
+    )
+    assert outcome == {"ok": True}
+    page.wait_for_function(
+        "document.querySelector('[data-row-key=beta]') === document.querySelectorAll('[data-row-key]')[0]"
+    )
+
+    assert beta.input_value() == "20"
+    assert page.evaluate(
+        """() => ({
+          rowPreserved: document.querySelector('[data-row-key=beta]') === window.__betaRow,
+          inputPreserved: document.querySelector('input[name=beta]') === window.__betaInput,
+        })"""
+    ) == {
+        "rowPreserved": True,
+        "inputPreserved": True,
+    }
 
 
 def test_state_replacement_preserves_the_live_region_outside_the_busy_table(
