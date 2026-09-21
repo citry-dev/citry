@@ -80,8 +80,8 @@ class ContactForm(Component):
     """
 
     js = """
-      $component(({ els }) => {
-        const root = els[0];
+      $component(({ component }) => {
+        const root = component.$el;
         const form = root.matches("form") ? root : root.querySelector("form");
         const result = root.querySelector(".contact-form__result");
         form.addEventListener("submit", (event) => {

@@ -200,6 +200,10 @@ class AccountDashboard(Component):
             <section class="i18n-demo__browser">
               <h2>{{ tr("demo-account-browser-heading") }}</h2>
               <p
+                data-browser-status
+                v-text="$i18n.tr('demo-account-js-status')"
+              >{{ tr("demo-account-js-status") }}</p>
+              <p
                 x-text="$i18n.tr(
                   'demo-account-live-status',
                   { name: accountName },
@@ -232,16 +236,6 @@ class AccountDashboard(Component):
           </section>
         </div>
       </c-i18n>
-    """
-
-    js = """
-      $component(({ effect, els, i18n }) => {
-        effect(() => {
-          els[0].dataset.browserStatus = i18n.tr(
-            "demo-account-js-status",
-          );
-        });
-      });
     """
 
     css = """
@@ -408,7 +402,7 @@ class ProductCard(Component):
     """
 
     js = """
-      $component(({ els, data }) => {const cardEl = els[0]; animateLikes(cardEl, data.likes); });
+      $component(({ component }) => {const cardEl = component.$el; animateLikes(cardEl, component.likes); });
     """
 
     css = """

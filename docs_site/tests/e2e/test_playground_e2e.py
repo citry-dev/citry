@@ -592,8 +592,8 @@ class LoadedFragment(Component):
 
     js = """
       window.__fragmentAssetLoads = (window.__fragmentAssetLoads || 0) + 1;
-      $component(({ els, data }) => {
-        els[0].setAttribute("data-component-js", data.kind);
+      $component(({ component }) => {
+        component.$el.setAttribute("data-component-js", component.kind);
       });
     """
 
