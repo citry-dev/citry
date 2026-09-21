@@ -25,8 +25,13 @@ from typing import TYPE_CHECKING, Any, Final
 _tomllib: Any
 try:
     import tomllib as _stdlib_tomllib
-except ModuleNotFoundError:  # Python 3.10 wheel-smoke jobs
-    _tomllib = None
+except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
+    try:
+        import tomli as _stdlib_tomllib  # type: ignore[import-untyped, no-redef]
+    except ModuleNotFoundError:
+        _tomllib = None
+    else:
+        _tomllib = _stdlib_tomllib
 else:
     _tomllib = _stdlib_tomllib
 
@@ -90,9 +95,9 @@ class DistributionVerificationError(RuntimeError):
 
 
 def _loads_toml(payload: str) -> dict[str, Any]:
-    """Parse TOML for the inventory/sdist gates, which run on Python 3.11+."""
+    """Parse TOML for the inventory/sdist gates."""
     if _tomllib is None:
-        raise DistributionVerificationError("TOML artifact checks require Python 3.11 or newer")
+        raise DistributionVerificationError("TOML artifact checks require tomllib or tomli")
     return _tomllib.loads(payload)
 
 
