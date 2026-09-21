@@ -194,7 +194,7 @@ def _events_page() -> tuple[Citry, str]:
                 <c-if cond="column.key == 'quantity'">
                   <input
                     c-name="row.key"
-                    c-value="cell.value"
+                    c-defaultValue="cell.value"
                     c-aria-label="row.key + ' quantity'"
                   />
                 </c-if>

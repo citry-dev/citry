@@ -215,6 +215,14 @@ class _DefinitionFragment:
         )
 
 
+@dataclass(slots=True)
+class _SlotKeyScope:
+    """One active keyed element whose slot descendants need stable VNode keys."""
+
+    expression: str
+    ordinal: int = 0
+
+
 @dataclass(frozen=True, slots=True)
 class _FillFragment:
     site_id: str
@@ -617,6 +625,7 @@ def assemble_typed_render(
             fills: tuple[_FillFragment, ...],
             *,
             definition_owner_id: str,
+            slot_key_scopes: Sequence[_SlotKeyScope] = (),
         ) -> None:
             if len({fill.site_id for fill in fills}) != len(fills):
                 raise UnsupportedPreparedView("prepared component call has duplicate supplied fill sites")
@@ -638,7 +647,10 @@ def assemble_typed_render(
                             )
                         ancestor = parent
                     supplied_fills[occurrence_id].append(fill)
-                    output.append(f'<slot name="{fill.site_id}"{context_binding_attrs}></slot>')
+                    output.append(
+                        f'<slot name="{fill.site_id}"{context_binding_attrs}'
+                        f'{_slot_key_attr(_next_slot_key(slot_key_scopes))}></slot>'
+                    )
                 output.append("</template>")
 
         def transform_parts(
@@ -652,12 +664,15 @@ def assemble_typed_render(
             project_root_markers: bool = True,
             parent_element_stack: tuple[str, ...] = (),
             projected_data: bool = False,
+            slot_key_scopes: Sequence[_SlotKeyScope] = (),
         ) -> _DefinitionFragment:
             nonlocal dynamic_site_index
             output = _DefinitionFragment.empty()
             dynamic_stack: list[tuple[str, str]] = []
             element_stack = list(parent_element_stack)
             inherited_element_depth = len(element_stack)
+            element_key_scopes: list[_SlotKeyScope | None] = [None] * inherited_element_depth
+            active_slot_key_scopes = list(slot_key_scopes)
             dom_depth = 0
             data_values = prepared_by_occurrence[data_owner_id]
             projected_keys: set[str] | None = set() if projected_data and data_owner_id != occurrence_id else None
@@ -703,6 +718,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
                         projected_data=projected_data,
+                        slot_key_scopes=tuple(active_slot_key_scopes),
                     )
                 if parts:
                     run_first[0] = [candidate for candidate in parts if _run_eligible_component(candidate)]
@@ -802,6 +818,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers and dom_depth == 0,
                         parent_element_stack=tuple(element_stack),
                         projected_data=projected_data or flattened_transparent_receiver,
+                        slot_key_scopes=tuple(active_slot_key_scopes),
                     )
                     if flattened_transparent_receiver:
                         output.extend(selected)
@@ -832,15 +849,33 @@ def assemble_typed_render(
                                 f"container_lexical={containing_lexical!r}"
                             )
                         supplied_fills[receiver_owner].append(fill)
-                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
+                        output.append(
+                            f'<slot name="{site_id}"{context_binding_attrs}'
+                            f'{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>'
+                        )
                     elif nested_template:
                         supplied_fills[output_owner].append(fill)
-                        output.append(f'<slot name="{site_id}"{context_binding_attrs}></slot>')
+                        output.append(
+                            f'<slot name="{site_id}"{context_binding_attrs}'
+                            f'{_slot_key_attr(_next_slot_key(active_slot_key_scopes))}></slot>'
+                        )
                     elif lexical_owner == output_owner:
-                        _append_slot_outlet(output, site_id, selected, context_binding_attrs)
+                        _append_slot_outlet(
+                            output,
+                            site_id,
+                            selected,
+                            context_binding_attrs,
+                            _next_slot_key(active_slot_key_scopes),
+                        )
                     else:
                         supplied_fills[output_owner].append(fill)
-                        _append_slot_outlet(output, site_id, _DefinitionFragment.empty(), context_binding_attrs)
+                        _append_slot_outlet(
+                            output,
+                            site_id,
+                            _DefinitionFragment.empty(),
+                            context_binding_attrs,
+                            _next_slot_key(active_slot_key_scopes),
+                        )
                     continue
                 if isinstance(part, RenderDecoration) and (
                     not part.frame.is_component_root or part.frame.render_id == frame.render_id
@@ -855,6 +890,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
                         projected_data=projected_data,
+                        slot_key_scopes=tuple(active_slot_key_scopes),
                     )
                     wrapped = _DefinitionFragment.empty()
                     wrapped.extend(
@@ -867,6 +903,7 @@ def assemble_typed_render(
                             project_root_markers=False,
                             parent_element_stack=tuple(element_stack),
                             projected_data=projected_data,
+                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                     )
                     wrapped.extend(decorated)
@@ -893,6 +930,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             projected_data=projected_data,
+                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                     )
                     continue
@@ -908,6 +946,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             projected_data=projected_data,
+                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                     )
                     continue
@@ -1001,6 +1040,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             projected_data=projected_data,
+                            slot_key_scopes=tuple(active_slot_key_scopes),
                         )
                         if wrapper_key is None:
                             output.extend(transparent_body)
@@ -1128,7 +1168,12 @@ def assemble_typed_render(
                                 f':key="preparedData.calls.{local_id}.key">'
                             )
                             opening_end = output.byte_length
-                            append_child_fills(output, member_fills, definition_owner_id=call_owner_id)
+                            append_child_fills(
+                                output,
+                                member_fills,
+                                definition_owner_id=call_owner_id,
+                                slot_key_scopes=tuple(active_slot_key_scopes),
+                            )
                             output.append(f"</{tag}>")
                             output.local_calls.append(
                                 {
@@ -1333,7 +1378,12 @@ def assemble_typed_render(
                     output.append(">")
                     opening_end = output.byte_length
                     fills = tuple(supplied_fills.pop(child_id, ()))
-                    append_child_fills(output, fills, definition_owner_id=call_owner_id)
+                    append_child_fills(
+                        output,
+                        fills,
+                        definition_owner_id=call_owner_id,
+                        slot_key_scopes=tuple(active_slot_key_scopes),
+                    )
                     output.append(f"</{tag}>")
                     output.local_calls.append(
                         {
@@ -1405,12 +1455,23 @@ def assemble_typed_render(
                         for operation, tag in structure.tag_transitions:
                             if operation == "open":
                                 element_stack.append(tag)
+                                element_key_scopes.append(None)
                             elif (
                                 operation == "close"
                                 and len(element_stack) > inherited_element_depth
                                 and element_stack[-1] == tag
                             ):
                                 element_stack.pop()
+                                element_scope = element_key_scopes.pop()
+                                if element_scope is not None:
+                                    if (
+                                        not active_slot_key_scopes
+                                        or active_slot_key_scopes[-1] is not element_scope
+                                    ):
+                                        raise UnsupportedPreparedView(
+                                            "prepared static key scope changed during text capture"
+                                        )
+                                    active_slot_key_scopes.pop()
                             else:
                                 raise UnsupportedPreparedView(
                                     "prepared static tag transitions changed during text capture"
@@ -1682,6 +1743,14 @@ def assemble_typed_render(
                         runtime_events_key,
                     )
                     if not part.is_void:
+                        element_scope = (
+                            None
+                            if prepared_key_binding is None
+                            else _SlotKeyScope(f"preparedData.{prepared_key_binding}")
+                        )
+                        element_key_scopes.append(element_scope)
+                        if element_scope is not None:
+                            active_slot_key_scopes.append(element_scope)
                         element_stack.append(part.tag.lower())
                         dom_depth += 1
                     continue
@@ -1828,6 +1897,14 @@ def assemble_typed_render(
                         output.append(f"</{alias}>")
                     else:
                         dynamic_stack.append((part.tag, alias))
+                        element_scope = (
+                            None
+                            if key_key is None
+                            else _SlotKeyScope(f"preparedData.{key_key}")
+                        )
+                        element_key_scopes.append(element_scope)
+                        if element_scope is not None:
+                            active_slot_key_scopes.append(element_scope)
                         element_stack.append(part.tag.lower())
                         dom_depth += 1
                     continue
@@ -1838,12 +1915,22 @@ def assemble_typed_render(
                     output.append(f"</{alias}>")
                     if len(element_stack) <= inherited_element_depth or element_stack.pop() != part.tag.lower():
                         raise UnsupportedPreparedView("dynamic element stack changed during text capture")
+                    element_scope = element_key_scopes.pop()
+                    if element_scope is not None:
+                        if not active_slot_key_scopes or active_slot_key_scopes[-1] is not element_scope:
+                            raise UnsupportedPreparedView("prepared dynamic key scope changed during text capture")
+                        active_slot_key_scopes.pop()
                     dom_depth -= 1
                     continue
                 if isinstance(part, PreparedElementClose):
                     output.append(f"</{part.tag}>")
                     if len(element_stack) <= inherited_element_depth or element_stack.pop() != part.tag.lower():
                         raise UnsupportedPreparedView("prepared element stack changed during text capture")
+                    element_scope = element_key_scopes.pop()
+                    if element_scope is not None:
+                        if not active_slot_key_scopes or active_slot_key_scopes[-1] is not element_scope:
+                            raise UnsupportedPreparedView("prepared element key scope changed during text capture")
+                        active_slot_key_scopes.pop()
                     dom_depth -= 1
                     continue
                 if isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
@@ -2119,15 +2206,30 @@ def _append_static_root_projection(
     output.append(html[cursor:])
 
 
+def _next_slot_key(scopes: Sequence[_SlotKeyScope]) -> str | None:
+    """Return a stable key for one slot under the nearest keyed element."""
+    if not scopes:
+        return None
+    scope = scopes[-1]
+    ordinal = scope.ordinal
+    scope.ordinal += 1
+    return f"JSON.stringify([{scope.expression}, {ordinal}])"
+
+
+def _slot_key_attr(expression: str | None) -> str:
+    return "" if expression is None else f' :key="{expression}"'
+
+
 def _append_slot_outlet(
     output: _DefinitionFragment,
     site_id: str,
     fallback: _DefinitionFragment,
     context_binding_attrs: str = "",
+    slot_key_expression: str | None = None,
 ) -> None:
     output.append(
         f"<slot v-if=\"preparedData.selectedSlots[{site_id!r}] === 'supplied'\" "
-        f'name="{site_id}"{context_binding_attrs}></slot>'
+        f'name="{site_id}"{context_binding_attrs}{_slot_key_attr(slot_key_expression)}></slot>'
     )
     if fallback.chunks:
         output.append(f"<template v-else-if=\"preparedData.selectedSlots[{site_id!r}] === 'fallback'\">")

@@ -4,7 +4,9 @@ from dataclasses import replace
 
 import pytest
 
+from citry import Citry, Component
 from citry._vue import compiler as vue_compiler
+from citry._vue.capture import render_prepared_direct
 from citry._vue.compiler import (
     HELPER_CONTRACT,
     NativeCompiler,
@@ -12,6 +14,7 @@ from citry._vue.compiler import (
     definition_compile_inputs,
     definition_templates,
 )
+from citry._vue.direct_capture import assemble_typed_render
 from citry._vue.prepared import (
     ComponentCall,
     ElementClose,
@@ -31,6 +34,22 @@ from citry._vue.prepared import (
     replace_definition_ids,
 )
 from citry._vue.protocol import DefinitionAsset, prepared_manifest, revision_envelope
+
+
+def _direct_definition_template(source: str) -> str:
+    registry = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = registry
+        template = source
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Page()),
+        revision=0,
+        tag_for_type=lambda type_key: f"x-{type_key.lower().replace('_', '-')}",
+    )
+    root = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
+    return assembly.compile_inputs[root.definition_id].template
 
 
 def test_direct_definition_composer_preserves_bindings_calls_slots_and_utf8_spans() -> None:
@@ -73,7 +92,7 @@ def test_direct_definition_composer_preserves_bindings_calls_slots_and_utf8_span
     root_input = inputs["root-def"]
     assert 'v-bind="preparedData.citryAttrsA"' in root_input.template
     assert "v-slot:['citrySlotA']" in root_input.template
-    assert '<slot name="citrySlotA"></slot>' in root_input.template
+    assert '<slot name="citrySlotA" :key="JSON.stringify([preparedData.citryKeyA, 0])"></slot>' in root_input.template
     encoded = root_input.template.encode()
     call_start = encoded.find(b"<citry-child")
     assert root_input.local_calls[0]["sourceEnd"] == call_start + encoded[call_start:].find(b">") + 1
@@ -83,6 +102,82 @@ def test_direct_definition_composer_preserves_bindings_calls_slots_and_utf8_span
         compiled = compile_view(view, compiler)
     assert compiled.view.occurrences[0].definition_id == compiled.definitions["root-def"].id
     assert compiled.definitions["root-def"].directive_signature[0].name == "v-show"
+
+
+def test_direct_capture_keys_slots_by_nearest_prepared_element_and_preserves_void_boundaries() -> None:
+    template = _direct_definition_template(
+        """
+        <div #c-key="'outer'">
+          <span #c-key="'inner'"><c-slot name="inner" /><c-slot name="inner-second" /></span>
+          <input #c-key="'void'">
+          <c-slot name="outer" />
+        </div>
+        """
+    )
+
+    assert template.count(':key="JSON.stringify([preparedData.citryKey1,') == 2
+    assert ':key="JSON.stringify([preparedData.citryKey1, 0])"' in template
+    assert ':key="JSON.stringify([preparedData.citryKey1, 1])"' in template
+    assert ':key="JSON.stringify([preparedData.citryKey0, 0])"' in template
+    assert ':key="JSON.stringify([preparedData.citryKey1, 2])"' not in template
+
+
+def test_direct_capture_leaves_unkeyed_slots_without_a_synthetic_key() -> None:
+    template = _direct_definition_template('<div><c-slot name="body" /></div>')
+    assert '<slot v-if="preparedData.selectedSlots[' in template
+    assert ':key="' not in template
+
+
+def test_direct_capture_keys_slots_under_a_keyed_dynamic_element() -> None:
+    template = _direct_definition_template(
+        """<c-element c-is="'section'" #c-key="'dynamic'"><c-slot name="body" /></c-element>"""
+    )
+
+    assert ':key="JSON.stringify([preparedData.citryKey0, 0])"' in template
+
+
+def test_prepared_compiler_keys_slot_outlets_from_the_balanced_element_stream() -> None:
+    site = "citrySlotKeyed"
+    nodes = (
+        ElementOpen("div", (), None, "citryKeyOuter", (0, 1)),
+        ElementOpen("span", (), None, "citryKeyInner", (1, 2)),
+        PreparedSlotOutlet(site, "body", ()),
+        ForwardedSlot("citrySlotForwarded", "forwarded"),
+        ElementClose("span", (2, 3)),
+        ForwardedSlot("citrySlotOuter", "outer"),
+        ElementClose("div", (3, 4)),
+    )
+
+    template = definition_compile_inputs(
+        PreparedView(
+            0,
+            "root",
+            (PreparedOccurrence("root", "Root", "root-def", {}, {}, None, None),),
+            (PreparedDefinition("root-def", "Root", nodes),),
+        )
+    )["root-def"].template
+
+    assert ':key="JSON.stringify([preparedData.citryKeyInner, 0])"' in template
+    assert ':key="JSON.stringify([preparedData.citryKeyInner, 1])"' in template
+    assert ':key="JSON.stringify([preparedData.citryKeyOuter, 0])"' in template
+
+
+def test_prepared_compiler_leaves_unkeyed_slot_outlets_without_a_synthetic_key() -> None:
+    nodes = (
+        ElementOpen("div", (), None, None, (0, 1)),
+        PreparedSlotOutlet("citrySlotUnkeyed", "body", ()),
+        ForwardedSlot("citrySlotForwardedUnkeyed", "forwarded"),
+        ElementClose("div", (1, 2)),
+    )
+    template = definition_compile_inputs(
+        PreparedView(
+            0,
+            "root",
+            (PreparedOccurrence("root", "Root", "root-def", {}, {}, None, None),),
+            (PreparedDefinition("root-def", "Root", nodes),),
+        )
+    )["root-def"].template
+    assert ':key="' not in template
 
 
 def test_compiled_identity_binds_preamble_and_compatibility_metadata() -> None:

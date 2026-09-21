@@ -91,6 +91,28 @@ class _ElementBindingDeclaration(TypedDict):
     runtimeEventsBindingKey: NotRequired[str | None]
 
 
+@dataclass(slots=True)
+class _SlotKeyScope:
+    """One active keyed element whose native slot descendants need stable keys."""
+
+    expression: str
+    ordinal: int = 0
+
+
+def _next_slot_key(scopes: list[_SlotKeyScope]) -> str | None:
+    """Return a stable key for one native slot under the nearest keyed element."""
+    if not scopes:
+        return None
+    scope = scopes[-1]
+    ordinal = scope.ordinal
+    scope.ordinal += 1
+    return f"JSON.stringify([{scope.expression}, {ordinal}])"
+
+
+def _slot_key_attr(expression: str | None) -> str:
+    return "" if expression is None else f' :key="{expression}"'
+
+
 class _DynamicElementDeclaration(TypedDict):
     alias: str
     tag: str
@@ -662,6 +684,8 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
     parts: list[str] = []
     local_calls: list[dict[str, object]] = []
     element_bindings: list[dict[str, object]] = []
+    element_stack: list[tuple[str, _SlotKeyScope | None]] = []
+    slot_key_scopes: list[_SlotKeyScope] = []
     byte_position = 0
 
     def append(value: str) -> None:
@@ -714,7 +738,22 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                             "keyBindingKey": node.key_binding_key,
                         }
                     )
+                element_scope = (
+                    None
+                    if node.key_binding_key is None
+                    else _SlotKeyScope(f"preparedData.{node.key_binding_key}")
+                )
+                element_stack.append((node.tag, element_scope))
+                if element_scope is not None:
+                    slot_key_scopes.append(element_scope)
             elif isinstance(node, ElementClose):
+                if not element_stack or element_stack[-1][0].lower() != node.tag.lower():
+                    raise ValueError("prepared element close has no matching opening")
+                _, element_scope = element_stack.pop()
+                if element_scope is not None:
+                    if not slot_key_scopes or slot_key_scopes[-1] is not element_scope:
+                        raise ValueError("prepared element key scope changed before its close")
+                    slot_key_scopes.pop()
                 append(f"</{node.tag}>")
             elif isinstance(node, LocalComponentCall):
                 start = byte_position
@@ -739,16 +778,18 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                     }
                 )
             elif isinstance(node, PreparedSlotOutlet):
+                slot_key = _next_slot_key(slot_key_scopes)
                 append(
                     f'<slot v-if="preparedData.selectedSlots[{node.site_id!r}] === '
-                    f'\'supplied\'" name="{node.site_id}"></slot>'
+                    f'\'supplied\'" name="{node.site_id}"{_slot_key_attr(slot_key)}></slot>'
                 )
                 if node.fallback:
                     append(f"<template v-else-if=\"preparedData.selectedSlots[{node.site_id!r}] === 'fallback'\">")
                     render(node.fallback)
                     append("</template>")
             elif isinstance(node, ForwardedSlot):
-                append(f'<slot name="{node.site_id}"></slot>')
+                slot_key = _next_slot_key(slot_key_scopes)
+                append(f'<slot name="{node.site_id}"{_slot_key_attr(slot_key)}></slot>')
             elif isinstance(node, (ComponentCall, SlotOutlet)):
                 raise TypeError("legacy absolute calls and unlocalized slot ownership cannot be compiled directly")
             else:
