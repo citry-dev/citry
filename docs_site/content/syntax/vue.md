@@ -56,7 +56,12 @@ Vue modifiers stay in the attribute name. For example,
 browser's default action.
 
 See the [Vue template syntax](https://vuejs.org/guide/essentials/template-syntax.html){:
-target="_blank" rel="noopener"} for the complete native syntax.
+target="_blank" rel="noopener"} for directive forms and modifiers.
+
+Citry currently compiles component templates to ordinary Vue VNodes. Vue's
+built-in helper components are outside that compiled-template contract for now:
+`<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>` are rejected with
+an unsupported-helper diagnostic when they appear in a `Component.template`.
 
 ## Keep Python and JavaScript expressions separate
 

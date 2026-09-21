@@ -8,11 +8,15 @@
   on the server and ships a pinned production Vue runtime only when rendered
   output needs it. Applications do not need Node.js or a separate frontend
   build for ordinary component behavior.
-- Component templates accept native Vue directives, bindings, props, events,
-  slots, and keyed lists. `Component.js_data()` seeds reactive Vue instance
-  members, `$component({...})` accepts supported Vue Options, `Citry.vue`
-  exposes Composition API helpers, and `onServerRender({ component, revision })`
-  runs after mount and each accepted server revision.
+- Component templates accept the supported native Vue directives, bindings,
+  props, events, slots, and keyed lists. Vue's built-in helper components
+  (`<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>`) are not yet
+  accepted in compiled `Component.template` values and produce an
+  unsupported-helper diagnostic. `Component.js_data()` seeds reactive Vue
+  instance members, `$component({...})` accepts supported Vue Options,
+  `Citry.vue` exposes Composition API helpers, and
+  `onServerRender({ component, revision })` runs after mount and each accepted
+  server revision.
 - Events renders can address a component occurrence with `render:<id>` or a
   caller-relative `<c-mark name="...">` with `mark:<name>`. A contiguous group
   can update several independent targets atomically.

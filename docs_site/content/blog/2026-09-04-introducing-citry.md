@@ -14,7 +14,7 @@ After roughly 2-2.5 years of working towards bring the experience of React and
 Vue to Python, I'm proud to release [Citry](https://github.com/citry-dev/citry){: target="\_blank" rel="noopener"}.
 
 Citry is a fully typed frontend framework for Python with server events and
-Alpine.js, inspired by Vue and Livewire.
+compiled Vue interactivity, inspired by Livewire.
 
 How it works:
 
