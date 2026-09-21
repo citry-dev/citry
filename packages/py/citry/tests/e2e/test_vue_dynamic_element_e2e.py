@@ -2627,9 +2627,7 @@ def test_component_boundary_citry_event_dispatches_from_vue_child(page: Any, ser
     assert page.locator("#component-events").text_content() == "1", (faults, calls, page.content())
 
 
-def test_component_boundary_event_args_keep_child_el_and_native_current_target(
-    page: Any, serve_live: Any
-) -> None:
+def test_component_boundary_event_args_keep_child_el_and_native_current_target(page: Any, serve_live: Any) -> None:
     engine = Citry(secret="component-boundary-event-args", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
 
@@ -2754,6 +2752,91 @@ def test_component_boundary_event_args_keep_child_el_and_native_current_target(
             "target_kind": "boundary-emitter",
             "current_target_kind": "boundary-emitter",
         },
+    ]
+    assert faults == [], (faults, page.content())
+
+
+def test_component_boundary_authored_el_supports_text_and_empty_children(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="component-boundary-node-roots", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class TextChild(Component):
+        citry = engine
+        template = "text child"
+        js = """
+            $component({mounted(){
+                globalThis.__emitTextBoundary = () => this.$emit('text-change', new Event('text-change'));
+            }});
+        """
+
+    class EmptyChild(Component):
+        citry = engine
+        template = ""
+        js = """
+            $component({mounted(){
+                globalThis.__emitEmptyBoundary = () => this.$emit('empty-change', new Event('empty-change'));
+            }});
+        """
+
+    class Parent(Component):
+        citry = engine
+
+        @dataclass
+        class NodeArgs:
+            node_type: int
+            node_name: str
+            event_type: str
+
+        template = """
+            <main>
+                <c-TextChild @c-text-change="capture({
+                    node_type: $el?.nodeType || 0,
+                    node_name: $el?.nodeName || '',
+                    event_type: $event?.type || '',
+                })" />
+                <c-EmptyChild @c-empty-change="capture({
+                    node_type: $el?.nodeType || 0,
+                    node_name: $el?.nodeName || '',
+                    event_type: $event?.type || '',
+                })" />
+            </main>
+        """
+
+        class Events:
+            def capture(self, data: "Parent.NodeArgs"):  # noqa: UP037
+                return None
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    requests: list[dict[str, Any]] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.on(
+        "request",
+        lambda request: requests.append(request.post_data_json)
+        if request.url.endswith("/ext/events/call") and request.post_data_json
+        else None,
+    )
+    page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
+    page.wait_for_function(
+        "typeof globalThis.__emitTextBoundary === 'function' && typeof globalThis.__emitEmptyBoundary === 'function'"
+    )
+
+    def trigger(name: str) -> None:
+        expected_calls = sum(len(request["calls"]) for request in requests) + 1
+        page.evaluate(f"globalThis.{name}()")
+        deadline = time.monotonic() + 5
+        while sum(len(request["calls"]) for request in requests) < expected_calls and time.monotonic() < deadline:
+            page.wait_for_timeout(10)
+        assert sum(len(request["calls"]) for request in requests) >= expected_calls
+        page.wait_for_function("() => ![...CitryStable._apps.values()][0].busy")
+
+    trigger("__emitTextBoundary")
+    trigger("__emitEmptyBoundary")
+
+    calls = [call for request in requests for call in request["calls"]]
+    assert [call["args"] for call in calls] == [
+        {"node_type": 3, "node_name": "#text", "event_type": "text-change"},
+        {"node_type": 8, "node_name": "#comment", "event_type": "empty-change"},
     ]
     assert faults == [], (faults, page.content())
 

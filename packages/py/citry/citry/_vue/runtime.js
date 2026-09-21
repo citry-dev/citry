@@ -2304,19 +2304,20 @@ global.CitryVueFragments = CitryVueFragments;
       }
       return null;
     };
+    const liveComponentCarrier = component => {
+      const element = firstLiveElement(component?.$?.subTree);
+      if (element) return element;
+      const root = component?.$el;
+      if (typeof Node === "function" && root instanceof Node && root.isConnected) return root;
+      throw new Error("Citry Events component has no live DOM root");
+    };
     const dispatchCarrier = source => {
       if (!source || sources.get(source.stableId)?.generation !== source.generation)
         throw new Error("Citry Events dispatch source is stale or retired");
       const mounted = ownedApp.mounted.get(source.stableId);
       if (!mounted || mounted.record.generation !== source.generation)
         throw new Error("Citry Events dispatch source is stale or retired");
-      if (mounted.component.$el instanceof Element && mounted.component.$el.isConnected)
-        return mounted.component.$el;
-      const element = firstLiveElement(mounted.component.$?.subTree);
-      if (element) return element;
-      if (mounted.component.$el instanceof Node && mounted.component.$el.isConnected)
-        return mounted.component.$el;
-      throw new Error("Citry Events dispatch source has no live DOM root");
+      return liveComponentCarrier(mounted.component);
     };
     const liveRootElements = (component, seen = new Set(), output = []) => {
       const visit = vnode => {
@@ -2351,11 +2352,7 @@ global.CitryVueFragments = CitryVueFragments;
       const mounted = ownedApp.mounted.get(childId);
       if (!mounted || mounted.record.app !== ownedApp || mounted.record.occurrenceId !== childId)
         throw new Error("Citry component event child is stale or retired");
-      const roots = liveRootElements(mounted.component);
-      const root = roots[0];
-      if (typeof Element !== "function" || !(root instanceof Element) || !root.isConnected)
-        throw new Error("Citry component event child has no live physical root");
-      return root;
+      return liveComponentCarrier(mounted.component);
     };
     const sourceForElement = element => {
       if (typeof Element !== "function" || !(element instanceof Element) || !element.isConnected) return null;
@@ -3691,7 +3688,7 @@ global.CitryVueFragments = CitryVueFragments;
     const current = document.activeElement;
     const focusWasLost = current === null || current === document || current === document.body ||
       current === document.documentElement;
-    // A user focus change wins over the focus that was captured for this render.
+    // A move to another connected element wins over the focus captured for this render.
     if (!focusWasLost && current !== element) return;
     if (current !== element) {
       try { element.focus({preventScroll: true}); }

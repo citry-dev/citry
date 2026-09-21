@@ -1553,6 +1553,11 @@ from those nodes too. A stale or disconnected occurrence rejects rather than
 dispatching globally. This preserves one document observation while avoiding
 an unnecessary exception for valid empty components.
 
+Keyed DOM moves restore a still-connected focused control only when focus falls
+to the document/body sentinel; a deliberate move to another connected element
+wins, while an intentional blur during the same Vue flush is indistinguishable
+and may be restored.
+
 Slot investigation found that simply removing its scalar-to-dataclass branch
 restores Python string behavior but makes plain slot text indistinguishable from
 intentional Markup at restricted SVG insertion points. The chosen bounded
