@@ -1,7 +1,5 @@
 """Browser tests for CTooltip's owned overlay behavior."""
 
-# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
-
 from __future__ import annotations
 
 import pytest
@@ -20,7 +18,26 @@ def _tooltip_page() -> str:
 
     class Page(Component):
         citry = app
-        js = "$component({data(){return {controlled:false,open:false,accept:false,disabled:false,placement:'top',label:'Jupiter moon'};}});"
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: false,
+                open: false,
+                accept: false,
+                disabled: false,
+                placement: 'top',
+                label: 'Jupiter moon',
+              };
+            },
+            mounted() {
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__state;
+            },
+          });
+        """
         css = """
           :where(.space-tooltip) {
             --cui-tooltip-background: rgb(15 35 54);

@@ -1,7 +1,5 @@
 """Browser tests for CPopover's owned overlay behavior."""
 
-# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
-
 from __future__ import annotations
 
 import pytest
@@ -20,7 +18,26 @@ def _popover_page() -> str:
 
     class Page(Component):
         citry = app
-        js = "$component({data(){return {controlled:false,open:false,accept:false,dismissible:true,placement:'bottom-start',matchWidth:false};}});"
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: false,
+                open: false,
+                accept: false,
+                dismissible: true,
+                placement: 'bottom-start',
+                matchWidth: false,
+              };
+            },
+            mounted() {
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__state;
+            },
+          });
+        """
         css = """
           :where(.space-popover) {
             --cui-popover-background: rgb(15 35 54);

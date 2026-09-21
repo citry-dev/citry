@@ -65,6 +65,19 @@ def _switch_page() -> str:
             --cui-switch-width: 48px;
           }
         """
+        js = """
+          $component({
+            data() {
+              return { checked: true, fixed: false, size: 'md' };
+            },
+            mounted() {
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__state;
+            },
+          });
+        """
         template = """
           <!doctype html>
           <html lang="en">
