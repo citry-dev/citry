@@ -20,7 +20,7 @@ def _interaction_page() -> str:
 
     class Page(Component):
         citry = app
-        js = "$component({data(){return {loading:true,disabled:false};}});"
+        js = "$component({data(){return {loading:true,disabled:false,showSubmit:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -38,7 +38,7 @@ def _interaction_page() -> str:
                 @reset="window.__buttonResets = (window.__buttonResets || 0) + 1"
               >
                 <input id="probe-input" name="title" value="Original" />
-                <span id="submit-mount">
+                <span id="submit-mount" v-if="showSubmit">
                   <c-CButton
                     type="submit"
                     c-attrs="submit_attrs"
@@ -74,6 +74,13 @@ def _interaction_page() -> str:
                 @click="disabled = !disabled"
               >
                 Toggle disabled
+              </button>
+              <button
+                id="remove-submit"
+                type="button"
+                @click="showSubmit = false"
+              >
+                Remove submit button
               </button>
               <c-js />
             </body>
@@ -599,11 +606,25 @@ def test_removing_button_runs_component_listener_cleanup(page):
     page.evaluate(
         """() => {
           window.__removedButton = document.querySelector('#submit-action');
-          document.querySelector('#submit-mount').remove();
+          document.querySelector('#remove-submit').click();
         }"""
     )
-    page.wait_for_timeout(100)
+    page.wait_for_function("!document.querySelector('#submit-action')")
 
     assert page.evaluate("!window.__removedButton.hasAttribute('data-citry-button-initialized')") is True
-    page.evaluate("window.__removedButton.click()")
-    assert page.evaluate("window.__buttonClicks || 0") == 0
+    event = page.evaluate(
+        """() => {
+          const click = new MouseEvent('click', {bubbles: true, cancelable: true});
+          const dispatched = window.__removedButton.dispatchEvent(click);
+          return {
+            dispatched,
+            defaultPrevented: click.defaultPrevented,
+            callerListenerCalls: window.__buttonClicks || 0,
+          };
+        }"""
+    )
+    # The CButton guard is installed in onServerRender and blocks activation
+    # while loading. Vue removes that component listener during the supported
+    # v-if unmount; a caller-authored listener may remain on a retained,
+    # detached DOM object by Vue's design.
+    assert event == {"dispatched": True, "defaultPrevented": False, "callerListenerCalls": 1}

@@ -259,6 +259,7 @@ def _workflow_page() -> tuple[Citry, str]:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {showTeam:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -267,7 +268,12 @@ def _workflow_page() -> tuple[Citry, str]:
               <c-css />
             </head>
             <body>
-              <c-escalation-team />
+              <div id="team-mount" v-if="showTeam">
+                <c-escalation-team />
+              </div>
+              <button id="remove-team" type="button" @click="showTeam = false">
+                Remove team
+              </button>
               <c-js />
             </body>
           </html>
@@ -366,11 +372,13 @@ def test_repeatable_workflow_preserves_edits_identity_validation_and_submission(
     page.evaluate(
         """() => {
           window.__removedTeam = document.querySelector('[data-escalation-team]');
-          window.__removedTeam.remove();
+          document.querySelector('#remove-team').click();
         }"""
     )
     page.wait_for_function(
         """() => (
+          !document.querySelector('[data-escalation-team]')
+          &&
           !window.__removedTeam.querySelector('[data-citry-form-initialized]')
           && !window.__removedTeam.querySelector('[data-citry-input-initialized]')
           && !window.__removedTeam.querySelector('[data-citry-combobox-initialized]')
