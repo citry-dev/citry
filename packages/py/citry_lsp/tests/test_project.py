@@ -672,6 +672,7 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
             "name": "count",
             "type_display": "int",
             "description": None,
+            "client_writable": True,
             "module": "app",
             "qualname": "Card.State",
             "file": "relative.py",

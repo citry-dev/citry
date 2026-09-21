@@ -91,7 +91,7 @@ this control instead of presenting an editable control as locked.
 
 ## Control browser selection
 
-Supply client `value` through `$c-props` to control current selection. Mirror
+Supply client `value` with native Vue bindings to control current selection. Mirror
 the native `input` event to accept user choices. Omit the prop to release
 control without replacing a valid browser-owned selection.
 
@@ -141,7 +141,7 @@ Keep a visible label even when placeholder text is present. Native Select
 adds no role, focus proxy, or keyboard handler. Labels, values, names, IDs,
 and autocomplete hints render as plain text, including trusted-string
 subclasses. `attrs`, `class_`, `style`, and option/group `attrs` remain trusted
-code surfaces for unowned native, ARIA, data, and Alpine attributes.
+code surfaces for unowned native, ARIA, data, and Vue attributes.
 
 Use `attrs={"form": "survey"}` for an external native Form owner. That Form
 element and ID must remain stable for one Select initialization; rerender the

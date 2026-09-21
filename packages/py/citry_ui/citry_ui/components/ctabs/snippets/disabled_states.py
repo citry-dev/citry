@@ -8,8 +8,6 @@ class TabsDisabledStates(Component):
     template = """
       <section
         class="tabs-disabled"
-        x-data="{ group_disabled: false }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p class="tabs-eyebrow">Launch windows</p>
@@ -21,7 +19,7 @@ class TabsDisabledStates(Component):
           aria_label="Inner-planet mission windows"
           variant="pill"
           grow
-          $c-props="{ disabled: group_disabled }"
+          :disabled="group_disabled"
         >
           <c-CTab value="mercury">
             Mercury
@@ -44,6 +42,26 @@ class TabsDisabledStates(Component):
           </c-CTabPanel>
         </c-CTabs>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            group_disabled: false
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

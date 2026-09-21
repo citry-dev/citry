@@ -24,13 +24,13 @@ def card_states_component(app: Citry) -> type[Component]:
               <c-CCard><c-fill name="default">Body-only Card</c-fill></c-CCard>
               <c-CCard variant="outline"><c-fill name="header"><h2>Header-only Card</h2></c-fill></c-CCard>
               <c-for each="variant in variants">
-                <c-CCard c-variant="variant">
+                <c-CCard #c-key="variant" c-variant="variant">
                   <c-fill name="header"><h2>{{ variant }} Card</h2></c-fill>
                   <c-fill name="default">Complete static surface treatment.</c-fill>
                 </c-CCard>
               </c-for>
               <c-for each="size in sizes">
-                <c-CCard c-size="size" variant="outline">
+                <c-CCard #c-key="size" c-size="size" variant="outline">
                   <c-fill name="header"><h2>{{ size }} Card</h2></c-fill>
                   <c-fill name="default">Size changes spacing only.</c-fill>
                 </c-CCard>

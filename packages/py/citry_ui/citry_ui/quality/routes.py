@@ -248,6 +248,11 @@ def build_scenario(
     app.register_library(citry_ui)
     if configure_app is not None:
         configure_app(app)
+    if app.mounted_prefix is None:
+        # Standalone quality pages still contain Vue event components. Give
+        # them the same deterministic asset base as a mounted host so route
+        # rendering can exercise the complete browser contract.
+        app.set_mounted_prefix("/citry")
     scenario_component = factory(app)
 
     class ScenarioPage(Component):
@@ -300,6 +305,7 @@ def render_scenario(scenario_id: str, *, embedded: bool = False) -> str:
         raise RuntimeError(msg)
     app = Citry(secret="citry-ui-quality-scenarios", autodiscover=False)  # noqa: S106
     app.register_library(citry_ui)
+    app.set_mounted_prefix("/citry")
     return str(factory(app)())
 
 

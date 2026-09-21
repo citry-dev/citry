@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from html.parser import HTMLParser
 
 import pytest
 from markupsafe import Markup
@@ -12,7 +13,13 @@ from citry_ui import CRadio, CRadioGroup
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(template: str, data: dict[str, object] | None = None, *, include_css: bool = False) -> str:
+def _render(
+    template: str,
+    data: dict[str, object] | None = None,
+    *,
+    include_css: bool = False,
+    static_fallback: bool = False,
+) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     page_template = template
@@ -24,8 +31,18 @@ def _render(template: str, data: dict[str, object] | None = None, *, include_css
         def template_data(self, kwargs, slots):
             return dict(data or {})
 
-    html = str(Page())
+    page = Page()
+    html = page.render().serialize(security_javascript="omit") if static_fallback else str(page)
     return html + (str(app.get("css")()) if include_css else "")
+
+
+class _TagAttributes(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tags: list[tuple[str, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, dict(attrs)))
 
 
 def test_radio_schemas_keep_group_and_item_ownership_separate():
@@ -70,7 +87,8 @@ def test_standalone_group_renders_native_fieldset_legend_and_radios():
               </c-CRadio>
             </c-fill>
           </c-CRadioGroup>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert '<fieldset class="cui-radio-group"' in html
@@ -98,7 +116,8 @@ def test_field_label_targets_the_first_radio_instead_of_the_group_fieldset():
               </c-CRadioGroup>
             </c-fill>
           </c-CField>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert '<label id="signal-band-label" for="signal-band"' in html
@@ -127,7 +146,8 @@ def test_group_and_item_root_styling_and_form_owner_reach_exact_destinations():
               >Wide</c-CRadio>
             </c-fill>
           </c-CRadioGroup>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert 'class="cui-radio-group group-class"' in html
@@ -147,8 +167,9 @@ def test_radio_requires_group_and_group_requires_label_and_items():
             """
               <c-CRadioGroup name="destination">
                 <c-CRadio value="moon">Moon</c-CRadio>
-              </c-CRadioGroup>
-            """
+          </c-CRadioGroup>
+        """,
+            static_fallback=True,
         )
     with pytest.raises(ValueError, match="at least one descendant"):
         _render(
@@ -251,9 +272,14 @@ def test_safe_string_values_are_detrusted_and_canonicalized():
           </c-CRadioGroup>
         """,
         {"name": Markup('orbit" data-evil="x'), "value": Markup("moon\r\nbase")},
+        static_fallback=True,
     )
-    assert 'name="orbit&#34; data-evil=&#34;x"' in html
-    assert 'value="moon\nbase"' in html
+    parser = _TagAttributes()
+    parser.feed(html)
+    radio_input = next(attrs for tag, attrs in parser.tags if tag == "input")
+    assert radio_input["name"] == 'orbit" data-evil="x'
+    assert radio_input["value"] == "moon\nbase"
+    assert "data-evil" not in radio_input
 
 
 def test_css_exposes_group_item_and_environment_contract():

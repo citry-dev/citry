@@ -29,8 +29,8 @@ inputs:
       - {id: messages, name: messages, type: {display: 'CTagsInputMessages | None', interfaces: [CTagsInputMessages]}, default: {kind: literal, value: null}, effect: 'Overrides catalog-backed removal, status, rejection, and unfinished-draft text per field.'}
       - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
       - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with attrs.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes to the root.}
-      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed naming, descriptive, hint, style, and native-listener attributes to the editor.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed attributes to the root; executable listener names and ownership directives are rejected.'}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed naming, descriptive, hint, and style attributes to the editor; executable listener names and ownership directives are rejected. Use typed callbacks or authored Vue listeners for browser behavior.'}
 
   - id: ctags-input-client-inputs
     component: CTagsInput

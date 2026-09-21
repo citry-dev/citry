@@ -38,7 +38,7 @@ packages/py/citry/citry/ext/events/client/*.js text eol=lf
 # Citry UI generates byte-frozen production payloads from readable source
 # files, so both inputs and outputs keep the same line endings on every host.
 packages/py/citry_ui/citry_ui/components/**/*.source.css text eol=lf
-packages/py/citry_ui/citry_ui/components/**/*.source.js text eol=lf
+packages/py/citry_ui/citry_ui/components/**/*.source.js text eol=lf whitespace=-blank-at-eol,-blank-at-eof
 packages/py/citry_ui/citry_ui/components/**/*.min.css text eol=lf
 packages/py/citry_ui/citry_ui/components/**/*.min.js text eol=lf
 
@@ -51,6 +51,10 @@ packages/py/citry_core/citry_core/py.typed text eol=lf
 packages/py/citry_core/LICENSE text eol=lf
 packages/py/citry_core/README.md text eol=lf
 packages/py/citry_core/pyproject.toml text eol=lf
+
+# Vendored compiler declarations and snapshots preserve upstream whitespace.
+packages/py/citry_lsp/citry_lsp/types/node_modules/** whitespace=-blank-at-eol,-blank-at-eof
+third_party/rust/vize_atelier_core/**/*.snap whitespace=-blank-at-eol
 
 # The VS Code extension bundle is generated and minified. JavaScript template
 # literals inside it preserve trailing spaces as product bytes, so Git should

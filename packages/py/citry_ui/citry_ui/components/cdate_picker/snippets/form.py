@@ -8,7 +8,7 @@ citry.register_library(citry_ui)
 
 class DatePickerForm(Component):
     template = """
-      <section x-data="{submitted:'Submit to inspect FormData'}">
+      <section >
         <form @submit.prevent="submitted=JSON.stringify(Array.from(new FormData($event.target).entries()))">
           <c-CField control_id="trip-date" required>
             <c-fill name="label">Trip date</c-fill>
@@ -18,8 +18,17 @@ class DatePickerForm(Component):
           </c-CField>
           <div><button type="submit">Submit</button> <button type="reset">Reset</button></div>
         </form>
-        <output x-text="submitted">Submit to inspect FormData</output>
+        <output v-text="submitted">Submit to inspect FormData</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            submitted:'Submit to inspect FormData'
+          };
+        },
+      });
     """
     css = ":where(form){display:grid;gap:.75rem;max-inline-size:28rem}:where(output){display:block;margin-block-start:.75rem;overflow-wrap:anywhere}"
 

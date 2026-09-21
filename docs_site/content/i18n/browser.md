@@ -40,7 +40,7 @@ Use `tr()` for the initial HTML and `$c-tr` for the explicit browser binding:
 ```
 
 The server value remains the initial value. The checked binding starts tracking
-its Alpine values as soon as the element initializes. Changing `toast.title`
+its Vue values as soon as the element mounts. Changing `toast.title`
 retranslates the attribute even if the locale has never changed; changing the
 provider locale retranslates it with the latest values.
 
@@ -89,19 +89,19 @@ For a server-conditional `c-$c-tr` or a `$c-tr` entry returned by `c-bind`, use
 it. A string supplies a reactive named-values expression. An empty string also
 means presence-only, but `True` communicates that intent more clearly.
 
-### Let an Alpine expression own the whole value
+### Let a Vue expression own the whole value
 
 ```citry-html
 <c-i18n tag="section" client>
-  <span x-text="$i18n.tr('my-app-account-title')"></span>
+  <span v-text="$i18n.tr('my-app-account-title')"></span>
   <button @click="$i18n.switchLocale('cs-CZ')">Čeština</button>
 </c-i18n>
 ```
 
-Alpine owns the `<span>` text. Calling `switchLocale()` replaces the provider's
+Vue owns the `<span>` text. Calling `switchLocale()` replaces the provider's
 readonly context, so the expression runs again.
 
-Use this general Alpine form when the expression itself owns more than a
+Use this general Vue form when the expression itself owns more than a
 translation binding. For a stable server-rendered text or attribute,
 `$c-tr` avoids duplicating that broader ownership logic.
 
@@ -121,7 +121,7 @@ def account_page(locale: str):
     )
 ```
 
-An application may put every translated field under Alpine, but a large number
+An application may put every translated field under Vue, but a large number
 of expressions adds browser startup work and can delay interactivity. A server
 rerender updates every server value through one normal render.
 
@@ -142,7 +142,7 @@ The real element owns the browser scope and its `lang` and `dir` attributes.
 The i18n browser runtime loads only when a rendered tree contains a
 client-enabled provider.
 
-`$i18n` resolves the nearest client provider at the element where the Alpine
+`$i18n` resolves the nearest client provider at the element where the Vue
 expression runs. It is the concise form of Citry's ordinary browser
 provide/inject lookup.
 
@@ -162,8 +162,8 @@ Translate a message or attribute:
 
 ```citry-html
 <button
-  x-text="$i18n.tr('my-app-account-actions')"
-  x-bind:aria-label="$i18n.tr(
+  v-text="$i18n.tr('my-app-account-actions')"
+  :aria-label="$i18n.tr(
     'my-app-account-actions',
     { name: accountName },
     { attr: 'aria-label' },
@@ -178,7 +178,7 @@ Format values with the same named profiles as the server:
 
 ```citry-html
 <output
-  x-text="$i18n.format.number(
+  v-text="$i18n.format.number(
     '12345.50',
     { format: 'measurement' },
   )"
@@ -191,20 +191,27 @@ current temporal boundary.
 
 ## Bind a browser-created or custom destination
 
-`$component` callbacks receive `i18n` from the same nearest provider. Use
-`bind()` when there is no stable HTML text or attribute for `$c-tr` to own:
+An `onServerRender` callback can use the same nearest provider through the
+component instance. Use `bind()` when there is no stable HTML text or
+attribute for `$c-tr` to own:
 
 ```javascript
-$component(({ i18n, state, toast }, control) => {
-  const binding = i18n.bind({
-    message: "my-app-toast-dismiss",
-    values: () => ({ title: state.toastTitle }),
-    onChange(text) {
-      toast.update({ dismissLabel: text });
-    },
-  });
+$component({
+  onServerRender({ component }) {
+    const destination = component.$refs.toast;
+    const i18n = component.$i18n;
+    if (!(destination instanceof HTMLElement) || !i18n) return;
 
-  control.registerCleanup(binding.dispose);
+    const binding = i18n.bind({
+      message: "my-app-toast-dismiss",
+      values: () => ({ title: component.toastTitle }),
+      onChange(text) {
+        destination.setAttribute("aria-label", text);
+      },
+    });
+
+    return () => binding.dispose();
+  },
 });
 ```
 
@@ -222,7 +229,7 @@ Choose the narrowest API that owns the destination:
   text.
 - Use `$c-tr` for stable `textContent` or one of Citry's allowlisted HTML
   attributes. Pair it with the initial server `tr()` value.
-- Use `$i18n.tr()` when an Alpine expression already owns the complete value,
+- Use `$i18n.tr()` when a Vue expression already owns the complete value,
   not merely its translation.
 - Use `i18n.bind()` for browser-created values, custom objects, native
   properties, or callbacks that have no stable HTML destination.
@@ -230,14 +237,14 @@ Choose the narrowest API that owns the destination:
 Keep message IDs literal when possible so Citry can preload and check their
 exact outputs. Keep the named-values object explicit instead of hiding it
 behind a computed spread when editor validation is useful. Do not add both
-`x-text` and `$c-tr` to the same text destination; that gives two browser
+`v-text` and `$c-tr` to the same text destination; that gives two browser
 systems ownership of the same value. Dispose imperative bindings whose
 lifetime is shorter than their component, and use `refresh()` only for
 ordinary non-reactive state.
 
 ## Let Citry preload literal message names
 
-Citry finds literal `$i18n.tr()` and `$i18n.resolve()` calls in Alpine
+Citry finds literal `$i18n.tr()` and `$i18n.resolve()` calls in Vue
 expressions, checked `$c-tr` declarations, and literal `i18n` calls in
 component JavaScript. A bounded object-literal
 `i18n.bind({ message: "...", output: "...", ... })` contributes its exact
@@ -295,7 +302,7 @@ a client provider is a hard browser boundary and also needs a real `tag`:
 
 ```citry-html
 <c-i18n tag="main" client>
-  <span x-text="$i18n.tr('my-app-live-title')"></span>
+  <span v-text="$i18n.tr('my-app-live-title')"></span>
 
   <c-i18n tag="section">
     {{ tr("my-app-fixed-server-copy") }}
@@ -313,7 +320,7 @@ requirements and checked binding records used by its browser expressions. When
 Citry Events adopts that fragment, and the provider has already switched away
 from the fragment's server-rendered locale, Citry loads the provider's
 current-locale closure and reconciles the fragment's bound text and attributes
-before Alpine or component callbacks activate. The ownership rule is Citry's
+before Vue or component callbacks activate. The ownership rule is Citry's
 logical provider route, including slots and teleports; it is not DOM
 `closest()`.
 

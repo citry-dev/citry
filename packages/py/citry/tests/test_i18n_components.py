@@ -1,6 +1,8 @@
 """Server behavior for the built-in ``<c-i18n>`` and ``<c-trans>`` tags."""
 
+import json
 import re
+from typing import Any
 
 import pytest
 
@@ -21,6 +23,22 @@ def configured_app() -> Citry:
 
 def without_component_ids(rendered: str) -> str:
     return re.sub(r' data-cid-[^=]+=""', "", rendered)
+
+
+def prepared_i18n_payload(component: Component) -> tuple[dict[str, Any], dict[str, Any]]:
+    serialized = component.render().serialize()
+    payload = serialized.split("CitryStable.startPrepared(", 1)[1].split(").catch", 1)[0]
+    manifest = json.loads(payload)["manifest"]
+    extension = manifest["extensions"]["i18n"]
+    assert extension["schemaVersion"] == 1
+    return manifest, extension["payload"]
+
+
+def assert_provider_occurrence_identity(manifest: dict[str, Any], provider: dict[str, Any]) -> None:
+    occurrences = {item["id"]: item for item in manifest["occurrences"]}
+    assert provider["id"] in occurrences
+    host = next(item for item in manifest["occurrences"] if item["renderId"] == provider["serverProviderId"])
+    assert host["parentId"] == provider["id"]
 
 
 def test_i18n_provider_changes_the_context_for_its_subtree() -> None:
@@ -150,19 +168,23 @@ def test_i18n_client_mode_requires_a_real_wrapper() -> None:
         Page().render()
 
 
-def test_i18n_client_mode_uses_the_existing_browser_provide_contract() -> None:
+def test_i18n_client_mode_uses_the_native_prepared_provider_contract() -> None:
     app = configured_app()
 
     class Page(Component):
         citry = app
         template = '<c-i18n c-client="True" tag="section">text</c-i18n>'
 
-    rendered = without_component_ids(Page().render().serialize(deps_strategy="ignore"))
-    assert rendered == (
-        '<section lang="en-US" dir="ltr" '
-        'x-init="$provide(&#39;citry_i18n&#39;, Citry.i18n.provider('
-        '$el, $inject(&#39;citry_i18n&#39;, null)))">text</section>'
-    )
+    manifest, payload = prepared_i18n_payload(Page())
+    providers = payload["providers"]
+    assert len(providers) == 1
+    provider = providers[0]
+    assert provider["parent"] is None
+    assert provider["context"]["locale"] == "en-US"
+    assert provider["context"]["direction"] == "ltr"
+    assert_provider_occurrence_identity(manifest, provider)
+    assert payload["barriers"] == []
+    assert payload["requirements"] == []
 
 
 def test_nested_server_provider_is_an_explicit_client_barrier() -> None:
@@ -176,8 +198,21 @@ def test_nested_server_provider_is_an_explicit_client_barrier() -> None:
             </c-i18n>
         """
 
-    rendered = without_component_ids(Page().render().serialize(deps_strategy="ignore"))
-    assert 'x-init="$unprovide(&#39;citry_i18n&#39;)"' in rendered
+    manifest, payload = prepared_i18n_payload(Page())
+    providers = payload["providers"]
+    assert len(providers) == 1
+    provider = providers[0]
+    assert provider["parent"] is None
+    assert_provider_occurrence_identity(manifest, provider)
+
+    barriers = payload["barriers"]
+    assert len(barriers) == 1
+    barrier = barriers[0]
+    occurrences = {item["id"]: item for item in manifest["occurrences"]}
+    provider_host = next(item for item in manifest["occurrences"] if item["renderId"] == provider["serverProviderId"])
+    assert occurrences[barrier]["parentId"] == provider_host["id"]
+    assert barrier not in {item["id"] for item in providers}
+    assert payload["requirements"] == []
 
 
 def test_nested_server_provider_barrier_requires_a_real_wrapper() -> None:

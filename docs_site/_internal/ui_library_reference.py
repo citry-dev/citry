@@ -324,8 +324,7 @@ def _render_inputs(
         else:
             _add_paragraph(
                 lines,
-                f'Client inputs are passed in the browser through the `$c-props="{{ ... }}"` attribute on '
-                f"`<c-{component} />`.",
+                f"Client inputs are passed in the browser through native Vue `:prop` bindings on `<c-{component} />`.",
             )
             rows = [
                 (
@@ -388,8 +387,8 @@ def _render_events(
         return
     _add_paragraph(
         lines,
-        "Component events are callback inputs supplied through `$c-props`. Native browser events remain available "
-        "through Alpine `@...` attributes.",
+        "Component events are callback inputs supplied through native Vue `:prop` bindings. Native browser "
+        "events remain available through Vue `@...` attributes.",
     )
     for table in tables:
         lines.extend((f"#### {table['component']} events", ""))
@@ -665,8 +664,29 @@ def _render_default(value: Mapping[str, Any]) -> str:
     return _code(str(literal))
 
 
+_CODE_SPAN = re.compile(r"`[^`]*`")
+# Stand-in characters for one code span while the paragraph is wrapped. Neither
+# can appear in generated prose, so restoring them cannot corrupt real text.
+_SPAN_MARK = "\x00"
+_SPAN_FILL = "\x01"
+
+
 def _add_paragraph(lines: list[str], text: str) -> None:
-    lines.extend(wrap(text, width=92, break_long_words=False, break_on_hyphens=False))
+    # An inline code span may hold spaces, as `<c-Button />` does. Wrapping the raw
+    # text can break inside one, and the half-open span that leaves is read by the
+    # docs renderer as a live component tag rather than as example markup. Each span
+    # is therefore wrapped as a single unbreakable token of its own width.
+    spans: list[str] = []
+
+    def stash(match: re.Match[str]) -> str:
+        spans.append(match.group(0))
+        marker = f"{_SPAN_MARK}{len(spans) - 1}{_SPAN_MARK}"
+        return marker + _SPAN_FILL * max(0, len(match.group(0)) - len(marker))
+
+    stashed = _CODE_SPAN.sub(stash, text)
+    wrapped = wrap(stashed, width=92, break_long_words=False, break_on_hyphens=False)
+    pattern = re.compile(f"{_SPAN_MARK}(\\d+){_SPAN_MARK}{_SPAN_FILL}*")
+    lines.extend(pattern.sub(lambda match: spans[int(match.group(1))], line) for line in wrapped)
     lines.append("")
 
 

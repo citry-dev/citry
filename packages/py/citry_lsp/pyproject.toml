@@ -53,4 +53,4 @@ Issues = "https://github.com/citry-dev/citry/issues"
 include = ["citry_lsp*"]
 
 [tool.setuptools.package-data]
-citry_lsp = ["py.typed"]
+citry_lsp = ["py.typed", "types/**/*.json", "types/**/*.d.ts", "types/**/*.d.mts", "types/**/LICENSE*"]

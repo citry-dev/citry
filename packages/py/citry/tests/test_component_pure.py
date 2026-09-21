@@ -6,6 +6,20 @@ from dataclasses import dataclass
 import pytest
 
 from citry import Citry, Component
+from citry._pure import PurePreparedPart
+from citry._vue.capture import (
+    PreparedBrowserBinding,
+    PreparedElementClose,
+    PreparedElementOpen,
+    PreparedSourceText,
+    PreparedStaticRun,
+    PreparedTextValue,
+    PreparedVerbatimHtml,
+    render_prepared,
+)
+from citry._vue.direct_capture import assemble_typed_render
+from citry.citry_context import CitryContext
+from citry.component_render import _capture_pure_part
 
 
 class _RenderedProbe:
@@ -38,6 +52,100 @@ def test_pure_component_reuses_equal_body_with_fresh_component_ids() -> None:
     assert len(markers) == 2
     assert markers[0][0] != markers[1][0]
     assert markers[0][1] == markers[1][1]
+
+
+def test_prepared_pure_component_reuses_immutable_text_with_fresh_occurrences() -> None:
+    app = Citry(autodiscover=False, extensions=[])
+
+    class PureLeaf(Component):
+        citry = app
+        pure = True
+        template = "<section><span>fixed</span>{{ value }}</section>"
+
+    class Page(Component):
+        citry = app
+        template = '<c-PureLeaf c-value="value" /><c-PureLeaf c-value="value" />'
+
+    probe = _RenderedProbe("same")
+    assembly = assemble_typed_render(
+        render_prepared(Page(value=probe)),
+        revision=0,
+        tag_for_type=lambda key: f"x-{key.lower().replace('_', '-')}",
+    )
+
+    assert probe.calls == 1
+    leaves = [occurrence for occurrence in assembly.view.occurrences if occurrence.parent_id is not None]
+    assert len(leaves) == 2
+    assert leaves[0].id != leaves[1].id
+    assert leaves[0].definition_id == leaves[1].definition_id
+    assert all("same" in occurrence.prepared_data.values() for occurrence in leaves)
+    definition = assembly.compile_inputs[leaves[0].definition_id]
+    assert "<section><span>fixed</span>" in definition.template
+
+
+def test_pure_capture_whitelists_only_context_free_prepared_parts() -> None:
+    context = CitryContext(variables={})
+    safe = (
+        PreparedSourceText("source", (0, 6), "source"),
+        PreparedStaticRun("<p>fixed</p>"),
+        PreparedElementClose("</p>", (0, 4), "p"),
+        PreparedTextValue("{{ value }}", (0, 11), "value"),
+    )
+    assert all(isinstance(_capture_pure_part(part, context), PurePreparedPart) for part in safe)
+
+    forged_binding = PreparedBrowserBinding("$binding", "id", "text")
+    unsafe = (
+        PreparedTextValue("{{ value }}", (0, 11), "value", browser_binding=forged_binding),
+        PreparedTextValue("{{ value }}", (0, 11), ("not", "a", "scalar")),
+        PreparedElementOpen(
+            "<p>",
+            (0, 3),
+            "p",
+            (),
+            is_void=False,
+            is_self_closing=False,
+            element_metadata=None,
+        ),
+        PreparedVerbatimHtml("<c-raw>x</c-raw>", (0, 20), "<b>x</b>"),
+    )
+    assert all(_capture_pure_part(part, context) is None for part in unsafe)
+
+
+def test_pure_simple_component_reuses_safe_typed_text() -> None:
+    app = Citry(autodiscover=False, extensions=[])
+
+    class PureLabel(Component):
+        citry = app
+        pure = True
+        simple = True
+        template = "<span>{{ value }}</span>"
+
+    class Page(Component):
+        citry = app
+        template = '<c-PureLabel c-value="value" /><c-PureLabel c-value="value" />'
+
+    probe = _RenderedProbe("same")
+    assert Page(value=probe).render().serialize().count("same</span>") == 2
+    assert probe.calls == 1
+
+
+def test_pure_i18n_bindings_remain_live_for_each_occurrence() -> None:
+    app = Citry(extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}})
+
+    class PureLabel(Component):
+        citry = app
+        pure = True
+        template = "<span $c-tr:save>{{ tr('save') }}</span>"
+        messages = "save = Save"
+
+    class Page(Component):
+        citry = app
+        template = '<c-i18n c-client="True" tag="main"><c-PureLabel /><c-PureLabel /></c-i18n>'
+
+    html = Page().render().serialize()
+    binding_ids = re.findall(r'"id":"([^"]+~i18n-[^"]+)"', html)
+    assert len(binding_ids) == 2
+    assert len(set(binding_ids)) == 2
 
 
 def test_pure_component_memo_is_scoped_to_one_root_render() -> None:

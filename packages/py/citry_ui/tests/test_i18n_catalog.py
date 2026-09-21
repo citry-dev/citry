@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib.resources
 import json
+import re
 import subprocess
 import sys
 from decimal import Decimal
@@ -217,8 +218,22 @@ def test_client_provider_emits_only_the_default_catalog_binding() -> None:
             return {"items": items}
 
     html = str(Page())
-    assert html.count("data-citry-i18n-binding=") == 1
-    assert "citry-ui-breadcrumbs-label" in html
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    manifest = json.loads(match.group(1))["manifest"]
+    bindings = [
+        attrs["data-citry-i18n-binding"]
+        for occurrence in manifest["occurrences"]
+        for key, attrs in occurrence["preparedData"].items()
+        if key.startswith("citryAttrs") and "data-citry-i18n-binding" in attrs
+    ]
+    assert len(bindings) == 1
+    payload = manifest["extensions"]["i18n"]["payload"]
+    assert any(
+        binding["message"] == "citry-ui-breadcrumbs-label"
+        for requirement in payload["requirements"]
+        for binding in requirement["bindings"]
+    )
     assert "$c-tr" not in html
 
 

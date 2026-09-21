@@ -1,5 +1,7 @@
 """Shared TagsInput scenario used by repository quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from __future__ import annotations
 
 from typing import Any
@@ -42,18 +44,10 @@ def tags_input_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack tags-input-quality"
             aria-labelledby="tags-input-states-title"
-            @c-quality-morph="refresh"
-            x-data="{
-              controlledTags:['controlled-one'],
-              controlledDraft:'owner draft',
-              acceptControlled:false,
-              submits:0,
-              resets:0,
-              last:'No TagsInput action yet',
-            }"
+            @quality-morph="refresh"
           >
             <h1 id="tags-input-states-title">TagsInput states</h1>
-            <output hidden data-quality-morph-step>{{ morph_step }}</output>
+            <output hidden data-quality-morph-step v-text="morphStep">{{ morph_step }}</output>
 
             <form
               id="tags-input-quality-form"
@@ -79,11 +73,8 @@ def tags_input_states_component(app: Citry) -> type[Component]:
                       'data-quality-states':
                         'required ordered form-data repeated-values editable reset field description'
                     }"
-                    $c-props="{
-                      onValueChange:(next,detail)=>
-                        last=`${detail.source}: ${JSON.stringify(next)}`,
-                      onValueInvalid:(reason)=>last=`Rejected ${reason}`,
-                    }"
+                    :onValueChange="(next,detail)=>
+                        last=`${detail.source}: ${JSON.stringify(next)}`" :onValueInvalid="(reason)=>last=`Rejected ${reason}`"
                   />
                 </c-fill>
               </c-CField>
@@ -123,18 +114,13 @@ def tags_input_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'controlled controlled-value controlled-draft refusal acceptance'
                 }"
-                $c-props="{
-                  value:controlledTags,
-                  inputValue:controlledDraft,
-                  onValueChange:(next,detail)=>{
+                :value="controlledTags" :inputValue="controlledDraft" :onValueChange="(next,detail)=>{
                     last=`Requested ${JSON.stringify(next)}`;
                     if (acceptControlled) {
                       controlledTags=next;
                       controlledDraft=detail.nextInputValue;
                     }
-                  },
-                  onInputValueChange:(next)=>controlledDraft=next,
-                }"
+                  }" :onInputValueChange="(next)=>controlledDraft=next"
               />
 
               <c-CTagsInput
@@ -230,32 +216,52 @@ def tags_input_states_component(app: Citry) -> type[Component]:
               </div>
             </div>
 
-            <c-if cond="include_lifecycle">
-              <div>
-                <c-CTagsInput
-                  #c-key="'tags-input-quality-lifecycle'"
-                  id="tags-input-quality-lifecycle"
-                  input_value="preserved draft"
-                  c-value="['preserved-one', 'preserved-two']"
-                  c-input_attrs="{'aria-label':'Lifecycle labels'}"
-                  c-attrs="{
-                    'data-quality-states':
-                      'lifecycle morph-target cleanup removal restore composition-node selection-preservation'
-                  }"
-                />
-              </div>
-            </c-if>
+            <template v-if="includeLifecycle">
+              <c-CTagsInput
+                #c-key="'tags-input-quality-lifecycle'"
+                id="tags-input-quality-lifecycle"
+                input_value="preserved draft"
+                c-value="['preserved-one', 'preserved-two']"
+                c-input_attrs="{'aria-label':'Lifecycle labels'}"
+                c-attrs="{
+                  'data-quality-states':
+                    'lifecycle morph-target cleanup removal restore composition-node selection-preservation'
+                }"
+              />
+            </template>
 
             <label>
-              <input type="checkbox" x-model="acceptControlled" />
+              <input type="checkbox" v-model="acceptControlled" />
               Accept controlled value requests
             </label>
             <output
               id="tags-input-quality-log"
               aria-live="polite"
-              x-text="`Submits: ${submits}; resets: ${resets}; last: ${last}`"
+              v-text="`Submits: ${submits}; resets: ${resets}; last: ${last}`"
             >Submits: 0; resets: 0; last: No TagsInput action yet</output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                includeLifecycle:true,
+                morphStep:0,
+                controlledTags:['controlled-one'],
+                controlledDraft:'owner draft',
+                acceptControlled:false,
+                submits:0,
+                resets:0,
+                last:'No TagsInput action yet',
+              };
+            },
+            methods: {
+              refresh() {
+                this.morphStep += 1;
+                this.includeLifecycle = ![2, 4].includes(this.morphStep);
+              },
+            },
+          });
         """
 
         css = """

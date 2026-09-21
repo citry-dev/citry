@@ -8,18 +8,26 @@ class AvatarReactive(Component):
     template = """
       <div
         class="avatar-reactive"
-        x-data="{source: null, status: 'fallback'}"
       >
         <c-CAvatar
           alt="Moonfen lookout"
-          $c-props="{src: source, onStatusChange: detail => status = detail.status}"
+          :src="source" :onStatusChange="detail => status = detail.status"
         >ML</c-CAvatar>
-        <p>Status: <strong x-text="status">fallback</strong></p>
+        <p>Status: <strong v-text="status">fallback</strong></p>
         <div class="avatar-reactive__actions">
           <c-CButton size="sm" @click="source = '/missing-lookout-a.png'">Try missing image</c-CButton>
           <c-CButton size="sm" variant="outline" @click="source = null">Use fallback</c-CButton>
         </div>
       </div>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            source: null, status: 'fallback'
+          };
+        },
+      });
     """
     css = """
       :where(.avatar-reactive) {

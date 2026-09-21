@@ -83,8 +83,8 @@ when the visible label does not produce concise typeahead text.
 ## Control visibility and configuration
 
 Server inputs are passed in Python through `<c-CMenu ... />` attributes or a
-`CMenu(...)` composition call. Client inputs are passed in the browser through
-`$c-props="{...}"`.
+`CMenu(...)` composition call. Client inputs are passed with native Vue
+bindings.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cmenu/snippets/controlled_open.py"
@@ -212,5 +212,5 @@ suppresses outside anchored layers and gives the Dialog Escape/focus ownership.
 Text is escaped. Values are plain, nonempty canonical strings; generated IDs
 do not expose raw values. `href` remains a trusted application URL boundary.
 Attribute maps reject owned semantics, focus, visibility, anchoring, structural
-Alpine directives, and Citry runtime namespaces. Use Popover when item content
+client-runtime directives, and Citry runtime namespaces. Use Popover when item content
 needs links, Buttons, inputs, editing, or independent Tab stops.

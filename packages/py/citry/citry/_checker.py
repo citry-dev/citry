@@ -22,7 +22,6 @@ from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_PROP,
-    BROWSER_UNKNOWN_COMPONENT_PROP,
     BROWSER_UNKNOWN_SERVER_EVENT,
     BROWSER_UNKNOWN_STATE_FIELD,
     CHECK_PYTHON_SOURCE_UNREADABLE,
@@ -39,6 +38,7 @@ from citry._diagnostic_catalog import (
     I18N_UNKNOWN_MESSAGE,
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
+    TEMPLATE_MARKER_NAME_INVALID,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import render_diagnostic
@@ -47,17 +47,19 @@ from citry._linting import _component_lint_info
 from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
-    AlpineLintConsumer,
+    BrowserComponentPropContribution,
+    BrowserComponentPropSite,
     BrowserExpression,
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
     TemplateLintConsumer,
+    VueLintConsumer,
+    analyze_browser_component_source,
     analyze_js_data_source,
-    browser_client_prop_accepts,
-    browser_component_prop_uses,
+    browser_component_prop_findings,
+    browser_component_prop_sites,
     browser_component_props,
-    browser_component_scope_writes,
     browser_declarative_events,
     browser_expressions,
     browser_i18n_binding_directives,
@@ -70,13 +72,15 @@ from citry.analysis import (
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_csp_compatibility,
-    lint_unknown_alpine_variables,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
+    lint_unknown_vue_variables,
+    mark_literal_findings,
 )
 from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
+from citry.component_registry import NotRegistered
 from citry.ext.events.extension import _component_events_info
 from citry.tag_rules import build_tag_rules
 from citry_core.template_parser import (
@@ -198,7 +202,6 @@ def _check_registry(
 ) -> list[CheckFinding]:
     """Read each authored registry template directly and continue after failures."""
     known_names = {name.lower() for name in registrations}
-    registered_components = {name.lower(): component for name, component in registrations.items()}
     unique_classes = {id(comp_cls): comp_cls for comp_cls in registrations.values()}
     components = sorted(unique_classes.values(), key=_class_label)
     findings: list[CheckFinding] = []
@@ -347,23 +350,19 @@ def _check_registry(
         else:
             existing.consumers.append(comp_cls)
 
-    scope_names: dict[int, set[str]] = {}
+    component_props: dict[type[Component], tuple[BrowserProp, ...] | None] = {}
     for browser_source in browser_sources.values():
-        names = {write.name for write in browser_component_scope_writes(browser_source.content)}
-        for component in browser_source.consumers:
-            scope_names.setdefault(id(component), set()).update(names)
+        declared = browser_component_props(browser_source.content)
+        for consumer in browser_source.consumers:
+            if consumer not in component_props:
+                component_props[consumer] = declared
+            elif component_props[consumer] != declared:
+                component_props[consumer] = None
 
     for source in sources.values():
         try:
             lint_consumers = tuple(_checker_lint_consumer(engine, component) for component in source.consumers)
-            alpine_lint_consumers = tuple(
-                _checker_alpine_lint_consumer(
-                    engine,
-                    component,
-                    scope_names.get(id(component), set()),
-                )
-                for component in source.consumers
-            )
+            vue_lint_consumers = tuple(_checker_vue_lint_consumer(engine, component) for component in source.consumers)
             foreign_options = _checker_foreign_options(
                 engine,
                 source,
@@ -396,14 +395,14 @@ def _check_registry(
                 source,
                 rules=rules,
                 known_names=known_names,
-                registered_components=registered_components,
                 engine=engine,
                 lint_consumers=lint_consumers,
-                alpine_lint_consumers=alpine_lint_consumers,
+                vue_lint_consumers=vue_lint_consumers,
                 i18n_manifest=i18n_manifest,
                 i18n_profiles=i18n_profiles,
                 foreign_options=foreign_options,
                 nested_foreign_options=nested_foreign_options,
+                component_props=component_props,
             )
         )
     for browser_source in browser_sources.values():
@@ -503,14 +502,14 @@ def _check_template(
     *,
     rules: Mapping[str, TagRules] | None = None,
     known_names: set[str] | None = None,
-    registered_components: Mapping[str, type[Component]] | None = None,
     engine: Citry | None = None,
     lint_consumers: tuple[TemplateLintConsumer, ...] = (),
-    alpine_lint_consumers: tuple[AlpineLintConsumer, ...] = (),
+    vue_lint_consumers: tuple[VueLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
     foreign_options: ParseOptions | None = None,
     nested_foreign_options: Callable[[str], ParseOptions | None] | None = None,
+    component_props: Mapping[type[Component], tuple[BrowserProp, ...] | None] | None = None,
 ) -> list[CheckFinding]:
     """Parse one source and, in registry mode, inspect component tag names."""
     try:
@@ -542,6 +541,22 @@ def _check_template(
         user_rules=dict(rules) if rules is not None else None,
         options=nested_foreign_options(value) if nested_foreign_options is not None else None,
     )
+    for marker_finding in mark_literal_findings(template, parse_nested=nested_parser):
+        line, column = _byte_offset_coordinates(source.content, marker_finding.start_index)
+        end_line, end_column = _byte_offset_coordinates(source.content, marker_finding.end_index)
+        findings.append(
+            CheckFinding(
+                source.origin,
+                render_diagnostic(TEMPLATE_MARKER_NAME_INVALID, variant=marker_finding.reason),
+                TEMPLATE_MARKER_NAME_INVALID,
+                start_index=marker_finding.start_index,
+                end_index=marker_finding.end_index,
+                line=line,
+                column=column,
+                end_line=end_line,
+                end_column=end_column,
+            )
+        )
     findings.extend(
         _i18n_binding_findings(
             source.origin,
@@ -579,9 +594,56 @@ def _check_template(
             for finding in lint_unknown_template_variables(template, lint_consumers)
         )
     browser_hosts = browser_expressions(template, parse_nested=nested_parser)
+    if engine is not None and component_props is not None:
+        sites = browser_component_prop_sites(template, parse_nested=nested_parser)
+
+        def declared_props(site: BrowserComponentPropSite) -> tuple[BrowserProp, ...] | None:
+            try:
+                component = engine.get(site.tag.lower().removeprefix("c-"))
+            except NotRegistered:
+                return None
+            return component_props.get(component)
+
+        def literal_value_type(contribution: BrowserComponentPropContribution) -> JsonWireType:
+            return browser_literal_wire_type(contribution.source)
+
+        for prop_finding in browser_component_prop_findings(
+            sites,
+            declared_props=declared_props,
+            value_type=literal_value_type,
+        ):
+            code = (
+                BROWSER_MISSING_COMPONENT_PROP
+                if prop_finding.kind == "missing"
+                else BROWSER_INCOMPATIBLE_COMPONENT_PROP
+            )
+            parameters = (
+                {"name": prop_finding.name, "tag": prop_finding.tag}
+                if prop_finding.kind == "missing"
+                else {
+                    "name": prop_finding.name,
+                    "expected": prop_finding.expected,
+                    "actual": prop_finding.actual,
+                }
+            )
+            line, column = _byte_offset_coordinates(source.content, prop_finding.start_index)
+            end_line, end_column = _byte_offset_coordinates(source.content, prop_finding.end_index)
+            findings.append(
+                CheckFinding(
+                    source.origin,
+                    render_diagnostic(code, **parameters),
+                    code,
+                    start_index=prop_finding.start_index,
+                    end_index=prop_finding.end_index,
+                    line=line,
+                    column=column,
+                    end_line=end_line,
+                    end_column=end_column,
+                )
+            )
     for expression in browser_hosts:
         findings.extend(_browser_i18n_profile_findings(source.origin, source.content, expression, i18n_profiles or {}))
-    for finding in lint_unknown_alpine_variables(browser_hosts, alpine_lint_consumers):
+    for finding in lint_unknown_vue_variables(browser_hosts, vue_lint_consumers):
         line, column = _byte_offset_coordinates(source.content, finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
         findings.append(
@@ -599,7 +661,7 @@ def _check_template(
             )
         )
     csp_mode = engine.settings.security_csp if engine is not None else None
-    for csp_finding in lint_csp_compatibility(browser_hosts, alpine_lint_consumers, csp_mode):
+    for csp_finding in lint_csp_compatibility(browser_hosts, vue_lint_consumers, csp_mode):
         line, column = _byte_offset_coordinates(source.content, csp_finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, csp_finding.end_index)
         findings.append(
@@ -654,63 +716,6 @@ def _check_template(
                         event.name,
                         event.start_index,
                         event.end_index,
-                    )
-                )
-    if registered_components is not None:
-        for props_use in browser_component_prop_uses(template, parse_nested=nested_parser):
-            target = registered_components.get(props_use.tag_name.removeprefix("c-").lower())
-            if target is None:
-                continue
-            if engine is None:
-                continue
-            contract = _checker_component_props(engine, target)
-            if contract is None:
-                continue
-            by_name = {prop.name: prop for prop in contract}
-            explicit = {property_.name for property_ in props_use.properties}
-            for property_ in props_use.properties:
-                expected = by_name.get(property_.name)
-                if expected is not None:
-                    actual = browser_literal_wire_type(property_.value_source)
-                    if actual.kind != "unknown" and not browser_client_prop_accepts(expected.javascript, actual):
-                        findings.append(
-                            _browser_template_finding(
-                                source.origin,
-                                source.content,
-                                property_.value_start_index,
-                                property_.value_end_index,
-                                BROWSER_INCOMPATIBLE_COMPONENT_PROP,
-                                name=property_.name,
-                                expected=expected.javascript,
-                                actual=actual.javascript,
-                            )
-                        )
-                    continue
-                findings.append(
-                    _browser_template_finding(
-                        source.origin,
-                        source.content,
-                        property_.start_index,
-                        property_.end_index,
-                        BROWSER_UNKNOWN_COMPONENT_PROP,
-                        name=property_.name,
-                        tag=props_use.tag_name,
-                    )
-                )
-            if props_use.has_dynamic_keys:
-                continue
-            for prop in contract:
-                if not prop.required or prop.name in explicit:
-                    continue
-                findings.append(
-                    _browser_template_finding(
-                        source.origin,
-                        source.content,
-                        props_use.start_index,
-                        props_use.end_index,
-                        BROWSER_MISSING_COMPONENT_PROP,
-                        name=prop.name,
-                        tag=props_use.tag_name,
                     )
                 )
     return findings
@@ -1490,16 +1495,14 @@ def _checker_lint_consumer(engine: Citry, component: type[Component]) -> Templat
     )
 
 
-def _checker_alpine_lint_consumer(
+def _checker_vue_lint_consumer(
     engine: Citry,
     component: type[Component],
-    scope_names: set[str],
-) -> AlpineLintConsumer:
+) -> VueLintConsumer:
     """Build the strict browser namespace shared with editor analysis."""
     component_info = engine.inspect_component(component)
     lint = _component_lint_info(engine, component)
-    known_names = {variable.name for variable in lint.alpine_variables}
-    known_names.update(scope_names)
+    known_names = {variable.name for variable in lint.vue_variables}
     schema = component_info.schemas.js_data
     if schema.kind == "fields":
         known_names.update(field.name for field in schema.fields)
@@ -1507,10 +1510,35 @@ def _checker_alpine_lint_consumer(
         analyzed = _disk_js_data_shape(component)
         if analyzed is not None:
             known_names.update(root.name for root in analyzed[2].roots)
-    return AlpineLintConsumer(
+    native_names, namespace_policy = _disk_vue_options_namespace(engine, component)
+    known_names.update(native_names)
+    return VueLintConsumer(
         known_names=frozenset(known_names),
-        rule_unknown_alpine_variable=lint.rule_unknown_alpine_variable,
+        rule_unknown_vue_variable=lint.rule_unknown_vue_variable,
+        namespace_policy=namespace_policy,
     )
+
+
+def _disk_vue_options_namespace(
+    engine: Citry,
+    component: type[Component],
+) -> tuple[frozenset[str], Literal["closed", "unknown"]]:
+    """Resolve public native Options names without executing an asset loader."""
+    sources: dict[tuple[object, ...], _BrowserSource] = {}
+    _collect_browser_source(engine, component, sources)
+    matching = [source for source in sources.values() if component in source.consumers]
+    if not matching:
+        try:
+            _owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
+        except (Exception, SystemExit):  # noqa: BLE001 - conservative unknown namespace
+            return frozenset(), "unknown"
+        return (frozenset(), "closed") if inline is None and filepath is None else (frozenset(), "unknown")
+    if len(matching) != 1:
+        return frozenset(), "unknown"
+    analysis = analyze_browser_component_source(matching[0].content)
+    names = frozenset(item.exposed_name for item in analysis.public_names)
+    unknown = not analysis.valid or any(section.state == "unknown" for section in analysis.sections)
+    return names, "unknown" if unknown else "closed"
 
 
 def _disk_template_data_shape(
@@ -1667,35 +1695,6 @@ def _collect_browser_source(
         sources[file_key] = _BrowserSource(str(resolved), content, [component])
     else:
         existing.consumers.append(component)
-
-
-def _checker_component_props(
-    engine: Citry,
-    component: type[Component],
-) -> tuple[BrowserProp, ...] | None:
-    """Read one current static `$component({props})` contract from disk."""
-    try:
-        owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
-    except (Exception, SystemExit):  # noqa: BLE001 - project code failures degrade this check
-        return None
-    if _effective_class_value(component, "js_lang") is not None:
-        return None
-    if type(inline) is str:
-        return browser_component_props(normalize_inline_asset(inline))
-    if not isinstance(filepath, (str, Path)):
-        return None
-    try:
-        inspection = _inspect_asset_path(
-            filepath,
-            owner_dir=module_dir(owner),
-            search_dirs=engine.settings.dirs,
-        )
-        if inspection.resolved_path is None:
-            return None
-        source = inspection.resolved_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return None
-    return browser_component_props(source)
 
 
 def _check_browser_source(

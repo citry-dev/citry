@@ -21,7 +21,6 @@ def popover_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack popover-quality"
             aria-labelledby="popover-states-title"
-            x-data="{ controlledOpen: false }"
           >
             <h1 id="popover-states-title">
               Popover states
@@ -59,10 +58,7 @@ def popover_states_component(app: Citry) -> type[Component]:
                 c-dismissible="False"
                 placement="top"
                 match_width
-                $c-props="{
-                  open: controlledOpen,
-                  onOpenChange: (open) => controlledOpen = open,
-                }"
+                :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton variant="outline" c-attrs="activator_attrs">
@@ -93,6 +89,15 @@ def popover_states_component(app: Citry) -> type[Component]:
               </c-CPopover>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlledOpen: false
+              };
+            },
+          });
         """
 
         css = """

@@ -1708,16 +1708,8 @@ fn validate_citry_tag_name_spelling(
     Ok(())
 }
 
-/// Validate the two authored forms of Citry's client props directive.
-///
-/// The direct form carries a browser expression as inert text. The
-/// server-dynamic form evaluates Python and supplies that complete browser
-/// expression. Both belong only on component call sites; `<c-element>` and
-/// ordinary tags render plain HTML and cannot own the directive.
+/// Reject the retired client-props aliases with the native Vue replacement.
 fn validate_client_props_placement(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
-    let tag_name = node.tag_name();
-    let is_component_boundary = is_component_boundary_tag(tag_name);
-
     for attr in node.attrs() {
         let name = attr.key.content.as_str();
         let is_case_variant = name.eq_ignore_ascii_case(CLIENT_PROPS_ATTR)
@@ -1726,41 +1718,10 @@ fn validate_client_props_placement(node: &Node, context: &ParserContext) -> Resu
             continue;
         }
 
-        let (line, col) = attr.token.line_col;
-        if name != CLIENT_PROPS_ATTR && name != DYNAMIC_CLIENT_PROPS_ATTR {
-            return Err(context.error_from_token(
-                &attr.token,
-                format!(
-                    "Citry client directive names are lowercase. Write '{}' or '{}' instead of '{}'.",
-                    CLIENT_PROPS_ATTR, DYNAMIC_CLIENT_PROPS_ATTR, name
-                ),
-            ));
-        }
-
-        if name == CLIENT_PROPS_ATTR
-            && !attr
-                .inner_value
-                .as_ref()
-                .is_some_and(|value| !value.content.trim().is_empty())
-        {
-            return Err(context.error_from_token(
-                &attr.token,
-                format!(
-                    "'{}' must have a non-empty client expression value, e.g. {}=\"{{ theme: currentTheme }}\".",
-                    CLIENT_PROPS_ATTR, CLIENT_PROPS_ATTR
-                ),
-            ));
-        }
-
-        if !is_component_boundary {
-            return Err(context.error_from_token(
-                &attr.token,
-                format!(
-                    "'{}' is not supported on '<{}>' (line {}, column {}). It is a client props directive and belongs on a Citry component tag, including '<c-component>'.",
-                    name, tag_name, line, col
-                ),
-            ));
-        }
+        return Err(context.error_from_token(
+            &attr.token,
+            format!("'{name}' was removed; use native Vue ':prop' or 'v-bind' syntax"),
+        ));
     }
 
     Ok(())
@@ -1778,11 +1739,18 @@ fn is_component_boundary_tag(tag_name: &str) -> bool {
 
 fn is_component_boundary_handler_attr(name: &str) -> bool {
     let resolved = name.strip_prefix("c-").unwrap_or(name);
-    resolved.starts_with('@') || resolved.starts_with("x-on:")
+    resolved.starts_with('@')
 }
 
 fn is_component_tag_client_binding_attr(name: &str) -> bool {
-    is_client_props_attr(name) || is_component_boundary_handler_attr(name)
+    is_client_props_attr(name)
+        || is_component_boundary_handler_attr(name)
+        || name == "v-bind"
+        || name == "ref"
+        || name.starts_with(':')
+        || name.starts_with('@')
+        || name.starts_with("v-bind:")
+        || name.starts_with("v-on:")
 }
 
 /// Validate where `#c-*` framework-metadata attributes may sit.
@@ -3036,8 +3004,7 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
         .map(|attr| attr.key.content.as_str())
         .filter(|&name| {
             name != C_BIND_ATTR
-                && !is_client_props_attr(name)
-                && !(is_component_boundary && is_component_boundary_handler_attr(name))
+                && !(is_component_boundary && is_component_tag_client_binding_attr(name))
         })
         .collect();
     let has_c_bind = attrs.iter().any(|attr| attr.key.content == C_BIND_ATTR);

@@ -27,7 +27,7 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CMenuSize]}, default: {kind: literal, value: md}, effect: Sets item geometry for the whole tree.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds surface classes and merges with `attrs`.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds surface styles; private anchor ownership merges last.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, ARIA, Alpine, and data attributes to the Menu surface.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, ARIA, Vue, and data attributes to the Menu surface.'}
 
   - id: cmenu-client-inputs
     component: CMenu

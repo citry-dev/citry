@@ -31,7 +31,6 @@ class BasicTagsInput(Component):
     template = """
       <section
         class="tags-input-basic"
-        x-data="{submitted:'Nothing submitted yet'}"
       >
         <form
           @submit.prevent="
@@ -60,8 +59,17 @@ class BasicTagsInput(Component):
           {{ python_tags }}
         </article>
 
-        <output x-text="submitted">Nothing submitted yet</output>
+        <output v-text="submitted">Nothing submitted yet</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            submitted:'Nothing submitted yet'
+          };
+        },
+      });
     """
 
     css = """

@@ -38,7 +38,9 @@ class TestFlaskMount:
 
         status, body = _wsgi_get(host.wsgi_app, "/citry/citry.js")
         assert status == "200 OK"
-        assert b"client-side dependency manager" in body
+        from citry.ext.dependencies.emission import _runtime_js
+
+        assert body.decode("utf-8") == _runtime_js()
 
     def test_other_paths_still_reach_the_host(self):
         from citry.contrib.flask import mount

@@ -43,7 +43,7 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "language": "python",
         "provenance": "Python type",
         "description": "This JSON-safe shape follows members from Python into the browser.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "member-name-definition",
@@ -53,8 +53,8 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "signature": "(property) Member.name: str",
         "language": "python",
         "provenance": "Declared by Member",
-        "description": "The field remains typed after Python data reaches Alpine.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "description": "The field remains typed after Python data reaches Vue.",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "member-online-definition",
@@ -65,7 +65,7 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "language": "python",
         "provenance": "Declared by Member",
         "description": "Citry translates this bool to a JavaScript boolean.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "invite-type-definition",
@@ -119,7 +119,7 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "signature": "(property) online: boolean",
         "language": "typescript",
         "provenance": "Declared by MemberChip.$component",
-        "description": "The child exposes this client-side prop to its Alpine scope.",
+        "description": "The child exposes this client-side prop to its Vue scope.",
         "docs": "/getting-started/client-props-and-handlers/",
     },
     {
@@ -208,7 +208,7 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "language": "python",
         "provenance": "Inferred from js_data()",
         "description": "Citry serializes this inferred value into component JavaScript.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "kwargs-members-use",
@@ -229,8 +229,8 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "signature": "(variable) inviting: bool",
         "language": "python",
         "provenance": "Inferred from js_data()",
-        "description": "The literal False becomes a typed Alpine boolean.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "description": "The literal False becomes a typed Vue boolean.",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "title-use",
@@ -246,24 +246,24 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "member-binding",
-        "needle": 'x-for="member in visibleMembers"',
+        "needle": 'v-for="member in visibleMembers"',
         "symbol": "member",
         "signature": "(variable) member: Member",
         "language": "typescript",
-        "provenance": "Introduced by x-for",
+        "provenance": "Introduced by v-for",
         "description": "This name exists only inside the repeated template subtree.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "visible-members-use",
-        "needle": 'x-for="member in visibleMembers"',
+        "needle": 'v-for="member in visibleMembers"',
         "symbol": "visibleMembers",
         "target": "visible-members",
         "signature": "(variable) visibleMembers: Member[]",
         "language": "typescript",
-        "provenance": "Assigned by InvitePanel.$component",
+        "provenance": "Computed by InvitePanel.$component",
         "description": "Go to Definition follows this name into component JavaScript.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "member-chip-use",
@@ -294,9 +294,9 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "target": "member-name",
         "signature": "(property) Member.name: string",
         "language": "typescript",
-        "provenance": "Inferred from the x-for item",
+        "provenance": "Inferred from the v-for item",
         "description": "Go to Definition opens the TypedDict field.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "member-chip-status-use",
@@ -332,35 +332,28 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "client-props",
-        "needle": '$c-props="{',
-        "symbol": "$c-props",
-        "signature": "(attribute) $c-props: MemberChipProps",
-        "language": "typescript",
-        "provenance": "Checked against MemberChip",
-        "description": "Unknown, missing, and mistyped child props are reported here.",
-        "docs": "/getting-started/client-props-and-handlers/",
-    },
-    {
-        "id": "member-chip-online-use",
-        "needle": '$c-props="{ online:',
-        "symbol": "online",
+        "needle": ':online="member',
+        "symbol": ":online",
         "target": "member-chip-online",
-        "signature": "(property) online: boolean",
+        "signature": "(attribute) online: boolean",
         "language": "typescript",
         "provenance": "Client prop declared by MemberChip",
-        "description": "Go to Definition opens the child's $component prop declaration.",
+        "description": (
+            "Unknown, missing, and mistyped child props are reported here, and "
+            "Go to Definition opens the child's $component prop declaration."
+        ),
         "docs": "/getting-started/client-props-and-handlers/",
     },
     {
         "id": "member-online-use",
-        "needle": "member.online }",
+        "needle": 'member.online"',
         "symbol": "online",
         "target": "member-online",
         "signature": "(property) Member.online: boolean",
         "language": "typescript",
-        "provenance": "Inferred from the x-for item",
+        "provenance": "Inferred from the v-for item",
         "description": "Go to Definition opens the Python Member field.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "unknown-template-variable",
@@ -381,7 +374,7 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "signature": 'function $sendEvent(name: "invite", data: InviteIn): Promise<void>',
         "language": "typescript",
         "provenance": "Citry browser API",
-        "description": "Calls a typed Python handler without leaving Alpine.",
+        "description": "Calls a typed Python handler without leaving Vue.",
         "docs": "/events/bindings/",
     },
     {
@@ -403,18 +396,18 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "language": "typescript",
         "provenance": "Citry browser API",
         "description": "Tracks the named Python event for this component instance.",
-        "docs": "/events/bindings/#read-call-state-from-alpine",
+        "docs": "/events/bindings/#read-call-state-from-vue",
     },
     {
         "id": "email-use",
-        "needle": 'x-model="email"',
+        "needle": 'v-model="email"',
         "symbol": "email",
-        "target": "scope-email",
+        "target": "email-state",
         "signature": "(variable) email: string",
         "language": "typescript",
-        "provenance": "Assigned by InvitePanel.$component",
-        "description": "Go to Definition opens the direct scope assignment.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "provenance": "Provided by InvitePanel.$component data()",
+        "description": "Go to Definition opens the local Vue data declaration.",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "inviting-use",
@@ -425,19 +418,19 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
         "language": "typescript",
         "provenance": "Inferred from js_data()",
         "description": "Go to Definition opens the exact returned dictionary key.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
-        "id": "unknown-alpine-variable",
+        "id": "unknown-vue-variable",
         "needle": "inviting || queuedInvite",
         "symbol": "queuedInvite",
         "severity": "error",
-        "code": "citry.alpine.unknown-variable",
+        "code": "citry.vue.unknown-variable",
         "signature": '"queuedInvite" is not defined',
         "language": "typescript",
-        "provenance": "Error · citry.alpine.unknown-variable",
-        "description": "Alpine variable 'queuedInvite' is not available in this component.",
-        "docs": "/ide/diagnostics/#citry.alpine.unknown-variable",
+        "provenance": "Error · citry.vue.unknown-variable",
+        "description": "Vue variable 'queuedInvite' is not available in this component.",
+        "docs": "/ide/diagnostics/#citry.vue.unknown-variable",
     },
     {
         "id": "unknown-event",
@@ -463,87 +456,77 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "data-parameter",
-        "needle": "init: ({ data, scope, props, effect }) => {",
+        "needle": "data() {",
         "symbol": "data",
-        "signature": "(parameter) data: Readonly<InvitePanelData>",
+        "signature": "data(): { email: string }",
         "language": "typescript",
-        "provenance": "Inferred from js_data()",
-        "description": "The callback sees the JSON-safe shape produced by Python.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "provenance": "Native Vue Options API",
+        "description": "Local browser state is returned from Vue's data option.",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "scope-parameter",
-        "needle": "init: ({ data, scope, props, effect }) => {",
-        "symbol": "scope",
-        "signature": "(parameter) scope: AlpineScope",
+        "needle": "computed: {",
+        "symbol": "computed",
+        "signature": "computed: { visibleMembers(): Member[] }",
         "language": "typescript",
-        "provenance": "Citry $component context",
-        "description": "Direct assignments become typed Alpine variables.",
-        "docs": "/concepts/client-interactivity/",
+        "provenance": "Native Vue Options API",
+        "description": "Derived browser values use Vue's computed option.",
+        "docs": "/getting-started/client-props-and-handlers/",
     },
     {
         "id": "props-parameter",
-        "needle": "init: ({ data, scope, props, effect }) => {",
+        "needle": "props: { compact:",
         "symbol": "props",
         "signature": "(parameter) props: Readonly<{ compact?: boolean }>",
         "language": "typescript",
         "provenance": "Declared by InvitePanel.$component",
-        "description": "The callback receives the component's validated client props.",
-        "docs": "/getting-started/client-props-and-handlers/",
-    },
-    {
-        "id": "effect-parameter",
-        "needle": "init: ({ data, scope, props, effect }) => {",
-        "symbol": "effect",
-        "signature": "function effect(callback: () => void): CitryCleanup",
-        "language": "typescript",
-        "provenance": "Citry $component context",
-        "description": "Runs a reactive effect and disposes it with the component.",
+        "description": "The component declares its validated client prop with Vue Options.",
         "docs": "/getting-started/client-props-and-handlers/",
     },
     {
         "id": "email-definition",
-        "needle": 'scope.email = "";',
+        "needle": 'return { email: "" };',
         "symbol": "email",
-        "definition": "scope-email",
-        "signature": "(property) AlpineScope.email: string",
+        "definition": "email-state",
+        "signature": "(property) InvitePanelData.email: string",
         "language": "typescript",
-        "provenance": "Assigned during $component initialization",
-        "description": "The direct scope write creates a typed Alpine variable.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "provenance": "Returned by InvitePanel.$component data()",
+        "description": "The local email value is declared in Vue's data option.",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "visible-members-definition",
-        "needle": "scope.visibleMembers = props.compact",
+        "needle": "visibleMembers() {",
         "symbol": "visibleMembers",
         "definition": "visible-members",
-        "signature": "(property) AlpineScope.visibleMembers: Member[]",
+        "signature": "(property) InvitePanelComputed.visibleMembers: Member[]",
         "language": "typescript",
-        "provenance": "Assigned during $component initialization",
-        "description": "The scope write is visible and typed in the template above.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "provenance": "Returned by InvitePanel.$component computed()",
+        "description": "The computed value is visible and typed in the template above.",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "data-members-slice-use",
-        "needle": "data.members.slice",
+        "needle": "this.members.slice",
         "symbol": "members",
         "target": "js-members",
         "signature": "(property) InvitePanelData.members: Member[]",
         "language": "typescript",
-        "provenance": "Inferred from js_data()",
+        "provenance": "Read from the Vue instance seeded by js_data()",
         "description": "Go to Definition opens the exact returned dictionary key.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
     {
         "id": "data-members-fallback-use",
-        "needle": ": data.members;",
+        "needle": ": this.members;",
         "symbol": "members",
         "target": "js-members",
         "signature": "(property) InvitePanelData.members: Member[]",
         "language": "typescript",
-        "provenance": "Inferred from js_data()",
+        "provenance": "Read from the Vue instance seeded by js_data()",
         "description": "Every use shares the Python key's inferred Member[] type.",
-        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+        "docs": "/ide/vscode/#complete-vue-expressions-and-component-javascript",
     },
 )
 
@@ -562,13 +545,13 @@ _EDITOR_NOTES: tuple[dict[str, str], ...] = (
     },
     {
         "id": "event-navigation",
-        "title": "Alpine expressions respect Python declarations.",
+        "title": "Vue expressions respect Python declarations.",
         "text": "`$sendEvent`'s input is typed from the Python event handler.",
         "mark": "event-name",
     },
     {
         "id": "scope-seeding",
-        "title": "Alpine variables defined in $component are recognized.",
+        "title": "Vue state defined in $component is recognized.",
         "text": "`email` and `visibleMembers` were defined in `$component`. The linter knows these are not unknown variables.",
         "mark": "email-use",
     },
@@ -576,7 +559,7 @@ _EDITOR_NOTES: tuple[dict[str, str], ...] = (
         "id": "diagnostics",
         "title": "Unknown names and event typos are reported as errors.",
         "text": "Focus or select an error to see its exact message.",
-        "mark": "unknown-alpine-variable",
+        "mark": "unknown-vue-variable",
     },
 )
 
@@ -664,20 +647,21 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         "title": "Use Python variables in templates, browser behavior, and CSS",
         "text": (
             "<code>template_data</code> prepares template variables, "
-            "<code>js_data</code> seeds Alpine variables from JSON, and "
+            "<code>js_data</code> seeds Vue variables from JSON, and "
             "<code>css_data</code> creates CSS variables scoped to this "
             "one instance."
         ),
     },
     {
-        "id": "alpine",
+        "id": "browser-state",
         "label": "Browser state",
         "lines": (36, 39),
-        "anchor": "x-data",
+        "anchor": ":class",
         "title": "State that never leaves the page",
         "text": (
-            "<code>x-data</code> holds what only the browser cares about. Opening "
-            "and closing the card needs no server, so it never asks one."
+            "<code>open</code> holds what only the browser cares about. It is "
+            "declared in <code>$component</code> below, so opening and closing the "
+            "card needs no server and never asks one."
         ),
     },
     {
@@ -702,8 +686,8 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
             "while <code>&lt;c-empty&gt;</code> runs when there are no tags at all. "
             "The child component <code>&lt;c-Tag&gt;</code> receives "
             "<code>label</code> as Python value, and <code>highlight</code> "
-            "as Alpine (browser) value through <code>$c-props</code>. "
-            "You can listen to children's Alpine events with regular <code>@click</code>."
+            "as a Vue (browser) value through the native <code>:highlight</code> binding. "
+            "You can listen to children's Vue events with regular <code>@click</code>."
         ),
     },
     {
@@ -722,7 +706,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         "label": "Bindings",
         "lines": (53, 55),
         "anchor": "@c-click",
-        "title": "Alpine and Python, side by side",
+        "title": "Vue and Python, side by side",
         "text": (
             "<code>@click</code> stays in the browser for instant feedback, while "
             "<code>@c-click</code> calls the Python handler set in the value, <code>like</code>."
@@ -742,7 +726,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "js",
         "label": "Script",
-        "lines": (63, 68),
+        "lines": (63, 70),
         "anchor": "$component",
         "title": "Advanced setup scoped to this component",
         "text": (
@@ -754,7 +738,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "css",
         "label": "Style",
-        "lines": (70, 78),
+        "lines": (72, 80),
         "anchor": "var(--accent)",
         "title": "Styles reading Python values",
         "text": (
@@ -766,7 +750,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "messages",
         "label": "Messages",
-        "lines": (80, 82),
+        "lines": (82, 84),
         "anchor": "messages =",
         "title": "Write translation keys as Fluent syntax",
         "text": (
@@ -777,7 +761,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "deps",
         "label": "Assets",
-        "lines": (84, 86),
+        "lines": (86, 88),
         "anchor": "class Dependencies",
         "title": "Third-party scripts and styles",
         "text": (
@@ -788,7 +772,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "render",
         "label": "Render",
-        "lines": (89, 92),
+        "lines": (91, 94),
         "anchor": "str(ProductCard",
         "title": "Rendering is a function call",
         "text": (
@@ -1029,8 +1013,8 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
             "<p>Citry can automatically pass the CSP nonce to all scripts and styles.</p>"
             "<p>Citry has 2 CSP modes:</p>"
             "<ul>"
-            "<li>Strict - Uses Alpine CSP build, raises error on incompatible syntax. Use for production.</li>"
-            "<li>Warning - Uses regular Alpine, prints all incompatibilities, but doesn't block you. Use for development.</li>"
+            "<li>Strict - Uses Vue CSP build, raises error on incompatible syntax. Use for production.</li>"
+            "<li>Warning - Uses regular Vue, prints all incompatibilities, but doesn't block you. Use for development.</li>"
             "</ul>"
             "<br/>"
             "<p>Optionally add verified SHA-384 integrity to the scripts.</p>"
@@ -4172,16 +4156,48 @@ class LandingPage(Component):
     """
 
     js = """
-      $component(({ els }) => {
-        const root = els[0];
+      $component(({ component }) => {
+        const controller = new AbortController();
+        const { signal } = controller;
+        const timeouts = new Set();
+        const frames = new Set();
+
+        function listen(target, type, handler, options) {
+          if (!target) return;
+          const listenerOptions = typeof options === 'boolean' ? { capture: options } : options || {};
+          target.addEventListener(type, handler, { ...listenerOptions, signal });
+        }
+
+        function later(handler, delay) {
+          let timeout;
+          timeout = window.setTimeout(() => {
+            timeouts.delete(timeout);
+            if (!signal.aborted) handler();
+          }, delay);
+          timeouts.add(timeout);
+          return timeout;
+        }
+
+        function frame(handler) {
+          let request;
+          request = window.requestAnimationFrame(() => {
+            frames.delete(request);
+            if (!signal.aborted) handler();
+          });
+          frames.add(request);
+          return request;
+        }
+
+        const root = component.$el;
         root.querySelectorAll('[data-copy-install]').forEach((button) => {
-          button.addEventListener('click', async () => {
+          listen(button, 'click', async () => {
             try {
               await navigator.clipboard.writeText('pip install citry');
+              if (signal.aborted) return;
               button.textContent = 'Copied';
-              window.setTimeout(() => { button.textContent = 'Copy'; }, 1400);
+              later(() => { button.textContent = 'Copy'; }, 1400);
             } catch (_error) {
-              button.textContent = 'Select command';
+              if (!signal.aborted) button.textContent = 'Select command';
             }
           });
         });
@@ -4218,19 +4234,19 @@ class LandingPage(Component):
           show(openCase);
           rows.forEach((row) => {
             const id = row.dataset.pickerCase;
-            row.addEventListener('click', () => {
+            listen(row, 'click', () => {
               // Closing is only useful where the panel covers the next row.
               if (stacked.matches && openCase === id) show(null);
               else show(id);
             });
-            row.addEventListener('mouseenter', () => {
+            listen(row, 'mouseenter', () => {
               if (!stacked.matches) show(id);
             });
-            row.addEventListener('focus', () => {
+            listen(row, 'focus', () => {
               if (!stacked.matches) show(id);
             });
           });
-          stacked.addEventListener('change', () => {
+          listen(stacked, 'change', () => {
             if (!stacked.matches && !openCase) show(rows[0].dataset.pickerCase);
             else show(openCase);
           });
@@ -4242,7 +4258,7 @@ class LandingPage(Component):
         if (tourRoot) {
           // The shared copy button reads textContent, and the walkthrough has no
           // newlines left in its markup, so it answers with the real source.
-          tourRoot.addEventListener('click', (event) => {
+          listen(tourRoot, 'click', (event) => {
             const button = event.target.closest && event.target.closest('.djc-code-copy');
             if (!button) return;
             event.stopPropagation();
@@ -4308,19 +4324,19 @@ class LandingPage(Component):
             showStop(lines[0].dataset.tour);
             lines.forEach((line) => {
               line.setAttribute('tabindex', '0');
-              line.addEventListener('mouseenter', () => activate(line, false));
-              line.addEventListener('focus', () => activate(line, false));
+              listen(line, 'mouseenter', () => activate(line, false));
+              listen(line, 'focus', () => activate(line, false));
               // Touch has no hover, so a tap has to do the same thing.
-              line.addEventListener('click', () => activate(line, true));
+              listen(line, 'click', () => activate(line, true));
             });
-            narrow.addEventListener('change', () => {
+            listen(narrow, 'change', () => {
               if (!narrow.matches && notesBox) {
                 notesBox.classList.remove('is-floating');
                 notesBox.style.removeProperty('top');
               }
             });
             // Tapping away from the code puts the notes back out of the way.
-            document.addEventListener('click', (event) => {
+            listen(document, 'click', (event) => {
               if (!narrow.matches || !notesBox) return;
               if (!tour.contains(event.target)) notesBox.classList.remove('is-floating');
             });
@@ -4404,7 +4420,7 @@ class LandingPage(Component):
             notes.forEach((note) => {
               note.classList.toggle('is-active', note.dataset.editorNote === id);
             });
-            requestAnimationFrame(() => placeHover(symbol, card));
+            frame(() => placeHover(symbol, card));
           }
 
           function hideEditorHover() {
@@ -4427,14 +4443,14 @@ class LandingPage(Component):
             definition.scrollIntoView({ block: 'center', inline: 'nearest' });
             definition.focus({ preventScroll: true });
             definition.classList.remove('is-definition-flash');
-            requestAnimationFrame(() => definition.classList.add('is-definition-flash'));
+            frame(() => definition.classList.add('is-definition-flash'));
             if (status) status.textContent = `Opened definition for ${definition.textContent}`;
           }
 
           symbols.forEach((symbol) => {
-            symbol.addEventListener('mouseenter', () => showEditorHover(symbol));
-            symbol.addEventListener('focus', () => showEditorHover(symbol));
-            symbol.addEventListener('click', (event) => {
+            listen(symbol, 'mouseenter', () => showEditorHover(symbol));
+            listen(symbol, 'focus', () => showEditorHover(symbol));
+            listen(symbol, 'click', (event) => {
               const target = symbol.dataset.editorTarget;
               // A keyboard-generated button click has detail 0. It follows the
               // target directly, while an ordinary pointer click opens hover.
@@ -4453,41 +4469,41 @@ class LandingPage(Component):
           });
 
           notes.forEach((note) => {
-            note.addEventListener('click', () => {
+            listen(note, 'click', () => {
               const symbol = symbols.find(
                 (item) => item.dataset.editorSymbol === note.dataset.editorNote,
               );
               if (!symbol) return;
               symbol.scrollIntoView({ block: 'center', inline: 'nearest' });
-              requestAnimationFrame(() => showEditorHover(symbol));
+              frame(() => showEditorHover(symbol));
             });
           });
 
           if (jump) {
-            jump.addEventListener('click', (event) => {
+            listen(jump, 'click', (event) => {
               event.preventDefault();
               jumpToDefinition(jump.dataset.editorJump);
             });
           }
 
-          document.addEventListener('click', (event) => {
+          listen(document, 'click', (event) => {
             const target = event.target;
             const staysOpen = target && typeof target.closest === 'function'
               ? target.closest('[data-editor-symbol], [data-editor-note], [data-editor-hover]')
               : null;
             if (!staysOpen) hideEditorHover();
           });
-          document.addEventListener('keydown', (event) => {
+          listen(document, 'keydown', (event) => {
             if (event.key === 'Escape' && activeSymbol) hideEditorHover();
           });
 
           if (scroller) {
-            scroller.addEventListener('scroll', () => {
+            listen(scroller, 'scroll', () => {
               if (!activeSymbol) return;
               placeHover(activeSymbol, card);
             }, { passive: true });
           }
-          window.addEventListener('resize', () => {
+          listen(window, 'resize', () => {
             if (!activeSymbol) return;
             placeHover(activeSymbol, card);
           });
@@ -4500,5 +4516,12 @@ class LandingPage(Component):
           if (first) showEditorHover(first);
         }
 
+        return () => {
+          controller.abort();
+          for (const timeout of timeouts) window.clearTimeout(timeout);
+          timeouts.clear();
+          for (const request of frames) window.cancelAnimationFrame(request);
+          frames.clear();
+        };
       });
     """

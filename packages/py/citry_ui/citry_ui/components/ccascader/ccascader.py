@@ -115,6 +115,10 @@ class _Option:
             current = current.parent
         return tuple(reversed(values))
 
+    @property
+    def key(self) -> str:
+        return _token(self.path)
+
 
 @dataclass(slots=True)
 class _Registry:
@@ -307,16 +311,27 @@ class CCascader(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "value": list(cast("tuple[str, ...]", snapshot["value"])),
-            **{
-                key: snapshot[key]
-                for key in ("open", "disabled", "change_on_select", "separator", "name", "form", "catalog", "labels")
-            },
+            "serverDefaults": {
+                "value": list(cast("tuple[str, ...]", snapshot["value"])),
+                **{
+                    key: snapshot[key]
+                    for key in (
+                        "open",
+                        "disabled",
+                        "change_on_select",
+                        "separator",
+                        "name",
+                        "form",
+                        "catalog",
+                        "labels",
+                    )
+                },
+            }
         }
 
     template = """
       <c-CInternalCascaderDeclarations><c-slot /></c-CInternalCascaderDeclarations>
-      <c-CInternalCascader c-snapshot="snapshot" />
+      <c-CInternalCascader ref="root" c-snapshot="snapshot" />
     """
 
     js_file = "runtime.min.js"
@@ -400,7 +415,8 @@ class CInternalCascaderDeclarations(LibraryComponent):
 
 
 class CInternalCascader(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -460,14 +476,16 @@ class CInternalCascader(LibraryComponent):
         </button>
         <div c-id="popup_id" c-hidden="not open" data-citry-ui-part="popup">
           <ul role="tree" c-aria-labelledby="trigger_id" c-hidden="not roots" data-citry-cascader-column data-level="1" data-citry-ui-part="tree">
-            <c-for each="entry in root_entries"><c-CInternalCascaderOption c-bind="entry" c-root_id="root_id" c-selected="value" c-level="1" /></c-for>
+            <c-for each="entry in root_entries"><c-CInternalCascaderOption #c-key="entry['option'].key" c-bind="entry" c-root_id="root_id" c-selected="value" c-level="1" /></c-for>
           </ul>
-          <c-for each="parent in groups"><c-CInternalCascaderGroup c-parent="parent" c-root_id="root_id" c-selected="value" /></c-for>
+          <c-for each="parent in groups"><c-CInternalCascaderGroup #c-key="parent.key" c-parent="parent" c-root_id="root_id" c-selected="value" /></c-for>
           <p c-if="not roots" data-citry-ui-part="empty" c-$c-tr:citry-ui-cascader-empty="True if catalog_empty else None">{{ tr('citry-ui-cascader-empty') if catalog_empty else labels['empty'] }}</p>
         </div>
         <span data-citry-ui-part="inputs" hidden>
           <c-for each="segment in value"><input type="hidden" c-name="name" c-value="segment" c-form="form" c-disabled="disabled or name is None" /></c-for>
         </span>
+        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-placeholder="True">{{ tr('citry-ui-cascader-placeholder') }}</span>
+        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-selected="True">{{ tr('citry-ui-cascader-selected', path=joined) }}</span>
         <span data-citry-ui-part="status" role="status" aria-live="polite" aria-atomic="true">{{ status }}</span>
       </div>
     """
@@ -556,7 +574,7 @@ class CInternalCascaderGroup(LibraryComponent):
 
     template = """
       <ul c-id="group_id" role="group" c-hidden="not active" data-citry-cascader-column c-data-level="level" data-citry-ui-part="group">
-        <c-for each="entry in entries"><c-CInternalCascaderOption c-bind="entry" c-root_id="root_id" c-selected="selected" c-level="level" /></c-for>
+        <c-for each="entry in entries"><c-CInternalCascaderOption #c-key="entry['option'].key" c-bind="entry" c-root_id="root_id" c-selected="selected" c-level="level" /></c-for>
       </ul>
     """
 

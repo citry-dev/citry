@@ -25,7 +25,7 @@ Row keys in preorder. Shift+Space toggles the focused Row, including unselect.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctree_grid/snippets/selection.py" title="Select organization units" />
 
-## Own state in Alpine
+## Own state in Vue
 
 Client `expanded` and `selected` props are controlled. Their callbacks report
 the requested vector, previous vector, Row key, requested boolean state,

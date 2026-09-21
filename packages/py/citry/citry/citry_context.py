@@ -25,10 +25,6 @@ flow through a render, kept separate on purpose (see docs/design/component_rende
    treated as read-only: a component that provides or blocks a key builds a
    new mapping with its changes instead of changing this one, so contexts can
    share it freely.
-4. ``ownership`` - the core per-root `OwnershipGraph` active while this
-   context rendered. Unlike extension scratch data, it is one explicitly
-   shared collector across deferred components and slot ownership transitions.
-
 ``ComponentNode`` is the boundary: each component render gets its own
 CitryContext.
 
@@ -47,7 +43,6 @@ if TYPE_CHECKING:
     from citry._simple_runtime import SimpleScope
     from citry.citry_template import CitryTemplate
     from citry.component import Component
-    from citry.ownership import OwnershipGraph
 
 # Namespace for citry-core data inside ``extra``. The ``extra`` bag is shared
 # across the whole render tree, so top-level keys are namespaced by owner to
@@ -92,7 +87,7 @@ class CitryContext:
         "_simple_scope",
         "component",
         "extra",
-        "ownership",
+        "js_data",
         "provides",
         "sandboxed",
         "template_record",
@@ -106,7 +101,6 @@ class CitryContext:
         component: Component | None = None,
         provides: dict[str, Any] | None = None,
         sandboxed: bool = True,
-        ownership: OwnershipGraph | None = None,
         template_record: CitryTemplate | None = None,
         _simple_scope: SimpleScope | None = None,
     ) -> None:
@@ -118,8 +112,8 @@ class CitryContext:
             else _ConstMapping()
         )
         self.extra = extra if extra is not None else {}
+        self.js_data: dict[str, Any] = {}
         self.component = component
-        self.ownership = ownership
         self.template_record = template_record
         self._simple_scope = _simple_scope
         self.provides = provides if provides is not None else {}
@@ -139,11 +133,11 @@ class CitryContext:
             component=self.component,
             provides=provides,
             sandboxed=self.sandboxed,
-            ownership=self.ownership,
             template_record=self.template_record,
             _simple_scope=self._simple_scope,
         )
         context._error_tainted = self._error_tainted
+        context.js_data = self.js_data
         return context
 
     def _add_root_markers(self, markers: Iterable[str]) -> None:

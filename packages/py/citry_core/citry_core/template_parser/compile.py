@@ -68,3 +68,11 @@ def compile_template(
 
     """
     return _rust.template_parser.compile_template(template, lang)
+
+
+def _compile_prepared_template(
+    template: _rust.template_parser.Template,
+    lang: str | None = None,
+) -> str:
+    """Compile a parsed template into Citry's private prepared-render nodes."""
+    return _rust.template_parser._compile_prepared_template(template, lang)

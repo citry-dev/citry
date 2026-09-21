@@ -12,7 +12,7 @@ class DividerInsets(Component):
         <c-for each="inset in insets">
           <div>
             <span>{{ inset }}</span>
-            <c-CDivider c-inset="inset" c-decorative="True" />
+            <c-CDivider #c-key="inset" c-inset="inset" c-decorative="True" />
           </div>
         </c-for>
         <div dir="rtl">

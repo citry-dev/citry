@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -13,7 +14,7 @@ from citry import Citry, Component
 from citry_ui import CSortable, CSortableItem
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -21,7 +22,14 @@ def _render(source: str) -> str:
         citry = app
         template = f"<main>{source}</main>"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
+
+
+def _manifest(html: str) -> dict[str, object]:
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["manifest"]
 
 
 def test_public_schema_and_registration_are_explicit() -> None:
@@ -63,7 +71,8 @@ def test_server_order_semantics_and_native_form_entries() -> None:
         '<c-CSortableItem value="a" label="Alpha" />'
         '<c-CSortableItem value="b" label="Beta" c-disabled="True" />'
         '<c-CSortableItem value="c" label="Gamma" />'
-        "</c-CSortable>"
+        "</c-CSortable>",
+        static_fallback=True,
     )
     root = re.search(r'<div[^>]+id="tasks"[^>]*>', html)
     assert root is not None
@@ -78,12 +87,23 @@ def test_server_order_semantics_and_native_form_entries() -> None:
     assert 'aria-live="polite"' in html
 
 
+def test_server_defaults_are_namespaced_away_from_vue_props() -> None:
+    html = _render(
+        '<c-CSortable id="tasks" name="priority" disabled><c-CSortableItem value="a" label="Alpha" /></c-CSortable>'
+    )
+    occurrence = next(item for item in _manifest(html)["occurrences"] if item["typeKey"].startswith("CSortable_"))
+    server_data = occurrence["serverData"]
+    assert set(server_data) == {"serverDefaults"}
+    assert set(server_data["serverDefaults"]) == {"order", "name", "form", "layout", "disabled", "catalog", "labels"}
+
+
 def test_default_and_handle_slots_render_without_replacing_owned_button() -> None:
     html = _render(
         '<c-CSortable><c-CSortableItem value="a" label="Alpha">'
         '<c-fill name="handle"><span>Move icon</span></c-fill>'
         '<c-fill name="default"><strong>Rich Alpha</strong></c-fill>'
-        "</c-CSortableItem></c-CSortable>"
+        "</c-CSortableItem></c-CSortable>",
+        static_fallback=True,
     )
     assert "<strong>Rich Alpha</strong>" in html
     assert "<span>Move icon</span>" in html
@@ -114,7 +134,8 @@ def test_invalid_composition_fails(source: str, match: str) -> None:
 def test_explicit_labels_do_not_register_catalog_bindings() -> None:
     html = _render(
         '<c-CSortable label="Custom order" handle_label="Reorder {item}">'
-        '<c-CSortableItem value="a" label="Alpha" /></c-CSortable>'
+        '<c-CSortableItem value="a" label="Alpha" /></c-CSortable>',
+        static_fallback=True,
     )
     assert re.search(r'<ol[^>]+aria-label="Custom order"', html)
     assert 'aria-label="Reorder Alpha"' in html
@@ -126,6 +147,9 @@ def test_assets_cover_keyboard_pointer_controlled_cleanup_and_environment() -> N
     css = (root / "runtime.source.css").read_text(encoding="utf8")
     for fragment in (
         "onOrderChange",
+        "onServerRender",
+        "component.$refs.root.$el",
+        "Citry.vue.watchEffect",
         "pointerdown",
         "pointercancel",
         "setPointerCapture",
@@ -137,6 +161,7 @@ def test_assets_cover_keyboard_pointer_controlled_cleanup_and_environment() -> N
         "i18n.tr",
     ):
         assert fragment in js
+    assert "init:" not in js
     for fragment in (
         'data-layout="grid"',
         "prefers-reduced-motion",

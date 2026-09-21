@@ -1,7 +1,11 @@
 $component({
   props: {order: {}, layout: {}, disabled: {}, onOrderChange: {}},
-  init: ({els, data, props, effect, i18n}) => {
-    const root = els[0];
+  onServerRender: ({component}) => {
+    const root = component.$refs.root.$el;
+    const data = component.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
+    const i18n = component.$i18n;
     const list = root?.querySelector(':scope > [data-citry-sortable-items]');
     const status = root?.querySelector(':scope > [data-citry-ui-part="status"]');
     const instructions = root?.querySelector(':scope > [data-citry-sortable-instructions]');

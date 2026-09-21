@@ -36,7 +36,9 @@ if TYPE_CHECKING:
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
-MAX_WHEEL_BYTES: Final = 1_100 * 1024
+# The package carries readable and generated client runtimes. The budget includes
+# the accepted post-start lifecycle and pending Events discovery improvements.
+MAX_WHEEL_BYTES: Final = 1_124 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
     'playwright>=1.62.0; extra == "ext-preview"',
@@ -562,41 +564,23 @@ assert importlib.util.find_spec("jsonschema") is None
 
 import citry
 from citry import Citry, Component
-from citry._protocol import client_graph, events
+from citry._protocol import events
+from citry.ext.dependencies.emission import _runtime_js
 from citry.ext.i18n import make_context
 
 descriptor = events.build_descriptor("Page_1", {})
 instance = events.build_component_instance("page_1", "Page_1", None, {})
-events_manifest = events.build_manifest(None, [descriptor], [instance])
+events_manifest = events.build_manifest([descriptor], [instance])
 assert events.validate_manifest(events_manifest) is None
 
-component_class = client_graph.build_component_class("Page_1", "Page")
-component_instance = client_graph.build_component_instance(
-    instance_id=1,
-    render_id="page_1",
-    class_id="Page_1",
-    invocation_id=None,
-    parent_render_id=None,
-    transparent=False,
-)
-graph = client_graph.build_graph(
-    graph_id=0,
-    component_classes=[component_class],
-    component_instances=[component_instance],
-    source_locations=[],
-    nested_components=[],
-    component_execution_order_constraints=[],
-    fills=[],
-    slot_regions=[],
-)
-graph_manifest = client_graph.build_manifest("production", [graph])
-assert client_graph.validate_manifest(graph_manifest) is None
-
 root = importlib.resources.files("citry")
-assert root.joinpath("ext/dependencies/client/citry.js").is_file()
-assert root.joinpath("ext/events/client/citry-events.js").is_file()
-assert root.joinpath("ext/events/client/citry-events-csp.js").is_file()
-assert root.joinpath("ext/i18n/client/citry-i18n.js").is_file()
+delivered_runtime = root.joinpath("_vue/runtime.js")
+assert delivered_runtime.is_file()
+assert _runtime_js() == delivered_runtime.read_text(encoding="utf-8")
+assert root.joinpath("_vue/vue.js").is_file()
+assert root.joinpath("_vue/client.js").is_file()
+assert root.joinpath("_vue/events.js").is_file()
+assert root.joinpath("ext/i18n/client/vue-plugin.source.js").is_file()
 assert root.joinpath("py.typed").is_file()
 
 i18n_app = Citry(

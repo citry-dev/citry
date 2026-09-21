@@ -1,8 +1,14 @@
 """Tests for the routing surface, the mount contract, and the script-serving endpoint logic."""
 
+import json
+import re
+from pathlib import Path
+
 import pytest
 
 from citry import Citry, Component, Extension, InMemoryCache
+from citry.ext.dependencies import emission
+from citry.ext.dependencies.emission import _runtime_js
 from citry.ext.dependencies.routes import script_url
 from citry.util.routing import RouteResponse, URLRoute, match_route
 
@@ -187,22 +193,36 @@ class TestScriptEndpointLogic:
         cache.clear()
         assert self._serve(new_citry, new_url.removeprefix("/citry/")).content == new_widget.js
 
-    def test_vars_script_served_from_cache(self):
+    def test_native_js_data_and_css_vars_are_delivered(self):
         c = Citry()
 
         class Widget(Component):
             citry = c
             template = "<span>w</span>"
-            js = "$component(() => {});"
+            js = "$component({ onServerRender({ component }) { console.log(component.rows); } });"
+            css = ".w { color: var(--accent); }"
 
             def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
+            def css_data(self, kwargs, slots):
+                return {"accent": "red"}
+
         rendered = Widget().render()
         record = next(iter(rendered.context.extra["dependencies"]))
-        response = self._serve(c, f"cache/{Widget.class_id}.{record.js_vars_hash}.js")
+        html = rendered.serialize()
+        match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+        assert match is not None
+        manifest = json.loads(match.group(1))["manifest"]
+        occurrence = next(item for item in manifest["occurrences"] if item["typeKey"] == Widget.class_id)
+        assert occurrence["serverData"] == {"rows": 3}
+        assert record.js_vars_hash is None
+        assert record.css_vars_hash is not None
+
+        response = self._serve(c, f"cache/{Widget.class_id}.{record.css_vars_hash}.css")
         assert response.status == 200
-        assert "registerComponentData" in response.content
+        assert response.content_type == "text/css"
+        assert "--accent: red;" in response.content
 
     def test_unknown_class_or_missing_vars_give_404(self):
         c = Citry()
@@ -224,8 +244,14 @@ class TestScriptEndpointLogic:
         c = Citry()
         response = self._serve(c, "citry.js")
         assert response.status == 200
-        assert "client-side dependency manager" in response.content
+        assert "Citry interactive runtime." in response.content
         assert response.content_type == "text/javascript"
+
+    def test_runtime_reader_uses_the_generated_vue_delivery_file(self):
+        runtime = Path(emission.__file__).parents[2] / "_vue" / "runtime.js"
+
+        assert _runtime_js() == runtime.read_text(encoding="utf8")
+        assert "Citry interactive runtime." in _runtime_js()
 
 
 class TestWsgiApp:
@@ -246,7 +272,7 @@ class TestWsgiApp:
         status, headers, body = self._get(c, "/citry.js")
         assert status == "200 OK"
         assert headers["Content-Type"] == "text/javascript"
-        assert b"client-side dependency manager" in body
+        assert b"Citry interactive runtime." in body
 
     def test_unknown_404_and_wrong_method_405(self):
         c = Citry()

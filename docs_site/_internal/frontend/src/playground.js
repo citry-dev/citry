@@ -3,6 +3,8 @@ import { createCitryEditor } from "./citry_editor.js";
 import { PreviewBridge } from "./preview_bridge.js";
 import { CitryBrowserSession } from "./worker_session.js";
 
+await (globalThis.__citryDocsReady || Promise.resolve());
+
 // This module coordinates the full-page UI. Python execution and iframe
 // delivery stay in shared classes also used by inline live-code examples.
 const SETTINGS_KEY = "citry.playground.settings.v1";

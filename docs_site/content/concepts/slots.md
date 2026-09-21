@@ -182,7 +182,7 @@ component that defines the slot and uses that component's variables.
 </c-ProfileCard>
 ```
 
-The same ownership rule applies to Alpine expressions. See
+The same ownership rule applies to Vue expressions. See
 [Understand slot scope](/concepts/client-interactivity/#understand-slot-scope)
 for the browser side.
 
@@ -373,6 +373,6 @@ slot's fallback at that point.
 - [Provide and inject](/concepts/provide-and-inject/) passes data through a
   whole rendered subtree.
 - [Client interactivity](/concepts/client-interactivity/) explains ownership
-  when slots contain Alpine expressions.
+  when slots contain Vue expressions.
 - [Inputs and validation](/concepts/inputs-and-validation/) covers typed
   component inputs in more depth.

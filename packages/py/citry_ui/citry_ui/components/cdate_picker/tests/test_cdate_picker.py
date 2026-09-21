@@ -222,7 +222,10 @@ def test_field_and_form_have_one_control_while_calendar_is_context_isolated() ->
     assert "data-citry-field-control" in control
     assert html.count("data-citry-field-control") == 1
     assert 'id="arrival-calendar-calendar"' in html
-    assert 'id="arrival-calendar" type="date"' in html
+    assert re.search(
+        r'<input\b(?=[^>]*\btype="date")(?=[^>]*\bid="arrival-calendar")[^>]*>',
+        html,
+    )
     assert 'name="arrival"' not in html.split('id="arrival-calendar"', 1)[1].split("/>", 1)[0]
 
 

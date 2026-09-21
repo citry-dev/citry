@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class ComposeForm(Component):
     template = """
-      <section class="orbit-request" x-data="{ saved: '' }">
+      <section class="orbit-request" >
         <header>
           <p>Orbital survey</p>
           <h2>Queue a tracking request</h2>
@@ -35,10 +35,19 @@ class ComposeForm(Component):
           </c-CButton>
         </c-CForm>
 
-        <p aria-live="polite" x-show="saved">
-          Queued <strong x-text="saved"></strong>
+        <p aria-live="polite" v-show="saved">
+          Queued <strong v-text="saved"></strong>
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            saved: ''
+          };
+        },
+      });
     """
 
     css = """

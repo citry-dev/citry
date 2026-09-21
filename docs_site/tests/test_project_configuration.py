@@ -118,6 +118,7 @@ def test_default_project_loads_every_manifest() -> None:
         ("tour", "tour"),
     ]
     assert project.redirects.redirects == (
+        ("/advanced/alpine-runtime/", "/advanced/vue-runtime/"),
         ("/advanced/const-optimization/", "/advanced/performance/"),
         ("/ui-library/components/stack-group/", "/ui-library/components/col-row/"),
     )

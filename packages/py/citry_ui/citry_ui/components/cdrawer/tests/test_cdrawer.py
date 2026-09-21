@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import re
+
 import pytest
 
 import citry_ui
@@ -21,6 +24,17 @@ def _render(**kwargs) -> str:
     return citry_ui.CDrawer(**kwargs, slots=slots).render(citry=app).serialize(deps_strategy="fragment")
 
 
+def _prepared_occurrence(html: str) -> dict[str, object]:
+    script = re.search(
+        r'<script\b(?=[^>]*type="application/json")(?=[^>]*data-citry-vue-fragment)[^>]*>(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert script is not None
+    manifest = json.loads(script.group(1))["vue"]["prepared"]["manifest"]
+    return next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
+
+
 def test_drawer_renders_native_modal_anatomy_and_logical_configuration() -> None:
     html = _render(
         id="field-note",
@@ -36,14 +50,16 @@ def test_drawer_renders_native_modal_anatomy_and_logical_configuration() -> None
         },
     )
 
-    assert '<dialog class="cui-drawer" id="field-note" open' in html
-    assert 'aria-labelledby="field-note-title"' in html
-    assert 'aria-describedby="field-note-description"' in html
-    assert 'data-placement="block-end"' in html
-    assert 'data-size="lg"' in html
-    assert 'data-scroll="drawer"' in html
-    assert 'data-citry-ui-part="surface"' in html
-    assert 'data-citry-ui-part="actions"' in html
+    occurrence = _prepared_occurrence(html)
+    attrs = occurrence["preparedData"]["citryAttrs0"]
+    assert attrs["id"] == "field-note"
+    assert attrs["open"] == ""
+    assert attrs["aria-labelledby"] == "field-note-title"
+    assert attrs["aria-describedby"] == "field-note-description"
+    assert attrs["data-placement"] == "block-end"
+    assert attrs["data-size"] == "lg"
+    assert attrs["data-scroll"] == "drawer"
+    assert "data-citry-ui-part" not in attrs
 
 
 def test_drawer_slot_data_supplies_owned_relationships() -> None:
@@ -102,17 +118,23 @@ def test_drawer_rejects_owned_static_and_dynamic_attrs(attr: str) -> None:
         _render(attrs={attr: "consumer"})
 
 
+def test_drawer_rejects_python_resolved_vue_directives() -> None:
+    with pytest.raises(ValueError, match="cannot introduce Vue directives"):
+        _render(attrs={"@close": "closed = true"})
+
+
 def test_drawer_merges_class_style_and_unrelated_attrs() -> None:
     html = _render(
         class_=["field-drawer", {"is-current": True}],
         style={"--cui-drawer-extent": "31rem"},
-        attrs={"data-workflow": "field-note", "@close": "closed = true"},
+        attrs={"data-workflow": "field-note"},
     )
 
-    assert 'class="cui-drawer field-drawer is-current"' in html
-    assert "--cui-drawer-extent: 31rem" in html
-    assert 'data-workflow="field-note"' in html
-    assert '@close="closed = true"' in html
+    occurrence = _prepared_occurrence(html)
+    attrs = occurrence["preparedData"]["citryAttrs0"]
+    assert attrs["class"] == "cui-drawer field-drawer is-current"
+    assert "--cui-drawer-extent: 31rem" in attrs["style"]
+    assert attrs["data-workflow"] == "field-note"
 
 
 def test_drawer_public_types_are_runtime_introspectable() -> None:

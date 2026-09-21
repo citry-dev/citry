@@ -8,11 +8,11 @@ class SplitButtonForms(Component):
     template = """
       <section
         class="split-button-forms"
-        x-data="{result:'No Form action yet',owner:'accession-form'}"
+
       >
         <form
           id="accession-form"
-          x-ref="accession"
+          ref="accession"
           @submit.prevent="
             result = `Submitted ${new FormData($event.target, $event.submitter).get('action')}`
           "
@@ -66,20 +66,20 @@ class SplitButtonForms(Component):
 
         <label>
           External primary Form owner
-          <select x-model="owner">
+          <select v-model="owner">
             <option value="accession-form">Main accession Form</option>
             <option value="secondary-accession-form">Secondary accession Form</option>
           </select>
         </label>
 
         <c-CSplitButton
+          ref="externalSplit"
           id="external-commit-actions"
           label="External commit actions"
           menu_label="More external commit actions"
           type="submit"
           size="sm"
           c-primary_attrs="{
-            ':form':'owner',
             'name':'action',
             'value':'external-commit'
           }"
@@ -100,8 +100,20 @@ class SplitButtonForms(Component):
         >
           Request native submit
         </button>
-        <output x-text="result">No Form action yet</output>
+        <output v-text="result">No Form action yet</output>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {result:'No Form action yet',owner:'accession-form'};},
+        onServerRender({component}) {
+          const primary=component.$refs.externalSplit.$el.querySelector(
+            '[data-citry-ui-part="split-button-primary"]'
+          );
+          Citry.vue.watchEffect(()=>primary.setAttribute('form',component.owner));
+        },
+      });
     """
 
     css = """

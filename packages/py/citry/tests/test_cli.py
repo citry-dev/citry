@@ -248,6 +248,7 @@ class TestListComponents:
             {"name": "error-fallback", "class": "ErrorFallback", "path": "source.py"},
             {"name": "i18n", "class": "I18nProvider", "path": "source.py"},
             {"name": "js", "class": "Js", "path": "source.py"},
+            {"name": "mark", "class": "Mark", "path": "source.py"},
             {"name": "provide", "class": "Provide", "path": "source.py"},
             {"name": "trans", "class": "Trans", "path": "source.py"},
             {"name": "zebracard, zebra-card, extra", "class": "ZebraCard", "path": "source.py"},

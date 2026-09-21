@@ -7,7 +7,7 @@ description: Test rendered HTML, input contracts, server behavior, and browser i
 
 Test each behavior at the smallest useful layer. Python tests are quick and
 good at checking component input and rendered HTML. A host framework's test
-client checks HTTP integration. A browser test proves that Alpine, Citry's
+client checks HTTP integration. A browser test proves that Vue, Citry's
 client runtime, and real DOM events work together.
 
 ## Give each test its own Citry instance
@@ -182,7 +182,7 @@ without depending on an HTTP server.
 ## Choose the right test for interactive behavior
 
 Rendering in Python proves which HTML, bindings, and assets Citry produces. It
-does not execute Alpine or Citry's browser runtime.
+does not execute Vue or Citry's browser runtime.
 
 - Use a Python render test for component inputs and initial HTML.
 - Use your framework's test client for mounted Citry routes, event requests,
@@ -205,4 +205,4 @@ attributes or JavaScript registries.
 - [`Component`][citry.Component]
 - [`CitryElement`][citry.CitryElement]
 - [Rendering](/concepts/rendering/)
-- [Alpine in components](/syntax/alpine/)
+- [Vue in templates](/syntax/vue/)

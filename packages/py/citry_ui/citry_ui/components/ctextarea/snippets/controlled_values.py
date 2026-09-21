@@ -8,28 +8,21 @@ class ControlledTextarea(Component):
     template = """
       <section
         class="forest-controlled"
-        x-data
-        x-init="Alpine.store('forestTextareaDraft', {
-          controlled: true,
-          draft: 'A tawny owl called from the eastern ridge.',
-        })"
       >
         <c-CField>
           <c-fill name="label">Patrol draft</c-fill>
           <c-fill name="default">
             <c-CTextarea
               name="patrol_draft"
-              $c-props="{
-                value: $store.forestTextareaDraft.controlled
-                  ? $store.forestTextareaDraft.draft
-                  : undefined,
-              }"
-              @input="$store.forestTextareaDraft.draft = $event.target.value"
+              :value="controlled
+                  ? draft
+                  : undefined"
+              @input="draft = $event.target.value"
             />
           </c-fill>
           <c-fill name="description">
             <span
-              x-text="$store.forestTextareaDraft.controlled
+              v-text="controlled
                 ? 'Application controlled'
                 : 'Browser controlled'"
             ></span>
@@ -39,7 +32,7 @@ class ControlledTextarea(Component):
           <c-CButton
             type="button"
             size="sm"
-            @click="$store.forestTextareaDraft.controlled = false"
+            @click="controlled = false"
           >
             Release
           </c-CButton>
@@ -48,14 +41,24 @@ class ControlledTextarea(Component):
             size="sm"
             variant="outline"
             @click="
-              $store.forestTextareaDraft.draft = 'Fresh tracks followed the creek north.';
-              $store.forestTextareaDraft.controlled = true;
+              draft = 'Fresh tracks followed the creek north.';
+              controlled = true;
             "
           >
             Replace draft
           </c-CButton>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            controlled: true,
+            draft: 'A tawny owl called from the eastern ridge.',
+          };
+        },
+      });
     """
 
     css = """

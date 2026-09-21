@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -8,18 +10,6 @@ class FieldInputConfiguration(Component):
     template = """
       <section
         class="shore-configurator"
-        x-data
-        x-init="Alpine.store('shoreFieldConfig', {
-          orientation: 'vertical',
-          density: 'default',
-          variant: 'outline',
-          size: 'md',
-          required: true,
-          disabled: false,
-          readonly: false,
-          invalid: false,
-        })"
-        @citry-ui-preview-controls.window="Object.assign($store.shoreFieldConfig, $event.detail)"
       >
         <header>
           <p>Survey setup</p>
@@ -27,14 +17,7 @@ class FieldInputConfiguration(Component):
         </header>
 
         <c-CField
-          $c-props="{
-            orientation: $store.shoreFieldConfig.orientation,
-            density: $store.shoreFieldConfig.density,
-            required: $store.shoreFieldConfig.required,
-            disabled: $store.shoreFieldConfig.disabled,
-            readonly: $store.shoreFieldConfig.readonly,
-            invalid: $store.shoreFieldConfig.invalid,
-          }"
+          :orientation="orientation" :density="density" :required="required" :disabled="disabled" :readonly="readonly" :invalid="invalid"
         >
           <c-fill name="label">
             Shore condition
@@ -43,10 +26,7 @@ class FieldInputConfiguration(Component):
             <c-CInput
               name="condition"
               value="Calm pools"
-              $c-props="{
-                variant: $store.shoreFieldConfig.variant,
-                size: $store.shoreFieldConfig.size,
-              }"
+              :variant="variant" :size="size"
             />
           </c-fill>
           <c-fill name="description">
@@ -57,6 +37,33 @@ class FieldInputConfiguration(Component):
           </c-fill>
         </c-CField>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            orientation: 'vertical',
+            density: 'default',
+            variant: 'outline',
+            size: 'md',
+            required: true,
+            disabled: false,
+            readonly: false,
+            invalid: false,
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

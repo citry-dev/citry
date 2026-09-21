@@ -746,25 +746,27 @@ class CDataGrid(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:
         data = self.template_data(kwargs, slots)
         return {
-            key: data[key]
-            for key in (
-                "sort",
-                "selection",
-                "selected",
-                "disabled",
-                "multi_sort",
-                "total_count",
-                "start_index",
-                "row_height",
-                "viewport_size",
-                "overscan",
-                "initial_index",
-                "is_ready",
-                "column_labels",
-                "labels",
-                "catalog",
-                "editors",
-            )
+            "serverDefaults": {
+                key: data[key]
+                for key in (
+                    "sort",
+                    "selection",
+                    "selected",
+                    "disabled",
+                    "multi_sort",
+                    "total_count",
+                    "start_index",
+                    "row_height",
+                    "viewport_size",
+                    "overscan",
+                    "initial_index",
+                    "is_ready",
+                    "column_labels",
+                    "labels",
+                    "catalog",
+                    "editors",
+                )
+            }
         }
 
     template = """

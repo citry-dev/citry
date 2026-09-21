@@ -1,5 +1,7 @@
 """Browser evidence for the production Radio contract."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from typing import Any
@@ -20,6 +22,7 @@ def _radio_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const radioTest=Citry.vue.reactive({value:'moon',immutable:'moon',orientation:'vertical',variant:'solid',size:'md'});window.__radioTest=radioTest;return {state:{radioTest}};}});"
         css = """
           :where(.radio-brand) {
             --cui-radio-active-color: rgb(88 28 135);
@@ -35,29 +38,18 @@ def _radio_page() -> str:
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body
-              x-data
-              x-init="Alpine.store('radioTest', {
-                value: 'moon',
-                immutable: 'moon',
-                orientation: 'vertical',
-                variant: 'solid',
-                size: 'md',
-              })"
-            >
+            <body>
               <form id="mission-form">
                 <c-CRadioGroup
                   name="destination"
                   value="moon"
                   required
                   class_="radio-brand radio-part"
-                  $c-props="{
-                    value: $store.radioTest.value,
-                    orientation: $store.radioTest.orientation,
-                    variant: $store.radioTest.variant,
-                    size: $store.radioTest.size,
-                  }"
-                  @input="$store.radioTest.value = $event.target.value"
+                  :value="state.radioTest.value"
+                  :orientation="state.radioTest.orientation"
+                  :variant="state.radioTest.variant"
+                  :size="state.radioTest.size"
+                  @input="state.radioTest.value = $event.target.value"
                 >
                   <c-fill name="label">Destination</c-fill>
                   <c-fill name="default">
@@ -73,7 +65,7 @@ def _radio_page() -> str:
                 <c-CRadioGroup
                   name="immutable"
                   value="moon"
-                  $c-props="{value: $store.radioTest.immutable}"
+                  :value="state.radioTest.immutable"
                 >
                   <c-fill name="label">Immutable destination</c-fill>
                   <c-fill name="default">
@@ -160,7 +152,7 @@ def test_controlled_radio_restores_after_native_input_and_reset(radio_page):
     mars.click()
     page.wait_for_function("document.querySelector('input[name=immutable][value=moon]').checked")
     assert moon.is_checked()
-    page.evaluate("Alpine.store('radioTest').value = 'mars'")
+    page.evaluate("window.__radioTest.value = 'mars'")
     page.wait_for_timeout(0)
     selected = page.get_by_role("group", name="Destination", exact=True)
     assert selected.get_by_role("radio", name="Mars").is_checked()
@@ -194,7 +186,7 @@ def test_client_configuration_invalid_episode_css_and_direction(radio_page):
     group = page.get_by_role("group", name="Destination", exact=True)
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('radioTest'), {
+        """() => Object.assign(window.__radioTest, {
           orientation: 'horizontal',
           variant: 'outline',
           size: 'lg',
@@ -213,9 +205,9 @@ def test_client_configuration_invalid_episode_css_and_direction(radio_page):
         == "2px"
     )
 
-    page.evaluate("Alpine.store('radioTest').value = 'venus'")
+    page.evaluate("window.__radioTest.value = 'venus'")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('radioTest').value = 42")
+    page.evaluate("window.__radioTest.value = 42")
     page.wait_for_timeout(0)
     assert sum("CRadioGroup value received invalid client value" in error for error in errors) == 1
 

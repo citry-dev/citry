@@ -48,11 +48,13 @@ class Counter(Component):
     """
 
     js = """
-      $component(({ scope, sendEvent }) => {
-        scope.addOne = async () => {
-          const result = await sendEvent("increment", { amount: 1 });
-          return result.count;
-        };
+      $component({
+        methods: {
+          async addOne() {
+            const result = await this.$sendEvent("increment", { amount: 1 });
+            return result.count;
+          },
+        },
       });
     """
 
@@ -65,27 +67,12 @@ class TaskIn:
     task_id: int
 
 
-class TaskSummary(Component):
+class TaskEditor(Component):
     citry = citry_app
 
     class Kwargs:
-        task_id: int
-        status: str
-
-    def template_data(
-        self,
-        kwargs: Kwargs,
-        slots,
-    ) -> dict[str, Any]:
-        return {"task_id": kwargs.task_id, "status": kwargs.status}
-
-    template = """
-      <p id="task-summary">Task {{ task_id }}: {{ status }}</p>
-    """
-
-
-class TaskEditor(Component):
-    citry = citry_app
+        task_id: int = 42
+        status: str = "pending"
 
     class Events:
         def complete(self, data: TaskIn):
@@ -96,16 +83,18 @@ class TaskEditor(Component):
                     {"taskId": data.task_id},
                 ),
                 actions.Render(
-                    TaskSummary(task_id=data.task_id, status="complete"),
-                    target="#task-summary",
+                    TaskEditor(task_id=data.task_id, status="complete"),
                 ),
             ]
+
+    def template_data(self, kwargs: Kwargs, slots) -> dict[str, Any]:
+        return {"task_id": kwargs.task_id, "status": kwargs.status}
 
     template = """
       <button @c-click="complete({ task_id: 42 })">
         Complete task
       </button>
-      <p id="task-summary">Task 42: pending</p>
+      <p>Task {{ task_id }}: {{ status }}</p>
     """
 
 

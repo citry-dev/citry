@@ -11,7 +11,7 @@ from citry import Citry, Component
 from citry_ui import CDropTarget, CFileInput
 
 
-def _render(template: str, *, include_css: bool = False) -> str:
+def _render(template: str, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("<c-css />" if include_css else "")
@@ -20,7 +20,8 @@ def _render(template: str, *, include_css: bool = False) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tag(html: str, part: str) -> str:
@@ -74,7 +75,8 @@ def test_file_input_is_a_native_form_control() -> None:
     tag = _tag(
         _render(
             '<c-CFileInput id="evidence" name="documents" accept="application/pdf,.txt" '
-            'capture="environment" multiple required variant="soft" size="lg" />'
+            'capture="environment" multiple required variant="soft" size="lg" />',
+            static_fallback=True,
         ),
         "file-input",
     )
@@ -90,7 +92,10 @@ def test_file_input_is_a_native_form_control() -> None:
 
 
 def test_drop_target_has_one_owned_native_input_and_visible_content() -> None:
-    html = _render('<c-CDropTarget label="Evidence files" name="evidence" multiple>PDF or image files</c-CDropTarget>')
+    html = _render(
+        '<c-CDropTarget label="Evidence files" name="evidence" multiple>PDF or image files</c-CDropTarget>',
+        static_fallback=True,
+    )
     root = _tag(html, "drop-target")
     native = _tag(html, "input")
     assert root.startswith("<label")
@@ -104,7 +109,10 @@ def test_drop_target_has_one_owned_native_input_and_visible_content() -> None:
 
 def test_root_class_style_and_attrs_merge() -> None:
     file_tag = _tag(
-        _render('<c-CFileInput class_="brand" style="inline-size: 20rem" c-attrs="{\'data-test\': \'file\'}" />'),
+        _render(
+            '<c-CFileInput class_="brand" style="inline-size: 20rem" c-attrs="{\'data-test\': \'file\'}" />',
+            static_fallback=True,
+        ),
         "file-input",
     )
     assert 'class="cui-file-input brand"' in file_tag
@@ -112,7 +120,10 @@ def test_root_class_style_and_attrs_merge() -> None:
     assert 'data-test="file"' in file_tag
 
     drop_tag = _tag(
-        _render('<c-CDropTarget label="Upload" class_="drop-brand" c-attrs="{\'data-test\': \'drop\'}" />'),
+        _render(
+            '<c-CDropTarget label="Upload" class_="drop-brand" c-attrs="{\'data-test\': \'drop\'}" />',
+            static_fallback=True,
+        ),
         "drop-target",
     )
     assert 'class="cui-drop-target drop-brand"' in drop_tag
@@ -126,7 +137,8 @@ def test_file_input_integrates_with_field_relationships() -> None:
         '<c-fill name="default"><c-CFileInput name="report" /></c-fill>'
         '<c-fill name="description">One PDF</c-fill>'
         '<c-fill name="error">Choose a report</c-fill>'
-        "</c-CField>"
+        "</c-CField>",
+        static_fallback=True,
     )
     tag = _tag(html, "file-input")
     assert 'id="report"' in tag
@@ -163,7 +175,10 @@ def test_drop_target_rejects_field_context() -> None:
 
 
 def test_form_context_supplies_native_owner_and_disabledness() -> None:
-    html = _render('<form id="upload-form"><c-CFileInput name="one" c-attrs="{\'form\': \'upload-form\'}" /></form>')
+    html = _render(
+        '<form id="upload-form"><c-CFileInput name="one" c-attrs="{\'form\': \'upload-form\'}" /></form>',
+        static_fallback=True,
+    )
     file_tag = _tag(html, "file-input")
     assert 'form="upload-form"' in file_tag
 
@@ -178,7 +193,7 @@ def test_conflicting_form_owner_is_rejected(component: str) -> None:
     # The effective conflict is tested through CForm once the shared CForm
     # lifecycle fixture is available; the family must still preserve the
     # explicit native owner without rewriting it.
-    html = _render(f'<form id="inside">{declaration}</form>')
+    html = _render(f'<form id="inside">{declaration}</form>', static_fallback=True)
     part = "file-input" if component == "CFileInput" else "input"
     assert 'form="outside"' in _tag(html, part)
 
@@ -217,20 +232,26 @@ def test_owned_and_structural_attrs_are_rejected(template: str) -> None:
 
 def test_static_relationship_attrs_remain_available_standalone() -> None:
     file_tag = _tag(
-        _render("<c-CFileInput c-attrs=\"{'aria-label': 'Choose evidence', 'aria-describedby': 'help'}\" />"),
+        _render(
+            "<c-CFileInput c-attrs=\"{'aria-label': 'Choose evidence', 'aria-describedby': 'help'}\" />",
+            static_fallback=True,
+        ),
         "file-input",
     )
     assert 'aria-label="Choose evidence"' in file_tag
     assert 'aria-describedby="help"' in file_tag
     drop_input = _tag(
-        _render("<c-CDropTarget label=\"Evidence\" c-input_attrs=\"{'aria-describedby': 'drop-help'}\" />"),
+        _render(
+            "<c-CDropTarget label=\"Evidence\" c-input_attrs=\"{'aria-describedby': 'drop-help'}\" />",
+            static_fallback=True,
+        ),
         "input",
     )
     assert 'aria-describedby="drop-help"' in drop_input
 
 
 def test_css_contract_contains_public_parts_variables_and_environments() -> None:
-    html = _render('<c-CFileInput /><c-CDropTarget label="Upload" />', include_css=True)
+    html = _render('<c-CFileInput /><c-CDropTarget label="Upload" />', include_css=True, static_fallback=True)
     for token in (
         "--cui-file-input-background",
         "--cui-file-input-active-color",

@@ -15,7 +15,7 @@ from citry import Citry, Component
 from citry_ui import CButton, CTooltip
 
 
-def _page_html(value: object) -> str:
+def _page_html(value: object, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -26,7 +26,8 @@ def _page_html(value: object) -> str:
         def template_data(self, kwargs, slots):
             return {"value": value}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tooltip(**kwargs: object) -> CTooltip:
@@ -60,7 +61,8 @@ def test_tooltip_renders_semantic_top_layer_anatomy_and_typed_slot_data():
             style={"--cui-tooltip-max-inline-size": "24rem"},
             attrs={"data-mission": "europa"},
             slots={"activator": activator},
-        )
+        ),
+        static_fallback=True,
     )
     surface = re.search(r'<div class="cui-tooltip(?:\s|\")[^>]*>', html)
 
@@ -93,7 +95,8 @@ def test_tooltip_accepts_exclusive_static_default_fill():
                 ),
                 "default": "A sulfur-stained surface",
             },
-        )
+        ),
+        static_fallback=True,
     )
 
     assert "A sulfur-stained surface" in html
@@ -180,7 +183,8 @@ def test_tooltip_detrusts_safe_strings_before_rendering():
         _tooltip(
             id=Markup('moon"data-unsafe="yes'),
             text=Markup("</span><script>window.__pwned=true</script>"),
-        )
+        ),
+        static_fallback=True,
     )
 
     assert 'id="moon&#34;data-unsafe=&#34;yes"' in html
@@ -210,7 +214,7 @@ class _SideEffectMapping(Mapping[str, object]):
 
 def test_tooltip_snapshots_caller_owned_attrs_once_per_render():
     attrs = _SideEffectMapping()
-    html = _page_html(_tooltip(text="Europa", attrs=attrs))
+    html = _page_html(_tooltip(text="Europa", attrs=attrs), static_fallback=True)
 
     assert 'data-snapshot="first"' in html
     assert attrs.iterations == 1

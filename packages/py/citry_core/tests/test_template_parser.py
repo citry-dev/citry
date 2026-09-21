@@ -25,13 +25,26 @@ from citry_core.template_parser import (
     TagRules,
     Template,
     Token,
+    _compile_prepared_template,
     analyze_browser_source,
-    analyze_component_scope_writes,
     analyze_component_source,
     compile_template,
     parse_diagnostic,
     parse_template,
 )
+
+
+def test_private_prepared_compiler_emits_typed_parts_and_rejects_other_languages() -> None:
+    template = parse_template("<p>Hello {{ name }}</p>")
+    code = _compile_prepared_template(template)
+
+    assert "PreparedElementOpenNode" in code
+    assert "PreparedSourceTextNode" in code
+    assert "PreparedExprNode" in code
+    assert "PreparedElementCloseNode" in code
+
+    with pytest.raises(ValueError, match="currently supports only Python"):
+        _compile_prepared_template(parse_template("<p>x</p>"), "js")
 
 
 def test_foreign_spans_are_keyword_only_and_keep_utf8_byte_positions() -> None:
@@ -71,8 +84,6 @@ def test_parser_owned_attribute_names_are_exposed_with_structural_context() -> N
         "c-bind",
         "#c-key",
         "#c-ignore",
-        "$c-props",
-        "c-$c-props",
     } == CITRY_DIRECTIVE_NAMES
     assert set(STRUCTURAL_TAG_ATTRIBUTE_NAMES) == RESERVED_TAG_NAMES
     assert STRUCTURAL_TAG_ATTRIBUTE_NAMES["c-for"] == {"each"}
@@ -93,40 +104,32 @@ def test_parser_owned_attribute_names_are_exposed_with_structural_context() -> N
         STRUCTURAL_TAG_ATTRIBUTE_NAMES["c-slot"] = frozenset()  # type: ignore[index]
 
 
-def test_browser_analysis_exposes_oxc_free_references_and_scope_writes() -> None:
+def test_browser_analysis_exposes_oxc_free_references() -> None:
     valid, references = analyze_browser_source("known + local.value", "expression")
-    source = "$component(({ scope, data }) => { scope.title = data.title; });"
-    writes = analyze_component_scope_writes(source)
 
     assert valid
     assert [name for name, _start, _end in references] == ["known", "local"]
-    assert len(writes) == 1
-    name, name_start, name_end, value_start, value_end = writes[0]
-    encoded = source.encode()
-    assert name == "title"
-    assert encoded[name_start:name_end] == b"title"
-    assert encoded[value_start:value_end] == b"data.title"
 
 
 def test_component_source_analysis_exposes_only_runtime_initializer_facts() -> None:
     source = """
 const outside = missingOutside;
-$component(({ scope: alpineScope, data }) => {
-  alpineScope.ready = data.ready;
+$component({ onServerRender({ component }) {
+  component;
   console.log(missingInside);
-});
+} });
 """
 
-    valid, references, bindings, writes = analyze_component_source(source)
+    valid, references, bindings, calls, public_names, sections, member_references = analyze_component_source(source)
 
     assert valid
     assert [name for name, _start, _end in references] == ["console", "missingInside"]
-    assert [(name, local) for name, local, _start, _end, _references in bindings] == [
-        ("scope", "alpineScope"),
-        ("data", "data"),
-    ]
+    assert [(name, local) for name, local, _start, _end, _references in bindings] == [("component", "component")]
     assert all(references for _name, _local, _start, _end, references in bindings)
-    assert [name for name, *_rest in writes] == ["ready"]
+    assert len(calls) == 1
+    assert public_names == []
+    assert all(section[1] == "absent" for section in sections)
+    assert member_references == []
 
 
 # =========================================================================
@@ -643,6 +646,14 @@ class TestTagRules:
     def test_allowed_attrs_passes(self):
         rules = {"c-card": TagRules(allowed_attrs=[["title"]])}
         t = parse_template('<c-card title="hi"></c-card>', user_rules=rules)
+        assert len(t.elements) == 1
+
+    def test_native_vue_component_bindings_bypass_python_kwarg_allowlist(self):
+        rules = {"c-card": TagRules(allowed_attrs=[["title"]])}
+        t = parse_template(
+            '<c-card title="x" :disabled="blocked" v-bind="props" @change="changed" ref="root" />',
+            user_rules=rules,
+        )
         assert len(t.elements) == 1
 
     def test_disallowed_attr_raises(self):

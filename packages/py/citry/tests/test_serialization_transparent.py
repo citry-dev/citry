@@ -1,21 +1,62 @@
 """Transparent instance caps belong to a whole output, not each interior fragment."""
 
-import json
 import re
-from collections import Counter
 
 import pytest
 
 from citry import Citry, Component
+from citry._vue.serialization import vue_serialization_requirements
 from citry.slots import Slot
+
+
+def test_server_resolved_dynamic_element_does_not_require_vue_by_itself():
+    app = Citry()
+
+    class Page(Component):
+        citry = app
+        template = '<c-element c-is="tag">plain</c-element>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": "section"}
+
+    rendered = Page().render()
+    assert vue_serialization_requirements(rendered) == frozenset()
+    html = rendered.serialize()
+    assert html.startswith("<section ")
+    assert html.endswith(">plain</section>")
+    assert 'id="citry-vue-' not in html
+
+
+def test_dynamic_element_remains_in_prepared_view_when_parent_is_interactive():
+    app = Citry()
+    app.set_mounted_prefix("/citry")
+
+    class Page(Component):
+        citry = app
+        template = '<c-element c-is="tag">{{ label }}</c-element>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": "section", "label": "ready"}
+
+        def js_data(self, kwargs, slots):
+            return {"active": True}
+
+    rendered = Page().render()
+    assert vue_serialization_requirements(rendered) == frozenset({"js_data"})
+    html = rendered.serialize()
+    assert 'id="citry-vue-' in html
+    assert '"tag":"section"' in html
 
 
 @pytest.mark.parametrize(
     "source",
     [
-        '<c-for each="value in [1, 2]"><c-widget /></c-for>',
-        '<div c-for="value in [1, 2]"><c-widget /></div>',
-        '<c-for each="outer in [1]"><c-for each="inner in [1, 2]"><c-widget /></c-for></c-for>',
+        "<c-for each=\"value in ['one', 'two']\"><c-widget #c-key=\"value\" /></c-for>",
+        "<div c-for=\"value in ['one', 'two']\"><c-widget #c-key=\"value\" /></div>",
+        (
+            "<c-for each=\"outer in ['group']\"><c-for each=\"inner in ['one', 'two']\"><c-widget"
+            ' #c-key="inner" /></c-for></c-for>'
+        ),
     ],
 )
 def test_nested_template_loop_emits_one_cap_pair_per_instance(source):
@@ -28,7 +69,7 @@ def test_nested_template_loop_emits_one_cap_pair_per_instance(source):
             <button>ready</button>
         """
         js = """
-            $component(({ els }) => { els[0].setAttribute('data-ready', 'true'); });
+            $component(({ component }) => { component.$el.setAttribute('data-ready', 'true'); });
         """
 
     def content(ctx):
@@ -36,17 +77,9 @@ def test_nested_template_loop_emits_one_cap_pair_per_instance(source):
 
     rendered = app.render_template('<main><c-slot name="content" /></main>', slots={"content": Slot(content)})
     html = rendered.serialize()
-    caps = Counter(re.findall(r"<!--(citry:g1:[^>]+)-->", html))
-    assert caps
-    assert set(caps.values()) == {1}
-    manifest = json.loads(re.search(r'<script type="application/json" data-citry-graph>(.*?)</script>', html).group(1))
-    for graph in manifest["graphs"]:
-        for instance in graph["componentInstances"]:
-            for side in ("s", "e"):
-                suffix = f":{graph['graphId']}:i:{instance['instanceId']}:{side}"
-                assert sum(count for cap, count in caps.items() if cap.endswith(suffix)) == 1
-    assert html.count('data-citry-root=""') == 2
-    assert html.count('data-cid="') == 2
+    assert html.count('id="citry-vue-') == 1
+    assert len(set(re.findall(r"citryOccurrence[0-9a-f]{24}", html))) == 3
+    assert "data-citry-graph" not in html
 
 
 def test_nested_transparent_provide_preserves_child_markers_and_values():
@@ -59,7 +92,7 @@ def test_nested_transparent_provide_preserves_child_markers_and_values():
             <button>{{ value }}</button>
         """
         js = """
-            $component(({ els }) => { els[0].setAttribute('data-ready', 'true'); });
+            $component(({ component }) => { component.$el.setAttribute('data-ready', 'true'); });
         """
 
         def template_data(self, kwargs, slots):
@@ -75,17 +108,16 @@ def test_nested_transparent_provide_preserves_child_markers_and_values():
         slots={
             "content": Slot(
                 lambda ctx: app.render_template(
-                    '<c-for each="value in [1, 2]"><c-widget /></c-for>', provides=ctx.provides
+                    "<c-for each=\"value in ['one', 'two']\"><c-widget #c-key=\"value\" /></c-for>",
+                    provides=ctx.provides,
                 )
             )
         }
     ).render()
     html = rendered.serialize()
-    caps = Counter(re.findall(r"<!--(citry:g1:[^>]+)-->", html))
-    assert set(caps.values()) == {1}
-    assert html.count("violet</button>") == 2
-    assert html.count('data-cid-c1=""') == 2
-    assert html.count('data-citry-root=""') == 2
+    assert html.count('id="citry-vue-') == 1
+    assert len(set(re.findall(r"citryOccurrence[0-9a-f]{24}", html))) == 3
+    assert html.count("violet") == 2
 
 
 def test_transparent_lexical_fill_owner_keeps_one_boundary_across_child_frame():
@@ -101,7 +133,7 @@ def test_transparent_lexical_fill_owner_keeps_one_boundary_across_child_frame():
     class Widget(Component):
         citry = app
         template = """
-            <button x-text="label"></button>
+            <button v-text="label"></button>
         """
 
         def js_data(self, kwargs, slots):
@@ -114,8 +146,6 @@ def test_transparent_lexical_fill_owner_keeps_one_boundary_across_child_frame():
         slots={"content": content},
     )
     html = rendered.serialize()
-    caps = Counter(re.findall(r"<!--(citry:g1:[^>]+)-->", html))
-    assert caps
-    assert set(caps.values()) == {1}
-    assert "Preview</h1>" in html
-    assert html.count('data-citry-root=""') == 1
+    assert html.count('id="citry-vue-') == 1
+    assert '"label":"ready"' in html
+    assert len(set(re.findall(r"citryOccurrence[0-9a-f]{24}", html))) == 3

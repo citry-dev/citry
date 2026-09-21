@@ -18,9 +18,12 @@ def _assets(*, kind: str, names: set[str] | None = None) -> bytes:
 def test_complete_component_catalog_stays_inside_compressed_asset_budgets() -> None:
     catalog = asset_report()["catalog"]
 
+    # Repeated here on purpose rather than imported: raising a budget then has to be
+    # an edit to this test too, so the new ceiling shows up in review instead of
+    # passing quietly. Keep it in step with `_CATALOG_ASSET_LIMITS`.
     assert catalog["limits"] == {
-        "javascript": {"raw": 1088 * 1024, "gzip": 208 * 1024, "brotli": 152 * 1024},
-        "css": {"raw": 368 * 1024, "gzip": 48 * 1024, "brotli": 40 * 1024},
+        "javascript": {"raw": 1152 * 1024, "gzip": 232 * 1024, "brotli": 168 * 1024},
+        "css": {"raw": 400 * 1024, "gzip": 52 * 1024, "brotli": 44 * 1024},
     }
     for kind in ("javascript", "css"):
         assert catalog["headroom"][kind] == {

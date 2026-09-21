@@ -11,7 +11,7 @@ from citry import Citry, Component
 from citry_ui import CStep, CStepper
 
 
-def _render(template: str, *, include_css: bool = False) -> str:
+def _render(template: str, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("<c-css />" if include_css else "")
@@ -20,7 +20,8 @@ def _render(template: str, *, include_css: bool = False) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tag(html: str, part: str, index: int = 0) -> str:
@@ -63,7 +64,8 @@ def test_static_stepper_is_named_ordered_progress() -> None:
     html = _render(
         '<c-CStepper label="Setup" c-active="1">'
         "<c-CStep>Profile</c-CStep><c-CStep>Security</c-CStep><c-CStep>Review</c-CStep>"
-        "</c-CStepper>"
+        "</c-CStepper>",
+        static_fallback=True,
     )
     root = _tag(html, "stepper")
     assert root.startswith("<nav")
@@ -82,7 +84,8 @@ def test_interactive_stepper_uses_form_safe_buttons() -> None:
     html = _render(
         '<form><c-CStepper label="Setup" interactive c-active="1">'
         "<c-CStep>Profile</c-CStep><c-CStep>Security</c-CStep><c-CStep>Review</c-CStep>"
-        "</c-CStepper></form>"
+        "</c-CStepper></form>",
+        static_fallback=True,
     )
     triggers = re.findall(r'<button[^>]+data-citry-ui-part="trigger"[^>]*>', html)
     assert len(triggers) == 3
@@ -95,7 +98,8 @@ def test_interactive_stepper_uses_form_safe_buttons() -> None:
 def test_non_linear_keeps_future_step_available() -> None:
     html = _render(
         '<c-CStepper label="Setup" interactive c-linear="False">'
-        "<c-CStep>One</c-CStep><c-CStep>Two</c-CStep></c-CStepper>"
+        "<c-CStep>One</c-CStep><c-CStep>Two</c-CStep></c-CStepper>",
+        static_fallback=True,
     )
     assert "disabled" not in _tag(html, "trigger", 1)
 
@@ -105,7 +109,8 @@ def test_step_description_relationship_and_metadata() -> None:
         '<c-CStepper label="Setup"><c-CStep optional error>'
         '<c-fill name="default">Profile</c-fill>'
         '<c-fill name="description">Needs attention</c-fill>'
-        "</c-CStep><c-CStep>Review</c-CStep></c-CStepper>"
+        "</c-CStep><c-CStep>Review</c-CStep></c-CStepper>",
+        static_fallback=True,
     )
     step = _tag(html, "step", 0)
     trigger = _tag(html, "trigger", 0)
@@ -121,9 +126,10 @@ def test_custom_indicator_replaces_numeric_fallback() -> None:
     html = _render(
         '<c-CStepper label="Setup"><c-CStep>'
         '<c-fill name="default">Profile</c-fill><c-fill name="indicator">P</c-fill>'
-        "</c-CStep><c-CStep>Review</c-CStep></c-CStepper>"
+        "</c-CStep><c-CStep>Review</c-CStep></c-CStepper>",
+        static_fallback=True,
     )
-    assert ">P<" in html
+    assert re.search(r">\s*P\s*<", html) is not None
     assert 'aria-hidden="true"' in _tag(html, "indicator", 0)
 
 
@@ -132,7 +138,8 @@ def test_root_and_step_class_style_attrs_reach_concrete_roots() -> None:
         '<c-CStepper label="Setup" class_="brand" style="inline-size:20rem" '
         "c-attrs=\"{'data-test': 'root'}\">"
         "<c-CStep class_=\"first\" c-attrs=\"{'data-test': 'step'}\">One</c-CStep>"
-        "<c-CStep>Two</c-CStep></c-CStepper>"
+        "<c-CStep>Two</c-CStep></c-CStepper>",
+        static_fallback=True,
     )
     assert 'class="cui-stepper brand"' in _tag(html, "stepper")
     assert 'style="inline-size: 20rem;"' in _tag(html, "stepper")
@@ -208,6 +215,7 @@ def test_css_exposes_public_variables_environment_rules_and_parts() -> None:
     html = _render(
         '<c-CStepper label="Setup"><c-CStep>One</c-CStep><c-CStep>Two</c-CStep></c-CStepper>',
         include_css=True,
+        static_fallback=True,
     )
     for token in (
         "--cui-stepper-gap",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator, Mapping
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
@@ -39,7 +40,13 @@ from citry_ui import (
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _page_html(app: Citry, value: object, *, include_css: bool = False) -> str:
+def _page_html(
+    app: Citry,
+    value: object,
+    *,
+    include_css: bool = False,
+    static_fallback: bool = False,
+) -> str:
     class Page(Component):
         citry = app
         template = """
@@ -52,7 +59,8 @@ def _page_html(app: Citry, value: object, *, include_css: bool = False) -> str:
                 "css": app.get("css")() if include_css else "",
             }
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_every_public_styled_component_exposes_root_class_and_style_inputs():
@@ -163,7 +171,7 @@ def test_every_public_styled_component_exposes_root_class_and_style_inputs():
             style={"--consumer-token": definition.__name__},
             slots=dict(invocation.slots),
         )
-        html = str(StyledInputsPage(value=invocation))
+        html = StyledInputsPage(value=invocation).render().serialize(security_javascript="omit")
         root = re.search(rf'<[^>]+data-citry-ui-part="{part}"[^>]*>', html)
 
         assert root is not None
@@ -199,7 +207,7 @@ def test_button_renders_direct_native_anatomy_and_public_configuration():
         },
     )
 
-    html = _page_html(app, button)
+    html = _page_html(app, button, static_fallback=True)
 
     assert '<button class="cui-button application-action direct-action is-dangerous" type="submit"' in html
     assert 'style="--consumer-button-radius: 1rem;"' in html
@@ -223,7 +231,7 @@ def test_button_renders_direct_native_anatomy_and_public_configuration():
 def test_button_loading_server_fallback_is_natively_inert_without_javascript():
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
-    html = _page_html(app, CButton(type="submit", loading=True, slots={"default": "Save"}))
+    html = _page_html(app, CButton(type="submit", loading=True, slots={"default": "Save"}), static_fallback=True)
     button_tag = re.search(r"<button[^>]*>", html)
 
     assert button_tag is not None
@@ -249,6 +257,7 @@ def test_button_href_renders_a_native_link_with_link_attributes():
             attrs={"target": "_blank", "rel": "noreferrer", "download": "guide.pdf"},
             slots={"default": "Open field guide"},
         ),
+        static_fallback=True,
     )
     link_tag = re.search(r"<a[^>]*>", html)
 
@@ -273,7 +282,7 @@ def test_button_href_renders_a_native_link_with_link_attributes():
 def test_button_unavailable_link_is_inert_without_javascript(kwargs, expected_tabindex):
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
-    html = _page_html(app, CButton(href="/next", **kwargs, slots={"default": "Next"}))
+    html = _page_html(app, CButton(href="/next", **kwargs, slots={"default": "Next"}), static_fallback=True)
     link_tag = re.search(r"<a[^>]*>", html)
 
     assert link_tag is not None
@@ -342,7 +351,7 @@ def test_dialog_renders_native_modal_anatomy_and_typed_slot_bindings():
         },
     )
 
-    html = _page_html(app, dialog)
+    html = _page_html(app, dialog, static_fallback=True)
     dialog_tag = re.search(r"<dialog[^>]*>", html)
 
     assert dialog_tag is not None
@@ -414,7 +423,7 @@ def test_combobox_renders_native_field_relationships_and_canonical_form_value():
         },
     )
 
-    html = _page_html(app, combobox)
+    html = _page_html(app, combobox, static_fallback=True)
     visible = re.search(r'<input class="cui-combobox__input"[^>]*>', html)
     hidden = re.search(r'<input name="owner_id" value="ada"[^>]*>', html)
 
@@ -435,6 +444,18 @@ def test_combobox_renders_native_field_relationships_and_canonical_form_value():
     assert 'data-citry-ui-part="form-value"' not in html
 
 
+def test_combobox_javascript_asset_is_file_backed():
+    component_dir = Path(citry_ui.__file__).parent / "components" / "ccombobox"
+    source = (component_dir / "runtime.source.js").read_text(encoding="utf-8")
+    bundle = (component_dir / "runtime.min.js").read_text(encoding="utf-8")
+
+    assert CCombobox.js_file == "runtime.min.js"
+    assert getattr(CCombobox, "js", None) is None
+    assert source.startswith("\n")
+    assert "$component({" in source
+    assert bundle
+
+
 def test_combobox_without_name_is_not_a_named_form_participant():
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
@@ -442,6 +463,7 @@ def test_combobox_without_name_is_not_a_named_form_participant():
     html = _page_html(
         app,
         CCombobox(options=(CComboboxOption("mars", "Mars"),)),
+        static_fallback=True,
     )
 
     hidden = re.search(r"<input[^>]*data-citry-combobox-form-value[^>]*>", html)
@@ -455,7 +477,7 @@ def test_combobox_server_output_filters_open_options_and_matches_unicode_thresho
     def render(combobox: object) -> str:
         app = Citry(autodiscover=False)
         app.register_library(citry_ui)
-        return _page_html(app, combobox)
+        return _page_html(app, combobox, static_fallback=True)
 
     empty_html = render(CCombobox(options=options, input_value="zz", open=True))
     below_threshold_html = render(CCombobox(options=options, input_value="🚀", min_chars=2, open=True))
@@ -520,7 +542,7 @@ def test_field_and_input_preserve_native_relationships_and_component_like_slot_v
         },
     )
 
-    html = _page_html(app, field)
+    html = _page_html(app, field, static_fallback=True)
     control_id = re.search(r'<input[^>]+\sid="([^"]+)"', html)
 
     assert control_id is not None
@@ -547,7 +569,7 @@ def test_field_keeps_an_empty_live_region_mounted_without_a_dangling_reference()
         }
     )
 
-    html = _page_html(app, field)
+    html = _page_html(app, field, static_fallback=True)
     input_tag = re.search(r"<input[^>]*>", html)
 
     assert 'data-citry-ui-part="error"' in html
@@ -580,7 +602,7 @@ def test_styled_field_exposes_complete_bindings_to_a_custom_control():
           </c-CField>
         """
 
-    html = str(Page())
+    html = Page().render().serialize(security_javascript="omit")
     control_id = re.search(r'<textarea[^>]*\sid="([^"]+)"', html)
 
     assert control_id is not None
@@ -641,7 +663,7 @@ def test_input_merges_external_descriptions_without_dropping_field_relationships
         },
     )
 
-    html = _page_html(app, field)
+    html = _page_html(app, field, static_fallback=True)
 
     assert 'aria-describedby="name-control-description name-control-error external-description"' in html
     assert 'aria-errormessage="name-control-error external-error"' in html
@@ -676,6 +698,7 @@ def test_input_omitted_case_insensitive_form_attr_keeps_enclosing_owner(omitted_
             id="inside",
             slots={"default": CInput(attrs={"FORM": omitted_value})},
         ),
+        static_fallback=True,
     )
 
     input_tag = re.search(r'<input[^>]*data-citry-ui-part="input"[^>]*>', html)
@@ -702,7 +725,7 @@ def test_explicit_field_control_ids_always_generate_unique_relationship_ids():
         def template_data(self, kwargs, slots):
             return {"first": first, "second": second}
 
-    html = str(Page())
+    html = Page().render().serialize(security_javascript="omit")
 
     assert html.count('id="foo-label"') == 1
     assert html.count('id="foo-control-label"') == 1
@@ -793,7 +816,7 @@ def test_input_supports_unnamed_usage_concise_visual_size_and_native_character_w
         attrs={"aria-label": "Filter observations", "size": 24},
     )
 
-    html = _page_html(app, input_value)
+    html = _page_html(app, input_value, static_fallback=True)
     input_tag = re.search(r"<input[^>]*>", html)
 
     assert input_tag is not None
@@ -817,7 +840,7 @@ def test_disabled_form_wins_over_explicit_false_field_state():
         },
     )
 
-    html = _page_html(app, form)
+    html = _page_html(app, form, static_fallback=True)
     field_tag = re.search(r"<div[^>]*data-citry-field-root[^>]*>", html)
     input_tag = re.search(r"<input[^>]*>", html)
 
@@ -867,7 +890,7 @@ def test_form_preserves_native_structure_and_inherited_field_configuration():
         },
     )
 
-    html = _page_html(app, form)
+    html = _page_html(app, form, static_fallback=True)
     form_tag = re.search(r"<form[^>]*>", html)
     fieldset_tag = re.search(r"<fieldset[^>]*>", html)
     input_tag = re.search(r"<input[^>]*>", html)
@@ -921,7 +944,16 @@ def test_semantic_table_renders_ordered_headers_row_headers_and_nested_component
         slots={"caption": "Projects"},
     )
 
-    html = _page_html(app, table)
+    class Page(Component):
+        citry = app
+        template = "<main>{{ table }}</main>"
+
+        def template_data(self, kwargs, slots):
+            return {"table": table}
+
+    rendered = Page().render()
+    html = rendered.serialize(security_javascript="omit")
+    prepared_html = rendered.serialize()
 
     assert "<table" in html
     assert '<caption id="' in html
@@ -933,7 +965,7 @@ def test_semantic_table_renders_ordered_headers_row_headers_and_nested_component
     assert '<button class="cui-button"' in html
     assert "Open" in html
     assert 'role="grid"' not in html
-    assert "<script" in html
+    assert "<script" in prepared_html
 
 
 def test_table_renders_footer_and_merges_column_cell_defaults():
@@ -973,7 +1005,7 @@ def test_table_renders_footer_and_merges_column_cell_defaults():
         ),
     )
 
-    html = _page_html(app, table)
+    html = _page_html(app, table, static_fallback=True)
 
     assert '<tfoot data-citry-ui-part="footer">' in html
     assert '<th scope="row" data-column-key="moon"' in html
@@ -1180,7 +1212,7 @@ def test_server_rendered_tabs_pair_aria_ids_and_initial_selection():
         slots={"default": TabsContent()},
     )
 
-    html = _page_html(app, tabs)
+    html = _page_html(app, tabs, static_fallback=True)
     selected_tab = re.search(r'<button[^>]+aria-selected="true"[^>]+>', html)
     root_tag = re.search(r'<div[^>]+data-citry-ui-part="tabs"[^>]*>', html)
 
@@ -1227,7 +1259,7 @@ def test_styled_tabs_expose_production_configuration_parts_and_tokens():
         slots={"default": TabsContent()},
     )
 
-    html = _page_html(app, tabs, include_css=True)
+    html = _page_html(app, tabs, include_css=True, static_fallback=True)
     root_tag = re.search(r'<div[^>]+data-citry-ui-part="tabs"[^>]*>', html)
 
     assert root_tag is not None
@@ -1505,7 +1537,7 @@ def test_imported_compound_tabs_can_be_nested_as_component_like_slot_values():
         aria_label="Account settings",
         slots={"default": TabsContent()},
     )
-    html = _page_html(app, tabs)
+    html = _page_html(app, tabs, static_fallback=True)
 
     assert "Account" in html
     assert "Panel" in html
@@ -1624,7 +1656,7 @@ def test_nested_tabs_are_valid_below_a_tab_panel_boundary():
         aria_label="Outer tabs",
         slots={"default": NestedContent()},
     )
-    html = _page_html(app, tabs)
+    html = _page_html(app, tabs, static_fallback=True)
 
     assert html.count('role="tablist"') == 2
     assert html.count('role="tab"') == 2

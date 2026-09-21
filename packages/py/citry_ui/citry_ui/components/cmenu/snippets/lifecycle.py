@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class MenuLifecycle(Component):
     template = """
-      <section class="archive-lifecycle-demo" x-data>
+      <section class="archive-lifecycle-demo">
         <c-CPopover>
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Open reading room</c-CButton>
@@ -30,13 +30,15 @@ class MenuLifecycle(Component):
           </c-fill>
         </c-CPopover>
         <c-CButton @click="$refs.vault.showModal()">Open modal vault</c-CButton>
-        <dialog x-ref="vault" aria-labelledby="vault-title">
+        <dialog ref="vault" aria-labelledby="vault-title">
           <h2 id="vault-title">Royal vault</h2>
           <p>Opening this modal closes unrelated anchored layers.</p>
           <button type="button" @click="$refs.vault.close()">Close vault</button>
         </dialog>
       </section>
     """
+
+    js = "$component({});"
 
     css = """
       :where(.archive-lifecycle-demo) {

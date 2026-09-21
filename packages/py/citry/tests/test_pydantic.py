@@ -11,13 +11,12 @@ declaration, validation, defaults, parse-time tag rules, slots, and how the
 Pydantic is a dev/test dependency only; the suite skips cleanly without it.
 """
 
-# ruff: noqa: ANN
-
 import pytest
 
-from citry import Citry, Component, Const, Extension
+from citry import Citry, Component, Const, Extension, const_value
+from citry._vue.capture import PreparedConstantNode, PreparedExprNode, PreparedTextValue
+from citry._vue.leaf_program import LeafProgramNode
 from citry.constness import is_const
-from citry.nodes import ExprNode
 from citry.slots import Slot
 from citry.util.misc import to_dict
 
@@ -27,6 +26,31 @@ ConfigDict = pydantic.ConfigDict
 pydantic_v1 = pytest.importorskip("pydantic.v1")
 BaseModelV1 = pydantic_v1.BaseModel
 ExtraV1 = pydantic_v1.Extra
+
+
+def _track_prepared_expression(monkeypatch, expression):
+    original = PreparedExprNode.evaluate
+    calls = []
+
+    def evaluate(self, variables, *, sandboxed=True):
+        if self.expr.strip() == expression:
+            calls.append(tuple(const_value(variables[name]) for name in self.used_vars))
+        return original(self, variables, sandboxed=sandboxed)
+
+    monkeypatch.setattr(PreparedExprNode, "evaluate", evaluate)
+    return calls
+
+
+def _cache_has_prepared_text(cache, expected):
+    return any(
+        any(
+            isinstance(item, PreparedConstantNode)
+            and isinstance(item.value, PreparedTextValue)
+            and item.value.value == expected
+            for item in body
+        )
+        for body in cache.values()
+    )
 
 
 class TestPydanticKwargs:
@@ -289,6 +313,31 @@ class TestPydanticComponentData:
 
 
 class TestPydanticConstInterplay:
+    def test_validation_strips_the_marker_from_the_typed_view(self, monkeypatch):
+        # Pydantic validation produces new (coerced) values, so the typed
+        # view loses the Const marker: the value safely renders as dynamic.
+        # Validation itself accepts the transparent proxy.
+        c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "cols")
+
+        seen: dict = {}
+
+        class Card(Component):
+            citry = c
+            template = "<p>{{ cols }}</p>"
+
+            class Kwargs(BaseModel):
+                cols: int
+
+            def template_data(self, kwargs, slots):
+                seen["typed_is_const"] = is_const(kwargs.cols)
+                return {"cols": kwargs.cols}
+
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c2="">3</p>'
+        assert seen["typed_is_const"] is False
+        assert calls == [(3,)]
+
     def test_marked_default_is_plain_before_validation(self):
         seen = []
         c = Citry()
@@ -314,11 +363,10 @@ class TestPydanticConstInterplay:
         assert seen == [(True, True)]
 
     def test_coerced_kwargs_and_custom_output_remain_plain_and_dynamic(self):
-        # Citry removes the input marker before Pydantic validation. The typed
-        # field is ordinary, and coercion replaces the marked input object, so
-        # the custom callback's result stays dynamic.
+        # Pydantic receives ordinary values after Citry consumes the input
+        # marker. Coercion therefore leaves the custom callback's result
+        # dynamic, while the prepared Vue expression path still renders it.
         c = Citry()
-
         seen: dict = {}
 
         class Card(Component):
@@ -338,7 +386,7 @@ class TestPydanticConstInterplay:
         assert Card(cols=Const("3")).render().serialize() == '<p data-cid-c1="">3</p>'
         assert seen["typed_is_const"] is False
         (body,) = c._const_body_cache.values()
-        assert any(isinstance(item, ExprNode) for item in body)
+        assert any(isinstance(item, LeafProgramNode) for item in body)
 
     def test_raw_kwargs_are_plain_and_same_input_mapping_restores_constness(self):
         c = Citry()
@@ -359,4 +407,4 @@ class TestPydanticConstInterplay:
             """.strip()
 
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
-        assert ["<p>3</p>"] in c._const_body_cache.values()
+        assert _cache_has_prepared_text(c._const_body_cache, "3")

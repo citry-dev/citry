@@ -71,7 +71,7 @@ inputs:
         name: attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds allowed native root, ARIA, Alpine, and data attributes. It may also contribute class and style values; prefer the top-level inputs for those. Form attributes apply only without `href`; link attributes such as `target`, `rel`, and `download` apply with `href`.
+        effect: Adds allowed native root, ARIA, Vue, and data attributes. It may also contribute class and style values; prefer the top-level inputs for those. Form attributes apply only without `href`; link attributes such as `target`, `rel`, and `download` apply with `href`.
 
   - id: cbutton-client-inputs
     component: CButton

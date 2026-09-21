@@ -6,14 +6,23 @@ citry.register_library(citry_ui)
 
 class DelayedSpinner(Component):
     template = """
-      <section class="spinner-delayed" x-data="{visible: false}">
+      <section class="spinner-delayed" >
         <button type="button" @click="visible = !visible">Toggle long-running observation</button>
-        <div x-show="visible" class="spinner-delayed__status">
+        <div v-show="visible" class="spinner-delayed__status">
           <c-CSpinner label="Waiting for long exposure" size="sm" />
           <span>Waiting for the long exposure</span>
         </div>
         <p>Real applications show this only after their chosen delay.</p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            visible: false
+          };
+        },
+      });
     """
     css = """
       :where(.spinner-delayed) {

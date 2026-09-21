@@ -75,8 +75,7 @@ element and its browser state.
 ## Configure Button
 
 Server inputs are passed in Python through `<c-CButton ... />` attributes or a
-`CButton(...)` composition call. Client inputs are passed in the browser through
-the `$c-props="{...}"` attribute.
+`CButton(...)` composition call. Client inputs use native Vue `:prop` bindings.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cbutton/snippets/configuration.py"
@@ -90,11 +89,9 @@ episode and use the server value for that field.
 ```citry-html
 <c-CButton
   variant="outline"
-  $c-props="{
-    loading: scanning,
-    disabled: !trailOpen,
-    variant: preferredVariant,
-  }"
+  :loading="scanning"
+  :disabled="!trailOpen"
+  :variant="preferredVariant"
 >
   Begin survey
 </c-CButton>
@@ -168,7 +165,7 @@ geometry.
 ## Show loading and disabled states
 
 The server `loading` input sets the initial pending state. The client `loading`
-input is passed through `$c-props` when browser code owns later changes.
+input uses `:loading` when browser code owns later changes.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cbutton/snippets/loading_states.py"
@@ -215,7 +212,7 @@ Native submitter attributes pass through the server `attrs` mapping.
 
 Supported native attributes include `name`, `value`, `form`, `formaction`,
 `formenctype`, `formmethod`, `formnovalidate`, and `formtarget`. Listen to native
-`click`, `submit`, and `reset` events with Alpine. `CButton` does not duplicate
+`click`, `submit`, and `reset` events with Vue. `CButton` does not duplicate
 them with component callbacks or custom DOM events.
 
 Form attributes and `type="submit"` or `type="reset"` are incompatible with

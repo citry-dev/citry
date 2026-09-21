@@ -27,6 +27,7 @@ def _page(app: Citry, *, localized: bool = False) -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {selected:'2026-08-19',visible:'2026-08-19',acceptValue:false,acceptVisible:false};}});"
         template = f"""
           <!doctype html>
           <html lang="en-US">
@@ -38,7 +39,7 @@ def _page(app: Citry, *, localized: bool = False) -> str:
             </head>
             <body>
               {provider_open}
-              <section x-data="{{selected:'2026-08-19',visible:'2026-08-19',acceptValue:false,acceptVisible:false}}">
+              <section>
                 <form id="booking" @submit.prevent="window.__calendarSubmits.push(Array.from(new FormData($event.target).entries()))">
                   <c-CField control_id="arrival" required>
                     <c-fill name="label">Arrival date</c-fill>
@@ -51,7 +52,8 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                         min="2026-08-10"
                         max="2026-09-15"
                         c-unavailable_dates="('2026-08-20',)"
-                        $c-props="{{onValueChange:(value,detail)=>window.__calendarEvents.push(['value',value,detail.source]),onVisibleDateChange:(value,detail)=>window.__calendarEvents.push(['visible',value,detail.source])}}"
+                        :onValueChange="(value,detail)=>window.__calendarEvents.push(['value',value,detail.source])"
+                        :onVisibleDateChange="(value,detail)=>window.__calendarEvents.push(['visible',value,detail.source])"
                         @input="window.__calendarEvents.push(['input',$event.target.value])"
                         @change="window.__calendarEvents.push(['change',$event.target.value])"
                       />
@@ -67,7 +69,10 @@ def _page(app: Citry, *, localized: bool = False) -> str:
                   value="2026-08-19"
                   visible_date="2026-08-19"
                   label="Controlled calendar"
-                  $c-props="{{value:selected,visibleDate:visible,onValueChange:(value,detail)=>{{window.__calendarEvents.push(['controlled-value',value,detail.controlled]);if(acceptValue)selected=value}},onVisibleDateChange:(value,detail)=>{{window.__calendarEvents.push(['controlled-visible',value,detail.controlled]);if(acceptVisible)visible=value}}}}"
+                  :value="selected"
+                  :visibleDate="visible"
+                  :onValueChange="(value,detail)=>{{window.__calendarEvents.push(['controlled-value',value,detail.controlled]);if(acceptValue)selected=value}}"
+                  :onVisibleDateChange="(value,detail)=>{{window.__calendarEvents.push(['controlled-visible',value,detail.controlled]);if(acceptVisible)visible=value}}"
                 />
                 <button id="accept-value" type="button" @click="acceptValue=true">Accept value</button>
                 <button id="accept-visible" type="button" @click="acceptVisible=true">Accept page</button>
@@ -268,7 +273,7 @@ def test_client_locale_switch_updates_messages_calendar_fields_and_direction(
     assert root.locator('[data-citry-ui-part="previous"]').get_attribute("aria-label") == "Previous month"
     english_label = root.locator('[data-date="2026-08-19"]').get_attribute("aria-label")
 
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-cs'), '$i18n').switchLocale('cs-CZ')")
+    page.locator("#switch-cs").click()
     page.wait_for_function("document.querySelector('main')?.lang === 'cs-CZ'")
     page.wait_for_function(
         "document.querySelector('#arrival-calendar [data-citry-ui-part=previous]').getAttribute('aria-label') === 'Předchozí měsíc'"
@@ -278,12 +283,12 @@ def test_client_locale_switch_updates_messages_calendar_fields_and_direction(
     assert root.locator('[data-citry-ui-part="next"]').get_attribute("aria-label") == "Další měsíc"
     assert root.locator('[data-date="2026-08-19"]').get_attribute("aria-label") != english_label
 
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-th'), '$i18n').switchLocale('th-TH')")
+    page.locator("#switch-th").click()
     page.wait_for_function("document.querySelector('main')?.lang === 'th-TH'")
     assert "2569" in root.locator('[data-citry-ui-part="heading"]').text_content()
     assert root.locator('[data-date="2026-08-19"]').count() == 1
 
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-ar'), '$i18n').switchLocale('ar-EG')")
+    page.locator("#switch-ar").click()
     page.wait_for_function("document.querySelector('main')?.dir === 'rtl'")
     day = root.locator('[data-date="2026-08-19"]')
     day.focus()

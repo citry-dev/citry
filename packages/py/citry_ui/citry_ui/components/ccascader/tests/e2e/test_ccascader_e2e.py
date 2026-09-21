@@ -109,12 +109,13 @@ citry-ui-cascader-selected = Vybráno: { $path }
 def _localized_page(app: Citry) -> str:
     class Page(Component):
         citry = app
+        js = "$component({data(){return {selection:[]};}});"
         template = """
           <!doctype html><html lang="en-US"><head><meta charset="utf-8"><title>Localized Cascader</title><c-css /></head>
           <body>
             <c-i18n tag="main" c-client="True">
-              <section x-data="{selection:[]}">
-                <c-CCascader id="localized-place" aria_label="Destination" $c-props="{value:selection,onValueChange:value=>selection=value}">
+              <section>
+                <c-CCascader id="localized-place" aria_label="Destination" :value="selection" :onValueChange="value=>selection=value">
                   <c-CCascaderOption value="world" label="World">
                     <c-CCascaderOption value="europe" label="Europe"><c-CCascaderOption value="prague" label="Prague" /></c-CCascaderOption>
                   </c-CCascaderOption>
@@ -149,7 +150,7 @@ def _server_only_localized_page(app: Citry) -> str:
     return Page().render(provides={"citry_i18n": context}).serialize()
 
 
-def _page() -> str:
+def _page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -157,9 +158,10 @@ def _page() -> str:
         citry = app
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cascader evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <form id="form"><label id="place-label">Destination</label><c-CCascader id="place" aria_labelledby="place-label" name="place" c-value="['world','europe','prague']"
-              $c-props="{onValueChange:(value,detail)=>$store.cascade.changes.push([value,detail.source]),onOpenChange:(open)=>$store.cascade.opens.push(open)}">
+              :onValueChange="(value,detail)=>state.cascade.changes.push([value,detail.source])"
+              :onOpenChange="(open)=>state.cascade.opens.push(open)">
               <c-CCascaderOption value="world" label="World">
                 <c-CCascaderOption value="europe" label="Europe"><c-CCascaderOption value="prague" label="Prague" /><c-CCascaderOption value="berlin" label="Berlin" /></c-CCascaderOption>
                 <c-CCascaderOption value="asia" label="Asia"><c-CCascaderOption value="tokyo" label="Tokyo" /></c-CCascaderOption>
@@ -169,7 +171,10 @@ def _page() -> str:
             <c-CCascader id="empty-place" aria_label="Empty destination" />
             <button id="after-empty" type="button">After empty Cascader</button>
             <c-CCascader id="controlled-place" aria_label="Controlled destination" c-value="['world','europe','prague']"
-              $c-props="{open:$store.cascade.controlledOpen,value:$store.cascade.controlledValue,onOpenChange:open=>setTimeout(()=>$store.cascade.controlledOpen=open,40),onValueChange:value=>setTimeout(()=>$store.cascade.controlledValue=value,40)}">
+              :open="state.cascade.controlledOpen"
+              :value="state.cascade.controlledValue"
+              :onOpenChange="open=>globalThis.setTimeout(()=>state.cascade.controlledOpen=open,40)"
+              :onValueChange="value=>globalThis.setTimeout(()=>state.cascade.controlledValue=value,40)">
               <c-CCascaderOption value="world" label="World">
                 <c-CCascaderOption value="europe" label="Europe"><c-CCascaderOption value="prague" label="Prague" /></c-CCascaderOption>
                 <c-CCascaderOption value="asia" label="Asia"><c-CCascaderOption value="tokyo" label="Tokyo" /></c-CCascaderOption>
@@ -177,24 +182,25 @@ def _page() -> str:
             </c-CCascader>
           </body></html>
         """
-        js = "Alpine.store('cascade',{changes:[],opens:[],controlledOpen:false,controlledValue:['world','europe','prague']});"
+        js = "$component({data(){const state=Citry.vue.reactive({changes:[],opens:[],controlledOpen:false,controlledValue:['world','europe','prague']});window.__cascade=state;return {state:{cascade:state}};}});"
 
-    return str(Page())
+    return app, str(Page())
 
 
-def _load(page: Any) -> list[str]:
+def _load(page: Any, serve_citry_ui_live: Any) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    app, html = _page()
+    page.goto(serve_citry_ui_live(app, html) + "/", wait_until="networkidle")
     page.wait_for_selector("#place[data-citry-cascader-initialized]")
     page.wait_for_selector("#empty-place[data-citry-cascader-initialized]")
     page.wait_for_selector("#controlled-place[data-citry-cascader-initialized]")
     return errors
 
 
-def test_pointer_path_updates_display_inputs_and_callbacks(page: Any) -> None:
-    errors = _load(page)
+def test_pointer_path_updates_display_inputs_and_callbacks(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#place")
     assert root.locator('[data-citry-ui-part="popup"]').is_hidden()
     root.locator('[data-citry-ui-part="trigger"]').click()
@@ -202,8 +208,8 @@ def test_pointer_path_updates_display_inputs_and_callbacks(page: Any) -> None:
     root.locator('[role="treeitem"][data-value="tokyo"]').click()
     assert root.locator('[data-citry-ui-part="value"]').inner_text() == "World / Asia / Tokyo"
     assert root.locator('input[name="place"]').evaluate_all("els=>els.map(el=>el.value)") == ["world", "asia", "tokyo"]
-    assert page.evaluate("Alpine.store('cascade').changes") == [[["world", "asia", "tokyo"], "pointer"]]
-    assert page.evaluate("Alpine.store('cascade').opens") == [True, False]
+    assert page.evaluate("window.__cascade.changes") == [[["world", "asia", "tokyo"], "pointer"]]
+    assert page.evaluate("window.__cascade.opens") == [True, False]
     assert errors == []
 
 
@@ -261,8 +267,8 @@ def test_shipped_geographic_path_toggles_popup_and_each_active_branch(
     assert errors == []
 
 
-def test_keyboard_environment_axe_and_cleanup(page: Any) -> None:
-    errors = _load(page)
+def test_keyboard_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#place")
     trigger = root.locator('[data-citry-ui-part="trigger"]')
     assert trigger.get_attribute("aria-labelledby") == "place-label"
@@ -279,7 +285,7 @@ def test_keyboard_environment_axe_and_cleanup(page: Any) -> None:
     page.wait_for_function("document.activeElement?.dataset?.value === 'tokyo'")
     page.keyboard.press("End")
     page.keyboard.press("Enter")
-    assert page.evaluate("Alpine.store('cascade').changes.at(-1)[1]") == "keyboard"
+    assert page.evaluate("window.__cascade.changes.at(-1)[1]") == "keyboard"
     page.emulate_media(forced_colors="active", reduced_motion="reduce")
     page.add_script_tag(path=str(_root() / "node_modules" / "axe-core" / "axe.min.js"))
     violations = page.evaluate(
@@ -291,8 +297,8 @@ def test_keyboard_environment_axe_and_cleanup(page: Any) -> None:
     assert errors == []
 
 
-def test_empty_popup_escape_and_tab_close_from_the_trigger(page: Any) -> None:
-    errors = _load(page)
+def test_empty_popup_escape_and_tab_close_from_the_trigger(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     trigger = page.locator('#empty-place [data-citry-ui-part="trigger"]')
     trigger.focus()
     trigger.click()
@@ -308,8 +314,10 @@ def test_empty_popup_escape_and_tab_close_from_the_trigger(page: Any) -> None:
     assert errors == []
 
 
-def test_delayed_controlled_open_focuses_and_controlled_acceptance_announces(page: Any) -> None:
-    errors = _load(page)
+def test_delayed_controlled_open_focuses_and_controlled_acceptance_announces(
+    page: Any, serve_citry_ui_live: Any
+) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#controlled-place")
     trigger = root.locator('[data-citry-ui-part="trigger"]')
     trigger.click()
@@ -345,13 +353,14 @@ def test_delayed_controlled_open_focuses_and_controlled_acceptance_announces(pag
 
 def test_invalid_controlled_props_retain_the_last_valid_state_until_control_is_omitted(
     page: Any,
+    serve_citry_ui_live: Any,
 ) -> None:
-    errors = _load(page)
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#controlled-place")
     page.evaluate(
         """() => {
-          Alpine.store('cascade').controlledValue=['world','asia','tokyo'];
-          Alpine.store('cascade').controlledOpen=true;
+          window.__cascade.controlledValue=['world','asia','tokyo'];
+          window.__cascade.controlledOpen=true;
         }"""
     )
     page.wait_for_function(
@@ -364,8 +373,8 @@ def test_invalid_controlled_props_retain_the_last_valid_state_until_control_is_o
 
     page.evaluate(
         """() => {
-          Alpine.store('cascade').controlledValue=['world','missing'];
-          Alpine.store('cascade').controlledOpen='yes';
+          window.__cascade.controlledValue=['world','missing'];
+          window.__cascade.controlledOpen='yes';
         }"""
     )
     page.wait_for_timeout(50)
@@ -377,8 +386,8 @@ def test_invalid_controlled_props_retain_the_last_valid_state_until_control_is_o
 
     page.evaluate(
         """() => {
-          Alpine.store('cascade').controlledValue=undefined;
-          Alpine.store('cascade').controlledOpen=undefined;
+          window.__cascade.controlledValue=undefined;
+          window.__cascade.controlledOpen=undefined;
         }"""
     )
     page.wait_for_function(
@@ -396,9 +405,11 @@ def test_invalid_controlled_props_retain_the_last_valid_state_until_control_is_o
     assert any("CCascader open received invalid client value" in error for error in errors)
 
 
-def test_normal_flow_popup_is_clamped_without_document_overflow_in_ltr_and_rtl(page: Any) -> None:
+def test_normal_flow_popup_is_clamped_without_document_overflow_in_ltr_and_rtl(
+    page: Any, serve_citry_ui_live: Any
+) -> None:
     page.set_viewport_size({"width": 900, "height": 700})
-    errors = _load(page)
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#place")
     trigger = root.locator('[data-citry-ui-part="trigger"]')
     popup = root.locator('[data-citry-ui-part="popup"]')
@@ -434,8 +445,10 @@ def test_normal_flow_popup_is_clamped_without_document_overflow_in_ltr_and_rtl(p
     assert errors == []
 
 
-def test_desktop_columns_are_siblings_without_nested_horizontal_scroll_or_reserved_height(page: Any) -> None:
-    errors = _load(page)
+def test_desktop_columns_are_siblings_without_nested_horizontal_scroll_or_reserved_height(
+    page: Any, serve_citry_ui_live: Any
+) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#place")
     root.locator('[data-citry-ui-part="trigger"]').click()
     geometry = root.locator('[data-citry-ui-part="popup"]').evaluate(
@@ -473,9 +486,9 @@ def test_desktop_columns_are_siblings_without_nested_horizontal_scroll_or_reserv
     assert errors == []
 
 
-def test_narrow_columns_stack_at_trigger_width_without_inline_scroll(page: Any) -> None:
+def test_narrow_columns_stack_at_trigger_width_without_inline_scroll(page: Any, serve_citry_ui_live: Any) -> None:
     page.set_viewport_size({"width": 390, "height": 700})
-    errors = _load(page)
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#place")
     root.locator('[data-citry-ui-part="trigger"]').click()
     geometry = root.locator('[data-citry-ui-part="popup"]').evaluate(
@@ -623,7 +636,7 @@ def test_locale_switch_updates_only_an_empty_placeholder_and_never_overwrites_a_
     root.get_by_role("treeitem", name="Prague").click()
     assert value.inner_text() == "World / Europe / Prague"
 
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-cs'), '$i18n').switchLocale('cs-CZ')")
+    page.locator("#switch-cs").click()
     page.wait_for_function("document.querySelector('main')?.lang === 'cs-CZ'")
     assert value.inner_text() == "World / Europe / Prague"
 
@@ -631,7 +644,7 @@ def test_locale_switch_updates_only_an_empty_placeholder_and_never_overwrites_a_
     page.wait_for_function(
         "document.querySelector('#localized-place [data-citry-ui-part=value]').textContent === 'Vyberte možnost'"
     )
-    page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-en'), '$i18n').switchLocale('en-US')")
+    page.locator("#switch-en").click()
     page.wait_for_function(
         "document.querySelector('#localized-place [data-citry-ui-part=value]').textContent === 'Choose an option'"
     )

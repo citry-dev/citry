@@ -21,7 +21,7 @@ path remains visible and submits normally.
 
 ## Control selection
 
-Pass `value` and `onValueChange` through `$c-props` for controlled state. The
+Pass `value` and `onValueChange` with native Vue bindings for controlled state. The
 callback receives the path plus labels, previous path, selected Option element,
 controlled flag, interaction source, and native event.
 Invalid controlled `value` or `open` values are diagnosed once and retain the

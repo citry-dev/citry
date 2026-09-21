@@ -74,7 +74,7 @@ invalid state, and relationship IDs ambiguous, so Field rejects them.
 
 Server inputs are passed in Python through `<c-CField ... />`,
 `<c-CInput ... />`, `CField(...)`, or `CInput(...)`. Client inputs are passed
-in the browser through `$c-props="{...}"`.
+with native Vue bindings.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cfield/snippets/configuration.py"
@@ -94,7 +94,7 @@ An unsupported server value raises; an unsupported browser value resolves to
 fieldset.
 
 Standalone Input accepts those state inputs directly. Its client inputs use the
-same names through `$c-props`.
+same names through native Vue bindings.
 
 ## Choose an Input variant
 
@@ -177,7 +177,7 @@ browser owns later edits. Supplying a client string controls the current value.
 ```citry-html
 <c-CInput
   type="search"
-  $c-props="{ value: query }"
+  :value="query"
   @input="query = $event.target.value"
 />
 ```
@@ -277,7 +277,7 @@ stays mounted as a polite live region. The required marker is hidden from
 assistive technology.
 
 Input adds no component callback or custom DOM event. Listen to native `input`,
-`change`, `invalid`, `focus`, `blur`, and composition events with Alpine. The
+`change`, `invalid`, `focus`, `blur`, and composition events with Vue. The
 native root exposes `focus()`, `blur()`, `select()`, selection-range methods,
 `checkValidity()`, `reportValidity()`, and `setCustomValidity()` directly.
 

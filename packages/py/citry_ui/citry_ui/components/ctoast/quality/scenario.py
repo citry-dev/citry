@@ -1,5 +1,7 @@
 """Shared Toast scenario used by Citry UI quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from __future__ import annotations
 
 from citry import Citry, Component
@@ -21,17 +23,6 @@ def toast_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack toast-quality"
             aria-labelledby="toast-states-title"
-            x-data="{
-              notices: [
-                {id:'neutral', title:'Draft retained', durationMs:0},
-                {id:'success', title:'Field note saved', description:'Aurora Ridge synchronized.',
-                 intent:'success', durationMs:0},
-                {id:'warn', title:'Connection is slow', intent:'warn', priority:'assertive',
-                 actionLabel:'Retry', closeOnAction:false, durationMs:0},
-                {id:'queued', title:'Queued observation', durationMs:0},
-              ],
-              placement:'block-end-end', limit:3, result:'No action yet'
-            }"
           >
             <h1 id="toast-states-title">Toast states</h1>
             <div class="toast-quality__controls">
@@ -40,7 +31,7 @@ def toast_states_component(app: Citry) -> type[Component]:
               }]">Add notification</c-CButton>
               <c-CButton variant="outline" @click="placement = placement.endsWith('end')
                 ? 'block-start-start' : 'block-end-end'">Move logical corner</c-CButton>
-              <output x-text="result"></output>
+              <output v-text="result"></output>
             </div>
             <c-CToastRegion
               id="quality-toast-region"
@@ -49,13 +40,26 @@ def toast_states_component(app: Citry) -> type[Component]:
                 'queue polite assertive neutral info success warn error action dismissal '
                 'persistent timed visible-limit pause f6 block-start-start block-end-end '
                 'long-content rtl brand'}"
-              $c-props="{
-                items:notices, placement, limit,
-                onAction:(id) => result = `Action: ${id}`,
-                onDismiss:(id) => notices = notices.filter(item => item.id !== id),
-              }"
+              :items="notices" :placement="placement" :limit="limit" :onAction="(id) => result = `Action: ${id}`" :onDismiss="(id) => notices = notices.filter(item => item.id !== id)"
             />
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                notices: [
+                {id:'neutral', title:'Draft retained', durationMs:0},
+                {id:'success', title:'Field note saved', description:'Aurora Ridge synchronized.',
+                intent:'success', durationMs:0},
+                {id:'warn', title:'Connection is slow', intent:'warn', priority:'assertive',
+                actionLabel:'Retry', closeOnAction:false, durationMs:0},
+                {id:'queued', title:'Queued observation', durationMs:0},
+                ],
+                placement:'block-end-end', limit:3, result:'No action yet'
+              };
+            },
+          });
         """
 
         css = """

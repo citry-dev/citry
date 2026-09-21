@@ -12,7 +12,6 @@ ROOT = Path(__file__).resolve().parents[1]
 EMBEDDED_ROOT = ROOT / "packages" / "py" / "citry" / "citry" / "_protocol"
 PACKAGES = {
     "events": ROOT / "packages" / "protocol" / "events" / "v1" / "python" / "citry_events",
-    "client_graph": ROOT / "packages" / "protocol" / "client_graph" / "v1" / "python" / "citry_client_graph",
 }
 
 

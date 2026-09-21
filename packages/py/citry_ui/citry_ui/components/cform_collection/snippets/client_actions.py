@@ -6,10 +6,10 @@ citry.register_library(citry_ui)
 
 class FormCollectionClientActions(Component):
     template = """
-      <section x-data>
+      <section >
         <c-CFormCollection
           label="Phone numbers"
-          $c-props="{onAction: applyCollectionAction}"
+          :onAction="applyCollectionAction"
         >
           <c-CFormCollectionItem value="mobile" label="Mobile">
             <label>Number <input name="phones[mobile]" /></label>
@@ -18,25 +18,34 @@ class FormCollectionClientActions(Component):
             <label>Number <input name="phones[office]" /></label>
           </c-CFormCollectionItem>
         </c-CFormCollection>
-        <output aria-live="polite" x-text="collectionStatus">Order: Mobile, Office</output>
+        <output aria-live="polite" v-text="collectionStatus">Order: Mobile, Office</output>
       </section>
     """
 
     js = """
       $component({
-        init: ({ scope, els, i18n }) => {
-        const collection = els[0].querySelector('[data-citry-ui-part="form-collection"]');
+        data() {
+          return { collectionStatus: 'Order: Mobile, Office', nextSequence: 3 };
+        },
+        methods: {
+          applyCollectionAction(detail) {
+            this._collectionRuntime?.apply(detail);
+          },
+        },
+        mounted() {
+          const component = this;
+          const collection = this.$el.querySelector('[data-citry-ui-part="form-collection"]');
         const list = collection.querySelector(':scope > [data-citry-ui-part="items"]');
         const parking = document.createElement('fieldset');
         const parked = document.createElement('ol');
         const bindings = [];
-        let nextSequence = 3;
         parking.disabled = true;
         parking.hidden = true;
         parking.append(parked);
         collection.append(parking);
 
         const bindActionLabel = (button, action, label) => {
+          const i18n = component.$i18n;
           let binding = null;
           if (action === 'move-up') {
             button.setAttribute('aria-label', `Move ${label} up`);
@@ -73,8 +82,8 @@ class FormCollectionClientActions(Component):
         };
 
         const makeItem = () => {
-          const sequence = nextSequence;
-          nextSequence += 1;
+          const sequence = component.nextSequence;
+          component.nextSequence += 1;
           const value = `phone-${sequence}`;
           const label = `Phone ${sequence}`;
           const labelId = `client-phone-${sequence}-label`;
@@ -135,11 +144,10 @@ class FormCollectionClientActions(Component):
           const add = collection.querySelector('[data-citry-ui-part="add"]');
           add.disabled = false;
           add.dataset.citryInitiallyDisabled = 'false';
-          scope.collectionStatus = `Order: ${current.map(item => item.dataset.label).join(', ') || 'No items'}`;
+          component.collectionStatus = `Order: ${current.map(item => item.dataset.label).join(', ') || 'No items'}`;
         };
 
-        scope.collectionStatus = 'Order: Mobile, Office';
-        scope.applyCollectionAction = (detail) => {
+        const apply = (detail) => {
           // The static preview owns this local record set; production owners rerender their own state.
           detail.sourceEvent.preventDefault();
           const button = detail.sourceEvent.target.closest('[data-citry-form-collection-action]');
@@ -160,7 +168,19 @@ class FormCollectionClientActions(Component):
           });
         };
         sync();
-        return () => bindings.forEach(binding => binding.dispose());
+        Object.defineProperty(this, '_collectionRuntime', {
+          configurable: true,
+          value: {
+            apply,
+            dispose() {
+              bindings.forEach(binding => binding.dispose());
+            },
+          },
+        });
+        },
+        beforeUnmount() {
+          this._collectionRuntime?.dispose();
+          delete this._collectionRuntime;
         },
       });
     """

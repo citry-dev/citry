@@ -38,29 +38,27 @@ def _page() -> str:
         template = """
           <!doctype html>
           <html lang="en"><head><meta charset="utf-8"><title>Tree evidence</title><c-css /></head>
-          <body x-data>
-            <form @submit.prevent="$store.tree.submits += 1">
+          <body>
+            <form @submit.prevent="tree.submits += 1">
               <c-CTree
                 label="Controlled files"
                 c-expanded="['src']"
                 c-selected="['app']"
                 class_="brand-tree"
                 variant="outline"
-                $c-props="{
-                  expanded: $store.tree.expanded,
-                  selected: $store.tree.selected,
-                  selectionMode: $store.tree.mode,
-                  disabled: $store.tree.disabled,
-                  onExpandedChange: (next, detail) => {
-                    $store.tree.events.push(['expanded', detail.value, detail.expanded, detail.controlled]);
-                    if ($store.tree.accept) $store.tree.expanded = next;
-                  },
-                  onSelectionChange: (next, detail) => {
-                    $store.tree.events.push(['selected', detail.value, detail.selected, detail.controlled]);
-                    if ($store.tree.accept) $store.tree.selected = next;
-                  },
-                  onAction: (value) => $store.tree.actions.push(value),
+                :expanded="tree.expanded"
+                :selected="tree.selected"
+                :selection-mode="tree.mode"
+                :disabled="tree.disabled"
+                :on-expanded-change="(next, detail) => {
+                  tree.events.push(['expanded', detail.value, detail.expanded, detail.controlled]);
+                  if (tree.accept) tree.expanded = next;
                 }"
+                :on-selection-change="(next, detail) => {
+                  tree.events.push(['selected', detail.value, detail.selected, detail.controlled]);
+                  if (tree.accept) tree.selected = next;
+                }"
+                :on-action="(value) => tree.actions.push(value)"
               >
                 <c-CTreeItem value="src" label="Source">
                   <c-CTreeItem value="app" label="App" />
@@ -89,9 +87,12 @@ def _page() -> str:
           </body></html>
         """
         js = """
-          Alpine.store('tree', {
-            expanded: ['src'], selected: ['app'], mode: 'single', disabled: false,
-            accept: false, events: [], actions: [], submits: 0,
+          $component({
+            data() { return {tree: {
+              expanded: ['src'], selected: ['app'], mode: 'single', disabled: false,
+              accept: false, events: [], actions: [], submits: 0,
+            }}; },
+            mounted() { window.__treeState = this.tree; },
           });
         """
 
@@ -116,9 +117,9 @@ def test_controlled_expansion_selection_action_and_release(page: Any) -> None:
     source = _item(page, "src")
     source.locator(':scope > [data-citry-ui-part="row"] > [data-citry-ui-part="indicator"]').click()
     assert source.get_attribute("aria-expanded") == "true"
-    assert page.evaluate("Alpine.store('tree').events")[-1] == ["expanded", "src", False, True]
+    assert page.evaluate("window.__treeState.events")[-1] == ["expanded", "src", False, True]
 
-    page.evaluate("Alpine.store('tree').accept = true")
+    page.evaluate("window.__treeState.accept = true")
     source.locator(':scope > [data-citry-ui-part="row"] > [data-citry-ui-part="indicator"]').click()
     page.wait_for_function(
         "document.querySelector('.brand-tree [data-value=src]').getAttribute('aria-expanded') === 'false'"
@@ -132,10 +133,10 @@ def test_controlled_expansion_selection_action_and_release(page: Any) -> None:
         "document.querySelector('.brand-tree [data-value=readme]').getAttribute('aria-selected') === 'true'"
     )
     _item(page, "readme").press("Enter")
-    assert page.evaluate("Alpine.store('tree').actions") == ["readme"]
-    assert page.evaluate("Alpine.store('tree').submits") == 0
+    assert page.evaluate("window.__treeState.actions") == ["readme"]
+    assert page.evaluate("window.__treeState.submits") == 0
 
-    page.evaluate("Alpine.store('tree').selected = null")
+    page.evaluate("window.__treeState.selected = null")
     page.wait_for_timeout(20)
     _item(page, "app").click()
     assert _item(page, "app").get_attribute("aria-selected") == "true"
@@ -144,7 +145,7 @@ def test_controlled_expansion_selection_action_and_release(page: Any) -> None:
 
 def test_keyboard_navigation_typeahead_collapse_focus_and_disabled(page: Any) -> None:
     errors = _load(page)
-    page.evaluate("Alpine.store('tree').accept = true")
+    page.evaluate("window.__treeState.accept = true")
     app = _item(page, "app")
     app.focus()
     app.press("ArrowDown")

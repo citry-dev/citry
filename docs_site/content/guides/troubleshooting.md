@@ -56,13 +56,13 @@ first error in the chain:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| A second or foreign Alpine warning | The page or a dependency loads Alpine separately | Remove that script and use [Citry's plugin hook](/advanced/alpine-runtime/#add-an-alpine-plugin) |
-| Props initialization was skipped | `$c-props` is missing, invalid, asynchronous, or has the wrong declared type | Return a synchronous plain object and follow the named prop diagnostic |
-| Missing or changed ownership marker | A minifier, CDN, sanitizer, or DOM update changed ownership comments | Preserve all [client-active HTML](/advanced/alpine-runtime/#preserve-client-active-html) |
+| Vue component failed to mount | A prepared definition, manifest reference, or component asset is incomplete | Fix the first validation or asset error before retrying the render |
+| A required Vue prop is missing or incompatible | The parent omitted a declared prop or supplied a value with a proven incompatible type | Check the child's native `props` option and the parent's `:` or `v-bind` binding |
+| Generated Vue host or configuration is missing | An optimizer, sanitizer, or DOM update removed part of the interactive delivery | Preserve the [Vue host, configuration, and fragment descriptors](/advanced/vue-runtime/#preserve-interactive-html) |
 | Fragment graph or asset adoption failed | Citry routes are not mounted, or one manifest or asset is incomplete | Mount the integration and inspect the first network or graph error |
-| Native `x-for`, `x-if`, or `x-teleport` clone was rejected | The template tries to clone a server-rendered active Citry component | Render component lists on the server or keep the structural directive inside the component |
+| A `v-for` or `v-if` cannot create the expected Citry child | Vue owns the browser loop or branch and cannot run Python | Use `<c-for>` or `<c-if>` when the structure creates Python component instances |
 
-Citry fails a damaged graph before callbacks can observe partial ownership. Do
+Citry rejects invalid prepared metadata before callbacks can observe a partial update. Do
 not suppress the diagnostic and continue with only the visible HTML.
 
 ## Read the component path in errors

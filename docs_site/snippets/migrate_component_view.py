@@ -41,11 +41,7 @@ class ContactForm(Component):
 
     class Events(ViewEvents):
         def post(self, data: ContactIn):
-            return actions.Render(
-                ThankYouMessage(name=data.name),
-                target="#result",
-                swap="inner",
-            )
+            return ThankYouMessage(name=data.name)
 
     def template_data(self, kwargs, slots) -> dict[str, Any]:
         submit_url = self.citry.build_url(f"ext/events/e/{type(self).class_id}")
@@ -56,7 +52,6 @@ class ContactForm(Component):
         <input name="name">
         <button type="submit">Send</button>
       </form>
-      <div id="result"></div>
     """
 
 
@@ -71,8 +66,7 @@ class NamedContactForm(Component):
         def submit(self, data: ContactIn):
             return actions.Render(
                 ThankYouMessage(name=data.name),
-                target="#result",
-                swap="inner",
+                target="mark:result",
             )
 
     def template_data(self, kwargs, slots) -> dict[str, Any]:
@@ -87,7 +81,7 @@ class NamedContactForm(Component):
         <input name="name">
         <button type="submit">Send</button>
       </form>
-      <div id="result"></div>
+      <c-mark name="result" />
     """
 
 
@@ -123,16 +117,14 @@ class FragmentLoader(Component):
         def preview(self):
             return actions.Render(
                 LoadedFragment(kind="preview"),
-                target="#fragment-target",
-                swap="inner",
+                target="mark:fragment-target",
             )
 
         @event(methods=("GET",))
         def details(self):
             return actions.Render(
                 LoadedFragment(kind="details"),
-                target="#fragment-target",
-                swap="inner",
+                target="mark:fragment-target",
             )
 
     template = """
@@ -140,7 +132,7 @@ class FragmentLoader(Component):
         <button @c-click="preview">Preview</button>
         <button @c-click="details">Details</button>
       </nav>
-      <div id="fragment-target"></div>
+      <c-mark name="fragment-target" />
     """
 
 

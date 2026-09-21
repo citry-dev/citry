@@ -373,27 +373,27 @@ class CCheckbox(LibraryComponent):
     ) -> dict[str, object]:
         field = self.inject(FIELD_CONTEXT_KEY, None)
         return {
-            "value": self._checkbox_value,
-            "checked": kwargs.checked,
-            "indeterminate": kwargs.indeterminate,
-            "required": bool(field.required)
+            "serverValue": self._checkbox_value,
+            "serverChecked": kwargs.checked,
+            "serverIndeterminate": kwargs.indeterminate,
+            "serverRequired": bool(field.required)
             if field is not None
             else kwargs.required
             if kwargs.required is not None
             else False,
-            "disabled": bool(field.disabled)
+            "serverDisabled": bool(field.disabled)
             if field is not None
             else kwargs.disabled
             if kwargs.disabled is not None
             else False,
-            "invalid": bool(field.invalid)
+            "serverInvalid": bool(field.invalid)
             if field is not None
             else kwargs.invalid
             if kwargs.invalid is not None
             else False,
-            "variant": _plain_choice("variant", kwargs.variant, _VARIANTS),
-            "size": _plain_choice("size", kwargs.size, _SIZES),
-            "labelPos": _plain_choice("label_pos", kwargs.label_pos, _LABEL_POSITIONS),
+            "serverVariant": _plain_choice("variant", kwargs.variant, _VARIANTS),
+            "serverSize": _plain_choice("size", kwargs.size, _SIZES),
+            "serverLabelPos": _plain_choice("label_pos", kwargs.label_pos, _LABEL_POSITIONS),
             "descriptionId": self._checkbox_description_id,
             "hasDescription": self._checkbox_has_description,
             "externalDescribedBy": self._checkbox_external_described_by,
@@ -466,14 +466,21 @@ class CCheckbox(LibraryComponent):
           size: {},
           label_pos: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          if (!(root instanceof HTMLElement)) throw new Error("[citry-ui] CCheckbox settled anatomy is invalid.");
+          const data = component;
+          const props = component.$props;
           const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
           if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
             throw new Error("[citry-ui] CCheckbox requires one direct native checkbox input.");
           }
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const handoffKey = Symbol.for("citry-ui:checkbox-handoff");
           const allowedValues = {
             variant: ["solid", "outline"],
@@ -498,7 +505,7 @@ class CCheckbox(LibraryComponent):
             input.checked = Boolean(handoff.checked);
             input.indeterminate = Boolean(handoff.indeterminate);
           } else {
-            input.indeterminate = data.indeterminate;
+            input.indeterminate = data.serverIndeterminate;
           }
 
           const describeValue = (value) => {
@@ -561,12 +568,12 @@ class CCheckbox(LibraryComponent):
           const resolveValue = () => {
             if (props.value === undefined) {
               invalidEpisodes.delete("value");
-              return data.value;
+              return data.serverValue;
             }
             const canonical = canonicalizeValue(props.value);
             if (canonical === null) {
               reportInvalid("value", props.value);
-              return data.value;
+              return data.serverValue;
             }
             invalidEpisodes.delete("value");
             return canonical;
@@ -626,14 +633,14 @@ class CCheckbox(LibraryComponent):
               disabled = field.disabled;
               externalInvalid = field.invalid;
             } else {
-              required = resolveBoolean("required", data.required);
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              externalInvalid = resolveBoolean("invalid", data.invalid);
+              required = resolveBoolean("required", data.serverRequired);
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
+              externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             }
             const invalid = externalInvalid || nativeInvalid;
-            const variant = resolveChoice("variant", data.variant);
-            const size = resolveChoice("size", data.size);
-            const labelPos = resolveChoice("label_pos", data.labelPos);
+            const variant = resolveChoice("variant", data.serverVariant);
+            const size = resolveChoice("size", data.serverSize);
+            const labelPos = resolveChoice("label_pos", data.serverLabelPos);
             const value = resolveValue();
 
             input.required = required;
@@ -782,7 +789,7 @@ class CCheckbox(LibraryComponent):
           input.addEventListener("input", onInput);
           input.addEventListener("change", onChange);
           nativeForm?.addEventListener("reset", onReset);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyState();
             applyLatestControlled();
             if (!activationPending) {

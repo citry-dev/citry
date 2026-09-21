@@ -67,20 +67,19 @@ form submission and reset.
 
 ## Controlled values and callbacks
 
-Omitting client `value` leaves the component uncontrolled. Supplying it through
-`$c-props` makes every interaction a request: the thumb moves only after the
-owner returns the requested value. `onValueChange` fires during each accepted
+Omitting client `value` leaves the component uncontrolled. Supply it with a
+native Vue `:value` binding to make every interaction a request: the thumb
+moves only after the owner returns the requested value. Pass callback props
+with native Vue bindings as well. `onValueChange` fires during each accepted
 pointer or keyboard step. `onValueChangeEnd` fires once at the end of a pointer
 gesture and once after a keyboard request.
 
 ```citry
-<div x-data="{ price: ['20', '80'] }">
+<div>
   <c-CRangeSlider
     c-value="(20, 80)"
-    $c-props="{
-      value: price,
-      onValueChange: (next) => price = next,
-    }"
+    :value="price"
+    :onValueChange="(next) => price = next"
   />
 </div>
 ```

@@ -8,14 +8,13 @@ class NightSkyGuide(Component):
     template = """
       <section
         class="night-sky-guide"
-        x-data="{ selected: 'planets' }"
       >
         <header>
           <p class="night-sky-guide__eyebrow">Field guide</p>
           <h2>The night sky</h2>
           <p>
             Current topic:
-            <output x-text="selected">planets</output>
+            <output v-text="selected">planets</output>
           </p>
         </header>
 
@@ -24,11 +23,9 @@ class NightSkyGuide(Component):
           aria_label="Night sky topics"
           variant="pill"
           grow
-          $c-props="{
-            onValueChange: (value) => {
+          :onValueChange="(value) => {
               selected = value;
-            },
-          }"
+            }"
         >
           <c-CTab value="planets">
             Planets
@@ -54,6 +51,15 @@ class NightSkyGuide(Component):
           </c-CTabPanel>
         </c-CTabs>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            selected: 'planets'
+          };
+        },
+      });
     """
 
     css = """

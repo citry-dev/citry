@@ -260,15 +260,17 @@ class CCarousel(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "index": snapshot["index"],
-            "orientation": snapshot["orientation"],
-            "loop": snapshot["loop"],
-            "disabled": snapshot["disabled"],
-            "controls": snapshot["controls"],
-            "indicators": snapshot["indicators"],
-            "draggable": snapshot["draggable"],
-            "variant": snapshot["variant"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "index": snapshot["index"],
+                "orientation": snapshot["orientation"],
+                "loop": snapshot["loop"],
+                "disabled": snapshot["disabled"],
+                "controls": snapshot["controls"],
+                "indicators": snapshot["indicators"],
+                "draggable": snapshot["draggable"],
+                "variant": snapshot["variant"],
+                "size": snapshot["size"],
+            }
         }
 
     def on_render(self) -> Any:
@@ -348,8 +350,11 @@ class CCarousel(LibraryComponent):
           size: {},
           onIndexChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const geometry = globalThis[Symbol.for("citry-ui:scroll-geometry")];
           if (geometry?.generation !== 1) {
             throw new Error("[citry-ui] CCarousel scroll geometry dependency did not load.");

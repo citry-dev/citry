@@ -33,10 +33,10 @@ def _page() -> str:
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8">
           <title>MultiSelect evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <form
               id="planet-form"
-              @submit.prevent="$store.multi.submits = Array.from(new FormData($event.target).entries())"
+              @submit.prevent="multi.submits = Array.from(new window.FormData($event.target).entries())"
             >
               <c-CMultiSelect
                 class_="primary-multi"
@@ -46,24 +46,22 @@ def _page() -> str:
                 c-value="['earth']"
                 required
                 c-trigger_attrs="{'aria-label': 'Planets'}"
-                $c-props="{
-                  value: $store.multi.value,
-                  open: $store.multi.open,
-                  disabled: $store.multi.disabled,
-                  readonly: $store.multi.readonly,
-                  loop: $store.multi.loop,
-                  closeOnSelect: $store.multi.closeOnSelect,
-                  variant: $store.multi.variant,
-                  size: $store.multi.size,
-                  onValueChange: (next, detail) => {
-                    $store.multi.values.push([next, detail.previousValue, detail.source, detail.controlled]);
-                    if ($store.multi.accept) $store.multi.value = next;
-                  },
-                  onOpenChange: (next, detail) => {
-                    $store.multi.opens.push([next, detail.reason, detail.controlled, detail.forced]);
-                    if ($store.multi.acceptOpen) $store.multi.open = next;
-                  },
-                }"
+                :value="multi.value"
+                :open="multi.open"
+                :disabled="multi.disabled"
+                :readonly="multi.readonly"
+                :loop="multi.loop"
+                :closeOnSelect="multi.closeOnSelect"
+                :variant="multi.variant"
+                :size="multi.size"
+                :onValueChange="(next, detail) => {
+                    multi.values.push([next, detail.previousValue, detail.source, detail.controlled]);
+                    if (multi.accept) multi.value = next;
+                  }"
+                :onOpenChange="(next, detail) => {
+                    multi.opens.push([next, detail.reason, detail.controlled, detail.forced]);
+                    if (multi.acceptOpen) multi.open = next;
+                  }"
               />
               <button id="submit" type="submit">Submit</button>
               <button id="reset" type="reset">Reset</button>
@@ -83,17 +81,30 @@ def _page() -> str:
               c-value="exact_values"
               placeholder="Exact"
               c-trigger_attrs="{'aria-label': 'Exact values'}"
-              $c-props="{value: $store.multi.exact}"
+              :value="multi.exact"
             />
             <dialog id="modal"><button autofocus type="button">Modal action</button></dialog>
+            <c-js />
           </body></html>
         """
         js = """
-          Alpine.store('multi', {
-            value:['earth'], open:undefined, disabled:false, readonly:false, loop:false,
-            closeOnSelect:false, variant:'outline', size:'md', accept:false, acceptOpen:false,
-            values:[], opens:[], submits:[],
-            exact:[' alpha ', 'line\\nfeed'],
+          $component({
+            data() {
+              return {
+                multi: {
+                  value:['earth'], open:undefined, disabled:false, readonly:false, loop:false,
+                  closeOnSelect:false, variant:'outline', size:'md', accept:false, acceptOpen:false,
+                  values:[], opens:[], submits:[],
+                  exact:[' alpha ', 'line\\nfeed'],
+                },
+              };
+            },
+            mounted() {
+              window.__multi = this.multi;
+            },
+            beforeUnmount() {
+              delete window.__multi;
+            },
           });
         """
 
@@ -143,19 +154,19 @@ def test_controlled_values_reject_accept_release_and_popup_stays_open(page: Any)
     _option(page, "mars").click()
     assert control.get_attribute("aria-expanded") == "true"
     assert _chips(page) == ["Earth"]
-    assert page.evaluate("Alpine.store('multi').values.at(-1)") == [
+    assert page.evaluate("window.__multi.values.at(-1)") == [
         ["earth", "mars"],
         ["earth"],
         "pointer",
         True,
     ]
 
-    page.evaluate("Alpine.store('multi').accept = true")
+    page.evaluate("window.__multi.accept = true")
     _option(page, "mars").click()
     page.wait_for_function("document.querySelectorAll('.primary-multi [data-citry-ui-part=chip]').length === 2")
     assert _chips(page) == ["Earth", "Mars"]
 
-    page.evaluate("Alpine.store('multi').value = undefined")
+    page.evaluate("window.__multi.value = undefined")
     _option(page, "jupiter").click()
     assert _chips(page) == ["Earth", "Mars", "Jupiter"]
     assert errors == []
@@ -164,7 +175,7 @@ def test_controlled_values_reject_accept_release_and_popup_stays_open(page: Any)
 def test_keyboard_typeahead_disabled_options_close_on_select_and_tab(page: Any) -> None:
     errors = _load(page)
     control = _control(page)
-    page.evaluate("Alpine.store('multi').value = undefined")
+    page.evaluate("window.__multi.value = undefined")
     control.focus()
     control.press("ArrowUp")
     assert control.get_attribute("aria-expanded") == "true"
@@ -177,7 +188,7 @@ def test_keyboard_typeahead_disabled_options_close_on_select_and_tab(page: Any) 
     control.press("m")
     control.press("Enter")
     assert "Mars" in _chips(page)
-    page.evaluate("Alpine.store('multi').closeOnSelect = true")
+    page.evaluate("window.__multi.closeOnSelect = true")
     control.press("Enter")
     page.wait_for_function("document.querySelector('.primary-multi [role=combobox]').ariaExpanded === 'false'")
     control.click()
@@ -189,19 +200,19 @@ def test_keyboard_typeahead_disabled_options_close_on_select_and_tab(page: Any) 
 def test_native_repeated_form_reset_readonly_fieldset_and_modal_safety(page: Any) -> None:
     errors = _load(page)
     control = _control(page)
-    page.evaluate("Alpine.store('multi').value = undefined")
+    page.evaluate("window.__multi.value = undefined")
     control.click()
     _option(page, "mars").click()
     control.press("Escape")
     page.locator("#submit").click()
-    assert page.evaluate("Alpine.store('multi').submits") == [["planet", "earth"], ["planet", "mars"]]
+    assert page.evaluate("window.__multi.submits") == [["planet", "earth"], ["planet", "mars"]]
     page.locator("#reset").click()
     page.wait_for_function("document.querySelectorAll('.primary-multi [data-citry-ui-part=chip]').length === 1")
     assert _chips(page) == ["Earth"]
 
-    page.evaluate("Alpine.store('multi').readonly = true")
+    page.evaluate("window.__multi.readonly = true")
     page.locator("#submit").click()
-    assert page.evaluate("Alpine.store('multi').submits") == [["planet", "earth"]]
+    assert page.evaluate("window.__multi.submits") == [["planet", "earth"]]
     control.click()
     assert control.get_attribute("aria-expanded") == "false"
 
@@ -212,17 +223,17 @@ def test_native_repeated_form_reset_readonly_fieldset_and_modal_safety(page: Any
     locked.click()
     assert locked.get_attribute("aria-expanded") == "true"
 
-    page.evaluate("Alpine.store('multi').readonly = false")
+    page.evaluate("window.__multi.readonly = false")
     control.click()
     page.locator("#modal").evaluate("element => element.showModal()")
     page.wait_for_function("document.querySelector('.primary-multi [role=combobox]').ariaExpanded === 'false'")
-    assert page.evaluate("Alpine.store('multi').opens.at(-1).slice(1)") == ["ancestor", False, True]
+    assert page.evaluate("window.__multi.opens.at(-1).slice(1)") == ["ancestor", False, True]
     assert errors == []
 
 
 def test_canceled_reset_after_target_listener_preserves_multiselect_state(page: Any) -> None:
     errors = _load(page)
-    page.evaluate("Alpine.store('multi').value = undefined")
+    page.evaluate("window.__multi.value = undefined")
     control = _control(page)
     control.click()
     _option(page, "mars").click()

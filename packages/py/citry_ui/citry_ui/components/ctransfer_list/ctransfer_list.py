@@ -343,18 +343,21 @@ class CTransferList(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "value": snapshot["value"],
-            "name": snapshot["name"],
-            "form": snapshot["form"],
-            "required": snapshot["required"],
-            "disabled": snapshot["disabled"],
-            "catalog": snapshot["catalog"],
-            "labels": snapshot["labels"],
+            "serverDefaults": {
+                "value": snapshot["value"],
+                "name": snapshot["name"],
+                "form": snapshot["form"],
+                "required": snapshot["required"],
+                "disabled": snapshot["disabled"],
+                "catalog": snapshot["catalog"],
+                "labels": snapshot["labels"],
+            }
         }
 
     template = """
       <c-CInternalTransferListDeclarations><c-slot /></c-CInternalTransferListDeclarations>
       <c-CInternalTransferList
+        ref="root"
         c-root_id="root_id"
         c-native_id="native_id"
         c-available_title_id="available_title_id"
@@ -468,7 +471,8 @@ class CInternalTransferListDeclarations(LibraryComponent):
 
 
 class CInternalTransferList(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -583,7 +587,8 @@ class CInternalTransferList(LibraryComponent):
             "move_bottom_label": kwargs.labels["move_bottom"],
         }
 
-    template = """
+    template = (
+        """
       <div
         class="cui-transfer-list"
         c-bind="attrs"
@@ -647,8 +652,10 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="available"
               data-citry-ui-part="listbox"
             >
-              <c-for each="item in available_items"><c-CInternalTransferListItem c-item="item" /></c-for>
-            </div>
+"""
+        '              <c-for each="item in available_items"><c-CInternalTransferListItem #c-ke'
+        'y="item[\'declaration\'].value" c-item="item" /></c-for>\n'
+        """            </div>
             <p
               c-hidden="available_total != 0"
               c-$c-tr:citry-ui-transfer-list-available-empty="True if catalog['available_empty'] else None"
@@ -698,8 +705,10 @@ class CInternalTransferList(LibraryComponent):
               data-citry-transfer-listbox="chosen"
               data-citry-ui-part="listbox"
             >
-              <c-for each="item in chosen_items"><c-CInternalTransferListItem c-item="item" /></c-for>
-            </div>
+"""
+        '              <c-for each="item in chosen_items"><c-CInternalTransferListItem #c-key="'
+        'item[\'declaration\'].value" c-item="item" /></c-for>\n'
+        """            </div>
             <p c-hidden="chosen_total != 0"
               c-$c-tr:citry-ui-transfer-list-chosen-empty="True if catalog['chosen_empty'] else None"
               data-citry-ui-part="empty"
@@ -734,6 +743,7 @@ class CInternalTransferList(LibraryComponent):
         <div aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></div>
       </div>
     """
+    )
 
 
 class CInternalTransferListItem(LibraryComponent):

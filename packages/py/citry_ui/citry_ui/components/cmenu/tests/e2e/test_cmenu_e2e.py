@@ -57,6 +57,12 @@ def _menu_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """$component({data(){const menuSpec=Citry.vue.reactive({radio:'list',
+          badTextValue:null,submenuDisabled:false});const state={fieldsetDisabled:false,
+          controlled:false,accepted:false,menuOpen:false,menuSize:'md',matchMenuWidth:false,
+          menuSpec};return state;},
+          onServerRender:({component})=>{window.__menuState=component;
+          window.__menuSpec=component.menuSpec;}});"""
         css = """
           :where(#library-menu) {
             --cui-menu-background: rgb(21 32 43);
@@ -91,40 +97,25 @@ def _menu_page() -> str:
               </script>
               <c-css />
             </head>
-            <body
-              x-data="{
-                fieldsetDisabled: false,
-                controlled: false,
-                accepted: false,
-                menuOpen: false,
-                menuSize: 'md',
-                matchMenuWidth: false,
-              }"
-              x-init="Alpine.store('menuSpec', {
-                radio: 'list',
-                badTextValue: null,
-                submenuDisabled: false,
-              })"
-            >
+            <body>
               <form
                 id="menu-form"
                 @submit.prevent="window.__formSubmits = (window.__formSubmits || 0) + 1"
               >
-              <fieldset x-bind:disabled="fieldsetDisabled">
+              <fieldset :disabled="fieldsetDisabled">
                 <c-CMenu
                   id="library-menu"
-                  $c-props="{
-                    open: controlled ? menuOpen : undefined,
-                    size: menuSize,
-                    matchWidth: matchMenuWidth,
-                    onOpenChange: (nextOpen, detail) => {
+                  :open="controlled ? menuOpen : undefined"
+                  :size="menuSize"
+                  :matchWidth="matchMenuWidth"
+                  :onOpenChange="(nextOpen, detail) => {
                       window.__lastMenuOpenDetail = detail;
                       window.__menuEvents.push([
                         'open', nextOpen, detail.reason, detail.controlled,
                       ]);
                       if (accepted) menuOpen = nextOpen;
-                    },
-                    onAction: (value, detail) => {
+                    }"
+                  :onAction="(value, detail) => {
                       if (window.__modalFromMenuCallback === 'command') {
                         window.__menuEvents.push(['action-enter']);
                         window.__openMenuCallbackModal();
@@ -134,8 +125,7 @@ def _menu_page() -> str:
                           'action', value, detail.kind, detail.path.join('/'),
                         ]);
                       }
-                    },
-                  }"
+                    }"
                 >
                   <c-fill
                     name="activator"
@@ -150,17 +140,16 @@ def _menu_page() -> str:
                   <c-fill name="default">
                     <c-CMenuItem
                       value="rename"
-                      c-attrs="command_attrs"
-                      $c-props="{textValue: $store.menuSpec.badTextValue}"
+                      :textValue="menuSpec.badTextValue"
+                      @click="window.__menuEvents.push(['author-click'])"
                     >
                       Rename
                     </c-CMenuItem>
                     <c-CMenuCheckboxItem
                       value="notes"
                       checked="mixed"
-                      $c-props="{
-                        checked: null,
-                        onCheckedChange: (nextChecked, detail) => {
+                      :checked="null"
+                      :onCheckedChange="(nextChecked, detail) => {
                           if (window.__modalFromMenuCallback === 'checkbox') {
                             window.__menuEvents.push(['checked-enter']);
                             window.__openMenuCallbackModal();
@@ -172,16 +161,14 @@ def _menu_page() -> str:
                             detail.previousChecked,
                             detail.controlled,
                           ]);
-                        },
-                      }"
+                        }"
                     >
                       Show notes
                     </c-CMenuCheckboxItem>
                     <c-CMenuRadioGroup
                       value="grid"
-                      $c-props="{
-                        value: $store.menuSpec.radio,
-                        onValueChange: (nextValue, detail) => {
+                      :value="menuSpec.radio"
+                      :onValueChange="(nextValue, detail) => {
                           window.__menuEvents.push([
                             'radio',
                             nextValue,
@@ -189,8 +176,7 @@ def _menu_page() -> str:
                             detail.controlled,
                             detail.reason,
                           ]);
-                        },
-                      }"
+                        }"
                     >
                       <c-fill name="label">Layout</c-fill>
                       <c-fill name="default">
@@ -207,11 +193,24 @@ def _menu_page() -> str:
                     <c-CMenuSeparator />
                     <c-CMenuSubmenu
                       value="export"
-                      $c-props="{disabled: $store.menuSpec.submenuDisabled}"
+                      :disabled="menuSpec.submenuDisabled"
                     >
                       <c-fill name="label">Export</c-fill>
                       <c-fill name="default">
-                        <c-CMenuItem value="pdf">PDF</c-CMenuItem>
+                        <c-CMenuGroup>
+                          <c-fill name="label">Documents</c-fill>
+                          <c-fill name="default">
+                            <c-CMenuItem value="pdf">PDF</c-CMenuItem>
+                            <c-CMenuItem value="svg">SVG</c-CMenuItem>
+                          </c-fill>
+                        </c-CMenuGroup>
+                        <c-CMenuRadioGroup value="compact">
+                          <c-fill name="label">Export detail</c-fill>
+                          <c-fill name="default">
+                            <c-CMenuRadioItem value="compact">Compact export</c-CMenuRadioItem>
+                            <c-CMenuRadioItem value="detailed">Detailed export</c-CMenuRadioItem>
+                          </c-fill>
+                        </c-CMenuRadioGroup>
                         <c-CMenuSubmenu value="more">
                           <c-fill name="label">More formats</c-fill>
                           <c-fill name="default">
@@ -252,13 +251,6 @@ def _menu_page() -> str:
           </html>
         """
 
-        def template_data(self, kwargs, slots):
-            return {
-                "command_attrs": {
-                    "@click.stop": "window.__menuEvents.push(['author-click'])",
-                }
-            }
-
     return str(Page())
 
 
@@ -269,6 +261,14 @@ def _events_menu_page() -> tuple[Citry, str]:
 
     class WorkspaceMenu(Component):
         citry = app
+        js = """$component({
+          data() {
+            return {menuMorph: {events: [], theme: 'theme-night'}};
+          },
+          onServerRender({component}) {
+            window.__menuMorph = component.menuMorph;
+          },
+        });"""
 
         class Kwargs:
             step: int = 0
@@ -316,10 +316,8 @@ def _events_menu_page() -> tuple[Citry, str]:
               #c-key="'events-menu'"
               id="events-menu"
               c-close_on_select="False"
-              $c-props="{
-                onOpenChange: (open, detail) => {
-                  $store.menuMorph.events.push(['open', open, detail.reason]);
-                },
+              :onOpenChange="(open, detail) => {
+                menuMorph.events.push(['open', open, detail.reason]);
               }"
             >
               <c-fill
@@ -336,46 +334,45 @@ def _events_menu_page() -> tuple[Citry, str]:
                 <c-for each="item in items">
                   <c-CMenuItem
                     c-value="item['value']"
+                    #c-key="item['value']"
                   >{{ item["label"] }}</c-CMenuItem>
                 </c-for>
                 <c-for each="label in anonymous_items">
-                  <c-CMenuItem>{{ label }}</c-CMenuItem>
+                  <c-CMenuItem #c-key="label">{{ label }}</c-CMenuItem>
                 </c-for>
                 <c-CMenuRadioGroup
                   value="layout-list"
-                  $c-props="{
-                    onValueChange: (value, detail) => {
-                      $store.menuMorph.events.push([
+                  :onValueChange="(value, detail) => {
+                      menuMorph.events.push([
                         'layout', value, detail.previousValue, detail.reason, detail.controlled,
                       ]);
-                    },
-                  }"
+                    }"
                 >
                   <c-fill name="label">Layout</c-fill>
                   <c-fill name="default">
                     <c-for each="radio in layout_radios">
                       <c-CMenuRadioItem
                         c-value="radio['value']"
+                        #c-key="radio['value']"
                       >{{ radio["label"] }}</c-CMenuRadioItem>
                     </c-for>
                   </c-fill>
                 </c-CMenuRadioGroup>
                 <c-CMenuRadioGroup
                   value="theme-day"
-                  $c-props="{
-                    value: $store.menuMorph.theme,
-                    onValueChange: (value, detail) => {
-                      $store.menuMorph.events.push([
+                  :value="menuMorph.theme"
+                  :onValueChange="(value, detail) => {
+                      menuMorph.events.push([
                         'theme', value, detail.previousValue, detail.reason, detail.controlled,
                       ]);
-                    },
-                  }"
+                    }"
                 >
                   <c-fill name="label">Theme</c-fill>
                   <c-fill name="default">
                     <c-for each="radio in theme_radios">
                       <c-CMenuRadioItem
                         c-value="radio['value']"
+                        #c-key="radio['value']"
                       >{{ radio["label"] }}</c-CMenuRadioItem>
                     </c-for>
                   </c-fill>
@@ -469,10 +466,7 @@ def _events_menu_page() -> tuple[Citry, str]:
               <title>Menu correlated rerender</title>
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('menuMorph', {events: [], theme: 'theme-night'})"
-            >
+            <body>
               <c-workspace-menu />
               <c-js />
             </body>
@@ -489,6 +483,18 @@ def _disabled_handoff_page(*, controlled: bool, via_fieldset: bool) -> tuple[Cit
 
     class DisabledMenu(Component):
         citry = app
+        js = """$component({
+          data() {
+            return {
+              controlled: __CONTROLLED__,
+              open: false,
+              handoffEvents: [],
+            };
+          },
+          onServerRender({component}) {
+            window.__disabledHandoffEvents = component.handoffEvents;
+          },
+        });""".replace("__CONTROLLED__", "true" if controlled else "false")
 
         class Kwargs:
             disabled: bool = False
@@ -516,22 +522,18 @@ def _disabled_handoff_page(*, controlled: bool, via_fieldset: bool) -> tuple[Cit
                 #c-key="'disabled-menu'"
                 id="disabled-menu"
                 c-disabled="menu_disabled"
-                $c-props="{
-                  open: $store.disabledHandoff.controlled
-                    ? $store.disabledHandoff.open
-                    : undefined,
-                  onOpenChange: (open, detail) => {
-                    window.__disabledHandoffEvents.push([
-                      open,
+                :open="controlled ? open : undefined"
+                :onOpenChange="(nextOpen, detail) => {
+                    handoffEvents.push([
+                      nextOpen,
                       detail.reason,
                       detail.controlled,
                       detail.forced,
                     ]);
-                    if ($store.disabledHandoff.controlled) {
-                      $store.disabledHandoff.open = open;
+                    if (controlled) {
+                      open = nextOpen;
                     }
-                  },
-                }"
+                  }"
               >
                 <c-fill
                   name="activator"
@@ -568,18 +570,12 @@ def _disabled_handoff_page(*, controlled: bool, via_fieldset: bool) -> tuple[Cit
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="
-                window.__disabledHandoffEvents = [];
-                Alpine.store('disabledHandoff', {controlled: __CONTROLLED__, open: false});
-              "
-            >
+            <body>
               <c-disabled-menu />
               <c-js />
             </body>
           </html>
-        """.replace("__CONTROLLED__", "true" if controlled else "false")
+        """
 
     return app, str(Page())
 
@@ -769,7 +765,12 @@ def test_menu_initializes_native_anatomy_and_runs_exactly_one_action_sequence(pa
 
     assert _focused_text(page) == "Rename"
     assert _surface(page).get_attribute("role") == "menu"
-    assert page.locator('#library-menu [role="menuitemradio"]').count() == 2
+    assert (
+        page.locator('#library-menu [role="menuitemradio"]').evaluate_all(
+            "elements => elements.filter(element => element.closest('[role=menu]')?.id === 'library-menu').length"
+        )
+        == 2
+    )
     assert page.locator('#library-menu [role="menuitemcheckbox"]').count() == 1
 
     page.keyboard.press("ArrowDown")
@@ -835,11 +836,11 @@ def test_radio_control_release_and_controlled_root_requests_are_owner_authoritat
     assert radios.nth(0).get_attribute("aria-checked") == "false"
     assert radios.nth(1).get_attribute("aria-checked") == "true"
 
-    page.evaluate("Alpine.store('menuSpec').radio = 'grid'")
+    page.evaluate("window.__menuSpec.radio = 'grid'")
     page.wait_for_function(
         "document.querySelector('#library-menu [role=menuitemradio]').getAttribute('aria-checked') === 'true'"
     )
-    page.evaluate("Alpine.store('menuSpec').radio = null")
+    page.evaluate("window.__menuSpec.radio = null")
     trigger.click()
     page.wait_for_timeout(550)
     page.keyboard.press("l")
@@ -864,11 +865,11 @@ def test_radio_control_release_and_controlled_root_requests_are_owner_authoritat
     trigger.click()
     page.wait_for_function("document.querySelector('#library-menu').matches(':popover-open')")
     requests = page.evaluate("window.__menuEvents.length")
-    page.evaluate("Alpine.$data(document.body).menuOpen = false")
+    page.evaluate("window.__menuState.menuOpen = false")
     page.wait_for_function("!document.querySelector('#library-menu').matches(':popover-open')")
     assert page.evaluate("window.__menuEvents.length") == requests
 
-    page.evaluate("Alpine.$data(document.body).menuOpen = true")
+    page.evaluate("window.__menuState.menuOpen = true")
     page.wait_for_function("document.querySelector('#library-menu').matches(':popover-open')")
     page.evaluate("document.querySelector('#release-menu').click()")
     _trigger(page).evaluate("element => element.click()")
@@ -904,6 +905,32 @@ def test_submenu_keyboard_navigation_closes_one_logical_level_at_a_time(page):
     page.keyboard.press("Escape")
     assert _focused_text(page).startswith("Export")
     assert page.locator('[data-citry-menu-submenu] > [role="menu"]:popover-open').count() == 0
+    assert errors == []
+
+
+def test_grouped_and_radio_grouped_submenu_items_share_navigation_and_escape(page):
+    errors = _load(page)
+    page.get_by_role("button", name="Library actions").click()
+    export = page.get_by_role("menuitem", name="Export", exact=True)
+    export.focus()
+    export.press("ArrowRight")
+
+    pdf = page.get_by_role("menuitem", name="PDF")
+    assert pdf.evaluate("element => element === document.activeElement")
+    pdf.press("ArrowDown")
+    svg = page.get_by_role("menuitem", name="SVG")
+    assert svg.evaluate("element => element === document.activeElement")
+    svg.press("ArrowDown")
+    compact = page.get_by_role("menuitemradio", name="Compact export")
+    assert compact.evaluate("element => element === document.activeElement")
+    compact.press("ArrowDown")
+    detailed = page.get_by_role("menuitemradio", name="Detailed export")
+    assert detailed.evaluate("element => element === document.activeElement")
+
+    detailed.press("Escape")
+    assert export.evaluate("element => element === document.activeElement")
+    assert export.get_attribute("aria-expanded") == "false"
+    assert errors == []
     page.keyboard.press("Escape")
     page.wait_for_function("!document.querySelector('#library-menu').matches(':popover-open')")
     assert _trigger(page).evaluate("element => element === document.activeElement")
@@ -919,7 +946,7 @@ def test_disabling_open_submenu_returns_focus_to_its_apg_focusable_trigger(page)
         "document.querySelector('[data-citry-menu-submenu] > [role=menu]').matches(':popover-open')"
     )
     assert _focused_text(page) == "PDF"
-    page.evaluate("Alpine.store('menuSpec').submenuDisabled = true")
+    page.evaluate("window.__menuSpec.submenuDisabled = true")
     page.wait_for_function(
         "!document.querySelector('[data-citry-menu-submenu] > [role=menu]').matches(':popover-open')"
     )
@@ -1593,7 +1620,7 @@ def test_controlled_native_close_and_hidden_open_are_gated_without_resurrection(
     errors = _load(page)
     page.locator("#control-menu").click()
     page.locator("#accept-menu").click()
-    page.evaluate("Alpine.$data(document.body).menuOpen = true")
+    page.evaluate("window.__menuState.menuOpen = true")
     page.wait_for_function("document.querySelector('#library-menu').matches(':popover-open')")
 
     page.evaluate(
@@ -1610,7 +1637,7 @@ def test_controlled_native_close_and_hidden_open_are_gated_without_resurrection(
     page.evaluate("document.querySelector('[data-citry-menu-host]').hidden = false")
     page.wait_for_timeout(180)
     assert not _surface(page).evaluate("element => element.matches(':popover-open')")
-    page.evaluate("Alpine.$data(document.body).menuOpen = false")
+    page.evaluate("window.__menuState.menuOpen = false")
     _trigger(page).click()
     page.wait_for_function("document.querySelector('#library-menu').matches(':popover-open')")
     assert errors == []
@@ -1623,7 +1650,7 @@ def test_size_match_width_and_optional_regions_propagate_across_the_tree(page):
         """() => {
           const trigger = document.querySelector('[data-citry-menu-trigger]');
           trigger.style.inlineSize = '96px';
-          const state = Alpine.$data(document.body);
+          const state = window.__menuState;
           state.menuSize = 'lg';
           state.matchMenuWidth = true;
         }"""
@@ -1747,17 +1774,17 @@ def test_reactivating_selected_radio_skips_value_change_but_runs_action_and_clos
 def test_invalid_text_value_uses_canonical_fallback_until_a_valid_episode(page):
     errors = _load(page)
     _trigger(page).click()
-    page.evaluate("Alpine.store('menuSpec').badTextValue = 'wrong\\0value'")
+    page.evaluate("window.__menuSpec.badTextValue = 'wrong\\0value'")
     page.wait_for_timeout(20)
     page.keyboard.press("r")
     assert _focused_text(page) == "Rename"
     assert sum("textValue received invalid client value" in error for error in errors) == 1
 
-    page.evaluate("Alpine.store('menuSpec').badTextValue = 'zebra\\r\\ncommand'")
+    page.evaluate("window.__menuSpec.badTextValue = 'zebra\\r\\ncommand'")
     page.wait_for_timeout(20)
     page.keyboard.press("z")
     assert _focused_text(page) == "Rename"
-    page.evaluate("Alpine.store('menuSpec').badTextValue = 'still\\0wrong'")
+    page.evaluate("window.__menuSpec.badTextValue = 'still\\0wrong'")
     page.wait_for_timeout(20)
     assert sum("textValue received invalid client value" in error for error in errors) == 2
 
@@ -1786,13 +1813,7 @@ def test_correlated_rerender_retains_reorder_and_recovers_from_removed_choices_a
         }"""
     )
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(document.querySelector('.advance-menu'), 'advance', {}).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".advance-menu").evaluate("element => element.click()")
     page.wait_for_function(
         "document.querySelector('#events-menu [role=menuitem]').textContent.includes('Delete shelf')"
     )
@@ -1827,13 +1848,7 @@ def test_correlated_rerender_retains_reorder_and_recovers_from_removed_choices_a
         "document.querySelector('#events-menu [data-citry-menu-submenu] > [role=menu]').matches(':popover-open')"
     )
     assert submenu_trigger.evaluate("element => element === document.activeElement")
-    outcome = page.evaluate(
-        """() => Citry.events.send(document.querySelector('.advance-menu'), 'advance', {}).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".advance-menu").evaluate("element => element.click()")
     page.wait_for_function("!document.querySelector('#events-menu [data-citry-menu-submenu]')")
     page.wait_for_function(
         "[...document.querySelectorAll('[role=menuitemradio]')].some(item => "
@@ -1845,25 +1860,23 @@ def test_correlated_rerender_retains_reorder_and_recovers_from_removed_choices_a
     ), page.evaluate("document.activeElement?.outerHTML")
     assert page.get_by_role("menuitemradio", name="List layout").get_attribute("aria-checked") == "true"
     page.wait_for_function(
-        "Alpine.store('menuMorph').events.filter(event => ['layout', 'theme'].includes(event[0])).length === 3"
+        "window.__menuMorph.events.filter(event => ['layout', 'theme'].includes(event[0])).length === 3"
     )
     assert page.get_by_role("menuitemradio", name="Day theme").get_attribute("aria-checked") == "false"
-    choice_events = [
-        event for event in page.evaluate("Alpine.store('menuMorph').events") if event[0] in {"layout", "theme"}
-    ]
+    choice_events = [event for event in page.evaluate("window.__menuMorph.events") if event[0] in {"layout", "theme"}]
     assert choice_events == [
         ["layout", "layout-grid", "layout-list", "activation", False],
         ["layout", "layout-list", "layout-grid", "removal", False],
         ["theme", "theme-day", "theme-night", "removal", True],
     ], choice_events
-    assert page.evaluate("Alpine.store('menuMorph').theme") == "theme-night"
-    page.evaluate("Alpine.store('menuMorph').theme = 'theme-day'")
+    assert page.evaluate("window.__menuMorph.theme") == "theme-night"
+    page.evaluate("window.__menuMorph.theme = 'theme-day'")
     page.wait_for_function(
         "[...document.querySelectorAll('[role=menuitemradio]')].some("
         "item => item.textContent.includes('Day theme') && item.getAttribute('aria-checked') === 'true'"
         ")"
     )
-    assert [event for event in page.evaluate("Alpine.store('menuMorph').events") if event[0] == "theme"] == [
+    assert [event for event in page.evaluate("window.__menuMorph.events") if event[0] == "theme"] == [
         ["theme", "theme-day", "theme-night", "removal", True]
     ]
     assert page.locator('#events-menu [data-citry-menu-submenu] > [role="menu"]:popover-open').count() == 0
@@ -1902,13 +1915,7 @@ def test_correlated_rerender_restores_two_level_submenu_path_and_duplicate_leaf_
     page.wait_for_function("document.querySelectorAll('#events-menu [role=menu]:popover-open').length === 2")
     page.get_by_role("menuitem", name="Archive tool").focus()
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(document.querySelector('.advance-menu'), 'advance', {}).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".advance-menu").evaluate("element => element.click()")
     page.wait_for_function(
         "document.querySelector('#events-menu > [role=menuitem]').textContent.includes('Delete shelf')"
     )
@@ -1943,13 +1950,7 @@ def test_correlated_rerender_recovers_removed_leaf_within_retained_submenu(
     page.wait_for_function("document.querySelectorAll('#events-menu [role=menu]:popover-open').length === 2")
     page.get_by_role("menuitem", name="Batch tool").focus()
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(document.querySelector('.advance-menu'), 'advance', {}).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".advance-menu").evaluate("element => element.click()")
     page.wait_for_function("!document.querySelector('#events-menu').textContent.includes('Batch tool')")
     page.wait_for_function("document.querySelectorAll('#events-menu [role=menu]:popover-open').length === 2")
     page.wait_for_function(
@@ -1978,17 +1979,7 @@ def test_correlated_rerender_disabled_submenu_collapses_focus_to_its_trigger(
     page.wait_for_function("document.querySelectorAll('#events-menu [role=menu]:popover-open').length === 1")
     page.get_by_role("menuitem", name="Build index").focus()
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(
-          document.querySelector('.disable-submenu'),
-          'disable_submenu',
-          {},
-        ).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".disable-submenu").evaluate("element => element.click()")
     page.wait_for_function(
         "document.querySelector('#events-menu [aria-disabled=true]')?.textContent.includes('Tools')"
     )
@@ -2022,17 +2013,7 @@ def test_correlated_rerender_effective_disabled_emits_one_forced_close_and_resto
     page.wait_for_function("document.querySelector('#disabled-menu').matches(':popover-open')")
     page.get_by_role("menuitem", name="Second command").focus()
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(
-          document.querySelector('.server-disable-menu'),
-          'disable',
-          {},
-        ).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".server-disable-menu").evaluate("element => element.click()")
     page.wait_for_function("document.querySelector('[aria-controls=disabled-menu]').matches(':disabled')")
     page.wait_for_function("!document.querySelector('#disabled-menu').matches(':popover-open')")
     page.wait_for_function(
@@ -2077,17 +2058,7 @@ def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_confi
     page.wait_for_function("document.querySelectorAll('#configuration-menu [role=menu]:popover-open').length === 2")
     page.get_by_role("menuitem", name="First leaf").focus()
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(
-          document.querySelector('.change-menu-configuration'),
-          'change',
-          {},
-        ).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".change-menu-configuration").evaluate("element => element.click()")
     page.wait_for_function("document.querySelectorAll('#configuration-menu [role=menu]:popover-open').length === 2")
     page.wait_for_function(
         "[...document.querySelectorAll('[role=menuitem]')].some(item => "
@@ -2131,25 +2102,13 @@ def test_correlated_rerender_distinguishes_retained_anonymous_commands_and_recov
     page.get_by_role("button", name="Library workspace").click()
     page.get_by_role("menuitem", name="Clear recent").focus()
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(document.querySelector('.advance-menu'), 'advance', {}).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".advance-menu").evaluate("element => element.click()")
     page.wait_for_function(
         "document.querySelector('#events-menu > [role=menuitem]').textContent.includes('Delete shelf')"
     )
     assert page.get_by_role("menuitem", name="Clear recent").evaluate("element => element === document.activeElement")
 
-    outcome = page.evaluate(
-        """() => Citry.events.send(document.querySelector('.advance-menu'), 'advance', {}).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
-    )
-    assert outcome == {"ok": True}
+    page.locator(".advance-menu").evaluate("element => element.click()")
     page.wait_for_function("!document.querySelector('#events-menu').textContent.includes('Clear recent')")
     page.wait_for_function(
         "[...document.querySelectorAll('[role=menuitemradio]')].some(item => "

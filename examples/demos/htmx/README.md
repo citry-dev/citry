@@ -66,32 +66,23 @@ start the server, and run all three interactions in a real browser.
 - `app/main.py` creates the FastAPI application, initializes Citry, and mounts
   the static and Citry routes.
 - `app/static/htmx.min.js` contains the pinned HTMX runtime.
-- `app/static/citry-htmx.js` preserves Citry's component markers while HTMX
-  parses a response.
 - `app/static/citry-mark.svg` contains the Citry mark used in the page header.
 - `app/static/demo.css` styles the page around the Citry components.
 - `tests/test_app.py` checks the page, routes, form errors, and saved changes.
 
 ## Return the whole Citry response
 
-Each route that HTMX calls serializes the rendered component like this:
-
-```python
-return HTMLResponse(
-    component.render().serialize(deps_strategy="fragment")
-)
-```
-
-The response includes the component HTML and everything Citry needs to load
-its CSS and JavaScript. Return it unchanged.
+Each interactive row route serializes the complete row component with
+`serialize(deps_strategy="fragment")`. Search results compose those trusted,
+final Citry fragment strings inside plain server-rendered list wrappers. They
+are inserted as final HTML and are never compiled as Vue template source.
 
 Each contact row keeps a plain `.contact-row-host` wrapper in the page. The
 Edit, Save, and Cancel requests target the nearest wrapper and replace its
-contents, so the form opens in the row where you chose Edit. Keeping the
-wrapper also gives Citry's HTMX adapter a stable place to restore the component
-markers after each swap.
+contents, so the form opens in the row where you chose Edit. The wrapper remains outside the row's Vue app, so replacing its contents
+unmounts one complete app without changing unrelated rows.
 
-Load HTMX, `citry-htmx.js`, and `/citry/citry.js` once on the full page. Put a
+Load HTMX and `/citry/citry.js` once on the full page. Put a
 plain `<div>` around the area HTMX will update, and replace the contents of
 that `<div>` with `hx-swap="innerHTML"`. Keep the wrapper outside the HTML
 returned by the route. `innerHTML` then replaces its contents while leaving
@@ -102,18 +93,9 @@ response across out-of-band swaps. Avoid inserting these responses directly
 into `<tbody>` or `<select>`. Each of those approaches can discard the data
 Citry needs to set up the component.
 
-With HTMX 2.0.8 or newer, Chromium can remove markers that Citry needs while
-parsing a response. The HTML still appears, but Citry may not load the
-component's CSS or run its JavaScript.
-
-The bundled `citry-htmx.js` extension preserves those markers during the
-swap. Add `hx-ext="citry-fragments"` to the page, or to any section where HTMX
-inserts Citry-rendered HTML.
-
-Use the extension only with `hx-swap="innerHTML"` on a wrapper that stays on
-the page. It raises an error for `outerHTML`, `beforebegin`, `afterbegin`,
-`beforeend`, and `afterend`. After those swaps, the extension cannot reliably
-find all the nodes HTMX just inserted. It does not support out-of-band swaps.
+`ContactDetail` and `ContactForm` process their mounted Vue root with HTMX.
+This is necessary because Vue creates their controls after HTMX's initial page
+scan. Keep `hx-swap="innerHTML"` on the persistent unmanaged row wrapper.
 
 The application uses separate URLs for full pages and HTMX responses. If one
 URL returns different HTML based on the `HX-Request` header, also return

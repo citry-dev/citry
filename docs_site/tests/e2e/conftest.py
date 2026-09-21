@@ -87,6 +87,91 @@ title: Incomplete live example
     incomplete_path.parent.mkdir(parents=True)
     incomplete_path.write_text(incomplete, encoding="utf-8")
 
+    from citry import Component, Slot
+    from citry import citry as default_citry
+    from citry.citry_render import CitryRender
+    from docs_site._internal.components.landing_composer import (
+        _RECIPES,
+        _initial_state,
+        _instantiate,
+        _serialize_source,
+    )
+    from docs_site._internal.static_deps import export_prepared_page_assets
+
+    tabs_state = _initial_state()
+    tabs_state["root"]["slots"]["default"] = []
+    tabs_recipe = next(recipe for recipe in _RECIPES if recipe["id"] == "tabs")
+    tabs_node, tabs_state["nextId"] = _instantiate(tabs_recipe["node"], start=tabs_state["nextId"])
+    tabs_state["root"]["slots"]["default"].append(tabs_node)
+    tabs_source = _serialize_source(tabs_state).replace(
+        "            Overview",
+        '            <span v-text="label">fallback tab</span>',
+    )
+    tabs_source = tabs_source.replace(
+        "                Components can be nested inside each panel.",
+        '                <b v-text="detail">fallback panel</b>',
+    )
+    tabs_source = tabs_source.replace(
+        "\n\npreview = LandingComposition()",
+        "\n\n    def js_data(self, kwargs, slots):\n"
+        "        return {'label': 'Lexical tab', 'detail': 'Lexical panel'}\n\n"
+        "preview = LandingComposition()",
+    )
+    tabs_namespace: dict[str, object] = {}
+    exec(compile(tabs_source, "<tabs-lexical>", "exec"), tabs_namespace)  # noqa: S102
+    tabs_lexical = str(tabs_namespace["preview"])
+    tabs_lexical_path = site / "__tests__" / "tabs-lexical" / "index.html"
+    tabs_lexical_path.parent.mkdir(parents=True)
+    export_prepared_page_assets(tabs_lexical, site, default_citry)
+    tabs_lexical_path.write_text(tabs_lexical, encoding="utf-8")
+
+    declarations: list[Slot] = []
+
+    class DeferredRunDeclaration(Component):
+        template = """
+          <c-slot />
+        """
+
+        def template_data(self, kwargs, slots):
+            declarations.append(slots["default"])
+            return {}
+
+        def on_render(self):
+            result, error = yield
+            if error is not None:
+                raise error
+            return CitryRender(parts=[], context=result.context)
+
+    class DeferredRunReceiver(Component):
+        template = """
+          <section class="deferred-run-receiver">{{ content }}</section>
+        """
+
+        def template_data(self, kwargs, slots):
+            declaration = declarations[{"a": 0, "b": 1}[kwargs["key"]]]
+            return {"content": Slot(lambda _: declaration())}
+
+    class DeferredRunRoot(Component):
+        template = """
+          <c-DeferredRunDeclaration><b v-text="label">first</b></c-DeferredRunDeclaration>
+          <c-DeferredRunDeclaration><i v-text="label">second</i></c-DeferredRunDeclaration>
+          <c-for each="key in keys">
+            <c-DeferredRunReceiver #c-key="key" c-key="key" />
+          </c-for>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"keys": ["a", "b"]}
+
+        def js_data(self, kwargs, slots):
+            return {"label": "lexical"}
+
+    deferred_run = str(DeferredRunRoot())
+    deferred_run_path = site / "__tests__" / "deferred-run" / "index.html"
+    deferred_run_path.parent.mkdir(parents=True)
+    export_prepared_page_assets(deferred_run, site, default_citry)
+    deferred_run_path.write_text(deferred_run, encoding="utf-8")
+
     toc_history = render_page(
         """---
 title: TOC history fixture
@@ -218,7 +303,7 @@ def local_docs_site_url() -> Iterator[str]:
 @pytest.fixture(scope="session")
 def getting_started_app_url() -> Iterator[str]:
     """Run the finished FastAPI tutorial app through a real ASGI server."""
-    app_dir = Path(__file__).resolve().parents[2] / "snippets" / "getting_started"
+    repo_dir = Path(__file__).resolve().parents[3]
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -230,13 +315,13 @@ def getting_started_app_url() -> Iterator[str]:
             sys.executable,
             "-m",
             "uvicorn",
-            "app:app",
+            "docs_site.tests.e2e.getting_started_app:app",
             "--host",
             "127.0.0.1",
             "--port",
             str(port),
         ],
-        cwd=app_dir,
+        cwd=repo_dir,
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

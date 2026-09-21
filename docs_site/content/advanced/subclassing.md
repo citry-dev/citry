@@ -123,13 +123,16 @@ class BaseCard(Component):
         title: str
 
     template = """
-      <article class="card">
+      <article class="card" ref="root">
         <h2>{{ title }}</h2>
       </article>
     """
     js = """
-      $component(({ els }) => {
-        els[0].dataset.ready = "true";
+      $component(({ component }) => {
+        const root = component.$refs.root;
+        if (root instanceof HTMLElement) {
+          root.dataset.ready = "true";
+        }
       });
     """
     css = """

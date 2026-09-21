@@ -24,7 +24,7 @@ from citry.ext.events._introspection import capture_handler_introspection, inspe
 from citry.ext.events.bindings import compile_template_bindings, rewrite_resolved_attrs
 from citry.ext.events.cache import export_events_cache, stage_events_cache
 from citry.ext.events.config import Events
-from citry.ext.events.emission import capture_instance, emit_events_dependencies, merge_instance_entries
+from citry.ext.events.emission import capture_instance, merge_instance_entries
 from citry.ext.events.handlers import (
     CONFIG_NAMES,
     collect_event_handlers,
@@ -55,7 +55,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from citry.component import Component
-    from citry.ext.dependencies.emission import OnDependenciesContext
     from citry.extension import (
         ComponentIntrospectionContext,
         OnAttrsResolvedContext,
@@ -379,7 +378,6 @@ class EventsExtension(Extension):
         comp_cls = ctx.component_class
         compiled = compile_template_bindings(
             self.resolve(comp_cls),
-            comp_cls.class_id,
             comp_cls.__name__,
             ctx.nodes,
         )
@@ -409,9 +407,7 @@ class EventsExtension(Extension):
         # bindings) and for compiled State bindings that need final control/type
         # validation after dynamic attributes resolve.
         comp_cls = type(ctx.component)
-        return rewrite_resolved_attrs(
-            self.resolve(comp_cls), ctx.component._citry_class_id, comp_cls.__name__, ctx.tag_name, ctx.attrs
-        )
+        return rewrite_resolved_attrs(self.resolve(comp_cls), comp_cls.__name__, ctx.tag_name, ctx.attrs)
 
     def on_component_data(self, ctx: OnComponentDataContext) -> None:
         """
@@ -434,16 +430,6 @@ class EventsExtension(Extension):
 
     def stage_render_cache(self, ctx: OnRenderCacheStageContext) -> StagedRenderCacheContribution:
         return stage_events_cache(self, ctx)
-
-    def on_dependencies(self, ctx: OnDependenciesContext) -> None:
-        """
-        Add the Events runtime and instance data to serialized dependencies.
-
-        Args:
-            ctx: The dependencies context for the render being serialized.
-
-        """
-        emit_events_dependencies(self, ctx)
 
     def two_way_binding_targets(self, comp_cls: type[Component]) -> frozenset[str]:
         """

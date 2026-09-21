@@ -35,14 +35,14 @@ class ProductCard(Component):
     template = """
       <article
         class="card"
-        x-data="{ open: false }"
+        :class="{ 'card--open': open }"
       >
         <c-slot name="body" />
 
         <c-for each="tag in tags">
           <c-Tag
             c-label="tag"
-            $c-props="{ highlight: open }"
+            :highlight="open"
             @click="open = !open"
           />
         </c-for>
@@ -51,7 +51,7 @@ class ProductCard(Component):
         </c-empty>
 
         <button type="button" @c-click="like">
-          Like <span x-text="likes">{{ likes }}</span>
+          Like <span v-text="likes">{{ likes }}</span>
         </button>
 
         <c-slot name="footer">
@@ -61,9 +61,11 @@ class ProductCard(Component):
     """
 
     js = """
-      $component(({ els, data }) => {
-        const cardEl = els[0];
-        animateLikes(cardEl, data.likes);
+      $component({
+        data() { return {open: false}; },
+        onServerRender: ({ component }) => {
+          animateLikes(component.$el, component.likes);
+        },
       });
     """
 
@@ -72,7 +74,7 @@ class ProductCard(Component):
         border-left: 3px solid var(--accent);
       }
 
-      .tag--active {
+      .card--open {
         color: var(--accent);
       }
     """
@@ -82,7 +84,7 @@ class ProductCard(Component):
     """
 
     class Dependencies:
-        js = ["https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"]
+        js = ["https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"]
         css = ["https://unpkg.com/normalize.css@8.0.1/normalize.css"]
 
 

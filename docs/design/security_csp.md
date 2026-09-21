@@ -1,5 +1,11 @@
 # Design: Content Security Policy and JavaScript delivery
 
+**Vue cutover:** [`vue.md`](vue.md) defines the current runtime-only compiler
+and browser delivery. Nonce, integrity and JavaScript delivery contracts below
+remain relevant. Alpine evaluator and bundle-selection sections describe the
+earlier runtime; they do not constrain Vue expression compilation. Migration qualification and the completed cutover are recorded in
+[`vue.md`](vue.md).
+
 **Status (2026-08-12): complete through phase 11 and promoted.** Alpine core
 and morph are upgraded to 3.17.1, and `@alpinejs/csp` is pinned at the same
 version. Typed security settings, serialization overrides, and the immutable
@@ -366,6 +372,15 @@ cases. Later settled-output validation also covers dynamically produced
 attributes and extension output. The checker guarantees parity for its
 versioned, source-classifiable contract; it must not claim that every possible
 runtime value was statically proven safe.
+
+Prepared applications that expose Events must use the `security_csp` and
+`security_javascript` modes configured on their `Citry` instance. A call-local
+override cannot be retained as authenticated application state for later
+server revisions, and a later revision may introduce trusted opaque HTML even
+when the initial render did not contain it. Serialization therefore rejects a
+different call-local mode for a revisable Events application. Configure the
+required modes on `Citry(...)`; call-local overrides remain available for
+static serialization that has no Events revisions.
 
 ## 5. CSP modes
 

@@ -30,12 +30,10 @@ Render the component in a framework route and serialize it with
 from fastapi.responses import HTMLResponse
 
 
-@app.get("/fragments/search", response_class=HTMLResponse)
-def search(q: str = "") -> HTMLResponse:
-    component = SearchResults(contacts=find_contacts(q), query=q)
-    return HTMLResponse(
-        component.render().serialize(deps_strategy="fragment")
-    )
+@app.get("/fragments/contacts/{contact_id}", response_class=HTMLResponse)
+def contact_detail(contact_id: int) -> HTMLResponse:
+    component = ContactDetail(contact=get_contact(contact_id))
+    return HTMLResponse(component.render().serialize(deps_strategy="fragment"))
 ```
 
 The response contains the component's HTML plus the information Citry needs to
@@ -44,15 +42,13 @@ the visible HTML, the component may appear but its behavior may not start.
 
 ## Let HTMX send the request and update the page
 
-Load a pinned copy of HTMX and Citry's browser runtime on the full page. With
-HTMX 2.0.8 or newer, also copy and load `citry-htmx.js` from the demo:
+Load a pinned copy of HTMX and Citry's browser runtime once on the full page:
 
 ```html
 <script src="/static/htmx.min.js"></script>
-<script src="/static/citry-htmx.js"></script>
 <script src="/citry/citry.js"></script>
 
-<main hx-ext="citry-fragments">
+<main>
   <label for="contact-search">Search contacts</label>
   <input
     id="contact-search"
@@ -72,24 +68,31 @@ Write literal HTMX attributes as ordinary HTML, such as
 `hx-target="#results"`. When a value comes from component data, add Citry's
 `c-` prefix: `c-hx-get="edit_url"`.
 
-With HTMX 2.0.8 or newer, Chromium can remove markers that Citry needs while
-parsing a response. The HTML still appears, but Citry may not load the
-component's CSS or run its JavaScript.
+When Vue creates HTMX controls inside a Citry component, process the mounted
+root from native component JavaScript:
 
-The bundled `citry-htmx.js` extension preserves those markers during the
-swap. Add `hx-ext="citry-fragments"` to the page, or to any section where HTMX
-inserts Citry-rendered HTML.
+```javascript
+$component({
+  mounted() {
+    window.htmx.process(this.$refs.root);
+  },
+});
+```
 
-Use the extension only with `hx-swap="innerHTML"` on a wrapper that stays on
-the page. It raises an error for `outerHTML`, `beforebegin`, `afterbegin`,
-`beforeend`, and `afterend`. After those swaps, the extension cannot reliably
-find all the nodes HTMX just inserted. It does not support out-of-band swaps.
+This lets HTMX discover attributes after Vue has mounted the component. Remove
+the listener implicitly by replacing the complete Vue app through its external
+wrapper; do not let HTMX rewrite descendants of a retained Vue app.
 
 ## Update a plain wrapper around the component
 
-Put a plain `<div>` or `<section>` around the area HTMX will update. Keep the
-wrapper outside the HTML returned by the route. `innerHTML` then replaces its
-contents while leaving the wrapper on the page. A Citry component can render
+Put a plain `<div>` or `<section>` around each complete Vue app that HTMX will
+update. Keep the wrapper outside the HTML returned by the route. `innerHTML`
+then replaces the old app and its fragment manifest while leaving the wrapper
+on the page. For a list, render the list wrapper on the server and serialize
+each interactive row independently. Insert those trusted final fragment
+strings as HTML; never compile serialized fragment HTML as Vue template source.
+
+A Citry component can render
 several elements, only text, or even no HTML, so you cannot assume it always
 has one outer element to replace.
 
@@ -116,13 +119,13 @@ HTMX file you deploy, and check that:
   expected;
 - authenticated changes reject bad CSRF tokens and unauthorized users;
 - a component inserted later receives its CSS and JavaScript;
-- Citry avoids duplicate dependencies while components that use them remain;
-- Citry removes a component's CSS after its last instance leaves and restores
-  it when another instance appears; and
+- interactive Vue fragments release their app-owned styles when the app is replaced;
+- static fragment dependency tags remain attached to the inserted HTML, while
+  repeated URL fetches use the browser cache; and
 - the browser console and network log stay free of unexpected errors.
 
 The complete
-[HTMX patterns demo]({{ repo_url }}/tree/citry%400.4.6/examples/demos/htmx){: target="_blank" rel="noopener"}
+[HTMX patterns demo]({{ repo_url }}/tree/main/examples/demos/htmx){: target="_blank" rel="noopener"}
 contains search-as-you-type, an editable contact form, and a department picker
 that refreshes the team list. It also includes FastAPI routes, a pinned HTMX
 runtime, and browser tests. See

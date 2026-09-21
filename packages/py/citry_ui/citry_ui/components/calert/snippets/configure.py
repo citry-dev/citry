@@ -8,27 +8,13 @@ class ConfigureAlert(Component):
     template = """
       <section
         class="alert-configurator"
-        x-data="{
-          intent: 'info',
-          variant: 'soft',
-          size: 'md',
-          announce: 'off',
-          icon: true,
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p>Live configuration</p>
           <h2>Observation status</h2>
         </header>
         <c-CAlert
-          $c-props="{
-            intent,
-            variant,
-            size,
-            announce,
-            icon,
-          }"
+          :intent="intent" :variant="variant" :size="size" :announce="announce" :icon="icon"
         >
           <c-fill name="title">Tracking update</c-fill>
           <c-fill name="default">
@@ -36,6 +22,30 @@ class ConfigureAlert(Component):
           </c-fill>
         </c-CAlert>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            intent: 'info',
+            variant: 'soft',
+            size: 'md',
+            announce: 'off',
+            icon: true,
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

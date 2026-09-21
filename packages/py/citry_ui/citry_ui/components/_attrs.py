@@ -74,22 +74,40 @@ def pop_html_attr(
     return attrs.pop(matches[0]) if matches else default
 
 
+def html_attr_binding_target(name: str) -> str | None:
+    """Return the HTML target named by a static-argument binding."""
+    normalized = name.casefold()
+    if normalized.startswith(("x-bind:", "v-bind:")):
+        return normalized.split(":", 1)[1].split(".", 1)[0]
+    if normalized.startswith((":", ".")):
+        return normalized[1:].split(".", 1)[0]
+    return None
+
+
+def is_executable_event_attribute(name: str) -> bool:
+    """
+    Return whether a resolved attribute would install browser code.
+
+    Python-owned attribute mappings are data.  They must never smuggle a
+    framework event directive or an inline DOM event handler into the Vue
+    template assembled from that data.  Authored Vue attributes still go
+    through the template compiler and are intentionally outside this check.
+    """
+    normalized = name.casefold()
+    return normalized.startswith(("on", "@", "v-on", "x-on"))
+
+
 def reject_html_attr_bindings(
     attrs: Mapping[str, object] | None,
     names: set[str] | frozenset[str],
     component_name: str,
 ) -> None:
-    """Reject Alpine shorthand or longhand bindings to selected HTML attributes."""
+    """Reject Vue bindings to selected HTML attributes in Python-owned mappings."""
     normalized_names = {name.casefold() for name in names}
     for key in attrs or {}:
         if not isinstance(key, str):
             continue
-        normalized = key.casefold()
-        target = None
-        if normalized.startswith("x-bind:"):
-            target = normalized.removeprefix("x-bind:").split(".", 1)[0]
-        elif normalized.startswith((":", ".")):
-            target = normalized[1:].split(".", 1)[0]
+        target = html_attr_binding_target(key)
         if target in normalized_names:
             msg = f"{component_name} attrs cannot dynamically bind HTML attribute {target!r}."
             raise ValueError(msg)
@@ -115,6 +133,8 @@ __all__ = [
     "CStyleValue",
     "get_html_attr",
     "get_html_form_owner",
+    "html_attr_binding_target",
+    "is_executable_event_attribute",
     "merge_root_attrs",
     "pop_html_attr",
     "reject_html_attr_bindings",

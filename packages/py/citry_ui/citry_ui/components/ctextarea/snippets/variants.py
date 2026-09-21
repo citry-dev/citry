@@ -19,10 +19,11 @@ class TextareaVariants(Component):
     template = """
       <section class="forest-variants">
         <c-for each="variant in variants">
-          <c-CField>
+          <c-CField #c-key="variant">
             <c-fill name="label">{{ variant.title() }} field note</c-fill>
             <c-fill name="default">
               <c-CTextarea
+                #c-key="variant"
                 c-name="variant"
                 c-variant="variant"
                 value="Bracket fungi found on the fallen birch."

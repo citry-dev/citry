@@ -41,7 +41,8 @@ and rejects `collapsed=True`.
 
 ## Control collapse state
 
-Supply `collapsed` through `$c-props` to control it. The callback is a request;
+Bind `collapsed` with native Vue syntax, such as `:collapsed="collapsed"`, to
+control it. Bind `onCollapsedChange` as a Vue prop callback. The callback is a request;
 keep or change your value to reject or accept it.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/csidebar/snippets/controlled.py" title="Control Sidebar collapse" />

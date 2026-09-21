@@ -34,12 +34,11 @@ class WelcomeCard(Component):
     def css_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str]:
         return {"accent": kwargs.accent}
 
+    def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, int]:
+        return {"greetings": kwargs.greetings}
+
     template = """
-      <article
-        class="welcome-card"
-        c-x-data="{ 'greetings': greetings }"
-        @welcome-card:welcomed="greetings = $event.detail.greetings"
-      >
+      <article class="welcome-card">
         <p>Welcome, <strong>{{ name }}</strong>.</p>
         <button
           type="button"
@@ -50,9 +49,24 @@ class WelcomeCard(Component):
         </button>
         <p>
           Replies from Python:
-          <output x-text="greetings">{{ greetings }}</output>
+          <output v-text="greetings">{{ greetings }}</output>
         </p>
       </article>
+    """
+
+    js = """
+      $component({
+        onServerRender({ component }) {
+          const root = component.$el;
+          const receiveWelcome = (event) => {
+            component.greetings = event.detail.greetings;
+          };
+          root.addEventListener('welcome-card:welcomed', receiveWelcome);
+          return () => {
+            root.removeEventListener('welcome-card:welcomed', receiveWelcome);
+          };
+        },
+      });
     """
 
     css = """

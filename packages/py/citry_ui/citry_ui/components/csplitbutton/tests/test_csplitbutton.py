@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
 from citry import Citry, Component, ComponentLibrary
 from citry_ui.components.cbutton import CButton
-from citry_ui.components.cbutton.cbutton import _CBUTTON_SHARED_ASSETS
+from citry_ui.components.cbutton.cbutton import (
+    _CBUTTON_RUNTIME_GENERATION,
+    _CBUTTON_RUNTIME_KEY,
+    _CBUTTON_SHARED_ASSETS,
+)
 from citry_ui.components.cmenu import CMenu, CMenuItem
 from citry_ui.components.cmenu.cmenu import (
+    _CMENU_ROOT_RUNTIME_GENERATION,
+    _CMENU_ROOT_RUNTIME_KEY,
     _CMENU_SHARED_ASSETS,
     CInternalMenuCollection,
     CInternalMenuContent,
@@ -24,6 +31,10 @@ from citry_ui.components.csplitbutton import (
     CSplitButtonLoadingSlotData,
     CSplitButtonMenuSlotData,
     CSplitButtonStartSlotData,
+)
+from citry_ui.components.csplitbutton._submit_registry import (
+    _SPLIT_BUTTON_SUBMIT_RUNTIME_GENERATION,
+    _SPLIT_BUTTON_SUBMIT_RUNTIME_KEY,
 )
 
 _COMPONENTS = (
@@ -288,3 +299,25 @@ def test_button_and_menu_runtime_and_style_dependencies_are_deduplicated():
     assert html.count("cannot replace an incompatible CMenu runtime") == 1
     assert html.count(_CBUTTON_SHARED_ASSETS.style.content or "missing Button style") == 1
     assert html.count(_CMENU_SHARED_ASSETS.style.content or "missing Menu style") == 1
+
+
+def test_runtime_asset_tracks_shared_runtime_keys_and_generations():
+    component_dir = Path(__file__).parents[1]
+    source = (component_dir / "runtime.source.js").read_text(encoding="utf-8")
+    bundle = (component_dir / "runtime.min.js").read_text(encoding="utf-8")
+
+    assert CSplitButton.js_file == "runtime.min.js"
+    assert getattr(CSplitButton, "js", None) is None
+
+    for key, generation, runtime_name in (
+        (_CBUTTON_RUNTIME_KEY, _CBUTTON_RUNTIME_GENERATION, "buttonRuntime"),
+        (_CMENU_ROOT_RUNTIME_KEY, _CMENU_ROOT_RUNTIME_GENERATION, "menuRuntime"),
+        (_SPLIT_BUTTON_SUBMIT_RUNTIME_KEY, _SPLIT_BUTTON_SUBMIT_RUNTIME_GENERATION, "submitRuntime"),
+    ):
+        symbol = f'Symbol.for("{key}")'
+        source_generation_check = f"{runtime_name}?.generation !== {generation}"
+        minified_generation_check = f"{generation}!=={runtime_name}?.generation"
+        assert symbol in source
+        assert source_generation_check in source
+        assert symbol in bundle
+        assert minified_generation_check in bundle

@@ -727,12 +727,14 @@ class CCommandPalette(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         data = self._snapshot(kwargs)
         return {
-            "open": data["open"],
-            "query": data["query"],
-            "disabled": data["disabled"],
-            "loop": data["loop"],
-            "closeOnAction": data["close_on_action"],
-            "size": data["size"],
+            "serverDefaults": {
+                "open": data["open"],
+                "query": data["query"],
+                "disabled": data["disabled"],
+                "loop": data["loop"],
+                "closeOnAction": data["close_on_action"],
+                "size": data["size"],
+            },
             "regions": data["regions"],
             "fingerprint": data["fingerprint"],
             "hasActivator": "activator" in self.raw_slots,
@@ -1123,8 +1125,12 @@ class CCommandPalette(LibraryComponent):
           onQueryChange: {},
           onAction: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          const host = component.$el;
+          const data = component;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const dialogRuntime = globalThis[Symbol.for("citry-ui:dialog-controller-runtime")];
           const activeRuntime = globalThis[Symbol.for("citry-ui:active-descendant-runtime")];
           if (dialogRuntime?.generation !== 1 || activeRuntime?.generation !== 1) {
@@ -1214,7 +1220,13 @@ class CCommandPalette(LibraryComponent):
             const markers = [...host.attributes]
               .filter((attribute) => attribute.name.startsWith("data-cid-"))
               .map((attribute) => attribute.name.slice(9));
-            return host.getAttribute("data-citry-root") === ""
+            const legacyCorrelationPresent = host.hasAttribute("data-citry-root")
+              || host.hasAttribute("data-has-alpine-state")
+              || host.hasAttribute("x-citry-boundary")
+              || host.hasAttribute("data-cid")
+              || [...host.attributes].some((attribute) => attribute.name.startsWith("data-cid-"));
+            return (!legacyCorrelationPresent || (
+              host.getAttribute("data-citry-root") === ""
               && (!host.hasAttribute("data-has-alpine-state")
                 || host.getAttribute("data-has-alpine-state") === "true")
               && (!host.hasAttribute("x-citry-boundary")
@@ -1222,6 +1234,7 @@ class CCommandPalette(LibraryComponent):
               && identifiers.length === 1
               && markers.length === 1
               && markers[0] === identifiers[0]
+            ))
               && ownedElements.slice(1).every((element) =>
                 ![...element.attributes].some(frameworkMarker));
           };
@@ -1407,17 +1420,17 @@ class CCommandPalette(LibraryComponent):
           let controller = null;
           let collection = null;
           let configuration = {
-            disabled: data.disabled,
-            loop: data.loop,
-            closeOnAction: data.closeOnAction,
-            size: data.size,
+            disabled: defaults.disabled,
+            loop: defaults.loop,
+            closeOnAction: defaults.closeOnAction,
+            size: defaults.size,
           };
-          let internalOpen = retained ? previous.internalOpen : data.open;
+          let internalOpen = retained ? previous.internalOpen : defaults.open;
           let logicalOpen = retained ? previous.logicalOpen : false;
           let openControlled = false;
           let queryControlled = false;
-          let fallbackQuery = retained ? previous.fallbackQuery : data.query;
-          let query = retained ? previous.query : data.query;
+          let fallbackQuery = retained ? previous.fallbackQuery : defaults.query;
+          let query = retained ? previous.query : defaults.query;
           let suppliedQuery = retained ? previous.suppliedQuery : null;
           let activeValue = retained ? previous.activeValue : null;
           let previousOrder = retained ? previous.previousOrder : flattened.map((item) => item.value);
@@ -1460,7 +1473,7 @@ class CCommandPalette(LibraryComponent):
           };
           const resolveBoolean = (name, fallback) => {
             const value = props[name] === undefined || props[name] === null
-              ? data[name]
+              ? defaults[name]
               : props[name];
             if (typeof value === "boolean") {
               invalid.delete(name);
@@ -1470,7 +1483,7 @@ class CCommandPalette(LibraryComponent):
             return fallback;
           };
           const resolveSize = () => {
-            const value = props.size === undefined || props.size === null ? data.size : props.size;
+            const value = props.size === undefined || props.size === null ? defaults.size : props.size;
             if (["sm", "md", "lg"].includes(value)) {
               invalid.delete("size");
               return value;

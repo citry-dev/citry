@@ -3,9 +3,9 @@ members = [
     "crates/citry_core_py",
     "crates/citry_html_transform",
     "crates/citry_i18n",
-    "crates/citry_ownership",
     "crates/citry_template_formatter",
     "crates/citry_template_parser",
+    "crates/citry_vue_compiler",
     "crates/python_safe_eval",
 ]
 resolver = "2"
@@ -21,9 +21,10 @@ repository = "https://github.com/citry-dev/citry"
 
 [workspace.dependencies]
 python_safe_eval = { path = "crates/python_safe_eval", version = "=1.0.0" }
-citry_ownership = { path = "crates/citry_ownership", version = "=0.1.0" }
 pyo3 = { version = "0.27.1", features = ["extension-module"] }
 quick-xml = "0.38.3"
+html5gum = { version = "=0.8.4", features = ["tree-builder"] }
+html5ever = "=0.29.0"
 pest = "2.8.3"
 pest_derive = "2.8.3"
 thiserror = "2.0.17"
@@ -158,6 +159,9 @@ bstr = { version = "1.9.1" }
 datatest-stable = { version = "0.3.3" }
 insta = { version = "1.35.1" }
 serde_json = { version = "1.0.113" }
+vize_atelier_core = { path = "third_party/rust/vize_atelier_core", version = "=0.420.0" }
+vize_atelier_dom = "=0.420.0"
+vize_s1_to_s2 = { path = "third_party/rust/vize_s1_to_s2", version = "=0.420.0" }
 unicode-normalization = { version = "0.1.23" }
 unicode_names2 = { version = "1.2.2" }
 walkdir = { version = "2.3.2" }
@@ -190,3 +194,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     "cfg(fuzzing)",
     "cfg(codspeed)",
 ] }
+
+[patch.crates-io]
+vize_atelier_core = { path = "third_party/rust/vize_atelier_core" }
+vize_s1_to_s2 = { path = "third_party/rust/vize_s1_to_s2" }

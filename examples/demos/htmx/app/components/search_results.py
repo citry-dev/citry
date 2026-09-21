@@ -1,54 +1,34 @@
 from app.citry_app import citry_app
-from app.data import ContactView
-from citry import Component
+from citry import Component, Markup
 
 
 class SearchResults(Component):
     citry = citry_app
 
     class Kwargs:
-        contacts: tuple[ContactView, ...]
-        query: str = ""
+        rows_html: Markup
+        count: int
 
     class Slots:
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
-        count = len(kwargs.contacts)
         return {
-            "contacts": kwargs.contacts,
-            "summary": f"{count} contact{'s' if count != 1 else ''} found",
+            "rows_html": kwargs.rows_html,
+            "count": kwargs.count,
+            "summary": f"{kwargs.count} contact{'s' if kwargs.count != 1 else ''} found",
         }
 
-    def js_data(self, kwargs: Kwargs, slots: Slots):
-        return {"query": kwargs.query}
-
     template = """
-      <div class="contact-results">
+      <div class="contact-results" data-citry-activated="server">
         <p class="contact-results__summary" role="status">{{ summary }}</p>
-        <c-if cond="contacts">
-          <ul class="contact-results__list">
-            <c-for each="contact in contacts">
-              <li>
-                <div class="contact-row-host" c-id="f'contact-row-{contact.id}'">
-                  <c-ContactDetail c-contact="contact" />
-                </div>
-              </li>
-            </c-for>
-          </ul>
+        <c-if cond="count">
+          <ul class="contact-results__list">{{ rows_html }}</ul>
         </c-if>
         <c-else>
           <p class="contact-results__empty">No contacts match that search.</p>
         </c-else>
       </div>
-    """
-
-    js = """
-      $component(({ els, data }) => {
-        if (els[0]) {
-          els[0].dataset.citryActivated = data.query || "all";
-        }
-      });
     """
 
     css = """

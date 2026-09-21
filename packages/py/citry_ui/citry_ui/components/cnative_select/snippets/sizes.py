@@ -30,10 +30,11 @@ class NativeSelectSizes(Component):
     template = """
       <section class="ocean-sizes">
         <c-for each="size in sizes">
-          <c-CField>
+          <c-CField #c-key="size">
             <c-fill name="label">{{ size.upper() }} vessel control</c-fill>
             <c-fill name="default">
               <c-CNativeSelect
+                #c-key="size"
                 c-options="vessels"
                 c-size="size"
                 value="bathyscaphe"

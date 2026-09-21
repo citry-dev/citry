@@ -18,8 +18,15 @@ $component({
     loop: {}, placement: {}, matchWidth: {}, variant: {}, size: {},
     onValueChange: {}, onOpenChange: {},
   },
-  init: ({els, data, props, effect, inject}) => {
-    const root = els[0];
+  inject: {
+    fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+    formService: {from: Symbol.for('citry-ui:form'), default: null},
+  },
+  onServerRender: ({component}) => {
+    const root = component.$el;
+    if (!(root instanceof HTMLDivElement)) throw new Error('[citry-ui] CSelect root is invalid.');
+    const data = component;
+    const props = component.$props;
     const trigger = root.querySelector(':scope > [data-citry-ui-part="control"]');
     const nativeSelect = root.querySelector(':scope > [data-cui-select-native]');
     const readonlyInput = root.querySelector(':scope > [data-cui-select-readonly-value]');
@@ -34,8 +41,8 @@ $component({
     ) {
       throw new Error("[citry-ui] CSelect settled anatomy is invalid.");
     }
-    const field = inject(Symbol.for("citry-ui:field"), null);
-    const form = inject(Symbol.for("citry-ui:form"), null);
+    const field = component.fieldService;
+    const form = component.formService;
     const nativeForm = nativeSelect.form;
     const coordinator = anchoredLayerRuntime.coordinatorFor(popup);
     const invalidEpisodes = new Set();
@@ -71,14 +78,14 @@ $component({
     };
     const prior = root[selectHandoffKey];
     delete root[selectHandoffKey];
-    const serverFingerprint = JSON.stringify(data.value);
+    const serverFingerprint = JSON.stringify(data.serverValue);
     let committedValue = prior?.serverFingerprint === serverFingerprint
       ? prior.committedValue
-      : data.value;
+      : data.serverValue;
     let currentValue = committedValue;
     let internalOpen = prior?.serverFingerprint === serverFingerprint
       ? Boolean(prior.internalOpen)
-      : data.open;
+      : data.serverOpen;
     let logicalOpen = false;
     let highlightedValue = prior?.highlightedValue ?? null;
     let controlledValue = false;
@@ -98,15 +105,15 @@ $component({
     let pendingForcedNotice = null;
     let pendingStructure = prior?.pendingStructure ?? null;
     let configuration = {
-      required:data.required,
-      disabled:data.disabled,
-      readonly:data.readonly,
-      invalid:data.invalid,
-      loop:data.loop,
-      placement:data.placement,
-      matchWidth:data.matchWidth,
-      variant:data.variant,
-      size:data.size,
+      required:data.serverRequired,
+      disabled:data.serverDisabled,
+      readonly:data.serverReadonly,
+      invalid:data.serverInvalid,
+      loop:data.serverLoop,
+      placement:data.serverPlacement,
+      matchWidth:data.serverMatchWidth,
+      variant:data.serverVariant,
+      size:data.serverSize,
     };
 
     const anchorName = data.anchorName;
@@ -512,10 +519,10 @@ $component({
       const scheduled = generation;
       setTimeout(() => {
         if (!active || event.defaultPrevented || scheduled !== generation) return;
-        if (!controlledValue && currentValue !== data.value) {
+        if (!controlledValue && currentValue !== data.serverValue) {
           const previousValue = currentValue;
-          currentValue = data.value;
-          committedValue = data.value;
+          currentValue = data.serverValue;
+          committedValue = data.serverValue;
           syncValue();
           onValueChange?.(currentValue, {
             value:currentValue, previousValue, option:selectedOption(), controlled:false,
@@ -612,7 +619,8 @@ $component({
       observer.observe(ancestor, {attributes:true, childList:true, attributeFilter:['disabled']});
       fieldsetObservers.push(observer);
     }
-    const stop = effect(() => {
+    const unregisterCapabilities = field?.registerCapabilities({required:true, readonly:true});
+    Citry.vue.watchEffect(() => {
       clientValue = props.value;
       clientOpen = props.open;
       onValueChange = typeof props.onValueChange === 'function' ? props.onValueChange : null;
@@ -622,21 +630,21 @@ $component({
       if (props.onOpenChange != null && onOpenChange === null) report('onOpenChange', props.onOpenChange);
       else invalidEpisodes.delete('onOpenChange');
       configuration = {
-        required:field ? field.required : resolveBoolean('required', data.required),
+        required:field ? field.required : resolveBoolean('required', data.serverRequired),
         disabled:field
           ? field.disabled
-          : (form?.disabled || resolveBoolean('disabled', data.disabled)),
+          : (Boolean(form?.disabled) || resolveBoolean('disabled', data.serverDisabled)),
         readonly:field
           ? field.readonly
-          : (form?.readonly || resolveBoolean('readonly', data.readonly)),
-        invalid:field ? field.invalid : resolveBoolean('invalid', data.invalid),
-        loop:resolveBoolean('loop', data.loop),
-        placement:resolveChoice('placement', data.placement, [
+          : resolveBoolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+        invalid:field ? field.invalid : resolveBoolean('invalid', data.serverInvalid),
+        loop:resolveBoolean('loop', data.serverLoop),
+        placement:resolveChoice('placement', data.serverPlacement, [
           'bottom-start','bottom-end','top-start','top-end',
         ]),
-        matchWidth:resolveBoolean('matchWidth', data.matchWidth),
-        variant:resolveChoice('variant', data.variant, ['outline','filled','plain']),
-        size:resolveChoice('size', data.size, ['sm','md','lg']),
+        matchWidth:resolveBoolean('matchWidth', data.serverMatchWidth),
+        variant:resolveChoice('variant', data.serverVariant, ['outline','filled','plain']),
+        size:resolveChoice('size', data.serverSize, ['sm','md','lg']),
       };
       reconcileControlled();
     });
@@ -656,7 +664,7 @@ $component({
         highlightedValue,
         pendingStructure,
       };
-      stop?.();
+      unregisterCapabilities?.();
       fieldsetObservers.forEach((observer) => observer.disconnect());
       root.removeEventListener('click', onClick, true);
       root.removeEventListener('pointerover', onPointerOver, true);

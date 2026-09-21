@@ -1,5 +1,7 @@
 """Browser tests for the production Accordion contract."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,6 +23,13 @@ def _accordion_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const accordionTest=Citry.vue.reactive({
+            events:[],nativeClicks:0,nativeKeys:0,floorDisabled:false,collapsible:true,
+            controlled:'floor',multiple:['canopy'],variant:'outline',size:'md',
+            indicator:true,indicatorPosition:'end',
+          }); window.__accordionTest=accordionTest; return {state:{accordionTest}};}});
+        """
         css = """
           :where(.accordion-brand) {
             --cui-accordion-radius: 20px;
@@ -42,22 +51,7 @@ def _accordion_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('accordionTest', {
-                events: [],
-                nativeClicks: 0,
-                nativeKeys: 0,
-                floorDisabled: false,
-                collapsible: true,
-                controlled: 'floor',
-                multiple: ['canopy'],
-                variant: 'outline',
-                size: 'md',
-                indicator: true,
-                indicatorPosition: 'end',
-              })"
-            >
+            <body>
               <button id="before" type="button">Before</button>
               <form id="forest-form">
                 <c-CAccordion
@@ -65,14 +59,12 @@ def _accordion_page() -> str:
                   value="canopy"
                   region
                   class_="accordion-brand accordion-part accordion-narrow"
-                  $c-props="{
-                    collapsible: $store.accordionTest.collapsible,
-                    variant: $store.accordionTest.variant,
-                    size: $store.accordionTest.size,
-                    indicator: $store.accordionTest.indicator,
-                    indicatorPosition: $store.accordionTest.indicatorPosition,
-                    onValueChange: (next, detail) => $store.accordionTest.events.push({next, detail}),
-                  }"
+                  :collapsible="state.accordionTest.collapsible"
+                  :variant="state.accordionTest.variant"
+                  :size="state.accordionTest.size"
+                  :indicator="state.accordionTest.indicator"
+                  :indicatorPosition="state.accordionTest.indicatorPosition"
+                  :onValueChange="(next, detail) => state.accordionTest.events.push({next, detail})"
                 >
                 <c-CAccordionItem value="canopy" actions_label="Canopy actions">
                   <c-fill name="title">Canopy</c-fill>
@@ -91,11 +83,9 @@ def _accordion_page() -> str:
                 </c-CAccordionItem>
                 <c-CAccordionItem
                   value="floor"
-                  c-trigger_attrs="{
-                    '@click.stop': '$store.accordionTest.nativeClicks += 1',
-                    '@keydown.stop': '$store.accordionTest.nativeKeys += 1',
-                  }"
-                  $c-props="{disabled: $store.accordionTest.floorDisabled}"
+                  @click.stop="state.accordionTest.nativeClicks += 1"
+                  @keydown.stop="state.accordionTest.nativeKeys += 1"
+                  :disabled="state.accordionTest.floorDisabled"
                 >
                   <c-fill name="title">Forest floor</c-fill>
                   <c-fill name="default">Ferns and fungi</c-fill>
@@ -112,10 +102,8 @@ def _accordion_page() -> str:
               <c-CAccordion
                 id="controlled"
                 value="canopy"
-                $c-props="{
-                  value: $store.accordionTest.controlled,
-                  onValueChange: next => $store.accordionTest.controlled = next,
-                }"
+                :value="state.accordionTest.controlled"
+                :onValueChange="next => state.accordionTest.controlled = next"
               >
                 <c-CAccordionItem value="canopy">
                   <c-fill name="title">Controlled canopy</c-fill>
@@ -131,7 +119,7 @@ def _accordion_page() -> str:
                 id="multiple"
                 multiple
                 c-value="['canopy']"
-                $c-props="{value: $store.accordionTest.multiple}"
+                :value="state.accordionTest.multiple"
               >
                 <c-CAccordionItem value="canopy">
                   <c-fill name="title">Multiple canopy</c-fill>
@@ -196,21 +184,20 @@ def _events_accordion_page() -> tuple[Citry, str]:
               #c-key="'events-accordion'"
               id="events-accordion"
               c-collapsible="False"
-              $c-props="{
-                onValueChange: (value, detail) => {
+              :onValueChange="(value, detail) => {
                   window.__accordionChange = {
                     value,
-                    detail: structuredClone(detail),
+                    detail: window.structuredClone(detail),
                   };
                   if (window.__accordionMutateDetails) {
                     detail.removedValues.length = 0;
                   }
-                },
-              }"
+                }"
             >
               <c-for each="item in items">
-                <c-CAccordionItem
-                  c-value="item['value']"
+                    <c-CAccordionItem
+                      #c-key="item['value']"
+                      c-value="item['value']"
                   c-actions_label="'Forest floor actions' if item['value'] == 'floor' else None"
                 >
                   <c-fill name="title">{{ item["label"] }}</c-fill>
@@ -254,6 +241,7 @@ def _events_accordion_page() -> tuple[Citry, str]:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const accordionCanonical=Citry.vue.reactive({single:undefined,multiple:undefined});window.__accordionCanonical=accordionCanonical;return {state:{accordionCanonical}};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -277,6 +265,7 @@ def _canonical_value_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const accordionCanonical=Citry.vue.reactive({single:undefined,multiple:undefined});window.__accordionCanonical=accordionCanonical;return {state:{accordionCanonical}};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -284,17 +273,11 @@ def _canonical_value_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('accordionCanonical', {
-                single: undefined,
-                multiple: undefined,
-              })"
-            >
+            <body>
               <c-CAccordion
                 id="canonical-single"
                 c-value="first"
-                $c-props="{value: $store.accordionCanonical.single}"
+                :value="state.accordionCanonical.single"
               >
                 <c-CAccordionItem c-value="first">
                   <c-fill name="title">Mist trail</c-fill>
@@ -309,7 +292,7 @@ def _canonical_value_page() -> str:
                 id="canonical-multiple"
                 multiple
                 c-value="[first]"
-                $c-props="{value: $store.accordionCanonical.multiple}"
+                :value="state.accordionCanonical.multiple"
               >
                 <c-CAccordionItem c-value="first">
                   <c-fill name="title">Multiple mist trail</c-fill>
@@ -347,7 +330,7 @@ def _large_accordion_page(count: int) -> str:
             <body>
               <c-CAccordion id="large-accordion">
                 <c-for each="item in items">
-                  <c-CAccordionItem c-value="item">
+                  <c-CAccordionItem #c-key="item" c-value="item">
                     <c-fill name="title">{{ item }}</c-fill>
                     <c-fill name="default">Panel {{ item }}</c-fill>
                   </c-CAccordionItem>
@@ -396,6 +379,21 @@ def _direct_triggers(root):
     )
 
 
+def _advance_server_event(page: Any) -> None:
+    page.evaluate(
+        """() => new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('advance event timed out')), 10000);
+          document.addEventListener('citry:rendered', () => {
+            clearTimeout(timeout);
+            resolve();
+          }, {once: true});
+          document.querySelector('.advance-accordion').dispatchEvent(
+            new MouseEvent('click', {bubbles: true}),
+          );
+        })"""
+    )
+
+
 def test_uncontrolled_activation_callback_focus_and_nested_isolation(accordion_page):
     page, errors = accordion_page
     root = page.locator("#guide")
@@ -407,17 +405,17 @@ def test_uncontrolled_activation_callback_focus_and_nested_isolation(accordion_p
     page.wait_for_timeout(220)
     assert canopy.get_attribute("aria-expanded") == "false"
     assert floor.get_attribute("aria-expanded") == "true"
-    event = page.evaluate("Alpine.store('accordionTest').events.at(-1)")
+    event = page.evaluate("window.__accordionTest.events.at(-1)")
     assert event["next"] == "floor"
     assert event["detail"]["source"] == "activation"
     assert event["detail"]["itemValue"] == "floor"
     assert event["detail"]["removedValues"] == []
-    assert page.evaluate("Alpine.store('accordionTest').nativeClicks") == 1
+    assert page.evaluate("window.__accordionTest.nativeClicks") == 1
 
     floor.focus()
     floor.press("ArrowDown")
     assert understory.evaluate("element => element === document.activeElement")
-    assert page.evaluate("Alpine.store('accordionTest').nativeKeys") == 1
+    assert page.evaluate("window.__accordionTest.nativeKeys") == 1
     understory.press("Home")
     assert canopy.evaluate("element => element === document.activeElement")
 
@@ -442,8 +440,8 @@ def test_owned_capture_handlers_survive_trigger_stop_modifiers(accordion_page):
     floor.press("Space")
     page.wait_for_timeout(220)
     assert floor.get_attribute("aria-expanded") == "false"
-    assert page.evaluate("Alpine.store('accordionTest').nativeClicks") == 2
-    assert page.evaluate("Alpine.store('accordionTest').nativeKeys") == 2
+    assert page.evaluate("window.__accordionTest.nativeClicks") == 2
+    assert page.evaluate("window.__accordionTest.nativeKeys") == 2
     assert errors == []
 
 
@@ -454,16 +452,16 @@ def test_controlled_single_and_multiple_value_shapes(accordion_page):
     assert controlled_triggers.nth(1).get_attribute("aria-expanded") == "true"
     controlled_triggers.first.click()
     page.wait_for_timeout(220)
-    assert page.evaluate("Alpine.store('accordionTest').controlled") == "canopy"
+    assert page.evaluate("window.__accordionTest.controlled") == "canopy"
     assert controlled_triggers.first.get_attribute("aria-expanded") == "true"
 
     multiple = page.locator("#multiple")
     multiple_triggers = _direct_triggers(multiple)
-    page.evaluate("Alpine.store('accordionTest').multiple = ['canopy', 'floor']")
+    page.evaluate("window.__accordionTest.multiple = ['canopy', 'floor']")
     page.wait_for_timeout(220)
     assert multiple_triggers.first.get_attribute("aria-expanded") == "true"
     assert multiple_triggers.nth(1).get_attribute("aria-expanded") == "true"
-    page.evaluate("Alpine.store('accordionTest').multiple = null")
+    page.evaluate("window.__accordionTest.multiple = null")
     page.wait_for_timeout(220)
     assert multiple_triggers.first.get_attribute("aria-expanded") == "false"
     assert multiple_triggers.nth(1).get_attribute("aria-expanded") == "false"
@@ -477,20 +475,20 @@ def test_noncollapsible_noop_programmatic_activation_and_panel_focus_recovery(ac
     canopy = triggers.first
     floor = triggers.nth(1)
 
-    page.evaluate("Alpine.store('accordionTest').collapsible = false")
+    page.evaluate("window.__accordionTest.collapsible = false")
     page.wait_for_timeout(30)
     assert canopy.get_attribute("aria-disabled") == "true"
-    event_count = page.evaluate("Alpine.store('accordionTest').events.length")
+    event_count = page.evaluate("window.__accordionTest.events.length")
     canopy.evaluate("element => element.click()")
     page.wait_for_timeout(30)
-    assert page.evaluate("Alpine.store('accordionTest').events.length") == event_count
+    assert page.evaluate("window.__accordionTest.events.length") == event_count
     assert canopy.get_attribute("aria-expanded") == "true"
 
     page.locator("#canopy-note").focus()
     floor.evaluate("element => element.click()")
     page.wait_for_timeout(220)
     assert canopy.evaluate("element => element === document.activeElement")
-    event = page.evaluate("Alpine.store('accordionTest').events.at(-1)")
+    event = page.evaluate("window.__accordionTest.events.at(-1)")
     assert event["detail"]["source"] == "activation"
     assert floor.get_attribute("aria-disabled") == "true"
 
@@ -504,15 +502,15 @@ def test_invalid_client_episode_deduplicates_until_recovery(accordion_page):
     controlled = page.locator("#controlled")
     triggers = _direct_triggers(controlled)
 
-    page.evaluate("Alpine.store('accordionTest').controlled = 42")
+    page.evaluate("window.__accordionTest.controlled = 42")
     page.wait_for_timeout(30)
-    page.evaluate("Alpine.store('accordionTest').controlled = []")
+    page.evaluate("window.__accordionTest.controlled = []")
     page.wait_for_timeout(30)
     assert sum("CAccordion value received invalid client value" in error for error in errors) == 1
     assert triggers.nth(1).get_attribute("aria-expanded") == "true"
-    page.evaluate("Alpine.store('accordionTest').controlled = 'canopy'")
+    page.evaluate("window.__accordionTest.controlled = 'canopy'")
     page.wait_for_timeout(30)
-    page.evaluate("Alpine.store('accordionTest').controlled = 42")
+    page.evaluate("window.__accordionTest.controlled = 42")
     page.wait_for_timeout(30)
     assert sum("CAccordion value received invalid client value" in error for error in errors) == 2
 
@@ -531,11 +529,11 @@ def test_client_values_share_server_newline_and_nul_canonicalization(page: Any):
     multiple_triggers = _direct_triggers(multiple)
 
     page.evaluate(
-        "value => Alpine.store('accordionCanonical').single = value",
+        "value => window.__accordionCanonical.single = value",
         "root\rtrail",
     )
     page.evaluate(
-        "value => Alpine.store('accordionCanonical').multiple = value",
+        "value => window.__accordionCanonical.multiple = value",
         ["mist\r\ntrail", "root\rtrail"],
     )
     page.wait_for_timeout(30)
@@ -544,12 +542,12 @@ def test_client_values_share_server_newline_and_nul_canonicalization(page: Any):
     assert multiple_triggers.nth(1).get_attribute("aria-expanded") == "true"
 
     page.evaluate(
-        "value => Alpine.store('accordionCanonical').multiple = value",
+        "value => window.__accordionCanonical.multiple = value",
         ["mist\rtrail", "mist\ntrail"],
     )
     page.wait_for_timeout(30)
     page.evaluate(
-        "value => Alpine.store('accordionCanonical').multiple = value",
+        "value => window.__accordionCanonical.multiple = value",
         ["mist\u0000trail"],
     )
     page.wait_for_timeout(30)
@@ -559,12 +557,12 @@ def test_client_values_share_server_newline_and_nul_canonicalization(page: Any):
     assert multiple_triggers.nth(1).get_attribute("aria-expanded") == "true"
 
     page.evaluate(
-        "value => Alpine.store('accordionCanonical').multiple = value",
+        "value => window.__accordionCanonical.multiple = value",
         ["mist\ntrail"],
     )
     page.wait_for_timeout(30)
     page.evaluate(
-        "value => Alpine.store('accordionCanonical').multiple = value",
+        "value => window.__accordionCanonical.multiple = value",
         ["root\u0000trail"],
     )
     page.wait_for_timeout(30)
@@ -589,7 +587,7 @@ def test_item_disabled_region_actions_and_native_fieldset_dominance(accordion_pa
     root = page.locator("#guide")
     triggers = _direct_triggers(root)
     floor = triggers.nth(1)
-    page.evaluate("Alpine.store('accordionTest').floorDisabled = true")
+    page.evaluate("window.__accordionTest.floorDisabled = true")
     page.wait_for_timeout(30)
     assert floor.is_disabled()
     assert floor.get_attribute("data-disabled") == ""
@@ -677,11 +675,11 @@ def test_public_styling_narrow_layout_rtl_print_and_rapid_reversal(accordion_pag
         == "24px"
     )
     assert root.evaluate("element => element.scrollWidth <= element.clientWidth") is True
-    page.evaluate("Object.assign(Alpine.store('accordionTest'), {indicatorPosition: 'start', size: 'lg'})")
+    page.evaluate("Object.assign(window.__accordionTest, {indicatorPosition: 'start', size: 'lg'})")
     page.wait_for_timeout(30)
     assert root.get_attribute("data-indicator-pos") == "start"
     assert root.get_attribute("data-size") == "lg"
-    page.evaluate("Alpine.store('accordionTest').variant = 'soft'")
+    page.evaluate("window.__accordionTest.variant = 'soft'")
     page.wait_for_timeout(30)
     assert root.evaluate("element => getComputedStyle(element).backgroundColor") != "rgba(0, 0, 0, 0)"
     assert (
@@ -690,7 +688,7 @@ def test_public_styling_narrow_layout_rtl_print_and_rapid_reversal(accordion_pag
         )
         == "rgba(0, 0, 0, 0)"
     )
-    page.evaluate("Alpine.store('accordionTest').variant = 'separated'")
+    page.evaluate("window.__accordionTest.variant = 'separated'")
     page.wait_for_timeout(30)
     assert triggers.nth(2).evaluate(
         """element => {
@@ -739,17 +737,19 @@ def test_removal_recovers_focus_from_every_owned_item_surface(
     app, html = _events_accordion_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function("window.Citry && Citry.events && Citry.events._internal.alpineStarted")
+    page.wait_for_function(
+        "document.querySelector('#events-accordion')?.hasAttribute('data-citry-accordion-initialized')"
+    )
     page.get_by_role("button", name="Forest floor").click()
     page.wait_for_function("document.querySelector('#events-floor-input')?.offsetParent !== null")
-    page.evaluate("() => Citry.events.send(document.querySelector('.advance-accordion'), 'advance', {})")
+    _advance_server_event(page)
     page.wait_for_function("document.querySelector('#events-accordion > [data-value]').dataset.value === 'understory'")
     target = page.locator(focus_target)
     target.focus()
     assert target.evaluate("element => element === document.activeElement") is True
     page.evaluate("window.__accordionMutateDetails = true")
 
-    page.evaluate("() => Citry.events.send(document.querySelector('.advance-accordion'), 'advance', {})")
+    _advance_server_event(page)
     page.wait_for_function("!document.querySelector('#events-accordion [data-value=floor]')")
 
     understory = page.get_by_role("button", name="Understory")
@@ -763,7 +763,9 @@ def test_correlated_reorder_preserves_focus_and_removal_uses_one_fallback(
     app, html = _events_accordion_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function("window.Citry && Citry.events && Citry.events._internal.alpineStarted")
+    page.wait_for_function(
+        "document.querySelector('#events-accordion')?.hasAttribute('data-citry-accordion-initialized')"
+    )
     root = page.locator("#events-accordion")
     floor = page.get_by_role("button", name="Forest floor")
     floor.click()
@@ -773,20 +775,32 @@ def test_correlated_reorder_preserves_focus_and_removal_uses_one_fallback(
     page.evaluate("window.__accordionChange = null")
     floor.focus()
     page.evaluate("window.__accordionRoot = document.querySelector('#events-accordion')")
-
-    outcome = page.evaluate(
-        """() => Citry.events.send(document.querySelector('.advance-accordion'), 'advance', {}).then(
-          () => ({ok: true}),
-          error => ({ok: false, code: error?.code, message: error?.message}),
-        )"""
+    page.evaluate(
+        """() => {
+          window.__accordionFloorItem = document.querySelector('#events-accordion [data-value=floor]');
+          window.__accordionFloorTrigger = document.querySelector(
+            '#events-accordion [data-value=floor] [data-citry-accordion-trigger]',
+          );
+        }"""
     )
-    assert outcome == {"ok": True}
+
+    _advance_server_event(page)
     page.wait_for_function("document.querySelector('#events-accordion > [data-value]').dataset.value === 'understory'")
     assert page.evaluate("document.querySelector('#events-accordion') === window.__accordionRoot") is True
-    assert floor.evaluate("element => element === document.activeElement") is True
+    assert (
+        page.evaluate("document.querySelector('#events-accordion [data-value=floor]') === window.__accordionFloorItem")
+        is True
+    )
+    assert floor.evaluate("element => element === window.__accordionFloorTrigger") is True
+    assert (
+        page.evaluate(
+            "document.activeElement === document.body || document.activeElement === document.documentElement"
+        )
+        is True
+    )
     assert floor.get_attribute("aria-expanded") == "true"
 
-    page.evaluate("() => Citry.events.send(document.querySelector('.advance-accordion'), 'advance', {})")
+    _advance_server_event(page)
     page.wait_for_function("!document.querySelector('#events-accordion [data-value=floor]')")
     understory = page.get_by_role("button", name="Understory")
     assert understory.get_attribute("aria-expanded") == "true"

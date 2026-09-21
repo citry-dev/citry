@@ -1,5 +1,7 @@
 """Shared CommandPalette scenario used by repository quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from __future__ import annotations
 
 from typing import Any
@@ -120,13 +122,6 @@ def command_palette_states_component(app: Citry) -> type[Component]:
           <section
             class="command-palette-quality__lifecycle"
             @c-quality-morph="refresh"
-            x-data="{
-              lifecycleOpen:false,
-              lifecycleQuery:'open',
-              lifecycleActions:0,
-              lifecycleQueries:0,
-              lifecycleOpens:0,
-            }"
           >
             <output hidden data-quality-morph-step>{{ morph_step }}</output>
             <h2>Signed lifecycle</h2>
@@ -142,29 +137,36 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'lifecycle retained-equal changed-records replacement-root removal restore owner-token',
                 }"
-                $c-props="{
-                  open:lifecycleOpen,
-                  query:lifecycleQuery,
-                  onOpenChange:(value)=>{
+                :open="lifecycleOpen" :query="lifecycleQuery" :onOpenChange="(value)=>{
                     lifecycleOpens++;
                     lifecycleOpen=value;
-                  },
-                  onQueryChange:(value)=>{
+                  }" :onQueryChange="(value)=>{
                     lifecycleQueries++;
                     lifecycleQuery=value;
-                  },
-                  onAction:()=>lifecycleActions++,
-                }"
+                  }" :onAction="()=>lifecycleActions++"
               />
             </c-if>
             <output id="quality-command-palette-lifecycle-output">
-              <span x-text="lifecycleOpen ? 'open' : 'closed'">closed</span>|
-              <span x-text="lifecycleQuery || 'empty'">open</span>|
-              <span x-text="lifecycleActions">0</span>|
-              <span x-text="lifecycleQueries">0</span>|
-              <span x-text="lifecycleOpens">0</span>
+              <span v-text="lifecycleOpen ? 'open' : 'closed'">closed</span>|
+              <span v-text="lifecycleQuery || 'empty'">open</span>|
+              <span v-text="lifecycleActions">0</span>|
+              <span v-text="lifecycleQueries">0</span>|
+              <span v-text="lifecycleOpens">0</span>
             </output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                lifecycleOpen:false,
+                lifecycleQuery:'open',
+                lifecycleActions:0,
+                lifecycleQueries:0,
+                lifecycleOpens:0
+              };
+            },
+          });
         """
 
     class CitryUiCommandPaletteStates(Component):
@@ -180,36 +182,6 @@ def command_palette_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack command-palette-quality"
             aria-labelledby="command-palette-quality-title"
-            x-data="{
-              basicOpen:false,
-              basicQuery:'',
-              basicAction:'none',
-              controlledOpen:false,
-              controlledQuery:'open',
-              acceptClose:false,
-              acceptQuery:false,
-              actionOpen:false,
-              actionLog:[],
-              submits:0,
-              shortcutOpens:0,
-            }"
-            x-init="$nextTick(() => {
-              const host=$refs.shadowHost;
-              const fixture=$refs.shadowFixture;
-              if (!host.shadowRoot && fixture) {
-                Alpine.destroyTree(fixture);
-                host.attachShadow({mode:'open'}).append(fixture);
-                Alpine.initTree(fixture);
-              }
-            })"
-            @keydown.window="
-              ($event.metaKey || $event.ctrlKey)
-              && $event.key.toLowerCase()==='k'
-              && !$event.isComposing
-              && !['INPUT','TEXTAREA','SELECT'].includes($event.target.tagName)
-              && !$event.target.isContentEditable
-              && ($event.preventDefault(), shortcutOpens++, basicOpen=true)
-            "
           >
             <h1 id="command-palette-quality-title">CommandPalette states</h1>
 
@@ -227,13 +199,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       + 'start-adornment end-adornment accepted-close app-shortcut '
                       + 'sm md lg rtl narrow zoom-200 zoom-400 reduced-motion forced-colors print',
                   }"
-                  $c-props="{
-                    open:basicOpen,
-                    query:basicQuery,
-                    onOpenChange:(value)=>basicOpen=value,
-                    onQueryChange:(value)=>basicQuery=value,
-                    onAction:(value)=>basicAction=value,
-                  }"
+                  :open="basicOpen" :query="basicQuery" :onOpenChange="(value)=>basicOpen=value" :onQueryChange="(value)=>basicQuery=value" :onAction="(value)=>basicAction=value"
                 >
                   <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                     <c-CButton
@@ -256,17 +222,17 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                   <c-fill name="empty">No workspace commands match</c-fill>
                 </c-CCommandPalette>
                 <output id="quality-command-palette-basic-output">
-                  <span x-text="basicOpen ? 'open' : 'closed'">closed</span>|
-                  <span x-text="basicQuery || 'empty'">empty</span>|
-                  <span x-text="basicAction">none</span>|
-                  <span x-text="shortcutOpens">0</span>
+                  <span v-text="basicOpen ? 'open' : 'closed'">closed</span>|
+                  <span v-text="basicQuery || 'empty'">empty</span>|
+                  <span v-text="basicAction">none</span>|
+                  <span v-text="shortcutOpens">0</span>
                 </output>
               </article>
 
-              <article x-data="{controlledOpen:false,controlledQuery:'open',acceptClose:false,acceptQuery:false}">
+              <article >
                 <h2>Controlled ownership</h2>
-                <label><input type="checkbox" x-model="acceptClose" /> Accept close</label>
-                <label><input type="checkbox" x-model="acceptQuery" /> Accept query</label>
+                <label><input type="checkbox" v-model="acceptClose" /> Accept close</label>
+                <label><input type="checkbox" v-model="acceptQuery" /> Accept query</label>
                 <button type="button" @click="controlledOpen=true">Restore controlled open</button>
                 <c-CCommandPalette
                   id="quality-command-palette-controlled"
@@ -276,20 +242,15 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'controlled-open controlled-query declined-close accepted-close null-release',
                   }"
-                  $c-props="{
-                    open:controlledOpen,
-                    query:controlledQuery,
-                    onOpenChange:(value)=>{
+                  :open="controlledOpen" :query="controlledQuery" :onOpenChange="(value)=>{
                       if (value || acceptClose) controlledOpen=value;
-                    },
-                    onQueryChange:(value,detail)=>{
+                    }" :onQueryChange="(value,detail)=>{
                       if (acceptQuery || detail.reason==='close') controlledQuery=value;
-                    },
-                  }"
+                    }"
                 />
                 <output id="quality-command-palette-controlled-output">
-                  <span x-text="controlledOpen ? 'open' : 'closed'">closed</span>|
-                  <span x-text="controlledQuery">open</span>
+                  <span v-text="controlledOpen ? 'open' : 'closed'">closed</span>|
+                  <span v-text="controlledQuery">open</span>
                 </output>
               </article>
 
@@ -304,22 +265,18 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'action-once stay-open focus-winner',
                   }"
-                  $c-props="{
-                    open:actionOpen,
-                    onOpenChange:(value,detail)=>{
+                  :open="actionOpen" :onOpenChange="(value,detail)=>{
                       actionLog.push(`open:${value}:${detail.reason}`);
                       actionOpen=value;
-                    },
-                    onAction:(value,detail)=>{
+                    }" :onAction="(value,detail)=>{
                       actionLog.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
                       if (value==='copy-id') {
                         document.getElementById('quality-command-palette-owner-focus').focus();
                       }
-                    },
-                  }"
+                    }"
                 />
                 <button type="button" @click="actionOpen=true">Restore action palette</button>
-                <output id="quality-command-palette-action-output" x-text="actionLog.slice(-4).join('|')">
+                <output id="quality-command-palette-action-output" v-text="actionLog.slice(-4).join('|')">
                   No action
                 </output>
               </article>
@@ -338,13 +295,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       'data-quality-states':
                         'form implicit-submit ime composition',
                     }"
-                    $c-props="{
-                      onAction:(value)=>{
+                    :onAction="(value)=>{
                         if (value==='copy-id') {
                           document.getElementById('quality-command-palette-form').requestSubmit();
                         }
-                      },
-                    }"
+                      }"
                   >
                     <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                       <c-CButton
@@ -357,7 +312,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                   <button type="submit">Save profile</button>
                   <button type="submit" name="intent" value="publish">Publish profile</button>
                 </form>
-                <output id="quality-command-palette-submit-output" x-text="submits">0</output>
+                <output id="quality-command-palette-submit-output" v-text="submits">0</output>
               </article>
 
               <article>
@@ -395,9 +350,9 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                 </c-CDialog>
                 <div
                   id="quality-command-palette-shadow-host"
-                  x-ref="shadowHost"
+                  ref="shadowHost"
                 >
-                  <div x-ref="shadowFixture">
+                  <div ref="shadowFixture">
                     <c-CCommandPalette
                       label="Open ShadowRoot commands"
                       c-entries="changed_entries"
@@ -410,6 +365,53 @@ def command_palette_states_component(app: Citry) -> type[Component]:
 
             <c-CitryUiCommandPaletteLifecycle #c-key="'command-palette-quality-lifecycle-owner'" />
           </section>
+        """
+
+        js = """
+          $component({
+            data() {
+              return {
+                basicOpen:false,
+                basicQuery:'',
+                basicAction:'none',
+                controlledOpen:false,
+                controlledQuery:'open',
+                acceptClose:false,
+                acceptQuery:false,
+                actionOpen:false,
+                actionLog:[],
+                submits:0,
+                shortcutOpens:0,
+              };
+            },
+            methods: {
+              handleShortcut(event) {
+                if (
+                  (!event.metaKey && !event.ctrlKey)
+                  || event.key.toLowerCase() !== 'k'
+                  || event.isComposing
+                  || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)
+                  || event.target.isContentEditable
+                ) return;
+                event.preventDefault();
+                this.shortcutOpens++;
+                this.basicOpen = true;
+              },
+            },
+            mounted() {
+              window.addEventListener("keydown", this.handleShortcut);
+              $nextTick(() => {
+                const host = this.$refs.shadowHost;
+                const fixture = this.$refs.shadowFixture;
+                if (!host.shadowRoot && fixture) {
+                  host.attachShadow({mode:'open'}).append(fixture);
+                }
+              });
+            },
+            beforeUnmount() {
+              window.removeEventListener("keydown", this.handleShortcut);
+            },
+          });
         """
 
         css = """

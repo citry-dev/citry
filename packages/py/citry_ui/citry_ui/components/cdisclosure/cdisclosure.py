@@ -604,7 +604,7 @@ class CDisclosure(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
-        return {
+        data = {
             "open": snapshot["open"],
             "serverFingerprint": "open" if snapshot["open"] else "closed",
             "disabled": snapshot["own_disabled"],
@@ -619,6 +619,18 @@ class CDisclosure(LibraryComponent):
             "region": snapshot["region"],
             "hasActions": snapshot["has_actions"],
             "actionsLabel": snapshot["actions_label"],
+        }
+        prop_names = {
+            "open",
+            "disabled",
+            "variant",
+            "size",
+            "indicator",
+            "indicatorPosition",
+        }
+        return {
+            "serverDefaults": {key: value for key, value in data.items() if key in prop_names},
+            **{key: value for key, value in data.items() if key not in prop_names},
         }
 
     template = """
@@ -739,10 +751,15 @@ class CDisclosure(LibraryComponent):
           indicator: {},
           indicatorPosition: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
+        inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const defaults = data.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const rootSelector = "[data-citry-disclosure-root]";
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const form = component.formService;
           const layerCoordinator = anchoredLayerRuntime.coordinatorFor(root);
           const allowedParts = new Set(["popover", "tooltip", "menu", "popup", "hover-card"]);
           const titleHtml = new Set([
@@ -779,15 +796,15 @@ class CDisclosure(LibraryComponent):
           let controlled = false;
           let onOpenChange = null;
           let configuration = {
-            disabled: data.disabled,
-            variant: data.variant,
-            size: data.size,
-            indicator: data.indicator,
-            indicatorPosition: data.indicatorPosition,
+            disabled: defaults.disabled,
+            variant: defaults.variant,
+            size: defaults.size,
+            indicator: defaults.indicator,
+            indicatorPosition: defaults.indicatorPosition,
           };
           const retained = root.__citryUiDisclosureRuntime ?? null;
           const sameServer = retained?.serverFingerprint === data.serverFingerprint;
-          let baselineOpen = sameServer ? Boolean(retained.baselineOpen) : Boolean(data.open);
+          let baselineOpen = sameServer ? Boolean(retained.baselineOpen) : Boolean(defaults.open);
           let logicalOpen = sameServer ? Boolean(retained.logicalOpen) : baselineOpen;
           const runtimeState = retained ?? {};
           root.__citryUiDisclosureRuntime = runtimeState;
@@ -1245,27 +1262,27 @@ class CDisclosure(LibraryComponent):
             const supplied = rawInputs[name];
             if (supplied === undefined) {
               invalidInputs.delete(name);
-              return data[name];
+              return defaults[name];
             }
             if (typeof supplied === "boolean") {
               invalidInputs.delete(name);
               return supplied;
             }
             reportInput(name, supplied, "the Python fallback");
-            return data[name];
+            return defaults[name];
           };
           const resolveChoice = (name) => {
             const supplied = rawInputs[name];
             if (supplied === undefined) {
               invalidInputs.delete(name);
-              return data[name];
+              return defaults[name];
             }
             if (typeof supplied === "string" && allowedChoices[name].includes(supplied)) {
               invalidInputs.delete(name);
               return supplied;
             }
             reportInput(name, supplied, "the Python fallback");
-            return data[name];
+            return defaults[name];
           };
           const resolveCallback = () => {
             const supplied = rawInputs.onOpenChange;

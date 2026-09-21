@@ -26,6 +26,7 @@ def _render_split_button_instances(count: int) -> str:
           <main>
             <c-for each="item in items">
               <c-CSplitButton
+                #c-key="item"
                 c-label="f'Actions {item}'"
                 c-menu_label="f'More actions {item}'"
               >
@@ -102,7 +103,7 @@ def _render_context_menu_combined_instances(count: int) -> str:
         template = """
           <main>
             <c-for each="item in items">
-              <c-CMenu c-id="f'menu-asset-{item}'">
+              <c-CMenu #c-key="item" c-id="f'menu-asset-{item}'">
                 <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                   <button
                     type="button"
@@ -115,6 +116,7 @@ def _render_context_menu_combined_instances(count: int) -> str:
                 </c-fill>
               </c-CMenu>
               <c-CSplitButton
+                #c-key="item"
                 c-label="f'Actions {item}'"
                 c-menu_label="f'More actions {item}'"
               >
@@ -124,6 +126,7 @@ def _render_context_menu_combined_instances(count: int) -> str:
                 </c-fill>
               </c-CSplitButton>
               <c-CContextMenu
+                #c-key="item"
                 c-id="f'context-menu-asset-{item}'"
                 c-aria_label="f'Actions for record {item}'"
               >
@@ -368,8 +371,8 @@ def test_asset_report_is_deterministic_and_covers_every_family():
         "color-picker",
     ]
     assert first["catalog"]["limits"] == {
-        "javascript": {"raw": 1_114_112, "gzip": 212_992, "brotli": 155_648},
-        "css": {"raw": 376_832, "gzip": 49_152, "brotli": 40_960},
+        "javascript": {"raw": 1_179_648, "gzip": 237_568, "brotli": 172_032},
+        "css": {"raw": 409_600, "gzip": 53_248, "brotli": 45_056},
     }
     for kind in ("javascript", "css"):
         measurements = first["catalog"][kind]

@@ -414,30 +414,30 @@ class CDatePicker(LibraryComponent):
             "publicId": public_id,
             "nativeId": native_id,
             "visibleId": visible_id,
-            "value": value,
-            "min": minimum,
-            "max": maximum,
-            "unavailableDates": unavailable_dates,
-            "required": required,
-            "disabled": disabled,
-            "readonly": readonly,
-            "invalid": invalid,
+            "serverValue": value,
+            "serverMin": minimum,
+            "serverMax": maximum,
+            "serverUnavailableDates": unavailable_dates,
+            "serverRequired": required,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
+            "serverInvalid": invalid,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "clearable": kwargs.clearable,
-            "dismissible": kwargs.dismissible,
-            "placement": kwargs.placement,
-            "matchWidth": kwargs.match_width,
-            "firstDayOfWeek": first_day,
-            "showAdjacentDays": kwargs.show_adjacent_days,
-            "fixedWeeks": kwargs.fixed_weeks,
+            "serverClearable": kwargs.clearable,
+            "serverDismissible": kwargs.dismissible,
+            "serverPlacement": kwargs.placement,
+            "serverMatchWidth": kwargs.match_width,
+            "serverFirstDayOfWeek": first_day,
+            "serverShowAdjacentDays": kwargs.show_adjacent_days,
+            "serverFixedWeeks": kwargs.fixed_weeks,
             "placeholder": placeholder,
             "pickerLabel": picker_label,
             "changeLabel": kwargs.change_label,
             "clearLabel": clear_label,
             "unavailableMessage": unavailable_message,
             "catalog": catalog,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
+            "serverVariant": kwargs.variant,
+            "serverSize": kwargs.size,
             "locale": context.locale,
             "describedby": cast("str | None", external_described_by),
             "errormessage": cast("str | None", external_error_message),
@@ -492,7 +492,11 @@ class CDatePicker(LibraryComponent):
             c-placement="placement"
             c-match_width="match_width"
             class_="cui-date-picker__popover"
-            $c-props="{open:datePickerOpen,dismissible:datePickerDismissible,placement:datePickerPlacement,matchWidth:datePickerMatchWidth,onOpenChange:datePickerOnPopoverOpenChange}"
+            :open="datePickerOpen"
+            :dismissible="datePickerDismissible"
+            :placement="datePickerPlacement"
+            :matchWidth="datePickerMatchWidth"
+            :onOpenChange="datePickerOnPopoverOpenChange"
           >
             <c-fill name="activator" data="{ activator_attrs }">
               <button
@@ -527,7 +531,18 @@ class CDatePicker(LibraryComponent):
                 c-show_adjacent_days="show_adjacent_days"
                 c-fixed_weeks="fixed_weeks"
                 variant="plain"
-                $c-props="{value:datePickerCalendarValue,visibleDate:datePickerVisibleDate,min:datePickerMin,max:datePickerMax,unavailableDates:datePickerUnavailableDates,disabled:datePickerDisabled,readonly:datePickerReadonly,firstDayOfWeek:datePickerFirstDayOfWeek,showAdjacentDays:datePickerShowAdjacentDays,fixedWeeks:datePickerFixedWeeks,onValueChange:datePickerOnCalendarValueChange,onVisibleDateChange:datePickerOnVisibleDateChange}"
+                :value="datePickerCalendarValue"
+                :visibleDate="datePickerVisibleDate"
+                :min="datePickerMin"
+                :max="datePickerMax"
+                :unavailableDates="datePickerUnavailableDates"
+                :disabled="datePickerDisabled"
+                :readonly="datePickerReadonly"
+                :firstDayOfWeek="datePickerFirstDayOfWeek"
+                :showAdjacentDays="datePickerShowAdjacentDays"
+                :fixedWeeks="datePickerFixedWeeks"
+                :onValueChange="datePickerOnCalendarValueChange"
+                :onVisibleDateChange="datePickerOnVisibleDateChange"
               />
             </c-fill>
           </c-CPopover>
@@ -551,8 +566,44 @@ class CDatePicker(LibraryComponent):
           clearable: {}, dismissible: {}, placement: {}, matchWidth: {}, firstDayOfWeek: {}, showAdjacentDays: {}, fixedWeeks: {},
           variant: {}, size: {}, onValueChange: {}, onOpenChange: {},
         },
-        init: ({ els, data, props, scope, effect, inject, unprovide, i18n }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        provide() {
+          return {
+            [Symbol.for('citry-ui:field')]: null,
+            [Symbol.for('citry-ui:form')]: null,
+          };
+        },
+        data() {
+          return {
+            datePickerOpen: false,
+            datePickerCalendarValue: null,
+            datePickerVisibleDate: undefined,
+            datePickerMin: null,
+            datePickerMax: null,
+            datePickerUnavailableDates: [],
+            datePickerDisabled: false,
+            datePickerReadonly: false,
+            datePickerDismissible: true,
+            datePickerPlacement: 'bottom-start',
+            datePickerMatchWidth: true,
+            datePickerFirstDayOfWeek: null,
+            datePickerShowAdjacentDays: true,
+            datePickerFixedWeeks: true,
+            datePickerOnPopoverOpenChange: null,
+            datePickerOnCalendarValueChange: null,
+            datePickerOnVisibleDateChange: null,
+          };
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
+          const scope = component;
+          const effect = Citry.vue.watchEffect;
+          const i18n = component.$i18n;
           const input = root.querySelector(':scope > [data-citry-ui-part="fallback-input"]');
           const enhanced = root.querySelector(':scope > [data-citry-ui-part="enhanced-control"]');
           const trigger = root.querySelector('[data-citry-date-picker-trigger]');
@@ -560,31 +611,27 @@ class CDatePicker(LibraryComponent):
           const clear = enhanced?.querySelector(':scope > [data-citry-ui-part="clear"]');
           if (!(root instanceof HTMLElement) || !(input instanceof HTMLInputElement) || input.type !== 'date' || !(enhanced instanceof HTMLElement) || !(trigger instanceof HTMLButtonElement) || !(valueText instanceof HTMLElement) || !(clear instanceof HTMLButtonElement)) throw new Error('[citry-ui] CDatePicker settled anatomy is invalid.');
 
-          const fieldKey = Symbol.for('citry-ui:field');
-          const formKey = Symbol.for('citry-ui:form');
-          const field = inject(fieldKey, null);
-          const form = inject(formKey, null);
-          unprovide(fieldKey);
-          unprovide(formKey);
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CDatePicker form-control runtime is unavailable.');
           const resolver = runtime.resolver(root, props, 'CDatePicker');
           const listeners = runtime.listeners();
           const mutations = runtime.mutations(root);
           const owned = mutations.owned;
-          let current = input.value || data.value || null;
+          let current = input.value || data.serverValue || null;
           let internalOpen = false;
           let controlledValue = false;
           let controlledOpen = false;
           let visibleDate = current || undefined;
-          let initialValue = data.value || null;
+          let initialValue = data.serverValue || null;
           let nativeInvalid = false;
           let unavailableMessage = data.unavailableMessage;
           let invalidGeneration = 0;
           let dispatching = false;
           let ready = false;
           let configuration = null;
-          let previousConstraints = { min: data.min, max: data.max, unavailableDates: [...data.unavailableDates] };
+          let previousConstraints = { min: data.serverMin, max: data.serverMax, unavailableDates: [...data.serverUnavailableDates] };
           const allowedPlacements = ['top-start','top','top-end','bottom-start','bottom','bottom-end'];
           const DISPLAY_PROFILE = 'citry-ui-date-picker-display';
 
@@ -623,7 +670,7 @@ class CDatePicker(LibraryComponent):
           };
           const unavailableDates = () => {
             const requested = props.unavailableDates;
-            if (requested === undefined) { resolver.clear('unavailableDates'); return [...data.unavailableDates]; }
+            if (requested === undefined) { resolver.clear('unavailableDates'); return [...data.serverUnavailableDates]; }
             if (!Array.isArray(requested) || requested.length > 4096) { resolver.report('unavailableDates', requested); return previousConstraints.unavailableDates; }
             const normalized = requested.map(canonicalDate);
             if (normalized.some(value => value === null) || new Set(normalized).size !== normalized.length) { resolver.report('unavailableDates', requested); return previousConstraints.unavailableDates; }
@@ -631,8 +678,8 @@ class CDatePicker(LibraryComponent):
             return normalized.sort();
           };
           const resolveConstraints = () => {
-            const minimum = optionalDate('min', data.min);
-            const maximum = optionalDate('max', data.max);
+            const minimum = optionalDate('min', data.serverMin);
+            const maximum = optionalDate('max', data.serverMax);
             const unavailable = unavailableDates();
             if (minimum !== null && maximum !== null && minimum > maximum) { resolver.report('min/max', {min:minimum,max:maximum}); return previousConstraints; }
             resolver.clear('min/max');
@@ -641,25 +688,25 @@ class CDatePicker(LibraryComponent):
           };
           const firstDay = () => {
             const value = props.firstDayOfWeek;
-            if (value === undefined) { resolver.clear('firstDayOfWeek'); return data.firstDayOfWeek; }
+            if (value === undefined) { resolver.clear('firstDayOfWeek'); return data.serverFirstDayOfWeek; }
             if (value === null || (Number.isInteger(value) && value >= 1 && value <= 7)) { resolver.clear('firstDayOfWeek'); return value; }
-            resolver.report('firstDayOfWeek', value); return data.firstDayOfWeek;
+            resolver.report('firstDayOfWeek', value); return data.serverFirstDayOfWeek;
           };
           const resolveConfiguration = () => ({
             constraints: resolveConstraints(),
-            required: field ? field.required : resolver.boolean('required', data.required),
-            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(input),
-            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-            invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-            clearable: resolver.boolean('clearable', data.clearable),
-            dismissible: resolver.boolean('dismissible', data.dismissible),
-            placement: resolver.choice('placement', data.placement, allowedPlacements),
-            matchWidth: resolver.boolean('matchWidth', data.matchWidth),
+            required: field ? field.required : resolver.boolean('required', data.serverRequired),
+            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled) || runtime.fieldsetDisabled(input),
+            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+            invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+            clearable: resolver.boolean('clearable', data.serverClearable),
+            dismissible: resolver.boolean('dismissible', data.serverDismissible),
+            placement: resolver.choice('placement', data.serverPlacement, allowedPlacements),
+            matchWidth: resolver.boolean('matchWidth', data.serverMatchWidth),
             firstDayOfWeek: firstDay(),
-            showAdjacentDays: resolver.boolean('showAdjacentDays', data.showAdjacentDays),
-            fixedWeeks: resolver.boolean('fixedWeeks', data.fixedWeeks),
-            variant: resolver.choice('variant', data.variant, ['outline','filled','plain']),
-            size: resolver.choice('size', data.size, ['sm','md','lg']),
+            showAdjacentDays: resolver.boolean('showAdjacentDays', data.serverShowAdjacentDays),
+            fixedWeeks: resolver.boolean('fixedWeeks', data.serverFixedWeeks),
+            variant: resolver.choice('variant', data.serverVariant, ['outline','filled','plain']),
+            size: resolver.choice('size', data.serverSize, ['sm','md','lg']),
           });
           const reportFieldOwned = () => {
             if (!field) return;

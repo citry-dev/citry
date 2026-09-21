@@ -16,12 +16,30 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 
-def _alert_page() -> str:
+def _alert_page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
     class Page(Component):
         citry = app
+        js = """
+          $component({
+            mounted() { window.alertTest = this; },
+            beforeUnmount() {
+              if (window.alertTest === this) delete window.alertTest;
+            },
+          });
+        """
+
+        def js_data(self, kwargs, slots):
+            return {
+                "intent": "info",
+                "variant": "soft",
+                "size": "md",
+                "announce": "off",
+                "icon": True,
+            }
+
         css = """
           :where(.alert-brand) {
             --cui-alert-radius: 20px;
@@ -43,26 +61,15 @@ def _alert_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('alertTest', {
-                intent: 'info',
-                variant: 'soft',
-                size: 'md',
-                announce: 'off',
-                icon: true,
-              })"
-            >
+            <body>
               <c-CAlert
                 class_="alert-brand alert-part"
                 actions_label="Observatory recovery"
-                $c-props="{
-                  intent: $store.alertTest.intent,
-                  variant: $store.alertTest.variant,
-                  size: $store.alertTest.size,
-                  announce: $store.alertTest.announce,
-                  icon: $store.alertTest.icon,
-                }"
+                :intent="intent"
+                :variant="variant"
+                :size="size"
+                :announce="announce"
+                :icon="icon"
               >
                 <c-fill name="title">Camera link interrupted</c-fill>
                 <c-fill name="default">
@@ -94,18 +101,19 @@ def _alert_page() -> str:
           </html>
         """
 
-    return str(Page())
+    return app, str(Page())
 
 
 @pytest.fixture
-def alert_page(page: Any):
+def alert_page(page: Any, serve_citry_ui_live: Any):
     errors: list[str] = []
     page.on(
         "console",
         lambda message: errors.append(message.text) if message.type == "error" else None,
     )
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_alert_page())
+    app, html = _alert_page()
+    page.goto(serve_citry_ui_live(app, html) + "/")
     page.wait_for_function(
         """() => {
           const alerts = [...document.querySelectorAll('.cui-alert')];
@@ -142,7 +150,7 @@ def test_client_inputs_update_every_public_surface_and_deduplicate_invalid_episo
     content = root.locator(':scope > [data-citry-ui-part="content"]')
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('alertTest'), {
+        """() => Object.assign(window.alertTest, {
           intent: 'error',
           variant: 'solid',
           size: 'lg',
@@ -158,22 +166,22 @@ def test_client_inputs_update_every_public_surface_and_deduplicate_invalid_episo
     assert root.get_attribute("data-icon") is None
     assert content.get_attribute("role") == "alert"
 
-    page.evaluate("Alpine.store('alertTest').intent = null")
+    page.evaluate("window.alertTest.intent = null")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('alertTest').intent = 42")
+    page.evaluate("window.alertTest.intent = 42")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('alertTest').variant = 'outline'")
+    page.evaluate("window.alertTest.variant = 'outline'")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('alertTest').size = 'sm'")
+    page.evaluate("window.alertTest.size = 'sm'")
     page.wait_for_timeout(0)
     assert root.get_attribute("data-intent") == "info"
     assert sum("CAlert intent received invalid client value" in error for error in errors) == 1
 
-    page.evaluate("Alpine.store('alertTest').intent = 'success'")
+    page.evaluate("window.alertTest.intent = 'success'")
     # The valid effect must clear the previous episode before invalidating again.
     expect(root).to_have_attribute("data-intent", "success")
     with page.expect_console_message(lambda message: "CAlert intent received invalid client value" in message.text):
-        page.evaluate("Alpine.store('alertTest').intent = null")
+        page.evaluate("window.alertTest.intent = null")
     assert sum("CAlert intent received invalid client value" in error for error in errors) == 2
 
 
@@ -192,7 +200,7 @@ def test_icons_have_one_svg_zero_geometry_when_hidden_and_logical_rtl_behavior(a
         )
         == 1
     )
-    page.evaluate("Alpine.store('alertTest').intent = 'error'")
+    page.evaluate("window.alertTest.intent = 'error'")
     page.wait_for_timeout(0)
     error_glyph = indicator.locator("[data-cui-alert-intent=error]")
     info_glyph = indicator.locator("[data-cui-alert-intent=info]")
@@ -212,7 +220,7 @@ def test_icons_have_one_svg_zero_geometry_when_hidden_and_logical_rtl_behavior(a
         )
         is True
     )
-    page.evaluate("Alpine.store('alertTest').icon = false")
+    page.evaluate("window.alertTest.icon = false")
     page.wait_for_timeout(0)
     assert indicator.evaluate("element => getComputedStyle(element).display") == "none"
     assert indicator.evaluate("element => element.getBoundingClientRect().width") == 0
@@ -311,7 +319,7 @@ def test_plain_action_links_follow_alert_foreground_with_solid_contrast(alert_pa
         root.evaluate("(element, value) => { element.style.colorScheme = value; }", scheme)
         for intent in ("info", "success", "warn", "error"):
             page.evaluate(
-                "([nextIntent]) => Object.assign(Alpine.store('alertTest'), {intent: nextIntent, variant: 'solid'})",
+                "([nextIntent]) => Object.assign(window.alertTest, {intent: nextIntent, variant: 'solid'})",
                 [intent],
             )
             page.wait_for_function(

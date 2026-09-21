@@ -27,8 +27,10 @@ visible but cannot change or submit.
 
 ## Control state in the browser
 
-Pass `checked` through `$c-props="{...}"`; handle native `input` with
-`$event.target.checked`. Omit the prop to release browser ownership.
+Bind `checked` as a native Vue component prop. Handle `@input` on the
+`CSwitch` component and read `$event.target.checked`. Omit the prop to release
+browser ownership. Python `input_attrs` accepts static nonconflicting metadata;
+it does not accept executable listeners or Vue directives.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cswitch/snippets/controlled.py" title="Control a Switch" />
 

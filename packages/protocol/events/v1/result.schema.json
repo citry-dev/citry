@@ -177,6 +177,13 @@
       ]
     },
     "renderAction": {
+      "oneOf": [
+        {"$ref": "#/$defs/legacyRenderAction"},
+        {"$ref": "#/$defs/explicitHtmlRenderAction"},
+        {"$ref": "#/$defs/preparedRenderAction"}
+      ]
+    },
+    "legacyRenderAction": {
       "type": "object",
       "additionalProperties": false,
       "required": ["action", "target", "swap", "html"],
@@ -188,6 +195,34 @@
           "type": "string",
           "description": "A complete Citry fragment, including its inert manifest tags."
         },
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "explicitHtmlRenderAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "target", "swap", "renderer", "html"],
+      "properties": {
+        "action": {"const": "render"},
+        "target": {"$ref": "#/$defs/target"},
+        "swap": {"$ref": "#/$defs/swap"},
+        "renderer": {"const": "html-fragment/1"},
+        "html": {"type": "string"},
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "preparedRenderAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "target", "swap", "renderer", "prepared"],
+      "properties": {
+        "action": {"const": "render"},
+        "target": {"$ref": "#/$defs/target"},
+        "swap": {"$ref": "#/$defs/swap"},
+        "renderer": {"const": "vue-prepared/1"},
+        "prepared": {"type": "object"},
         "delay": {"$ref": "#/$defs/delay"},
         "wait": {"$ref": "#/$defs/wait"}
       }

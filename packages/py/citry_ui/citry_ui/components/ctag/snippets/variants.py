@@ -8,6 +8,7 @@ class TagVariants(Component):
     template = """
       <c-CCol gap="lg">
         <c-CTagGroup
+          #c-key="variant"
           c-for="variant in ['soft', 'solid', 'outline']"
           c-label="variant"
           c-variant="variant"
@@ -16,7 +17,7 @@ class TagVariants(Component):
         >
           <c-CTag value="one">Selected</c-CTag><c-CTag value="two">Available</c-CTag>
         </c-CTagGroup>
-        <c-CTagGroup c-for="size in ['sm', 'md', 'lg']" c-label="size" c-size="size">
+        <c-CTagGroup #c-key="size" c-for="size in ['sm', 'md', 'lg']" c-label="size" c-size="size">
           <c-CTag value="sample">Sample</c-CTag>
         </c-CTagGroup>
       </c-CCol>

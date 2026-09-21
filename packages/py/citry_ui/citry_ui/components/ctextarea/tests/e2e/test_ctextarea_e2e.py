@@ -13,6 +13,68 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 
+def _vue_textarea_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        js = """
+          $component({data(){const textareaDemo=Citry.vue.reactive({
+            controlled:true,draft:'Moss and fern',immutable:'Fixed record',rows:4,
+            required:false,disabled:false,readonly:false,invalid:false,
+            variant:'outline',size:'md',resize:'vertical',
+          }); window.__textareaDemo=textareaDemo; return {
+            state:{textareaDemo}, value:'server note', required:false,
+            invalid:false, formDisabled:false,
+          };}});
+        """
+        template = """
+          <main>
+            <c-CForm id="vue-textarea-form" :disabled="formDisabled">
+              <c-CField control_id="vue-notes" :required="required" :invalid="invalid">
+                <c-fill name="label">Notes</c-fill>
+                <c-fill name="default">
+                  <c-CTextarea :value="value" @input="value = $event.target.value" />
+                </c-fill>
+                <c-fill name="error">Notes are required.</c-fill>
+              </c-CField>
+            </c-CForm>
+            <button id="textarea-required" @click="required = !required">required</button>
+            <button id="textarea-invalid" @click="invalid = !invalid">invalid</button>
+            <button id="textarea-disabled" @click="formDisabled = !formDisabled">disabled</button>
+            <c-CTextarea id="vue-literal-textarea" c-value="literal_value" />
+          </main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"literal_value": "\n{{ 1 + 1 }} <b>literal</b>"}
+
+    return Page().render().serialize()
+
+
+def test_vue_textarea_provider_input_focus_and_validation(page) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_vue_textarea_page(), wait_until="load")
+    textarea = page.locator("#vue-notes")
+    page.wait_for_selector("#vue-notes[data-citry-textarea-initialized]")
+    textarea.focus()
+    textarea.press("End")
+    textarea.type(" updated")
+    assert textarea.input_value() == "server note updated"
+    assert textarea.evaluate("element => document.activeElement === element") is True
+    page.locator("#textarea-required").click()
+    assert textarea.evaluate("element => element.required") is True
+    page.locator("#textarea-invalid").click()
+    assert textarea.get_attribute("aria-invalid") == "true"
+    page.locator("#textarea-disabled").click()
+    assert textarea.is_disabled()
+    assert page.locator("#vue-literal-textarea").input_value() == "\n{{ 1 + 1 }} <b>literal</b>"
+    assert page.locator("#vue-literal-textarea b").count() == 0
+    assert errors == []
+
+
 def _textarea_page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
@@ -37,22 +99,7 @@ def _textarea_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('textareaDemo', {
-                controlled: true,
-                draft: 'Moss and fern',
-                immutable: 'Fixed record',
-                rows: 4,
-                required: false,
-                disabled: false,
-                readonly: false,
-                invalid: false,
-                variant: 'outline',
-                size: 'md',
-                resize: 'vertical',
-              })"
-            >
+            <body>
               <c-CForm id="journal-form">
                 <c-CField control_id="journal-notes">
                   <c-fill name="label">Journal notes</c-fill>
@@ -62,16 +109,14 @@ def _textarea_page() -> str:
                       value="Server notes"
                       class_="textarea-brand textarea-part-override"
                       c-attrs="{'minlength': 5, 'maxlength': 80}"
-                      $c-props="{
-                        value: $store.textareaDemo.controlled
-                          ? $store.textareaDemo.draft
-                          : undefined,
-                        rows: $store.textareaDemo.rows,
-                        variant: $store.textareaDemo.variant,
-                        size: $store.textareaDemo.size,
-                        resize: $store.textareaDemo.resize,
-                      }"
-                      @input="$store.textareaDemo.draft = $event.target.value"
+                      :value="state.textareaDemo.controlled
+                          ? state.textareaDemo.draft
+                          : undefined"
+                      :rows="state.textareaDemo.rows"
+                      :variant="state.textareaDemo.variant"
+                      :size="state.textareaDemo.size"
+                      :resize="state.textareaDemo.resize"
+                      @input="state.textareaDemo.draft = $event.target.value"
                     />
                   </c-fill>
                   <c-fill name="description">Record one field observation.</c-fill>
@@ -80,16 +125,14 @@ def _textarea_page() -> str:
                 <c-CTextarea
                   id="immutable-notes"
                   value="Server immutable"
-                  $c-props="{value: $store.textareaDemo.immutable}"
+                  :value="state.textareaDemo.immutable"
                 />
                 <c-CTextarea
                   id="state-notes"
-                  $c-props="{
-                    required: $store.textareaDemo.required,
-                    disabled: $store.textareaDemo.disabled,
-                    readonly: $store.textareaDemo.readonly,
-                    invalid: $store.textareaDemo.invalid,
-                  }"
+                  :required="state.textareaDemo.required"
+                  :disabled="state.textareaDemo.disabled"
+                  :readonly="state.textareaDemo.readonly"
+                  :invalid="state.textareaDemo.invalid"
                 />
                 <c-CTextarea
                   id="native-newlines"
@@ -162,7 +205,7 @@ def test_mirrored_controlled_input_preserves_middle_insertion_and_caret(page):
     page.wait_for_timeout(20)
     assert textarea.input_value() == "MossX and fern"
     assert textarea.evaluate("element => [element.selectionStart, element.selectionEnd]") == [5, 5]
-    assert page.evaluate("Alpine.store('textareaDemo').draft") == "MossX and fern"
+    assert page.evaluate("window.__textareaDemo.draft") == "MossX and fern"
 
 
 def test_immutable_controlled_value_restores_after_consumer_handlers_settle(page):
@@ -188,7 +231,7 @@ def test_composition_defers_assignment_and_reads_latest_prop_after_commit(page):
           element.value = 'composing';
         }"""
     )
-    page.evaluate("Alpine.store('textareaDemo').draft = 'remote update'")
+    page.evaluate("window.__textareaDemo.draft = 'remote update'")
     page.wait_for_timeout(0)
     assert textarea.input_value() == "composing"
 
@@ -221,7 +264,7 @@ def test_mirrored_composition_commit_wins_before_deferred_reconciliation(page):
     page.wait_for_timeout(20)
 
     assert textarea.input_value() == "moss 苔"
-    assert page.evaluate("Alpine.store('textareaDemo').draft") == "moss 苔"
+    assert page.evaluate("window.__textareaDemo.draft") == "moss 苔"
 
 
 def test_release_during_composition_is_immediate_and_reset_uses_server_default(page):
@@ -234,7 +277,7 @@ def test_release_during_composition_is_immediate_and_reset_uses_server_default(p
           element.value = 'uncommitted';
         }"""
     )
-    page.evaluate("Alpine.store('textareaDemo').controlled = false")
+    page.evaluate("window.__textareaDemo.controlled = false")
     page.wait_for_timeout(0)
     assert textarea.input_value() == "uncommitted"
 
@@ -279,7 +322,7 @@ def test_client_configuration_reflects_native_state_and_uses_server_fallback(pag
     textarea = page.locator("#journal-notes")
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('textareaDemo'), {
+        """() => Object.assign(window.__textareaDemo, {
           rows: 7,
           variant: 'filled',
           size: 'lg',
@@ -298,7 +341,7 @@ def test_client_configuration_reflects_native_state_and_uses_server_fallback(pag
     assert textarea.evaluate("element => getComputedStyle(element).resize") == "none"
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('textareaDemo'), {
+        """() => Object.assign(window.__textareaDemo, {
           rows: 0,
           variant: 'raised',
           size: 'xl',
@@ -330,7 +373,7 @@ def test_field_state_relationships_and_public_css_overrides_work_in_browser(page
     assert textarea.evaluate("element => getComputedStyle(element).borderTopWidth") == "5px"
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('textareaDemo'), {
+        """() => Object.assign(window.__textareaDemo, {
           required: true,
           disabled: true,
           readonly: true,

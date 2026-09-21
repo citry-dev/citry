@@ -121,7 +121,11 @@ def test_progressive_select_and_hidden_editor_share_ordered_values() -> None:
     assert 'id="labels-input"' in editor
     assert 'value="draft"' in editor
     assert 'aria-required="true"' in editor
-    assert html.index('value="urgent" selected') < html.index('value="billing" selected')
+    urgent = re.search(r'<option\b(?=[^>]*\bvalue="urgent")(?=[^>]*\bselected\b)[^>]*>', html)
+    billing = re.search(r'<option\b(?=[^>]*\bvalue="billing")(?=[^>]*\bselected\b)[^>]*>', html)
+    assert urgent is not None
+    assert billing is not None
+    assert urgent.start() < billing.start()
     assert html.index('data-value="urgent"') < html.index('data-value="billing"')
     assert 'data-citry-ui-part="tags-input"' in root
     assert "data-required" in root
@@ -146,8 +150,16 @@ def test_readonly_submits_repeated_hidden_values_and_disables_proxy() -> None:
     assert " disabled" in native
     assert " name=" not in native
     assert " required" not in native
-    assert html.count('<input name="label" form="ticket"') == 2
-    assert len(re.findall(r'<button[^>]+disabled[^>]+data-citry-ui-part="remove"', html)) == 2
+    assert (
+        len(
+            re.findall(
+                r'<input\b(?=[^>]*\btype="hidden")(?=[^>]*\bname="label")(?=[^>]*\bform="ticket")[^>]*>',
+                html,
+            )
+        )
+        == 2
+    )
+    assert len(re.findall(r'<button\b(?=[^>]*\bdisabled)(?=[^>]*data-citry-ui-part="remove")[^>]*>', html)) == 2
 
 
 def test_disabled_excludes_native_and_hidden_transports() -> None:
@@ -268,6 +280,22 @@ def test_owned_static_dynamic_and_runtime_attributes_are_rejected(
         template = f"<c-CTagsInput {extra} />"
     with pytest.raises(ValueError, match="cannot override owned attribute"):
         _render(template, data)
+
+
+@pytest.mark.parametrize(
+    "attribute",
+    ["@input", "@change", "v-on:input", "x-on:input", "oninput", "onclick"],
+)
+def test_python_resolved_listener_attributes_are_rejected(attribute: str) -> None:
+    data = {
+        "input_attrs": {
+            "aria-label": "Labels",
+            attribute: "handler($event)",
+        }
+    }
+
+    with pytest.raises(ValueError, match="executable listener attribute"):
+        _render('<c-CTagsInput c-input_attrs="input_attrs" />', data)
 
 
 def test_direct_python_composition_and_empty_slot_contract() -> None:

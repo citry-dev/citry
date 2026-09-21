@@ -7,8 +7,12 @@ $component({
     items: {}, placement: {}, limit: {}, durationMs: {}, pauseOnHover: {},
     pauseOnFocus: {}, pauseOnHidden: {}, onDismiss: {}, onAction: {},
   },
-  init: ({ els, data, props, effect, i18n }) => {
-    const region = els[0];
+  onServerRender: ({component}) => {
+    const region = component.$refs.root;
+    const data = component.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
+    const i18n = component.$i18n;
     const scope = region.getRootNode();
     const ownerDocument = region.ownerDocument;
     const existing = toastRegistry.get(scope);
@@ -328,18 +332,18 @@ $component({
     };
     const actionAnnouncement = (message) => {
       if (!message.actionLabel) return null;
-      if (data.catalogActionAnnouncement) {
+      if (component.catalogActionAnnouncement) {
         return i18n
           ? i18n.tr("citry-ui-toast-action-available", {
               action_label: inlineTranslationValue(message.actionLabel),
             })
           : formatPattern(
-              data.actionAnnouncementPattern,
+              component.actionAnnouncementPattern,
               "action_label",
               inlineTranslationValue(message.actionLabel),
             );
       }
-      return formatPattern(data.actionAnnouncementPattern, "action_label", message.actionLabel);
+      return formatPattern(component.actionAnnouncementPattern, "action_label", message.actionLabel);
     };
     const announcementText = (message) => [
       message.title,
@@ -448,7 +452,7 @@ $component({
       value.action.textContent = message.actionLabel ?? "";
       value.action.hidden = message.actionLabel === null;
       value.dismissButton.hidden = !message.dismissible;
-      if (data.catalogDismiss && i18n) {
+      if (component.catalogDismiss && i18n) {
         if (value.dismissBinding === null) {
           value.dismissBinding = i18n.bind({
             message: "citry-ui-toast-dismiss",
@@ -458,11 +462,11 @@ $component({
         } else {
           value.dismissBinding.refresh();
         }
-      } else if (data.catalogDismiss) {
+      } else if (component.catalogDismiss) {
         value.dismissButton.setAttribute(
           "aria-label",
           formatPattern(
-            data.dismissPattern,
+            component.dismissPattern,
             "title",
             inlineTranslationValue(message.title),
           ),
@@ -470,7 +474,7 @@ $component({
       } else {
         value.dismissButton.setAttribute(
           "aria-label",
-          formatPattern(data.dismissPattern, "title", inlineTranslationValue(message.title)),
+          formatPattern(component.dismissPattern, "title", inlineTranslationValue(message.title)),
         );
       }
       value.actions.hidden = message.actionLabel === null && !message.dismissible;

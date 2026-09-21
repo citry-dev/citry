@@ -49,17 +49,17 @@ def test_records_template_data_and_composite_template_calls_without_values() -> 
             {{ prepared }}
             {{ "<" + tr("first-message") + ">" + tr("second-message") }}
             {{ amount }} {{ parsed }}
-            <span x-text="$i18n.tr('browser-message')"></span>
+            <span v-text="$i18n.tr('browser-message')"></span>
         """
         js = """
             const i18n = unrelated;
             i18n.tr("not-a-component-call");
-            $component(({ i18n: localeService }) => {
-                localeService.tr("component-browser-message");
-                localeService.bind({
+            $component(({ component }) => {
+                component.$i18n.tr("component-browser-message");
+                component.$i18n.bind({
                     message: "bound-browser-message",
                     output: "label",
-                    onChange: applyMessage,
+                    onChange: () => {},
                 });
             });
         """
@@ -155,7 +155,7 @@ def test_render_cache_replays_usage_with_the_fresh_component_id() -> None:
             calls += 1
             return super().template_data(kwargs, slots)
 
-        template = '{{ tr("cached-message") }}<span x-text="$i18n.tr(\'cached-client\')"></span>'
+        template = '{{ tr("cached-message") }}<span v-text="$i18n.tr(\'cached-client\')"></span>'
         messages = """
             cached-message = Cached
             cached-client = Cached client
@@ -184,6 +184,9 @@ def test_render_cache_remaps_translation_binding_records_and_html_markers() -> N
 
         class Cache:
             enabled = True
+
+            def vary(self, kwargs, slots):
+                return self.component.i18n.context.identity
 
         def template_data(self, kwargs, slots):
             nonlocal calls

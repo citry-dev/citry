@@ -14,7 +14,6 @@ class LaunchDestinationForm(Component):
     template = """
       <section
         class="launch-form"
-        x-data="{ result: 'No route submitted.' }"
       >
         <header>
           <p>Flight plan</p>
@@ -55,11 +54,20 @@ class LaunchDestinationForm(Component):
         <p
           class="launch-form__result"
           aria-live="polite"
-          x-text="result"
+          v-text="result"
         >
           No route submitted.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result: 'No route submitted.'
+          };
+        },
+      });
     """
 
     def template_data(

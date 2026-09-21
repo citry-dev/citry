@@ -25,44 +25,60 @@ def _page() -> str:
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body x-data="{
-              notices: [
-                {id: 'saved', title: 'Saved', description: 'Field note synchronized.',
-                 intent: 'success', durationMs: 0},
-                {id: 'retry', title: 'Upload paused', actionLabel: 'Retry',
-                 intent: 'warn', durationMs: 0},
-                {id: 'queued', title: 'Queued observation', durationMs: 0},
-              ],
-              placement: 'block-end-end', limit: 2, durationMs: 1000,
-              pauseOnHover: true, pauseOnFocus: true, pauseOnHidden: true,
-              removeOnDismiss: true, dismissals: [], actions: []
-            }">
+            <body>
               <button id="before" type="button">Before notices</button>
-              <form id="toast-form" @submit.prevent="$el.dataset.submitted = 'yes'">
+              <form id="toast-form" @submit.prevent="$event.currentTarget.dataset.submitted = 'yes'">
                 <c-CToastRegion
                   id="notices"
-                  $c-props="{
-                    items: notices, placement, limit, durationMs,
-                    pauseOnHover, pauseOnFocus, pauseOnHidden,
-                    onDismiss: (id, detail) => {
+                  :items="notices"
+                  :placement="placement"
+                  :limit="limit"
+                  :durationMs="durationMs"
+                  :pauseOnHover="pauseOnHover"
+                  :pauseOnFocus="pauseOnFocus"
+                  :pauseOnHidden="pauseOnHidden"
+                  :onDismiss="(id, detail) => {
                       dismissals.push([id, detail.reason, detail.message.title,
                         Object.hasOwn(detail.message, 'fingerprint')]);
                       if (removeOnDismiss) notices = notices.filter(item => item.id !== id);
-                    },
-                    onAction: (id, detail) => actions.push([
+                    }"
+                  :onAction="(id, detail) => actions.push([
                       id, detail.message.title, Object.hasOwn(detail.message, 'fingerprint')
-                    ]),
-                  }"
+                    ])"
                 />
                 <button id="submit" type="submit">Submit form</button>
               </form>
               <button id="after" type="button">After notices</button>
               <dialog id="blocking-dialog"><button type="button">Modal task</button></dialog>
-              <output id="dismissals" x-text="JSON.stringify(dismissals)"></output>
-              <output id="actions" x-text="JSON.stringify(actions)"></output>
+              <output id="dismissals" v-text="JSON.stringify(dismissals)"></output>
+              <output id="actions" v-text="JSON.stringify(actions)"></output>
               <c-js />
             </body>
           </html>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                notices: [
+                  {id: 'saved', title: 'Saved', description: 'Field note synchronized.',
+                   intent: 'success', durationMs: 0},
+                  {id: 'retry', title: 'Upload paused', actionLabel: 'Retry',
+                   intent: 'warn', durationMs: 0},
+                  {id: 'queued', title: 'Queued observation', durationMs: 0},
+                ],
+                placement: 'block-end-end', limit: 2, durationMs: 1000,
+                pauseOnHover: true, pauseOnFocus: true, pauseOnHidden: true,
+                removeOnDismiss: true, dismissals: [], actions: [],
+              };
+            },
+            mounted() {
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__state;
+            },
+          });
         """
 
     return str(Page())
@@ -181,29 +197,29 @@ def test_action_order_close_policy_and_suppression_until_producer_removal(toast_
     assert page.locator("#actions").text_content() == '[["retry","Upload paused",false]]'
     assert page.locator("#dismissals").text_content() == ('[["retry","action","Upload paused",false]]')
 
-    page.evaluate("Alpine.$data(document.body).removeOnDismiss = false")
-    page.evaluate("Alpine.$data(document.body).limit = 3")
+    page.evaluate("window.__state.removeOnDismiss = false")
+    page.evaluate("window.__state.limit = 3")
     page.evaluate(
         """() => {
-          const state = Alpine.$data(document.body);
+          const state = window.__state;
           state.notices = [...state.notices, {id: 'sticky', title: 'Sticky', durationMs: 0}];
         }"""
     )
     sticky = page.locator('[data-citry-toast-id="sticky"]')
     _dismiss_button(sticky, "Sticky").click()
     page.wait_for_function("!document.querySelector('[data-citry-toast-id=sticky]')")
-    page.evaluate("Alpine.$data(document.body).placement = 'block-start-start'")
+    page.evaluate("window.__state.placement = 'block-start-start'")
     page.wait_for_timeout(0)
     assert page.locator('[data-citry-toast-id="sticky"]').count() == 0
     page.evaluate(
         """() => {
-          const state = Alpine.$data(document.body);
+          const state = window.__state;
           state.notices = state.notices.filter(item => item.id !== 'sticky');
         }"""
     )
     page.evaluate(
         """() => {
-          const state = Alpine.$data(document.body);
+          const state = window.__state;
           state.notices = [...state.notices,
             {id: 'sticky', title: 'Fresh sticky', durationMs: 0}];
         }"""
@@ -218,7 +234,7 @@ def test_timeout_pause_and_queued_promotion(toast_page) -> None:
     page, console_errors, page_errors = toast_page
     page.evaluate(
         """() => {
-          const state = Alpine.$data(document.body);
+          const state = window.__state;
           state.limit = 1;
           state.notices = [
             {id: 'timed', title: 'Timed', durationMs: 1000},
@@ -258,18 +274,18 @@ def test_f6_focus_route_and_focused_removal_handoff(toast_page) -> None:
 def test_reactive_configuration_invalid_episode_and_logical_geometry(toast_page) -> None:
     page, console_errors, page_errors = toast_page
     region = page.locator("#notices")
-    page.evaluate("Object.assign(Alpine.$data(document.body), {placement: 'block-start-start', limit: 3})")
+    page.evaluate("Object.assign(window.__state, {placement: 'block-start-start', limit: 3})")
     page.wait_for_function("document.querySelector('#notices').dataset.placement === 'block-start-start'")
     assert _toasts(page).count() == 3
     assert region.evaluate("element => getComputedStyle(element).insetBlockStart !== 'auto'")
 
-    page.evaluate("Alpine.$data(document.body).placement = null")
+    page.evaluate("window.__state.placement = null")
     page.wait_for_timeout(0)
-    page.evaluate("Object.assign(Alpine.$data(document.body), {placement: 42, limit: 'many'})")
+    page.evaluate("Object.assign(window.__state, {placement: 42, limit: 'many'})")
     page.wait_for_timeout(0)
-    page.evaluate("Object.assign(Alpine.$data(document.body), {durationMs: 99, pauseOnHover: 'yes'})")
+    page.evaluate("Object.assign(window.__state, {durationMs: 99, pauseOnHover: 'yes'})")
     page.wait_for_timeout(0)
-    page.evaluate("Object.assign(Alpine.$data(document.body), {limit: -1, placement: 'center'})")
+    page.evaluate("Object.assign(window.__state, {limit: -1, placement: 'center'})")
     page.wait_for_timeout(0)
     assert sum("CToastRegion placement received invalid" in item for item in console_errors) == 1
     assert sum("CToastRegion limit received invalid" in item for item in console_errors) == 1
@@ -284,7 +300,7 @@ def test_unrelated_modal_suppresses_appearance_announcement_and_timers(toast_pag
     page.evaluate(
         """() => {
           document.querySelector('#blocking-dialog').showModal();
-          Alpine.$data(document.body).notices = [
+          window.__state.notices = [
             {id: 'modal-wait', title: 'Wait for modal', priority: 'assertive', durationMs: 1000}
           ];
         }"""
@@ -312,7 +328,7 @@ def test_plain_text_update_identity_rtl_css_and_accessibility(toast_page) -> Non
     page.evaluate(
         """() => {
           document.documentElement.dir = 'rtl';
-          Alpine.$data(document.body).notices = [{
+          window.__state.notices = [{
             id: 'saved', title: '<b>Updated safely</b>',
             description: 'observatory'.repeat(40), intent: 'error', durationMs: 0,
           }];
@@ -327,7 +343,7 @@ def test_plain_text_update_identity_rtl_css_and_accessibility(toast_page) -> Non
     assert toast.locator("b").count() == 0
     assert toast.get_attribute("data-intent") == "error"
     assert toast.evaluate("element => element.scrollWidth <= element.clientWidth")
-    page.evaluate("Alpine.$data(document.body).placement = 'block-end-start'")
+    page.evaluate("window.__state.placement = 'block-end-start'")
     page.wait_for_function("document.querySelector('#notices').dataset.placement === 'block-end-start'")
     assert page.locator("#notices").evaluate("element => getComputedStyle(element).insetInlineStart !== 'auto'")
     axe_path = Path("node_modules/axe-core/axe.min.js").resolve()

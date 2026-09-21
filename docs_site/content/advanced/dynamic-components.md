@@ -60,8 +60,8 @@ and the body fills its default slot. The selected component checks its own
 
 Browser-side bindings follow the usual component-boundary rules. They do not
 become Python kwargs. See
-[Client interactivity](/concepts/client-interactivity/) for `$c-props`, Alpine
-handlers, and Citry event handlers.
+[Client interactivity](/concepts/client-interactivity/) for native Vue props,
+child events, and Citry server-event handlers.
 
 ### What `c-is` accepts
 
@@ -129,7 +129,7 @@ lowercase selector spellings.
 Other attributes use the normal HTML formatting rules. `class` and `style`
 are normalized, and `False` and `None` leave an attribute out. Values are
 escaped unless they explicitly provide trusted HTML through `__html__()`.
-`$c-props` belongs to component boundaries and is not valid on an HTML
+Native Vue props belong to component boundaries and are not valid on an HTML
 element.
 
 ### Limits of `c-element`

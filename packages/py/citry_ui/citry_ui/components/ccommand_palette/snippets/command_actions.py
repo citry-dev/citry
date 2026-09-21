@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from typing import Any
 
 import citry_ui
@@ -32,35 +34,38 @@ class CommandActions(Component):
     template = """
       <section
         class="command-palette-actions"
-        x-data="{open:true,events:[],throwNext:false,moveFocus:false}"
       >
         <h2>Action transaction</h2>
         <div role="group" aria-label="Action behavior">
-          <label><input type="checkbox" x-model="throwNext" /> Throw in next action</label>
-          <label><input type="checkbox" x-model="moveFocus" /> Move owner focus</label>
+          <label><input type="checkbox" v-model="throwNext" /> Throw in next action</label>
+          <label><input type="checkbox" v-model="moveFocus" /> Move owner focus</label>
         </div>
         <button id="command-action-focus-target" type="button">Owner focus target</button>
         <c-CCommandPalette
           label="Draft commands"
           c-entries="commands"
-          $c-props="{
-            open,
-            onOpenChange:(value,detail)=>{
+          :open="open" :onOpenChange="(value,detail)=>{
               events.push(`open:${value}:${detail.reason}`);
               open=value;
-            },
-            onQueryChange:(value,detail)=>events.push(`query:${value}:${detail.reason}`),
-            onAction:(value,detail)=>{
+            }" :onQueryChange="(value,detail)=>events.push(`query:${value}:${detail.reason}`)" :onAction="(value,detail)=>{
               events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
               if (moveFocus) document.getElementById('command-action-focus-target').focus();
               if (throwNext) { throwNext=false; throw new Error('Application action failed'); }
-            },
-          }"
+            }"
         />
-        <output aria-live="polite" x-text="events.slice(-4).join(' | ') || 'No actions yet'">
+        <output aria-live="polite" v-text="events.slice(-4).join(' | ') || 'No actions yet'">
           No actions yet
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open:true,events:[],throwNext:false,moveFocus:false
+          };
+        },
+      });
     """
 
     css = """

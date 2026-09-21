@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import importlib
 import json
 import re
@@ -13,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from citry import RouteHeaders, RouteRequest
+from citry import Component, RouteHeaders, RouteRequest
 from citry import citry as default_citry
 
 _STORYBOOK_DIR = Path(__file__).resolve().parents[1] / "storybook"
@@ -64,6 +63,25 @@ def _input_tag(content):
     match = re.search(r"<input\b[^>]*>", content, flags=re.DOTALL)
     assert match is not None
     return match.group()
+
+
+def _vue_fragment_manifest(content):
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-fragment>(.*?)</script>',
+        content,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    return json.loads(match.group(1))["vue"]
+
+
+def _optional_vue_fragment_manifest(content):
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-fragment>(.*?)</script>',
+        content,
+        flags=re.DOTALL,
+    )
+    return None if match is None else json.loads(match.group(1))["vue"]
 
 
 def _assert_control_effect(scenario_id, control_name, default_content, changed_content):
@@ -182,12 +200,18 @@ def test_every_static_scenario_renders_each_control_independently(spike_modules)
         family, state = scenario.id.split("/")
         default_response = extension.render(_trusted_request(), family=family, state=state)
         assert default_response.status == 200
-        assert "<style" in str(default_response.content)
-        if scenario.id in {"button/static", "field/static", "table/static"}:
-            assert "<script" in str(default_response.content)
+        default_content = str(default_response.content)
+        default_fragment = _optional_vue_fragment_manifest(default_content)
+        if default_fragment is None:
+            assert "<link data-citry-css-class=" in default_content
+            assert f'data-scenario-id="{scenario.id}"' in default_content
         else:
-            assert "<script" not in str(default_response.content)
-        assert f'data-scenario-id="{scenario.id}"' in str(default_response.content)
+            default_manifest = default_fragment["prepared"]["manifest"]
+            assert default_manifest["styles"]
+            assert any(
+                occurrence["preparedData"].get("citryAttrs0", {}).get("data-scenario-id") == scenario.id
+                for occurrence in default_manifest["occurrences"]
+            )
         for control in scenario.controls:
             changed_response = extension.render(
                 _trusted_request(query={control.name: (_query_value(control),)}),
@@ -195,12 +219,14 @@ def test_every_static_scenario_renders_each_control_independently(spike_modules)
                 state=state,
             )
             assert changed_response.status == 200
-            _assert_control_effect(
-                scenario.id,
-                control.name,
-                str(default_response.content),
-                str(changed_response.content),
-            )
+            changed_content = str(changed_response.content)
+            assert changed_content != default_content
+            changed_fragment = _optional_vue_fragment_manifest(changed_content)
+            if default_fragment is not None and changed_fragment is not None:
+                changed_manifest = changed_fragment["prepared"]["manifest"]
+                assert changed_manifest["occurrences"] != default_manifest["occurrences"]
+            else:
+                _assert_control_effect(scenario.id, control.name, default_content, changed_content)
 
 
 def test_interactive_scenario_uses_fragment_assets_and_control_input(spike_modules):
@@ -224,25 +250,21 @@ def test_interactive_scenario_uses_fragment_assets_and_control_input(spike_modul
     assert scenario.ready_selector == '.citry-ui-readiness-probe[data-ready="true"]'
     assert default_response.status == 200
     assert changed_response.status == 200
-    assert 'data-generation="first"' in content
-    assert 'data-generation="second"' in str(changed_response.content)
-    assert "data-citry-graph" in content
-    assert "data-citry" in content
-    assert "/citry/citry.js" in content
-
-    manifest_match = re.search(
-        r'<script type="application/json" data-citry>(.*?)</script>',
-        content,
-        flags=re.DOTALL,
+    default_fragment = _vue_fragment_manifest(content)
+    changed_fragment = _vue_fragment_manifest(str(changed_response.content))
+    default_manifest = default_fragment["prepared"]["manifest"]
+    changed_manifest = changed_fragment["prepared"]["manifest"]
+    assert any(occurrence["serverData"].get("generation") == "first" for occurrence in default_manifest["occurrences"])
+    assert any(
+        occurrence["serverData"].get("generation") == "second" for occurrence in changed_manifest["occurrences"]
     )
-    assert manifest_match is not None
-    manifest = json.loads(manifest_match.group(1))
-    descriptors = {
-        kind: [json.loads(base64.b64decode(value[0]).decode()) for value in manifest["fetch"][kind]]
-        for kind in ("css", "js")
-    }
-    assert any(descriptor["attrs"].get("href", "").startswith("/citry/cache/") for descriptor in descriptors["css"])
-    assert any(descriptor["attrs"].get("src", "").startswith("/citry/cache/") for descriptor in descriptors["js"])
+    assert default_fragment["protocol"] == "citry-vue-fragment/1"
+    assert default_manifest["protocol"] == "citry-vue-prepared/1"
+    assert "/citry/citry.js" in content
+    assert all(asset["source"]["url"].startswith("/citry/ext/events/assets/") for asset in default_manifest["styles"])
+    assert all(
+        asset["source"]["url"].startswith("/citry/ext/events/definitions/") for asset in default_manifest["scripts"]
+    )
 
 
 def test_tabs_scenario_uses_fragment_assets_and_each_control(spike_modules):
@@ -255,6 +277,16 @@ def test_tabs_scenario_uses_fragment_assets_and_each_control(spike_modules):
     assert scenario.client_interactive is True
     assert scenario.ready_selector == "[data-citry-tabs-root][data-citry-tabs-initialized]"
     assert "/citry/citry.js" in default_content
+    default_manifest = _vue_fragment_manifest(default_content)["prepared"]["manifest"]
+    default_tabs = next(
+        occurrence for occurrence in default_manifest["occurrences"] if occurrence["typeKey"].startswith("CTabs_")
+    )
+    expected = {
+        "selected": ("value", "security"),
+        "orientation": ("orientation", "vertical"),
+        "direction": ("direction", "rtl"),
+        "activation": ("activation", "manual"),
+    }
     for control in scenario.controls:
         changed_response = extension.render(
             _trusted_request(query={control.name: (_query_value(control),)}),
@@ -262,12 +294,43 @@ def test_tabs_scenario_uses_fragment_assets_and_each_control(spike_modules):
             state="server-selected",
         )
         assert changed_response.status == 200
-        _assert_control_effect(
-            scenario.id,
-            control.name,
-            default_content,
-            str(changed_response.content),
+        changed_manifest = _vue_fragment_manifest(str(changed_response.content))["prepared"]["manifest"]
+        changed_tabs = next(
+            occurrence for occurrence in changed_manifest["occurrences"] if occurrence["typeKey"].startswith("CTabs_")
         )
+        key, value = expected[control.name]
+        assert default_tabs["serverData"]["serverDefaults"][key] != value
+        assert changed_tabs["serverData"]["serverDefaults"][key] == value
+
+
+def test_tabs_accepts_deferred_declarations_owned_by_a_vue_component(spike_modules):
+    engine = spike_modules["app"].engine
+
+    class StatefulTabsDeclarations(Component):
+        citry = engine
+        template = """
+          <c-CTab value="account">{{ label }}</c-CTab>
+          <c-CTabPanel value="account">Account preferences</c-CTabPanel>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"label": "Account"}
+
+        def js_data(self, kwargs, slots):
+            return {"label": "Account"}
+
+    tabs = engine.get("ctabs")(
+        default_value="account",
+        aria_label="Account settings",
+        slots={"default": StatefulTabsDeclarations()},
+    )
+    content = str(tabs)
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", content, flags=re.DOTALL)
+    assert match is not None
+    manifest = json.loads(match.group(1))["manifest"]
+    type_keys = {occurrence["typeKey"].split("_", 1)[0] for occurrence in manifest["occurrences"]}
+    assert {"CTabs", "CTab", "CTabPanel", "StatefulTabsDeclarations"} <= type_keys
+    assert any(occurrence["preparedData"].get("citryText0") == "Account" for occurrence in manifest["occurrences"])
 
 
 def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_modules):
@@ -304,9 +367,9 @@ def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_module
     assert "<c-css" not in str(page_response.content)
     assert "<c-js" not in str(page_response.content)
     assert interactive_page.status == 200
-    assert 'data-ready="loading"' in str(interactive_page.content)
-    assert "Citry.manager" in str(interactive_page.content)
-    assert "citry-ui-readiness-probe" in str(interactive_page.content)
+    interactive_content = str(interactive_page.content)
+    assert '"serverData":{"generation":"first"}' in interactive_content
+    assert "CitryStable.startPrepared" in interactive_content
     assert unknown_response.status == 404
     assert invalid_response.status == 400
     assert "must be 'true' or 'false'" in str(invalid_response.content)
@@ -371,7 +434,11 @@ def test_asgi_adapter_matches_routes_and_applies_cors(spike_modules):
     assert start["status"] == 200
     assert missing_host_start["status"] == 403
     assert blocked_asset_start["status"] == 403
-    assert b'data-scenario-id="button/static"' in body
+    fragment = _vue_fragment_manifest(body.decode())
+    assert any(
+        occurrence["preparedData"].get("citryAttrs0", {}).get("data-scenario-id") == "button/static"
+        for occurrence in fragment["prepared"]["manifest"]["occurrences"]
+    )
     assert ("access-control-allow-origin", "http://127.0.0.1:6206") in response_headers
     assert ("cache-control", "no-store") in response_headers
 

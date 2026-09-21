@@ -32,7 +32,7 @@ def _page() -> str:
         citry = app
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8">
-          <title>Sortable evidence</title><c-css /></head><body x-data>
+           <title>Sortable evidence</title><c-css /></head><body>
             <form id="uncontrolled-form">
               <c-CSortable id="uncontrolled" name="priority">
                 <c-CSortableItem value="alpha" label="Alpha" />
@@ -42,13 +42,10 @@ def _page() -> str:
               </c-CSortable>
               <button id="reset" type="reset">Reset</button>
             </form>
-            <c-CSortable id="controlled" $c-props="{
-              order:$store.sortable.order,
-              onOrderChange:(next,detail)=>{
-                $store.sortable.events.push({next:[...next],source:detail.source,controlled:detail.controlled});
-                if($store.sortable.accept)$store.sortable.order=[...next];
-              },
-            }">
+            <c-CSortable id="controlled" :order="state.sortable.order" :onOrderChange="(next,detail)=>{
+                state.sortable.events.push({next:[...next],source:detail.source,controlled:detail.controlled});
+                if(state.sortable.accept)state.sortable.order=[...next];
+              }">
               <c-CSortableItem value="one" label="One" />
               <c-CSortableItem value="two" label="Two" />
               <c-CSortableItem value="three" label="Three" />
@@ -60,7 +57,7 @@ def _page() -> str:
             </c-CSortable></div>
           </body></html>
         """
-        js = "Alpine.store('sortable',{order:['one','two','three'],accept:false,events:[]});"
+        js = "$component({data(){const state=Citry.vue.reactive({order:['one','two','three'],accept:false,events:[]});window.__sortable=state;return {state:{sortable:state}};}});"
 
     return str(Page())
 
@@ -121,13 +118,10 @@ def test_controlled_keyboard_request_waits_then_accepts(page: Any) -> None:
     handle.press("End")
     handle.press("Enter")
     assert _values(root) == ["one", "two", "three"]
-    assert page.evaluate("Alpine.store('sortable').events") == [
+    assert page.evaluate("window.__sortable.events") == [
         {"next": ["two", "three", "one"], "source": "keyboard", "controlled": True}
     ]
-    page.evaluate(
-        "Alpine.store('sortable').accept=true;"
-        "Alpine.store('sortable').order=[...Alpine.store('sortable').events[0].next]"
-    )
+    page.evaluate("window.__sortable.accept=true;window.__sortable.order=[...window.__sortable.events[0].next]")
     page.wait_for_function(
         "[...document.querySelectorAll('#controlled > ol > [data-value]')].map(e=>e.dataset.value).join(',') === 'two,three,one'"
     )

@@ -11,15 +11,24 @@ class RatingForms(Component):
         pass
 
     template = """
-      <form class="rating-demo-stack" x-data="{result:'Submit or reset the Form'}" @submit.prevent="result=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+      <form class="rating-demo-stack" @submit.prevent="result=JSON.stringify(Array.from(new FormData($event.target).entries()))">
         <c-CField required>
           <c-fill name="label">Service rating</c-fill>
           <c-fill name="default"><c-CRating name="service" value="2" /></c-fill>
         </c-CField>
         <c-CRating name="published" label="Published rating" value="4.5" precision="0.5" readonly />
         <c-CRow><c-CButton type="submit">Submit</c-CButton><c-CButton type="reset" variant="outline">Reset</c-CButton></c-CRow>
-        <output x-text="result">Submit or reset the Form</output>
+        <output v-text="result">Submit or reset the Form</output>
       </form>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result:'Submit or reset the Form'
+          };
+        },
+      });
     """
     css = ":where(.rating-demo-stack){display:grid;justify-items:start;gap:1rem}"
 

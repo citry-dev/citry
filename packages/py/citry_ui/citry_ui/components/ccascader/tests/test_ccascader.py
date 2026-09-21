@@ -13,7 +13,7 @@ from citry import Citry, Component
 from citry_ui import CCascader, CCascaderOption
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -21,7 +21,8 @@ def _render(source: str) -> str:
         citry = app
         template = f"<main>{source}</main>"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 _OPTIONS = """
@@ -53,9 +54,8 @@ def test_schemas_registration_path_labels_and_native_inputs() -> None:
     ]
     assert CCascader in citry_ui.COMPONENTS
     assert CCascaderOption in citry_ui.COMPONENTS
-    html = _render(
-        f'<p id="place-label">Destination</p><c-CCascader aria_labelledby="place-label" name="place" form="profile" c-value="[\'world\',\'europe\',\'prague\']">{_OPTIONS}</c-CCascader>'
-    )
+    source = f'<p id="place-label">Destination</p><c-CCascader aria_labelledby="place-label" name="place" form="profile" c-value="[\'world\',\'europe\',\'prague\']">{_OPTIONS}</c-CCascader>'
+    html = _render(source, static_fallback=True)
     assert "World / Europe / Prague" in html
     assert len(re.findall(r'<input[^>]+name="place"', html)) == 3
     assert 'value="world"' in html
@@ -71,12 +71,12 @@ def test_schemas_registration_path_labels_and_native_inputs() -> None:
 
 
 def test_empty_hierarchy_and_unselected_server_focus_are_useful_without_client_runtime() -> None:
-    empty = _render('<c-CCascader aria_label="Empty taxonomy" />')
+    empty = _render('<c-CCascader aria_label="Empty taxonomy" />', static_fallback=True)
     assert "No options" in empty
     assert 'aria-label="Empty taxonomy"' in empty
     assert re.search(r'<ul[^>]+hidden[^>]+data-citry-ui-part="tree"', empty)
 
-    options = _render(f"<c-CCascader>{_OPTIONS}</c-CCascader>")
+    options = _render(f"<c-CCascader>{_OPTIONS}</c-CCascader>", static_fallback=True)
     world = re.search(r'<li[^>]+data-value="world"[^>]*>', options)
     assert world is not None
     assert 'tabindex="0"' in world.group(0)

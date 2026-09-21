@@ -14,7 +14,7 @@ class AlertSizes(Component):
     template = """
       <section class="alert-sizes" aria-label="Alert sizes">
         <c-for each="size in sizes">
-          <c-CAlert c-size="size[0]">
+          <c-CAlert #c-key="size[0]" c-size="size[0]">
             <c-fill name="title">{{ size[1] }} Alert</c-fill>
             <c-fill name="default">The northern camera is ready.</c-fill>
           </c-CAlert>

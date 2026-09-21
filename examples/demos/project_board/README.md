@@ -17,7 +17,7 @@ service, or a network connection after installation.
   value so they use the same color.
 - Each card uses `<c-component>` to choose its high- or standard-priority
   badge.
-- Alpine opens the explanation and dismisses notices without calling Python.
+- Vue opens the explanation and dismisses notices without calling Python.
 - Dragging a card moves it to another column. Each card also has a labeled
   **Move to column** menu that works with a keyboard or touchscreen.
 - Citry Events send searches, new tasks, card moves, and completion changes

@@ -31,31 +31,49 @@ def _run_sources(*sources: str) -> list[dict]:
     return json.loads(completed.stdout)
 
 
-def _dispatch_source(source: str, handler: str, *, run_id: int = 7) -> tuple[dict, dict]:
+def _prepared_transport(html: str) -> dict:
+    marker = "CitryStable.startPrepared("
+    start = html.index(marker) + len(marker)
+    transport, _ = json.JSONDecoder().raw_decode(html[start:])
+    assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
+    return transport
+
+
+def _root_occurrence(manifest: dict) -> dict:
+    [root] = [occurrence for occurrence in manifest["occurrences"] if occurrence["id"] == manifest["rootId"]]
+    return root
+
+
+def _dispatch_source(
+    source: str,
+    handler: str,
+    *,
+    run_id: int = 7,
+    args: dict | None = None,
+) -> tuple[dict, dict]:
     program = f"""
 import json
-import re
 import runpy
 import sys
 
 adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
 payload = json.load(sys.stdin)
 rendered = json.loads(adapter["run_source_json"](payload["source"], payload["run_id"]))
-manifest = json.loads(re.search(
-    r'<script[^>]*data-citry-events[^>]*>(.*?)</script>',
-    rendered["html"],
-    re.DOTALL,
-).group(1))
-instance = manifest["componentInstances"][0]
+marker = "CitryStable.startPrepared("
+start = rendered["html"].index(marker) + len(marker)
+prepared, _ = json.JSONDecoder().raw_decode(rendered["html"][start:])
+manifest = prepared["manifest"]
+occurrence = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
+event_context = occurrence["eventContext"]
 call = {{
-    "componentClassId": instance["componentClassId"],
+    "componentClassId": event_context["componentClassId"],
     "handlerName": payload["handler"],
-    "callerRenderId": instance["renderId"],
-    "args": {{}},
+    "callerRenderId": event_context["serverRenderId"],
+    "args": payload["args"],
     "sendSequence": 1,
 }}
-if instance["stateToken"] is not None:
-    call["stateToken"] = instance["stateToken"]
+if event_context["stateToken"] is not None:
+    call["stateToken"] = event_context["stateToken"]
 envelope = {{
     "protocol": "citry-events/1",
     "requestId": "playground-test",
@@ -63,10 +81,10 @@ envelope = {{
 }}
 result = json.loads(adapter["dispatch_event_json"](json.dumps(envelope), payload["run_id"]))
 print(json.dumps([rendered, result]))
-"""
+    """
     completed = subprocess.run(
         [sys.executable, "-c", program],
-        input=json.dumps({"source": source, "handler": handler, "run_id": run_id}),
+        input=json.dumps({"source": source, "handler": handler, "run_id": run_id, "args": args or {}}),
         text=True,
         capture_output=True,
         check=True,
@@ -77,7 +95,6 @@ print(json.dumps([rendered, result]))
 
 def _dispatch_render_source(source: str, handler: str, *, run_id: int = 7) -> tuple[dict, dict, list[dict]]:
     program = f"""
-import base64
 import json
 import re
 import runpy
@@ -86,38 +103,39 @@ import sys
 adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
 payload = json.load(sys.stdin)
 rendered = json.loads(adapter["run_source_json"](payload["source"], payload["run_id"]))
-manifest = json.loads(re.search(
-    r'<script[^>]*data-citry-events[^>]*>(.*?)</script>',
-    rendered["html"],
-    re.DOTALL,
-).group(1))
-instance = manifest["componentInstances"][0]
+marker = "CitryStable.startPrepared("
+start = rendered["html"].index(marker) + len(marker)
+prepared, _ = json.JSONDecoder().raw_decode(rendered["html"][start:])
+manifest = prepared["manifest"]
+occurrence = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
+event_context = occurrence["eventContext"]
 envelope = {{
     "protocol": "citry-events/1",
     "requestId": "playground-render-test",
     "calls": [{{
-        "componentClassId": instance["componentClassId"],
+        "componentClassId": event_context["componentClassId"],
         "handlerName": payload["handler"],
-        "callerRenderId": instance["renderId"],
+        "callerRenderId": event_context["serverRenderId"],
         "args": {{}},
         "sendSequence": 1,
     }}],
 }}
+if event_context["stateToken"] is not None:
+    envelope["calls"][0]["stateToken"] = event_context["stateToken"]
 response = json.loads(adapter["dispatch_event_json"](json.dumps(envelope), payload["run_id"]))
 action = response["results"][0]["actions"][0]
-dependency = json.loads(re.search(
-    r'<script[^>]*data-citry(?:>|=[^>]*>)(.*?)</script>',
+fragment = json.loads(re.search(
+    r'<script[^>]*data-citry-vue-fragment[^>]*>(.*?)</script>',
     action["html"],
     re.DOTALL,
 ).group(1))
+manifest = fragment["vue"]["prepared"]["manifest"]
 paths = []
-for kind in ("js", "css"):
-    for encoded in dependency["fetch"][kind]:
-        encoded = encoded[0] if isinstance(encoded, list) else encoded
-        descriptor = json.loads(base64.b64decode(encoded).decode())
-        path = descriptor.get("attrs", {{}}).get("src") or descriptor.get("attrs", {{}}).get("href")
-        if path:
-            paths.append(path)
+for descriptor in manifest["scripts"] + manifest["styles"]:
+    path = descriptor["source"].get("url")
+    if path:
+        paths.append(path)
+paths = list(dict.fromkeys(paths))
 assets = json.loads(adapter["load_playground_assets_json"](json.dumps(paths), payload["run_id"]))
 print(json.dumps([rendered, response, assets]))
 """
@@ -194,7 +212,11 @@ def test_executor_accepts_html_markup_element_render_and_starter() -> None:
     assert render["ok"]
     assert ">render</p>" in render["html"]
     assert starter["ok"]
-    assert "Welcome, <strong>Ada Lovelace</strong>" in starter["html"]
+    welcome = _root_occurrence(_prepared_transport(starter["html"])["manifest"])
+    assert welcome["typeKey"].startswith("WelcomeCard_")
+    assert welcome["preparedData"]["citryText0"] == "Ada Lovelace"
+    assert welcome["preparedData"]["citryText1"] == "0"
+    assert welcome["eventContext"]["publicState"] == {"greetings": 0}
 
 
 def test_executor_registers_and_resolves_citry_ui_on_every_run() -> None:
@@ -206,7 +228,10 @@ CButton(slots={"default": "Direct save"})
         """from citry import Component
 
 class Page(Component):
-    template = "<main><c-CButton>Registered save</c-CButton></main>"
+    def template_data(self, kwargs, slots):
+        return {"label": "Registered save"}
+
+    template = "<main><c-CButton>{{ label }}</c-CButton></main>"
 
 Page()
 """,
@@ -217,11 +242,21 @@ CButton(slots={"default": "Second run"})
     )
 
     assert direct["ok"] is True
-    assert "Direct save" in direct["html"]
+    direct_occurrence = _root_occurrence(_prepared_transport(direct["html"])["manifest"])
+    assert direct_occurrence["typeKey"].startswith("CButton_")
+    assert "Direct save" in direct_occurrence["preparedData"].values()
     assert registered["ok"] is True
-    assert "Registered save" in registered["html"]
+    registered_manifest = _prepared_transport(registered["html"])["manifest"]
+    registered_root = _root_occurrence(registered_manifest)
+    assert registered_root["typeKey"].startswith("Page_")
+    assert "Registered save" in registered_root["preparedData"].values()
+    [registered_button] = [
+        occurrence for occurrence in registered_manifest["occurrences"] if occurrence["typeKey"].startswith("CButton_")
+    ]
+    assert "supplied" in registered_button["preparedData"]["selectedSlots"].values()
     assert repeated["ok"] is True
-    assert "Second run" in repeated["html"]
+    repeated_occurrence = _root_occurrence(_prepared_transport(repeated["html"])["manifest"])
+    assert "Second run" in repeated_occurrence["preparedData"].values()
 
 
 def test_successful_run_publishes_a_bounded_component_catalog() -> None:
@@ -322,9 +357,6 @@ class LoadedFragment(Component):
 
     js = """
       window.__fragmentAssetLoads = (window.__fragmentAssetLoads || 0) + 1;
-      $component(({ els, data }) => {
-        els[0].setAttribute("data-component-js", data.kind);
-      });
     """
 
     css = """
@@ -339,14 +371,13 @@ class FragmentLoader(Component):
         def load(self):
             return actions.Render(
                 LoadedFragment(kind="rendered"),
-                target="#fragment-target",
-                swap="inner",
+                target="mark:fragment-target",
             )
 
     template = """
       <main>
         <button type="button" @c-click="load">Load</button>
-        <div id="fragment-target"></div>
+        <c-mark name="fragment-target"></c-mark>
       </main>
     """
 
@@ -361,9 +392,10 @@ FragmentLoader()
     assert result["ok"]
     [render] = result["actions"]
     assert render["action"] == "render"
-    assert render["target"] == "#fragment-target"
-    assert render["swap"] == "inner"
-    assert "loaded-fragment" in render["html"]
+    assert render["target"] == "mark:fragment-target"
+    assert render["swap"] == "replace"
+    assert "data-citry-vue-fragment" in render["html"]
+    assert "citry-loaded-fragment-" in render["html"]
     assert assets
     assert all(asset["path"].startswith("/__citry_playground__/") for asset in assets)
     assert {asset["contentType"] for asset in assets} == {"text/css", "text/javascript"}
@@ -557,7 +589,7 @@ def test_executor_registers_the_playground_module_and_its_source() -> None:
 
 
 def test_event_input_annotation_resolves_in_the_dynamic_module() -> None:
-    [result] = _run_sources(
+    rendered, response = _dispatch_source(
         "from citry import Component\n"
         "from citry.ext.events import actions\n"
         "class SignupIn:\n"
@@ -568,8 +600,34 @@ def test_event_input_annotation_resolves_in_the_dynamic_module() -> None:
         "            return actions.Dispatch('signup:sent', {'email': data.email})\n"
         '    template = \'<form @c-submit.prevent="submit"><input name="email"></form>\'\n'
         "SignupForm()",
+        "submit",
+        args={"email": "ada@example.test"},
     )
 
+    assert rendered["ok"], rendered
+    manifest = _prepared_transport(rendered["html"])["manifest"]
+    occurrence = _root_occurrence(manifest)
+    [binding] = occurrence["preparedData"]["eventBindings"].values()
+    assert binding["id"].startswith("citryEvent")
+    assert {name: value for name, value in binding.items() if name != "id"} == {
+        "args": None,
+        "debounce": None,
+        "event": "submit",
+        "handler": "submit",
+        "key": None,
+        "once": False,
+        "prevent": True,
+        "self": False,
+        "stop": False,
+        "throttle": None,
+    }
+    [result] = response["results"]
     assert result["ok"], result
-    assert "<form" in result["html"]
-    assert "data-cev-on" in result["html"]
+    assert result["actions"] == [
+        {
+            "action": "event",
+            "eventName": "signup:sent",
+            "detail": {"email": "ada@example.test"},
+            "target": f"render:{occurrence['eventContext']['serverRenderId']}",
+        }
+    ]

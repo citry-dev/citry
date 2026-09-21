@@ -7,21 +7,18 @@ citry.register_library(citry_ui)
 
 class ControlledMultiSelect(Component):
     template = """
-      <div x-data>
+      <div >
         <c-CMultiSelect
           c-options="options"
           placeholder="Choose channels"
           c-value="['email']"
           c-trigger_attrs="{'aria-label':'Notification channels'}"
-          $c-props="{
-            value:$store.multiSelectExample.value,
-            onValueChange:(next) => $store.multiSelectExample.value = next,
-          }"
+          :value="value" :onValueChange="(next) => value = next"
         />
-        <p>Current: <strong x-text="$store.multiSelectExample.value.join(', ')"></strong></p>
+        <p>Current: <strong v-text="value.join(', ')"></strong></p>
       </div>
     """
-    js = "Alpine.store('multiSelectExample', {value:['email']});"
+    js = "$component({data(){return {value:['email']};}});"
 
     def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
         return {

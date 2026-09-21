@@ -6,14 +6,23 @@ citry.register_library(citry_ui)
 
 class ControlledPagination(Component):
     template = """
-      <section x-data="{ page: 3 }">
-        <p>Plate <strong x-text="page"></strong> of 18</p>
+      <section >
+        <p>Plate <strong v-text="page"></strong> of 18</p>
         <c-CPagination
           c-pages="18"
           c-page="3"
-          $c-props="{ page, onPageChange: (next) => page = next }"
+          :page="page" :onPageChange="(next) => page = next"
         />
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            page: 3
+          };
+        },
+      });
     """
 
 

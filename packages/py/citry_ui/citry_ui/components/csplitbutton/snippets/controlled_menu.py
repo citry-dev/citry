@@ -8,17 +8,12 @@ class ControlledSplitButtonMenu(Component):
     template = """
       <section
         class="split-button-controlled"
-        x-data="{
-          open:false,
-          controlled:true,
-          accept:true,
-          lastReason:'none'
-        }"
+
       >
         <c-CSplitButton
           label="Publication actions"
           menu_label="More publication actions"
-          $c-props="{
+          v-bind="{
             open: controlled ? open : null,
             onOpenChange: (nextOpen, detail) => {
               lastReason = detail.reason;
@@ -34,7 +29,7 @@ class ControlledSplitButtonMenu(Component):
         </c-CSplitButton>
 
         <label>
-          <input type="checkbox" x-model="accept" />
+          <input type="checkbox" v-model="accept" />
           Accept Menu requests
         </label>
         <div role="group" aria-label="Menu owner controls">
@@ -50,13 +45,22 @@ class ControlledSplitButtonMenu(Component):
         </div>
         <output>
           Ownership:
-          <span x-text="controlled ? 'controlled' : 'released'">
+          <span v-text="controlled ? 'controlled' : 'released'">
             controlled
           </span>
           · Last reason:
-          <span x-text="lastReason">none</span>
+          <span v-text="lastReason">none</span>
         </output>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {
+          open:false,
+          controlled:true,
+          accept:true,
+          lastReason:'none'
+        };}});
     """
 
     css = """

@@ -19,16 +19,6 @@ class RowsAndResize(Component):
     template = """
       <section
         class="forest-resize"
-        x-data
-        x-init="Alpine.store('forestTextareaResize', {rows: 4, resize: 'vertical'})"
-        @citry-ui-preview-controls.window="
-          if ($event.detail.rows !== undefined) {
-            $store.forestTextareaResize.rows = Number($event.detail.rows);
-          }
-          if ($event.detail.resize !== undefined) {
-            $store.forestTextareaResize.resize = $event.detail.resize;
-          }
-        "
       >
         <c-CField>
           <c-fill name="label">Understory survey</c-fill>
@@ -36,10 +26,7 @@ class RowsAndResize(Component):
             <c-CTextarea
               name="understory"
               c-value="survey_note"
-              $c-props="{
-                rows: $store.forestTextareaResize.rows,
-                resize: $store.forestTextareaResize.resize,
-              }"
+              :rows="rows" :resize="resize"
             />
           </c-fill>
           <c-fill name="description">
@@ -47,6 +34,26 @@ class RowsAndResize(Component):
           </c-fill>
         </c-CField>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            rows: 4, resize: 'vertical'
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

@@ -9,7 +9,7 @@ from citry import Citry, Component
 from citry_ui.components.cpagination.cpagination import _range
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -17,7 +17,8 @@ def _render(source: str) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_compact_range_expands_single_gaps():
@@ -26,7 +27,7 @@ def test_compact_range_expands_single_gaps():
 
 
 def test_native_links_and_current_page_are_exact():
-    html = _render('<c-CPagination c-pages="20" c-page="10" href="?page={page}" />')
+    html = _render('<c-CPagination c-pages="20" c-page="10" href="?page={page}" />', static_fallback=True)
     assert "<nav" in html
     assert 'aria-label="Pagination"' in html
     assert 'href="?page=10"' in html
@@ -35,7 +36,7 @@ def test_native_links_and_current_page_are_exact():
 
 
 def test_button_mode_edges_and_unavailable_controls():
-    html = _render('<c-CPagination c-pages="4" c-page="1" c-show_edges="True" />')
+    html = _render('<c-CPagination c-pages="4" c-page="1" c-show_edges="True" />', static_fallback=True)
     assert html.count('data-kind="first"') == 1
     assert html.count('data-kind="last"') == 1
     first = re.search(r'<button[^>]+data-kind="first"[^>]*>', html)

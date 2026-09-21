@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -14,16 +16,6 @@ class ConfigureCombobox(Component):
     template = """
       <section
         class="combo-config"
-        x-data
-        x-init="Alpine.store('comboConfig', {
-          variant: 'outline',
-          size: 'md',
-          filter: 'contains',
-          clearable: true,
-          open_on_focus: false,
-          auto_highlight: false,
-        })"
-        @citry-ui-preview-controls.window="Object.assign($store.comboConfig, $event.detail)"
       >
         <p>Observatory controls</p>
         <h2>Configure the catalog</h2>
@@ -35,18 +27,36 @@ class ConfigureCombobox(Component):
             <c-CCombobox
               c-options="objects"
               placeholder="Search the catalog"
-              $c-props="{
-                variant: $store.comboConfig.variant,
-                size: $store.comboConfig.size,
-                filter: $store.comboConfig.filter,
-                clearable: $store.comboConfig.clearable,
-                openOnFocus: $store.comboConfig.open_on_focus,
-                autoHighlight: $store.comboConfig.auto_highlight,
-              }"
+              :variant="variant" :size="size" :filter="filter" :clearable="clearable" :openOnFocus="open_on_focus" :autoHighlight="auto_highlight"
             />
           </c-fill>
         </c-CField>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            variant: 'outline',
+            size: 'md',
+            filter: 'contains',
+            clearable: true,
+            open_on_focus: false,
+            auto_highlight: false,
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     def template_data(

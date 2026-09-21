@@ -6,21 +6,30 @@ citry.register_library(citry_ui)
 
 class VirtualWindowExample(Component):
     template = """
-      <section x-data="{last:'This static preview supplies one complete window'}">
-        <output x-text="last">This static preview supplies one complete window</output>
+      <section >
+        <output v-text="last">This static preview supplies one complete window</output>
         <c-CVirtualWindow
           aria_label="Audit records"
           c-total_count="16"
           c-item_size="48"
-          $c-props="{onRangeChange:(detail)=>last=`Requested ${detail.startIndex}-${detail.endIndex - 1}`}"
+          :onRangeChange="(detail)=>last=`Requested ${detail.startIndex}-${detail.endIndex - 1}`"
         >
           <c-for each="record in records">
-            <c-CVirtualListItem c-item_key="record['key']">
+            <c-CVirtualListItem #c-key="record['key']" c-item_key="record['key']">
               <span>{{ record['number'] }}</span> {{ record['label'] }}
             </c-CVirtualListItem>
           </c-for>
         </c-CVirtualWindow>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            last:'This static preview supplies one complete window'
+          };
+        },
+      });
     """
     css = """
       :where([data-citry-ui-part="item"]) {

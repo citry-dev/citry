@@ -79,7 +79,13 @@ from docs_site._internal.release_notes import (
 from docs_site._internal.seo import generate_seo_files
 from docs_site._internal.site_nav import load_site_nav
 from docs_site._internal.social_cards import generate_social_cards
-from docs_site._internal.static_deps import CITRY_MOUNT_PREFIX, export_fragment_deps, export_runtime
+from docs_site._internal.static_deps import (
+    CITRY_MOUNT_PREFIX,
+    export_fragment_deps,
+    export_prepared_page_assets,
+    export_runtime,
+    validate_prepared_assets,
+)
 from docs_site._internal.ui_library_projection import (
     UiLibraryCatalog,
     copy_ui_library_api_sources,
@@ -169,6 +175,12 @@ class BuildOutcome:
     social_cards_skipped: str = ""  # why card generation was skipped, if it was
     docs_version: str = ""  # the version this snapshot was built as (version mode)
     alias_redirects: int = 0  # redirect stubs written for a materialized alias
+
+
+def _write_built_html(path: Path, html: str, output_dir: Path) -> None:
+    """Persist one page and its still-retained prepared browser assets."""
+    export_prepared_page_assets(html, output_dir, default_citry)
+    path.write_text(html, encoding="utf-8")
 
 
 @docs_project_scope
@@ -422,7 +434,7 @@ def _build_site_to_output(
                 source_to_public_path=source_routes,
             )
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(result.html, encoding="utf-8")
+            _write_built_html(out_path, result.html, output_dir)
             record = _record_for(page_url, canonical, result, source_md=md_path)
             # Also emit the expanded markdown as a `.md` companion beside the page,
             # so LLMs and tools can fetch the raw markdown. Its `url:` is the page's
@@ -601,6 +613,7 @@ def _build_site_to_output(
     if not docs_version:
         # The client runtime, so a component's JavaScript loads from flat files.
         outcome.runtime = export_runtime(output_dir, default_citry)
+        validate_prepared_assets(output_dir, default_citry)
 
         # The search index, built by scanning the written HTML. A failure here is
         # recorded but does not fail the build (the pages are already on disk).
@@ -889,7 +902,7 @@ def _build_ui_library_pages(
             )
             html_path = clean_url_to_html_path(output_dir, projection.public_path)
             html_path.parent.mkdir(parents=True, exist_ok=True)
-            html_path.write_text(result.html, encoding="utf-8")
+            _write_built_html(html_path, result.html, output_dir)
             record = _record_for(page_url, canonical, result, source_md=source_path)
             _write_companion(
                 clean_url_to_companion_path(output_dir, projection.public_path),
@@ -917,7 +930,7 @@ def _build_ui_previews(
             html = render_ui_preview_document(preview, repo_root=repo_root)
             target = clean_url_to_html_path(output_dir, preview.public_path)
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(html, encoding="utf-8")
+            _write_built_html(target, html, output_dir)
             built += 1
         except Exception as exc:  # noqa: BLE001 - preserve per-page build isolation
             label = f"{preview.source.as_posix()} ({preview.public_path})"
@@ -957,7 +970,7 @@ def _build_blog_posts(
             )
             html_path = clean_url_to_html_path(output_dir, post.public_path)
             html_path.parent.mkdir(parents=True, exist_ok=True)
-            html_path.write_text(result.html, encoding="utf-8")
+            _write_built_html(html_path, result.html, output_dir)
             record = _record_for(
                 page_url,
                 canonical,
@@ -1156,7 +1169,7 @@ def _build_reference(
         )
         out_path = output_dir / page_url / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(result.html, encoding="utf-8")
+        _write_built_html(out_path, result.html, output_dir)
         record = _record_for(page_url, canonical, result, source_md=None)
         _write_companion(
             clean_url_to_companion_path(output_dir, page_url),
@@ -1209,7 +1222,7 @@ def _build_releases(
         )
         out_path = output_dir / page_url / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(result.html, encoding="utf-8")
+        _write_built_html(out_path, result.html, output_dir)
         record = _record_for(page_url, canonical, result, source_md=None)
         _write_companion(
             clean_url_to_companion_path(output_dir, page_url),
@@ -1292,7 +1305,7 @@ def _build_not_found(
         version_prefix=version_prefix,
         discovery_links=False,
     ).html
-    (output_dir / "404.html").write_text(html, encoding="utf-8")
+    _write_built_html(output_dir / "404.html", html, output_dir)
     return True
 
 
@@ -1310,7 +1323,7 @@ def _pre_render_examples(
             continue
         out_path = output_dir / "examples" / info.public_slug / "demo" / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(str(info.page_cls()), encoding="utf-8")
+        _write_built_html(out_path, str(info.page_cls()), output_dir)
         count += 1
         # A fragment demo: pre-render each variant as an HTML fragment to its own
         # endpoint, and write the fragment component's dep files so the client
@@ -1318,7 +1331,11 @@ def _pre_render_examples(
         for variant, comp_cls in info.fragments.items():
             variant_path = output_dir / "examples" / info.public_slug / "demo" / variant / "index.html"
             variant_path.parent.mkdir(parents=True, exist_ok=True)
-            variant_path.write_text(comp_cls().render().serialize(deps_strategy="fragment"), encoding="utf-8")
+            _write_built_html(
+                variant_path,
+                comp_cls().render().serialize(deps_strategy="fragment"),
+                output_dir,
+            )
             export_fragment_deps(output_dir, comp_cls)
             count += 1
     return count

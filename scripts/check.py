@@ -176,7 +176,6 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
                 "-m",
                 "packages.protocol._tooling.check",
                 "packages/protocol/events/v1",
-                "packages/protocol/client_graph/v1",
             ],
         ),
         (
@@ -186,10 +185,6 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
         (
             "events protocol JavaScript",
             ["pnpm", "--dir", "packages/protocol/events/v1/js", "run", "check"],
-        ),
-        (
-            "client graph protocol JavaScript",
-            ["pnpm", "--dir", "packages/protocol/client_graph/v1/js", "run", "check"],
         ),
         (
             "docs-playground",

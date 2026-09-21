@@ -1,5 +1,7 @@
 """Focused browser contracts for CCommandPalette."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from typing import Any
@@ -25,6 +27,7 @@ def _page() -> str:
 
     class Page(Component):
         citry = app
+        js = """$component({data(){const state=Citry.vue.reactive({actions:[],opens:[],queries:[],controlledOpen:false,controlledQuery:'',controlledRequests:[],controlledCloseReasons:[],acceptOpen:false,acceptClose:false,acceptQuery:false,commands:[{value:'open-settings',label:'Open settings',keywords:['preferences'],disabled:false},{value:'deploy',label:'Deploy production',keywords:['release'],disabled:true},{value:'copy-id',label:'Copy ID',keywords:['identifier'],disabled:false}]});window.__commandPalette=state;return state;}});"""
         template = """
           <!doctype html>
           <html lang="en">
@@ -32,34 +35,20 @@ def _page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                actions: [], opens: [], queries: [],
-                controlledOpen: false, controlledQuery: '', controlledRequests: [],
-                controlledCloseReasons: [],
-                acceptOpen: false, acceptClose: false, acceptQuery: false,
-                commands: [
-                  {value: 'open-settings', label: 'Open settings', keywords: ['preferences'], disabled: false},
-                  {value: 'deploy', label: 'Deploy production', keywords: ['release'], disabled: true},
-                  {value: 'copy-id', label: 'Copy ID', keywords: ['identifier'], disabled: false}
-                ]
-              }"
-            >
+            <body>
               <button id="before" type="button">Before</button>
               <c-CCommandPalette
                 id="basic-palette"
                 label="Workspace commands"
                 c-entries="entries"
-                $c-props="{
-                  onAction: (value, detail) => actions.push({
+                :onAction="(value, detail) => actions.push({
                     value,
                     source: detail.source,
                     query: detail.query,
                     closeOnAction: detail.closeOnAction,
-                  }),
-                  onOpenChange: (value, detail) => opens.push({value, reason: detail.reason}),
-                  onQueryChange: (value, detail) => queries.push({value, reason: detail.reason})
-                }"
+                  })"
+                :onOpenChange="(value, detail) => opens.push({value, reason: detail.reason})"
+                :onQueryChange="(value, detail) => queries.push({value, reason: detail.reason})"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <button id="trigger" type="button" c-bind="activator_attrs">
@@ -72,20 +61,18 @@ def _page() -> str:
                 id="controlled-palette"
                 label="Controlled commands"
                 c-entries="entries"
-                $c-props="{
-                  open: controlledOpen,
-                  query: controlledQuery,
-                  onOpenChange: (value, detail) => {
+                :open="controlledOpen"
+                :query="controlledQuery"
+                :onOpenChange="(value, detail) => {
                     controlledRequests.push(['open', value, detail.reason]);
                     if ((value && acceptOpen) || (!value && acceptClose)) controlledOpen = value;
-                  },
-                  onQueryChange: (value, detail) => {
+                  }"
+                :onQueryChange="(value, detail) => {
                     controlledRequests.push(['query', value, detail.reason]);
                     if (detail.reason === 'close') controlledCloseReasons.push(detail.closeReason);
                     if (acceptQuery || detail.reason === 'close') controlledQuery = value;
-                  },
-                  onAction: (value) => controlledRequests.push(['action', value]),
-                }"
+                  }"
+                :onAction="(value) => controlledRequests.push(['action', value])"
               >
                 <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                   <button
@@ -96,7 +83,7 @@ def _page() -> str:
                   >Controlled</button>
                 </c-fill>
               </c-CCommandPalette>
-              <output id="ledger" x-text="JSON.stringify({actions, opens, queries})"></output>
+              <output id="ledger" :textContent="JSON.stringify({actions, opens, queries})"></output>
               <c-js />
             </body>
           </html>
@@ -159,7 +146,7 @@ def test_open_filter_keyboard_action_and_close_reset(page: Any) -> None:
     assert not dialog.locator('[data-value="open-settings"]').is_visible()
     input_.press("Enter")
     page.wait_for_function("() => !document.querySelector('#basic-palette').open")
-    assert page.evaluate("() => document.body._x_dataStack[0].actions") == [
+    assert page.evaluate("() => window.__commandPalette.actions") == [
         {
             "value": "copy-id",
             "source": "keyboard",
@@ -167,7 +154,7 @@ def test_open_filter_keyboard_action_and_close_reset(page: Any) -> None:
             "closeOnAction": True,
         }
     ]
-    assert page.evaluate("() => document.body._x_dataStack[0].queries.at(-1)") == {
+    assert page.evaluate("() => window.__commandPalette.queries.at(-1)") == {
         "value": "",
         "reason": "close",
     }
@@ -184,10 +171,10 @@ def test_disabled_navigation_click_refusal_and_escape(page: Any) -> None:
     dialog = page.locator("#basic-palette")
     assert active == dialog.locator('[data-value="copy-id"]').get_attribute("id")
     dialog.locator('[data-value="deploy"]').evaluate("element => element.click()")
-    assert page.evaluate("() => document.body._x_dataStack[0].actions") == []
+    assert page.evaluate("() => window.__commandPalette.actions") == []
     input_.press("Escape")
     page.wait_for_function("() => !document.querySelector('#basic-palette').open")
-    assert page.evaluate("() => document.body._x_dataStack[0].opens.at(-1).reason") == "escape"
+    assert page.evaluate("() => window.__commandPalette.opens.at(-1).reason") == "escape"
 
 
 def test_shared_helpers_transfer_shadow_focus_and_prepare_modal_in_order(page: Any) -> None:
@@ -406,7 +393,7 @@ def test_shared_helpers_transfer_shadow_focus_and_prepare_modal_in_order(page: A
 
 def test_controlled_open_query_decline_accept_and_close_reset(page: Any) -> None:
     _ready(page)
-    state = "document.body._x_dataStack[0]"
+    state = "window.__commandPalette"
     page.locator("#controlled-trigger").click()
     assert not page.locator("#controlled-palette").evaluate("element => element.open")
     assert page.evaluate(f"() => {state}.controlledRequests") == [["open", True, "trigger"]]
@@ -441,7 +428,7 @@ def test_controlled_open_query_decline_accept_and_close_reset(page: Any) -> None
 
 def test_declined_controlled_close_does_not_label_later_owner_close(page: Any) -> None:
     _ready(page)
-    state = "document.body._x_dataStack[0]"
+    state = "window.__commandPalette"
     page.evaluate(f"() => {{ {state}.acceptOpen = true; {state}.acceptQuery = true; }}")
     page.locator("#controlled-trigger").click()
     page.wait_for_function("() => document.querySelector('#controlled-palette').matches(':modal')")
@@ -465,6 +452,7 @@ def test_document_open_shadow_root_move_refreshes_scope_and_closes_modal(page: A
         """async () => {
           const dialog = document.querySelector('#basic-palette');
           const host = dialog.parentElement;
+          const owner = host.parentNode;
           const before = host.nextSibling;
           const shadowHost = document.createElement('div');
           document.body.append(shadowHost);
@@ -477,7 +465,7 @@ def test_document_open_shadow_root_move_refreshes_scope_and_closes_modal(page: A
             closed: !dialog.open,
             root: host.getRootNode() === shadow,
           };
-          document.body.insertBefore(host, before);
+          owner.insertBefore(host, before);
           await new Promise(resolve => setTimeout(resolve, 0));
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           const restored = {

@@ -6,20 +6,20 @@ citry.register_library(citry_ui)
 
 class InfiniteScrollVirtualList(Component):
     template = """
-      <section x-data>
+      <section >
         <c-CInfiniteScroll
           aria_label="Audit log"
           c-auto="False"
-          $c-props="{loading, hasMore, onLoadMore: loadSnapshot}"
+          :loading="loading" :hasMore="hasMore" :onLoadMore="loadSnapshot"
         >
-          <div x-bind:hidden="expanded">
+          <div :hidden="expanded">
             <c-CVirtualList aria_label="Loaded audit records" c-viewport_size="180">
               <c-CVirtualListItem item_key="event-1">Signed in</c-CVirtualListItem>
               <c-CVirtualListItem item_key="event-2">Changed billing contact</c-CVirtualListItem>
               <c-CVirtualListItem item_key="event-3">Exported report</c-CVirtualListItem>
             </c-CVirtualList>
           </div>
-          <div hidden x-bind:hidden="!expanded">
+          <div hidden :hidden="!expanded">
             <c-CVirtualList aria_label="Loaded audit records" c-viewport_size="180">
               <c-CVirtualListItem item_key="event-1">Signed in</c-CVirtualListItem>
               <c-CVirtualListItem item_key="event-2">Changed billing contact</c-CVirtualListItem>
@@ -30,27 +30,29 @@ class InfiniteScrollVirtualList(Component):
             </c-CVirtualList>
           </div>
         </c-CInfiniteScroll>
-        <output aria-live="polite" x-text="expanded ? 'Showing 6 audit records' : 'Showing 3 audit records'">
+        <output aria-live="polite" v-text="expanded ? 'Showing 6 audit records' : 'Showing 3 audit records'">
           Showing 3 audit records
         </output>
       </section>
     """
 
     js = """
-      $component(({ scope }) => {
-        scope.expanded = false;
-        scope.loading = false;
-        scope.hasMore = true;
-        scope.loadSnapshot = () => {
-          if (scope.loading || !scope.hasMore) return;
-          scope.loading = true;
-          return new Promise(resolve => setTimeout(() => {
-            scope.expanded = true;
-            scope.hasMore = false;
-            scope.loading = false;
-            resolve();
-          }, 220));
-        };
+      $component({
+        data() {
+          return { expanded: false, loading: false, hasMore: true };
+        },
+        methods: {
+          loadSnapshot() {
+            if (this.loading || !this.hasMore) return;
+            this.loading = true;
+            return new Promise(resolve => setTimeout(() => {
+              this.expanded = true;
+              this.hasMore = false;
+              this.loading = false;
+              resolve();
+            }, 220));
+          },
+        },
       });
     """
 

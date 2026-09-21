@@ -41,7 +41,7 @@ areas:
           - { title: Expressions, path: /syntax/expressions/ }
           - { title: Attributes, path: /syntax/dynamic-attributes/ }
           - { title: Conditions and loops, path: /syntax/control-flow/, needs_review: true }
-          - { title: Alpine, path: /syntax/alpine/, needs_review: true }
+          - { title: Vue, path: /syntax/vue/, needs_review: true }
           - { title: Comments and literal text, path: /syntax/comments/, needs_review: true }
           - { title: Markup in attributes, path: /syntax/nested-templates/, needs_review: true }
 
@@ -104,7 +104,7 @@ areas:
           - { title: Component JavaScript and CSS, path: /advanced/js-and-css-dependencies/, needs_review: true }
           - { title: Dependency files, path: /advanced/dependency-files/, needs_review: true }
           - { title: Asset placement, path: /advanced/asset-placement/, needs_review: true }
-          - { title: Alpine runtime, path: /advanced/alpine-runtime/, needs_review: true }
+          - { title: Vue runtime, path: /advanced/vue-runtime/, needs_review: true }
           - { title: HTML fragments, path: /advanced/html-fragments/, needs_review: true }
           - { title: Performance, path: /advanced/performance/, needs_review: true }
           - { title: Simple components, path: /advanced/simple-components/, needs_review: true }

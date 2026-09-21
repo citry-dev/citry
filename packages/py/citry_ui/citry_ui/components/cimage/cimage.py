@@ -9,7 +9,12 @@ from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    is_executable_event_attribute,
+    merge_root_attrs,
+)
 
 CImageFit = Literal["contain", "cover", "fill", "none", "scale-down"]
 CImageLoading = Literal["eager", "lazy"]
@@ -354,8 +359,11 @@ def _copy_attrs(
         ):
             msg = f"CImage {destination} cannot override owned attribute {key!r}."
             raise ValueError(msg)
-        if normalized.startswith("on"):
-            msg = f"CImage {destination} cannot use raw event attribute {key!r}."
+        if is_executable_event_attribute(normalized):
+            msg = (
+                f"CImage {destination} cannot use executable listener attribute {key!r}; "
+                "use onStatusChange or author a Vue listener in the template."
+            )
             raise ValueError(msg)
         if normalized in _OWNERSHIP_DIRECTIVES or any(
             normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
@@ -575,23 +583,25 @@ class CImage(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         data = self._snapshot(kwargs)
         return {
-            "src": data["src"],
-            "alt": data["alt"],
-            "width": data["width"],
-            "height": data["height"],
-            "srcset": data["srcset"],
-            "sizes": data["sizes"],
             "sources": data["sources"],
-            "loading": data["loading"],
-            "decoding": data["decoding"],
-            "fetchPriority": data["fetch_priority"],
-            "crossOrigin": data["cross_origin"],
-            "referrerPolicy": data["referrer_policy"],
-            "fit": data["fit"],
-            "position": data["position"],
-            "draggable": data["draggable"],
             "hasPlaceholder": "placeholder" in self.raw_slots,
             "hasFallback": "fallback" in self.raw_slots,
+            "serverDefaults": {
+                "src": data["src"],
+                "alt": data["alt"],
+                "width": data["width"],
+                "height": data["height"],
+                "srcset": data["srcset"],
+                "sizes": data["sizes"],
+                "loading": data["loading"],
+                "decoding": data["decoding"],
+                "fetchPriority": data["fetch_priority"],
+                "crossOrigin": data["cross_origin"],
+                "referrerPolicy": data["referrer_policy"],
+                "fit": data["fit"],
+                "position": data["position"],
+                "draggable": data["draggable"],
+            },
         }
 
     def on_render(self) -> Any:
@@ -722,8 +732,16 @@ class CImage(LibraryComponent):
           referrerPolicy: {}, fit: {}, position: {}, draggable: {},
           onStatusChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = {
+            sources: component.sources,
+            hasPlaceholder: component.hasPlaceholder,
+            hasFallback: component.hasFallback,
+            ...component.serverDefaults,
+          };
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const handoffKey = Symbol.for("citry-ui:image-handoff");
           const previous = root?.[handoffKey] ?? null;
           if (previous?.abort !== null && previous?.abort !== undefined) clearTimeout(previous.abort);
@@ -766,7 +784,13 @@ class CImage(LibraryComponent):
               .filter((attribute) => attribute.name.startsWith("data-cid-"))
               .map((attribute) => attribute.name.slice(9));
             const fillOwners = [root, placeholder, fallback].filter(Boolean);
-            return root.getAttribute("data-citry-root") === ""
+            const legacyCorrelationPresent = root.hasAttribute("data-citry-root")
+              || root.hasAttribute("data-has-alpine-state")
+              || root.hasAttribute("x-citry-boundary")
+              || root.hasAttribute("data-cid")
+              || [...root.attributes].some((attribute) => attribute.name.startsWith("data-cid-"));
+            return (!legacyCorrelationPresent || (
+              root.getAttribute("data-citry-root") === ""
               && (!root.hasAttribute("data-has-alpine-state")
                 || root.getAttribute("data-has-alpine-state") === "true")
               && (!root.hasAttribute("x-citry-boundary")
@@ -774,6 +798,7 @@ class CImage(LibraryComponent):
               && identifiers.length === 1
               && markers.length === 1
               && markers[0] === identifiers[0]
+            ))
               && ownedElements.slice(1).every((element) =>
                 ![...element.attributes].some((attribute) => attribute.name.startsWith("data-cid"))
                 && !element.hasAttribute("data-citry-root")

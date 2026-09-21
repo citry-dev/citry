@@ -179,7 +179,6 @@ def test_strict_json_validation_falls_back_for_values_deeper_than_python_recursi
             (
                 manifest := {
                     "protocol": "citry-events/1",
-                    "clientGraphRevision": None,
                     "componentClasses": [],
                     "componentInstances": [],
                 }
@@ -378,7 +377,7 @@ def test_canonical_and_embedded_packages_are_byte_identical() -> None:
 def test_manifest_builder_escapes_only_at_the_html_transport_boundary() -> None:
     descriptor = events.build_descriptor("Notice_1", {})
     instance = events.build_component_instance("notice_1", "Notice_1", "token", {"text": "</script>"})
-    manifest = events.build_manifest(None, [descriptor], [instance])
+    manifest = events.build_manifest([descriptor], [instance])
     text = json.dumps(manifest, separators=(",", ":"), sort_keys=True, allow_nan=False).replace("<", "\\u003c")
     assert "</script>" not in text
     assert json.loads(text) == manifest

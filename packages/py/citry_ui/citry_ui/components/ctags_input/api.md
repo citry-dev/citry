@@ -153,17 +153,20 @@ cancels pending reset, focus, status, and controlled-acceptance work.
 
 ## Distinguish callbacks from native events
 
-Use these semantic component callbacks through `$c-props`:
+Use these semantic component callbacks with native Vue bindings:
 
 - `onValueChange` for a valid add, removal, or controlled reset request;
 - `onInputValueChange` for draft edits and accepted draft transitions; and
 - `onValueInvalid` for a rejected empty, duplicate, maximum, delimiter, or
   invalid-value transaction.
 
-Native editor events remain ordinary Alpine listeners such as `@input`,
-`@paste`, `@focus`, and `@blur` in `input_attrs`. Native bubbling `input` and
-`change` events on the Select proxy report accepted uncontrolled value
-changes. Controlled value requests dispatch no native proxy change event.
+Native editor events should be authored as Vue listeners in the component
+template when an application needs the raw browser event. Python-resolved
+`attrs` and `input_attrs` mappings reject executable listener names such as
+`@input`, `v-on:input`, `x-on:input`, and `oninput`; use the typed callbacks
+above for normalized component behavior. Native bubbling `input` and `change`
+events on the Select proxy report accepted uncontrolled value changes.
+Controlled value requests dispatch no native proxy change event.
 
 TagsInput dispatches no custom DOM event and exposes no public method. Use an
 ordinary ref when application code needs to focus or inspect the editor.
@@ -171,13 +174,12 @@ ordinary ref when application code needs to focus or inspect the editor.
 ## Treat attributes and values as data
 
 `attrs` targets the root and `input_attrs` targets the editor. They accept
-ordinary nonconflicting attributes, styling, permitted accessibility hints,
-and Alpine `@event` or `x-on:event` observers. The component rejects values
-that can replace its identity, native Form ownership, state, Field
-relationships, structure, or Alpine lifecycle.
+ordinary nonconflicting attributes, styling, and permitted accessibility
+hints. Python-resolved mappings reject executable listener names and ownership
+directives. Use typed callbacks or authored Vue listeners for browser behavior.
 
 Tag values, drafts, placeholders, and message substitutions are assigned as
 text or native values. They are never evaluated as HTML, URLs, selectors, or
-Alpine expressions.
+Vue expressions.
 
 <!-- UI_LIBRARY_API_REFERENCE -->

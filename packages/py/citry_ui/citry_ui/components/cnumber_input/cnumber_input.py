@@ -411,24 +411,24 @@ class CNumberInput(LibraryComponent):
             "transportId": f"{public_id}-transport",
             "name": name,
             "form": form_owner,
-            "value": value,
+            "serverValue": value,
             "formattedValue": formatted,
             "localizedServerValue": bool(self.i18n.configured and value is not None and formatted != value),
-            "min": minimum,
-            "max": maximum,
-            "step": step,
-            "required": required,
-            "disabled": disabled,
-            "readonly": readonly,
-            "invalid": invalid,
+            "serverMin": minimum,
+            "serverMax": maximum,
+            "serverStep": step,
+            "serverRequired": required,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
+            "serverInvalid": invalid,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "showControls": kwargs.show_controls,
-            "wheel": kwargs.wheel,
-            "commitBehavior": commit_behavior,
-            "placeholder": kwargs.placeholder,
-            "autocomplete": kwargs.autocomplete,
-            "variant": variant,
-            "size": size,
+            "serverShowControls": kwargs.show_controls,
+            "serverWheel": kwargs.wheel,
+            "serverCommitBehavior": commit_behavior,
+            "serverPlaceholder": kwargs.placeholder,
+            "serverAutocomplete": kwargs.autocomplete,
+            "serverVariant": variant,
+            "serverSize": size,
             "messages": {
                 "required": required_message,
                 "invalid": invalid_message,
@@ -524,8 +524,15 @@ class CNumberInput(LibraryComponent):
           showControls: {}, wheel: {}, commitBehavior: {}, placeholder: {}, autocomplete: {},
           variant: {}, size: {}, onValueChange: {}, onInputValueChange: {},
         },
-        init: ({ els, data, props, effect, inject, i18n }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
+          const i18n = component.$i18n;
           const control = root.querySelector(':scope > [data-citry-ui-part="control"]');
           const input = control?.querySelector(':scope > [data-citry-ui-part="input"]');
           const decrement = control?.querySelector(':scope > [data-citry-ui-part="decrement"]');
@@ -534,18 +541,18 @@ class CNumberInput(LibraryComponent):
           if (!(control instanceof HTMLElement && input instanceof HTMLInputElement && transport instanceof HTMLInputElement)) {
             throw new Error('[citry-ui] CNumberInput settled anatomy is invalid.');
           }
-          const field = inject(Symbol.for('citry-ui:field'), null);
-          const form = inject(Symbol.for('citry-ui:form'), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CNumberInput form-control runtime is unavailable.');
           const resolver = runtime.resolver(root, props, 'CNumberInput');
           const listeners = runtime.listeners();
           const mutations = runtime.mutations(root);
           const owned = mutations.owned;
-          let current = data.value;
-          let committed = data.value;
+          let current = data.serverValue;
+          let committed = data.serverValue;
           let draft = data.formattedValue;
-          let initialValue = data.value;
+          let initialValue = data.serverValue;
           let controlled = false;
           let composing = false;
           let dirty = false;
@@ -808,21 +815,21 @@ class CNumberInput(LibraryComponent):
             return value;
           };
           const resolveConfiguration = () => {
-            const min = configurationValue('min', data.min, true);
-            const max = configurationValue('max', data.max, true);
+            const min = configurationValue('min', data.serverMin, true);
+            const max = configurationValue('max', data.serverMax, true);
             return {
-              min, max, step: configurationValue('step', data.step, false, true),
-              required: field ? field.required : resolver.boolean('required', data.required),
-              disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled),
-              readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-              invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-              showControls: resolver.boolean('showControls', data.showControls),
-              wheel: resolver.boolean('wheel', data.wheel),
-              commitBehavior: resolver.choice('commitBehavior', data.commitBehavior, ['validate', 'clamp']),
-              placeholder: resolver.string('placeholder', data.placeholder),
-              autocomplete: resolver.string('autocomplete', data.autocomplete),
-              variant: resolver.choice('variant', data.variant, ['outline', 'filled', 'plain']),
-              size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+              min, max, step: configurationValue('step', data.serverStep, false, true),
+              required: field ? field.required : resolver.boolean('required', data.serverRequired),
+              disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled),
+              readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+              invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+              showControls: resolver.boolean('showControls', data.serverShowControls),
+              wheel: resolver.boolean('wheel', data.serverWheel),
+              commitBehavior: resolver.choice('commitBehavior', data.serverCommitBehavior, ['validate', 'clamp']),
+              placeholder: resolver.string('placeholder', data.serverPlaceholder),
+              autocomplete: resolver.string('autocomplete', data.serverAutocomplete),
+              variant: resolver.choice('variant', data.serverVariant, ['outline', 'filled', 'plain']),
+              size: resolver.choice('size', data.serverSize, ['sm', 'md', 'lg']),
             };
           };
           const reset = runtime.registerReset(root, input, {
@@ -890,11 +897,11 @@ class CNumberInput(LibraryComponent):
             validationBinding?.refresh();
             applyState();
           });
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             configuration = resolveConfiguration();
             if (configuration.min !== null && configuration.max !== null && compare(configuration.min, configuration.max) > 0) {
               resolver.report('min', configuration.min, 'min cannot exceed max');
-              configuration.min = data.min; configuration.max = data.max;
+              configuration.min = data.serverMin; configuration.max = data.serverMax;
             }
             const requested = props.value;
             if (requested === undefined) {

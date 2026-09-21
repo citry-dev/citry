@@ -315,7 +315,7 @@ class CTree(LibraryComponent):
             raise ValueError(f"CTree selected contains unknown Items: {sorted(unknown_selected)!r}.")
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._tree_data
+        return {"serverDefaults": self._tree_data}
 
     template = """
       <div
@@ -338,8 +338,11 @@ class CTree(LibraryComponent):
           expanded: {}, selected: {}, selectionMode: {}, disabled: {}, variant: {}, size: {},
           onExpandedChange: {}, onSelectionChange: {}, onAction: {},
         },
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const invalidEpisodes = new Set();
           const allItems = () => [...root.querySelectorAll('[role="treeitem"]')]
             .filter((item) => item.closest('[role="tree"]') === root);

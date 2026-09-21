@@ -36,24 +36,22 @@ def _page() -> str:
         """
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Carousel evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <c-CCarousel
               id="stories" label="Featured stories" class_="evidence-carousel"
-              $c-props="{
-                index:$store.carousel.controlled ? $store.carousel.index : undefined,
-                disabled:$store.carousel.disabled,
-                loop:$store.carousel.loop,
-                controls:$store.carousel.controls,
-                indicators:$store.carousel.indicators,
-                draggable:$store.carousel.draggable,
-                orientation:$store.carousel.orientation,
-                variant:$store.carousel.variant,
-                size:$store.carousel.size,
-                onIndexChange:(next, detail) => {
-                  $store.carousel.requests.push([next, detail.reason, detail.controlled, detail.forced, detail.value]);
-                  if ($store.carousel.accept) $store.carousel.index = next;
-                },
-              }"
+              :index="state.carousel.controlled ? state.carousel.index : undefined"
+              :disabled="state.carousel.disabled"
+              :loop="state.carousel.loop"
+              :controls="state.carousel.controls"
+              :indicators="state.carousel.indicators"
+              :draggable="state.carousel.draggable"
+              :orientation="state.carousel.orientation"
+              :variant="state.carousel.variant"
+              :size="state.carousel.size"
+              :onIndexChange="(next, detail) => {
+                  state.carousel.requests.push([next, detail.reason, detail.controlled, detail.forced, detail.value]);
+                  if (state.carousel.accept) state.carousel.index = next;
+                }"
             >
               <c-CCarouselSlide value="aurora" label="Aurora field report"><article class="evidence-slide"><h2>Aurora</h2><a href="#aurora">Read Aurora</a></article></c-CCarouselSlide>
               <c-CCarouselSlide value="tide" label="Tide field report"><article class="evidence-slide"><h2>Tide</h2><button type="button">Open Tide</button></article></c-CCarouselSlide>
@@ -63,11 +61,11 @@ def _page() -> str:
           </body></html>
         """
         js = """
-          Alpine.store('carousel', {
+          $component({data(){const carousel=Citry.vue.reactive({
             controlled:false, index:0, accept:false, disabled:false, loop:false,
             controls:true, indicators:true, draggable:true, orientation:'horizontal',
             variant:'plain', size:'md', requests:[],
-          });
+          }); window.__carousel=carousel; return {state:{carousel}};}});
         """
 
     return str(Page())
@@ -94,7 +92,7 @@ def _set_orientation(page: Any, orientation: str) -> None:
             requestAnimationFrame(() => resolve(true));
           });
           observer.observe(viewport);
-          Alpine.store('carousel').orientation = orientation;
+          window.__carousel.orientation = orientation;
         })""",
         arg=orientation,
     )
@@ -117,13 +115,13 @@ def test_next_previous_picker_and_focus_stability(page: Any) -> None:
 
 def test_controlled_reject_accept_release_and_loop(page: Any) -> None:
     errors = _load(page)
-    page.evaluate("Alpine.store('carousel').controlled = true")
+    page.evaluate("window.__carousel.controlled = true")
     page.get_by_role("button", name="Next slide").click()
     assert page.locator("#stories").get_attribute("data-index") == "0"
-    assert page.evaluate("Alpine.store('carousel').requests.at(-1)") == [1, "next", True, False, "tide"]
-    page.evaluate("Object.assign(Alpine.store('carousel'), {accept:true, index:1})")
+    assert page.evaluate("window.__carousel.requests.at(-1)") == [1, "next", True, False, "tide"]
+    page.evaluate("Object.assign(window.__carousel, {accept:true, index:1})")
     page.wait_for_function("document.querySelector('#stories').dataset.index === '1'")
-    page.evaluate("Object.assign(Alpine.store('carousel'), {controlled:false, loop:true})")
+    page.evaluate("Object.assign(window.__carousel, {controlled:false, loop:true})")
     page.get_by_role("button", name="Previous slide").click()
     page.wait_for_function("document.querySelector('#stories').dataset.index === '0'")
     page.get_by_role("button", name="Previous slide").click()
@@ -189,7 +187,7 @@ def test_shared_geometry_keeps_rtl_picker_and_native_position_correlated(page: A
 def test_reactive_presentation_disabled_reduced_forced_print_and_axe(page: Any) -> None:
     errors = _load(page)
     page.evaluate(
-        "Object.assign(Alpine.store('carousel'), {variant:'surface', size:'lg', controls:false, indicators:false, disabled:true})"
+        "Object.assign(window.__carousel, {variant:'surface', size:'lg', controls:false, indicators:false, disabled:true})"
     )
     root = page.locator("#stories")
     page.wait_for_function("document.querySelector('#stories').dataset.size === 'lg'")

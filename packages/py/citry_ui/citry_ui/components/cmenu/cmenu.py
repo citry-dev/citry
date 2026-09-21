@@ -14,6 +14,7 @@ from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._validation import (
     reject_owned_attrs,
@@ -596,23 +597,7 @@ def _feed_menu_output(
     part: object,
     expected_render_ids: frozenset[str],
 ) -> None:
-    while hasattr(part, "region_id") and hasattr(part, "part"):
-        part = part.part
-    if isinstance(part, str):
-        parser.feed_text(part)
-        return
-    if not isinstance(part, CitryRender):
-        parser.invalid = True
-        return
-
-    render_id = part.frame.render_id
-    is_expected_root = part.is_component_root and render_id is not None and render_id in expected_render_ids
-    if is_expected_root and render_id is not None:
-        parser.enter(render_id)
-    for child in part.parts:
-        _feed_menu_output(parser, child, expected_render_ids)
-    if is_expected_root and render_id is not None:
-        parser.exit(render_id)
+    feed_typed_direct_output(parser, part, expected_render_ids, parser.enter, parser.exit)
 
 
 def _validate_direct_output(result: CitryRender, registry: _MenuRegistry) -> None:
@@ -888,13 +873,15 @@ class CMenu(LibraryComponent):
     ) -> dict[str, object]:
         snapshot = self._snapshot(kwargs)
         return {
-            "open": snapshot["open"],
-            "disabled": snapshot["disabled"],
-            "loop": snapshot["loop"],
-            "placement": snapshot["placement"],
-            "matchWidth": snapshot["match_width"],
-            "closeOnSelect": snapshot["close_on_select"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "open": snapshot["open"],
+                "disabled": snapshot["disabled"],
+                "loop": snapshot["loop"],
+                "placement": snapshot["placement"],
+                "matchWidth": snapshot["match_width"],
+                "closeOnSelect": snapshot["close_on_select"],
+                "size": snapshot["size"],
+            },
         }
 
     template = """
@@ -926,6 +913,85 @@ class CMenu(LibraryComponent):
         } catch {
           element.removeAttribute("popover");
         }
+      };
+      const createMenuService = () => {
+        const service = {registrations: new Map(), radioStates: new Map(), controller: null};
+        service.register = (entry) => {
+          entry.context ??= service;
+          service.registrations.set(entry.root, entry);
+          service.controller?.attach(entry);
+          return () => {
+            if (service.registrations.get(entry.root) !== entry) return;
+            service.controller?.detach(entry);
+            service.registrations.delete(entry.root);
+          };
+        };
+        service.bind = (context) => {
+          service.controller = context;
+          for (const entry of service.registrations.values()) context.attach(entry);
+        };
+        service.claimRadioState = (serverValue, path, identity) => {
+          const key = identity ?? JSON.stringify([path, serverValue]);
+          if (!service.radioStates.has(key)) service.radioStates.set(key, {
+            current: serverValue, serverValue, priorOrder: [], pendingRemoval: null,
+            controlled: false,
+          });
+          return service.radioStates.get(key);
+        };
+        service.releaseRadioState = (identity) => service.radioStates.delete(identity);
+        service.child = (options, parent = null) => {
+          const child = {...options, identity: Symbol("citry-ui:menu-child")};
+          for (const name of ["surface", "container", "parentSubmenu", "radioGroup", "rootLayer"]) {
+            let overridden = Object.hasOwn(options, name);
+            let localValue = options[name];
+            delete child[name];
+            Object.defineProperty(child, name, {
+              get: () => overridden ? localValue : (parent ?? service)[name],
+              set: (value) => {
+                overridden = true;
+                localValue = value;
+              },
+            });
+          }
+          let localPath = [...(options.path ?? [])];
+          delete child.path;
+          Object.defineProperty(child, "path", {
+            get: () => [...(parent?.path ?? []), ...localPath],
+            set: (path) => {
+              const parentPath = parent?.path ?? [];
+              localPath = (
+                path.length >= parentPath.length
+                && parentPath.every((value, index) => path[index] === value)
+              ) ? path.slice(parentPath.length) : [...path];
+            },
+          });
+          child.setOptions = (next) => {
+            Object.assign(child, next);
+            for (const entry of service.registrations.values()) {
+              if (entry.context === child) service.controller?.attach(entry);
+            }
+          };
+          child.register = (entry) => { entry.context ??= child; return service.register(entry); };
+          child.child = (options) => service.child(options, child);
+          for (const name of ["update", "entries", "addSubmenu",
+            "openSubmenu", "closeSubmenu", "dismissFromSubmenu", "size", "defer",
+            "claimRadioState", "releaseRadioState"]) child[name] = (...args) => service[name](...args);
+          return child;
+        };
+        for (const name of [
+          "update", "entries", "addSubmenu", "openSubmenu", "closeSubmenu",
+          "dismissFromSubmenu", "size", "defer",
+        ]) service[name] = (...args) => service.controller?.[name](...args);
+        for (const name of [
+          "surface", "container", "path", "parentSubmenu", "radioGroup", "rootLayer",
+        ]) Object.defineProperty(service, name, {get: () => service.controller?.[name]});
+        service.dispose = () => {
+          for (const entry of service.registrations.values()) service.controller?.detach(entry);
+          service.controller = null;
+          service.registrations.clear();
+          service.radioStates.clear();
+        };
+        return service;
       };
       const createCompoundAnatomy = (root, data, changed) => {
         const children = [...root.children];
@@ -1080,21 +1146,7 @@ class CMenu(LibraryComponent):
           },
         };
       };
-      $component({
-        helpers: { createCompoundAnatomy, externalActivationVersion: 1, hideNativePopover },
-        props: {
-          open: {},
-          disabled: {},
-          loop: {},
-          placement: {},
-          matchWidth: {},
-          closeOnSelect: {},
-          size: {},
-          onOpenChange: {},
-          onAction: {},
-        },
-        init: ({ els, data, props, effect, provide }, controllerOptions = {}) => {
-          const host = controllerOptions.host ?? els[0];
+      const createMenuController = ({host, data, props, effect, service}, controllerOptions = {}) => {
           const componentName = controllerOptions.componentName ?? "CMenu";
           const externalActivation = controllerOptions.activationMode === "external";
           const hostSelector = "[data-citry-menu-host]";
@@ -1170,7 +1222,7 @@ class CMenu(LibraryComponent):
           };
           const entrySelector = "[data-citry-menu-entry]";
           const invalidEpisodes = new Set();
-          const registrations = new Map();
+          const registrations = service.registrations;
           const submenus = new Set();
           const scheduledTasks = new Set();
           let reconciliationTimer = null;
@@ -1247,7 +1299,6 @@ class CMenu(LibraryComponent):
             closeOnSelect: data.closeOnSelect,
             size: data.size,
           };
-          const radioStateClaims = new Map();
 
           const describeValue = (value) => {
             try {
@@ -1328,9 +1379,10 @@ class CMenu(LibraryComponent):
             return flattened;
           };
           const entriesForSurface = (menuSurface) => flattenEntries(menuSurface);
+          const entryPath = (entry) => entry.context?.path ?? entry.path ?? [];
           const stableIdentity = (entry) => ({
             kind: entry.kind,
-            path: [...(entry.path ?? [])],
+            path: [...entryPath(entry)],
             value: entry.value,
           });
           const samePath = (left, right) => (
@@ -1341,7 +1393,7 @@ class CMenu(LibraryComponent):
             identity
             && entry.kind === identity.kind
             && entry.value === identity.value
-            && samePath(entry.path ?? [], identity.path ?? [])
+            && samePath(entryPath(entry), identity.path ?? [])
           );
           const identityToken = (entry) => JSON.stringify(stableIdentity(entry));
           const allActionableEntries = () => [...registrations.values()].filter((entry) => (
@@ -1382,6 +1434,10 @@ class CMenu(LibraryComponent):
             runtimeState.currentIdentity = stableIdentity(entry);
             runtimeState.currentRoot = entry.root;
             runtimeState.currentSurface = entry.surface;
+            runtimeState.currentLevelOrder = entriesForSurface(entry.surface).map(identityToken);
+            runtimeState.currentLevelRoots = entriesForSurface(entry.surface).map(
+              (candidate) => candidate.root,
+            );
             for (const candidate of registrations.values()) {
               if (candidate.element) {
                 candidate.element.tabIndex = candidate === entry ? 0 : -1;
@@ -1410,12 +1466,6 @@ class CMenu(LibraryComponent):
               return null;
             }
             const removedIdentity = stableIdentity(removed);
-            const sameRoot = entries.find((entry) => (
-              entry.root === removed.root && sameIdentity(entry, removedIdentity)
-            ));
-            if (sameRoot) {
-              return sameRoot;
-            }
             const oldRoots = removed.lastRoots ?? [];
             const oldOrder = removed.lastOrder ?? [];
             const oldRootIndex = oldRoots.indexOf(removed.root);
@@ -1425,17 +1475,21 @@ class CMenu(LibraryComponent):
             const identityWasAmbiguous = oldOrder.filter((token) => (
               token === identityToken(removed)
             )).length > 1;
+            const sameRoot = entries.find((entry) => (
+              entry.root === removed.root && sameIdentity(entry, removedIdentity)
+            ));
+            if (sameRoot) {
+              return sameRoot;
+            }
             if (!identityWasAmbiguous && semanticMatches.length === 1) {
               return semanticMatches[0];
             }
             const oldIndex = oldRootIndex >= 0
               ? oldRootIndex
               : oldOrder.indexOf(identityToken(removed));
-            for (let distance = 1; distance <= oldOrder.length; distance += 1) {
-              // Resolve each historical distance as a unit so a far physical
-              // predecessor cannot beat a closer logical successor whose DOM
-              // root was legitimately replaced by the correlated morph.
-              for (const index of [oldIndex + distance, oldIndex - distance]) {
+            for (const direction of [1, -1]) {
+              for (let distance = 1; distance <= oldOrder.length; distance += 1) {
+                const index = oldIndex + direction * distance;
                 const expectedToken = oldOrder[index];
                 if (expectedToken === undefined) {
                   continue;
@@ -1469,11 +1523,11 @@ class CMenu(LibraryComponent):
             return allActionableEntries()
               .filter((entry) => entry.kind === "submenu")
               .filter((entry) => {
-                const entryPath = [...entry.path, entry.value];
-                return entryPath.length <= identity.path.length
-                  && entryPath.every((value, index) => value === identity.path[index]);
+                const candidatePath = [...entryPath(entry), entry.value];
+                return candidatePath.length <= identity.path.length
+                  && candidatePath.every((value, index) => value === identity.path[index]);
               })
-              .sort((left, right) => right.path.length - left.path.length)[0] ?? null;
+              .sort((left, right) => entryPath(right).length - entryPath(left).length)[0] ?? null;
           };
           const resetTypeahead = () => {
             typeahead = "";
@@ -2088,7 +2142,7 @@ class CMenu(LibraryComponent):
               }
               return;
             }
-            const path = [...entry.path];
+            const path = [...entryPath(entry)];
             const callback = onAction;
             actionTransaction = true;
             deferredFocusOutside = null;
@@ -2354,7 +2408,7 @@ class CMenu(LibraryComponent):
             retainedOpenSubmenuPaths = [];
             for (const path of paths.sort((left, right) => left.length - right.length)) {
               const submenu = [...submenus].find((entry) => (
-                samePath([...entry.path, entry.value], path)
+                samePath([...entryPath(entry), entry.value], path)
               ));
               if (submenu) {
                 openSubmenu(submenu, { focus: null });
@@ -2556,7 +2610,15 @@ class CMenu(LibraryComponent):
             parentSubmenu: null,
             radioGroup: null,
             rootLayer: layer,
-            register(entry) {
+            attach(entry) {
+              entry.surface = entry.context?.surface ?? entry.surface ?? surface;
+              entry.container = entry.context?.container ?? entry.container ?? surface;
+              entry.radioGroup = entry.context?.radioGroup ?? entry.radioGroup ?? null;
+              if (entry.context?.path) entry.path = [...entry.context.path];
+              entry.parent = entry.context?.parentSubmenu ?? entry.parent ?? null;
+              if (entry.kind === "submenu") {
+                entry.layer.logicalParent = entry.parent?.layer ?? layer;
+              }
               entry.serverBaseline ??= JSON.stringify([
                 entry.kind,
                 entry.value ?? null,
@@ -2572,8 +2634,6 @@ class CMenu(LibraryComponent):
                   .filter((attribute) => (
                     !attribute.name.startsWith("data-cid")
                     && !attribute.name.startsWith("data-cev")
-                    && attribute.name !== "data-has-alpine-state"
-                    && attribute.name !== "x-citry-fill-source"
                     && ![
                       "aria-checked",
                       "aria-disabled",
@@ -2587,37 +2647,28 @@ class CMenu(LibraryComponent):
                   .map((attribute) => [attribute.name, attribute.value])
                   .sort(),
               ]);
-              registrations.set(entry.root, entry);
+              if (entry.kind === "submenu") submenus.add(entry);
               scheduleReconcile();
-              return () => {
-                if (registrations.get(entry.root) !== entry) {
-                  return;
-                }
+            },
+            detach(entry) {
+                if (registrations.get(entry.root) !== entry) return;
                 if (entry.kind === "submenu") {
                   closeSubmenu(entry, { restore: false });
                   submenus.delete(entry);
                 }
                 const wasCurrent = currentEntry === entry;
-                registrations.delete(entry.root);
                 if (wasCurrent) {
                   runtimeState.currentIdentity = stableIdentity(entry);
                   pendingRemovedEntry = entry;
                   currentEntry = null;
                 }
                 scheduleReconcile();
-              };
             },
             update() {
               scheduleReconcile();
             },
             child(options) {
-              return {
-                ...context,
-                ...options,
-                register: context.register,
-                update: context.update,
-                child: context.child,
-              };
+              return service.child(options);
             },
             entries: directEntries,
             addSubmenu(submenu) {
@@ -2628,22 +2679,19 @@ class CMenu(LibraryComponent):
             dismissFromSubmenu,
             size: () => configuration.size,
             defer: scheduleTask,
-            claimRadioState(serverValue, path) {
-              const base = JSON.stringify([path, serverValue]);
-              const index = radioStateClaims.get(base) ?? 0;
-              radioStateClaims.set(base, index + 1);
-              const key = `${base}:${index}`;
-              runtimeState.radioGroups[key] ??= {
+            claimRadioState(serverValue, path, identity) {
+              const key = identity ?? JSON.stringify([path, serverValue]);
+              if (!service.radioStates.has(key)) service.radioStates.set(key, {
                 current: serverValue,
                 serverValue,
                 priorOrder: [],
                 pendingRemoval: null,
                 controlled: false,
-              };
-              return runtimeState.radioGroups[key];
+              });
+              return service.radioStates.get(key);
             },
           };
-          provide(Symbol.for("citry-ui:menu"), context);
+          service.bind(context);
 
           host.addEventListener("click", onClick, true);
           host.addEventListener("keydown", onKeydown, true);
@@ -2876,6 +2924,7 @@ class CMenu(LibraryComponent):
             if (!active) {
               return;
             }
+            if (service.controller === context) service.controller = null;
             const handoff = options.handoff === true;
             active = false;
             runtimeState.open = logicalOpen;
@@ -2894,7 +2943,7 @@ class CMenu(LibraryComponent):
             }
             runtimeState.openSubmenuPaths = [...submenus]
               .filter((submenu) => submenu.open)
-              .map((submenu) => [...submenu.path, submenu.value]);
+              .map((submenu) => [...entryPath(submenu), submenu.value]);
             runtimeState.serverOpen = data.open;
             // Read this generation's committed configuration, not the live
             // retained Button attribute: a correlated morph may already have
@@ -2940,7 +2989,6 @@ class CMenu(LibraryComponent):
               }
               controllerOptions.closed?.();
             }
-            registrations.clear();
             submenus.clear();
             primaryTransactions.clear();
             acceptedPrimaryClick = null;
@@ -2987,7 +3035,29 @@ class CMenu(LibraryComponent):
             };
           }
           return cleanup;
+        };
+      $component({
+        helpers: {
+          createCompoundAnatomy, createMenuController, createMenuService,
+          externalActivationVersion: 1, hideNativePopover,
         },
+        props: {
+          open: {}, disabled: {}, loop: {}, placement: {}, matchWidth: {},
+          closeOnSelect: {}, size: {}, onOpenChange: {}, onAction: {},
+        },
+        setup() {
+          const service = Citry.vue.markRaw(createMenuService());
+          Citry.vue.onUnmounted(() => service.dispose());
+          return {menuService: service};
+        },
+        provide() { return {[Symbol.for("citry-ui:menu")]: this.menuService}; },
+        onServerRender: ({component}) => createMenuController({
+          host: component.$el,
+          data: component.serverDefaults,
+          props: component.$props,
+          effect: Citry.vue.watchEffect,
+          service: component.menuService,
+        }),
       });
     """
     )
@@ -3474,6 +3544,7 @@ _CMENU_SHARED_ASSETS = build_shared_component_assets(
     generation=_CMENU_ROOT_RUNTIME_GENERATION,
     component_source=CMenu._runtime_source,
     style_source=CMenu._style_source,
+    controller_factory="createMenuController",
 )
 
 
@@ -3496,9 +3567,17 @@ _MENU_ITEM_JS = r"""
           checked: {},
           onCheckedChange: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
-          const context = inject(Symbol.for("citry-ui:menu"), null);
+        inject: {menuContext: {from: Symbol.for("citry-ui:menu"), default: null}},
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = {
+            componentName: component.componentName, key: component.key,
+            kind: component.kind, value: component.value, href: component.href,
+            ...component.serverDefaults,
+          };
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const context = component.menuContext;
           if (!context) {
             console.error(
               `[citry-ui] ${data.componentName} requires the nearest CMenu client context.`,
@@ -3680,7 +3759,7 @@ _MENU_ITEM_JS = r"""
             href: data.href,
             surface: context.surface,
             container: context.container,
-            path: [...context.path],
+            path: [...(context.path ?? [])],
             parent: context.parentSubmenu,
             radioGroup: context.radioGroup,
             ownDisabled: data.disabled,
@@ -3787,11 +3866,13 @@ class CMenuItem(LibraryComponent):
             "kind": "item",
             "value": snapshot["value"],
             "href": snapshot["href"],
-            "disabled": snapshot["disabled"],
-            "closeOnSelect": snapshot["close_on_select"],
-            "intent": snapshot["intent"],
-            "textValue": snapshot["text_value"],
-            "checked": None,
+            "serverDefaults": {
+                "disabled": snapshot["disabled"],
+                "closeOnSelect": snapshot["close_on_select"],
+                "intent": snapshot["intent"],
+                "textValue": snapshot["text_value"],
+                "checked": None,
+            },
         }
 
     template = """
@@ -3885,11 +3966,13 @@ class CMenuCheckboxItem(LibraryComponent):
             "kind": "checkbox",
             "value": snapshot["value"],
             "href": None,
-            "disabled": snapshot["disabled"],
-            "closeOnSelect": snapshot["close_on_select"],
-            "intent": "default",
-            "textValue": snapshot["text_value"],
-            "checked": snapshot["checked"],
+            "serverDefaults": {
+                "disabled": snapshot["disabled"],
+                "closeOnSelect": snapshot["close_on_select"],
+                "intent": "default",
+                "textValue": snapshot["text_value"],
+                "checked": snapshot["checked"],
+            },
         }
 
     template = """
@@ -3997,11 +4080,13 @@ class CMenuRadioItem(LibraryComponent):
             "kind": "radio",
             "value": snapshot["value"],
             "href": None,
-            "disabled": snapshot["disabled"],
-            "closeOnSelect": snapshot["close_on_select"],
-            "intent": "default",
-            "textValue": snapshot["text_value"],
-            "checked": snapshot["checked"],
+            "serverDefaults": {
+                "disabled": snapshot["disabled"],
+                "closeOnSelect": snapshot["close_on_select"],
+                "intent": "default",
+                "textValue": snapshot["text_value"],
+                "checked": snapshot["checked"],
+            },
         }
 
     template = """
@@ -4143,9 +4228,16 @@ class CMenuGroup(LibraryComponent):
 
     js = r"""
       $component({
-        init: ({ els, data, inject, provide }) => {
-          const root = els[0];
-          const context = inject(Symbol.for("citry-ui:menu"), null);
+        inject: {menuContext: {from: Symbol.for("citry-ui:menu"), default: null}},
+        setup() {
+          const parent = Citry.vue.inject(Symbol.for("citry-ui:menu"), null);
+          return {groupService: Citry.vue.markRaw(parent?.child({container: null}) ?? {})};
+        },
+        provide() { return {[Symbol.for("citry-ui:menu")]: this.groupService}; },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const context = component.menuContext;
           if (!context) {
             console.error(
               "[citry-ui] CMenuGroup requires the nearest CMenu client context.",
@@ -4173,7 +4265,7 @@ class CMenuGroup(LibraryComponent):
             },
           };
           const unregister = context.register(entry);
-          provide(Symbol.for("citry-ui:menu"), context.child({ container: root }));
+          component.groupService.setOptions({container: root});
           return () => unregister();
         },
       });
@@ -4242,7 +4334,7 @@ class CMenuRadioGroup(LibraryComponent):
         snapshot = self._snapshot(kwargs)
         return {
             "key": self.id,
-            "value": snapshot["value"],
+            "serverDefaults": {"value": snapshot["value"]},
         }
 
     template = """
@@ -4276,9 +4368,20 @@ class CMenuRadioGroup(LibraryComponent):
           value: {},
           onValueChange: {},
         },
-        init: ({ els, data, props, effect, inject, provide }) => {
-          const root = els[0];
-          const context = inject(Symbol.for("citry-ui:menu"), null);
+        inject: {menuContext: {from: Symbol.for("citry-ui:menu"), default: null}},
+        setup() {
+          const parent = Citry.vue.inject(Symbol.for("citry-ui:menu"), null);
+          const service = Citry.vue.markRaw(parent?.child({container: null, radioGroup: null}) ?? {});
+          Citry.vue.onUnmounted(() => parent?.releaseRadioState(service.identity));
+          return {radioService: service};
+        },
+        provide() { return {[Symbol.for("citry-ui:menu")]: this.radioService}; },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = {key: component.key, ...component.serverDefaults};
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const context = component.menuContext;
           if (!context) {
             console.error(
               "[citry-ui] CMenuRadioGroup requires the nearest CMenu client context.",
@@ -4290,7 +4393,9 @@ class CMenuRadioGroup(LibraryComponent):
             ':scope > [data-citry-ui-part="menu-group-label"]',
           );
           const invalidEpisodes = new Set();
-          const runtimeState = context.claimRadioState(data.value, context.path);
+          const runtimeState = context.claimRadioState(
+            data.value, context.path ?? [], component.radioService.identity,
+          );
           root.__citryUiMenuRadioGroupRuntime = runtimeState;
           let controlled = runtimeState.serverValue === data.value
             ? Boolean(runtimeState.controlled)
@@ -4470,10 +4575,7 @@ class CMenuRadioGroup(LibraryComponent):
             },
           };
           const unregister = context.register(entry);
-          provide(
-            Symbol.for("citry-ui:menu"),
-            context.child({ container: root, radioGroup: entry }),
-          );
+          component.radioService.setOptions({container: root, radioGroup: entry});
           effect(() => {
             // Root reconciliation runs after all direct radio registrations in
             // this activation turn, so a valid controlled value is never
@@ -4539,9 +4641,11 @@ class CMenuSeparator(LibraryComponent):
 
     js = r"""
       $component({
-        init: ({ els, data, inject }) => {
-          const root = els[0];
-          const context = inject(Symbol.for("citry-ui:menu"), null);
+        inject: {menuContext: {from: Symbol.for("citry-ui:menu"), default: null}},
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const context = component.menuContext;
           if (!context) {
             console.error(
               "[citry-ui] CMenuSeparator requires the nearest CMenu client context.",
@@ -4669,9 +4773,11 @@ class CMenuSubmenu(LibraryComponent):
         return {
             "key": self.id,
             "value": snapshot["value"],
-            "disabled": snapshot["disabled"],
-            "intent": snapshot["intent"],
-            "textValue": snapshot["text_value"],
+            "serverDefaults": {
+                "disabled": snapshot["disabled"],
+                "intent": snapshot["intent"],
+                "textValue": snapshot["text_value"],
+            },
         }
 
     template = """
@@ -4790,9 +4896,20 @@ class CMenuSubmenu(LibraryComponent):
           intent: {},
           textValue: {},
         },
-        init: ({ els, data, props, effect, inject, provide }) => {
-          const wrapper = els[0];
-          const context = inject(Symbol.for("citry-ui:menu"), null);
+        inject: {menuContext: {from: Symbol.for("citry-ui:menu"), default: null}},
+        setup() {
+          const parent = Citry.vue.inject(Symbol.for("citry-ui:menu"), null);
+          return {submenuService: Citry.vue.markRaw(parent?.child({
+            surface: null, container: null, path: [], parentSubmenu: null, radioGroup: null,
+          }) ?? {})};
+        },
+        provide() { return {[Symbol.for("citry-ui:menu")]: this.submenuService}; },
+        onServerRender: ({component}) => {
+          const wrapper = component.$el;
+          const data = {key: component.key, value: component.value, ...component.serverDefaults};
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const context = component.menuContext;
           if (!context) {
             console.error(
               "[citry-ui] CMenuSubmenu requires the nearest CMenu client context.",
@@ -5006,7 +5123,7 @@ class CMenuSubmenu(LibraryComponent):
             surface: context.surface,
             childSurface: surface,
             container: context.container,
-            path: [...context.path],
+            path: [...(context.path ?? [])],
             parent: context.parentSubmenu,
             radioGroup: null,
             open: false,
@@ -5127,16 +5244,13 @@ class CMenuSubmenu(LibraryComponent):
           };
           context.addSubmenu(entry);
           const unregister = context.register(entry);
-          provide(
-            Symbol.for("citry-ui:menu"),
-            context.child({
+          component.submenuService.setOptions({
               surface,
               container: surface,
-              path: [...context.path, data.value],
+              path: [...(context.path ?? []), data.value],
               parentSubmenu: entry,
               radioGroup: null,
-            }),
-          );
+            });
           effect(() => {
             entry.refresh();
             context.update(entry);
@@ -5190,7 +5304,7 @@ class CInternalMenuSurface(LibraryComponent):
         c-inert="not surface.open"
         c-data-open="surface.open"
         c-data-placement="surface.placement"
-        c-data-match-width="surface.match_width"
+        c-data-match-width="'' if surface.match_width else None"
         c-data-size="surface.size"
         c-bind="surface.attrs"
         popover="manual"

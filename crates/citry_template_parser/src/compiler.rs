@@ -62,8 +62,9 @@
 //! - `key=""` normalizes to boolean `True` (at compile time, not parse time).
 //! - Void elements render compact (`<br/>`); non-void self-closing expand
 //!   (`<div></div>`).
-//! - `<c-raw>` compiles its body to a single literal text part; the inner
-//!   content is emitted verbatim, with no template processing.
+//! - `<c-raw>` compiles its body to a single literal text part in ordinary
+//!   mode and a distinct `PreparedVerbatimHtmlNode` in prepared mode. Both
+//!   preserve the inner content verbatim, with no template processing.
 //! - `#c-*` framework metadata never joins the attribute set. On a plain
 //!   element, `#c-key="expr"` emits an `ElementKeyNode` after the ordinary
 //!   attributes. That node emits ` data-citry-key=":<key>"` (an empty scope
@@ -138,6 +139,32 @@ pub fn compile_template(template: Template, lang: Option<Lang>) -> Result<String
     compile_template_with_custom_lang(template, Some(&lang_impl))
 }
 
+/// Compile a template into Python source whose ordinary HTML remains typed.
+///
+/// This private experimental entry point shares component, control-flow, slot,
+/// and expression compilation with [`compile_template`]. Other host languages
+/// deliberately have no prepared runtime yet.
+pub fn compile_prepared_template(
+    template: Template,
+    lang: Option<Lang>,
+) -> Result<String, CompileError> {
+    let selected = lang.unwrap_or(Lang::Python);
+    if !matches!(selected, Lang::Python) {
+        return Err(CompileError::Generic(
+            "prepared template compilation currently supports only Python".to_string(),
+        ));
+    }
+    let lang_impl = selected.to_lang_impl();
+    let body_items = compile_template_body_with_mode(template, CompileMode::Prepared)?;
+    lang_impl.compile(body_items).map_err(CompileError::Generic)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CompileMode {
+    Html,
+    Prepared,
+}
+
 /// Compile a template AST into language-specific source code with a custom language implementation.
 ///
 /// This is same as `compile_template()`, but allows you to specify a custom language implementation,
@@ -171,6 +198,13 @@ pub fn compile_template_with_custom_lang(
 }
 
 pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>, CompileError> {
+    compile_template_body_with_mode(template, CompileMode::Html)
+}
+
+fn compile_template_body_with_mode(
+    template: Template,
+    mode: CompileMode,
+) -> Result<Vec<LangSpecArgument>, CompileError> {
     // First, process elements to convert control flow attributes (`c-if="..."`)
     // into control flow nodes (`<c-if cond="...">...</c-if>`).
     let processed_elements = wrap_nodes_with_control_flow_attrs(template.elements)?;
@@ -190,10 +224,20 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
             // We just escape double quotes, and wrap the text in `""""`,
             // so it's safe even if it spans multiple lines.
             TemplateElement::Text(text) => {
-                body_items.push(LangSpecArgument::UnsafeString(text.token.content));
+                body_items.push(if mode == CompileMode::Prepared {
+                    prepared_source_text(&text.token)
+                } else {
+                    LangSpecArgument::UnsafeString(text.token.content)
+                });
             }
 
             TemplateElement::Foreign(part) => {
+                if mode == CompileMode::Prepared {
+                    return Err(CompileError::Generic(
+                        "prepared template compilation does not yet support foreign source"
+                            .to_string(),
+                    ));
+                }
                 body_items.push(compile_foreign_node(&part));
             }
 
@@ -233,7 +277,11 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
             // Thus, on subsequent renders, we won't have to re-evaluate the expression.
             TemplateElement::Expr(expr) => {
                 let expr_node = format_expr_node(
-                    EXPR_NODE,
+                    if mode == CompileMode::Prepared {
+                        "PreparedExprNode"
+                    } else {
+                        EXPR_NODE
+                    },
                     &expr.token,
                     &expr.value.content,
                     &expr.used_variables,
@@ -252,12 +300,17 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                             consume_nodes_into_group(&mut elements_iter, &[C_EMPTY_TAG]);
                         for_group.extend(for_empty_nodes);
 
-                        let for_node = compile_control_flow_node(for_group, FOR_NODE, C_FOR_TAG)?;
+                        let for_node =
+                            compile_control_flow_node(for_group, FOR_NODE, C_FOR_TAG, mode)?;
                         body_items.push(for_node);
                         // Whitespace read past the end of the group is content
                         // after it, so every text node is emitted in place.
                         for text in trailing_whitespace {
-                            body_items.push(LangSpecArgument::UnsafeString(text.token.content));
+                            body_items.push(if mode == CompileMode::Prepared {
+                                prepared_source_text(&text.token)
+                            } else {
+                                LangSpecArgument::UnsafeString(text.token.content)
+                            });
                         }
                     }
                     C_IF_TAG => {
@@ -267,22 +320,26 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                             consume_nodes_into_group(&mut elements_iter, &[C_ELIF_TAG, C_ELSE_TAG]);
                         if_group.extend(elif_and_else_nodes);
 
-                        let if_node = compile_control_flow_node(if_group, IF_NODE, C_IF_TAG)?;
+                        let if_node = compile_control_flow_node(if_group, IF_NODE, C_IF_TAG, mode)?;
                         body_items.push(if_node);
                         // Whitespace read past the end of the group is content
                         // after it, so every text node is emitted in place.
                         for text in trailing_whitespace {
-                            body_items.push(LangSpecArgument::UnsafeString(text.token.content));
+                            body_items.push(if mode == CompileMode::Prepared {
+                                prepared_source_text(&text.token)
+                            } else {
+                                LangSpecArgument::UnsafeString(text.token.content)
+                            });
                         }
                     }
 
                     // Special c-* tags
                     C_SLOT_TAG => {
-                        let slot_node = compile_simple_node(node, SLOT_NODE)?;
+                        let slot_node = compile_simple_node(node, SLOT_NODE, mode)?;
                         body_items.push(slot_node);
                     }
                     C_FILL_TAG => {
-                        let fill_node = compile_simple_node(node, FILL_NODE)?;
+                        let fill_node = compile_simple_node(node, FILL_NODE, mode)?;
                         body_items.push(fill_node);
                     }
                     // NOTE: `<c-provide>`, `<c-js>`, and `<c-css>` are not included here
@@ -293,7 +350,26 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     // content as a single Text element (process_html_raw), so
                     // nothing inside is template-processed.
                     C_RAW_TAG => {
-                        if let Node::WithBody { body, .. } = node {
+                        if mode == CompileMode::Prepared {
+                            if let Node::WithBody { body, .. } = node {
+                                for element in body.elements {
+                                    match element {
+                                        TemplateElement::Text(text) => {
+                                            body_items.push(prepared_verbatim_html(&text.token));
+                                        }
+                                        TemplateElement::Foreign(part) => {
+                                            body_items.push(compile_foreign_node(&part));
+                                        }
+                                        TemplateElement::Node(_) | TemplateElement::Expr(_) => {
+                                            return Err(CompileError::Generic(
+                                                "Internal error: parsed Citry syntax reached a <c-raw> body"
+                                                    .to_string(),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        } else if let Node::WithBody { body, .. } = node {
                             for element in body.elements {
                                 match element {
                                     TemplateElement::Text(text) => body_items
@@ -345,7 +421,7 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
 
                         // Finally, create a ComponentNode, whether we've got `<c-component>` or `<c-MyComp>`
                         let comp_node =
-                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE)?;
+                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE, mode)?;
                         body_items.push(comp_node);
                     }
 
@@ -353,20 +429,20 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     // name is decided at render time), e.g.
                     // `<c-element c-is="form_content_tag" class="x">...</c-element>`.
                     tag_name if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) => {
-                        let element_items = compile_element_node(node)?;
+                        let element_items = compile_element_node(node, mode)?;
                         body_items.extend(element_items);
                     }
                     // Unknown c-* tag => user-defined component
                     // This contains also c-provide, c-js, c-css
                     tag_name if has_citry_component_prefix(tag_name) => {
                         let comp_node =
-                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE)?;
+                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE, mode)?;
                         body_items.push(comp_node);
                     }
 
                     // Regular HTML tags e.g. `<div>`, `<a>`, etc.
                     _ => {
-                        let html_items = compile_html_node(node)?;
+                        let html_items = compile_html_node(node, mode)?;
                         body_items.extend(html_items);
                     }
                 }
@@ -375,7 +451,11 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
     }
 
     // Coalesce consecutive string items into single strings.
-    let body_items = coalesce_strings(body_items);
+    let body_items = if mode == CompileMode::Html {
+        coalesce_strings(body_items)
+    } else {
+        body_items
+    };
 
     Ok(body_items)
 }
@@ -480,7 +560,10 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
 /// Void elements are elements defined in the HTML spec that cannot have an end tag, e.g. `<img/>`, `<br/>`, etc.
 ///
 /// For void elements, we keep the self-closing syntax as is.
-fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> {
+fn compile_html_node(node: Node, mode: CompileMode) -> Result<Vec<LangSpecArgument>, CompileError> {
+    if mode == CompileMode::Prepared {
+        return compile_prepared_html_node(node);
+    }
     let mut items = Vec::new();
 
     // A plain HTML start tag containing foreign source is kept as one ordered
@@ -517,7 +600,7 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
             &foreign_start_tag_parts,
         )?);
         if let Node::WithBody { body, end_tag, .. } = node {
-            items.extend(compile_template_body(body)?);
+            items.extend(compile_template_body_with_mode(body, mode)?);
             items.push(LangSpecArgument::UnsafeString(end_tag.token.content));
         }
         return Ok(items);
@@ -649,7 +732,7 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
 
     // Process body content (if WithBody)
     if let Node::WithBody { body, .. } = node {
-        let body_items = compile_template_body(body)?;
+        let body_items = compile_template_body_with_mode(body, mode)?;
         items.extend(body_items);
 
         // Add end tag
@@ -657,6 +740,153 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
     }
 
     Ok(items)
+}
+
+fn prepared_source_text(token: &Token) -> LangSpecArgument {
+    LangSpecArgument::Struct(LangSpecStruct {
+        name: "PreparedSourceTextNode".to_string(),
+        arguments: vec![
+            LangSpecArgument::Variable("source".to_string()),
+            LangSpecArgument::Tuple(vec![
+                LangSpecArgument::Int(token.start_index),
+                LangSpecArgument::Int(token.end_index),
+            ]),
+            LangSpecArgument::UnsafeString(token.content.clone()),
+        ],
+    })
+}
+
+fn prepared_verbatim_html(token: &Token) -> LangSpecArgument {
+    LangSpecArgument::Struct(LangSpecStruct {
+        name: "PreparedVerbatimHtmlNode".to_string(),
+        arguments: vec![
+            LangSpecArgument::Variable("source".to_string()),
+            LangSpecArgument::Tuple(vec![
+                LangSpecArgument::Int(token.start_index),
+                LangSpecArgument::Int(token.end_index),
+            ]),
+            LangSpecArgument::UnsafeString(token.content.clone()),
+        ],
+    })
+}
+
+fn compile_prepared_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> {
+    if node
+        .start_tag()
+        .foreign_parts
+        .iter()
+        .chain(
+            node.attrs()
+                .iter()
+                .flat_map(|attr| attr.foreign_parts.iter()),
+        )
+        .next()
+        .is_some()
+    {
+        return Err(CompileError::Generic(
+            "prepared template compilation does not yet support foreign source in HTML tags"
+                .to_string(),
+        ));
+    }
+
+    let start_tag = node.start_tag();
+    let tag_name = node.tag_name().to_string();
+    let is_self_closing = start_tag.is_self_closing;
+    let is_void = is_html_void_element(&tag_name);
+    let (meta_attrs, ordinary_attrs): (Vec<&HtmlAttr>, Vec<&HtmlAttr>) = node
+        .attrs()
+        .iter()
+        .partition(|attr| attr.kind == HtmlAttrKind::Meta);
+    let attr_args = ordinary_attrs
+        .iter()
+        .map(|attr| compile_html_attr(attr))
+        .collect::<Result<Vec<_>, _>>()?;
+    let attr_vars = ordinary_attrs
+        .iter()
+        .flat_map(|attr| attr.used_variables.iter().cloned())
+        .collect::<Vec<_>>();
+    let used_variables = dedupe_variable_names(&attr_vars);
+
+    let mut metadata = Vec::new();
+    for attr in meta_attrs {
+        match attr.key.content.as_str() {
+            META_ATTR_KEY => metadata.push(LangSpecArgument::Tuple(vec![
+                LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_KEY.to_string()),
+                build_attr_struct(EXPR_ATTR_NODE, attr),
+            ])),
+            META_ATTR_IGNORE => metadata.push(LangSpecArgument::Tuple(vec![
+                LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_MORPH.to_string()),
+                LangSpecArgument::SafeString(MORPH_OUTPUT_IGNORE_VALUE.to_string()),
+            ])),
+            other => {
+                return Err(CompileError::Generic(format!(
+                    "Internal error: unexpected '#c-*' attribute '{other}' on HTML tag"
+                )));
+            }
+        }
+    }
+
+    let open = LangSpecArgument::Struct(LangSpecStruct {
+        name: "PreparedElementOpenNode".to_string(),
+        arguments: vec![
+            LangSpecArgument::Variable("source".to_string()),
+            LangSpecArgument::Tuple(vec![
+                LangSpecArgument::Int(start_tag.token.start_index),
+                LangSpecArgument::Int(start_tag.token.end_index),
+            ]),
+            LangSpecArgument::UnsafeString(tag_name.clone()),
+            LangSpecArgument::Tuple(attr_args),
+            LangSpecArgument::Tuple(
+                used_variables
+                    .iter()
+                    .map(|name| LangSpecArgument::SafeString(name.clone()))
+                    .collect(),
+            ),
+            LangSpecArgument::Bool(is_void),
+            LangSpecArgument::Bool(is_self_closing),
+            LangSpecArgument::Tuple(metadata),
+        ],
+    });
+    let mut output = vec![open];
+
+    match node {
+        Node::WithBody { body, end_tag, .. } => {
+            output.extend(compile_template_body_with_mode(
+                body,
+                CompileMode::Prepared,
+            )?);
+            output.push(prepared_element_close(&end_tag, &tag_name));
+        }
+        Node::SelfClosing { start_tag, .. } if !is_void => {
+            output.push(LangSpecArgument::Struct(LangSpecStruct {
+                name: "PreparedElementCloseNode".to_string(),
+                arguments: vec![
+                    LangSpecArgument::Variable("source".to_string()),
+                    LangSpecArgument::Tuple(vec![
+                        LangSpecArgument::Int(start_tag.token.end_index),
+                        LangSpecArgument::Int(start_tag.token.end_index),
+                    ]),
+                    LangSpecArgument::UnsafeString(tag_name),
+                ],
+            }));
+        }
+        Node::SelfClosing { .. } => {}
+    }
+    Ok(output)
+}
+
+fn prepared_element_close(end_tag: &HtmlEndTag, tag_name: &str) -> LangSpecArgument {
+    LangSpecArgument::Struct(LangSpecStruct {
+        name: "PreparedElementCloseNode".to_string(),
+        arguments: vec![
+            LangSpecArgument::Variable("source".to_string()),
+            LangSpecArgument::Tuple(vec![
+                LangSpecArgument::Int(end_tag.token.start_index),
+                LangSpecArgument::Int(end_tag.token.end_index),
+            ]),
+            LangSpecArgument::UnsafeString(tag_name.to_string()),
+        ],
+    })
 }
 
 /// Emit the rendered form of one `#c-*` attribute on a plain HTML element,
@@ -865,6 +1095,7 @@ fn dedupe_variable_names(tokens: &[Token]) -> Vec<String> {
 fn compile_simple_node(
     node: Node,
     node_class_name: &str,
+    mode: CompileMode,
 ) -> Result<LangSpecArgument, CompileError> {
     let start_tag = node.start_tag();
 
@@ -896,7 +1127,7 @@ fn compile_simple_node(
     //       This way, after first render, when we detect static parts,
     //       we can replace them with their result as text.
     let body_items = match node {
-        Node::WithBody { body, .. } => compile_template_body(body)?,
+        Node::WithBody { body, .. } => compile_template_body_with_mode(body, mode)?,
         Node::SelfClosing { .. } => Vec::new(),
     };
 
@@ -1010,6 +1241,7 @@ fn compile_simple_node(
 fn compile_component_node(
     node: Node,
     metadata_locus: &'static str,
+    mode: CompileMode,
 ) -> Result<LangSpecArgument, CompileError> {
     let start_tag = node.start_tag();
 
@@ -1057,7 +1289,7 @@ fn compile_component_node(
 
     // Compile body content as a list: `[item1, item2, ...]`
     let body_items = match node {
-        Node::WithBody { body, .. } => compile_template_body(body)?,
+        Node::WithBody { body, .. } => compile_template_body_with_mode(body, mode)?,
         Node::SelfClosing { .. } => Vec::new(),
     };
 
@@ -1155,7 +1387,10 @@ fn compile_component_node(
 /// fill-bearing body, where an explicit `<c-fill name="default">` is legal),
 /// the node compiles to `ComponentNode("element")` and the "element"
 /// built-in component resolves it at render time.
-fn compile_element_node(mut node: Node) -> Result<Vec<LangSpecArgument>, CompileError> {
+fn compile_element_node(
+    mut node: Node,
+    mode: CompileMode,
+) -> Result<Vec<LangSpecArgument>, CompileError> {
     reject_is_attr_conflict(&node)?;
 
     let static_name = if node.contains_fills() {
@@ -1169,6 +1404,7 @@ fn compile_element_node(mut node: Node) -> Result<Vec<LangSpecArgument>, Compile
         return Ok(vec![compile_component_node(
             node,
             COMPONENT_METADATA_LOCUS_ELEMENT,
+            mode,
         )?]);
     };
 
@@ -1224,7 +1460,7 @@ fn compile_element_node(mut node: Node) -> Result<Vec<LangSpecArgument>, Compile
         };
     }
 
-    compile_html_node(node)
+    compile_html_node(node, mode)
 }
 
 /// Compile a group of control flow nodes (e.g., `<c-if>/<c-elif>/<c-else>` or `<c-for>/<c-empty>`)
@@ -1279,6 +1515,7 @@ fn compile_control_flow_node(
     nodes: Vec<Node>,
     node_class_name: &str,
     first_tag_name: &str,
+    mode: CompileMode,
 ) -> Result<LangSpecArgument, CompileError> {
     if nodes.is_empty() {
         return Err(CompileError::Generic(format!(
@@ -1329,7 +1566,7 @@ fn compile_control_flow_node(
 
         // Compile body content
         let body_items = match node {
-            Node::WithBody { body, .. } => compile_template_body(body)?,
+            Node::WithBody { body, .. } => compile_template_body_with_mode(body, mode)?,
             Node::SelfClosing { .. } => Vec::new(),
         };
 

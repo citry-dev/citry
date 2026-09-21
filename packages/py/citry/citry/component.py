@@ -56,6 +56,7 @@ Example:
 from __future__ import annotations
 
 from contextvars import ContextVar
+from difflib import get_close_matches
 from hashlib import md5
 from re import sub
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -77,7 +78,7 @@ from citry.assets import _find_pair_declaration, load_css, load_js, load_message
 from citry.assets import reset_files as _reset_files_impl
 from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
-from citry.citry_element import CitryElement, _ElementMorphMetadata
+from citry.citry_element import CitryElement, _ElementMorphMetadata, _PreparedCallMetadata
 from citry.constness import _const_mapping, _ConstMapping, _construct_data_schema, _restore_const_identities
 from citry.ext.dependencies import get_dependencies as _get_dependencies_impl
 from citry.introspection import _new_definition_id
@@ -101,11 +102,45 @@ if TYPE_CHECKING:
     from citry._simple_declarations import SimpleDeclaration
     from citry.citry_render import OnRenderGenerator, RenderReplacement
     from citry.citry_template import CitryTemplate
+    from citry.client_directives import ComponentTagClientBinding, RuntimeComponentEventBinding
     from citry.ext.cache import CacheConfig
     from citry.ext.dependencies import CitryDependencies, DependenciesConfig, Dependency
     from citry.ext.events.config import Events as EventsConfig
     from citry.ext.i18n import I18n as I18nConfig
-    from citry.ownership import ComponentInvocationId, ComponentTagClientBindingRecord, OwnershipGraph
+
+
+def _enrich_unexpected_schema_key(error: TypeError, schema: type, supplied: dict[str, Any]) -> None:
+    """Append one bounded field suggestion to a constructor-binding error."""
+    from citry._schema_introspection import _read_schema_fields, _schema_namespace_policy  # noqa: PLC0415
+
+    traceback = error.__traceback__
+    if (
+        traceback is None
+        or traceback.tb_next is None
+        or traceback.tb_next.tb_next is not None
+        or _schema_namespace_policy(schema) != "closed"
+    ):
+        return
+    fields = _read_schema_fields(schema)
+    if fields is None:
+        return
+    names = tuple(field.name for field in fields)
+    if not error.args or type(error.args[0]) is not str:
+        return
+    # Python 3.14 may append its own suggestion before Citry sees the binder
+    # error. Normalize it so Citry's bounded one-unknown-key policy stays
+    # deterministic across supported Python versions.
+    message = sub(r" Did you mean ['\"][^'\"]+['\"]\?$", "", error.args[0])
+    error.args = (message, *error.args[1:])
+    unknown = [name for name in supplied if name not in names]
+    if len(unknown) != 1:
+        return
+    name = unknown[0]
+    if f"got an unexpected keyword argument {name!r}" not in message:
+        return
+    close = get_close_matches(name, names, n=1, cutoff=0.7)
+    if close:
+        error.args = (f"{message} Did you mean {close[0]!r}?", *error.args[1:])
 
 
 def _schema_adapter_family(schema: type) -> str:
@@ -652,7 +687,7 @@ class Component(metaclass=ComponentMeta):
 
     simple: ClassVar[bool] = False
     """
-    Render a presentation template under its caller's ownership.
+    Render a presentation template inside its caller's render frame.
 
     A simple component has no independent instance, component hooks or browser
     identity. Unsupported declarations and invocations raise errors. The flag
@@ -675,7 +710,7 @@ class Component(metaclass=ComponentMeta):
     Set ``pure = True`` only when rendering the template is a deterministic,
     side-effect-free function of its template variables. The memo lives for
     one root render. It can reuse safe strings around a child or Slot, but the
-    child, Slot, ordinary component instances, IDs, ownership, and i18n work
+    child, Slot, ordinary component instances, IDs, and i18n work
     still run for every occurrence. A separately declared simple component keeps
     its restricted instance-free contract. A subclass must declare purity again rather than
     inheriting the promise.
@@ -974,7 +1009,7 @@ class Component(metaclass=ComponentMeta):
     descendants and never visible to this component's own ``inject``.
     """
 
-    _component_tag_client_bindings: tuple[ComponentTagClientBindingRecord, ...]
+    _component_tag_client_bindings: tuple[ComponentTagClientBinding | RuntimeComponentEventBinding, ...]
     """Client bindings from the nested component tag, kept separate from kwargs."""
 
     _selector_call_shape: tuple[bool, bool]
@@ -983,11 +1018,11 @@ class Component(metaclass=ComponentMeta):
     _element_morph_metadata: _ElementMorphMetadata | None
     """Private metadata for the dynamic ordinary-element built-in."""
 
-    _ownership_invocation_id: ComponentInvocationId | None
-    """Internal invocation record selected for this rendered instance."""
+    _prepared_call_metadata: _PreparedCallMetadata | None
+    """Private lexical call-site identity used only by prepared rendering."""
 
-    _ownership_graph: OwnershipGraph
-    """Internal graph that owns this rendered instance's typed records."""
+    _citry_mark_replacement: bool = False
+    """Set on the instance that stands in for a synthetic mark element."""
 
     _citry_class_id: str
     """Stable class identity cached once for this render instance's hot path."""
@@ -1062,16 +1097,22 @@ class Component(metaclass=ComponentMeta):
         # as an empty dict.
         self._provides_own = None
         self._element_morph_metadata = None
+        self._prepared_call_metadata = None
 
     def _finalize_inputs(self) -> None:
         """Normalize hook-mutated slots and publish both typed inputs atomically."""
         cls = type(self)
         raw_slots = normalize_slot_fills(self.raw_slots, component_name=cls.__name__) if self.raw_slots else {}
-        typed_kwargs, kwargs_const = _construct_data_schema(
-            self.raw_kwargs,
-            cls.Kwargs,
-            provenance_only=True,
-        )
+        try:
+            typed_kwargs, kwargs_const = _construct_data_schema(
+                self.raw_kwargs,
+                cls.Kwargs,
+                provenance_only=True,
+            )
+        except TypeError as error:
+            if cls.Kwargs is not None:
+                _enrich_unexpected_schema_key(error, cls.Kwargs, self.raw_kwargs)
+            raise
         # An input hook or schema default may establish a newer explicit
         # promise for a name. Keep original candidates too: final template data
         # may deliberately return that original object after an intermediate
@@ -1141,12 +1182,13 @@ class Component(metaclass=ComponentMeta):
         """
         Return the JS variables for this render.
 
-        Override this to expose per-render data to the component's browser
-        behavior. The dict is serialized to strict JSON, seeded into the
-        component's Alpine scope, and delivered to its ``$component`` callback
-        as ``data`` when one exists. Identical JSON is transported only once,
-        while every rendered instance receives a fresh mutable value graph.
-        Consumed by the built-in ``dependencies`` extension.
+        Override this to expose per-render data on the component's Vue
+        instance. The mapping is serialized to strict JSON, and its keys
+        become reactive fields on that rendered component's public instance.
+        Component JavaScript can read them from ``component`` in
+        ``onServerRender({component})``, and Vue template expressions can read
+        them as instance values. Each rendered occurrence receives its own
+        mutable value graph.
 
         Args:
             kwargs: The keyword arguments passed to the component.

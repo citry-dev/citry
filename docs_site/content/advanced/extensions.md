@@ -315,6 +315,10 @@ The handler receives a [`RouteRequest`][citry.RouteRequest] and returns a
 `methods=("POST",)` or another tuple to change it. `{name}` path segments are
 passed to the handler as keyword arguments.
 
+Pass `methods=None` when the handler owns method admission itself. Host
+adapters then forward every HTTP method to that handler, which must return its
+own `405 Method Not Allowed` response and `Allow` header when appropriate.
+
 A plain `def` handler works with every host adapter. An `async def` handler
 passed as `handler` works only with the direct ASGI adapter. To support both
 async and sync hosts without blocking the event loop, provide a plain

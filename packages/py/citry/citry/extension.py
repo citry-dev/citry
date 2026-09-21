@@ -59,6 +59,11 @@ if TYPE_CHECKING:
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
+    from citry.browser_render import (
+        BrowserPluginDescriptor,
+        BrowserRenderContribution,
+        OnBrowserRenderPrepareContext,
+    )
     from citry.citry import Citry
     from citry.citry_context import CitryContext
     from citry.citry_render import CitryRender, RenderPart
@@ -66,7 +71,6 @@ if TYPE_CHECKING:
     from citry.component import Component
     from citry.host_templates import CompiledBody
     from citry.nodes import BodyItem, SlotNode
-    from citry.ownership_manifest import OwnershipManifestArtifact
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
     from citry.slots import Slot
     from citry.util.routing import URLRoute
@@ -303,6 +307,8 @@ class OnRenderCacheStageContext:
     payload: dict[str, object]
     instance_ids: tuple[str, ...]
     instance_class_ids: tuple[str, ...]
+    parent_ids: tuple[str, ...]
+    provided_render_ids: Mapping[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -531,6 +537,8 @@ class OnSerializeContext:
     context: CitryContext
     """The root render's ``CitryContext`` (its ``extra`` carries everything
     that bubbled up during the render)."""
+    selected_render: CitryRender
+    """The final hook-selected render tree being serialized."""
     html: str
     """The joined HTML (threaded: return a new string to replace it)."""
     placeholders: dict[str, str]
@@ -939,6 +947,17 @@ class Extension:
         ``<c-js>``/``<c-css>`` positions.
         """
 
+    def browser_plugin(self) -> BrowserPluginDescriptor | None:
+        """Describe the fixed Vue plugin installed before an interactive app mounts."""
+        return None
+
+    def prepare_browser_render(
+        self,
+        ctx: OnBrowserRenderPrepareContext,  # noqa: ARG002
+    ) -> BrowserRenderContribution | None:
+        """Project this extension's selected render records into prepared browser data."""
+        return None
+
     def _on_serialize_internal(
         self,
         ctx: OnSerializeContext,
@@ -946,7 +965,6 @@ class Extension:
         _security_csp: SecurityCspMode,
         _javascript_policy: _JavascriptPolicy | None,
         _security_javascript: SecurityJavascriptMode,
-        _ownership_artifact: OwnershipManifestArtifact | None,
     ) -> str | None:
         """Internal dispatch carrying call-local structured-script authority."""
         return self.on_serialize(ctx)
@@ -1359,6 +1377,8 @@ class ExtensionManager:
         *,
         instance_ids: tuple[str, ...],
         instance_class_ids: tuple[str, ...],
+        parent_ids: tuple[str, ...],
+        provided_render_ids: Mapping[str, str],
     ) -> tuple[StagedRenderCacheContribution, ...]:
         """Validate every payload and stage immutable contributions without mutation."""
         from citry.ext.cache.artifact import ArtifactExtension, _thaw_json  # noqa: PLC0415
@@ -1384,6 +1404,8 @@ class ExtensionManager:
                     payload=cast("dict[str, object]", thawed),
                     instance_ids=instance_ids,
                     instance_class_ids=instance_class_ids,
+                    parent_ids=parent_ids,
+                    provided_render_ids=provided_render_ids,
                 )
             )
             if type(contribution) is not StagedRenderCacheContribution:
@@ -1840,6 +1862,7 @@ class ExtensionManager:
     def on_serialize(
         self,
         context: CitryContext,
+        selected_render: CitryRender,
         html: str,
         placeholders: dict[str, str],
         deps_strategy: str,
@@ -1849,11 +1872,11 @@ class ExtensionManager:
         _security_csp: SecurityCspMode = "off",
         _javascript_policy: _JavascriptPolicy | None = None,
         _security_javascript: SecurityJavascriptMode = "allow",
-        _ownership_artifact: OwnershipManifestArtifact | None = None,
     ) -> str:
         ctx = OnSerializeContext(
             citry=self.citry,
             context=context,
+            selected_render=selected_render,
             html=html,
             placeholders=placeholders,
             deps_strategy=deps_strategy,
@@ -1866,7 +1889,6 @@ class ExtensionManager:
                 _security_csp,
                 _javascript_policy,
                 _security_javascript,
-                _ownership_artifact,
             )
             if out is not None:
                 ctx = replace(ctx, html=out)

@@ -30,7 +30,6 @@ class ScrollAreaLifecycle(Component):
     template = """
       <section
         class="scroll-area-lifecycle"
-        x-data="{mounted:true,lastOffset:0,direction:'ltr'}"
       >
         <div class="scroll-area-lifecycle__controls">
           <button type="button" @c-click="refresh">
@@ -71,7 +70,7 @@ class ScrollAreaLifecycle(Component):
 
         <p>Server step: <output>{{ step }}</output></p>
 
-        <template x-if="mounted">
+        <template v-if="mounted">
           <div :dir="direction">
             <c-CScrollArea
               #c-key="root_key"
@@ -79,10 +78,8 @@ class ScrollAreaLifecycle(Component):
               axis="both"
               aria_label="Lifecycle audit records"
               style="--cui-scroll-area-max-block-size: 12rem"
-              $c-props="{
-                onScrollChange:(detail)=>
-                  lastOffset=Math.round(detail.blockOffset),
-              }"
+              :onScrollChange="(detail)=>
+                  lastOffset=Math.round(detail.blockOffset)"
             >
               <div class="scroll-area-lifecycle__content">
                 <p>Server generation {{ step }}</p>
@@ -98,10 +95,19 @@ class ScrollAreaLifecycle(Component):
           </div>
         </template>
 
-        <output x-text="`Last user scroll offset ${lastOffset}`">
+        <output v-text="`Last user scroll offset ${lastOffset}`">
           Last user scroll offset 0
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            mounted:true,lastOffset:0,direction:'ltr'
+          };
+        },
+      });
     """
 
     css = """

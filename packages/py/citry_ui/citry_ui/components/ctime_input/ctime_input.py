@@ -238,17 +238,17 @@ class CTimeInput(LibraryComponent):
             "attrs": merge_root_attrs(caller_attrs, kwargs.class_, kwargs.style),
         }
         self._cui_time_input_data: dict[str, object] = {
-            "value": value,
-            "min": minimum,
-            "max": maximum,
-            "step": step,
-            "required": required,
-            "disabled": disabled,
-            "readonly": readonly,
-            "invalid": invalid,
+            "serverValue": value,
+            "serverMin": minimum,
+            "serverMax": maximum,
+            "serverStep": step,
+            "serverRequired": required,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
+            "serverInvalid": invalid,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
+            "serverVariant": kwargs.variant,
+            "serverSize": kwargs.size,
             "describedby": external_described_by,
             "errormessage": external_error_message,
         }
@@ -299,13 +299,19 @@ class CTimeInput(LibraryComponent):
           value: {}, min: {}, max: {}, step: {}, required: {}, disabled: {}, readonly: {}, invalid: {},
           variant: {}, size: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const input = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        onServerRender: ({component}) => {
+          const input = component.$el;
           if (!(input instanceof HTMLInputElement) || input.type !== 'time') {
             throw new Error('[citry-ui] CTimeInput settled anatomy is invalid.');
           }
-          const field = inject(Symbol.for('citry-ui:field'), null);
-          const form = inject(Symbol.for('citry-ui:form'), null);
+          const data = component;
+          const props = component.$props;
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CTimeInput form-control runtime is unavailable.');
           const resolver = runtime.resolver(input, props, 'CTimeInput');
@@ -313,12 +319,12 @@ class CTimeInput(LibraryComponent):
           const mutations = runtime.mutations(input);
           const owned = mutations.owned;
           let controlled = false;
-          let current = data.value ?? '';
+          let current = data.serverValue ?? '';
           const initialValue = current;
           let nativeInvalid = false;
           let invalidGeneration = 0;
           let configuration = null;
-          let previousConstraints = { min: data.min, max: data.max, step: data.step };
+          let previousConstraints = { min: data.serverMin, max: data.serverMax, step: data.serverStep };
 
           const canonicalTime = value => {
             if (typeof value !== 'string') return null;
@@ -339,9 +345,9 @@ class CTimeInput(LibraryComponent):
             return previousConstraints[name];
           };
           const resolveConstraints = () => {
-            const minimum = optionalTime('min', data.min);
-            const maximum = optionalTime('max', data.max);
-            const requestedStep = props.step === undefined ? data.step : props.step;
+            const minimum = optionalTime('min', data.serverMin);
+            const maximum = optionalTime('max', data.serverMax);
+            const requestedStep = props.step === undefined ? data.serverStep : props.step;
             const step = Number.isInteger(requestedStep) && requestedStep > 0
               ? requestedStep : previousConstraints.step;
             if (step === requestedStep) resolver.clear('step'); else resolver.report('step', requestedStep);
@@ -349,12 +355,12 @@ class CTimeInput(LibraryComponent):
             return previousConstraints;
           };
           const resolveConfiguration = () => ({
-            required: field ? field.required : resolver.boolean('required', data.required),
-            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(input),
-            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-            invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-            variant: resolver.choice('variant', data.variant, ['outline', 'filled', 'plain']),
-            size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+            required: field ? field.required : resolver.boolean('required', data.serverRequired),
+            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled) || runtime.fieldsetDisabled(input),
+            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+            invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+            variant: resolver.choice('variant', data.serverVariant, ['outline', 'filled', 'plain']),
+            size: resolver.choice('size', data.serverSize, ['sm', 'md', 'lg']),
             constraints: resolveConstraints(),
           });
           const reportFieldOwned = () => {
@@ -433,7 +439,7 @@ class CTimeInput(LibraryComponent):
             const token = ++invalidGeneration;
             runtime.invalidFocus(input, input, () => token === invalidGeneration);
           }, true);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             reportFieldOwned();
             configuration = resolveConfiguration();
             const requested = props.value;

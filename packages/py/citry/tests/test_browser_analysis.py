@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+import pytest
 
-from citry._alpine_csp import ALPINE_CSP_COMPATIBILITY_VERSION, classify_alpine_csp
-from citry._browser_expressions import BrowserExpression
+from citry._browser_expressions import BrowserExpression, browser_component_prop_sites
 from citry.analysis import (
-    AlpineLintConsumer,
     ComponentJsLintConsumer,
+    VueLintConsumer,
     analyze_browser_component_source,
     analyze_browser_expression,
     analyze_js_data_source,
+    browser_bindings,
     browser_client_prop_accepts,
-    browser_component_prop_uses,
     browser_component_props,
-    browser_component_scope_writes,
     browser_declarative_events,
     browser_expressions,
     browser_i18n_bind_calls,
@@ -31,8 +28,8 @@ from citry.analysis import (
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_csp_compatibility,
-    lint_unknown_alpine_variables,
     lint_unknown_component_js_variables,
+    lint_unknown_vue_variables,
     python_event_handler_range,
 )
 from citry_core.template_parser import parse_template
@@ -90,29 +87,27 @@ def test_js_data_source_keeps_only_browser_identifier_roots():
 
 def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():
     source = (
-        '<main x-data="{}"><button @click="sendEvent(\'save\')" :class="tone"></button>'
-        '<span x-for="item in items" x-text="item.name + title" '
-        'x-model.lazy="query" x-intersect.once="load()"></span></main>'
+        '<main><button @click="sendEvent(\'save\')" :class="tone"></button>'
+        '<span v-for="item in items" v-text="item.name + title" '
+        'v-model.lazy="query"></span></main>'
     )
     template = parse_template(source)
 
     expressions = browser_expressions(template)
 
     assert [(item.attribute, item.mode) for item in expressions] == [
-        ("x-data", "expression"),
         ("@click", "statement"),
         (":class", "expression"),
-        ("x-for", "loop"),
-        ("x-text", "expression"),
-        ("x-model.lazy", "expression"),
-        ("x-intersect.once", "statement"),
+        ("v-for", "loop"),
+        ("v-text", "expression"),
+        ("v-model.lazy", "expression"),
     ]
-    click = expressions[1]
+    click = expressions[0]
     calls = browser_literal_calls(click, frozenset({"sendEvent", "$sendEvent"}))
     assert [(call.function, call.value) for call in calls] == [("sendEvent", "save")]
-    text = expressions[4]
+    text = expressions[3]
     assert [(binding.name, binding.kind, binding.position) for binding in text.binding_details] == [
-        ("item", "x-for", 0)
+        ("item", "v-for", 0)
     ]
     binding = text.binding_details[0]
     assert source.encode()[binding.start_index : binding.end_index].decode() == "item"
@@ -123,47 +118,222 @@ def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():
     ]
 
 
-def test_browser_hosts_keep_citry_state_bindings_out_of_alpine_analysis():
-    source = '<input :c-query.debounce.300ms="refresh" /><input :C-query="ordinaryAlpineBinding" />'
+def test_browser_hosts_keep_citry_state_bindings_out_of_vue_analysis():
+    source = '<input :c-query.debounce.300ms="refresh" /><input :C-query="ordinaryVueBinding" />'
 
     expressions = browser_expressions(parse_template(source))
 
     # Citry prefixes are case-sensitive. The exact lowercase channel belongs
-    # to Events, while the case variant remains ordinary Alpine shorthand.
+    # to Events, while the case variant remains ordinary Vue shorthand.
     assert [(item.attribute, item.source, item.host) for item in expressions] == [
-        (":C-query", "ordinaryAlpineBinding", "alpine")
+        (":C-query", "ordinaryVueBinding", "vue")
     ]
+
+
+def test_native_slot_pattern_binds_only_its_body_and_reports_initializer_references():
+    source = (
+        '<NativeChild :value="item" #[slotName]="{ item: local = fallback, nested: [first, ...rest] }">'
+        '<span :title="local + first + rest.length" />'
+        '</NativeChild><p :title="item" />'
+    )
+    template = parse_template(source)
+    expressions = browser_expressions(template)
+    by_attribute = [(item.attribute, item) for item in expressions]
+
+    value = next(item for attribute, item in by_attribute if attribute == ":value")
+    dynamic_name = next(
+        item for attribute, item in by_attribute if attribute == "#[slotName]" and item.mode == "expression"
+    )
+    pattern = next(
+        item for attribute, item in by_attribute if attribute == "#[slotName]" and item.mode == "binding-pattern"
+    )
+    body = next(item for attribute, item in by_attribute if attribute == ":title" and "local" in item.source)
+    sibling = next(item for attribute, item in by_attribute if attribute == ":title" and item.source == "item")
+
+    assert [(item.name, item.root) for item in browser_identifiers(value)] == [("item", True)]
+    assert [(item.name, item.root) for item in browser_identifiers(dynamic_name)] == [("slotName", True)]
+    assert [item.name for item in analyze_browser_expression(pattern).references] == ["fallback"]
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [
+        ("local", False),
+        ("first", False),
+        ("rest", False),
+        ("length", False),
+    ]
+    assert [(item.name, item.root) for item in browser_identifiers(sibling)] == [("item", True)]
+    assert [(item.name, item.kind) for item in browser_bindings(template)] == [
+        ("local", "v-slot"),
+        ("first", "v-slot"),
+        ("rest", "v-slot"),
+    ]
+
+
+def test_v_for_and_v_slot_scopes_keep_same_element_props_outside_slot_bindings():
+    source = (
+        '<NativeChild v-for="row in rows" :value="item + row" #default="{ item = fallback(row) }">'
+        '<span :title="item + row" />'
+        '</NativeChild><p :title="item + row" />'
+    )
+    expressions = browser_expressions(parse_template(source))
+    same_element = next(item for item in expressions if item.attribute == ":value")
+    pattern = next(item for item in expressions if item.mode == "binding-pattern")
+    body = next(item for item in expressions if item.attribute == ":title" and item.source == "item + row")
+    sibling = [item for item in expressions if item.attribute == ":title" and item.source == "item + row"][1]
+
+    assert [(item.name, item.root) for item in browser_identifiers(same_element)] == [
+        ("item", True),
+        ("row", False),
+    ]
+    pattern_analysis = analyze_browser_expression(pattern)
+    assert [item.name for item in pattern_analysis.references] == ["fallback", "row"]
+    assert "row" in pattern.bindings
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [
+        ("item", False),
+        ("row", False),
+    ]
+    assert [(item.name, item.root) for item in browser_identifiers(sibling)] == [
+        ("item", True),
+        ("row", True),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("directive", "bindings"),
+    [('#default="x, y"', ("x", "y")), ('#default="...args"', ("args",))],
+)
+def test_native_slot_parameter_lists_are_scoped_only_to_descendants(directive, bindings):
+    source = (
+        f'<NativeChild :title="x + y + args" {directive}>'
+        '<span :title="x + y + args" />'
+        '</NativeChild><p :title="x + y + args" />'
+    )
+    expressions = browser_expressions(parse_template(source))
+    same_element, body, sibling = [item for item in expressions if item.attribute == ":title"]
+
+    assert all(item.root for item in browser_identifiers(same_element))
+    assert {item.name for item in browser_identifiers(body) if not item.root} == set(bindings)
+    assert all(item.root for item in browser_identifiers(sibling))
+
+
+@pytest.mark.parametrize("conditional", ["v-if", "v-else-if"])
+def test_same_element_vue_condition_precedes_v_for_and_slot_bindings(conditional):
+    source = (
+        f'<NativeChild v-for="row in rows" {conditional}="row.visible" '
+        '#default="{ item = fallback(row) }">'
+        '<span :title="item + row" />'
+        "</NativeChild>"
+    )
+    expressions = browser_expressions(parse_template(source))
+    condition = next(item for item in expressions if item.attribute == conditional)
+    pattern = next(item for item in expressions if item.mode == "binding-pattern")
+    body = next(item for item in expressions if item.attribute == ":title")
+
+    assert [(item.name, item.root) for item in browser_identifiers(condition)] == [
+        ("row", True),
+        ("visible", False),
+    ]
+    assert "row" in pattern.bindings
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [
+        ("item", False),
+        ("row", False),
+    ]
+
+
+def test_only_whole_dynamic_slot_arguments_create_name_expressions():
+    source = (
+        '<template #foo[bar]="{ item }"><span :title="item" /></template>'
+        '<template v-slot:foo[other]="{ item }"><span :title="item" /></template>'
+        '<template #[slots[名]].tail="{ item }"><span :title="item" /></template>'
+        '<template #[slots[\'[\']].tail="{ item }"><span :title="item" /></template>'
+        '<template #[slots[`[`]].tail="{ item }"><span :title="item" /></template>'
+        '<template #[slots[a][foo.bar]].tail="{ item }"><span :title="item" /></template>'
+    )
+    expressions = browser_expressions(parse_template(source))
+    slot_name_expressions = [
+        item for item in expressions if item.mode == "expression" and item.attribute.startswith(("#", "v-slot:"))
+    ]
+
+    assert [(item.attribute, item.source) for item in slot_name_expressions] == [
+        ("#[slots[名]].tail", "slots[名]].tail"),
+        ("#[slots['[']].tail", "slots['[']].tail"),
+        ("#[slots[`[`]].tail", "slots[`[`]].tail"),
+        ("#[slots[a][foo.bar]].tail", "slots[a][foo.bar]].tail"),
+    ]
+    dynamic = slot_name_expressions[0]
+    assert source.encode()[dynamic.start_index : dynamic.end_index].decode() == dynamic.source
+    analysis = analyze_browser_expression(dynamic)
+    assert analysis.valid
+    assert [(item.name, item.start_index, item.end_index) for item in analysis.references] == [
+        (
+            "slots",
+            dynamic.start_index,
+            dynamic.start_index + len("slots"),
+        ),
+        (
+            "名",
+            dynamic.start_index + len("slots["),
+            dynamic.start_index + len("slots[名".encode()),
+        ),
+    ]
+
+
+def test_default_v_slot_modifier_form_still_introduces_bindings():
+    template = parse_template('<template v-slot.foo="{ item }"><span :title="item" /></template>')
+    body = next(item for item in browser_expressions(template) if item.attribute == ":title")
+
+    assert [(item.name, item.root) for item in browser_identifiers(body)] == [("item", False)]
+
+
+def test_invalid_slot_pattern_is_one_invalid_host_without_spurious_bindings():
+    template = parse_template('<template #default="{ item:"><span :title="item" /></template>')
+    patterns = [item for item in browser_expressions(template) if item.mode == "binding-pattern"]
+
+    assert len(patterns) == 1
+    assert not analyze_browser_expression(patterns[0]).valid
+    assert browser_bindings(template) == ()
+    assert "item" not in patterns[0].bindings
+
+
+@pytest.mark.parametrize("attribute", ["v-slot", "#default", 'v-slot=""', '#default=""'])
+def test_empty_native_slot_directive_has_no_pattern_or_binding(attribute):
+    template = parse_template(f'<template {attribute}><span :title="outer" /></template>')
+
+    assert all(item.mode != "binding-pattern" for item in browser_expressions(template))
+    assert browser_bindings(template) == ()
+
+
+def test_citry_slot_channels_do_not_create_native_vue_bindings():
+    template = parse_template('<c-Card><c-fill name="body" data="item"><span #c-key="item" /></c-fill></c-Card>')
+
+    assert browser_bindings(template) == ()
 
 
 def test_browser_hosts_capture_csp_element_attribute_and_evaluator_context():
     source = (
-        '<main X-DATA="{ open: true }"><span X-TEXT="open"></span></main>'
-        '<c-card @click="save()" @c-save="save({ id: item.id })" $c-props="{ id: item.id }" />'
+        '<main><span V-TEXT="open"></span></main>'
+        '<c-card @click="save()" @c-save="save({ id: item.id })" />'
         '<button @C-CLICK="save(() => 1)"></button>'
     )
 
     expressions = browser_expressions(parse_template(source))
 
     assert [(item.canonical_attribute, item.element, item.host, item.evaluator) for item in expressions] == [
-        ("x-data", "main", "alpine", "normal"),
-        ("x-text", "span", "alpine", "normal"),
-        ("@click", "c-card", "alpine", "raw"),
+        ("v-text", "span", "vue", "normal"),
+        ("@click", "c-card", "vue", "raw"),
         ("@c-save", "c-card", "citry-event-args", "raw"),
-        ("$c-props", "c-card", "citry-props", "raw"),
-        ("@c-click", "button", "alpine", "normal"),
+        ("@c-click", "button", "vue", "normal"),
     ]
-    assert "open" in expressions[1].bindings
+    assert expressions[1].bindings == ()
     encoded = source.encode()
     assert [
         encoded[item.attribute_start_index : item.attribute_end_index].decode()  # type: ignore[index]
         for item in expressions
-    ] == ["X-DATA", "X-TEXT", "@click", "@c-save", "$c-props", "@C-CLICK"]
+    ] == ["V-TEXT", "@click", "@c-save", "@C-CLICK"]
 
 
-def test_case_variant_dynamic_element_uses_the_rendered_html_evaluator_context():
+def test_case_variant_dynamic_element_uses_vue_precompiled_evaluator_context():
     source = (
         '<c-Element is="SCRIPT" @click="value = 1"></c-Element>'
-        '<c-Element is="IFRAME" x-text="value"></c-Element>'
+        '<c-Element is="IFRAME" v-text="value"></c-Element>'
         '<c-Card @click="value = 1" />'
     )
     expressions = browser_expressions(parse_template(source))
@@ -175,110 +345,21 @@ def test_case_variant_dynamic_element_uses_the_rendered_html_evaluator_context()
     ]
     findings = lint_csp_compatibility(
         expressions,
-        (AlpineLintConsumer(frozenset({"value"}), "ignore"),),
+        (VueLintConsumer(frozenset({"value"}), "ignore"),),
         "strict",
     )
-    assert len(findings) == 2
-    assert [source.encode()[item.start_index : item.end_index].decode() for item in findings] == [
-        "@click",
-        "x-text",
-    ]
+    assert findings == ()
 
 
-def test_alpine_csp_classifier_matches_the_pinned_expression_corpus():
-    fixture = json.loads(
-        (Path(__file__).parents[3] / "js/citry-client/test/fixtures/alpine-csp-3.17.1.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    assert fixture["alpineVersion"] == ALPINE_CSP_COMPATIBILITY_VERSION
-
-    for case in fixture["cases"]:
-        expression = BrowserExpression(
-            case["source"],
-            0,
-            len(case["source"].encode()),
-            "expression",
-            "x-text",
-            transform=case.get("transform", "identity"),
-        )
-        actual = classify_alpine_csp(expression).outcome
-        expected = case.get("staticOutcome", "compatible" if case["outcome"] == "accepted" else "incompatible")
-        assert actual == expected, case["id"]
-
-
-def test_alpine_csp_checker_handles_directives_casing_derived_code_and_mode():
-    source = (
-        '<div X-HTML></div><SCRIPT x-text="value"></SCRIPT>'
-        '<input x-modelable="count + 1">'
-        '<template x-for="item in rows?.items"></template>'
-    )
-    expressions = browser_expressions(parse_template(source))
-    consumer = AlpineLintConsumer(frozenset({"count", "rows", "value"}), "ignore")
+def test_vue_precompiled_expressions_do_not_use_the_legacy_csp_evaluator():
+    expressions = browser_expressions(parse_template('<div v-html="markup"></div><button @click="save()"></button>'))
+    consumer = VueLintConsumer(frozenset({"markup", "save"}), "ignore")
 
     assert lint_csp_compatibility(expressions, (consumer,), "off") == ()
-    warnings = lint_csp_compatibility(expressions, (consumer,), "warn")
-    errors = lint_csp_compatibility(expressions, (consumer,), "strict")
-
-    assert len(warnings) == 4
-    assert {finding.severity for finding in warnings} == {"warning"}
-    assert {finding.severity for finding in errors} == {"error"}
-    assert all(finding.code == "citry.csp.incompatible-browser-code" for finding in errors)
-    assert [source.encode()[finding.start_index : finding.end_index].decode() for finding in errors] == [
-        "X-HTML",
-        "x-text",
-        "count + 1",
-        "?.",
-    ]
-
-
-def test_alpine_csp_checker_requires_explicit_scope_for_javascript_globals():
-    expression = browser_expressions(parse_template('<span x-text="Math.max(1, 2)"></span>'))[0]
-
-    missing = lint_csp_compatibility(
-        (expression,),
-        (AlpineLintConsumer(frozenset(), "ignore"),),
-        "strict",
-    )
-    supplied = lint_csp_compatibility(
-        (expression,),
-        (AlpineLintConsumer(frozenset({"Math"}), "ignore"),),
-        "strict",
-    )
-
-    assert len(missing) == 1
-    assert "unprovided JavaScript global 'Math'" in missing[0].message
-    assert supplied == ()
-    undefined = browser_expressions(parse_template('<span x-text="undefined"></span>'))[0]
-    assert lint_csp_compatibility((undefined,), (AlpineLintConsumer(frozenset(), "ignore"),), "strict") == ()
-
-
-def test_alpine_csp_checker_reports_unterminated_strings_without_raising():
-    expression = BrowserExpression("'unterminated", 7, 20, "expression", "x-text")
-
-    classification = classify_alpine_csp(expression)
-    findings = lint_csp_compatibility(
-        (expression,),
-        (AlpineLintConsumer(frozenset(), "ignore"),),
-        "strict",
-    )
-
-    assert classification.outcome == "incompatible"
-    assert classification.detail == "an unterminated string"
-    assert (classification.start_index, classification.end_index) == (7, 20)
-    assert len(findings) == 1
-
-
-def test_alpine_csp_directive_empty_rules_use_javascript_whitespace_semantics():
-    source = '<div x-data="\u001c"></div><button @click="\u001c"></button><div x-init="\ufeff"></div>'
-    expressions = browser_expressions(parse_template(source))
-    findings = lint_csp_compatibility(expressions, (), "strict")
-
-    assert len(findings) == 2
-    assert [source.encode()[item.start_index : item.end_index].decode() for item in findings] == [
-        "\u001c",
-        "\u001c",
-    ]
+    assert lint_csp_compatibility(expressions, (consumer,), "warn") == ()
+    assert lint_csp_compatibility(expressions, (consumer,), "strict") == ()
+    with pytest.raises(ValueError, match="Unknown CSP compatibility mode"):
+        lint_csp_compatibility(expressions, (consumer,), "invalid")  # type: ignore[arg-type]
 
 
 def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ranges():
@@ -305,7 +386,7 @@ def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ran
 
 def test_oxc_browser_analysis_distinguishes_free_roots_from_javascript_locals():
     template = parse_template(
-        '<div x-text="items.map((item) => ({ label: item.name, value: suffix }))" '
+        '<div v-text="items.map((item) => ({ label: item.name, value: suffix }))" '
         '@click="const next = count + 1; submit(next)"></div>'
     )
     text, click = browser_expressions(template)
@@ -327,7 +408,7 @@ def test_oxc_browser_analysis_distinguishes_free_roots_from_javascript_locals():
 
 
 def test_member_literal_calls_keep_direct_i18n_calls_and_exact_utf8_ranges():
-    source_text = "<span x-text=\"$i18n.tr('čau') + other.tr('skip') + $i18n['tr']('skip')\"></span>"
+    source_text = "<span v-text=\"$i18n.tr('čau') + other.tr('skip') + $i18n['tr']('skip')\"></span>"
     template = parse_template(source_text)
     expression = browser_expressions(template)[0]
 
@@ -344,7 +425,7 @@ def test_member_literal_calls_keep_direct_i18n_calls_and_exact_utf8_ranges():
 
 def test_i18n_profile_calls_keep_nested_method_and_literal_option_ranges():
     source_text = (
-        "<span x-text=\"$i18n.format.number(total, {format: 'measurement'}) "
+        "<span v-text=\"$i18n.format.number(total, {format: 'measurement'}) "
         "+ $i18n.parse.percent(value, { format: 'editing' }) + other.format.number(1, {format: 'skip'})"
         '"></span>'
     )
@@ -364,9 +445,9 @@ def test_i18n_magic_binding_follows_client_provider_and_server_barrier():
     for client_input in ('c-client="True"', "client"):
         source = f"""
         <c-i18n {client_input} tag="main">
-          <span x-text="$i18n.tr('outer')"></span>
+          <span v-text="$i18n.tr('outer')"></span>
           <c-i18n tag="section">
-            <span x-text="$i18n.tr('blocked')"></span>
+            <span v-text="$i18n.tr('blocked')"></span>
           </c-i18n>
         </c-i18n>
         """
@@ -401,9 +482,23 @@ def test_i18n_bind_calls_extract_only_bounded_literal_object_roots():
     assert encoded[calls[0].output_start_index - 7 : calls[0].output_end_index - 7].decode() == "aria-label"
 
 
+def test_i18n_bind_calls_accept_only_authenticated_member_owner_spans() -> None:
+    source = "component.$i18n.bind({message:'allowed'}); other.$i18n.bind({message:'forged'});"
+    expression = BrowserExpression(source, 0, len(source.encode()), "statement", "component-js")
+    owner_start = source.index("$i18n")
+
+    calls = browser_i18n_bind_calls(
+        expression,
+        frozenset({"$i18n"}),
+        authenticated_owner_spans=frozenset({(owner_start, owner_start + len("$i18n"))}),
+    )
+
+    assert [(call.message, call.owner_start_index) for call in calls] == [("allowed", owner_start)]
+
+
 def test_browser_i18n_message_calls_keep_parameter_and_attribute_spans():
     source = "$i18n.tr('account-title', { name: accountName, count }, { attr: 'aria-label' })"
-    expression = BrowserExpression(source, 11, len(source.encode("utf-8")) + 11, "expression", "x-text")
+    expression = BrowserExpression(source, 11, len(source.encode("utf-8")) + 11, "expression", "v-text")
 
     calls = browser_i18n_message_calls(expression)
 
@@ -460,7 +555,7 @@ def test_browser_i18n_binding_value_is_an_alpine_expression_host() -> None:
 
 
 def test_oxc_loop_analysis_checks_only_the_outer_iterable_expression():
-    template = parse_template('<template x-for="(color, index) in colors.filter(Boolean)"></template>')
+    template = parse_template('<template v-for="(color, index) in colors.filter(Boolean)"></template>')
     expression = browser_expressions(template)[0]
 
     analysis = analyze_browser_expression(expression)
@@ -478,20 +573,20 @@ def test_oxc_browser_analysis_declines_invalid_source_without_partial_roots():
     assert analysis.references == ()
 
 
-def test_unknown_alpine_lint_is_strict_configurable_and_scope_aware():
+def test_unknown_vue_lint_is_strict_configurable_and_v_for_scope_aware():
     template = parse_template(
-        '<main x-data="{ local: 1 }" :class="known + missing">'
-        '<template x-for="color in colors"><span x-text="color + local + missing"></span></template>'
-        "<button @click=\"$dispatch('open'); console.log(known)\"></button>"
+        '<main :class="known + missing">'
+        '<div v-for="color in colors"><span v-text="color + missing"></span></div>'
+        "<button @click=\"$sendEvent('open'); console.log(known)\"></button>"
         "</main>"
     )
     expressions = browser_expressions(template)
     consumers = (
-        AlpineLintConsumer(frozenset({"known", "colors"}), "error"),
-        AlpineLintConsumer(frozenset({"known", "colors", "missing"}), "warning"),
+        VueLintConsumer(frozenset({"known", "colors"}), "error"),
+        VueLintConsumer(frozenset({"known", "colors", "missing"}), "warning"),
     )
 
-    findings = lint_unknown_alpine_variables(expressions, consumers)
+    findings = lint_unknown_vue_variables(expressions, consumers)
 
     assert [(item.name, item.severity) for item in findings] == [
         ("missing", "error"),
@@ -499,43 +594,125 @@ def test_unknown_alpine_lint_is_strict_configurable_and_scope_aware():
     ]
 
 
-def test_unknown_alpine_lint_honors_ignore_and_declines_invalid_hosts():
+def test_unknown_vue_lint_honors_ignore_and_declines_invalid_hosts():
     template = parse_template('<button :disabled="missing" @click="broken("></button>')
 
-    findings = lint_unknown_alpine_variables(
+    findings = lint_unknown_vue_variables(
         browser_expressions(template),
-        (AlpineLintConsumer(frozenset(), "ignore"),),
+        (VueLintConsumer(frozenset(), "ignore"),),
     )
 
     assert findings == ()
 
 
+def test_unknown_vue_lint_uses_native_names_and_respects_unknown_namespace() -> None:
+    template = parse_template('<button @click="save(opaque)"></button>')
+    expressions = browser_expressions(template)
+
+    assert (
+        lint_unknown_vue_variables(
+            expressions,
+            (VueLintConsumer(frozenset({"save"}), "error", "unknown"),),
+        )
+        == ()
+    )
+    findings = lint_unknown_vue_variables(
+        expressions,
+        (VueLintConsumer(frozenset({"save"}), "error", "closed"),),
+    )
+    assert [item.name for item in findings] == ["opaque"]
+
+
 def test_component_source_analysis_keeps_initializer_bindings_and_free_names_separate():
     source = """
 const outside = missingOutside;
-$component(({ scope: alpineScope, data }) => {
+$component({ onServerRender({ component: current, revision, data }) {
   const local = data.ready;
-  alpineScope.ready = local;
-  console.log(missingInside);
-});
+  current.ready = local;
+  console.log(revision, missingInside);
+} });
 """
 
     analysis = analyze_browser_component_source(source)
 
     assert analysis.valid
     assert [(item.name, item.local_name) for item in analysis.bindings] == [
-        ("scope", "alpineScope"),
-        ("data", "data"),
+        ("component", "current"),
+        ("revision", "revision"),
     ]
     assert [item.name for item in analysis.references] == ["console", "missingInside"]
-    assert [item.name for item in analysis.scope_writes] == ["ready"]
+
+
+def test_component_source_analysis_reports_vue_options_and_authenticated_helper_spans():
+    source = """
+$component /* trivia */ ({
+  props: ["display-name"],
+  methods: { save() {}, ...extra },
+  data() { return { ready: true } },
+  setup: () => ({ selected: seed }),
+  computed: { label() { return this.$i18n.locale } },
+});
+"""
+
+    analysis = analyze_browser_component_source(source)
+
+    assert analysis.valid
+    assert len(analysis.component_calls) == 1
+    call = analysis.component_calls[0]
+    encoded = source.encode()
+    assert encoded[call.callee_start_index : call.callee_end_index] == b"$component"
+    assert encoded[call.open_paren_end_index - 1 : call.open_paren_end_index] == b"("
+    assert [(item.origin, item.exposed_name) for item in analysis.public_names] == [
+        ("props", "displayName"),
+        ("methods", "save"),
+        ("data", "ready"),
+        ("setup", "selected"),
+        ("computed", "label"),
+    ]
+    assert next(item for item in analysis.sections if item.name == "methods").state == "unknown"
+    assert [(item.receiver, item.name) for item in analysis.member_references] == [("this", "$i18n")]
+
+
+def test_component_source_analysis_preserves_native_unknown_states_and_vue_camelization():
+    analysis = analyze_browser_component_source("$component({ props: { 'foo--bar': { type: String, ...details } } })")
+
+    prop = next(item for item in analysis.public_names if item.origin == "props")
+    assert prop.exposed_name == "foo-Bar"
+    assert (prop.required, prop.has_default, prop.type_source) == (None, None, None)
+    computed = analyze_browser_component_source(
+        "$component({ props: { first: String }, methods: { save() {} }, [key]: value })"
+    )
+    assert computed.public_names == ()
+    assert all(section.state == "unknown" for section in computed.sections)
+
+
+def test_component_member_literal_calls_require_native_receiver_authentication():
+    source = "$component({ methods: { label() { return this.$i18n.resolve('message') } } })"
+    analysis = analyze_browser_component_source(source)
+    owner_spans = frozenset(
+        (item.start_index, item.end_index) for item in analysis.member_references if item.name == "$i18n"
+    )
+    expression = BrowserExpression(source, 0, len(source.encode()), "statement", "component-js")
+
+    assert [
+        call.value
+        for call in browser_member_literal_calls(
+            expression,
+            frozenset({"$i18n"}),
+            frozenset({"resolve"}),
+            authenticated_owner_spans=owner_spans,
+        )
+    ] == ["message"]
+    assert not browser_member_literal_calls(expression, frozenset({"$i18n"}), frozenset({"resolve"}))
 
 
 def test_unknown_component_js_lint_is_strict_configurable_and_initializer_only():
     source = """
 const outside = missingOutside;
-$component(({ data }) => {
-  console.log(data.ready, configured, missingInside);
+$component({
+  onServerRender({ component }) {
+    console.log(component.ready, configured, missingInside);
+  }
 });
 """
 
@@ -551,7 +728,7 @@ $component(({ data }) => {
 
 
 def test_unknown_component_js_lint_flags_a_missing_context_destructure():
-    source = "$component(({ data }) => { scope.ready = data.ready; });"
+    source = "$component({ onServerRender({ component }) { scope.ready = component.ready; } });"
 
     findings = lint_unknown_component_js_variables(
         source,
@@ -579,7 +756,8 @@ def test_simple_data_and_scope_members_are_identified_without_chained_guesses():
 def test_component_props_and_event_method_provenance_use_conservative_source_shapes():
     js = (
         "$component({ props: { title: { type: String, required: true }, "
-        "count: { type: [Number, String], default: null } }, init({ props }) { props.title } })"
+        "count: { type: [Number, String], default: null } }, "
+        "onServerRender({ component }) { component.$props.title } })"
     )
     props = browser_component_props(js)
     source = (
@@ -599,36 +777,7 @@ def test_component_props_and_event_method_provenance_use_conservative_source_sha
 
 
 def test_dynamic_component_props_remain_unknown_instead_of_looking_empty():
-    assert browser_component_props("$component({ props: makeProps(), init() {} })") is None
-
-
-def test_component_prop_uses_keep_direct_keys_beside_dynamic_spreads():
-    source = "<c-child $c-props=\"{ title: label, count: 2, ...extra, '😀': enabled, [computed]: other }\" />"
-    uses = browser_component_prop_uses(parse_template(source))
-
-    assert len(uses) == 1
-    use = uses[0]
-    assert use.tag_name == "c-child"
-    assert use.has_dynamic_keys
-    assert [(field.name, field.value_source) for field in use.properties] == [
-        ("title", "label"),
-        ("count", "2"),
-        ("😀", "enabled"),
-    ]
-    encoded = source.encode()
-    assert [encoded[field.start_index : field.end_index].decode() for field in use.properties] == [
-        "title",
-        "count",
-        "'😀'",
-    ]
-
-
-def test_component_prop_uses_resolve_only_static_dynamic_component_targets():
-    static = parse_template('<c-component is="child" $c-props="{ title }" />')
-    dynamic = parse_template('<c-component c-is="target" $c-props="{ title }" />')
-
-    assert [use.tag_name for use in browser_component_prop_uses(static)] == ["c-child"]
-    assert browser_component_prop_uses(dynamic) == ()
+    assert browser_component_props("$component({ props: makeProps(), onServerRender() {} })") is None
 
 
 def test_component_prop_types_compare_only_proven_broad_json_shapes():
@@ -638,24 +787,24 @@ def test_component_prop_types_compare_only_proven_broad_json_shapes():
     assert browser_literal_wire_type("calculate() ").kind == "unknown"
 
 
-def test_component_scope_writes_preserve_utf8_ranges_and_exact_value_source():
+def test_native_component_prop_sites_preserve_nested_utf8_ranges_and_dynamic_uncertainty():
     source = (
-        "const prefix = '😀';\n"
-        "$component(({ scope }) => {\n"
-        "  scope.title = data.title;\n"
-        "  Object.assign(scope, { count: 2 });\n"
-        "  setTimeout(() => { scope.late = true; });\n"
-        "});\n"
+        'é<template><c-card v-bind="{ title: name }" :display-name.camel="name" '
+        ':ignored.prop="value" :ignored-attr.attr="value" :unknown.future="value" />'
+        "</template>"
     )
 
-    writes = browser_component_scope_writes(source)
-    encoded = source.encode()
+    sites = browser_component_prop_sites(parse_template(source))
 
-    assert [(write.name, write.value_source) for write in writes] == [
-        ("title", "data.title"),
-        ("count", "2"),
+    assert len(sites) == 1
+    site = sites[0]
+    encoded = source.encode("utf-8")
+    assert encoded[site.tag_start_index : site.tag_end_index].decode() == "c-card"
+    assert [(item.name, item.source, item.dynamic) for item in site.contributions] == [
+        ("title", "name", False),
+        ("display-name", "name", False),
+        (None, "value", True),
     ]
-    assert [encoded[write.start_index : write.end_index].decode() for write in writes] == [
-        "title",
-        "count",
-    ]
+    dynamic = site.contributions[-1]
+    assert encoded[dynamic.name_start_index : dynamic.name_end_index].decode() == ":unknown.future"
+    assert encoded[dynamic.value_start_index : dynamic.value_end_index].decode() == "value"

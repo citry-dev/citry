@@ -234,7 +234,11 @@ class CColorPicker(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         data = self._snapshot(kwargs)
-        return {key: data[key] for key in ("value", "open", "disabled", "readonly", "format", "catalog", "labels")}
+        return {
+            "serverDefaults": {
+                key: data[key] for key in ("value", "open", "disabled", "readonly", "format", "catalog", "labels")
+            }
+        }
 
     template = """
       <div class="cui-color-picker" c-id="root_id" c-bind="root_attrs" c-aria-disabled="'true' if disabled else 'false'" data-citry-ui-part="color-picker">

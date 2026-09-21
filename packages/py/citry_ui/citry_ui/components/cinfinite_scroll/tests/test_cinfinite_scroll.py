@@ -12,7 +12,7 @@ from citry import Citry, Component
 from citry_ui import CInfiniteScroll
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,7 +20,8 @@ def _render(source: str) -> str:
         citry = app
         template = f"<main>{source}</main>"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_schema_registration_and_server_fallback() -> None:
@@ -45,9 +46,11 @@ def test_schema_registration_and_server_fallback() -> None:
         "style",
         "attrs",
     ]
+    assert [item.name for item in fields(CInfiniteScroll.JsData)] == ["serverDefaults"]
     assert CInfiniteScroll in citry_ui.COMPONENTS
     html = _render(
-        '<form><c-CInfiniteScroll id="feed" aria_label="Feed" action_name="feed_action"><ol><li>A</li></ol></c-CInfiniteScroll></form>'
+        '<form><c-CInfiniteScroll id="feed" aria_label="Feed" action_name="feed_action"><ol><li>A</li></ol></c-CInfiniteScroll></form>',
+        static_fallback=True,
     )
     assert "<ol><li>A</li></ol>" in html
     assert 'role="region"' in html
@@ -59,17 +62,18 @@ def test_schema_registration_and_server_fallback() -> None:
 
 
 def test_loading_error_end_and_explicit_labels() -> None:
-    loading = _render('<c-CInfiniteScroll c-loading="True"><p>A</p></c-CInfiniteScroll>')
+    loading = _render('<c-CInfiniteScroll c-loading="True"><p>A</p></c-CInfiniteScroll>', static_fallback=True)
     assert 'aria-busy="true"' in loading
     assert 'aria-busy="true" data-citry-ui-part="content"' in loading
     assert "data-loading" in loading
     error = _render(
-        '<c-CInfiniteScroll c-error="True" retry_label="Retry now" error_label="Offline"><p>A</p></c-CInfiniteScroll>'
+        '<c-CInfiniteScroll c-error="True" retry_label="Retry now" error_label="Offline"><p>A</p></c-CInfiniteScroll>',
+        static_fallback=True,
     )
     assert "data-error" in error
     assert "Retry now" in error
     assert "Offline" in error
-    end = _render('<c-CInfiniteScroll c-has_more="False"><p>A</p></c-CInfiniteScroll>')
+    end = _render('<c-CInfiniteScroll c-has_more="False"><p>A</p></c-CInfiniteScroll>', static_fallback=True)
     assert "data-end" in end
     assert "No more results" in end
 
@@ -81,6 +85,7 @@ def test_loading_error_end_and_explicit_labels() -> None:
         ('<c-CInfiniteScroll root_margin=" " />', "nonempty"),
         ('<c-CInfiniteScroll c-auto="1" />', "must be a bool"),
         ("<c-CInfiniteScroll c-attrs=\"{'aria-busy':'true'}\" />", "owned attribute"),
+        ("<c-CInfiniteScroll c-attrs=\"{'ref':'other'}\" />", "owned attribute"),
     ],
 )
 def test_invalid_inputs_fail(source: str, match: str) -> None:
@@ -94,7 +99,16 @@ def test_assets_docs_and_translation_reference_cover_contract() -> None:
     css = (root / "runtime.source.css").read_text(encoding="utf8")
     guide = (root / "api.md").read_text(encoding="utf8")
     reference = (root / "api.yml").read_text(encoding="utf8")
-    for fragment in ("IntersectionObserver", "MutationObserver", "onLoadMore", "removeEventListener", "disconnect"):
+    for fragment in (
+        "onServerRender",
+        "component.$refs.root",
+        "Citry.vue.watchEffect",
+        "IntersectionObserver",
+        "MutationObserver",
+        "onLoadMore",
+        "removeEventListener",
+        "disconnect",
+    ):
         assert fragment in js
     for fragment in ("prefers-reduced-motion", "forced-colors", "@media print"):
         assert fragment in css

@@ -82,9 +82,9 @@ inputs, selectors, and nested components predictable.
 
 ## Control visibility
 
-Client inputs are passed in the browser through `$c-props="{...}"`. Supply a
-Boolean `open` to control visibility. `onOpenChange` reports requests; update
-the owner value to accept one or leave it unchanged to decline it.
+Client inputs are passed with native Vue bindings. Supply a Boolean `:open` to
+control visibility. `onOpenChange` reports requests; update the owner value to
+accept one or leave it unchanged to decline it.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cpopover/snippets/controlled_open.py"
@@ -93,11 +93,9 @@ the owner value to accept one or leave it unchanged to decline it.
 
 ```citry-html
 <c-CPopover
-  $c-props="{
-    open,
-    onOpenChange: (nextOpen, detail) => {
-      if (mayApply(nextOpen, detail)) open = nextOpen;
-    },
+  :open="open"
+  :onOpenChange="(nextOpen, detail) => {
+    if (mayApply(nextOpen, detail)) open = nextOpen;
   }"
 >
   ...

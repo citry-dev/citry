@@ -362,6 +362,7 @@ class SourceStateFieldRecord:
     name: str
     type_display: str | None
     description: str | None
+    client_writable: bool
     module: str
     qualname: str
     source_file: Path
@@ -592,6 +593,7 @@ def _source_event_info(
             "name",
             "type_display",
             "description",
+            "client_writable",
             "module",
             "qualname",
             "file",
@@ -600,6 +602,7 @@ def _source_event_info(
         field_name = raw_field.get("name")
         type_display = raw_field.get("type_display")
         description = raw_field.get("description")
+        client_writable = raw_field.get("client_writable")
         field_module = raw_field.get("module")
         field_qualname = raw_field.get("qualname")
         field_file = raw_field.get("file")
@@ -608,6 +611,7 @@ def _source_event_info(
             or not field_name
             or (type_display is not None and type(type_display) is not str)
             or (description is not None and type(description) is not str)
+            or type(client_writable) is not bool
             or type(field_module) is not str
             or not field_module
             or type(field_qualname) is not str
@@ -627,6 +631,7 @@ def _source_event_info(
                 field_name,
                 type_display,
                 description,
+                client_writable,
                 field_module,
                 field_qualname,
                 path.resolve(),

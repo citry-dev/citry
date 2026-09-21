@@ -297,8 +297,10 @@ class CAvatar(LibraryComponent):
           shape: {},
           onStatusChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
           let image = root.querySelector('[data-citry-ui-part="image"]');
           if (!(image instanceof HTMLImageElement)) {
             image = document.createElement("img");
@@ -422,7 +424,7 @@ class CAvatar(LibraryComponent):
           image.addEventListener("load", onLoad);
           image.addEventListener("error", onError);
 
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             const source = resolveSource();
             const alt = resolveText("alt");
             const variant = resolveChoice("variant");

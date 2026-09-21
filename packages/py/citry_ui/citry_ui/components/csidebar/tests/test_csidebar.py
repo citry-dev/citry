@@ -12,7 +12,7 @@ from citry import Citry, Component
 from citry_ui import CSidebar
 
 
-def _render(source: str, *, css: bool = False) -> str:
+def _render(source: str, *, css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,7 +20,8 @@ def _render(source: str, *, css: bool = False) -> str:
         citry = app
         template = f"<main>{source}</main>{'<c-css />' if css else ''}"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tag(html: str, part: str, index: int = 0) -> str:
@@ -57,7 +58,7 @@ def test_public_schema_aliases_and_registration_are_exact() -> None:
 
 
 def test_default_sidebar_is_a_named_complementary_landmark() -> None:
-    html = _render('<c-CSidebar id="workspace" label="Workspace">Navigation</c-CSidebar>')
+    html = _render('<c-CSidebar id="workspace" label="Workspace">Navigation</c-CSidebar>', static_fallback=True)
     root = _tag(html, "sidebar")
     toggle = _tag(html, "toggle")
     panel = _tag(html, "panel")
@@ -84,7 +85,8 @@ def test_nav_offcanvas_and_optional_regions_render_exactly() -> None:
         '<c-CSidebar id="project" tag="nav" label="Project" c-collapsed="True" '
         'collapsible="offcanvas" side="inline-end" variant="floating" size="lg" c-sticky="True">'
         '<c-fill name="header">Header</c-fill><c-fill name="default">Links</c-fill>'
-        '<c-fill name="footer">Footer</c-fill><c-fill name="toggle">T</c-fill></c-CSidebar>'
+        '<c-fill name="footer">Footer</c-fill><c-fill name="toggle">T</c-fill></c-CSidebar>',
+        static_fallback=True,
     )
     root = _tag(html, "sidebar")
     panel = _tag(html, "panel")
@@ -103,7 +105,7 @@ def test_nav_offcanvas_and_optional_regions_render_exactly() -> None:
     assert 'aria-expanded="false"' in _tag(html, "toggle")
     assert "hidden" in panel
     assert "inert" in panel
-    assert ">T<" in html
+    assert re.search(r">\s*T\s*<", html) is not None
     assert _tag(html, "header").startswith("<header")
     assert _tag(html, "footer").startswith("<footer")
 
@@ -122,7 +124,8 @@ def test_class_style_and_allowed_attrs_merge_on_landmark() -> None:
     html = _render(
         '<c-CSidebar label="Tools" c-class_="[\'brand\']" '
         "c-style=\"{'--cui-sidebar-width':'18rem'}\" "
-        "c-attrs=\"{'data-test':'root','class':'extra','style':'color:red'}\">Tools</c-CSidebar>"
+        "c-attrs=\"{'data-test':'root','class':'extra','style':'color:red'}\">Tools</c-CSidebar>",
+        static_fallback=True,
     )
     root = _tag(html, "sidebar")
     assert all(name in root for name in ("cui-sidebar", "brand", "extra"))
@@ -158,8 +161,12 @@ def test_invalid_inputs_fail_closed(source: str, message: str) -> None:
         "{'aria-label':'Shadow'}",
         "{'data-collapsed':'false'}",
         "{'hidden':True}",
+        "{'ref':'other'}",
         "{':data-size':'size'}",
+        "{'v-bind:ref':'other'}",
+        "{'v-bind:data-size':'size'}",
         "{'x-html':'unsafe'}",
+        "{'v-html':'unsafe'}",
     ],
 )
 def test_owned_attrs_and_replacing_directives_are_rejected(attrs: str) -> None:

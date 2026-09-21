@@ -25,7 +25,7 @@ def _root() -> Path:
     raise RuntimeError("Could not locate repository root for Color Picker browser tests.")
 
 
-def _page() -> str:
+def _page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -35,29 +35,30 @@ def _page() -> str:
         def template_data(self, _kwargs, _slots):
             return {"swatches": [CColorSwatch("#7f56d9", "Violet"), CColorSwatch("#12b76a", "Green")]}
 
-        template = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Color Picker evidence</title><c-css /></head><body x-data><form><c-CColorPicker id="picker" label="Brand color" name="brand" value="#7f56d9" c-swatches="swatches" $c-props="{onValueChange:(value,detail)=>$store.color.changes.push([value,detail.source]),onOpenChange:(open)=>$store.color.opens.push(open)}" /><button type="reset">Reset</button></form></body></html>"""
-        js = "Alpine.store('color',{changes:[],opens:[]});"
+        template = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Color Picker evidence</title><c-css /></head><body><form><c-CColorPicker id="picker" label="Brand color" name="brand" value="#7f56d9" c-swatches="swatches" :onValueChange="(value,detail)=>state.color.changes.push([value,detail.source])" :onOpenChange="(open)=>state.color.opens.push(open)" /><button type="reset">Reset</button></form></body></html>"""
+        js = "$component({data(){const state=Citry.vue.reactive({changes:[],opens:[]});window.__color=state;return {state:{color:state}};}});"
 
-    return str(Page())
+    return app, str(Page())
 
 
-def _load(page: Any) -> list[str]:
+def _load(page: Any, serve_citry_ui_live: Any) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    app, html = _page()
+    page.goto(serve_citry_ui_live(app, html) + "/", wait_until="networkidle")
     page.wait_for_selector("#picker[data-citry-color-picker-initialized]")
     return errors
 
 
-def test_keyboard_text_swatch_and_form_value(page: Any) -> None:
-    errors = _load(page)
+def test_keyboard_text_swatch_and_form_value(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#picker")
     root.locator('[data-citry-ui-part="trigger"]').click()
     area = root.locator('[data-citry-ui-part="area"]')
     area.focus()
     area.press("Home")
-    assert page.evaluate("Alpine.store('color').changes.at(-1)[1]") == "area"
+    assert page.evaluate("window.__color.changes.at(-1)[1]") == "area"
     format_select = root.locator('[data-citry-ui-part="format"]')
     format_select.select_option("rgb")
     text_input = root.locator('[data-citry-ui-part="input"]')
@@ -66,12 +67,12 @@ def test_keyboard_text_swatch_and_form_value(page: Any) -> None:
     assert root.locator('input[type="color"]').input_value() == "#12b76a"
     root.locator('[data-citry-color-swatch][data-value="#7f56d9"]').click()
     assert root.locator('input[name="brand"]').input_value() == "#7f56d9"
-    assert page.evaluate("Alpine.store('color').changes.at(-1)") == ["#7f56d9", "swatch"]
+    assert page.evaluate("window.__color.changes.at(-1)") == ["#7f56d9", "swatch"]
     assert errors == []
 
 
-def test_invalid_edit_environment_axe_and_cleanup(page: Any) -> None:
-    errors = _load(page)
+def test_invalid_edit_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     root = page.locator("#picker")
     root.locator('[data-citry-ui-part="trigger"]').click()
     text_input = root.locator('[data-citry-ui-part="input"]')

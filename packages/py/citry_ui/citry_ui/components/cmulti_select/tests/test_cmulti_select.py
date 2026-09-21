@@ -120,7 +120,15 @@ def test_required_readonly_uses_repeated_hidden_inputs() -> None:
     native = re.search(r"<select[^>]+data-cui-multi-select-native[^>]*>", html).group(0)
     assert " disabled" in native
     assert " required" not in native
-    assert html.count('<input name="planet"') == 2
+    assert (
+        len(
+            re.findall(
+                r'<input\b(?=[^>]*\btype="hidden")(?=[^>]*\bname="planet")[^>]*>',
+                html,
+            )
+        )
+        == 2
+    )
 
 
 def test_field_owns_state_and_accessible_relationships() -> None:

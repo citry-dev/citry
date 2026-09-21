@@ -204,10 +204,10 @@ font, network request, overlay runtime, or duplicated slot tree.
 ## 17. Acceptance matrix
 
 Evidence covers both native tags, label/ID relationships, all collapse modes,
-controlled/uncontrolled requests, focus repair, prop removal/invalid episodes,
-slots, CList rail names, attrs, RTL/logical sides, sticky/floating/sizes,
-overflow, forced colors, reduced motion, print, localization override/live
-switch, cleanup, axe, exports, typing, docs, quality routes, assets and wheel.
+controlled and uncontrolled requests, focus repair, correlated server-baseline
+changes, slots, attrs, RTL/logical sides, sticky/floating/sizes, overflow,
+reduced motion, axe, exports, typing, docs, quality routes, assets and wheel.
+Source assertions cover bounded effect, listener, timer, and marker cleanup.
 
 ## 18. Compatibility classification
 

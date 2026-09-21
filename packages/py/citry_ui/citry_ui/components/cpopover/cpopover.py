@@ -259,10 +259,12 @@ class CPopover(LibraryComponent):
     ) -> dict[str, object]:
         snapshot = self._snapshot(kwargs)
         return {
-            "open": snapshot["open"],
-            "dismissible": snapshot["dismissible"],
-            "placement": snapshot["placement"],
-            "matchWidth": snapshot["match_width"],
+            "serverDefaults": {
+                "open": snapshot["open"],
+                "dismissible": snapshot["dismissible"],
+                "placement": snapshot["placement"],
+                "matchWidth": snapshot["match_width"],
+            },
         }
 
     template = """
@@ -345,8 +347,12 @@ class CPopover(LibraryComponent):
           matchWidth: {},
           onOpenChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          const host = component.$el;
+          const data = component;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const defaults = data.serverDefaults;
           const nearestHost = (element) => (
             element?.closest?.("[data-citry-popover-host]") ?? null
           );
@@ -387,15 +393,15 @@ class CPopover(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
-          let internalOpen = initialHandoff?.open ?? data.open;
+          let internalOpen = initialHandoff?.open ?? defaults.open;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
           let pendingRequest = null;
           let configuration = {
-            dismissible: data.dismissible,
-            placement: data.placement,
-            matchWidth: data.matchWidth,
+            dismissible: defaults.dismissible,
+            placement: defaults.placement,
+            matchWidth: defaults.matchWidth,
           };
 
           const describeValue = (value) => {
@@ -417,22 +423,22 @@ class CPopover(LibraryComponent):
             );
           };
           const resolveBoolean = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = props[name] === undefined ? defaults[name] : props[name];
             if (typeof value === "boolean") {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return defaults[name];
           };
           const resolvePlacement = () => {
-            const value = props.placement === undefined ? data.placement : props.placement;
+            const value = props.placement === undefined ? defaults.placement : props.placement;
             if (allowedPlacements.includes(value)) {
               invalidEpisodes.delete("placement");
               return value;
             }
             reportInvalid("placement", value);
-            return data.placement;
+            return defaults.placement;
           };
           const resolveCallback = () => {
             const value = props.onOpenChange;

@@ -99,7 +99,7 @@ def _make_view(route: URLRoute) -> Any:
     from django.http import HttpResponse, HttpResponseNotAllowed  # noqa: PLC0415
 
     def view(request: Any, **kwargs: Any) -> Any:
-        if request.method not in route.methods and request.method != "HEAD":
+        if route.methods is not None and request.method not in route.methods and request.method != "HEAD":
             return HttpResponseNotAllowed(route.methods)
         handler = route.handler
         assert handler is not None  # noqa: S101 - flatten_routes only yields handler routes

@@ -53,9 +53,13 @@ def _write_wheel(
     members[extension] = b"native-extension"
     members[f"{dist_info}/METADATA"] = (
         b"Metadata-Version: 2.4\nName: citry_core\nVersion: 1.7.0\nRequires-Python: >=3.10, <4.0\n"
+        b"License-File: LICENSE\nLicense-File: LICENSE-vize\n"
     )
     members[f"{dist_info}/WHEEL"] = (f"Wheel-Version: 1.0\nRoot-Is-Purelib: {root_is_purelib}\nTag: {tag}\n").encode()
     members[f"{dist_info}/licenses/LICENSE"] = (ROOT / "packages" / "py" / "citry_core" / "LICENSE").read_bytes()
+    members[f"{dist_info}/licenses/LICENSE-vize"] = (
+        ROOT / "packages" / "py" / "citry_core" / "LICENSE-vize"
+    ).read_bytes()
     members[f"{dist_info}/sboms/citry_core_py.cyclonedx.json"] = b'{"bomFormat":"CycloneDX"}\n'
     members.update(extra_members or {})
     record = io.StringIO()
@@ -161,6 +165,48 @@ def test_wheel_verifier_rejects_an_unchecked_python_payload(tmp_path: Path) -> N
 
     with pytest.raises(DistributionVerificationError, match="Python payload differs"):
         verify_wheel(wheel, version="1.7.0")
+
+
+def test_wheel_verifier_requires_exact_upstream_license_attribution(tmp_path: Path) -> None:
+    wheel = tmp_path / "citry_core-1.7.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+    _write_wheel(
+        wheel,
+        extra_members={"citry_core-1.7.0.dist-info/licenses/LICENSE-vize": b"changed\n"},
+    )
+
+    with pytest.raises(DistributionVerificationError, match="checked license inventory"):
+        verify_wheel(wheel, version="1.7.0")
+
+
+def test_vendored_vize_inventory_closes_source_and_attribution() -> None:
+    inventory = distribution_verifier.vendored_vize_inventory()
+
+    assert "third_party/rust/vize_atelier_core/Cargo.toml" in inventory
+    assert "third_party/rust/vize_atelier_core/LICENSE" in inventory
+    assert "third_party/rust/vize_atelier_core/README.citry.md" in inventory
+    assert "third_party/rust/vize_atelier_core/src/codegen/v_for/generate.rs" in inventory
+    assert "third_party/rust/vize_s1_to_s2/Cargo.toml" in inventory
+    assert "third_party/rust/vize_s1_to_s2/LICENSE" in inventory
+    assert "third_party/rust/vize_s1_to_s2/README.citry.md" in inventory
+    assert "third_party/rust/vize_s1_to_s2/src/emit/directive.rs" in inventory
+    assert all(
+        name.startswith(("third_party/rust/vize_atelier_core/", "third_party/rust/vize_s1_to_s2/"))
+        for name in inventory
+    )
+
+
+def test_pyproject_declares_attribution_and_tracks_patch_build_inputs() -> None:
+    manifest = distribution_verifier._loads_toml(
+        (ROOT / "packages" / "py" / "citry_core" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+
+    assert manifest["project"]["license-files"] == ["LICENSE", "LICENSE-vize"]
+    assert "include" not in manifest["tool"]["maturin"]
+    cache_files = {entry["file"] for entry in manifest["tool"]["uv"]["cache-keys"]}
+    assert "../../../third_party/rust/vize_atelier_core/**/*.rs" in cache_files
+    assert "../../../third_party/rust/vize_atelier_core/Cargo.toml" in cache_files
+    assert "../../../third_party/rust/vize_s1_to_s2/**/*.rs" in cache_files
+    assert "../../../third_party/rust/vize_s1_to_s2/Cargo.toml" in cache_files
 
 
 def test_wheel_verifier_rejects_a_recorded_installer_script(tmp_path: Path) -> None:

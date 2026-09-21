@@ -6,18 +6,15 @@ citry.register_library(citry_ui)
 
 class ControlledEditable(Component):
     template = """
-      <div x-data>
+      <div >
         <c-CEditable
           value="Atlas"
-          $c-props="{
-            value:$store.editableExample.value,
-            onValueChange:(next) => $store.editableExample.value = next,
-          }"
+          :value="value" :onValueChange="(next) => value = next"
         />
-        <p>Committed: <strong x-text="$store.editableExample.value"></strong></p>
+        <p>Committed: <strong v-text="value"></strong></p>
       </div>
     """
-    js = "Alpine.store('editableExample', {value:'Atlas'});"
+    js = "$component({data(){return {value:'Atlas'};}});"
 
 
 preview = ControlledEditable()

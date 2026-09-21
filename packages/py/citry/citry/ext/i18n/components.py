@@ -54,8 +54,21 @@ def make_i18n_component(citry_instance: Citry) -> type[Component]:
 <c-element
   c-is="tag"
   c-bind="attrs"
-  x-init="$provide('citry_i18n', Citry.i18n.provider($el, $inject('citry_i18n', null)))"
 ><c-slot /></c-element>\
+"""
+        js = """
+$component({
+  mounted() {
+    this._citryI18nStop = this.$i18n.subscribe((context) => {
+      this.$el.setAttribute('lang', context.locale);
+      this.$el.setAttribute('dir', context.direction);
+    });
+  },
+  beforeUnmount() {
+    this._citryI18nStop?.();
+    this._citryI18nStop = null;
+  },
+});
 """
 
     class I18nBarrierHost(Component, _citry_internal=internal_token):
@@ -75,7 +88,10 @@ def make_i18n_component(citry_instance: Citry) -> type[Component]:
             }
 
         template = """\
-<c-element c-is="tag" c-bind="attrs" x-init="$unprovide('citry_i18n')"><c-slot /></c-element>\
+<c-element c-is="tag" c-bind="attrs"><c-slot /></c-element>\
+"""
+        js = """
+$component({});
 """
 
     class I18nElementHost(Component, _citry_internal=internal_token):

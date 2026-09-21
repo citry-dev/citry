@@ -182,7 +182,7 @@ hover, and navigates to definitions from:
 
 - template `tr()` and `<c-trans message="...">` calls;
 - Python `self.i18n.tr()` and `Component.I18n.client_messages`;
-- Alpine `$i18n.tr()` inside a client-enabled provider;
+- Vue `$i18n.tr()` inside a client-enabled provider;
 - checked `$c-tr` bindings in component templates;
 - component JavaScript calls and bounded `i18n.bind()` registrations through
   the injected `i18n` service; and

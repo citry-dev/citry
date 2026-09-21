@@ -14,7 +14,6 @@ def slider_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack slider-quality"
             aria-labelledby="slider-states-title"
-            x-data="{controlled:['20','80'],last:'No Slider action yet'}"
           >
             <h1 id="slider-states-title">Slider and RangeSlider states</h1>
             <form
@@ -33,7 +32,7 @@ def slider_states_component(app: Citry) -> type[Component]:
                     step="0.25"
                     c-marks="{0:'Silent',5:'Medium',10:'Maximum'}"
                     c-attrs="{'data-quality-states':'single exact form marks keyboard pointer reset field description'}"
-                    $c-props="{onValueChange:(next,detail)=>last=`${detail.source}: ${next}`}"
+                    :onValueChange="(next,detail)=>last=`${detail.source}: ${next}`"
                   />
                 </c-fill>
               </c-CField>
@@ -46,7 +45,7 @@ def slider_states_component(app: Citry) -> type[Component]:
                 c-value="(20, 80)"
                 c-min_steps_between_thumbs="10"
                 c-attrs="{'data-quality-states':'range lower upper collision tab-order localized labels'}"
-                $c-props="{value:controlled,onValueChange:(next)=>{controlled=next;last=`Accepted ${next.join('-')}`}}"
+                :value="controlled" :onValueChange="(next)=>{controlled=next;last=`Accepted ${next.join('-')}`}"
               />
               <c-CSlider
                 value="30"
@@ -92,8 +91,17 @@ def slider_states_component(app: Citry) -> type[Component]:
                 c-attrs="{'data-quality-states':'vertical narrow'}"
               />
             </div>
-            <output x-text="last">No Slider action yet</output>
+            <output v-text="last">No Slider action yet</output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlled:['20','80'],last:'No Slider action yet'
+              };
+            },
+          });
         """
         css = """
           :where(.slider-quality form){display:grid;gap:1rem}

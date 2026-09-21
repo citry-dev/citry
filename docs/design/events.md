@@ -1,10 +1,16 @@
 # Design: the Events extension (`Component.Events`)
 
+**Vue cutover:** browser lifecycle, component targeting, native event handlers
+and prepared revisions follow [`vue.md`](vue.md). The Events wire contract,
+State and transport remain specified here and in the protocol package;
+Alpine-specific integration sections below are historical background.
+Migration qualification is recorded in [`vue.md`](vue.md).
+
 **Status (2026-07-26): Events v1 is implemented but not yet frozen or
 released as the v1 beta.** The exact current wire contract is
 [`packages/protocol/events/v1/spec.md`](../../packages/protocol/events/v1/spec.md);
-this document owns the product and implementation design behind it. The Alpine and
-frontend-boundary source of truth is now [`alpinejs.md`](alpinejs.md); this
+this document owns the product and implementation design behind it. The current
+frontend-boundary source of truth is [`vue.md`](vue.md); this
 document remains normative for the Events protocol, State, actions,
 transport, and queue. The full
 section-by-section maintainer readthrough completed 2026-07-07 (three
@@ -359,7 +365,7 @@ already built, and this design adds no core hooks:
 - **The client runtime baseline.** Before the Events decorator extends it in
   5.5, `Citry.manager` exposes seven public methods and `$component` callbacks
   receive exactly `{id, els, data}`
-  ([`citry.js:150`](../../packages/py/citry/citry/ext/dependencies/client/citry.js));
+  (the removed Alpine runtime's `citry.js:150`);
   fragments deliver assets and calls through inert base64-encoded JSON
   manifest tags picked up by a MutationObserver (`citry.js:201-213`).
   `$component(` is a cache-time regex rewrite to
@@ -1378,9 +1384,10 @@ colliding with component addressing:
 ```
 POST      ext/events/call               batch endpoint
                                         (envelope w/ calls[])
-GET       ext/events/runtime.js             events JS code
-GET       ext/events/runtime-csp.js         CSP-compatible events JS code
-GET|POST  ext/events/e/{class_id}/{event}   per-event dispatch
+GET       ext/events/runtime.js                         events JS code
+GET       ext/events/definitions/{digest}.js            prepared component definition
+GET       ext/events/assets/{digest}.css                 prepared component stylesheet
+declared  ext/events/e/{class_id}/{event}                per-event handler methods
 ```
 
 The per-event route (`ext/events/e/{class_id}/{event}`) is one fixed
@@ -1390,7 +1397,8 @@ the URL set once when `urlpatterns()` is built. `class_id` is used
 rather than the registered name because it always exists. The URL is
 authoritative: on the per-event route, a body naming a different
 component or event is rejected; the batch endpoint is where calls name
-their own targets.
+their own targets. Its `URLRoute.methods=None` delegates method admission to
+the resolved event handler, including its `405` response and `Allow` header.
 
 Every handler therefore has a real URL that host middleware, rate
 limiters, access logs, curl, and OpenAPI all see:
@@ -2550,9 +2558,13 @@ race-proof, because citry.js processes manifest tags DURING page parse
 - The serializer emits the `data-citry-events` tag BEFORE the
   `data-citry` tag, so whenever a call can fire, the events manifest is
   already parsed.
-- The context decorator drains any unprocessed events manifests before
-  decorating, covering the window where a tag is in the DOM but its
-  mutation record has not yet reached the observer.
+- The context decorator drains the Events runtime's pending manifest records
+  before decorating, covering the window where a tag is in the DOM but its
+  mutation record has not yet reached either permanent broker callback. The
+  same pending-only drain closes the boundary-initialization and pre-start
+  windows without rescanning the document. Runtime evaluation retains one
+  full-document catch-up for manifests parsed before a late Events provider,
+  and the explicit internal replay entry point retains its full scan.
 
 ### 5.3 DOM updates: morph by default
 

@@ -346,26 +346,16 @@ categories:
   - kind: authored_api
     slug: browser-apis
     title: Browser APIs
-    intro: Component JavaScript, Citry's Alpine magics, and page-wide browser methods.
+    intro: Component JavaScript, Vue integration, and component Events helpers.
     source: reference/browser-apis.md
     entries:
       - { key: "$component", anchor: component, role: "js:function" }
-      - { key: "$component.i18n", anchor: component-i18n, role: "js:data" }
-      - { key: "$i18n", anchor: i18n, role: "js:data" }
+      - { key: onServerRender, anchor: on-server-render, role: "js:function" }
+      - { key: Citry.vue, anchor: citry-vue, role: "js:data" }
       - { key: "$state", anchor: state, role: "js:data" }
       - { key: "$loading", anchor: loading, role: "js:function" }
-      - { key: "$error", anchor: error, role: "js:data" }
+      - { key: "$error", anchor: error, role: "js:function" }
       - { key: "$sendEvent", anchor: send-event, role: "js:function" }
-      - { key: "$onEvent", anchor: on-event, role: "js:function" }
-      - { key: "$provide", anchor: provide, role: "js:function" }
-      - { key: "$inject", anchor: inject, role: "js:function" }
-      - { key: "$unprovide", anchor: unprovide, role: "js:function" }
-      - { key: Citry.alpine.beforeStart, anchor: citry-alpine-before-start, role: "js:function" }
-      - { key: Citry.events.send, anchor: citry-events-send, role: "js:function" }
-      - { key: Citry.events.on, anchor: citry-events-on, role: "js:function" }
-      - { key: Citry.events.configure, anchor: citry-events-configure, role: "js:function" }
-      - { key: Citry.events.registerTransport, anchor: citry-events-register-transport, role: "js:function" }
-      - { key: Citry.events.applyActions, anchor: citry-events-apply-actions, role: "js:function" }
 
   - kind: generated_python
     slug: attributes
@@ -421,6 +411,7 @@ categories:
       - fill
       - component
       - element
+      - mark
       - provide
       - cache
       - error-fallback

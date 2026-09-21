@@ -8,7 +8,7 @@ class DisclosureOverlaysAndDialogs(Component):
     template = """
       <section
         class="disclosure-overlay-demo"
-        x-data="{dialogOpen:false}"
+
         @click="if ($event.target.closest('[data-open-credential-dialog]')) dialogOpen=true"
       >
         <c-CDisclosure open>
@@ -34,15 +34,21 @@ class DisclosureOverlaysAndDialogs(Component):
 
         <c-CDialog
           size="sm"
-          $c-props="{
-            open: dialogOpen,
-            onOpenChange: (next) => dialogOpen = next,
-          }"
+          :open="dialogOpen" :onOpenChange="(next) => dialogOpen = next"
         >
           <c-fill name="title">Rotate credential</c-fill>
           <c-fill name="default">The old credential stops working immediately.</c-fill>
         </c-CDialog>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            dialogOpen:false
+          };
+        },
+      });
     """
 
     css = """

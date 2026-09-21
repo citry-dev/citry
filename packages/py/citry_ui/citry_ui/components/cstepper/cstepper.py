@@ -234,11 +234,18 @@ class CStepper(LibraryComponent):
         }
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._stepper_data
+        return {
+            "label": self._stepper_data["label"],
+            "interactive": self._stepper_data["interactive"],
+            "serverDefaults": {
+                key: value for key, value in self._stepper_data.items() if key not in {"label", "interactive"}
+            },
+        }
 
     template = """
       <c-CInternalStepperDeclarations><c-slot required /></c-CInternalStepperDeclarations>
       <c-CInternalStepper
+        ref="stepperRoot"
         c-label="label"
         c-active="active"
         c-interactive="interactive"
@@ -255,8 +262,11 @@ class CStepper(LibraryComponent):
     js = r"""
       $component({
         props: {active: {}, linear: {}, disabled: {}, orientation: {}, variant: {}, size: {}, onActiveChange: {}},
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$refs.stepperRoot.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const stepSelector = ':scope > [data-citry-ui-part="list"] > [data-citry-ui-part="step"]';
           const invalidEpisodes = new Set();
           const prior = root.__citryUiStepperRuntime;
@@ -504,7 +514,8 @@ class CInternalStepperDeclarations(LibraryComponent):
 
 
 class CInternalStepper(LibraryComponent):
-    transparent = True
+    # This component owns the physical stepper root and is the runtime ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:

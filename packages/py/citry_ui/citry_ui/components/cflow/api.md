@@ -110,6 +110,6 @@ only when the original order remains understandable.
 />
 
 Flow renders completely without JavaScript. Attribute maps accept native,
-ARIA, data, and trusted targeted Alpine attributes, but reserve layout
+ARIA, data, and trusted targeted Vue attributes, but reserve layout
 reflections, part markers, structural directives, and Citry runtime ownership
 fields.

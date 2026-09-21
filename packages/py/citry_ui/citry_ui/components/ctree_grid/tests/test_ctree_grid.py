@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -11,7 +12,7 @@ from citry import Citry, Component
 from citry_ui import CTreeGrid, CTreeGridColumn, CTreeGridRow
 
 
-def _render(columns, rows, attrs: str = "") -> str:
+def _render(columns, rows, attrs: str = "", *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -23,7 +24,14 @@ def _render(columns, rows, attrs: str = "") -> str:
 
         template = f'<c-CTreeGrid c-columns="columns" c-rows="rows" label="Hierarchy" {attrs} />'
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
+
+
+def _manifest(html: str) -> dict[str, object]:
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["manifest"]
 
 
 def _data():
@@ -54,7 +62,10 @@ def test_schema_registration_hierarchy_and_native_selection() -> None:
     ]
     assert CTreeGrid in citry_ui.COMPONENTS
     html = _render(
-        columns, rows, 'c-expanded="[\'root\']" selection="multiple" c-selected="[\'child\']" name="chosen"'
+        columns,
+        rows,
+        'c-expanded="[\'root\']" selection="multiple" c-selected="[\'child\']" name="chosen"',
+        static_fallback=True,
     )
     assert 'role="treegrid"' in html
     assert 'aria-rowcount="3"' in html
@@ -65,6 +76,24 @@ def test_schema_registration_hierarchy_and_native_selection() -> None:
     for role in ("rowgroup", "row", "columnheader", "gridcell"):
         assert f'role="{role}"' not in html
     assert re.search(r'<input[^>]+name="chosen"[^>]+value="child"', html)
+
+
+def test_server_defaults_are_namespaced_away_from_vue_props() -> None:
+    columns, rows = _data()
+    html = _render(columns, rows, 'disabled selection="multiple"')
+    occurrence = next(item for item in _manifest(html)["occurrences"] if item["typeKey"].startswith("CTreeGrid_"))
+    server_data = occurrence["serverData"]
+    assert set(server_data) == {"serverDefaults"}
+    assert set(server_data["serverDefaults"]) == {
+        "expanded",
+        "selection",
+        "selected",
+        "name",
+        "form",
+        "disabled",
+        "catalog",
+        "labels",
+    }
 
 
 @pytest.mark.parametrize(
@@ -99,6 +128,8 @@ def test_assets_docs_and_translations_cover_contract() -> None:
     guide = (root / "api.md").read_text()
     reference = (root / "api.yml").read_text()
     for fragment in (
+        "onServerRender",
+        "Citry.vue.watchEffect",
         "shiftKey",
         "ArrowLeft",
         "ArrowRight",
@@ -108,6 +139,7 @@ def test_assets_docs_and_translations_cover_contract() -> None:
         "removeEventListener",
     ):
         assert fragment in js
+    assert "init:" not in js
     for fragment in ("prefers-reduced-motion", "forced-colors", "@media print"):
         assert fragment in css
     assert guide.count("<c-ui-demo ") == 6

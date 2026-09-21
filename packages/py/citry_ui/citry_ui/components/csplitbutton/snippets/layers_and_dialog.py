@@ -8,13 +8,8 @@ class SplitButtonLayersAndDialog(Component):
     template = """
       <section
         class="split-button-layer-demo"
-        x-data="{dialogOpen:false,last:'No layer action yet'}"
+
         @click="if ($event.target.closest('[data-open-provenance]')) dialogOpen=true"
-        x-init="$nextTick(() => {
-          const host = $refs.shadowHost;
-          const fixture = $refs.shadowFixture;
-          if (!host.shadowRoot && fixture) host.attachShadow({mode:'open'}).append(fixture);
-        })"
       >
         <h2>Clipped specimen tray</h2>
         <div class="split-button-layer-demo__clip" dir="rtl">
@@ -22,19 +17,19 @@ class SplitButtonLayersAndDialog(Component):
             label="Clipped specimen actions"
             menu_label="More clipped specimen actions"
             placement="bottom-end"
-            c-primary_attrs="{'data-open-provenance':'','@click':'last=`Primary requested provenance`'}"
-            $c-props="{onAction:(value)=>{
+            c-primary_attrs="{'data-open-provenance':''}"
+            v-bind="{onAction:(value)=>{
               last=value;
               if (value === 'open-provenance') dialogOpen=true;
             }}"
           >
-            <c-fill name="default">Record provenance</c-fill>
+            <c-fill name="default"><span @click="last='Primary requested provenance'">Record provenance</span></c-fill>
             <c-fill name="menu">
               <c-CMenuItem value="open-provenance">Open provenance Dialog</c-CMenuItem>
               <c-CMenuSubmenu value="archive">
                 <c-fill name="label">Archive destination</c-fill>
                 <c-fill name="default">
-                  <c-CMenuItem value="alpine-archive">Alpine archive</c-CMenuItem>
+                  <c-CMenuItem value="herbarium-archive">Herbarium archive</c-CMenuItem>
                   <c-CMenuItem value="coastal-archive">Coastal archive</c-CMenuItem>
                 </c-fill>
               </c-CMenuSubmenu>
@@ -42,8 +37,8 @@ class SplitButtonLayersAndDialog(Component):
           </c-CSplitButton>
         </div>
 
-        <div x-ref="shadowHost" class="split-button-layer-demo__shadow-host">
-          <div x-ref="shadowFixture">
+        <div ref="shadowHost" class="split-button-layer-demo__shadow-host">
+          <div ref="shadowFixture">
             <c-CSplitButton
               label="Shadow specimen actions"
               menu_label="More Shadow specimen actions"
@@ -56,10 +51,10 @@ class SplitButtonLayersAndDialog(Component):
           </div>
         </div>
 
-        <output aria-live="polite" x-text="last">No layer action yet</output>
+        <output aria-live="polite" v-text="last">No layer action yet</output>
         <c-CDialog
           size="sm"
-          $c-props="{
+          v-bind="{
             open:dialogOpen,
             onOpenChange:(next)=>dialogOpen=next,
           }"
@@ -71,6 +66,17 @@ class SplitButtonLayersAndDialog(Component):
           </c-fill>
         </c-CDialog>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {dialogOpen:false,last:'No layer action yet'};},
+        mounted() {
+          if (!this.$refs.shadowHost.shadowRoot) {
+            this.$refs.shadowHost.attachShadow({mode:'open'}).append(this.$refs.shadowFixture);
+          }
+        },
+      });
     """
 
     css = """

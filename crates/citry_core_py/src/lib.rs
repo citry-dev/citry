@@ -5,13 +5,12 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
-pub mod client_graph;
 pub mod html_transform;
 pub mod i18n;
-mod ownership;
 pub mod safe_eval;
 pub mod template_formatter;
 pub mod template_parser;
+mod vue;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet};
@@ -25,8 +24,9 @@ use citry_template_parser::{
     TagRules, Template, TemplateElement, Text, Token,
 };
 
-use crate::client_graph::canonical_json_and_revision;
-use crate::html_transform::{mark_html, scan_alpine_html, transform_html};
+use crate::html_transform::{
+    mark_html, scan_output_html, transform_html, validate_html_fragment_boundary,
+};
 use crate::i18n::{
     I18nCompileError, PyCatalogCompiler, PyCompiledCatalog, PyTextCatalog, canonicalize_locale,
     locale_direction,
@@ -36,8 +36,9 @@ use crate::template_formatter::{
     prepare_embedded_format, python_expression_provider,
 };
 use crate::template_parser::{
-    analyze_browser_source, analyze_component_members, analyze_component_scope_writes,
-    analyze_component_source, compile_template, parse_template,
+    analyze_browser_binding_pattern, analyze_browser_source, analyze_component_members,
+    analyze_component_scope_writes, analyze_component_source, compile_prepared_template,
+    compile_template, parse_template,
 };
 
 /// Singular Python API that brings together all the other Rust crates.
@@ -47,24 +48,18 @@ use crate::template_parser::{
 ///       It MUST match the `module-name` setting in `pyproject.toml` in `packages/py/citry_core/`.
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Ownership capture shares Python records with the higher-level runtime.
-    let ownership_mod = PyModule::new(m.py(), "ownership")?;
-    ownership::register(&ownership_mod)?;
-    m.add_submodule(&ownership_mod)?;
-
+    let vue_mod = PyModule::new(m.py(), "vue")?;
+    vue::register(&vue_mod)?;
+    m.add_submodule(&vue_mod)?;
     // HTML transformer
     let html_transform_mod = PyModule::new(m.py(), "html_transform")?;
     m.add_submodule(&html_transform_mod)?;
     html_transform_mod.add_function(wrap_pyfunction!(transform_html, &html_transform_mod)?)?;
     html_transform_mod.add_function(wrap_pyfunction!(mark_html, &html_transform_mod)?)?;
-    html_transform_mod.add_function(wrap_pyfunction!(scan_alpine_html, &html_transform_mod)?)?;
-
-    // Client graph canonicalization
-    let client_graph_mod = PyModule::new(m.py(), "client_graph")?;
-    m.add_submodule(&client_graph_mod)?;
-    client_graph_mod.add_function(wrap_pyfunction!(
-        canonical_json_and_revision,
-        &client_graph_mod
+    html_transform_mod.add_function(wrap_pyfunction!(scan_output_html, &html_transform_mod)?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(
+        validate_html_fragment_boundary,
+        &html_transform_mod
     )?)?;
 
     // Internationalization primitives
@@ -115,7 +110,19 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     template_parser_mod.add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
     template_parser_mod.add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
+        compile_prepared_template,
+        &template_parser_mod
+    )?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(
         analyze_browser_source,
+        &template_parser_mod
+    )?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(
+        analyze_browser_binding_pattern,
+        &template_parser_mod
+    )?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(
+        analyze_component_members,
         &template_parser_mod
     )?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
@@ -124,10 +131,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
         analyze_component_source,
-        &template_parser_mod
-    )?)?;
-    template_parser_mod.add_function(wrap_pyfunction!(
-        analyze_component_members,
         &template_parser_mod
     )?)?;
     // AST classes

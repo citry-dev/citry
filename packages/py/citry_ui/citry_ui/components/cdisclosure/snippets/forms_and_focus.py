@@ -8,32 +8,12 @@ class DisclosureFormsAndFocus(Component):
     template = """
       <form
         class="disclosure-form"
-        x-data="{notificationOpen:true, escalationOpen:false, invalidTarget:null}"
-        @invalid.capture="
-          if ($event.target.name === 'notification-email') {
-            $event.preventDefault();
-            notificationOpen = true;
-          } else if ($event.target.name === 'escalation-contact') {
-            $event.preventDefault();
-            escalationOpen = true;
-          } else {
-            return;
-          }
-          if (invalidTarget === null) {
-            invalidTarget = $event.target;
-            $nextTick(() => {
-              invalidTarget?.focus();
-              invalidTarget = null;
-            });
-          }
-        "
+
+        @invalid.capture="handleInvalid"
       >
         <c-CDisclosure
           open
-          $c-props="{
-            open: notificationOpen,
-            onOpenChange: (next) => notificationOpen = next,
-          }"
+          :open="notificationOpen" :onOpenChange="(next) => notificationOpen = next"
         >
           <c-fill name="title">Notification settings</c-fill>
           <c-fill name="default">
@@ -50,10 +30,7 @@ class DisclosureFormsAndFocus(Component):
           </c-fill>
         </c-CDisclosure>
         <c-CDisclosure
-          $c-props="{
-            open: escalationOpen,
-            onOpenChange: (next) => escalationOpen = next,
-          }"
+          :open="escalationOpen" :onOpenChange="(next) => escalationOpen = next"
         >
           <c-fill name="title">Required escalation contact</c-fill>
           <c-fill name="default">
@@ -63,6 +40,35 @@ class DisclosureFormsAndFocus(Component):
         <c-CButton type="submit">Save settings</c-CButton>
         <c-CButton type="reset" variant="outline">Reset form</c-CButton>
       </form>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            notificationOpen:true, escalationOpen:false, invalidTarget:null
+          };
+        },
+        methods: {
+          handleInvalid(event) {
+            if (event.target.name === 'notification-email') {
+              event.preventDefault();
+              this.notificationOpen = true;
+            } else if (event.target.name === 'escalation-contact') {
+              event.preventDefault();
+              this.escalationOpen = true;
+            } else {
+              return;
+            }
+            if (this.invalidTarget === null) {
+              this.invalidTarget = event.target;
+              this.$nextTick(() => {
+                this.invalidTarget?.focus();
+                this.invalidTarget = null;
+              });
+            }
+          },
+        },
+      });
     """
 
     css = """

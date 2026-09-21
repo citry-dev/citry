@@ -8,6 +8,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry.ext.events.renderers import dispatcher_for
 from citry_ui.quality.routes import render_scenario
 
 pytestmark = pytest.mark.e2e
@@ -19,6 +20,13 @@ def _form_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const formDemo=Citry.vue.reactive({
+            controlled:true,controlledValue:'owner@example.com',formDisabled:false,
+            formReadonly:false,submitting:false,fieldRequired:true,fieldInvalid:false,
+            inputRequired:undefined,variant:'outline',
+          }); window.__formDemo=formDemo; return {state:{formDemo}};}});
+        """
         css = """
           :where(.form-brand) {
             --cui-field-label-color: rgb(18 52 86);
@@ -39,20 +47,7 @@ def _form_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('formDemo', {
-                controlled: true,
-                controlledValue: 'owner@example.com',
-                formDisabled: false,
-                formReadonly: false,
-                submitting: false,
-                fieldRequired: true,
-                fieldInvalid: false,
-                inputRequired: undefined,
-                variant: 'outline',
-              })"
-            >
+            <body>
               <section
                 class="form-brand"
                 style="color-scheme: dark"
@@ -62,18 +57,14 @@ def _form_page() -> str:
                   action="/profiles"
                   method="post"
                   c-attrs="form_attrs"
-                  $c-props="{
-                    disabled: $store.formDemo.formDisabled,
-                    readonly: $store.formDemo.formReadonly,
-                    submitting: $store.formDemo.submitting,
-                  }"
+                  :disabled="state.formDemo.formDisabled"
+                  :readonly="state.formDemo.formReadonly"
+                  :submitting="state.formDemo.submitting"
                 >
                   <c-CField
                     control_id="email-control"
-                    $c-props="{
-                      required: $store.formDemo.fieldRequired,
-                      invalid: $store.formDemo.fieldInvalid,
-                    }"
+                    :required="state.formDemo.fieldRequired"
+                    :invalid="state.formDemo.fieldInvalid"
                   >
                     <c-fill name="label">
                       Work email
@@ -86,13 +77,11 @@ def _form_page() -> str:
                         autocomplete="email"
                         placeholder="name@example.com"
                         c-attrs="email_attrs"
-                        $c-props="{
-                          value: $store.formDemo.controlled
-                            ? $store.formDemo.controlledValue
-                            : undefined,
-                          required: $store.formDemo.inputRequired,
-                          variant: $store.formDemo.variant,
-                        }"
+                        :value="state.formDemo.controlled
+                            ? state.formDemo.controlledValue
+                            : undefined"
+                        :required="state.formDemo.inputRequired"
+                        :variant="state.formDemo.variant"
                       />
                       <span
                         hidden
@@ -128,42 +117,42 @@ def _form_page() -> str:
               <button
                 id="toggle-disabled"
                 type="button"
-                @click="$store.formDemo.formDisabled = !$store.formDemo.formDisabled"
+                @click="state.formDemo.formDisabled = !state.formDemo.formDisabled"
               >
                 Toggle disabled
               </button>
               <button
                 id="toggle-readonly"
                 type="button"
-                @click="$store.formDemo.formReadonly = !$store.formDemo.formReadonly"
+                @click="state.formDemo.formReadonly = !state.formDemo.formReadonly"
               >
                 Toggle readonly
               </button>
               <button
                 id="toggle-required"
                 type="button"
-                @click="$store.formDemo.fieldRequired = !$store.formDemo.fieldRequired"
+                @click="state.formDemo.fieldRequired = !state.formDemo.fieldRequired"
               >
                 Toggle required
               </button>
               <button
                 id="toggle-invalid"
                 type="button"
-                @click="$store.formDemo.fieldInvalid = !$store.formDemo.fieldInvalid"
+                @click="state.formDemo.fieldInvalid = !state.formDemo.fieldInvalid"
               >
                 Toggle invalid
               </button>
               <button
                 id="toggle-submitting"
                 type="button"
-                @click="$store.formDemo.submitting = !$store.formDemo.submitting"
+                @click="state.formDemo.submitting = !state.formDemo.submitting"
               >
                 Toggle submitting
               </button>
               <button
                 id="release-control"
                 type="button"
-                @click="$store.formDemo.controlled = false"
+                @click="state.formDemo.controlled = false"
               >
                 Release control
               </button>
@@ -171,8 +160,8 @@ def _form_page() -> str:
                 id="set-controlled"
                 type="button"
                 @click="
-                  $store.formDemo.controlledValue = 'next@example.com';
-                  $store.formDemo.controlled = true;
+                  state.formDemo.controlledValue = 'next@example.com';
+                  state.formDemo.controlled = true;
                 "
               >
                 Set controlled value
@@ -180,7 +169,7 @@ def _form_page() -> str:
               <button
                 id="set-invalid-props"
                 type="button"
-                @click="$store.formDemo.variant = 'raised'"
+                @click="state.formDemo.variant = 'raised'"
               >
                 Set invalid props
               </button>
@@ -219,6 +208,136 @@ def _load(page) -> None:
             && [...inputs].every((input) => input.hasAttribute('data-citry-input-initialized'));
         }"""
     )
+
+
+def _vue_provider_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <main>
+            <c-CForm id="native-provider-form" :disabled="formDisabled" :readonly="formReadonly">
+              <c-CField control_id="native-provider-input" :required="fieldRequired" :invalid="fieldInvalid">
+                <c-fill name="label">Email</c-fill>
+                <c-fill name="default">
+                  <c-CInput name="email" type="email" value="server@example.com" :value="controlledValue" />
+                </c-fill>
+                <c-fill name="error">Enter an email.</c-fill>
+              </c-CField>
+              <button id="submit-provider-form" type="submit">Submit</button>
+            </c-CForm>
+            <button id="toggle-provider-disabled" @click="formDisabled = !formDisabled">disabled</button>
+            <button id="toggle-provider-readonly" @click="formReadonly = !formReadonly">readonly</button>
+            <button id="toggle-provider-invalid" @click="fieldInvalid = !fieldInvalid">invalid</button>
+            <button id="change-provider-value" @click="controlledValue = 'next@example.com'">value</button>
+          </main>
+        """
+        js = """$component({data(){return {formDisabled:false,formReadonly:false,
+          fieldRequired:true,fieldInvalid:false,controlledValue:'owner@example.com'};}});"""
+
+    return Page().render().serialize()
+
+
+def test_vue_native_form_field_input_provider_workflow(page):
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_vue_provider_page(), wait_until="load")
+    page.wait_for_selector("#native-provider-input[data-citry-input-initialized]")
+    form = page.locator("#native-provider-form")
+    field = page.locator("[data-citry-field-root]")
+    control = page.locator("#native-provider-input")
+    assert control.input_value() == "owner@example.com"
+    assert control.evaluate("element => element.required")
+
+    page.locator("#toggle-provider-disabled").click()
+    assert form.get_attribute("data-disabled") == ""
+    assert control.is_disabled()
+    page.locator("#toggle-provider-disabled").click()
+    page.locator("#toggle-provider-readonly").click()
+    assert control.is_editable() is False
+    assert control.is_disabled() is False
+    page.locator("#toggle-provider-readonly").click()
+
+    page.locator("#toggle-provider-invalid").click()
+    assert field.get_attribute("data-invalid") == ""
+    assert control.get_attribute("aria-invalid") == "true"
+    page.locator("#toggle-provider-invalid").click()
+    assert control.evaluate("element => { element.value = 'not-an-email'; return element.reportValidity(); }") is False
+    page.wait_for_function("document.querySelector('[data-citry-field-root]').hasAttribute('data-invalid')")
+    assert page.locator("#native-provider-input-error").is_visible()
+    control.evaluate("element => { element.value = 'valid@example.com'; element.dispatchEvent(new Event('input')); }")
+    page.wait_for_function("!document.querySelector('[data-citry-field-root]').hasAttribute('data-invalid')")
+    assert page.locator("#native-provider-input-error").is_hidden()
+    page.locator("#change-provider-value").click()
+    assert control.input_value() == "next@example.com"
+    assert errors == []
+
+
+def test_retained_field_revision_updates_ids_and_slot_relationships(page, serve_citry_ui_live):
+    app = Citry(secret="field-revision", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(citry_ui)
+
+    class FieldRevision(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Slots:
+            pass
+
+        class Events:
+            def advance(self, state):
+                state.step = 1
+                return FieldRevision(step=1)
+
+        template = """
+          <section>
+            <button id="advance-field" @c-click="advance">advance</button>
+            <c-CField #c-key="'retained-field'" c-control_id="control_id" c-invalid="invalid">
+              <c-fill name="label">Value</c-fill>
+              <c-fill name="default"><c-CInput #c-key="'retained-input'" name="value" /></c-fill>
+              <c-fill name="description">Before help</c-fill>
+              <c-fill name="error">After error</c-fill>
+            </c-CField>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {
+                "step": kwargs.step,
+                "control_id": "after-field" if kwargs.step else "before-field",
+                "invalid": bool(kwargs.step),
+            }
+
+    dispatcher_for(app)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    base = serve_citry_ui_live(app, FieldRevision(step=0).render().serialize())
+    page.goto(base + "/")
+    page.wait_for_timeout(500)
+    assert page.locator("#before-field[data-citry-input-initialized]").count() == 1, (faults, page.content())
+    page.evaluate("window.__retainedField=document.querySelector('[data-citry-field-root]')")
+    assert page.locator("#before-field").get_attribute("aria-describedby") == "before-field-description"
+    assert page.locator("#before-field-error").count() == 1
+    assert page.locator("#before-field-error").is_hidden()
+
+    page.locator("#advance-field").click()
+    page.wait_for_selector("#after-field[data-citry-input-initialized]")
+    assert page.evaluate("window.__retainedField===document.querySelector('[data-citry-field-root]')")
+    assert (
+        page.locator("#after-field").get_attribute("aria-describedby") == "after-field-description after-field-error"
+    )
+    assert page.locator("#after-field").get_attribute("aria-errormessage") == "after-field-error"
+    assert page.locator("#after-field-description").count() == 1
+    assert page.locator("#after-field-error").is_visible()
+    assert faults == []
 
 
 def test_native_relationships_form_configuration_and_theme_are_preserved(page):
@@ -397,13 +516,13 @@ def test_field_owns_nested_input_client_state(page):
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     _load(page)
 
-    page.evaluate("Alpine.store('formDemo').inputRequired = false")
+    page.evaluate("window.__formDemo.inputRequired = false")
     page.wait_for_timeout(0)
     assert page.locator("#email-control").evaluate("element => element.required") is True
 
     page.locator("#toggle-required").click()
     page.wait_for_function("!document.querySelector('#email-control').required")
-    page.evaluate("Alpine.store('formDemo').inputRequired = true")
+    page.evaluate("window.__formDemo.inputRequired = true")
     page.wait_for_timeout(0)
     assert page.locator("#email-control").evaluate("element => element.required") is False
 
@@ -416,9 +535,9 @@ def test_invalid_controlled_value_keeps_previous_mode_and_recovers(page):
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     _load(page)
 
-    page.evaluate("Alpine.store('formDemo').controlledValue = null")
+    page.evaluate("window.__formDemo.controlledValue = null")
     page.wait_for_function("""() => document.querySelector('#email-control').value === 'owner@example.com'""")
-    page.evaluate("Alpine.store('formDemo').controlledValue = 'recovered@example.com'")
+    page.evaluate("window.__formDemo.controlledValue = 'recovered@example.com'")
     page.wait_for_function("""() => document.querySelector('#email-control').value === 'recovered@example.com'""")
 
     matching = [message for message in errors if "CInput value received invalid client value null" in message]
@@ -444,7 +563,7 @@ def test_controlled_input_defers_restoration_during_ime_composition(page):
     page.wait_for_timeout(0)
     assert page.locator("#email-control").input_value() == "composing"
 
-    page.evaluate("Alpine.store('formDemo').controlledValue = 'updated during composition'")
+    page.evaluate("window.__formDemo.controlledValue = 'updated during composition'")
     page.wait_for_timeout(0)
     assert page.locator("#email-control").input_value() == "composing"
 

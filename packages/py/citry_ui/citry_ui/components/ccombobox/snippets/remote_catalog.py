@@ -8,29 +8,6 @@ class RemoteStarCatalog(Component):
     template = """
       <section
         class="remote-stars"
-        x-data
-        x-init="Alpine.store('remoteStars', {
-          async loadStars({ query, signal }) {
-            await new Promise((resolve, reject) => {
-              const timer = setTimeout(resolve, 350);
-              signal.addEventListener('abort', () => {
-                clearTimeout(timer);
-                reject(new DOMException('Aborted', 'AbortError'));
-              }, { once: true });
-            });
-            if (query.toLowerCase() === 'offline') {
-              throw new Error('Catalog unavailable');
-            }
-            const stars = [
-              { value: 'vega', label: 'Vega', description: 'Blue-white star in Lyra' },
-              { value: 'rigel', label: 'Rigel', description: 'Blue supergiant in Orion' },
-              { value: 'sirius', label: 'Sirius', description: 'Brightest star in the night sky' },
-              { value: 'betelgeuse', label: 'Betelgeuse', description: 'Red supergiant in Orion' },
-            ];
-            const needle = query.toLowerCase();
-            return stars.filter((star) => star.label.toLowerCase().includes(needle));
-          },
-        })"
       >
         <c-CField>
           <c-fill name="label">
@@ -41,7 +18,7 @@ class RemoteStarCatalog(Component):
               c-min_chars="2"
               c-debounce_ms="150"
               placeholder="Type at least two letters"
-              $c-props="{ loadOptions: $store.remoteStars.loadStars }"
+              :loadOptions="loadStars"
             >
               <c-fill name="loading">
                 Reading the catalog...
@@ -59,6 +36,34 @@ class RemoteStarCatalog(Component):
           </c-fill>
         </c-CField>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            async loadStars({ query, signal }) {
+            await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, 350);
+            signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new DOMException('Aborted', 'AbortError'));
+            }, { once: true });
+            });
+            if (query.toLowerCase() === 'offline') {
+            throw new Error('Catalog unavailable');
+            }
+            const stars = [
+            { value: 'vega', label: 'Vega', description: 'Blue-white star in Lyra' },
+            { value: 'rigel', label: 'Rigel', description: 'Blue supergiant in Orion' },
+            { value: 'sirius', label: 'Sirius', description: 'Brightest star in the night sky' },
+            { value: 'betelgeuse', label: 'Betelgeuse', description: 'Red supergiant in Orion' },
+            ];
+            const needle = query.toLowerCase();
+            return stars.filter((star) => star.label.toLowerCase().includes(needle));
+            },
+          };
+        },
+      });
     """
 
     css = """

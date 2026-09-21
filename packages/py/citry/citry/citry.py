@@ -1083,6 +1083,9 @@ class Citry:
                 # after the hooks accept a final removal.
                 if not self._registry._has_class(comp_cls):
                     self._evict_component_cache(comp_cls)
+                if names_removed:
+                    # Alias removal changes authored tag resolution even while
+                    # the same class remains reachable under another name.
                     self.extensions._advance_render_cache_revision()
                 self._clear_standalone_template_cache()
             except BaseException:

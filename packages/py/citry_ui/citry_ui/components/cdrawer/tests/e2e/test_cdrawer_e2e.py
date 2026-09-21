@@ -1,5 +1,7 @@
 """Cross-browser behavior tests for CDrawer."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,29 +23,25 @@ def _page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const state=Citry.vue.reactive({open:false,accept:true,placement:'inline-end',size:'md',scroll:'body',dismissible:true,requests:[]});window.__drawer=state;return state;}});"
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body x-data="{
-              open: false, accept: true, placement: 'inline-end', size: 'md',
-              scroll: 'body', dismissible: true, requests: []
-            }">
+            <body>
               <c-CDrawer
                 id="field-drawer"
-                $c-props="{
-                  open,
-                  placement,
-                  size,
-                  scroll,
-                  dismissible,
-                  onOpenChange: (next, detail) => {
+                :open="open"
+                :placement="placement"
+                :size="size"
+                :scroll="scroll"
+                :dismissible="dismissible"
+                :onOpenChange="(next, detail) => {
                     requests.push([
                       next, detail.reason, detail.controlled, detail.returnValue, detail.forced
                     ]);
                     if (accept) open = next;
-                  },
-                }"
+                  }"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton c-attrs="activator_attrs">Edit field note</c-CButton>
@@ -64,9 +62,9 @@ def _page() -> str:
               </c-CDrawer>
               <c-CDrawer
                 id="native-drawer"
-                $c-props="{onOpenChange: (next, detail) => requests.push([
+                :onOpenChange="(next, detail) => requests.push([
                   next, detail.reason, detail.controlled, detail.returnValue, detail.forced
-                ])}"
+                ])"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton c-attrs="activator_attrs">Native close drawer</c-CButton>
@@ -81,7 +79,7 @@ def _page() -> str:
               <button id="force-close" type="button" @click="open = false">Force close</button>
               <button id="configure-sheet" type="button"
                 @click="placement = 'block-end'; size = 'lg'; scroll = 'drawer'">Configure sheet</button>
-              <output id="requests" x-text="JSON.stringify(requests)"></output>
+              <output id="requests" :textContent="JSON.stringify(requests)"></output>
               <c-js />
             </body>
           </html>
@@ -191,7 +189,7 @@ def test_drawer_external_native_close_is_forced_and_latches_controlled_true(page
     console_errors, page_errors = _load(page)
     _trigger(page).click()
     page.wait_for_function("document.querySelector('#field-drawer').matches(':modal')")
-    page.locator("body").evaluate("element => { element._x_dataStack[0].accept = false; }")
+    page.evaluate("window.__drawer.accept = false")
     page.locator("#field-drawer").evaluate("element => element.close()")
     page.wait_for_function("!document.querySelector('#field-drawer').open")
 
@@ -216,7 +214,7 @@ def test_drawer_settled_anatomy_fails_closed_and_requires_a_new_open_edge(page: 
     console_errors, page_errors = _load(page)
     _trigger(page).click()
     page.wait_for_function("document.querySelector('#field-drawer').matches(':modal')")
-    page.locator("body").evaluate("element => { element._x_dataStack[0].accept = false; }")
+    page.evaluate("window.__drawer.accept = false")
     page.locator('[data-citry-ui-part="title"]').first.evaluate(
         "element => element.insertAdjacentHTML('beforeend', '<a href=\"#bad\">bad</a>')"
     )

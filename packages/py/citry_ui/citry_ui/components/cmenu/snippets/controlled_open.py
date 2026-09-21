@@ -8,12 +8,10 @@ class ControlledMenu(Component):
     template = """
       <section
         class="archive-controlled-demo"
-        x-data="{open: false, disabled: false, locked: false, size: 'md', lastReason: 'none'}"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <c-CButton size="sm" @click="open = !open">Toggle from owner</c-CButton>
         <c-CMenu
-          $c-props="{
+          v-bind="{
             open,
             disabled,
             size,
@@ -31,8 +29,25 @@ class ControlledMenu(Component):
             <c-CMenuItem value="restore">Restore missing page</c-CMenuItem>
           </c-fill>
         </c-CMenu>
-        <output x-text="`Last request: ${lastReason}`">Last request: none</output>
+        <output v-text="`Last request: ${lastReason}`">Last request: none</output>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {open: false, disabled: false, locked: false, size: 'md', lastReason: 'none'};},
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

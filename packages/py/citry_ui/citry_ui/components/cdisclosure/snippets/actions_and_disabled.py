@@ -8,7 +8,6 @@ class DisclosureActionsAndDisabled(Component):
     template = """
       <section
         class="disclosure-actions-demo"
-        x-data="{disabled:false, fieldsetDisabled:false}"
       >
         <c-CDisclosure
           actions_label="Release note actions"
@@ -20,18 +19,18 @@ class DisclosureActionsAndDisabled(Component):
           </c-fill>
           <c-fill name="default">Review migration notes before deploying version 4.</c-fill>
         </c-CDisclosure>
-        <c-CDisclosure open $c-props="{disabled}">
+        <c-CDisclosure open :disabled="disabled">
           <c-fill name="title">Managed policy</c-fill>
           <c-fill name="default">Your organization keeps this guidance visible.</c-fill>
         </c-CDisclosure>
-        <label><input type="checkbox" x-model="disabled" /> Disable managed policy</label>
+        <label><input type="checkbox" v-model="disabled" /> Disable managed policy</label>
         <c-CDisclosure disabled>
           <c-fill name="title">Unavailable audit appendix</c-fill>
           <c-fill name="default">This closed section cannot be activated.</c-fill>
         </c-CDisclosure>
         <fieldset :disabled="fieldsetDisabled">
           <legend>
-            <label><input type="checkbox" x-model="fieldsetDisabled" /> Disable native fieldset</label>
+            <label><input type="checkbox" v-model="fieldsetDisabled" /> Disable native fieldset</label>
           </legend>
           <c-CDisclosure>
             <c-fill name="title">Fieldset-owned policy</c-fill>
@@ -39,6 +38,15 @@ class DisclosureActionsAndDisabled(Component):
           </c-CDisclosure>
         </fieldset>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            disabled:false, fieldsetDisabled:false
+          };
+        },
+      });
     """
 
     css = """

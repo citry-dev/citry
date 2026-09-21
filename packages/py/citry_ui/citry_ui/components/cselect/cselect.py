@@ -200,6 +200,15 @@ def _plain(owner: str, name: str, value: object, *, optional: bool = False) -> s
     return plain
 
 
+def _plain_js_value(value: object) -> object:
+    value = const_value(value)
+    if isinstance(value, dict):
+        return {str(const_value(key)): _plain_js_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_js_value(item) for item in value]
+    return value
+
+
 def _dynamic_target(key: str) -> str | None:
     if key.startswith("x-bind:"):
         return key.removeprefix("x-bind:").split(".", 1)[0]
@@ -478,6 +487,7 @@ class CSelect(LibraryComponent):
             "required": required,
             "disabled": disabled,
             "readonly": readonly,
+            "inheritsReadonly": field is None and kwargs.readonly is None,
             "invalid": invalid,
             "loop": bool(kwargs.loop),
             "placement": kwargs.placement,
@@ -533,7 +543,23 @@ class CSelect(LibraryComponent):
             "listbox_attrs": _attrs("CSelect", "listbox_attrs", kwargs.listbox_attrs, _LISTBOX_OWNED),
         }
         self._cui_select_snapshot = snapshot
-        self._cui_select_data = data
+        prop_names = {
+            "value",
+            "open",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "loop",
+            "placement",
+            "matchWidth",
+            "variant",
+            "size",
+        }
+        self._cui_select_data = {
+            (f"server{name[0].upper()}{name[1:]}" if name in prop_names else name): _plain_js_value(value)
+            for name, value in data.items()
+        }
         return snapshot
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002

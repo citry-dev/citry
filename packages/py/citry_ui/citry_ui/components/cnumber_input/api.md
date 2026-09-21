@@ -59,7 +59,7 @@ maximum, and step validity. Inside Field, set `required`, `disabled`,
 
 ## Control the canonical value
 
-Pass client `value` and `onValueChange` through `$c-props`. A controlled
+Pass client `value` and `onValueChange` with native Vue bindings. A controlled
 interaction is a request: the displayed committed value and Form transport do
 not change until the owner supplies the requested exact string.
 

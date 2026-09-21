@@ -272,11 +272,16 @@ class CSortable(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
-        return {key: snapshot[key] for key in ("order", "name", "form", "layout", "disabled", "catalog", "labels")}
+        return {
+            "serverDefaults": {
+                key: snapshot[key] for key in ("order", "name", "form", "layout", "disabled", "catalog", "labels")
+            }
+        }
 
     template = """
       <c-CInternalSortableDeclarations><c-slot required /></c-CInternalSortableDeclarations>
       <c-CInternalSortable
+        ref="root"
         c-root_id="root_id" c-order="order" c-name="name" c-form="form"
         c-layout="layout" c-disabled="disabled" c-size="size"
         c-catalog="catalog" c-labels="labels" c-attrs="attrs" c-registry="registry"
@@ -371,7 +376,8 @@ class CInternalSortableDeclarations(LibraryComponent):
 
 
 class CInternalSortable(LibraryComponent):
-    transparent = True
+    # This component owns the physical sortable root and is the runtime ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:

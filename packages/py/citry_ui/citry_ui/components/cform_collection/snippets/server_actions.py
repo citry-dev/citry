@@ -9,14 +9,14 @@ class FormCollectionServerActions(Component):
       <form
         method="post"
         action="/team"
-        x-data
+
         @submit.prevent="collectionStatus = 'Saved locally'"
       >
         <c-CFormCollection
           label="Team members"
           action_name="team_action"
           c-max_items="1"
-          $c-props="{onAction: applyCollectionAction}"
+          :onAction="applyCollectionAction"
         >
           <c-CFormCollectionItem value="member-17" label="Ada" remove_value="delete:member-17">
             <input type="hidden" name="members[member-17][id]" value="17" />
@@ -24,13 +24,23 @@ class FormCollectionServerActions(Component):
           </c-CFormCollectionItem>
         </c-CFormCollection>
         <button type="submit">Save team</button>
-        <output aria-live="polite" x-text="collectionStatus">Order: Ada</output>
+        <output aria-live="polite" v-text="collectionStatus">Order: Ada</output>
       </form>
     """
 
     js = """
-      $component(({ scope, els }) => {
-        const collection = els[0].querySelector('[data-citry-ui-part="form-collection"]');
+      $component({
+        data() {
+          return { collectionStatus: 'Order: Ada' };
+        },
+        methods: {
+          applyCollectionAction(detail) {
+            this._collectionRuntime?.apply(detail);
+          },
+        },
+        mounted() {
+          const component = this;
+          const collection = this.$el.querySelector('[data-citry-ui-part="form-collection"]');
         const list = collection.querySelector(':scope > [data-citry-ui-part="items"]');
         const parking = document.createElement('fieldset');
         const parked = document.createElement('ol');
@@ -60,11 +70,10 @@ class FormCollectionServerActions(Component):
           const add = collection.querySelector('[data-citry-ui-part="add"]');
           add.disabled = current.length >= maximum || parked.children.length === 0;
           add.dataset.citryInitiallyDisabled = String(add.disabled);
-          scope.collectionStatus = `Order: ${current.map(item => item.dataset.label).join(', ') || 'No items'}`;
+          component.collectionStatus = `Order: ${current.map(item => item.dataset.label).join(', ') || 'No items'}`;
         };
 
-        scope.collectionStatus = 'Order: Ada';
-        scope.applyCollectionAction = (detail) => {
+        const apply = (detail) => {
           // Static docs accept the named request locally; a real server returns a keyed rerender.
           detail.sourceEvent.preventDefault();
           const button = detail.sourceEvent.target.closest('[data-citry-form-collection-action]');
@@ -85,6 +94,14 @@ class FormCollectionServerActions(Component):
           });
         };
         sync();
+        Object.defineProperty(this, '_collectionRuntime', {
+          configurable: true,
+          value: {apply},
+        });
+        },
+        beforeUnmount() {
+          delete this._collectionRuntime;
+        },
       });
     """
 

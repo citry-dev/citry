@@ -435,8 +435,10 @@ class CTreeGrid(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         data = self._snapshot(kwargs)
         return {
-            key: data[key]
-            for key in ("expanded", "selection", "selected", "name", "form", "disabled", "catalog", "labels")
+            "serverDefaults": {
+                key: data[key]
+                for key in ("expanded", "selection", "selected", "name", "form", "disabled", "catalog", "labels")
+            }
         }
 
     template = """

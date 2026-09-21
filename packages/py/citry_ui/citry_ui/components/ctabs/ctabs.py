@@ -266,16 +266,18 @@ class CTabs(LibraryComponent):
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
         return {
-            "value": kwargs.value if kwargs.value is not None else kwargs.default_value,
-            "activation": kwargs.activation,
-            "orientation": kwargs.orientation,
-            "direction": kwargs.direction,
-            "loop": kwargs.loop,
-            "disabled": kwargs.disabled,
-            "variant": kwargs.variant,
-            "density": kwargs.density,
-            "align": kwargs.align,
-            "grow": kwargs.grow,
+            "serverDefaults": {
+                "value": kwargs.value if kwargs.value is not None else kwargs.default_value,
+                "activation": kwargs.activation,
+                "orientation": kwargs.orientation,
+                "direction": kwargs.direction,
+                "loop": kwargs.loop,
+                "disabled": kwargs.disabled,
+                "variant": kwargs.variant,
+                "density": kwargs.density,
+                "align": kwargs.align,
+                "grow": kwargs.grow,
+            }
         }
 
     template = """
@@ -283,6 +285,7 @@ class CTabs(LibraryComponent):
         <c-slot required />
       </c-CInternalTabsDeclarations>
       <c-CInternalTabs
+        ref="tabsRoot"
         c-group_id="group_id"
         c-selected_value="selected_value"
         c-root_disabled="root_disabled"
@@ -307,8 +310,11 @@ class CTabs(LibraryComponent):
           align: {},
           grow: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$refs.tabsRoot.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const rootSelector = "[data-citry-tabs-root]";
           const listSelector = "[data-citry-tabs-list]";
           const tabSelector = "[data-citry-tabs-tab]";
@@ -1002,7 +1008,8 @@ class CInternalTabsDeclarations(LibraryComponent):
 
 
 class CInternalTabs(LibraryComponent):
-    transparent = True
+    # This component owns the physical tabs root and is the runtime ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:

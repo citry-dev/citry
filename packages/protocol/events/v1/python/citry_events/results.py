@@ -5,7 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .calls import ACTION_KINDS, CAPABILITIES_BASELINE_V1, PROTOCOL, SWAPS, call_send_sequence, valid_render_id
+from .calls import (
+    ACTION_KINDS,
+    CAPABILITIES_BASELINE_V1,
+    PROTOCOL,
+    RENDERERS,
+    SWAPS,
+    call_send_sequence,
+    valid_render_id,
+)
 from .issues import (
     ProtocolValueError,
     ValidationIssue,
@@ -38,7 +46,7 @@ _OK_RESULT_FIELDS = ("ok", "sendSequence", "actions")
 _ERROR_RESULT_FIELDS = ("ok", "sendSequence", "error")
 _ERROR_FIELDS = ("status", "code", "message", "fieldErrors")
 _ACTION_FIELDS: dict[str, tuple[str, ...]] = {
-    "render": ("action", "target", "swap", "html", "delay", "wait"),
+    "render": ("action", "target", "swap", "renderer", "html", "prepared", "delay", "wait"),
     "data": ("action", "value", "delay"),
     "state": ("action", "targetRenderId", "stateToken", "delay", "wait"),
     "event": ("action", "eventName", "detail", "target", "delay", "wait"),
@@ -46,7 +54,7 @@ _ACTION_FIELDS: dict[str, tuple[str, ...]] = {
     "url": ("action", "url", "mode", "delay", "wait"),
 }
 _ACTION_REQUIRED: dict[str, tuple[str, ...]] = {
-    "render": ("action", "target", "swap", "html"),
+    "render": ("action", "target", "swap"),
     "data": ("action", "value"),
     "state": ("action", "targetRenderId", "stateToken"),
     "event": ("action", "eventName"),
@@ -284,8 +292,25 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
         if value["swap"] not in SWAPS:
             category = "type" if not isinstance(value["swap"], str) else "enum"
             return ValidationIssue(pointer(path, "swap"), category, "The render swap is not a v1 swap.")
-        if not isinstance(value["html"], str):
+        renderer = value.get("renderer", "html-fragment/1")
+        if not isinstance(renderer, str):
+            return ValidationIssue(pointer(path, "renderer"), "type", "The render renderer must be a string.")
+        if renderer not in RENDERERS:
+            return ValidationIssue(pointer(path, "renderer"), "enum", "The render renderer is not a v1 renderer.")
+        content = "html" if renderer == "html-fragment/1" else "prepared"
+        other = "prepared" if content == "html" else "html"
+        if content not in value:
+            return ValidationIssue(pointer(path, content), "required", f"The {renderer} render requires {content!r}.")
+        if other in value:
+            return ValidationIssue(
+                pointer(path, other), "semantic", "A render action must carry exactly one content representation."
+            )
+        if content == "html" and not isinstance(value["html"], str):
             return ValidationIssue(pointer(path, "html"), "type", "The render HTML must be a string.")
+        if content == "prepared" and not isinstance(value["prepared"], dict):
+            return ValidationIssue(
+                pointer(path, "prepared"), "type", "The prepared render content must be a JSON object."
+            )
     elif kind == "data":
         pass
     elif kind == "state":
@@ -345,6 +370,29 @@ def _with_timing(record: dict[str, Any], delay: float, wait: bool, *, allow_wait
 
 def build_render_action(target: str, swap: str, html: str, *, delay: float = 0, wait: bool = True) -> dict[str, Any]:
     return _with_timing({"action": "render", "target": target, "swap": swap, "html": html}, delay, wait)
+
+
+def build_prepared_render_action(
+    target: str,
+    swap: str,
+    renderer: str,
+    prepared: Mapping[str, Any],
+    *,
+    delay: float = 0,
+    wait: bool = True,
+) -> dict[str, Any]:
+    """Build an explicitly negotiated structured render action."""
+    return _with_timing(
+        {
+            "action": "render",
+            "target": target,
+            "swap": swap,
+            "renderer": renderer,
+            "prepared": copy_json(dict(prepared)),
+        },
+        delay,
+        wait,
+    )
 
 
 def build_data_action(value: Any, *, delay: float = 0) -> dict[str, Any]:
@@ -568,7 +616,7 @@ def validate_exchange(call_envelope: Mapping[str, Any], result_envelope: Any) ->
         name: set(raw_capabilities.get(name, CAPABILITIES_BASELINE_V1[name]))
         if isinstance(raw_capabilities, dict)
         else set()
-        for name in ("swaps", "actions")
+        for name in ("swaps", "actions", "renderers")
     }
     for index, (call, result) in enumerate(zip(calls, results, strict=True)):
         expected_sequence = call_send_sequence(call)
@@ -592,4 +640,12 @@ def validate_exchange(call_envelope: Mapping[str, Any], result_envelope: Any) ->
                     "capability",
                     "The result uses a swap the caller did not advertise.",
                 )
+            if action["action"] == "render":
+                renderer = action.get("renderer", "html-fragment/1")
+                if renderer not in allowed["renderers"]:
+                    return ValidationIssue(
+                        f"/results/{index}/actions/{action_index}/renderer",
+                        "capability",
+                        "The result uses a renderer the caller did not advertise.",
+                    )
     return None

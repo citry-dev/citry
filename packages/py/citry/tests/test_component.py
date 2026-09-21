@@ -38,8 +38,8 @@ class TestComponentFields:
             class Lint:
                 rule_unknown_template_variable = "warning"
                 template_variables = {"base_value": int}
-                rule_unknown_alpine_variable = "warning"
-                alpine_variables = {"$baseMagic": int}
+                rule_unknown_vue_variable = "warning"
+                vue_variables = {"$baseMagic": int}
                 rule_unknown_component_js_variable = "warning"
                 component_js_globals = {"baseClient": int}
 
@@ -48,7 +48,7 @@ class TestComponentFields:
                 template_variables = {
                     "child_value": Annotated[str, "Child-only value."],
                 }
-                alpine_variables = {
+                vue_variables = {
                     "childValue": Annotated[str, "Child-only browser value."],
                 }
                 component_js_globals = {
@@ -66,9 +66,9 @@ class TestComponentFields:
         assert {item.name for item in child_lint.template_variables} == {"base_value", "child_value"}
         child_value = next(item for item in child_lint.template_variables if item.name == "child_value")
         assert (child_value.type_display, child_value.description) == ("str", "Child-only value.")
-        assert child_lint.rule_unknown_alpine_variable == "warning"
-        assert {item.name for item in child_lint.alpine_variables} == {"$baseMagic", "childValue"}
-        child_browser_value = next(item for item in child_lint.alpine_variables if item.name == "childValue")
+        assert child_lint.rule_unknown_vue_variable == "warning"
+        assert {item.name for item in child_lint.vue_variables} == {"$baseMagic", "childValue"}
+        child_browser_value = next(item for item in child_lint.vue_variables if item.name == "childValue")
         assert (child_browser_value.type_display, child_browser_value.description) == (
             "str",
             "Child-only browser value.",
@@ -82,8 +82,8 @@ class TestComponentFields:
         )
         assert reset_lint.rule_unknown_template_variable == "error"
         assert reset_lint.template_variables == ()
-        assert reset_lint.rule_unknown_alpine_variable == "error"
-        assert reset_lint.alpine_variables == ()
+        assert reset_lint.rule_unknown_vue_variable == "error"
+        assert reset_lint.vue_variables == ()
         assert reset_lint.rule_unknown_component_js_variable == "error"
         assert reset_lint.component_js_globals == ()
 
@@ -106,13 +106,13 @@ class TestComponentFields:
                 class Lint:
                     rule_unknown_template_variable = "warn"
 
-        with pytest.raises(ValueError, match="rule_unknown_alpine_variable"):
+        with pytest.raises(ValueError, match="rule_unknown_vue_variable"):
 
-            class InvalidAlpineRule(Component):
+            class InvalidVueRule(Component):
                 citry = c
 
                 class Lint:
-                    rule_unknown_alpine_variable = "warn"
+                    rule_unknown_vue_variable = "warn"
 
     def test_kwargs_auto_dataclass(self):
         c = Citry()
@@ -555,6 +555,53 @@ class TestKwargsRenderValidation:
 
         with pytest.raises(TypeError, match="got an unexpected keyword argument 'bogus'"):
             MyComp(title="x", bogus=1).render()
+
+    def test_one_near_unexpected_kwarg_suggests_declared_field(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            class Kwargs:
+                title: str
+
+        with pytest.raises(TypeError, match=r"unexpected keyword argument 'titel'.*Did you mean 'title'\?"):
+            Card(titel="x").render()
+
+    def test_distant_or_multiple_unexpected_kwargs_are_not_guessed(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+
+            class Kwargs:
+                title: str = ""
+
+        with pytest.raises(TypeError) as distant:
+            Card(bogus="x").render()
+        assert "Did you mean" not in str(distant.value)
+        with pytest.raises(TypeError) as multiple:
+            Card(titel="x", bogus="y").render()
+        assert "Did you mean" not in str(multiple.value)
+
+    def test_constructor_body_type_error_is_not_enriched(self):
+        c = Citry()
+
+        @dataclass(init=False)
+        class Inputs:
+            title: str
+
+            def __init__(self, **kwargs):
+                del kwargs
+                raise TypeError("got an unexpected keyword argument 'titel'")
+
+        class Card(Component):
+            citry = c
+            Kwargs = Inputs
+
+        with pytest.raises(TypeError, match="unexpected keyword argument 'titel'") as caught:
+            Card(titel="x").render()
+        assert "Did you mean" not in str(caught.value)
 
 
 class TestKwargsDefaults:

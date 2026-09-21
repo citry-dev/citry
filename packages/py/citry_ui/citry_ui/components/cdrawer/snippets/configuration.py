@@ -6,9 +6,9 @@ citry.register_library(citry_ui)
 
 class ConfigureDrawer(Component):
     template = """
-      <section x-data="{placement:'inline-end', size:'md', scroll:'body'}"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)">
-        <c-CDrawer $c-props="{placement, size, scroll}">
+      <section
+        >
+        <c-CDrawer :placement="placement" :size="size" :scroll="scroll">
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Preview geometry</c-CButton>
           </c-fill>
@@ -16,6 +16,26 @@ class ConfigureDrawer(Component):
           <c-fill name="default">Change the logical edge, extent, and scrolling policy.</c-fill>
         </c-CDrawer>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            placement:'inline-end', size:'md', scroll:'body'
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
 

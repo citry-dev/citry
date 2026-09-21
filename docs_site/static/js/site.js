@@ -14,7 +14,7 @@
  * - Back-to-top button (revealed after scrolling a screenful down)
  */
 
-(function () {
+(globalThis.__citryDocsReady || Promise.resolve()).then(function () {
   'use strict';
 
   // ----------------------------------------------------------------
@@ -759,4 +759,4 @@
       window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
   }
-})();
+});

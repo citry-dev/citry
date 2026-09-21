@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from citry.component import Component
+    from citry.nodes import HtmlAttr
 
 CLIENT_PROPS_ATTR = "$c-props"
 
@@ -19,8 +21,11 @@ CLIENT_PROPS_ATTR = "$c-props"
 class ComponentTagClientBindingKind(str, Enum):
     """The client behaviors resolved from a nested component tag."""
 
-    PROPS = "props"
-    ALPINE_HANDLER = "alpine-handler"
+    PROP = "prop"
+    PROPS_OBJECT = "props-object"
+    EVENT = "event"
+    REF_STATIC = "ref-static"
+    REF_EXPRESSION = "ref-expression"
     CITRY_HANDLER = "citry-handler"
 
 
@@ -30,6 +35,85 @@ class ComponentTagClientBindingSource(str, Enum):
     DIRECT = "direct"
     SERVER_DYNAMIC = "server-dynamic"
     SPREAD = "spread"
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentTagClientBinding:
+    """One source-ordered browser binding retained on a Citry component call."""
+
+    kind: ComponentTagClientBindingKind
+    key: str
+    value: str
+    source: object
+    span: tuple[int, int]
+    _authored_attr: object | None = field(default=None, init=False, repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeComponentEventBinding:
+    """One data-resolved server event from an authenticated ``c-bind`` attribute."""
+
+    key: str
+    value: str
+    source: object
+    span: tuple[int, int]
+    _spread_attr: object | None = field(default=None, init=False, repr=False, compare=False)
+
+
+def authenticated_component_tag_client_binding(
+    *,
+    kind: ComponentTagClientBindingKind,
+    key: str,
+    value: str,
+    authored_attr: HtmlAttr,
+) -> ComponentTagClientBinding:
+    """Create a binding carrying its compiler-issued parser attribute identity."""
+    binding = ComponentTagClientBinding(
+        kind=kind,
+        key=key,
+        value=value,
+        source=authored_attr.source,
+        span=authored_attr.position,
+    )
+    object.__setattr__(binding, "_authored_attr", authored_attr)
+    return binding
+
+
+def is_authenticated_component_tag_client_binding(binding: ComponentTagClientBinding) -> bool:
+    """Verify that a binding still names its exact compiler-issued static attribute."""
+    from citry.nodes import StaticHtmlAttr  # noqa: PLC0415
+
+    attr = binding._authored_attr
+    return bool(
+        type(attr) is StaticHtmlAttr
+        and attr.key == binding.key
+        and attr.source is binding.source
+        and attr.position == binding.span
+    )
+
+
+def authenticated_runtime_component_event_binding(
+    *, key: str, value: str, spread_attr: HtmlAttr
+) -> RuntimeComponentEventBinding:
+    """Create a runtime event binding tied to its compiler-issued ``c-bind`` attribute."""
+    if type(key) is not str or type(value) is not str:
+        raise TypeError("runtime component event key and handler must be exact strings")
+    binding = RuntimeComponentEventBinding(key, value, spread_attr.source, spread_attr.position)
+    object.__setattr__(binding, "_spread_attr", spread_attr)
+    return binding
+
+
+def is_authenticated_runtime_component_event_binding(binding: RuntimeComponentEventBinding) -> bool:
+    """Verify the exact compiler-issued spread attribute behind one runtime event."""
+    from citry.nodes import ExprHtmlAttr  # noqa: PLC0415
+
+    attr = binding._spread_attr
+    return bool(
+        type(attr) is ExprHtmlAttr
+        and attr.key == "c-bind"
+        and attr.source is binding.source
+        and attr.position == binding.span
+    )
 
 
 def is_client_props_key(key: Any, *, tag_name: str) -> bool:
@@ -61,11 +145,19 @@ def classify_component_tag_client_binding_key(key: Any, *, tag_name: str) -> Com
     if not isinstance(key, str):
         return None
     if is_client_props_key(key, tag_name=tag_name):
-        return ComponentTagClientBindingKind.PROPS
+        raise RuntimeError(f"{CLIENT_PROPS_ATTR!r} was removed; use native Vue :prop or v-bind syntax")
     if key.startswith("@c-"):
         return ComponentTagClientBindingKind.CITRY_HANDLER
-    if key.startswith(("@", "x-on:")):
-        return ComponentTagClientBindingKind.ALPINE_HANDLER
+    if key.startswith(("@", "v-on:")):
+        return ComponentTagClientBindingKind.EVENT
+    if key == "v-bind":
+        return ComponentTagClientBindingKind.PROPS_OBJECT
+    if key in {":ref", "v-bind:ref"}:
+        return ComponentTagClientBindingKind.REF_EXPRESSION
+    if key.startswith((":", "v-bind:")):
+        return ComponentTagClientBindingKind.PROP
+    if key == "ref":
+        return ComponentTagClientBindingKind.REF_STATIC
     return None
 
 
@@ -81,12 +173,12 @@ def resolve_component_tag_client_binding_value(
     if raw_value is None or raw_value is False:
         return None
     if raw_value is True or not isinstance(raw_value, str) or not raw_value.strip():
-        if kind == ComponentTagClientBindingKind.PROPS:
+        if kind in {ComponentTagClientBindingKind.PROP, ComponentTagClientBindingKind.PROPS_OBJECT}:
             msg = (
                 f"{CLIENT_PROPS_ATTR} on <{tag_name}> must resolve to a non-empty client expression string, "
                 f"got {type(raw_value).__name__}."
             )
-        elif kind == ComponentTagClientBindingKind.ALPINE_HANDLER:
+        elif kind == ComponentTagClientBindingKind.EVENT:
             msg = (
                 f"Boundary handler {key!r} on <{tag_name}> must resolve to a non-empty client expression string, "
                 f"got {type(raw_value).__name__}."

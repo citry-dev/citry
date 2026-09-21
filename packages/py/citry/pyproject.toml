@@ -132,6 +132,6 @@ Issues = "https://github.com/citry-dev/citry/issues"
 
 [tool.setuptools.package-data]
 # Non-Python files shipped inside the package: the type-checking marker and
-# the client-side dependency manager and Events runtime (inlined into rendered
-# pages, later also served over HTTP by the web integrations).
-citry = ["py.typed", "ext/dependencies/client/*.js", "ext/events/client/*.js", "ext/i18n/client/*.js"]
+# the readable dependency-manager source, its generated delivery companion,
+# and the extension runtimes served or inlined by the web integrations.
+citry = ["py.typed", "_vue/*.js", "ext/i18n/client/*.js"]

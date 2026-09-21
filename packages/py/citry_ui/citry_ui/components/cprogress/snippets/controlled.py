@@ -6,11 +6,20 @@ citry.register_library(citry_ui)
 
 class ControlledProgress(Component):
     template = """
-      <section class="progress-controlled" x-data="{value: 28}">
-        <c-CRow justify="between"><h2>Transect upload</h2><output x-text="`${value}%`"></output></c-CRow>
-        <c-CProgress label="Transect upload" $c-props="{value}" shape="pill" />
-        <label>Completion <input type="range" min="0" max="100" x-model.number="value" /></label>
+      <section class="progress-controlled" >
+        <c-CRow justify="between"><h2>Transect upload</h2><output v-text="`${value}%`"></output></c-CRow>
+        <c-CProgress label="Transect upload" :value="value" shape="pill" />
+        <label>Completion <input type="range" min="0" max="100" v-model.number="value" /></label>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            value: 28
+          };
+        },
+      });
     """
     css = """
       :where(.progress-controlled) {

@@ -19,10 +19,11 @@ class TextareaSizes(Component):
     template = """
       <section class="forest-sizes">
         <c-for each="size in sizes">
-          <c-CField>
+          <c-CField #c-key="size">
             <c-fill name="label">{{ size.upper() }} specimen note</c-fill>
             <c-fill name="default">
               <c-CTextarea
+                #c-key="size"
                 c-name="size"
                 c-size="size"
                 value="Three fox prints beside the stream crossing."

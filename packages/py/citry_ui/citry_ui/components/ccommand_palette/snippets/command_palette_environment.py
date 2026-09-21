@@ -38,7 +38,7 @@ class CommandPaletteEnvironment(Component):
     template = """
       <section
         class="command-palette-environment"
-        x-data="{open:true,size:'md',dark:false,rtl:false}"
+
         :class="dark ? 'command-palette-environment--dark' : ''"
         :dir="rtl ? 'rtl' : 'ltr'"
       >
@@ -46,14 +46,14 @@ class CommandPaletteEnvironment(Component):
         <div role="group" aria-label="Environment controls">
           <label>
             Size
-            <select x-model="size">
+            <select v-model="size">
               <option value="sm">Small</option>
               <option value="md">Medium</option>
               <option value="lg">Large</option>
             </select>
           </label>
-          <label><input type="checkbox" x-model="dark" /> Dark scheme</label>
-          <label><input type="checkbox" x-model="rtl" /> RTL</label>
+          <label><input type="checkbox" v-model="dark" /> Dark scheme</label>
+          <label><input type="checkbox" v-model="rtl" /> RTL</label>
         </div>
         <c-CCommandPalette
           label="Localized workspace commands"
@@ -62,17 +62,22 @@ class CommandPaletteEnvironment(Component):
             '--cui-command-palette-inline-size':'min(42rem, calc(100dvi - 1rem))',
             '--cui-command-palette-row-min-block-size':'3rem',
           }"
-          $c-props="{
-            open,
-            size,
-            onOpenChange:(value)=>open=value,
-          }"
+          :open="open" :size="size" :onOpenChange="(value)=>open=value"
         />
         <p>
           Inspect sm, md, and lg at 200% and 400% zoom, narrow and wide widths,
           coarse pointer, virtual keyboard, reduced motion, forced colors, and print.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open:true,size:'md',dark:false,rtl:false
+          };
+        },
+      });
     """
 
     css = """

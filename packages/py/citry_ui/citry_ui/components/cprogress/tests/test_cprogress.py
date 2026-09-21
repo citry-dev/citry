@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields
+from html import unescape
 
 import pytest
 from markupsafe import Markup
@@ -12,7 +13,7 @@ from citry_ui import CProgress
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(progress: object, *, include_css: bool = False) -> str:
+def _render(progress: object, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -28,7 +29,8 @@ def _render(progress: object, *, include_css: bool = False) -> str:
                 "css": app.get("css")() if include_css else "",
             }
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_progress_schema_keeps_native_jobs_direct():
@@ -48,7 +50,7 @@ def test_progress_schema_keeps_native_jobs_direct():
 
 
 def test_indeterminate_progress_omits_value_and_uses_native_root():
-    html = _render(CProgress(label="Contacting archive"))
+    html = _render(CProgress(label="Contacting archive"), static_fallback=True)
     root = re.search(r'<progress[^>]+data-citry-ui-part="progress"[^>]*>', html)
 
     assert root is not None
@@ -73,7 +75,8 @@ def test_determinate_custom_range_value_text_and_root_styling():
             class_=["scan", {"active": True}],
             style={"--cui-progress-height": "18px"},
             attrs={"id": "scan-progress", "class": "from-attrs", "aria-describedby": "scan-help"},
-        )
+        ),
+        static_fallback=True,
     )
     root = re.search(r'<progress[^>]+data-citry-ui-part="progress"[^>]*>', html)
 
@@ -156,9 +159,18 @@ def test_progress_rejects_owned_runtime_and_structural_attributes(attribute):
 def test_choices_and_labels_are_detrusted_before_rendering():
     with pytest.raises(ValueError, match="intent must be one of"):
         _render(CProgress(label="Task", intent=Markup('primary" onfocus="evil')))
-    html = _render(CProgress(label=Markup('Archive "delta"'), value_text=Markup("2 < crates")))
-    assert 'aria-label="Archive &#34;delta&#34;"' in html
-    assert 'aria-valuetext="2 &lt; crates"' in html
+    html = _render(
+        CProgress(label=Markup('Archive "delta"'), value_text=Markup("2 < crates")),
+        static_fallback=True,
+    )
+    root = re.search(r'<progress[^>]+data-citry-ui-part="progress"[^>]*>', html)
+    assert root is not None
+    aria_label = re.search(r'\baria-label="([^"]*)"', root.group(0))
+    aria_value_text = re.search(r'\baria-valuetext="([^"]*)"', root.group(0))
+    assert aria_label is not None
+    assert aria_value_text is not None
+    assert unescape(aria_label.group(1)) == 'Archive "delta"'
+    assert unescape(aria_value_text.group(1)) == "2 < crates"
 
 
 def test_css_exposes_native_track_range_and_environment_contract():

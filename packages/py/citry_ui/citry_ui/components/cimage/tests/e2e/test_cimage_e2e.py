@@ -1,5 +1,7 @@
 """Focused browser contracts for CImage."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from typing import Any
@@ -41,6 +43,15 @@ def _page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const imageTest=Citry.vue.reactive({
+            source:document.querySelector('#basic-image')?.getAttribute('src'),
+            alt:'Reactive plate',height:40,fit:'contain',events:[],callbackEvents:[],
+            callback:detail=>{const store=window.__imageTest;store.callbackEvents.push(detail.status);
+              store.events.push({status:detail.status,src:detail.src,current:detail.current_src,
+                width:detail.natural_width,height:detail.natural_height});},
+          }); window.__imageTest=imageTest; return {state:{imageTest}};}});
+        """
         template = """
           <!doctype html>
           <html lang="en">
@@ -52,28 +63,7 @@ def _page() -> str:
               </style>
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('imageTest', {
-                source: document.querySelector('#basic-image').getAttribute('src'),
-                alt: 'Reactive plate',
-                height: 40,
-                fit: 'contain',
-                events: [],
-                callbackEvents: [],
-                callback: detail => {
-                  const store = Alpine.store('imageTest');
-                  store.callbackEvents.push(detail.status);
-                  store.events.push({
-                    status: detail.status,
-                    src: detail.src,
-                    current: detail.current_src,
-                    width: detail.natural_width,
-                    height: detail.natural_height
-                  });
-                }
-              })"
-            >
+            <body>
               <c-CImage
                 c-src="green"
                 alt="Green plate"
@@ -81,15 +71,13 @@ def _page() -> str:
                 c-height="40"
                 c-attrs="{'id': 'basic'}"
                 c-img_attrs="{'id': 'basic-image'}"
-                $c-props="{
-                  onStatusChange: detail => $store.imageTest.events.push({
+                :onStatusChange="detail => state.imageTest.events.push({
                     status: detail.status,
                     src: detail.src,
                     current: detail.current_src,
                     width: detail.natural_width,
                     height: detail.natural_height
-                  })
-                }"
+                  })"
               >
                 <c-fill name="placeholder">Loading</c-fill>
                 <c-fill name="fallback">Unavailable</c-fill>
@@ -121,13 +109,11 @@ def _page() -> str:
                 c-width="80"
                 c-height="40"
                 c-attrs="{'id': 'reactive'}"
-                $c-props="{
-                  src: $store.imageTest.source,
-                  alt: $store.imageTest.alt,
-                  height: $store.imageTest.height,
-                  fit: $store.imageTest.fit,
-                  onStatusChange: $store.imageTest.callback
-                }"
+                :src="state.imageTest.source"
+                :alt="state.imageTest.alt"
+                :height="state.imageTest.height"
+                :fit="state.imageTest.fit"
+                :onStatusChange="state.imageTest.callback"
               />
               <c-js />
             </body>
@@ -145,64 +131,65 @@ def _zero_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          window.__imageDecodeCalls = 0;
+          const nativeDecode = HTMLImageElement.prototype.decode;
+          const nativeComplete = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'complete'
+          );
+          const nativeCurrentSrc = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'currentSrc'
+          );
+          const nativeNaturalWidth = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'naturalWidth'
+          );
+          const nativeAddEventListener = HTMLImageElement.prototype.addEventListener;
+          const isZeroProbe = image => image.alt === 'Zero dimension vector';
+          Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+            configurable: true,
+            get() {
+              if (isZeroProbe(this)) return true;
+              return nativeComplete.get.call(this);
+            }
+          });
+          Object.defineProperty(HTMLImageElement.prototype, 'currentSrc', {
+            configurable: true,
+            get() {
+              if (isZeroProbe(this)) return this.src;
+              return nativeCurrentSrc.get.call(this);
+            }
+          });
+          Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', {
+            configurable: true,
+            get() {
+              if (isZeroProbe(this)) return 0;
+              return nativeNaturalWidth.get.call(this);
+            }
+          });
+          HTMLImageElement.prototype.addEventListener = function (type, listener, options) {
+            if (type === 'load' && isZeroProbe(this)) return;
+            return nativeAddEventListener.call(this, type, listener, options);
+          };
+          HTMLImageElement.prototype.decode = function () {
+            window.__imageDecodeCalls += 1;
+            return nativeDecode.call(this);
+          };
+          $component({data(){return {events:[]};}});
+        """
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /></head>
-            <body x-data="{ events: [] }">
-              <script>
-                window.__imageDecodeCalls = 0;
-                const nativeDecode = HTMLImageElement.prototype.decode;
-                const nativeComplete = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'complete'
-                );
-                const nativeCurrentSrc = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'currentSrc'
-                );
-                const nativeNaturalWidth = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'naturalWidth'
-                );
-                const nativeAddEventListener = HTMLImageElement.prototype.addEventListener;
-                const isZeroProbe = image => image.alt === 'Zero dimension vector';
-                Object.defineProperty(HTMLImageElement.prototype, 'complete', {
-                  configurable: true,
-                  get() {
-                    if (isZeroProbe(this)) return true;
-                    return nativeComplete.get.call(this);
-                  }
-                });
-                Object.defineProperty(HTMLImageElement.prototype, 'currentSrc', {
-                  configurable: true,
-                  get() {
-                    if (isZeroProbe(this)) return this.src;
-                    return nativeCurrentSrc.get.call(this);
-                  }
-                });
-                Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', {
-                  configurable: true,
-                  get() {
-                    if (isZeroProbe(this)) return 0;
-                    return nativeNaturalWidth.get.call(this);
-                  }
-                });
-                HTMLImageElement.prototype.addEventListener = function (type, listener, options) {
-                  if (type === 'load' && isZeroProbe(this)) return;
-                  return nativeAddEventListener.call(this, type, listener, options);
-                };
-                HTMLImageElement.prototype.decode = function () {
-                  window.__imageDecodeCalls += 1;
-                  return nativeDecode.call(this);
-                };
-              </script>
+            <body>
               <c-CImage
                 c-src="zero"
                 alt="Zero dimension vector"
                 c-width="20"
                 c-height="10"
                 c-attrs="{'id': 'zero'}"
-                $c-props="{ onStatusChange: detail => events.push(detail.status) }"
+                :onStatusChange="detail => events.push(detail.status)"
               />
-              <output id="zero-events" x-text="JSON.stringify(events)"></output>
+              <output id="zero-events" :textContent="JSON.stringify(events)"></output>
               <c-js />
             </body>
           </html>
@@ -219,71 +206,64 @@ def _decode_race_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          window.__decodeCalls = {race: 0, broken: 0};
+          const nativeComplete = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'complete'
+          );
+          const nativeCurrentSrc = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'currentSrc'
+          );
+          const nativeNaturalWidth = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'naturalWidth'
+          );
+          const nativeAddEventListener = HTMLImageElement.prototype.addEventListener;
+          const isProbe = image => image.alt.endsWith('decode probe');
+          Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+            configurable: true,
+            get() { return isProbe(this) ? true : nativeComplete.get.call(this); }
+          });
+          Object.defineProperty(HTMLImageElement.prototype, 'currentSrc', {
+            configurable: true,
+            get() { return isProbe(this) ? this.src : nativeCurrentSrc.get.call(this); }
+          });
+          Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', {
+            configurable: true,
+            get() { return isProbe(this) ? 0 : nativeNaturalWidth.get.call(this); }
+          });
+          HTMLImageElement.prototype.addEventListener = function (type, listener, options) {
+            if (isProbe(this) && (type === 'load' || type === 'error')) return;
+            return nativeAddEventListener.call(this, type, listener, options);
+          };
+          HTMLImageElement.prototype.decode = function () {
+            if (this.alt === 'Broken decode probe') {
+              window.__decodeCalls.broken += 1;
+              return Promise.reject(new DOMException('fixture rejection'));
+            }
+            if (this.alt === 'Race decode probe') {
+              window.__decodeCalls.race += 1;
+              if (window.__decodeCalls.race === 1) return new Promise((resolve, reject) => {
+                window.__rejectOldDecode = reject;
+              });
+              return Promise.resolve();
+            }
+            return Promise.resolve();
+          };
+          $component({data(){const imageDecode=Citry.vue.reactive({source:null,race:[],broken:[]});window.__imageDecode=imageDecode;return {state:{imageDecode}};}});
+        """
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /></head>
-            <body
-              x-data
-              x-init="Alpine.store('imageDecode', {
-                source: document.querySelector('#decode-race img').getAttribute('src'),
-                race: [], broken: []
-              })"
-            >
-              <script>
-                window.__decodeCalls = {race: 0, broken: 0};
-                const nativeComplete = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'complete'
-                );
-                const nativeCurrentSrc = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'currentSrc'
-                );
-                const nativeNaturalWidth = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'naturalWidth'
-                );
-                const nativeAddEventListener = HTMLImageElement.prototype.addEventListener;
-                const isProbe = image => image.alt.endsWith('decode probe');
-                Object.defineProperty(HTMLImageElement.prototype, 'complete', {
-                  configurable: true,
-                  get() { return isProbe(this) ? true : nativeComplete.get.call(this); }
-                });
-                Object.defineProperty(HTMLImageElement.prototype, 'currentSrc', {
-                  configurable: true,
-                  get() { return isProbe(this) ? this.src : nativeCurrentSrc.get.call(this); }
-                });
-                Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', {
-                  configurable: true,
-                  get() { return isProbe(this) ? 0 : nativeNaturalWidth.get.call(this); }
-                });
-                HTMLImageElement.prototype.addEventListener = function (type, listener, options) {
-                  if (isProbe(this) && (type === 'load' || type === 'error')) return;
-                  return nativeAddEventListener.call(this, type, listener, options);
-                };
-                HTMLImageElement.prototype.decode = function () {
-                  if (this.alt === 'Broken decode probe') {
-                    window.__decodeCalls.broken += 1;
-                    return Promise.reject(new DOMException('fixture rejection'));
-                  }
-                  if (this.alt === 'Race decode probe') {
-                    window.__decodeCalls.race += 1;
-                    if (window.__decodeCalls.race === 1) return new Promise((resolve, reject) => {
-                      window.__rejectOldDecode = reject;
-                    });
-                    return Promise.resolve();
-                  }
-                  return Promise.resolve();
-                };
-              </script>
+            <body>
               <c-CImage
                 c-src="green"
                 alt="Race decode probe"
                 c-width="20"
                 c-height="10"
                 c-attrs="{'id': 'decode-race'}"
-                $c-props="{
-                  src: $store.imageDecode.source,
-                  onStatusChange: detail => $store.imageDecode.race.push(detail.status)
-                }"
+                :src="state.imageDecode.source"
+                :onStatusChange="detail => state.imageDecode.race.push(detail.status)"
               />
               <c-CImage
                 src="data:image/png;base64,AAAA"
@@ -291,9 +271,7 @@ def _decode_race_page() -> str:
                 c-width="20"
                 c-height="10"
                 c-attrs="{'id': 'decode-broken'}"
-                $c-props="{
-                  onStatusChange: detail => $store.imageDecode.broken.push(detail.status)
-                }"
+                :onStatusChange="detail => state.imageDecode.broken.push(detail.status)"
               />
               <c-js />
             </body>
@@ -311,55 +289,56 @@ def _invalid_decode_page(mode: str) -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          const nativeComplete = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'complete'
+          );
+          const nativeCurrentSrc = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'currentSrc'
+          );
+          const nativeNaturalWidth = Object.getOwnPropertyDescriptor(
+            HTMLImageElement.prototype, 'naturalWidth'
+          );
+          Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+            configurable: true, get() { return this.alt === 'Invalid decode probe'
+              ? true : nativeComplete.get.call(this); }
+          });
+          Object.defineProperty(HTMLImageElement.prototype, 'currentSrc', {
+            configurable: true, get() { return this.alt === 'Invalid decode probe'
+              ? this.src : nativeCurrentSrc.get.call(this); }
+          });
+          Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', {
+            configurable: true, get() { return this.alt === 'Invalid decode probe'
+              ? 0 : nativeNaturalWidth.get.call(this); }
+          });
+          HTMLImageElement.prototype.decode = function () {
+            if (this.alt !== 'Invalid decode probe') return Promise.resolve();
+            if (MODE === 'undefined') return undefined;
+            if (MODE === 'plain') return {};
+            if (MODE === 'getter') return Object.defineProperty({}, 'then', {
+              get() { throw new DOMException('fixture getter'); }
+            });
+            return { then() { throw new DOMException('fixture then'); } };
+          };
+          $component({data(){return {events:[]};}});
+        """.replace("MODE", repr(mode))
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /></head>
-            <body x-data="{ events: [] }">
-              <script>
-                const nativeComplete = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'complete'
-                );
-                const nativeCurrentSrc = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'currentSrc'
-                );
-                const nativeNaturalWidth = Object.getOwnPropertyDescriptor(
-                  HTMLImageElement.prototype, 'naturalWidth'
-                );
-                Object.defineProperty(HTMLImageElement.prototype, 'complete', {
-                  configurable: true, get() { return this.alt === 'Invalid decode probe'
-                    ? true : nativeComplete.get.call(this); }
-                });
-                Object.defineProperty(HTMLImageElement.prototype, 'currentSrc', {
-                  configurable: true, get() { return this.alt === 'Invalid decode probe'
-                    ? this.src : nativeCurrentSrc.get.call(this); }
-                });
-                Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', {
-                  configurable: true, get() { return this.alt === 'Invalid decode probe'
-                    ? 0 : nativeNaturalWidth.get.call(this); }
-                });
-                HTMLImageElement.prototype.decode = function () {
-                  if (this.alt !== 'Invalid decode probe') return Promise.resolve();
-                  if (MODE === 'undefined') return undefined;
-                  if (MODE === 'plain') return {};
-                  if (MODE === 'getter') return Object.defineProperty({}, 'then', {
-                    get() { throw new DOMException('fixture getter'); }
-                  });
-                  return { then() { throw new DOMException('fixture then'); } };
-                };
-              </script>
+            <body>
               <c-CImage
                 c-src="zero"
                 alt="Invalid decode probe"
                 c-width="20"
                 c-height="10"
                 c-attrs="{'id': 'invalid-decode'}"
-                $c-props="{onStatusChange: detail => events.push(detail.status)}"
+                :onStatusChange="detail => events.push(detail.status)"
               />
               <c-js />
             </body>
           </html>
-        """.replace("MODE", repr(mode))
+        """
 
         def template_data(self, kwargs, slots):
             return {"zero": ZERO}
@@ -372,11 +351,12 @@ def _responsive_page(*, small_url: str = SMALL_URL) -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {events:[]};}});"
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /></head>
-            <body x-data="{ events: [] }">
+            <body>
               <c-CImage
                 c-src="wide"
                 alt="Responsive plate"
@@ -384,14 +364,12 @@ def _responsive_page(*, small_url: str = SMALL_URL) -> str:
                 c-height="30"
                 c-sources="sources"
                 c-attrs="{'id': 'responsive'}"
-                $c-props="{
-                  onStatusChange: detail => events.push({
+                :onStatusChange="detail => events.push({
                     status: detail.status,
                     current: detail.current_src
-                  })
-                }"
+                  })"
               />
-              <output id="responsive-events" x-text="JSON.stringify(events)"></output>
+              <output id="responsive-events" :textContent="JSON.stringify(events)"></output>
               <c-js />
             </body>
           </html>
@@ -413,11 +391,13 @@ def _auto_sizes_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """$component({data(){const state=Citry.vue.reactive({imageLoading:'lazy',imageSizes:'auto, 100vw'});
+          window.__state=state;return state;}});"""
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /></head>
-            <body x-data="{ imageLoading: 'lazy', imageSizes: 'auto, 100vw' }">
+            <body>
               <c-CImage
                 c-src="wide"
                 c-srcset="wide_set"
@@ -428,7 +408,8 @@ def _auto_sizes_page() -> str:
                 loading="lazy"
                 c-sources="sources"
                 c-attrs="{'id': 'auto-sizes'}"
-                $c-props="{loading: imageLoading, sizes: imageSizes}"
+                :loading="imageLoading"
+                :sizes="imageSizes"
               />
               <c-js />
             </body>
@@ -479,8 +460,8 @@ def _events_page() -> tuple[Citry, str]:
 
         template = """
           <section data-events-image>
-            <button class="advance-image" type="button" @c-click="advance">Advance</button>
-            <output id="image-step">{{ step }}</output>
+            <button class="advance-image" type="button" @click="$sendEvent('advance')">Advance</button>
+            <output id="image-step" :textContent="step"></output>
             <c-CImage
               #c-key="'events-image'"
               c-src="image_src"
@@ -489,12 +470,10 @@ def _events_page() -> tuple[Citry, str]:
               c-height="40"
               c-sources="sources"
               c-attrs="{'id': 'events-image'}"
-              $c-props="{
-                onStatusChange: detail => $store.imageMorph.events.push({
+              :onStatusChange="detail => window.__imageMorph.events.push({
                   status: detail.status,
                   current: detail.current_src,
-                })
-              }"
+                })"
             />
           </section>
         """
@@ -511,11 +490,12 @@ def _events_page() -> tuple[Citry, str]:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const imageMorph=Citry.vue.reactive({events:[]});window.__imageMorph=imageMorph;return {state:{imageMorph}};}});"
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body x-data x-init="Alpine.store('imageMorph', {events: []})">
+            <body>
               <c-events-image />
               <c-js />
             </body>
@@ -541,27 +521,33 @@ def test_basic_cached_error_slots_geometry_and_native_semantics(page: Any) -> No
     assert box is not None
     assert box["width"] == pytest.approx(200, abs=0.5)
     assert box["height"] == pytest.approx(112.5, abs=0.5)
-    statuses = page.evaluate("Alpine.store('imageTest').events.map(event => event.status)")
+    statuses = page.evaluate("window.__imageTest.events.map(event => event.status)")
     assert statuses.count("loading") == 2
     assert statuses.count("loaded") == 2
+
+
+def test_on_status_change_callback_prop_is_supported(page: Any) -> None:
+    page.set_content(_page(), wait_until="load")
+    page.wait_for_function("document.querySelector('#reactive').dataset.status === 'loaded'")
+    assert page.evaluate("window.__imageTest.callbackEvents") == ["loading", "loaded"]
 
 
 def test_reactive_request_generation_and_non_request_changes(page: Any) -> None:
     page.set_content(_page(), wait_until="load")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'loaded'")
-    baseline = page.evaluate("Alpine.store('imageTest').events.length")
+    baseline = page.evaluate("window.__imageTest.events.length")
 
-    page.evaluate("Object.assign(Alpine.store('imageTest'), {alt: 'Updated plate', height: 60, fit: 'cover'})")
+    page.evaluate("Object.assign(window.__imageTest, {alt: 'Updated plate', height: 60, fit: 'cover'})")
     page.wait_for_timeout(50)
-    assert page.evaluate("Alpine.store('imageTest').events.length") == baseline
+    assert page.evaluate("window.__imageTest.events.length") == baseline
     assert page.locator("#reactive [data-citry-ui-part='image']").get_attribute("alt") == "Updated plate"
     assert page.locator("#reactive").get_attribute("data-fit") == "cover"
 
-    page.evaluate("Alpine.store('imageTest').source = '/broken-reactive.png'")
+    page.evaluate("window.__imageTest.source = '/broken-reactive.png'")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'error'")
-    page.evaluate(f"Alpine.store('imageTest').source = {BLUE!r}")
+    page.evaluate(f"window.__imageTest.source = {BLUE!r}")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'loaded'")
-    assert page.evaluate("Alpine.store('imageTest').events.slice(-4).map(event => event.status)") == [
+    assert page.evaluate("window.__imageTest.events.slice(-4).map(event => event.status)") == [
         "loading",
         "error",
         "loading",
@@ -581,14 +567,14 @@ def test_cached_decode_rejection_and_superseded_probe_are_generation_guarded(pag
     page.set_content(_decode_race_page(), wait_until="load")
     page.wait_for_function("window.__decodeCalls.race === 1 && window.__decodeCalls.broken === 1")
     page.wait_for_function("document.querySelector('#decode-broken').dataset.status === 'error'")
-    assert page.evaluate("Alpine.store('imageDecode').broken") == ["loading", "error"]
+    assert page.evaluate("window.__imageDecode.broken") == ["loading", "error"]
 
-    page.evaluate(f"Alpine.store('imageDecode').source = {BLUE!r}")
+    page.evaluate(f"window.__imageDecode.source = {BLUE!r}")
     page.wait_for_function("window.__decodeCalls.race === 2")
     page.wait_for_function("document.querySelector('#decode-race').dataset.status === 'loaded'")
     page.evaluate("window.__rejectOldDecode(new DOMException('superseded fixture rejection'))")
     page.wait_for_timeout(50)
-    assert page.evaluate("Alpine.store('imageDecode').race") == ["loading", "loading", "loaded"]
+    assert page.evaluate("window.__imageDecode.race") == ["loading", "loading", "loaded"]
     assert page.locator("#decode-race").get_attribute("data-status") == "loaded"
 
 
@@ -648,14 +634,14 @@ def test_reactive_auto_sizes_tuple_retains_last_valid_configuration_atomically(p
     image = page.locator("#auto-sizes img")
     source = page.locator("#auto-sizes source")
 
-    page.evaluate("Alpine.$data(document.body).imageLoading = 'eager'")
+    page.evaluate("window.__state.imageLoading = 'eager'")
     page.wait_for_timeout(50)
     assert image.get_attribute("loading") == "lazy"
     assert image.get_attribute("sizes") == "auto, 100vw"
     assert source.get_attribute("sizes") == "auto, 100vw"
 
-    page.evaluate("Alpine.$data(document.body).imageLoading = 'lazy'")
-    page.evaluate("Alpine.$data(document.body).imageSizes = '100vw'")
+    page.evaluate("window.__state.imageLoading = 'lazy'")
+    page.evaluate("window.__state.imageSizes = '100vw'")
     page.wait_for_timeout(50)
     assert image.get_attribute("loading") == "lazy"
     assert image.get_attribute("sizes") == "auto, 100vw"
@@ -733,12 +719,12 @@ def test_trusted_load_with_empty_current_src_never_settles_loaded(page: Any) -> 
         "window.__emptyCurrentLoads=0;"
         "image.addEventListener('load',event=>{if(event.isTrusted)window.__emptyCurrentLoads+=1});"
         "Object.defineProperty(image,'currentSrc',{configurable:true,get:()=>''});"
-        f"Alpine.store('imageTest').source={BLUE!r}"
+        f"window.__imageTest.source={BLUE!r}"
     )
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'loading'")
     page.wait_for_timeout(250)
     assert page.locator("#reactive").get_attribute("data-status") == "loading"
-    assert page.evaluate("Alpine.store('imageTest').callbackEvents.at(-1)") == "loading"
+    assert page.evaluate("window.__imageTest.callbackEvents.at(-1)") == "loading"
 
 
 def test_invalid_client_diagnostics_do_not_stringify_or_disclose_values(page: Any) -> None:
@@ -748,7 +734,7 @@ def test_invalid_client_diagnostics_do_not_stringify_or_disclose_values(page: An
         "window.__imageStringified=0;window.__imageDiagnostics=[];"
         "const original=console.error;console.error=(...args)=>{"
         "window.__imageDiagnostics.push(args);original(...args)};"
-        "Alpine.store('imageTest').source={toString(){"
+        "window.__imageTest.source={toString(){"
         "window.__imageStringified+=1;return 'https://secret.invalid/image?token=SENTINEL'}}"
     )
     page.wait_for_function("window.__imageDiagnostics.length === 1")
@@ -769,22 +755,20 @@ def test_invalid_client_diagnostics_do_not_stringify_or_disclose_values(page: An
 def test_invalid_callback_retains_last_valid_until_explicit_clear_or_replacement(page: Any) -> None:
     page.set_content(_page(), wait_until="load")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'loaded'")
-    assert page.evaluate("Alpine.store('imageTest').callbackEvents") == ["loading", "loaded"]
+    assert page.evaluate("window.__imageTest.callbackEvents") == ["loading", "loaded"]
 
-    page.evaluate(
-        "Alpine.store('imageTest').callback='invalid';Alpine.store('imageTest').source='/broken-callback.png'"
-    )
+    page.evaluate("window.__imageTest.callback='invalid';window.__imageTest.source='/broken-callback.png'")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'error'")
-    assert page.evaluate("Alpine.store('imageTest').callbackEvents") == [
+    assert page.evaluate("window.__imageTest.callbackEvents") == [
         "loading",
         "loaded",
         "loading",
         "error",
     ]
 
-    page.evaluate(f"Alpine.store('imageTest').callback=null;Alpine.store('imageTest').source={BLUE!r}")
+    page.evaluate(f"window.__imageTest.callback=null;window.__imageTest.source={BLUE!r}")
     page.wait_for_function("document.querySelector('#reactive').dataset.status === 'loaded'")
-    assert page.evaluate("Alpine.store('imageTest').callbackEvents") == [
+    assert page.evaluate("window.__imageTest.callbackEvents") == [
         "loading",
         "loaded",
         "loading",
@@ -792,12 +776,12 @@ def test_invalid_callback_retains_last_valid_until_explicit_clear_or_replacement
     ]
 
     page.evaluate(
-        "Alpine.store('imageTest').callback=detail=>"
-        "Alpine.store('imageTest').callbackEvents.push(`next:${detail.status}`);"
-        f"Alpine.store('imageTest').source={GREEN!r}"
+        "window.__imageTest.callback=detail=>"
+        "window.__imageTest.callbackEvents.push(`next:${detail.status}`);"
+        f"window.__imageTest.source={GREEN!r}"
     )
-    page.wait_for_function("Alpine.store('imageTest').callbackEvents.at(-1) === 'next:loaded'")
-    assert page.evaluate("Alpine.store('imageTest').callbackEvents.slice(-2)") == [
+    page.wait_for_function("window.__imageTest.callbackEvents.at(-1) === 'next:loaded'")
+    assert page.evaluate("window.__imageTest.callbackEvents.slice(-2)") == [
         "next:loading",
         "next:loaded",
     ]
@@ -846,33 +830,39 @@ def test_correlated_morph_preserves_equal_request_and_restarts_changed_or_replac
         "window.__eventsImageRoot=document.querySelector('#events-image');"
         "window.__eventsImageNode=document.querySelector('#events-image img')"
     )
-    baseline = page.evaluate("Alpine.store('imageMorph').events.length")
+    baseline = page.evaluate("window.__imageMorph.events.length")
 
-    page.evaluate("()=>Citry.events.send(document.querySelector('.advance-image'),'advance',{})")
-    page.wait_for_function("document.querySelector('#image-step').textContent.trim() === '1'")
+    page.get_by_role("button", name="Advance").click()
+    page.wait_for_function(
+        "document.querySelector('#events-image [data-citry-ui-part=\\\"image\\\"]').alt === 'Morph plate 1'"
+    )
     page.wait_for_function("document.querySelector('#events-image')?.dataset.status === 'loaded'")
     assert page.evaluate("document.querySelector('#events-image')===window.__eventsImageRoot") is True
     assert page.evaluate("document.querySelector('#events-image img')===window.__eventsImageNode") is True
-    assert page.evaluate("Alpine.store('imageMorph').events.length") == baseline
+    assert page.evaluate("window.__imageMorph.events.length") == baseline
 
-    page.evaluate("()=>Citry.events.send(document.querySelector('.advance-image'),'advance',{})")
-    page.wait_for_function("document.querySelector('#image-step').textContent.trim() === '2'")
+    page.get_by_role("button", name="Advance").click()
+    page.wait_for_function(
+        "document.querySelector('#events-image [data-citry-ui-part=\\\"image\\\"]').alt === 'Morph plate 2'"
+    )
     page.wait_for_function("document.querySelector('#events-image')?.dataset.status === 'loaded'")
     assert page.evaluate("document.querySelector('#events-image')===window.__eventsImageRoot") is True
     assert page.evaluate("document.querySelector('#events-image img')===window.__eventsImageNode") is True
-    assert page.evaluate("Alpine.store('imageMorph').events.slice(-2).map(event=>event.status)") == [
+    assert page.evaluate("window.__imageMorph.events.slice(-2).map(event=>event.status)") == [
         "loading",
         "loaded",
     ]
 
     page.evaluate("window.__eventsImageNode=document.querySelector('#events-image img')")
-    page.evaluate("()=>Citry.events.send(document.querySelector('.advance-image'),'advance',{})")
-    page.wait_for_function("document.querySelector('#image-step').textContent.trim() === '3'")
+    page.get_by_role("button", name="Advance").click()
+    page.wait_for_function(
+        "document.querySelector('#events-image [data-citry-ui-part=\\\"image\\\"]').alt === 'Morph plate 3'"
+    )
     page.wait_for_function("document.querySelector('#events-image')?.dataset.status === 'loaded'")
     assert page.evaluate("document.querySelector('#events-image')===window.__eventsImageRoot") is True
     assert page.evaluate("document.querySelector('#events-image img')!==window.__eventsImageNode") is True
     assert page.locator("#events-image > picture > source").count() == 1
-    assert page.evaluate("Alpine.store('imageMorph').events.slice(-2).map(event=>event.status)") == [
+    assert page.evaluate("window.__imageMorph.events.slice(-2).map(event=>event.status)") == [
         "loading",
         "loaded",
     ]
@@ -905,7 +895,7 @@ def test_clone_hostile_anatomy_shadow_move_and_cleanup_are_owner_guarded(page: A
     page.wait_for_timeout(20)
     assert page.locator("#basic").get_attribute("data-citry-image-initialized") == ""
 
-    baseline_events = page.evaluate("Alpine.store('imageTest').events.length")
+    baseline_events = page.evaluate("window.__imageTest.events.length")
     page.locator("#basic").evaluate("root => root.setAttribute('style', 'color: red')")
     page.wait_for_function(
         "getComputedStyle(document.querySelector('#basic')).color === 'rgb(255, 0, 0)'"
@@ -914,7 +904,7 @@ def test_clone_hostile_anatomy_shadow_move_and_cleanup_are_owner_guarded(page: A
     )
     assert page.locator("#basic").get_attribute("data-citry-image-initialized") == ""
     assert page.locator("#basic").get_attribute("data-status") == "loaded"
-    assert page.evaluate("Alpine.store('imageTest').events.length") == baseline_events
+    assert page.evaluate("window.__imageTest.events.length") == baseline_events
 
     page.locator("#missing [data-citry-ui-part='fallback']").evaluate(
         "visual => visual.insertAdjacentHTML('beforeend', '<img src=\"data:image/png;base64,AAAA\" alt=\"forged\">')"

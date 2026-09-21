@@ -111,20 +111,20 @@ def _page() -> str:
         citry = app
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Form Collection evidence</title><c-css /></head>
-          <body x-data>
-            <form id="server" @submit.prevent="$store.collection.submits.push($event.submitter.value)">
+          <body>
+            <form id="server" @submit.prevent="state.collection.submits.push($event.submitter.value)">
               <c-CFormCollection id="contacts" label="Contacts" action_name="contact_action" c-min_items="1"
-                $c-props="{onAction:(detail)=>$store.collection.actions.push([detail.action,detail.value,detail.index,detail.toIndex])}">
+                :onAction="(detail)=>state.collection.actions.push([detail.action,detail.value,detail.index,detail.toIndex])">
                 <c-CFormCollectionItem value="a" label="Primary"><input aria-label="Primary email" name="contacts[a][email]" type="email" required /></c-CFormCollectionItem>
                 <c-CFormCollectionItem value="b" label="Backup"><input aria-label="Backup email" name="contacts[b][email]" /></c-CFormCollectionItem>
               </c-CFormCollection>
             </form>
-            <c-CFormCollection id="client" label="Client rows" $c-props="{disabled:$store.collection.disabled,onAction:(detail)=>$store.collection.client=detail.action}">
+            <c-CFormCollection id="client" label="Client rows" :disabled="state.collection.disabled" :onAction="(detail)=>state.collection.client=detail.action">
               <c-CFormCollectionItem value="one" label="One"><input aria-label="One value" /></c-CFormCollectionItem>
             </c-CFormCollection>
           </body></html>
         """
-        js = "Alpine.store('collection',{actions:[],submits:[],client:'',disabled:false});"
+        js = "$component({data(){const state=Citry.vue.reactive({actions:[],submits:[],client:'',disabled:false});window.__collection=state;return {state:{collection:state}};}});"
 
     return str(Page())
 
@@ -145,12 +145,12 @@ def test_named_actions_bypass_validation_and_report_exact_details(page: Any) -> 
     root.locator('[data-value="a"] [data-citry-form-collection-action="move-down"]').click()
     root.locator('[data-value="b"] [data-citry-form-collection-action="remove"]').click()
     root.locator('[data-citry-ui-part="add"]').click()
-    assert page.evaluate("Alpine.store('collection').actions") == [
+    assert page.evaluate("window.__collection.actions") == [
         ["move-down", "a", 0, 1],
         ["remove", "b", 1, None],
         ["add", None, None, None],
     ]
-    assert page.evaluate("Alpine.store('collection').submits") == ["move-down:a", "remove:b", "add"]
+    assert page.evaluate("window.__collection.submits") == ["move-down:a", "remove:b", "add"]
     assert page.locator('[name="contacts[a][email]"]').evaluate("element => element.validity.valueMissing") is True
     assert errors == []
 
@@ -161,8 +161,8 @@ def test_client_buttons_reactive_disabled_environment_axe_and_cleanup(page: Any)
     add = root.locator('[data-citry-ui-part="add"]')
     assert add.get_attribute("type") == "button"
     add.click()
-    assert page.evaluate("Alpine.store('collection').client") == "add"
-    page.evaluate("Alpine.store('collection').disabled=true")
+    assert page.evaluate("window.__collection.client") == "add"
+    page.evaluate("window.__collection.disabled=true")
     page.wait_for_function("document.querySelector('#client').hasAttribute('data-disabled')")
     assert add.is_disabled()
     assert root.locator("input").is_enabled()

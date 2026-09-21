@@ -12,7 +12,7 @@
 [![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/NaQ8QPyHtD)
 
 Citry is a fully typed frontend framework for Python with server events and
-Alpine.js. One component can own its HTML, browser behavior, CSS, translations,
+Vue. One component can own its HTML, browser behavior, CSS, translations,
 and Python event handlers, so you can build an interactive interface without
 maintaining a separate frontend application. It is inspired by Vue and
 Livewire.
@@ -127,7 +127,7 @@ Citry gives each part of an interface a clear home:
 | What you need | What Citry provides |
 | --- | --- |
 | Reusable UI | Components, typed inputs, slots, composition, and error boundaries |
-| Browser behavior | Alpine expressions, component JavaScript, CSS, and managed assets |
+| Browser behavior | Vue expressions, component JavaScript, CSS, and managed assets |
 | Python interactions | Server events, forms, persistent State, and targeted HTML updates |
 | Internationalization | Fluent catalogs, locale-aware formatting, and server/browser translations |
 | Production control | Caching, HTML fragments, strict CSP support, CSRF hooks, and debug tooling |

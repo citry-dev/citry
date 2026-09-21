@@ -12,7 +12,7 @@ from citry_ui import CListbox, CListboxGroup, CListboxOption
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(template: str, *, include_css: bool = False) -> str:
+def _render(template: str, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("<c-css />" if include_css else "")
@@ -21,7 +21,8 @@ def _render(template: str, *, include_css: bool = False) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _tag(html: str, part: str, index: int = 0) -> str:
@@ -81,7 +82,7 @@ def test_public_schemas_aliases_and_registration_are_exact() -> None:
 
 
 def test_single_listbox_has_native_aria_selection_grouping_and_roving_focus() -> None:
-    html = _render(_listbox('value="earth" variant="outline"'))
+    html = _render(_listbox('value="earth" variant="outline"'), static_fallback=True)
     root = _tag(html, "listbox-root")
     surface = _tag(html, "listbox")
     earth = _tag(html, "listbox-option", 0)
@@ -99,7 +100,7 @@ def test_single_listbox_has_native_aria_selection_grouping_and_roving_focus() ->
 
 
 def test_multiple_listbox_reflects_all_selected_values() -> None:
-    html = _render(_listbox("multiple c-value=\"['earth', 'saturn']\""))
+    html = _render(_listbox("multiple c-value=\"['earth', 'saturn']\""), static_fallback=True)
     assert 'aria-multiselectable="true"' in _tag(html, "listbox")
     assert 'aria-selected="true"' in _tag(html, "listbox-option", 0)
     assert 'aria-selected="true"' in _tag(html, "listbox-option", 3)
@@ -115,7 +116,8 @@ def test_option_regions_have_exact_accessible_relationships() -> None:
         '<c-fill name="description">Analytical engine</c-fill>'
         '<c-fill name="end">Available</c-fill>'
         "</c-CListboxOption>"
-        "</c-CListbox>"
+        "</c-CListbox>",
+        static_fallback=True,
     )
     option = _tag(html, "listbox-option")
     assert "aria-labelledby=" in option
@@ -132,7 +134,8 @@ def test_root_surface_option_and_group_attrs_reach_their_destinations() -> None:
         "<c-CListboxGroup label=\"Latin\" c-attrs=\"{'data-test': 'group'}\">"
         '<c-CListboxOption value="a" class_="special" style="color:red" '
         "c-attrs=\"{'data-test': 'option'}\">A</c-CListboxOption>"
-        "</c-CListboxGroup></c-CListbox>"
+        "</c-CListboxGroup></c-CListbox>",
+        static_fallback=True,
     )
     root = _tag(html, "listbox-root")
     surface = _tag(html, "listbox")
@@ -230,7 +233,8 @@ def test_output_escapes_hostile_label_and_values() -> None:
     html = _render(
         "<c-CListbox c-label=\"'Planets & <world>'\">"
         "<c-CListboxOption c-value=\"'earth&moon'\">Earth &amp; Moon</c-CListboxOption>"
-        "</c-CListbox>"
+        "</c-CListbox>",
+        static_fallback=True,
     )
     assert "Planets &amp; &lt;world&gt;" in html
     assert 'data-value="earth&amp;moon"' in html

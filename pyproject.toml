@@ -194,6 +194,13 @@ extend-markup-names = [
     "T201",    # The CLI commands print their output to stdout
     "ARG002",  # A command's handle receives the parsed options but may use none
 ]
+"packages/py/citry/citry/_vue/compiler.py" = [
+    # PYI049 asks whether a private TypedDict is used in the file that defines it.
+    # These declaration shapes describe the generated browser definition and are
+    # read by the other modules of the private `_vue` package, so the rule reports
+    # them as dead when they are not. The `.pyi` stubs still get the check.
+    "PYI049",
+]
 "benchmarks/*" = [
     "ARG002",
     "T201",    # The comparison runner prints its results

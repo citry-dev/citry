@@ -1,5 +1,7 @@
 """Shared Tour scenario used by repository quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from citry import Citry, Component
 
 
@@ -10,7 +12,6 @@ def tour_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack tour-quality"
             data-quality-tour-ready
-            x-data="{open:true,active:0,last:'No request'}"
           >
             <h1>Tour states</h1>
             <div class="tour-quality__workspace">
@@ -21,12 +22,7 @@ def tour_states_component(app: Citry) -> type[Component]:
               id="quality-tour"
               c-open="True"
               c-attrs="quality_attrs"
-              $c-props="{
-                open,
-                active,
-                onOpenChange:(next,detail)=>{last=detail.reason;open=next},
-                onActiveChange:(next,detail)=>{last=detail.reason;active=next},
-              }"
+              :open="open" :active="active" :onOpenChange="(next,detail)=>{last=detail.reason;open=next}" :onActiveChange="(next,detail)=>{last=detail.reason;active=next}"
             >
               <c-CTourStep value="intro" c-describe="True">
                 <c-fill name="title">Welcome to Tour quality</c-fill>
@@ -50,8 +46,17 @@ def tour_states_component(app: Citry) -> type[Component]:
                 <c-fill name="default"><span dir="rtl">اكتملت الجولة</span></c-fill>
               </c-CTourStep>
             </c-CTour>
-            <output x-text="last">No request</output>
+            <output v-text="last">No request</output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                open:true,active:0,last:'No request'
+              };
+            },
+          });
         """
         css = """
           :where(.tour-quality__workspace){min-block-size:24rem;padding:2rem;background:light-dark(#f8fafc,#172033)}

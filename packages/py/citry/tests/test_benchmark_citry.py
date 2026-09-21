@@ -13,7 +13,7 @@
 # - Django-only helpers (naturaltime, csrf, the request object) are small
 #   local stand-ins, so this file imports no Django and the import-time
 #   benchmark stays honest.
-# - DJC filters (`|json`, `|alpine`, ...) become plain functions, injected
+# - DJC filters become plain Python shaping helpers
 #   into every component's template scope by a small extension.
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from typing import Any, Callable, Iterable, Literal, NamedTuple, TypeAlias, Type
 
 import wrapt
 
-from citry import Citry, Component
+from citry import Citry, Component, SlotInput
 from citry.util.html import Markup, escape
 
 # ----------- IMPORTS END ------------ #
@@ -103,30 +103,12 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def to_alpine_json(value: Any) -> str:
-    """Serialize for an Alpine attribute; single quotes so it survives in HTML."""
-    return json.dumps(_plain(value)).replace('"', "'")
-
-
 def to_json(value: Any) -> str:
     return json.dumps(_plain(value))
 
 
 def get_item(dictionary: Any, key: Any) -> Any:
     return dictionary.get(key)
-
-
-def serialize_to_js(obj: Any) -> str:
-    """Serialize a Python object to a JS-like expression (recursive)."""
-    obj = _plain(obj)
-    if isinstance(obj, dict):
-        items = [f"{key}: {serialize_to_js(value)}" for key, value in obj.items()]
-        return f"{{ {', '.join(items)} }}"
-    if isinstance(obj, (list, tuple)):
-        return f"[{', '.join(serialize_to_js(item) for item in obj)}]"
-    if isinstance(obj, str):
-        return obj
-    return str(obj)
 
 
 def default_if_none(value: Any, fallback: Any) -> Any:
@@ -141,7 +123,7 @@ def linebreaksbr(value: Any) -> str:
     return str(value).replace("\n", "<br>")
 
 
-# The DJC filters above (to_json, to_alpine_json, ...) are plain functions
+# The DJC shaping helpers above are plain functions
 # called from `template_data`, the idiomatic citry shape: data is shaped in
 # Python and the template only references the resulting variables. So nothing
 # is injected into the template scope, and templates carry no filter/helper
@@ -416,7 +398,7 @@ data_json = """
               "output": 18
             }
           },
-          []
+          ["Tag 9"]
         ]
       ],
       []
@@ -1643,36 +1625,14 @@ class Menu(Component):
         all_list_attrs: dict = {}
         if kwargs.list_attrs:
             all_list_attrs.update(kwargs.list_attrs)
-        if anchor:
-            all_list_attrs[f"x-anchor.{kwargs.anchor_dir}"] = anchor
-        all_list_attrs.update({"x-show": model, "x-cloak": ""})
+        all_list_attrs.update({"data-model": model})
 
-        # The Alpine x-data object, with the same interpolated values DJC built
-        # with the `|alpine` filter, assembled here (V3 has no template filters).
-        x_data_lines = [
-            "{",
-            f"'isModelOverriden': {to_alpine_json(is_model_overriden)},",
-            f"'modelName': {to_alpine_json(model)},",
-            f"'closeOnClickOutside': {to_alpine_json(close_on_click_outside)},",
-        ]
-        if not is_model_overriden:
-            x_data_lines.append(f"'{model}': false,")
-        x_data_lines.append(
-            "onClickOutside(event) { if (this.closeOnClickOutside) {"
-            " if (!this.isModelOverriden) { this[this.modelName] = false; }"
-            " $dispatch('click_outside', { origEvent: event }); } }, }"
-        )
-        root_attrs = {"x-data": " ".join(x_data_lines)}
-        if close_on_esc:
-            root_attrs["@keydown.escape"] = f"{model} = false"
+        root_attrs = {"data-model": model}
 
         activator_attrs = {
-            "@click": f"{model} = !{model}",
-            "@keydown.enter": f"{model} = !{model}",
             "tabindex": "0",
             "aria-haspopup": "true",
-            ":aria-expanded": f"!!{model}",
-            "x-ref": "activator",
+            "data-activator": "",
             **(kwargs.activator_attrs or {}),
         }
         has_activator = bool(self.raw_slots.get("activator") or self.raw_slots.get("default"))
@@ -1686,12 +1646,21 @@ class Menu(Component):
             "has_activator": has_activator,
         }
 
+    def js_data(self, kwargs, slots):
+        return {
+            "closeOnEsc": bool(kwargs.close_on_esc),
+            "closeOnClickOutside": bool(kwargs.close_on_click_outside),
+        }
+
     template = """
-        <div c-bind="attrs" c-bind="root_attrs">
-            <div c-if="has_activator" c-bind="activator_attrs"><c-slot name="activator" /></div>
+        <div c-bind="attrs" c-bind="root_attrs" @keydown.escape="closeOnEsc && (open = false)"
+             @click.self="closeOnClickOutside && (open = false)">
+            <div c-if="has_activator" c-bind="activator_attrs" @click="open = !open" @keydown.enter="open = !open" :aria-expanded="open"><c-slot name="activator" /></div>
             <c-MenuList c-items="items" c-attrs="list_attrs" />
         </div>
     """
+
+    js = "$component({data(){return {open:false};}});"
 
 
 def _normalize_item(item):
@@ -1869,21 +1838,15 @@ class ExpansionPanel(Component):
     name = "ExpansionPanel"
 
     js = """
-        document.addEventListener("alpine:init", () => {
-            Alpine.data("expansion_panel", () => ({
-                isOpen: false,
-                init() {
-                    const initData = JSON.parse(this.$el.dataset.init);
-                    this.isOpen = initData.open;
-                    const panelId = this.$el.dataset.panelid;
-                    const panel = new URL(location.href).searchParams.get("panel");
-                    if (panel && panel == panelId) {
-                        this.isOpen = true;
-                        this.$el.scrollIntoView();
-                    }
-                },
-                togglePanel(event) { this.isOpen = !this.isOpen; },
-            }));
+        $component({
+            mounted() {
+                const panel = new URL(location.href).searchParams.get('panel');
+                if (panel && panel === this.$el.dataset.panelid) {
+                    this.isOpen = true;
+                    this.$el.scrollIntoView();
+                }
+            },
+            methods: { togglePanel() { this.isOpen = !this.isOpen; } },
         });
     """
 
@@ -1895,27 +1858,29 @@ class ExpansionPanel(Component):
         content_attrs: dict | None = None
         icon_position: Literal["left", "right"] = "left"
 
+    def js_data(self, kwargs, slots):
+        return {"isOpen": bool(kwargs.open)}
+
     def template_data(self, kwargs, slots):
         return {
             "attrs": kwargs.attrs,
             "header_attrs": kwargs.header_attrs,
             "content_attrs": kwargs.content_attrs,
             "icon_position": kwargs.icon_position,
-            "init_data_json": to_json({"open": kwargs.open}),
             "panel_id": kwargs.panel_id or False,
             # The DJC `attrs:style` / `attrs::class` nested html_attrs syntax,
             # passed to the Icon's `attrs` kwarg as a plain dict here.
-            "icon_attrs": {"style": "width: fit-content;", ":class": "{ 'rotate-180': isOpen }"},
+            "icon_attrs": {"style": "width: fit-content;"},
         }
 
     template = """
-        <div x-data="expansion_panel" c-data-init="init_data_json" c-bind="attrs" c-data-panelid="panel_id">
+        <div c-bind="attrs" c-data-panelid="panel_id">
             <div @click="togglePanel" c-bind="header_attrs" c-class="'pb-2 cursor-pointer'">
-                <c-if cond="icon_position == 'left'"><c-Icon name="chevron-down" variant="outline" c-attrs="icon_attrs" /></c-if>
+                <c-if cond="icon_position == 'left'"><c-Icon name="chevron-down" variant="outline" c-attrs="icon_attrs" :class="{ 'rotate-180': isOpen }" /></c-if>
                 <c-slot name="header" />
-                <c-if cond="icon_position == 'right'"><c-Icon name="chevron-down" variant="outline" c-attrs="icon_attrs" /></c-if>
+                <c-if cond="icon_position == 'right'"><c-Icon name="chevron-down" variant="outline" c-attrs="icon_attrs" :class="{ 'rotate-180': isOpen }" /></c-if>
             </div>
-            <div x-show="isOpen" c-bind="content_attrs"><c-slot name="content" /></div>
+            <div v-show="isOpen" c-bind="content_attrs"><c-slot name="content" /></div>
         </div>
     """
 
@@ -1934,8 +1899,42 @@ class Dialog(Component):
     citry = app
     name = "Dialog"
 
+    js = """
+        $component({
+            props: { model_value: { default: null } },
+            emits: ['update:model_value'],
+            data() { return { localOpen: false, id: `modal-title-${this.$.uid}` }; },
+            mounted() { window.addEventListener('keydown', this.closeOnEscape); },
+            beforeUnmount() { window.removeEventListener('keydown', this.closeOnEscape); },
+            computed: {
+                isOpen: {
+                    get() { return this.model_value === null ? this.localOpen : this.model_value; },
+                    set(value) {
+                        if (this.model_value === null) this.localOpen = value;
+                        else this.$emit('update:model_value', value);
+                    },
+                },
+            },
+            methods: {
+                openDialog() { this.isOpen = true; },
+                closeDialog() { this.isOpen = false; },
+                closeOnEscape(event) {
+                    if (event.key === 'Escape' && this.closeOnEsc) this.closeDialog();
+                },
+                closeOnOutside() { if (this.closeOnClickOutside) this.closeDialog(); },
+            },
+        });
+    """
+
+    def js_data(self, kwargs, slots):
+        return {
+            "closeOnEsc": bool(kwargs.close_on_esc),
+            "closeOnClickOutside": bool(kwargs.close_on_click_outside),
+        }
+
     class Kwargs:
         model: str | None = None
+        model_value: bool | None = None
         attrs: dict | None = None
         activator_attrs: dict | None = None
         title_attrs: dict | None = None
@@ -1962,31 +1961,13 @@ class Dialog(Component):
         close_on_click_outside: bool | None = True
 
     def template_data(self, kwargs, slots):
-        model = kwargs.model
-        is_model_overriden = bool(model)
-        model = model or "open"
-
-        cancel_attrs = {**(kwargs.cancel_attrs or {}), "@click": construct_btn_onclick(model, kwargs.cancel_on_click)}
-        confirm_attrs = {**(kwargs.confirm_attrs or {}), "@click": construct_btn_onclick(model, kwargs.confirm_on_click)}
-
-        x_data = "{ id: $id('modal-title'), " + (f"'{model}': false, " if not is_model_overriden else "") + "}"
-        root_attrs = {"x-data": x_data}
-        if kwargs.close_on_esc:
-            root_attrs["@keydown.escape"] = f"{model} = false"
-
-        panel_attrs = {}
-        if kwargs.close_on_click_outside:
-            panel_attrs["@click.away"] = f"{model} = false"
-
         return {
-            "model": model,
             "attrs": kwargs.attrs,
-            "activator_attrs": {"@click": f"{model} = true", **(kwargs.activator_attrs or {})},
+            "activator_attrs": kwargs.activator_attrs,
             "content_attrs": kwargs.content_attrs,
             "title_attrs": kwargs.title_attrs,
-            "root_attrs": root_attrs,
-            "backdrop_attrs": {"x-show": model},
-            "panel_attrs": panel_attrs,
+            "backdrop_attrs": {},
+            "panel_attrs": {},
             "confirm_hide": kwargs.confirm_hide,
             "confirm_text": kwargs.confirm_text,
             "confirm_href": kwargs.confirm_href,
@@ -1994,7 +1975,7 @@ class Dialog(Component):
             "confirm_variant": kwargs.confirm_variant,
             "confirm_color": kwargs.confirm_color,
             "confirm_type": kwargs.confirm_type,
-            "confirm_attrs": confirm_attrs,
+            "confirm_attrs": kwargs.confirm_attrs,
             "cancel_hide": kwargs.cancel_hide,
             "cancel_text": kwargs.cancel_text,
             "cancel_href": kwargs.cancel_href,
@@ -2002,19 +1983,19 @@ class Dialog(Component):
             "cancel_variant": kwargs.cancel_variant,
             "cancel_color": kwargs.cancel_color,
             "cancel_type": kwargs.cancel_type,
-            "cancel_attrs": cancel_attrs,
+            "cancel_attrs": kwargs.cancel_attrs,
             "has_activator": bool(self.raw_slots.get("activator") or self.raw_slots.get("default")),
             "has_title": bool(self.raw_slots.get("title")),
         }
 
     template = """
-        <div c-bind="root_attrs" c-bind="attrs">
-            <div c-if="has_activator" c-bind="activator_attrs"><c-slot name="activator" /></div>
-            <div class="relative z-50" :aria-labelledby="id" role="dialog" aria-modal="true" x-cloak>
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" c-bind="backdrop_attrs"></div>
-                <div class="fixed inset-0 z-50 w-screen overflow-y-auto" c-bind="backdrop_attrs">
+        <div c-bind="attrs" data-benchmark-dialog>
+            <div c-if="has_activator" c-bind="activator_attrs" @click="openDialog"><c-slot name="activator" /></div>
+            <div class="relative z-50" :aria-labelledby="id" role="dialog" aria-modal="true" v-cloak>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" c-bind="backdrop_attrs" v-show="isOpen"></div>
+                <div class="fixed inset-0 z-50 w-screen overflow-y-auto" c-bind="backdrop_attrs" v-show="isOpen">
                     <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-                        <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg" c-bind="panel_attrs">
+                        <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg" c-bind="panel_attrs" @click.self="closeOnOutside">
                             <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                                 <div class="sm:flex sm:items-start">
                                     <c-slot name="prepend" />
@@ -2026,8 +2007,8 @@ class Dialog(Component):
                                 </div>
                             </div>
                             <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-5">
-                                <c-Button c-if="not confirm_hide" c-variant="confirm_variant" c-color="confirm_color" c-disabled="confirm_disabled" c-href="confirm_href" c-type="confirm_type" c-attrs="confirm_attrs">{{ confirm_text }}</c-Button>
-                                <c-Button c-if="not cancel_hide" c-variant="cancel_variant" c-color="cancel_color" c-disabled="cancel_disabled" c-href="cancel_href" c-type="cancel_type" c-attrs="cancel_attrs">{{ cancel_text }}</c-Button>
+                                <c-Button c-if="not confirm_hide" c-variant="confirm_variant" c-color="confirm_color" c-disabled="confirm_disabled" c-href="confirm_href" c-type="confirm_type" c-attrs="confirm_attrs" @click="closeDialog">{{ confirm_text }}</c-Button>
+                                <c-Button c-if="not cancel_hide" c-variant="cancel_variant" c-color="cancel_color" c-disabled="cancel_disabled" c-href="cancel_href" c-type="cancel_type" c-attrs="cancel_attrs" @click="closeDialog">{{ cancel_text }}</c-Button>
                             </div>
                         </div>
                     </div>
@@ -2049,9 +2030,31 @@ class Tags(Component):
     citry = app
     name = "Tags"
 
+    js = """
+        $component({
+            props: { init_tags: { type: Array, default: () => [] } },
+            emits: ['change'],
+            watch: {
+                init_tags: {
+                    handler(values) { this.tags = values.map((value) => ({ value, options: this.allTags })); },
+                },
+            },
+            methods: {
+                emitChange() { this.$emit('change', this.tags.map((tag) => tag.value)); },
+                addTag() {
+                    if (this.tags.length < this.allTags.length) this.tags.push({value: '', options: this.allTags});
+                    this.emitChange();
+                },
+                removeTag(index) { this.tags.splice(index, 1); this.emitChange(); },
+                setTag(index, value) { this.tags[index].value = value; this.emitChange(); },
+            },
+        });
+    """
+
     class Kwargs:
         tag_type: str
         js_props: dict
+        init_tags: list | None = None
         editable: bool = True
         max_width: int | str = "300px"
         attrs: dict | None = None
@@ -2062,45 +2065,45 @@ class Tags(Component):
         all_tags = TAG_TYPE_META[kwargs.tag_type.upper()].allowed_values
         js_props = kwargs.js_props
 
-        x_props = (
-            "{ initAllTags: '" + to_json(all_tags) + "',"
-            " initTags: " + str(js_props.get("initTags", "[]")) + ","
-            " onChange: " + str(js_props.get("onChange", "() => {}")) + ", }"
-        )
         return {
             "editable": kwargs.editable,
             "max_width": kwargs.max_width,
             "attrs": kwargs.attrs,
-            "x_props": x_props,
-            "remove_btn_attrs": {"class": "!py-1", "@click": "removeTag(index)"},
-            "add_btn_attrs": {"class": "!py-1", "@click": "addTag"},
+            "remove_btn_attrs": {"class": "!py-1"},
+            "add_btn_attrs": {"class": "!py-1"},
             "has_title": bool(self.raw_slots.get("title")),
         }
 
-    # The `<template x-for>` blocks are client-side Alpine templates, kept as
-    # literal elements (citry renders them once; Alpine clones them in the
-    # browser). Only the server-evaluated bits use citry directives.
+    def js_data(self, kwargs, slots):
+        all_tags = TAG_TYPE_META[kwargs.tag_type.upper()].allowed_values
+        return {
+            "allTags": list(all_tags),
+            "tags": [{"value": value, "options": list(all_tags)} for value in kwargs.init_tags or []],
+        }
+
+    # These loops contain native elements only, so Vue may clone them without
+    # attempting to create additional server-side Citry component occurrences.
     template = """
-        <div x-data="tags" c-x-props="x_props" c-bind="attrs"
+        <div c-bind="attrs" data-benchmark-tags
              c-class="'pt-3 flex flex-col gap-y-3 items-start'">
-            <input x-ref="tagsInput" type="hidden" name="tags" value="" />
+            <input ref="tagsInput" type="hidden" name="tags" value="" />
             <c-slot name="title"><p class="text-sm">Tags:</p></c-slot>
-            <template x-for="(tag, index) in tags.value">
+            <template v-for="(tag, index) in tags">
                 <div class="tag text-sm flex flex-col gap-1 w-full" c-style="{'max-width': max_width}">
                     <div class="flex gap-6 w-full justify-between items-center">
                         <select name="_tags" class="flex-auto py-1 px-2" @change="(ev) => setTag(index, ev.target.value)" c-disabled="not editable">
-                            <template x-for="option in tag.options">
-                                <option :value="option" :selected="option === tag.value" x-text="option"></option>
+                            <template v-for="option in tag.options">
+                                <option :value="option" :selected="option === tag.value" v-text="option"></option>
                             </template>
                         </select>
                         <div c-if="editable">
-                            <c-Button color="error" c-attrs="remove_btn_attrs">Remove</c-Button>
+                            <button type="button" class="!py-1" @click="removeTag(index)">Remove</button>
                         </div>
                     </div>
                 </div>
             </template>
-            <div c-if="editable" x-show="tags.value.length < allTags.value.length">
-                <c-Button c-attrs="add_btn_attrs">Add tag</c-Button>
+            <div c-if="editable" v-show="tags.length < allTags.length">
+                <button type="button" class="!py-1" @click="addTag">Add tag</button>
             </div>
         </div>
     """
@@ -2210,7 +2213,7 @@ class ProjectPageTabsToQueryParams(Enum):
 
 _bookmark_item_class = "px-4 py-1 text-sm text-gray-900 hover:bg-gray-100 cursor-pointer"
 bookmark_menu_items = [
-    [MenuItem(value="Edit", link="#", item_attrs={"class": _bookmark_item_class, ":href": "contextMenuItem.value.edit_url"})],
+    [MenuItem(value="Edit", link="#", item_attrs={"class": _bookmark_item_class})],
 ]
 
 
@@ -2219,24 +2222,12 @@ class Bookmarks(Component):
     name = "Bookmarks"
 
     js = """
-        document.addEventListener('alpine:init', () => {
-            AlpineComposition.registerComponent(Alpine, AlpineComposition.defineComponent({
-                name: "bookmarks", props: {}, emits: {},
-                setup(props, vm, reactivity) {
-                    const { ref } = reactivity;
-                    const contextMenuItem = ref(null);
-                    const contextMenuRef = ref(null);
-                    const onContextMenuToggle = (data) => {
-                        const { item, el } = data;
-                        const willUntoggle = contextMenuItem.value && contextMenuItem.value.id === item.id;
-                        contextMenuItem.value = null; contextMenuRef.value = null;
-                        if (willUntoggle) return;
-                        setTimeout(() => { contextMenuItem.value = item; contextMenuRef.value = el; });
-                    };
-                    const onContextMenuClickOutside = () => { contextMenuItem.value = null; contextMenuRef.value = null; };
-                    return { contextMenuItem, contextMenuRef, onContextMenuToggle, onContextMenuClickOutside };
-                },
-            }));
+        $component({
+            data() { return { contextMenuItem: null }; },
+            methods: {
+                onContextMenuToggle(payload) { this.contextMenuItem = payload.item || null; },
+                onContextMenuClickOutside() { this.contextMenuItem = null; },
+            },
         });
     """
 
@@ -2273,16 +2264,16 @@ class Bookmarks(Component):
             "plus_icon_text_attrs": {"class": "px-2 py-1 text-xs"},
             "plus_icon_svg_attrs": {"class": "mt-0.5 ml-1"},
             "menu_list_attrs": {"class": "w-24 ml-8 z-40"},
-            "menu_attrs": {"@click_outside": "onContextMenuClickOutside"},
+            "menu_attrs": {},
             "bookmark_js": {"onMenuToggle": "onContextMenuToggle"},
         }
 
     template = """
-        <li x-data="bookmarks" c-bind="attrs" c-class="'pt-4'">
+        <li c-bind="attrs" c-class="'pt-4'">
             <c-Icon name="bookmark" variant="outline" c-text_attrs="bookmark_icon_text_attrs">Project Bookmarks</c-Icon>
             <ul class="mx-4">
                 <c-for each="bookmark in bookmark_data">
-                    <c-Bookmark c-bookmark="bookmark" c-js="bookmark_js" />
+                    <c-Bookmark #c-key="bookmark.edit_url" c-bookmark="bookmark" c-js="bookmark_js" @menu-toggle="onContextMenuToggle" />
                 </c-for>
                 <li>
                     <c-Icon name="plus" variant="outline" size="18" c-href="create_bookmark_url" c-color="theme.sidebar_link"
@@ -2290,13 +2281,13 @@ class Bookmarks(Component):
                 </li>
                 <div class="border-b border-gray-200 my-2 pt-2 text-sm font-bold">Attachments:</div>
                 <c-for each="bookmark in attachment_data">
-                    <c-Bookmark c-bookmark="bookmark" c-js="bookmark_js" />
+                    <c-Bookmark #c-key="bookmark.edit_url" c-bookmark="bookmark" c-js="bookmark_js" @menu-toggle="onContextMenuToggle" />
                 </c-for>
             </ul>
-            <template x-if="contextMenuItem.value">
-                <div class="self-center">
-                    <c-Menu c-items="menu_items" model="contextMenuItem.value" anchor="contextMenuRef.value"
-                        anchor_dir="bottom" c-list_attrs="menu_list_attrs" c-attrs="menu_attrs" />
+            <template v-if="contextMenuItem">
+                <div class="self-center" data-benchmark-bookmark-context>
+                    <c-Menu c-items="menu_items" model="contextMenuItem" anchor="contextMenuRef"
+                        anchor_dir="bottom" c-list_attrs="menu_list_attrs" c-attrs="menu_attrs" @click_outside="onContextMenuClickOutside" />
                 </div>
             </template>
         </li>
@@ -2308,16 +2299,12 @@ class Bookmark(Component):
     name = "Bookmark"
 
     js = """
-        document.addEventListener('alpine:init', () => {
-            AlpineComposition.registerComponent(Alpine, AlpineComposition.defineComponent({
-                name: "bookmark",
-                props: { bookmark: { type: Object, required: true } },
-                emits: { menuToggle: (obj) => true },
-                setup(props, vm) {
-                    const onMenuToggle = () => { vm.$emit('menuToggle', { item: props.bookmark, el: vm.$refs.bookmark_menu }); };
-                    return { bookmark: props.bookmark, onMenuToggle };
+        $component({
+            methods: {
+                onMenuToggle(event) {
+                    this.$emit('menuToggle', { item: this.bookmark, el: event.currentTarget });
                 },
-            }));
+            },
         });
     """
 
@@ -2325,28 +2312,30 @@ class Bookmark(Component):
         bookmark: Any
         js: dict | None = None
 
+    def js_data(self, kwargs, slots):
+        bookmark = kwargs.bookmark._asdict()
+        return {"bookmark": bookmark}
+
     def template_data(self, kwargs, slots):
         bookmark = kwargs.bookmark._asdict()
         js = kwargs.js or {}
-        x_props = (
-            "{ onMenuToggle: " + str(js.get("onMenuToggle", "() => {}")) + ","
-            " bookmark: " + to_alpine_json(bookmark) + ", }"
-        )
         return {
             "theme": theme,
             "bookmark": bookmark,
-            "x_props": x_props,
-            "menu_icon_attrs": {"class": "self-center cursor-pointer", "x-ref": "bookmark_menu", "@click": "onMenuToggle"},
+            "menu_icon_attrs": {
+                "class": "self-center cursor-pointer",
+                "data-benchmark-bookmark-menu": str(bookmark["id"]),
+            },
             "menu_icon_svg_attrs": {"class": "inline"},
             "menu_icon_text_attrs": {"class": "p-0"},
         }
 
     template = """
-        <li x-data="bookmark" c-x-props="x_props" class="list-disc ml-8">
+        <li class="list-disc ml-8">
             <div class="flex">
                 <a c-href="bookmark['url']" target="_blank"
                    c-class="['grow px-2 py-1 text-xs font-semibold', theme.sidebar_link]">{{ bookmark['text'] }}</a>
-                <c-Icon name="ellipsis-vertical" variant="outline" c-color="theme.sidebar_link"
+                <c-Icon name="ellipsis-vertical" variant="outline" c-color="theme.sidebar_link" @click="onMenuToggle"
                     c-svg_attrs="menu_icon_svg_attrs" c-text_attrs="menu_icon_text_attrs" c-attrs="menu_icon_attrs" />
             </div>
         </li>
@@ -2369,7 +2358,7 @@ class TabStaticEntry(NamedTuple):
     disabled: bool = False
 
 
-class _TabsImpl(Component):
+class TabsImpl(Component):
     citry = app
     # DJC registers this as "_tabs", but citry component names must start with a
     # letter, and this component is only ever instantiated directly by Tabs
@@ -2377,34 +2366,20 @@ class _TabsImpl(Component):
     name = "TabsImpl"
 
     js = """
-        document.addEventListener("alpine:init", () => {
-            Alpine.data("tabs", () => ({
-                openTab: 1,
-                name: null,
-                get tabQueryName() { return `tabs-${this.name}`; },
-                init() {
-                    if (this.$el.dataset['init']) {
-                        const { name } = JSON.parse(this.$el.dataset['init']);
-                        if (name) {
-                            this.name = name;
-                            app.query.registerParam(this.tabQueryName,
-                                (newVal, oldVal) => this.onTabQueryParamChange(newVal, oldVal));
-                        }
-                    }
-                    const containerEl = this.$refs.container;
-                    if (containerEl.scrollTop) { this.$refs.container.scrollTop = 0; }
+        $component({
+            data() { return { openTab: 1 }; },
+            mounted() { this.$nextTick(() => this.setOpenTab(this.openTab)); },
+            methods: {
+                setOpenTab(index) {
+                    this.openTab = index;
+                    this.$el.querySelectorAll('[data-tab-panel]').forEach((panel) => {
+                        panel.hidden = Number(panel.dataset.tabIndex) !== index;
+                    });
+                    this.$el.querySelectorAll('[data-tab-header]').forEach((header) => {
+                        header.classList.toggle('border-b-2', Number(header.dataset.tabIndex) === index);
+                    });
                 },
-                setOpenTab(tabIndex) {
-                    this.openTab = tabIndex;
-                    if (this.name) { app.query.setParams({ [this.tabQueryName]: tabIndex }); }
-                },
-                onTabQueryParamChange(newValue, oldValue) {
-                    if (newValue == null) return;
-                    const n = typeof newValue === "number" ? newValue : Number.parseInt(newValue);
-                    if (n === this.openTab) return;
-                    this.setOpenTab(n);
-                },
-            }));
+            },
         });
     """
 
@@ -2423,35 +2398,33 @@ class _TabsImpl(Component):
                 (
                     tab,
                     {
-                        "@click": f"setOpenTab( {i} )",
-                        ":class": "{ 'border-b-2 " + theme.tab_active + "': openTab === " + str(i) + " }",
+                        "data-tab-index": str(i),
                     },
-                    {":class": f"openTab === {i} ? '{theme.tab_text_active}' : '{theme.tab_text_inactive}'"},
+                    {"data-tab-index": str(i)},
                 )
             )
-            content_data.append((tab, {"x-show": f"openTab === {i}"}))
+            content_data.append((tab, {"data-tab-index": str(i)}))
         return {
             "attrs": kwargs.attrs,
             "header_data": header_data,
             "content_data": content_data,
             "header_attrs": kwargs.header_attrs,
             "content_attrs": kwargs.content_attrs,
-            "data_init_json": to_json({"name": kwargs.name}),
         }
 
     template = """
-        <div x-data="tabs" c-data-init="data_init_json" c-bind="attrs" c-class="'flex flex-col'">
+        <div c-bind="attrs" c-class="'flex flex-col'">
             <ul class="flex border-b text-sm">
                 <c-for each="tab, li_attrs, a_attrs in header_data">
-                    <li c-if="not tab.disabled" c-bind="li_attrs" c-bind="header_attrs">
+                    <li c-if="not tab.disabled" c-bind="li_attrs" c-bind="header_attrs" data-tab-header @click="setOpenTab(Number($event.currentTarget.dataset.tabIndex))">
                         <a href="#" c-bind="a_attrs" class="bg-white inline-block py-2 px-4 font-semibold transition">{{ tab.header }}</a>
                     </li>
                     <li c-else class="mr-1"><p class="text-gray-300 bg-white inline-block py-2 px-4 font-semibold">{{ tab.header }}</p></li>
                 </c-for>
             </ul>
-            <div class="w-full h-full flex-grow-1 relative overflow-y-scroll" x-ref="container">
+            <div class="w-full h-full flex-grow-1 relative overflow-y-scroll" ref="container">
                 <article class="px-4 pt-5 absolute w-full h-full">
-                    <div c-for="tab, show_attrs in content_data" c-bind="show_attrs" c-bind="content_attrs">{{ tab.content }}</div>
+                    <div c-for="tab, show_attrs in content_data" c-bind="show_attrs" c-bind="content_attrs" data-tab-panel>{{ tab.content }}</div>
                 </article>
             </div>
         </div>
@@ -2461,11 +2434,10 @@ class _TabsImpl(Component):
 class Tabs(Component):
     # An "API" component: it collects nested <c-TabItem> children (which
     # register themselves through provide/inject) and then renders the real
-    # _TabsImpl with the collected list. The collection happens in on_render's
+    # TabsImpl with the collected list. The collection happens in on_render's
     # generator form, after the slot (and its TabItems) have rendered.
     citry = app
     name = "Tabs"
-
     class Kwargs:
         name: str | None = None
         attrs: dict | None = None
@@ -2485,7 +2457,7 @@ class Tabs(Component):
         _result, error = yield
         if error is not None:
             return None
-        return _TabsImpl(
+        return TabsImpl(
             tabs=self._collected_tabs,
             name=self._kw.name,
             attrs=self._kw.attrs,
@@ -2504,33 +2476,26 @@ class TabItem(Component):
         header: str
         disabled: bool = False
 
+    class Slots:
+        default: SlotInput[Any]
+
     def template_data(self, kwargs, slots):
         tab_ctx = self.inject("_tab")
         if not tab_ctx.enabled:
             msg = "Component 'TabItem' must be a direct child of a Tabs component (not nested in another TabItem)."
             raise RuntimeError(msg)
-        self._parent_tabs = tab_ctx.tabs
-        self._header = kwargs.header
-        self._disabled = kwargs.disabled
+        tab_ctx.tabs.append(
+            TabEntry(
+                header=kwargs.header,
+                content=slots.default,
+                disabled=kwargs.disabled,
+            )
+        )
         # A disabled _tab for any nested TabItem, so nesting is detected.
         self.provide("_tab", tabs=[], enabled=False)
         return {}
 
-    def on_render(self):
-        result, error = yield
-        if error is not None:
-            return None
-        # This benchmark's synthetic Tabs API intentionally flattens child
-        # ownership into stored markup. Explicitly omit dependencies while
-        # doing so; client-active render ownership cannot survive string
-        # capture and is exercised by the dedicated browser suites instead.
-        content = (
-            Markup(result.serialize(deps_strategy="ignore").strip()) if result is not None else Markup("")
-        )
-        self._parent_tabs.append(TabEntry(header=self._header, content=content, disabled=self._disabled))
-        return None
-
-    template = "<c-slot />"
+    template = ""
 
 
 class TabsStatic(Component):
@@ -2597,22 +2562,25 @@ class ProjectUserAction(Component):
         role_id: int
         user_name: str
 
-    def template_data(self, kwargs, slots):
-        role_data = {
-            "delete_url": f"/delete/{kwargs.project_id}/{kwargs.role_id}",
-            "role_id": kwargs.role_id,
-            "user_name": kwargs.user_name,
-        }
+    def js_data(self, kwargs, slots):
         return {
-            "x_data": "{ role: " + to_alpine_json(role_data) + ", }",
+            "role": {
+                "delete_url": f"/delete/{kwargs.project_id}/{kwargs.role_id}",
+                "role_id": kwargs.role_id,
+                "user_name": kwargs.user_name,
+            }
+        }
+
+    def template_data(self, kwargs, slots):
+        return {
             "icon_svg_attrs": {"class": "inline mb-1"},
-            "icon_attrs": {"class": "p-2", "@click.stop": "$dispatch('user_delete', { role })"},
+            "icon_attrs": {"class": "p-2", "data-benchmark-user-delete": str(kwargs.role_id)},
         }
 
     template = """
-        <div c-x-data="x_data">
+        <div>
             <c-Icon name="trash" variant="outline" c-size="18" href="#" color="text-gray-500 hover:text-gray-400"
-                c-svg_attrs="icon_svg_attrs" c-attrs="icon_attrs" />
+                c-svg_attrs="icon_svg_attrs" c-attrs="icon_attrs" @click.stop="$emit('user_delete', { role })" />
         </div>
     """
 
@@ -2655,7 +2623,7 @@ class ProjectStatusUpdates(Component):
                 <div c-for="update in updates_data" class="px-3 py-2" style="border-top: solid 1px lightgrey">
                     <div class="flex justify-between gap-4 pt-2">
                         <span class="prose-sm prose-figure">{{ update['timestamp'] }}</span>
-                        <c-Icon c-if="editable" name="pencil-square" variant="outline" c-href="update['edit_href']"
+                        <c-Icon #c-key="update['edit_href']" c-if="editable" name="pencil-square" variant="outline" c-href="update['edit_href']"
                             color="text-gray-400 hover:text-gray-500" />
                     </div>
                     <p class="my-0 text-gray-900">{{ update['text'] }}</p>
@@ -2688,16 +2656,9 @@ class ProjectUsers(Component):
     name = "ProjectUsers"
 
     js = """
-        document.addEventListener('alpine:init', () => {
-            Alpine.data('project_users', () => ({
-                isDeleteDialogOpen: false,
-                role: null,
-                onUserDelete(event) {
-                    const { role } = event.detail;
-                    this.role = role;
-                    this.isDeleteDialogOpen = !!role;
-                },
-            }));
+        $component({
+            data() { return { role: null, isDeleteDialogOpen: false }; },
+            methods: { onUserDelete(payload) { this.role = payload.role; this.isDeleteDialogOpen = true; } },
         });
     """
 
@@ -2745,15 +2706,15 @@ class ProjectUsers(Component):
             "add_user_form": add_user_form,
             "submit_url": f"/submit/{project_id}/role/create",
             "project_url": f"/project/{project_id}",
-            "table_attrs": {"@user_delete": "onUserDelete"},
-            "dialog_confirm_attrs": {":href": "role.delete_url"},
+            "table_attrs": {},
+            "dialog_confirm_attrs": {},
             "dialog_content_attrs": {"class": "w-full"},
             "title_icon_attrs": {"class": "p-2 self-center"},
         }
 
     template = """
-        <div x-data="project_users">
-            <c-Table c-if="table_rows" c-headers="table_headers" c-rows="table_rows" c-attrs="table_attrs" />
+        <div>
+            <c-Table c-if="table_rows" c-headers="table_headers" c-rows="table_rows" c-attrs="table_attrs" @user_delete="onUserDelete" />
             <div c-if="editable">
                 <h4>Set project roles</h4>
                 <form c-hx-post="submit_url" hx-swap="outerHTML" method="post">
@@ -2761,12 +2722,12 @@ class ProjectUsers(Component):
                     <c-Button type="submit">Set role</c-Button>
                     <c-Button variant="secondary" c-href="project_url">Go back</c-Button>
                 </form>
-                <template x-if="role && isDeleteDialogOpen">
-                    <c-Dialog model="isDeleteDialogOpen" confirm_text="Delete" confirm_href="#" confirm_color="error"
-                        c-confirm_attrs="dialog_confirm_attrs" c-content_attrs="dialog_content_attrs">
+                <template v-if="role && isDeleteDialogOpen">
+                    <c-Dialog model="isDeleteDialogOpen" :model_value="isDeleteDialogOpen" @update:model_value="isDeleteDialogOpen = $event" confirm_text="Delete" confirm_href="#" confirm_color="error"
+                        c-confirm_attrs="dialog_confirm_attrs" c-content_attrs="dialog_content_attrs" :confirm_href="role.delete_url">
                         <c-fill name="title">
                             <div class="flex">
-                                <span>Remove <span x-text="role && role.user_name"></span> from this project?</span>
+                                <span>Remove <span v-text="role && role.user_name"></span> from this project?</span>
                                 <c-Icon name="trash" variant="outline" c-size="18" c-attrs="title_icon_attrs" />
                             </div>
                         </c-fill>
@@ -2786,28 +2747,27 @@ class Form(Component):
     name = "Form"
 
     js = """
-        document.addEventListener('alpine:init', () => {
-            Alpine.data('form', () => {
-                const data = Alpine.reactive({
-                    formData: {}, isSubmitting: false,
-                    updateFormModel(event) {
-                        const form = this.$el.closest("form");
-                        if (!form) { this.formData = null; return; }
-                        const formDataObj = new FormData(form);
-                        this.formData = [...formDataObj.entries()].reduce((agg, [k, v]) => { agg[k] = v; return agg; }, {});
-                    },
-                    onSubmit(event) {
-                        if (this.isSubmitting) return;
-                        this.isSubmitting = true;
-                        event.target.submit();
-                    },
-                });
-                Alpine.watch(() => data.formData, (newVal, oldVal) => {
-                    if (JSON.stringify(newVal || null) === JSON.stringify(oldVal || null)) return;
-                    data.$dispatch('change', newVal);
-                });
-                return data;
-            });
+        $component({
+            data() { return { isSubmitting: false, formData: {} }; },
+            watch: {
+                formData(value, previous) {
+                    if (JSON.stringify(value ?? null) !== JSON.stringify(previous ?? null)) {
+                        this.$emit('change', value);
+                    }
+                },
+            },
+            methods: {
+                updateFormModel() {
+                    const form = this.$el.closest('form');
+                    if (!form) { this.formData = null; return; }
+                    this.formData = Object.fromEntries(new FormData(form).entries());
+                },
+                onSubmit(event) {
+                    if (this.isSubmitting) return;
+                    this.isSubmitting = true;
+                    event.target.submit();
+                },
+            },
         });
     """
 
@@ -2855,7 +2815,7 @@ class Form(Component):
             "submit_variant": kwargs.submit_variant,
             "submit_color": kwargs.submit_color,
             "submit_type": kwargs.submit_type,
-            "submit_attrs": {**(kwargs.submit_attrs or {}), ":disabled": "isSubmitting"},
+            "submit_attrs": kwargs.submit_attrs,
             "cancel_hide": kwargs.cancel_hide,
             "cancel_text": kwargs.cancel_text,
             "cancel_href": kwargs.cancel_href,
@@ -2867,7 +2827,7 @@ class Form(Component):
         }
 
     template = """
-        <form c-bind="form_attrs" c-method="method" x-data="form" c-bind="attrs">
+        <form c-bind="form_attrs" c-method="method" c-bind="attrs">
             <c-element c-is="form_content_tag" @click="updateFormModel" @change="updateFormModel" c-bind="form_content_attrs">
                 <c-slot />
             </c-element>
@@ -2875,7 +2835,7 @@ class Form(Component):
             <div c-if="not actions_hide" c-bind="actions_attrs" c-class="'pt-4'">
                 <c-slot name="actions_prepend" />
                 <c-Button c-if="not submit_hide" c-variant="submit_variant" c-color="submit_color"
-                    c-disabled="submit_disabled" c-type="submit_type" c-attrs="submit_attrs">{{ submit_text }}</c-Button>
+                    c-disabled="submit_disabled" c-type="submit_type" c-attrs="submit_attrs" :disabled="isSubmitting">{{ submit_text }}</c-Button>
                 <c-Button c-if="not cancel_hide" c-variant="cancel_variant" c-color="cancel_color"
                     c-disabled="cancel_disabled" c-href="cancel_href" c-type="cancel_type" c-attrs="cancel_attrs">{{ cancel_text }}</c-Button>
                 <c-slot name="actions_append" />
@@ -2967,26 +2927,76 @@ class ProjectOutputBadge(Component):
 # ----- ProjectOutputAttachments -----
 
 
+class ProjectOutputAttachmentRow(Component):
+    citry = app
+    name = "ProjectOutputAttachmentRow"
+
+    js = """
+        $component({
+            inject: ['benchmarkAttachmentStore'],
+            emits: ['toggle', 'remove', 'setTags', 'update'],
+            computed: {
+                attachment() { return this.benchmarkAttachmentStore.attachments[this.rowIndex]; },
+            },
+        });
+    """
+
+    class Kwargs:
+        index: int
+        attachment: Any
+        editable: bool
+
+    def js_data(self, kwargs, slots):
+        return {"rowIndex": kwargs.index}
+
+    def template_data(self, kwargs, slots):
+        return {
+            "attachment": kwargs.attachment,
+            "index": kwargs.index,
+            "editable": kwargs.editable,
+            "text_max_len": FORM_SHORT_TEXT_MAX_LEN,
+            "tag_type": "project_output_attachment",
+            "tags_js_props": {},
+            "tags_attrs": {"class": "pb-8"},
+        }
+
+    template = """
+        <div v-if="attachment" class="project-output-form-attachment w-full" data-benchmark-initial-attachment>
+            <div class="text-sm flex gap-3 w-full justify-between">
+                <div v-show="attachment.isPreview">
+                    <a target="_blank" class="hover:text-gray-600 !underline" :href="attachment.url"
+                        v-text="attachment.text"></a>
+                </div>
+                <div v-show="!attachment.isPreview" class="flex flex-col gap-1">
+                    <label for="id_text">Text:</label>
+                    <input type="text" name="text" id="id_text" c-maxlength="text_max_len" required
+                        c-disabled="not editable" class="text-sm py-1 px-2" :value="attachment.text"
+                        @change="(event) => $emit('update', rowIndex, { text: event.target.value })" />
+                    <label for="id_url">Url:</label>
+                    <input type="url" name="url" id="id_url" required c-disabled="not editable"
+                        class="text-sm py-1 px-2" :value="attachment.url"
+                        @change="(event) => $emit('update', rowIndex, { url: event.target.value })" />
+                </div>
+                <div c-if="editable" class="flex gap-2 flex-wrap justify-end">
+                    <div><button type="button" class="!py-1" @click="$emit('toggle', rowIndex)" v-text="attachment.isPreview ? 'Edit' : 'Preview'"></button></div>
+                    <div><button type="button" class="!py-1" @click="$emit('remove', rowIndex)">Remove</button></div>
+                </div>
+            </div>
+            <c-Tags c-tag_type="tag_type" c-editable="editable" c-js_props="tags_js_props"
+                c-init_tags="attachment.tags" :init_tags="attachment.tags" c-attrs="tags_attrs"
+                @change="(tags) => $emit('setTags', rowIndex, tags)" />
+        </div>
+    """
+
+
 class ProjectOutputAttachments(Component):
     citry = app
     name = "ProjectOutputAttachments"
 
     js = """
-        document.addEventListener("alpine:init", () => {
-            AlpineComposition.registerComponent(Alpine, AlpineComposition.defineComponent({
-                name: "project_output_attachments",
-                props: { attachments: { type: Object, required: true } },
-                emits: {
-                    updateAttachmentData: (index, data) => true,
-                    setAttachmentTags: (index, tags) => true,
-                    removeAttachment: (index) => true,
-                    toggleAttachment: (index) => true,
-                },
-                setup(props, vm, { toRefs }) {
-                    const { attachments } = toRefs(props);
-                    return { attachments };
-                },
-            }));
+        $component({
+            props: { attachments: { type: Array, default: () => [] } },
+            provide() { return { benchmarkAttachmentStore: this }; },
         });
     """
 
@@ -2994,31 +3004,30 @@ class ProjectOutputAttachments(Component):
         has_attachments: bool
         js_props: dict
         editable: bool
+        attachments: list | None = None
         attrs: dict | None = None
 
+    def js_data(self, kwargs, slots):
+        return {"initialAttachmentCount": len(kwargs.attachments or [])}
+
     def template_data(self, kwargs, slots):
+        attachment_data = [
+            (
+                str(index),
+                index,
+                attachment,
+            )
+            for index, attachment in enumerate(kwargs.attachments or [])
+        ]
         return {
             "has_attachments": kwargs.has_attachments,
             "editable": kwargs.editable,
             "attrs": kwargs.attrs,
-            "x_props": "{ ..." + serialize_to_js(kwargs.js_props) + ", }",
-            "text_max_len": FORM_SHORT_TEXT_MAX_LEN,
-            "tag_type": "project_output_attachment",
-            "preview_btn_attrs": {
-                "x-bind:href": "attachment.url",
-                "x-text": "attachment.text",
-                "target": "_blank",
-                "class": "hover:text-gray-600 !underline",
-                "style": "color: cornflowerblue;",
-            },
-            "edit_btn_attrs": {"class": "!py-1", "x-text": "attachment.isPreview ? 'Edit' : 'Preview'", "@click": "() => $emit('toggleAttachment', index)"},
-            "remove_btn_attrs": {"class": "!py-1", "@click": "() => $emit('removeAttachment', index)"},
-            "tags_js_props": {"initTags": "attachment.tags", "onChange": "(tags) => $emit('setAttachmentTags', index, tags)"},
-            "tags_attrs": {"class": "pb-8"},
+            "attachment_data": attachment_data,
         }
 
     template = """
-        <div x-data="project_output_attachments" c-x-props="x_props" c-bind="attrs"
+        <div c-bind="attrs" data-benchmark-attachments
              c-class="'pt-3 flex flex-col gap-y-3 items-start'">
             <div>
                 <c-if cond="not has_attachments and editable">This output does not have any attachments, create one below:</c-if>
@@ -3026,28 +3035,19 @@ class ProjectOutputAttachments(Component):
                 <c-elif cond="has_attachments and not editable">Attachments:</c-elif>
                 <c-else></c-else>
             </div>
-            <template x-for="(attachment, index) in attachments.value">
-                <div class="project-output-form-attachment w-full">
-                    <div class="text-sm flex gap-3 w-full justify-between">
-                        <div x-show="attachment.isPreview">
-                            <c-Button variant="plain" c-link="True" c-attrs="preview_btn_attrs" />
-                        </div>
-                        <div x-show="!attachment.isPreview" class="flex flex-col gap-1">
-                            <label for="id_text">Text:</label>
-                            <input type="text" name="text" id="id_text" c-maxlength="text_max_len" required
-                                c-disabled="not editable" class="text-sm py-1 px-2" :value="attachment.text"
-                                @change="(ev) => $emit('updateAttachmentData', index, { text: ev.target.value })" />
-                            <label for="id_url">Url:</label>
-                            <input type="url" name="url" id="id_url" required c-disabled="not editable"
-                                class="text-sm py-1 px-2" :value="attachment.url"
-                                @change="(ev) => $emit('updateAttachmentData', index, { url: ev.target.value })" />
-                        </div>
-                        <div c-if="editable" class="flex gap-2 flex-wrap justify-end">
-                            <div><c-Button c-attrs="edit_btn_attrs">Edit</c-Button></div>
-                            <div><c-Button color="error" c-attrs="remove_btn_attrs">Remove</c-Button></div>
-                        </div>
-                    </div>
-                    <c-Tags c-tag_type="tag_type" c-editable="editable" c-js_props="tags_js_props" c-attrs="tags_attrs" />
+            <c-for each="key, index, attachment in attachment_data">
+                <c-ProjectOutputAttachmentRow #c-key="key" c-index="index" c-attachment="attachment"
+                    c-editable="editable" @toggle="(index) => $emit('toggleAttachment', index)"
+                    @remove="(index) => $emit('removeAttachment', index)"
+                    @set-tags="(index, tags) => $emit('setAttachmentTags', index, tags)"
+                    @update="(index, data) => $emit('updateAttachmentData', index, data)" />
+            </c-for>
+            <template v-for="(attachment, index) in attachments.slice(initialAttachmentCount)">
+                <div class="project-output-form-attachment w-full" data-benchmark-pending-attachment :key="`pending-${index}`">
+                    <span>New attachment:</span>
+                    <input type="text" :value="attachment.text" @change="(event) => attachment.text = event.target.value" />
+                    <input type="url" :value="attachment.url" @change="(event) => attachment.url = event.target.value" />
+                    <button type="button" @click="$emit('removeAttachment', initialAttachmentCount + index)">Remove</button>
                 </div>
             </template>
         </div>
@@ -3061,33 +3061,19 @@ class ProjectOutputDependency(Component):
     citry = app
     name = "ProjectOutputDependency"
 
-    js = """
-        document.addEventListener('alpine:init', () => {
-            AlpineComposition.registerComponent(Alpine, AlpineComposition.defineComponent({
-                name: 'project_output_dependency',
-                props: { initAttachments: { type: String, required: true } },
-                setup(props, vm, { ref }) {
-                    const attachments = ref([]);
-                    if (props.initAttachments) {
-                        attachments.value = JSON.parse(props.initAttachments).map(({ url, text, tags }) => ({
-                            url, text, tags, isPreview: true,
-                        }));
-                    }
-                    return { attachments };
-                },
-            }));
-        });
-    """
+    js = "$component({});"
 
     class Kwargs:
         dependency: Any
+
+    def js_data(self, kwargs, slots):
+        return {"attachments": list(kwargs.dependency.attachments)}
 
     def template_data(self, kwargs, slots):
         dep = kwargs.dependency  # RenderedOutputDep
         output = dep.dependency.output  # the output dict
         return {
             "attachments": dep.attachments,
-            "x_props": "{ initAttachments: '" + to_json(dep.attachments) + "' }",
             "output_completed": output["completed"],
             "output_description": output.get("description"),
             "output_name": output["name"],
@@ -3099,7 +3085,7 @@ class ProjectOutputDependency(Component):
         }
 
     template = """
-        <div class="pb-3 mb-3 border-b border-solid border-gray-300" x-data="project_output_dependency" c-x-props="x_props">
+        <div class="pb-3 mb-3 border-b border-solid border-gray-300">
             <div class="w-full bg-gray-100 text-sm p-2" style="min-height: 100px;">
                 <c-if cond="output_completed">
                     <c-if cond="output_description">{{ output_description }}</c-if>
@@ -3112,8 +3098,8 @@ class ProjectOutputDependency(Component):
                     <c-Button variant="plain" c-href="phase_url" c-attrs="phase_btn_attrs">{{ phase_type_title }}</c-Button>
                 </span>
             </div>
-            <c-ProjectOutputAttachments c-editable="False" c-has_attachments="attachments"
-                c-js_props="{'attachments': 'attachments.value'}" />
+            <c-ProjectOutputAttachments c-editable="False" c-has_attachments="attachments" c-attachments="attachments" :attachments="attachments"
+                c-js_props="{'attachments': 'attachments'}" />
         </div>
     """
 
@@ -3126,24 +3112,24 @@ class ProjectOutputForm(Component):
     name = "ProjectOutputForm"
 
     js = """
-        document.addEventListener('alpine:init', () => {
-            AlpineComposition.registerComponent(Alpine, AlpineComposition.defineComponent({
-                name: 'project_output_form',
-                props: { initAttachments: { type: String, required: true } },
-                setup(props, vm, { ref }) {
-                    const attachments = ref([]);
-                    if (props.initAttachments) {
-                        attachments.value = JSON.parse(props.initAttachments);
-                    }
-                    return { attachments };
-                },
-            }));
+        $component({
+            methods: {
+                addAttachment() { this.attachments.push({url: '', text: '', tags: [], isPreview: false}); },
+                toggleAttachmentPreview(index) { this.attachments[index].isPreview = !this.attachments[index].isPreview; },
+                removeAttachment(index) { this.attachments.splice(index, 1); },
+                setAttachmentTags(index, tags) { this.attachments[index].tags = tags; },
+                updateAttachmentData(index, data) { Object.assign(this.attachments[index], data); },
+                onOutputSubmit() {},
+            },
         });
     """
 
     class Kwargs:
         data: Any
         editable: bool
+
+    def js_data(self, kwargs, slots):
+        return {"attachments": list(kwargs.data.attachments)}
 
     def template_data(self, kwargs, slots):
         data = kwargs.data  # RenderedProjectOutput
@@ -3153,12 +3139,11 @@ class ProjectOutputForm(Component):
             "output_description": data.output.get("description"),
             "output_completed": data.output["completed"],
             "attachments": data.attachments,
-            "x_props": "{ initAttachments: '" + to_json([d._asdict() for d in data.attachments]) + "' }",
             "placeholder": OUTPUT_DESCRIPTION_PLACEHOLDER,
-            "add_btn_attrs": {"@click": "addAttachment"},
-            "save_btn_attrs": {"@click": "onOutputSubmit({ reload: true })"},
+            "add_btn_attrs": {"data-benchmark-add-attachment": True},
+            "save_btn_attrs": {},
             "attach_js_props": {
-                "attachments": "attachments.value",
+                "attachments": "attachments",
                 "onToggleAttachment": "(index) => toggleAttachmentPreview(index)",
                 "onSetAttachmentTags": "(index, tags) => setAttachmentTags(index, tags)",
                 "onUpdateAttachmentData": "(index, data) => updateAttachmentData(index, data)",
@@ -3167,7 +3152,7 @@ class ProjectOutputForm(Component):
         }
 
     template = """
-        <div x-data="project_output_form" c-x-props="x_props">
+        <div>
             <c-Form c-submit_href="update_output_url" c-actions_hide="True">
                 <c-if cond="editable">
                     <textarea name="description" class="w-full text-sm p-2 mb-2" c-placeholder="placeholder"
@@ -3185,11 +3170,11 @@ class ProjectOutputForm(Component):
                             c-checked="output_completed" c-disabled="not editable" />
                     </div>
                     <div c-if="editable" class="flex gap-x-2 ml-auto items-center justify-between basis-52">
-                        <c-Button variant="secondary" c-attrs="add_btn_attrs">Add attachment</c-Button>
-                        <c-Button c-attrs="save_btn_attrs">Save</c-Button>
+                        <c-Button variant="secondary" c-attrs="add_btn_attrs" @click="addAttachment">Add attachment</c-Button>
+                        <c-Button c-attrs="save_btn_attrs" @click="onOutputSubmit({ reload: true })">Save</c-Button>
                     </div>
                 </div>
-                <c-ProjectOutputAttachments c-has_attachments="attachments" c-editable="editable" c-js_props="attach_js_props" />
+                <c-ProjectOutputAttachments c-has_attachments="attachments" c-attachments="attachments" c-editable="editable" c-js_props="attach_js_props" :attachments="attachments" />
             </c-Form>
         </div>
     """
@@ -3248,16 +3233,16 @@ class ProjectOutputs(Component):
             <c-for each="data in outputs_data">
                 <div class="flex gap-x-3">
                     <div>
-                        <c-ProjectOutputBadge c-completed="data.output['completed']" c-missing_deps="data.has_missing_deps" />
+                        <c-ProjectOutputBadge #c-key="data.output['name']" c-completed="data.output['completed']" c-missing_deps="data.has_missing_deps" />
                     </div>
                     <div class="w-full">
-                        <c-ExpansionPanel c-panel_id="data.output['id']" icon_position="right"
+                        <c-ExpansionPanel #c-key="data.output['name']" c-panel_id="data.output['id']" icon_position="right"
                             c-attrs="panel_attrs" c-header_attrs="panel_header_attrs">
                             <c-fill name="header"><div>{{ data.output['name'] }}</div></c-fill>
                             <c-fill name="content">
                                 <div>
-                                    <c-for each="dep in data.dependencies"><c-ProjectOutputDependency c-dependency="dep" /></c-for>
-                                    <c-ProjectOutputForm c-data="data" c-editable="editable" />
+                                    <c-for each="dep in data.dependencies"><c-ProjectOutputDependency #c-key="dep.dependency.output['name']" c-dependency="dep" /></c-for>
+                                    <c-ProjectOutputForm #c-key="data.output['name']" c-data="data" c-editable="editable" />
                                 </div>
                             </c-fill>
                         </c-ExpansionPanel>
@@ -3304,11 +3289,11 @@ class ProjectOutputsSummary(Component):
     template = """
         <div class="flex flex-col gap-y-3">
             <c-for each="group in groups">
-                <c-ExpansionPanel c-open="group['has_outputs']" c-header_attrs="panel_header_attrs">
+                <c-ExpansionPanel #c-key="group['phase_type']" c-open="group['has_outputs']" c-header_attrs="panel_header_attrs">
                     <c-fill name="header"><h3 class="m-0">{{ group['phase_title'] }}</h3></c-fill>
                     <c-fill name="content">
                         <c-if cond="group['outputs']">
-                            <c-ProjectOutputs c-outputs="group['outputs']" c-project_id="project_id"
+                            <c-ProjectOutputs #c-key="group['phase_type']" c-outputs="group['outputs']" c-project_id="project_id"
                                 c-phase_type="group['phase_type']" c-editable="editable" />
                         </c-if>
                         <c-else>No outputs</c-else>
@@ -3393,7 +3378,7 @@ class ProjectInfo(Component):
                         <tr c-for="row in contacts_data">
                             <td>{{ row['name'] }}</td>
                             <td>{{ row['job'] }}</td>
-                            <td><c-Icon c-href="row['link_url']" name="arrow-top-right-on-square" variant="outline"
+                            <td><c-Icon #c-key="row['link_url']" c-href="row['link_url']" name="arrow-top-right-on-square" variant="outline"
                                 color="text-gray-400 hover:text-gray-500" /></td>
                         </tr>
                     </table>
@@ -3458,7 +3443,7 @@ class ProjectNotes(Component):
                 <div c-for="note in notes_data" class="py-2" style="border-top: solid 1px lightgrey">
                     <div class="flex justify-between gap-4 pt-2">
                         <span class="prose-sm prose-figure">{{ note['timestamp'] }}</span>
-                        <c-Icon c-if="editable" name="pencil-square" variant="outline" c-href="note['edit_href']"
+                        <c-Icon #c-key="note['edit_href']" c-if="editable" name="pencil-square" variant="outline" c-href="note['edit_href']"
                             color="text-gray-400 hover:text-gray-500" />
                     </div>
                     <p class="my-0 text-gray-900">{{ note['text'] }}</p>
@@ -3467,13 +3452,13 @@ class ProjectNotes(Component):
                         <div c-for="comment in note['comments']" class="pl-8 pb-2" style="border-top: solid 1px grey;">
                             <div class="flex justify-between gap-4 pt-2">
                                 <span class="prose-sm prose-figure">{{ comment['timestamp'] }}</span>
-                                <c-Icon c-if="editable" name="pencil-square" variant="outline" c-href="comment['edit_href']"
+                                <c-Icon #c-key="comment['edit_href']" c-if="editable" name="pencil-square" variant="outline" c-href="comment['edit_href']"
                                     color="text-gray-400 hover:text-gray-500" />
                             </div>
                             <div class="flex-auto"><p class="my-0">{{ comment['text'] }}</p></div>
                         </div>
                         <div class="text-right">
-                            <c-Button c-if="editable" c-href="note['create_comment_url']">Add comment</c-Button>
+                            <c-Button #c-key="note['create_comment_url']" c-if="editable" c-href="note['create_comment_url']">Add comment</c-Button>
                         </div>
                     </details>
                 </div>
@@ -3499,7 +3484,7 @@ class Navbar(Component):
     template = """
         <div c-bind="attrs"
              c-class="'sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8'">
-            <button type="button" class="-m-2.5 p-2.5 text-gray-700" @click="$dispatch('sidebar_toggle')">
+            <button type="button" class="-m-2.5 p-2.5 text-gray-700" @click="$emit('sidebar_toggle')">
                 <span class="sr-only">Open sidebar</span>
                 <c-Icon name="bars-3" variant="outline" />
             </button>
@@ -3578,8 +3563,29 @@ class Sidebar(Component):
     def template_data(self, kwargs, slots):
         user = self.inject("render_context").render_context.user
         is_staff = user.get("is_staff", False) if isinstance(user, dict) else getattr(user, "is_staff", False)
+        entries = []
+        for item in gen_sidebar_menu_items(kwargs.active_projects):
+            entries.append(
+                Icon(
+                    name=item.icon,
+                    variant=item.icon_variant,
+                    href=item.href,
+                    color=theme.sidebar_link,
+                    text_attrs={"class": "p-2"},
+                    slots={"default": item.name},
+                )
+            )
+            entries.extend(
+                Button(
+                    variant="plain",
+                    href=child.href,
+                    attrs={"class": "p-2 !w-full"},
+                    slots={"default": child.name},
+                )
+                for child in item.children or []
+            )
         return {
-            "items": gen_sidebar_menu_items(kwargs.active_projects),
+            "entries": entries,
             "attrs": kwargs.attrs,
             "is_staff": is_staff,
             "sidebar_class": theme.sidebar,
@@ -3598,26 +3604,20 @@ class Sidebar(Component):
                     <li>
                         <c-slot name="content" />
                         <ul role="list" class="-mx-2 space-y-1">
-                            <c-for each="sidebar_item in items">
-                                <li>
-                                    <c-Icon c-name="sidebar_item.icon" c-variant="sidebar_item.icon_variant"
-                                        c-href="sidebar_item.href" c-color="sidebar_link" c-text_attrs="icon_text_attrs">{{ sidebar_item.name }}</c-Icon>
-                                </li>
-                                <li c-for="child_item in sidebar_item.children or []" c-class="['ml-8 rounded-md', sidebar_link]">
-                                    <c-Button variant="plain" c-href="child_item.href" c-attrs="child_btn_attrs">{{ child_item.name }}</c-Button>
-                                </li>
+                            <c-for each="entry in entries">
+                                <li>{{ entry }}</li>
                             </c-for>
                         </ul>
-                        <li class="mt-auto">
+                        <div class="mt-auto">
                             <c-Icon name="user-group" variant="outline" c-href="faq_url" c-color="sidebar_link"
                                 c-text_attrs="icon_text_attrs">FAQ</c-Icon>
                             <c-Icon name="megaphone" variant="outline" c-color="sidebar_link"
                                 c-link_attrs="feedback_link_attrs" c-text_attrs="icon_text_attrs">Feedback</c-Icon>
-                        </li>
-                        <li c-if="is_staff">
+                        </div>
+                        <div c-if="is_staff">
                             <c-Icon name="document-arrow-down" variant="outline" c-color="sidebar_link"
                                 c-text_attrs="icon_text_attrs">Download</c-Icon>
-                        </li>
+                        </div>
                     </li>
                 </ul>
             </nav>
@@ -3636,26 +3636,7 @@ class Base(Component):
     citry = app
     name = "Base"
 
-    js = """
-        const app = { query: createQueryManager() };
-        app.query.load();
-        const createQueryManager = () => {
-            const callbacks = {};
-            const previousParamValues = {};
-            const registerParam = (key, cb) => {
-                callbacks[key] = callbacks[key] || [];
-                callbacks[key].push(cb);
-                return () => { callbacks[key] = (callbacks[key] || []).filter((c) => c !== cb); };
-            };
-            const setParams = (params) => {
-                const url = new URL(location.href);
-                Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-                history.pushState({}, "", url);
-            };
-            const load = () => {};
-            return { registerParam, setParams, load };
-        };
-    """
+    js = "$component({});"
 
     def template_data(self, kwargs, slots):
         return {
@@ -3677,25 +3658,7 @@ class Base(Component):
         </head>
         <body c-class="[background, 'h-full']">
             <c-slot name="content" />
-            <script src="//unpkg.com/@alpinejs/anchor" defer></script>
-            <script src="https://cdn.jsdelivr.net/npm/alpine-reactivity@0.1.10/dist/cdn.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/alpine-composition@0.1.27/dist/cdn.min.js"></script>
-            <script src="//unpkg.com/alpinejs" defer></script>
-            <script type="text/javascript" c-src="htmx_url"></script>
-            <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-            <c-js />
-            <c-slot name="js" />
-            <script>
-                (function () {
-                    const token = '{{ csrf_token }}';
-                    document.body.addEventListener('htmx:configRequest', (event) => {
-                        event.detail.headers['X-CSRFToken'] = token;
-                    });
-                    document.addEventListener('alpine:init', () => {
-                        Alpine.store('csrf', { token });
-                    });
-                })();
-            </script>
+            <div hidden c-data-runtime-src="htmx_url" c-data-csrf="csrf_token"></div>
         </body>
         </html>
     """
@@ -3714,19 +3677,11 @@ class Layout(Component):
     name = "Layout"
 
     js = """
-        document.addEventListener('alpine:init', () => {
-            const computeSidebarState = (prevState) => {
-                const width = (window.innerWidth > 0) ? window.innerWidth : screen.width;
-                if (!prevState && width >= 1024) return true;
-                if (prevState && width < 1024) return false;
-                return prevState;
-            };
-            Alpine.data('layout', () => ({
-                sidebarOpen: computeSidebarState(false),
-                init() { this.onWindowResize(); },
-                toggleSidebar() { this.sidebarOpen = !this.sidebarOpen; },
-                onWindowResize() { this.sidebarOpen = computeSidebarState(this.sidebarOpen); },
-            }));
+        $component({
+            data() { return { sidebarOpen: false }; },
+            mounted() { window.addEventListener('resize', this.onWindowResize); },
+            beforeUnmount() { window.removeEventListener('resize', this.onWindowResize); },
+            methods: { toggleSidebar() { this.sidebarOpen = !this.sidebarOpen; }, onWindowResize() {} },
         });
     """
 
@@ -3739,7 +3694,7 @@ class Layout(Component):
             "request": kwargs.data.request,
             "active_projects": kwargs.data.active_projects,
             "attrs": kwargs.attrs,
-            "navbar_attrs": {"@sidebar_toggle": "toggleSidebar"},
+            "navbar_attrs": {},
         }
 
     template = """
@@ -3748,14 +3703,14 @@ class Layout(Component):
                 <c-fill name="js"><c-slot name="js" /></c-fill>
                 <c-fill name="css"><c-slot name="css" /></c-fill>
                 <c-fill name="content">
-                    <div x-data="layout" @resize.window="onWindowResize" c-bind="attrs">
+                    <div c-bind="attrs">
                         <div class="hidden" :class="{ 'fixed inset-y-0 z-40 flex w-72 flex-col': sidebarOpen, 'hidden': !sidebarOpen }">
                             <c-Sidebar c-active_projects="active_projects">
                                 <c-fill name="content"><c-slot name="sidebar" /></c-fill>
                             </c-Sidebar>
                         </div>
                         <div :class="{ 'pl-72': sidebarOpen }" class="flex flex-col" style="height: 100vh;">
-                            <c-Navbar c-attrs="navbar_attrs" />
+                            <c-Navbar c-attrs="navbar_attrs" @sidebar_toggle="toggleSidebar" />
                             <main class="flex-auto flex flex-col">
                                 <c-slot name="header" />
                                 <div class="px-4 pt-10 sm:px-6 lg:px-8 flex-auto flex flex-col">
@@ -3960,5 +3915,5 @@ def test_render():
     data = gen_render_data()
     rendered = render(data)
     assert len(rendered) > 50_000  # the full project page, not a truncated render
-    for anchor in ("<!DOCTYPE html>", "Project Name", "<body", "x-data"):
+    for anchor in ("<!DOCTYPE html>", "Project Name", "<body", "CitryStable.startPrepared"):
         assert anchor in rendered

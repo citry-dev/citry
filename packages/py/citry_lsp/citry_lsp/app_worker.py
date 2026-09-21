@@ -277,6 +277,7 @@ def _event_sources(component_class: type) -> dict[str, object]:
         else:
             state = []
             public = set(info.state_meta.public)
+            writable = set(info.state_meta.model)
             for field in inspected:
                 if field.name not in public:
                     continue
@@ -288,6 +289,7 @@ def _event_sources(component_class: type) -> dict[str, object]:
                         "name": field.name,
                         "type_display": field.type_display,
                         "description": field.description,
+                        "client_writable": field.name in writable,
                         "module": field.source_module,
                         "qualname": field.source_qualname,
                         "file": field.source_file.resolve().as_posix(),

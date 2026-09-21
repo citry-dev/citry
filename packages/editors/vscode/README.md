@@ -5,8 +5,8 @@
 
 The Citry extension adds syntax highlight, linting, diagnostics, variable lookup, hints (and more) to Citry components.
 
-The inlined HTML/CSS/JS/FLT code blocks automatically detect available variables,
-errors, Python and Alpine expressions inside HTML, and more.
+The inlined HTML/CSS/JS/FTL code blocks automatically detect available variables,
+errors, Python and Vue expressions inside HTML, and more.
 
 ## What you get
 
@@ -96,9 +96,9 @@ syntax-only analysis available and appears in the language-server status.
 Citry recognizes direct `template`, `js`, `css`, and `messages` multiline
 assignments inside Python components. Template data and loop/fill variables get
 completion, readable type hover, and navigation back to their Python field or
-lexical declaration. Alpine directive names and common `@event` and
+lexical declaration. Vue directive names and common `@event` and
 `:attribute` shorthands complete in the same templates, with hover links to the
-Alpine documentation and native HTML help for bound attributes. Shared and
+Vue documentation and native HTML help for bound attributes. Shared and
 inherited templates expose only facts that are safe for every proven component
 owner.
 
@@ -139,7 +139,7 @@ class SearchResults(Component):
 
 The same connection extends into the browser layer:
 
-- `JsData` or inferred `js_data()` keys type Alpine expressions
+- `JsData` or inferred `js_data()` keys type Vue expressions
   and component JavaScript.
 - Callback `data` members complete through the JavaScript provider; unknown
   fields are errors when the component's data schema is known and closed.
@@ -151,9 +151,9 @@ The same connection extends into the browser layer:
 - `CssData`/`css_data()` keys complete inside `var(--...)` and navigate to their producer.
 - Static child props are checked against the child's JavaScript declaration.
 - Literal i18n message IDs and formatter/parser profiles complete and navigate
-  across Python, templates, Fluent, Alpine, and component JavaScript.
+  across Python, templates, Fluent, Vue, and component JavaScript.
 
-Browser values work the same way. `query` completes inside Alpine expressions,
+Browser values work the same way. `query` completes inside Vue expressions,
 hover shows a JavaScript string, and navigation returns to `JsData.query`:
 
 ```python
@@ -170,9 +170,9 @@ class SearchBox(Component):
     template = """
       <label>
         Search
-        <input x-model="query" />
+        <input v-model="query" />
       </label>
-      <output x-text="query.toUpperCase()"></output>
+      <output v-text="query.toUpperCase()"></output>
     """
 ```
 

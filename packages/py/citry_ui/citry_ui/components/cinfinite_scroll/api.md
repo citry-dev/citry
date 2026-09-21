@@ -21,7 +21,7 @@ named submit continue and return the next keyed result page from the server.
 
 ## Keep loading automatically
 
-Pass `onLoadMore` through `$c-props`. When the sentinel reaches `root_margin`,
+Pass `onLoadMore` with native Vue bindings. When the sentinel reaches `root_margin`,
 the callback receives `{reason: 'intersection', sourceEvent: null}`. Button
 activation uses `button` or `retry` and includes the native event.
 

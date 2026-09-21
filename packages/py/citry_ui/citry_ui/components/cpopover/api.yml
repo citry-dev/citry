@@ -21,7 +21,7 @@ inputs:
       - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: false}, effect: Makes the Popover at least as wide as its activator.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds surface classes and merges them with `attrs`.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds surface inline styles and merges them with `attrs`; Citry retains anchor ownership.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, ARIA, Alpine, and data attributes to the Popover surface. Owned presence, semantics, focus, and relationships are rejected.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, ARIA, Vue, and data attributes to the Popover surface. Owned presence, semantics, focus, and relationships are rejected.'}
 
   - id: cpopover-client-inputs
     component: CPopover

@@ -44,15 +44,14 @@ def _dialog_page(*, controlled: bool = False) -> str:
                 <c-CDialog
                   id="profile-dialog"
                   c-attrs="dialog_attrs"
-                  $c-props="{
-                    open: controlled ? open : undefined,
-                    dismissible: dialogDismissible,
-                    closeOnEscape: dialogCloseOnEscape,
-                    closeOnOutside: dialogCloseOnOutside,
-                    initialFocus: dialogInitialFocus,
-                    size: dialogSize,
-                    scroll: dialogScroll,
-                    onOpenChange: (nextOpen, detail) => {
+                  :open="controlled ? open : undefined"
+                  :dismissible="dialogDismissible"
+                  :closeOnEscape="dialogCloseOnEscape"
+                  :closeOnOutside="dialogCloseOnOutside"
+                  :initialFocus="dialogInitialFocus"
+                  :size="dialogSize"
+                  :scroll="dialogScroll"
+                  :onOpenChange="(nextOpen, detail) => {
                       window.__dialogRequest = {
                         nextOpen,
                         reason: detail.reason,
@@ -63,8 +62,7 @@ def _dialog_page(*, controlled: bool = False) -> str:
                       if (acceptRequests) {
                         open = nextOpen;
                       }
-                    },
-                  }"
+                    }"
                 >
                   <c-fill
                     name="activator"

@@ -92,8 +92,8 @@ An underscore-prefixed method is a private helper or configuration hook.
   from the current component.
 - [Handle and validate forms](/events/forms/) when named controls should become
   typed Python data.
-- [Bind events in templates](/events/bindings/) for `@c-*`, `:c-*`, polling,
-  loading feedback, and errors.
+- [Bind events in templates](/events/bindings/) for `@c-*`, `:c-*`, loading
+  feedback, errors, and the current status of planned polling support.
 - [Event actions](/events/actions/) for renders, browser
   events, history changes, and stable update targets.
 - [Use event routes directly](/events/http/) for GET handlers, native forms,
@@ -109,7 +109,7 @@ ends at the same Events contract:
 - [django-unicorn](/guides/migrate-from-django-unicorn/) maps public State,
   model bindings, validation, and browser calls.
 - [Tetra](/guides/migrate-from-tetra/) maps public methods, promise results,
-  Alpine behavior, and the client callback channel.
+  Vue behavior, and the client callback channel.
 - [livecomponents](/guides/migrate-from-livecomponents/) uses a two-step State
   migration: server-held first, signed per component when appropriate.
 

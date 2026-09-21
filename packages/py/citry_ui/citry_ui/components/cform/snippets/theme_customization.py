@@ -8,8 +8,7 @@ class FormThemeCustomization(Component):
     template = """
       <section
         class="night-checklist"
-        x-data="{ gap: '0.75rem', scheme: 'light', compact: false }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
+
         :style="{ colorScheme: scheme, '--cui-form-gap': gap }"
         :data-compact="compact"
       >
@@ -51,6 +50,26 @@ class FormThemeCustomization(Component):
           </c-CButton>
         </c-CForm>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            gap: '0.75rem', scheme: 'light', compact: false
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

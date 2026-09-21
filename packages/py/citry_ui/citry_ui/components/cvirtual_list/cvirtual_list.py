@@ -17,7 +17,26 @@ _VIRTUAL_LIST_CONTEXT = "citry_ui_virtual_list"
 _MAX_EXTENT = 16_000_000
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-show", "x-teleport", "x-text"}
+    {
+        "v-bind",
+        "v-for",
+        "v-html",
+        "v-if",
+        "v-model",
+        "v-on",
+        "v-show",
+        "v-text",
+        "x-bind",
+        "x-for",
+        "x-html",
+        "x-if",
+        "x-ignore",
+        "x-model",
+        "x-modelable",
+        "x-show",
+        "x-teleport",
+        "x-text",
+    }
 )
 _ROOT_OWNED = frozenset(
     {
@@ -109,8 +128,8 @@ def _integer(name: str, value: object, *, minimum: int, maximum: int | None = No
 
 
 def _dynamic_target(key: str) -> str | None:
-    if key.startswith("x-bind:"):
-        return key.removeprefix("x-bind:").split(".", 1)[0]
+    if key.startswith(("x-bind:", "v-bind:")):
+        return key.split(":", 1)[1].split(".", 1)[0]
     if key.startswith((":", ".")):
         return key[1:].split(".", 1)[0]
     return None
@@ -224,6 +243,7 @@ class CVirtualList(LibraryComponent):
     template = """
       <c-CInternalVirtualListDeclarations><c-slot /></c-CInternalVirtualListDeclarations>
       <c-CInternalVirtualList
+        ref="root"
         strategy="content-visibility"
         c-aria_label="aria_label"
         c-estimated_item_size="estimated_item_size"
@@ -295,7 +315,8 @@ class CInternalVirtualListDeclarations(LibraryComponent):
 
 
 class CInternalVirtualList(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -400,6 +421,7 @@ class CInternalVirtualListStatic(LibraryComponent):
         <div class="cui-virtual-list__track" data-citry-ui-part="track">
           <c-for each="item in items">
             <c-CInternalVirtualListItem
+              #c-key="item['declaration'].item_key"
               c-declaration="item['declaration']"
               c-index="item['index']"
               c-total_count="total_count"
@@ -451,6 +473,7 @@ class CInternalVirtualListWindow(LibraryComponent):
           ></div>
           <c-for each="item in items">
             <c-CInternalVirtualListItem
+              #c-key="item['declaration'].item_key"
               c-declaration="item['declaration']"
               c-index="item['index']"
               c-total_count="total_count"
@@ -544,16 +567,19 @@ class CVirtualWindow(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "totalCount": snapshot["total_count"],
-            "startIndex": snapshot["start_index"],
-            "itemSize": snapshot["item_size"],
-            "initialIndex": snapshot["initial_index"],
-            "overscan": snapshot["overscan"],
+            "serverDefaults": {
+                "totalCount": snapshot["total_count"],
+                "startIndex": snapshot["start_index"],
+                "itemSize": snapshot["item_size"],
+                "initialIndex": snapshot["initial_index"],
+                "overscan": snapshot["overscan"],
+            }
         }
 
     template = """
       <c-CInternalVirtualListDeclarations><c-slot /></c-CInternalVirtualListDeclarations>
       <c-CInternalVirtualList
+        ref="root"
         strategy="window"
         c-aria_label="aria_label"
         c-estimated_item_size="estimated_item_size"

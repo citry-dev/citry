@@ -50,10 +50,6 @@ def image_states_component(app: Citry) -> type[Component]:
                 "orion_small": f"{_ASSET}/orion-640.jpg",
                 "horsehead": f"{_ASSET}/horsehead-1280.jpg",
                 "missing": f"{_ASSET}/missing.jpg",
-                "native_image_attrs": {
-                    "@load": "$dispatch('quality-image-native-load')",
-                    "@error": "$dispatch('quality-image-native-error')",
-                },
                 "responsive_sources": (
                     CImageSource(
                         media="(max-width: 47.99rem)",
@@ -81,17 +77,7 @@ def image_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack image-quality"
             aria-labelledby="image-quality-title"
-            x-data="{
-              reactiveSource:null,
-              reactiveStatus:'waiting',
-              reactiveSelected:'none',
-              reactiveCallbacks:0,
-              nativeLoads:0,
-              nativeErrors:0,
-              lifecycleStatus:'waiting',
-              lifecycleCallbacks:0,
-              redact:(value)=>value ? value.split('/').pop().split('?')[0] : 'none',
-            }"
+
             @c-quality-morph="refresh"
             @quality-image-native-load="nativeLoads++"
             @quality-image-native-error="nativeErrors++"
@@ -240,27 +226,25 @@ def image_states_component(app: Citry) -> type[Component]:
                   alt="Live survey frame"
                   c-width="1280"
                   c-height="720"
-                  c-img_attrs="native_image_attrs"
                   c-attrs="{
                     'id':'quality-image-reactive',
                     'data-quality-states':
                       'reactive client-props callback native-events isolated-scope dispatch '
                       + 'rapid supersession stale-events redacted cached shadow-root',
                   }"
-                  $c-props="{
-                    src:reactiveSource,
-                    onStatusChange:(detail)=>{
+                  :src="reactiveSource" :onStatusChange="(detail)=>{
                       reactiveCallbacks++;
                       reactiveStatus=detail.status;
                       reactiveSelected=redact(detail.current_src || detail.src);
-                    },
-                  }"
+                      if (detail.status === 'loaded') nativeLoads++;
+                      if (detail.status === 'error') nativeErrors++;
+                    }"
                 >
                   <c-fill name="fallback">Live frame unavailable</c-fill>
                 </c-CImage>
                 <output
                   id="quality-image-reactive-output"
-                  x-text="`${reactiveStatus}|${reactiveSelected}|${reactiveCallbacks}|${nativeLoads}|${nativeErrors}`"
+                  v-text="`${reactiveStatus}|${reactiveSelected}|${reactiveCallbacks}|${nativeLoads}|${nativeErrors}`"
                 >waiting|none|0|0|0</output>
                 <div id="quality-image-shadow-host"></div>
               </article>
@@ -348,22 +332,37 @@ def image_states_component(app: Citry) -> type[Component]:
                       + 'hostile-fail-closed listener-count observer-count readiness request-fingerprint '
                       + 'selection-fingerprint',
                   }"
-                  $c-props="{
-                    onStatusChange:(detail)=>{
+                  :onStatusChange="(detail)=>{
                       lifecycleCallbacks++;
                       lifecycleStatus=detail.status;
-                    },
-                  }"
+                    }"
                 >
                   <c-fill name="placeholder">Loading calibration plate</c-fill>
                   <c-fill name="fallback">Calibration plate unavailable</c-fill>
                 </c-CImage>
               </c-if>
-              <output id="quality-image-lifecycle-output" x-text="`${lifecycleStatus}|${lifecycleCallbacks}`">
+              <output id="quality-image-lifecycle-output" v-text="`${lifecycleStatus}|${lifecycleCallbacks}`">
                 waiting|0
               </output>
             </article>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                reactiveSource:null,
+                reactiveStatus:'waiting',
+                reactiveSelected:'none',
+                reactiveCallbacks:0,
+                nativeLoads:0,
+                nativeErrors:0,
+                lifecycleStatus:'waiting',
+                lifecycleCallbacks:0,
+                redact:(value)=>value ? value.split('/').pop().split('?')[0] : 'none',
+              };
+            },
+          });
         """
 
         css = """

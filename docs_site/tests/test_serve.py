@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 import json
-import re
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from lxml import html as lxml_html
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
@@ -35,6 +34,18 @@ def _client(tmp_path: Path) -> TestClient:
     )
     config = DocsConfig(content_dir=content, site_dir=tmp_path / "site", repo_root=tmp_path)
     return TestClient(create_app(config=config))
+
+
+def _prepared_configuration(html: str) -> dict[str, object]:
+    document = lxml_html.document_fromstring(html)
+    marker = "CitryStable.startPrepared("
+    bootstraps = [script.text or "" for script in document.xpath("//script") if marker in (script.text or "")]
+    assert len(bootstraps) == 1
+    source = bootstraps[0]
+    start = source.index(marker) + len(marker)
+    configuration, _ = json.JSONDecoder().raw_decode(source[start:])
+    assert type(configuration) is dict
+    return configuration
 
 
 def test_serve_renders_index(tmp_path: Path) -> None:
@@ -126,7 +137,22 @@ def test_serve_renders_ui_library_source_directly_from_catalog(tmp_path: Path) -
     assert 'src="/ui-library/components/button/_previews/serve-preview/"' in response.text
     assert preview.status_code == 200
     assert preview.headers["x-robots-tag"] == "noindex, nofollow"
-    assert "Rendered serve preview" in preview.text
+    configuration = _prepared_configuration(preview.text)
+    prepared_manifest = configuration["manifest"]
+    assert type(prepared_manifest) is dict
+    definition_responses = [client.get(asset["url"]) for asset in prepared_manifest["definitions"]]
+    script_sources = [asset["source"] for asset in prepared_manifest["scripts"] if asset["source"]["kind"] == "owned"]
+    style_sources = [asset["source"] for asset in prepared_manifest["styles"] if asset["source"]["kind"] == "owned"]
+    script_responses = [client.get(source["url"]) for source in script_sources]
+    style_responses = [client.get(source["url"]) for source in style_sources]
+    assert definition_responses
+    assert all(response.status_code == 200 for response in definition_responses)
+    assert any("Rendered serve preview" in response.text for response in definition_responses)
+    assert script_responses
+    assert all(response.status_code == 200 for response in script_responses)
+    assert any("citry-ui-preview-height" in response.text for response in script_responses)
+    assert style_responses
+    assert all(response.status_code == 200 for response in style_responses)
     assert missing.status_code == 404
     assert not (content / "ui-library/components/button.md").exists()
 
@@ -378,26 +404,36 @@ def test_recipe_and_standalone_demo_use_distinct_routes(tmp_path: Path) -> None:
     assert "Recipe marker." not in demo.text
 
 
-def test_serve_pre_renders_a_fragment_variant_with_working_deps(tmp_path: Path) -> None:
-    # The dev server must serve the demo's pre-rendered fragment (parity with
-    # the static build), and its JS/CSS must resolve through the /citry mount.
+def test_serve_emits_a_fragment_variant_with_working_deps(tmp_path: Path) -> None:
+    # The fragment keeps its prepared render record, and its render/JS/CSS assets
+    # must resolve through the /citry mount.
     client = _client(tmp_path)
     frag = client.get("/examples/fragments/demo/widget/")
     assert frag.status_code == 200
-    assert "frag-widget" in frag.text  # the pre-rendered fragment HTML
+    document = lxml_html.document_fromstring(frag.text)
+    [fragment_tag] = document.xpath('//script[@type="application/json"][@data-citry-vue-fragment]')
+    fragment = json.loads(fragment_tag.text)
+    vue = fragment["vue"]
+    assert vue["protocol"] == "citry-vue-fragment/1"
+    prepared_manifest = vue["prepared"]["manifest"]
+    assert prepared_manifest["appId"] == vue["appId"]
+    [occurrence] = prepared_manifest["occurrences"]
+    assert occurrence["typeKey"].startswith("FragmentWidget_")
 
-    # The fragment manifest lists its JS/CSS as base64 dep descriptors that point
-    # at /citry/cache/<class_id>.<ext>; the /citry mount must serve each one.
-    manifest = json.loads(re.search(r"data-citry>(\{.*\})</script>", frag.text).group(1))
-    descriptors = [
-        json.loads(base64.b64decode(entry[0] if isinstance(entry, list) else entry))
-        for kind in ("js", "css")
-        for entry in manifest["fetch"][kind]
-    ]
-    dep_urls = [descriptor["attrs"].get("src") or descriptor["attrs"]["href"] for descriptor in descriptors]
-    assert dep_urls  # the widget ships both JS and CSS
-    for url in dep_urls:
-        assert client.get(url).status_code == 200
+    definition_responses = [client.get(item["url"]) for item in prepared_manifest["definitions"]]
+    assert definition_responses
+    assert all(response.status_code == 200 for response in definition_responses)
+    assert any('"frag-widget"' in response.text for response in definition_responses)
+
+    script_sources = [item["source"] for item in prepared_manifest["scripts"]]
+    style_sources = [item["source"] for item in prepared_manifest["styles"]]
+    assert script_sources
+    assert style_sources
+    script_responses = [client.get(source["url"]) for source in script_sources]
+    style_responses = [client.get(source["url"]) for source in style_sources]
+    assert all(response.status_code == 200 for response in (*script_responses, *style_responses))
+    assert any("frag-widget__title" in response.text for response in script_responses)
+    assert any(".frag-widget" in response.text for response in style_responses)
 
 
 def test_serve_404_for_unknown_fragment_variant(tmp_path: Path) -> None:

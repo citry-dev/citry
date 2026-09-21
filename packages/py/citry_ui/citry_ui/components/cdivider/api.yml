@@ -18,7 +18,7 @@ inputs:
       - {id: decorative, name: decorative, type: bool, default: {kind: literal, value: false}, effect: Removes an unlabelled Divider from the accessibility tree. Labelled line segments are always decorative.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with `attrs`.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with `attrs`.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted native, data, targeted Alpine, and event attributes without replacing Divider semantics, anatomy, or Citry runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted native, data, targeted Vue, and event attributes without replacing Divider semantics, anatomy, or Citry runtime fields.'}
 
 slots:
   - id: cdivider-slots

@@ -15,7 +15,7 @@ from citry.ext.events import ViewEvents, actions
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
+READY = "window.CitryStable && CitryStable._apps.size === 1"
 
 
 def _form_port() -> tuple[Citry, str, type[Component]]:

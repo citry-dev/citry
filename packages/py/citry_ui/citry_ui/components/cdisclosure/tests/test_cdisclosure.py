@@ -161,7 +161,10 @@ def test_native_anatomy_ids_states_region_and_actions_are_exact():
     closed = _render(_disclosure(inputs='id="closed" c-indicator="False"'))
     assert re.search(r'id="closed-panel"[^>]* aria-hidden="true" hidden inert', closed)
     assert 'data-state="closed"' in closed
-    assert re.search(r'cui-disclosure__indicator" hidden aria-hidden="true"', closed)
+    assert re.search(
+        r'<span\b(?=[^>]*class="cui-disclosure__indicator")(?=[^>]*\bhidden)(?=[^>]*aria-hidden="true")[^>]*>',
+        closed,
+    )
     assert 'role="region"' not in closed
     assert "aria-labelledby=" not in closed
 

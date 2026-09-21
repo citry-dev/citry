@@ -1,33 +1,24 @@
 """
-Tests for the events binding rewrite (WP12): the two-stage ``@c-*`` / ``:c-*``
-to ``data-cev-*`` rewrite and the design's hard template-load validation
-(docs/design/events.md section 5.1, section 7.2).
+Tests for Events binding capture, validation, and typed prepared metadata.
 
-The rewritten output is exact, so the spec assertions are authored
-observe-then-lock: the rewrite ran on representative templates, its real
-(decoded) output was read, and that output is locked here. Error assertions
-check message content, not just the exception type.
+Binding assertions inspect the prepared owner tables rather than serialized
+DOM marker attributes. Error assertions check message content, not just the
+exception type.
 """
 
-import base64
-import json
 import re
 
 import pytest
 
-from citry import Citry, Component
-from citry.ext.events.bindings import (
-    BINDING_SPEC_ENCODING,
-    DATA_CEV_ATTRS,
-    DATA_CEV_BIND,
-    DATA_CEV_ON,
-    DATA_CEV_POLL,
-    CevAttr,
-    rewrite_resolved_attrs,
+from citry import Citry, Component, InMemoryCache
+from citry._vue.capture import render_prepared
+from citry._vue.direct_capture import assemble_typed_render
+from citry.client_directives import (
+    RuntimeComponentEventBinding,
+    is_authenticated_runtime_component_event_binding,
 )
 
 _CID_RE = re.compile(r' data-cid(?:-\w+)?="[^"]*"')
-_CEV_RE = re.compile(r'data-cev-(on|poll|bind)="([^"]*)"')
 
 # A State-declaring component mints its state token at render, which needs a
 # signing secret on the Citry instance.
@@ -36,15 +27,6 @@ SIGNING_KEY = "test-secret-key"
 
 def _events_ext(app):
     return app.extensions.get_extension("events")
-
-
-def _decode_cev(source):
-    """Every ``data-cev-*`` attribute in ``source`` as ``(name, [specs])`` pairs, in order."""
-    pairs = []
-    for match in _CEV_RE.finditer(source):
-        specs = json.loads(base64.b64decode(match.group(2)).decode())
-        pairs.append((f"data-cev-{match.group(1)}", specs))
-    return pairs
 
 
 def _rendered(component):
@@ -60,6 +42,23 @@ def _compiled_html(comp_cls):
 def _noop(self):
     """A handler stub: a binding only needs its handler to exist, not to do anything."""
     return
+
+
+def _typed_binding_tables(comp_cls):
+    """Return the actual prepared owner and its typed binding tables."""
+    assembly = assemble_typed_render(
+        render_prepared(comp_cls()),
+        revision=0,
+        tag_for_type=lambda type_key: f"x-{type_key.lower().replace('_', '-')}",
+    )
+    owner = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
+    assert owner.type_key == comp_cls.class_id
+    tables = {}
+    for name in ("eventBindings", "pollBindings", "controlBindings"):
+        records = owner.prepared_data.get(name, {})
+        assert all(key == spec["id"] for key, spec in records.items())
+        tables[name] = list(records.values())
+    return owner, tables, assembly.compile_inputs[owner.definition_id]
 
 
 class TestStageOneEveryForm:
@@ -105,100 +104,90 @@ class TestStageOneEveryForm:
 
     def test_locked_specs(self):
         counter = self._counter()
-        source = _compiled_html(counter)
-        cid = counter.class_id
-        assert _decode_cev(source) == [
-            (
-                DATA_CEV_ON,
-                [
-                    {
-                        "cid": cid,
-                        "event": "click",
-                        "handler": "save",
-                        "args": None,
-                        "prevent": False,
-                        "stop": False,
-                        "self": False,
-                        "once": False,
-                        "key": None,
-                        "debounce": None,
-                        "throttle": None,
-                    }
-                ],
-            ),
-            (
-                DATA_CEV_ON,
-                [
-                    {
-                        "cid": cid,
-                        "event": "click",
-                        "handler": "rate",
-                        "args": "{stars: 5}",
-                        "prevent": True,
-                        "stop": True,
-                        "self": False,
-                        "once": False,
-                        "key": None,
-                        "debounce": None,
-                        "throttle": None,
-                    }
-                ],
-            ),
-            (
-                DATA_CEV_BIND,
-                [
-                    {
-                        "cid": cid,
-                        "field": "count",
-                        "binding_mode": "two-way",
-                        "handler": "refresh",
-                        "lazy": False,
-                        "on": None,
-                        "key": None,
-                        "debounce": 300,
-                        "throttle": None,
-                    }
-                ],
-            ),
-            (
-                DATA_CEV_BIND,
-                [
-                    {
-                        "cid": cid,
-                        "field": "name",
-                        "binding_mode": "one-way",
-                        "handler": None,
-                        "lazy": False,
-                        "on": None,
-                        "key": None,
-                        "debounce": None,
-                        "throttle": None,
-                    }
-                ],
-            ),
-            (
-                DATA_CEV_POLL,
-                [{"cid": cid, "handler": "refresh", "args": None, "interval": 30000}],
-            ),
-        ]
+        owner, tables, _ = _typed_binding_tables(counter)
+        assert owner.type_key == counter.class_id
+        ids_by_channel = {name: [spec["id"] for spec in specs] for name, specs in tables.items()}
+        assert all(type(binding_id) is str and binding_id for ids in ids_by_channel.values() for binding_id in ids)
+        assert all(len(ids) == len(set(ids)) for ids in ids_by_channel.values())
+        semantics = {
+            name: [{key: value for key, value in spec.items() if key != "id"} for spec in specs]
+            for name, specs in tables.items()
+        }
+        assert semantics == {
+            "eventBindings": [
+                {
+                    "event": "click",
+                    "handler": "save",
+                    "args": None,
+                    "prevent": False,
+                    "stop": False,
+                    "self": False,
+                    "once": False,
+                    "key": None,
+                    "debounce": None,
+                    "throttle": None,
+                },
+                {
+                    "event": "click",
+                    "handler": "rate",
+                    "args": "{stars: 5}",
+                    "prevent": True,
+                    "stop": True,
+                    "self": False,
+                    "once": False,
+                    "key": None,
+                    "debounce": None,
+                    "throttle": None,
+                },
+            ],
+            "controlBindings": [
+                {
+                    "field": "count",
+                    "binding_mode": "two-way",
+                    "handler": "refresh",
+                    "lazy": False,
+                    "on": None,
+                    "key": None,
+                    "debounce": 300,
+                    "throttle": None,
+                },
+                {
+                    "field": "name",
+                    "binding_mode": "one-way",
+                    "handler": None,
+                    "lazy": False,
+                    "on": None,
+                    "key": None,
+                    "debounce": None,
+                    "throttle": None,
+                },
+            ],
+            "pollBindings": [
+                {
+                    "handler": "refresh",
+                    "args": None,
+                    "interval": 30000,
+                }
+            ],
+        }
 
-    def test_plain_alpine_attributes_survive(self):
+    def test_authored_vue_attributes_survive_typed_capture(self):
         counter = self._counter()
         authored = counter.get_template().source
-        rendered = _compiled_html(counter)
-        # Compilation no longer mutates CitryTemplate.source. Only the rendered
-        # output dissolves Citry bindings; ordinary Alpine attributes survive.
+        _, _, compiled = _typed_binding_tables(counter)
+        # Capture does not mutate authored source. Its prepared Vue template
+        # consumes Citry bindings while preserving ordinary Vue attributes.
         assert '@c-click="save"' in authored
         assert ":c-count" in authored
-        assert "@c-click" not in rendered
-        assert ":c-count" not in rendered
-        assert '@click="$state.count++"' in rendered
-        assert ':class="{a: true}"' in rendered
+        assert "@c-click" not in compiled.template
+        assert ":c-count" not in compiled.template
+        assert '@click="$state.count++"' in compiled.template
+        assert ':class="{a: true}"' in compiled.template
 
     def test_two_way_targets_collected(self):
         counter = self._counter()
         ext = _events_ext(counter.citry)
-        _compiled_html(counter)
+        _typed_binding_tables(counter)
         assert ext.two_way_binding_targets(counter) == frozenset({"count"})
 
 
@@ -214,47 +203,56 @@ class TestStageOneVocabulary:
         comp = type("Comp", (Component,), ns)
         return _compiled_html(comp)
 
+    def _one_typed(self, template, *, state=None, events):
+        app = Citry(secret=SIGNING_KEY)
+        ns = {"citry": app, "template": template, "Events": type("Events", (), events)}
+        if state is not None:
+            ns["State"] = type("State", (), state)
+        comp = type("Comp", (Component,), ns)
+        owner, tables, compiled = _typed_binding_tables(comp)
+        assert owner.type_key == comp.class_id
+        return tables, compiled
+
     def test_bare_event(self):
-        source = self._one('<button @c-click="save">x</button>', events={"save": _noop})
-        ((name, specs),) = _decode_cev(source)
-        assert name == DATA_CEV_ON
-        assert specs[0]["event"] == "click"
-        assert specs[0]["handler"] == "save"
-        assert specs[0]["args"] is None
+        tables, _ = self._one_typed('<button @c-click="save">x</button>', events={"save": _noop})
+        [spec] = tables["eventBindings"]
+        assert (spec["event"], spec["handler"], spec["args"]) == ("click", "save", None)
 
     def test_event_modifiers(self):
-        source = self._one('<button @c-keyup.enter.prevent.once="go">x</button>', events={"go": _noop})
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["event"] == "keyup"
-        assert specs[0]["key"] == "enter"
-        assert specs[0]["prevent"] is True
-        assert specs[0]["once"] is True
-        assert specs[0]["stop"] is False
+        tables, _ = self._one_typed('<button @c-keyup.enter.prevent.once="go">x</button>', events={"go": _noop})
+        [spec] = tables["eventBindings"]
+        assert (spec["event"], spec["key"], spec["prevent"], spec["once"], spec["stop"]) == (
+            "keyup",
+            "enter",
+            True,
+            True,
+            False,
+        )
 
     def test_debounce_bare_default_and_throttle(self):
-        source = self._one('<button @c-click.debounce.throttle.1s="go">x</button>', events={"go": _noop})
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["debounce"] == 250  # bare .debounce default
-        assert specs[0]["throttle"] == 1000  # .throttle.1s
+        tables, _ = self._one_typed('<button @c-click.debounce.throttle.1s="go">x</button>', events={"go": _noop})
+        [spec] = tables["eventBindings"]
+        assert spec["debounce"] == 250  # bare .debounce default
+        assert spec["throttle"] == 1000  # .throttle.1s
 
     def test_bare_throttle_default(self):
         # Design 5.1 pins bare `.throttle` (no time segment) at 250 ms, the same
         # default as bare `.debounce`.
-        source = self._one('<button @c-click.throttle="go">x</button>', events={"go": _noop})
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["throttle"] == 250
-        assert specs[0]["debounce"] is None
+        tables, _ = self._one_typed('<button @c-click.throttle="go">x</button>', events={"go": _noop})
+        [spec] = tables["eventBindings"]
+        assert spec["throttle"] == 250
+        assert spec["debounce"] is None
 
     def test_bare_throttle_default_on_state_binding(self):
         # The same 250 ms default applies on the :c-* state channel (shared builder).
-        source = self._one(
+        tables, _ = self._one_typed(
             '<input :c-q.throttle="go">',
             state={"__annotations__": {"q": str}, "q": ""},
             events={"go": _noop},
         )
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["throttle"] == 250
-        assert specs[0]["debounce"] is None
+        [spec] = tables["controlBindings"]
+        assert spec["throttle"] == 250
+        assert spec["debounce"] is None
 
     def test_handler_debounce_config_merges_when_binding_has_none(self):
         from citry.ext.events import event
@@ -271,9 +269,10 @@ class TestStageOneVocabulary:
 
             template = '<button @c-click="go">x</button>'
 
-        specs = _decode_cev(_compiled_html(Comp))[0][1]
+        _, tables, _ = _typed_binding_tables(Comp)
+        [spec] = tables["eventBindings"]
         # The handler's configured debounce fills in when the binding sets none.
-        assert specs[0]["debounce"] == 500
+        assert spec["debounce"] == 500
 
     def test_binding_debounce_overrides_handler_config(self):
         from citry.ext.events import event
@@ -290,54 +289,60 @@ class TestStageOneVocabulary:
 
             template = '<button @c-click.debounce.50ms="go">x</button>'
 
-        specs = _decode_cev(_compiled_html(Comp))[0][1]
-        assert specs[0]["debounce"] == 50
+        _, tables, _ = _typed_binding_tables(Comp)
+        [spec] = tables["eventBindings"]
+        assert spec["debounce"] == 50
 
     def test_poll_interval_in_ms(self):
-        source = self._one('<div @c-poll.5s="go">x</div>', events={"go": _noop})
-        ((name, specs),) = _decode_cev(source)
-        assert name == DATA_CEV_POLL
-        assert specs[0]["interval"] == 5000
+        tables, _ = self._one_typed('<div @c-poll.5s="go">x</div>', events={"go": _noop})
+        assert tables["pollBindings"][0]["interval"] == 5000
+
+    def test_poll_interval_must_fit_javascript_safe_integer_milliseconds(self):
+        with pytest.raises(ValueError, match="@c-poll interval exceeds the JavaScript safe-integer limit"):
+            self._one('<div @c-poll.9007199254741s="go">x</div>', events={"go": _noop})
+
+    def test_poll_interval_must_be_positive(self):
+        with pytest.raises(
+            ValueError,
+            match=r"'@c-poll\.0s': @c-poll interval must be positive \(in Comp template, line 1\)",
+        ):
+            self._one('<div @c-poll.0s="go">x</div>', events={"go": _noop})
 
     def test_one_way_binding(self):
-        source = self._one(
+        tables, _ = self._one_typed(
             "<input :c-title>",
             state={"__annotations__": {"title": str}, "title": ""},
             events={"h": _noop},
         )
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["binding_mode"] == "one-way"
-        assert specs[0]["field"] == "title"
-        assert specs[0]["handler"] is None
+        [spec] = tables["controlBindings"]
+        assert (spec["binding_mode"], spec["field"], spec["handler"]) == ("one-way", "title", None)
 
     def test_two_way_on_override_and_key_filter(self):
-        source = self._one(
+        tables, _ = self._one_typed(
             '<input :c-q.on:keyup.enter="go">',
             state={"__annotations__": {"q": str}, "q": ""},
             events={"go": _noop},
         )
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["binding_mode"] == "two-way"
-        assert specs[0]["on"] == "keyup"
-        assert specs[0]["key"] == "enter"
+        [spec] = tables["controlBindings"]
+        assert (spec["binding_mode"], spec["on"], spec["key"]) == ("two-way", "keyup", "enter")
 
     def test_field_case_preserved(self):
         # The rewrite is server-side, so a mixed-case State field name survives.
-        source = self._one(
+        tables, _ = self._one_typed(
             "<input :c-docId>",
             state={"__annotations__": {"docId": int}, "docId": 0},
             events={"h": _noop},
         )
-        assert _decode_cev(source)[0][1][0]["field"] == "docId"
+        assert tables["controlBindings"][0]["field"] == "docId"
 
     def test_multiple_event_bindings_on_one_element(self):
-        source = self._one(
+        tables, compiled = self._one_typed(
             '<input @c-focus="a" @c-blur="b">',
             events={"a": _noop, "b": _noop},
         )
-        pairs = _decode_cev(source)
-        assert len(pairs) == 1  # one data-cev-on attribute...
-        assert [s["event"] for s in pairs[0][1]] == ["focus", "blur"]  # ...holding both specs
+        assert [spec["event"] for spec in tables["eventBindings"]] == ["focus", "blur"]
+        opening = compiled.template[compiled.template.index("<input") : compiled.template.index(">")]
+        assert opening.index("v-on:focus") < opening.index("v-on:blur")
 
 
 class TestArgExpressionVerbatim:
@@ -356,9 +361,10 @@ class TestArgExpressionVerbatim:
 
             template = '<button @c-click="remove({id: $el.dataset.id})">x</button>'
 
-        specs = _decode_cev(_compiled_html(Comp))[0][1]
-        assert specs[0]["handler"] == "remove"
-        assert specs[0]["args"] == "{id: $el.dataset.id}"
+        _, tables, _ = _typed_binding_tables(Comp)
+        [spec] = tables["eventBindings"]
+        assert spec["handler"] == "remove"
+        assert spec["args"] == "{id: $el.dataset.id}"
 
     def test_arg_expression_preserves_authored_inner_whitespace(self):
         app = Citry()
@@ -372,8 +378,8 @@ class TestArgExpressionVerbatim:
 
             template = '<button @c-click="save(  {value: 1}  )">x</button>'
 
-        specs = _decode_cev(_compiled_html(Comp))[0][1]
-        assert specs[0]["args"] == "  {value: 1}  "
+        _, tables, _ = _typed_binding_tables(Comp)
+        assert tables["eventBindings"][0]["args"] == "  {value: 1}  "
 
     @pytest.mark.parametrize(
         "expression",
@@ -396,7 +402,8 @@ class TestArgExpressionVerbatim:
 
             template = f'<button @c-click="save({expression})">x</button>'
 
-        assert _decode_cev(_compiled_html(Comp))[0][1][0]["args"] == expression
+        _, tables, _ = _typed_binding_tables(Comp)
+        assert tables["eventBindings"][0]["args"] == expression
 
     def test_trailing_javascript_is_rejected_instead_of_truncated(self):
         app = Citry()
@@ -432,10 +439,10 @@ class TestCompiledAttributeRobustness:
 
             template = '<button @c-click="save({ok: a > b})" title="t">x</button>'
 
-        source = _compiled_html(Comp)
+        _, tables, compiled = _typed_binding_tables(Comp)
         # The `>` inside the quoted value must not be read as the tag's end.
-        assert 'title="t"' in source
-        assert _decode_cev(source)[0][1][0]["args"] == "{ok: a > b}"
+        assert 'title="t"' in compiled.template
+        assert tables["eventBindings"][0]["args"] == "{ok: a > b}"
 
     def test_nested_parens_in_arg_expression(self):
         app = Citry(secret=SIGNING_KEY)
@@ -452,7 +459,8 @@ class TestCompiledAttributeRobustness:
 
             template = '<button @c-click="f({v: (1 + 2)})">x</button>'
 
-        assert _decode_cev(_compiled_html(Comp))[0][1][0]["args"] == "{v: (1 + 2)}"
+        _, tables, _ = _typed_binding_tables(Comp)
+        assert tables["eventBindings"][0]["args"] == "{v: (1 + 2)}"
 
     def test_self_closing_element_slash_preserved(self):
         app = Citry(secret=SIGNING_KEY)
@@ -469,11 +477,12 @@ class TestCompiledAttributeRobustness:
 
             template = '<input :c-q="go" class="a"/>'
 
-        source = _compiled_html(Comp)
-        assert "<input " in source
-        assert "/>" in source  # the self-closing slash survives
-        assert 'class="a"' in source
-        assert _decode_cev(source)[0][1][0]["field"] == "q"
+        _, tables, compiled = _typed_binding_tables(Comp)
+        assert "<input " in compiled.template
+        assert "/>" in compiled.template  # the self-closing slash survives
+        assert 'class="a"' in compiled.template
+        [spec] = tables["controlBindings"]
+        assert spec["field"] == "q"
 
     def test_static_collapse_uses_parser_byte_offsets_for_unicode_source(self):
         app = Citry()
@@ -487,9 +496,9 @@ class TestCompiledAttributeRobustness:
 
             template = '<button title="Příliš žluťoučký" @c-click="go">x</button>'
 
-        source = _compiled_html(Comp)
-        assert 'title="Příliš žluťoučký"' in source
-        assert _decode_cev(source)[0][1][0]["handler"] == "go"
+        _, tables, compiled = _typed_binding_tables(Comp)
+        assert 'title="Příliš žluťoučký"' in compiled.template
+        assert tables["eventBindings"][0]["handler"] == "go"
 
 
 class TestValidationErrors:
@@ -499,7 +508,7 @@ class TestValidationErrors:
     error path can lose the template location.
     """
 
-    def _load(self, template, *, state=None, events, child=False):
+    def _component(self, template, *, state=None, events, child=False):
         app = Citry(secret=SIGNING_KEY)
         if child:
             type("Child", (Component,), {"citry": app, "template": "x"})
@@ -507,7 +516,10 @@ class TestValidationErrors:
         if state is not None:
             ns["State"] = type("State", (), state)
         ns["Events"] = type("Events", (), events)
-        comp = type("Comp", (Component,), ns)
+        return type("Comp", (Component,), ns)
+
+    def _load(self, template, *, state=None, events, child=False):
+        comp = self._component(template, state=state, events=events, child=child)
         _compiled_html(comp)
         return comp
 
@@ -543,13 +555,21 @@ class TestValidationErrors:
             )
 
     def test_event_handler_on_component_tag_stays_for_boundary_capture(self):
-        comp = self._load('<c-Child @c-click="go" />', events={"go": _noop}, child=True)
+        comp = self._component('<c-Child @c-click="go" />', events={"go": _noop}, child=True)
+        owner, tables, compiled = _typed_binding_tables(comp)
+        [event] = tables["eventBindings"]
+        [call] = compiled.local_calls
+        [binding] = call["bindings"]
 
+        assert owner.type_key == comp.class_id
         assert '@c-click="go"' in comp.get_template().source
+        assert (event["event"], event["handler"]) == ("click", "go")
+        assert (binding["kind"], binding["name"]) == ("event", "v-on:click")
 
     def test_component_handler_is_validated_during_compilation(self):
+        comp = self._component('<c-Child @c-click="ghost" />', events={"go": _noop}, child=True)
         with pytest.raises(ValueError, match=r"names event handler 'ghost'.*component boundary"):
-            self._load('<c-Child @c-click="ghost" />', events={"go": _noop}, child=True)
+            _typed_binding_tables(comp)
 
     def test_invalid_literal_does_not_mutate_or_fail_template_loading(self):
         app = Citry()
@@ -569,7 +589,8 @@ class TestValidationErrors:
 
     def test_component_state_binding_remains_invalid(self):
         with pytest.raises(
-            ValueError, match=r"binds State on it.*\$c-props or Python kwargs.*\(in Comp template, line 1\)"
+            ValueError,
+            match=r"binds State on it.*native Vue prop binding.*Python kwargs.*\(in Comp template, line 1\)",
         ):
             self._load('<c-Child :c-x="go" />', events={"go": _noop}, child=True)
 
@@ -702,20 +723,22 @@ class TestValidationErrors:
 
     @pytest.mark.parametrize("event_name", ["click", "lol"])
     def test_event_key_filter_accepts_any_event_name(self, event_name):
-        comp = self._load(f'<button @c-{event_name}.enter="go">x</button>', events={"go": _noop})
-        source = _compiled_html(comp)
-        spec = _decode_cev(source)[0][1][0]
+        comp = self._component(f'<button @c-{event_name}.enter="go">x</button>', events={"go": _noop})
+        _, tables, compiled = _typed_binding_tables(comp)
+        [spec] = tables["eventBindings"]
+        assert f"@c-{event_name}" not in compiled.template
         assert spec["event"] == event_name
         assert spec["key"] == "enter"
 
     def test_state_key_filter_accepts_any_update_event_name(self):
-        comp = self._load(
+        comp = self._component(
             '<input :c-q.on:lol.escape="go">',
             state={"__annotations__": {"q": str}, "q": ""},
             events={"go": _noop},
         )
-        source = _compiled_html(comp)
-        spec = _decode_cev(source)[0][1][0]
+        _, tables, compiled = _typed_binding_tables(comp)
+        [spec] = tables["controlBindings"]
+        assert ":c-q" not in compiled.template
         assert spec["on"] == "lol"
         assert spec["key"] == "escape"
 
@@ -754,7 +777,7 @@ class TestBindingTarget:
 
     _STATE = {"__annotations__": {"q": str}, "q": ""}
 
-    def _load(self, template):
+    def _component(self, template):
         app = Citry(secret=SIGNING_KEY)
         state_cls = type("State", (), dict(self._STATE))
         events_cls = type("Events", (), {"go": _noop})
@@ -772,7 +795,28 @@ class TestBindingTarget:
                 },
             },
         )
-        return _compiled_html(comp)
+        return comp
+
+    def _load(self, template):
+        return _compiled_html(self._component(template))
+
+    def _typed_control(self, template):
+        comp = self._component(template)
+        owner, tables, compiled = _typed_binding_tables(comp)
+        assert owner.type_key == comp.class_id
+        [spec] = tables["controlBindings"]
+        tag = template.lstrip()[1:].split(None, 1)[0].rstrip("/>").casefold()
+        if tag == "c-element":
+            static_target = re.search(
+                r"""\bis\s*=\s*(["'])([^"']+)\1""",
+                template,
+                flags=re.IGNORECASE,
+            )
+            assert static_target is not None
+            tag = static_target.group(2).casefold()
+        assert f"<{tag}" in compiled.template.casefold()
+        assert "v-citry-control=" in compiled.template
+        return spec
 
     _NO_VALUE = r"holds no value, so a State binding has nothing to bind.*use an '@c-\*' event binding instead"
 
@@ -790,7 +834,8 @@ class TestBindingTarget:
         ],
     )
     def test_form_controls_are_accepted(self, template):
-        assert _decode_cev(self._load(template))[0][1][0]["field"] == "q"
+        spec = self._typed_control(template)
+        assert spec["field"] == "q"
 
     @pytest.mark.parametrize(
         "template",
@@ -810,22 +855,20 @@ class TestBindingTarget:
             self._load(template)
 
     def test_custom_element_one_way_is_accepted(self):
-        source = self._load("<my-picker :c-q></my-picker>")
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["binding_mode"] == "one-way"
-        assert specs[0]["field"] == "q"
+        spec = self._typed_control("<my-picker :c-q></my-picker>")
+        assert spec["binding_mode"] == "one-way"
+        assert spec["field"] == "q"
 
     def test_custom_element_two_way_is_accepted_with_an_event(self):
-        source = self._load('<my-picker :c-q.on:pick="go"></my-picker>')
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["binding_mode"] == "two-way"
-        assert specs[0]["on"] == "pick"
+        spec = self._typed_control('<my-picker :c-q.on:pick="go"></my-picker>')
+        assert spec["binding_mode"] == "two-way"
+        assert spec["on"] == "pick"
 
     def test_c_element_binds_the_element_its_is_names(self):
         # `<c-element is="input">` renders an <input>, so the binding is valid
         # and needs no explicit update event.
-        source = self._load('<c-element is="input" :c-q="go" />')
-        assert _decode_cev(source)[0][1][0]["binding_mode"] == "two-way"
+        spec = self._typed_control('<c-element is="input" :c-q="go" />')
+        assert (spec["binding_mode"], spec["field"], spec["handler"]) == ("two-way", "q", "go")
 
     def test_c_element_input_uses_the_same_type_matrix(self):
         with pytest.raises(ValueError, match=r'<input type="submit"> cannot be bound to State'):
@@ -836,16 +879,18 @@ class TestBindingTarget:
             self._load('<c-element is="div" :c-q="go" />')
 
     def test_c_element_with_a_computed_name_defers_target_validation(self):
-        source = self._load('<c-element c-is="tag" :c-q="go" />')
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["binding_mode"] == "two-way"
-        assert specs[0]["field"] == "q"
+        comp = self._component('<c-element c-is="tag" :c-q="go" />')
+        owner, tables, _ = _typed_binding_tables(comp)
+        [spec] = tables["controlBindings"]
+        assert owner.type_key == comp.class_id
+        assert (spec["binding_mode"], spec["field"]) == ("two-way", "q")
 
     def test_c_element_with_a_spread_name_defers_target_validation(self):
-        source = self._load('<c-element c-bind="attrs" :c-q="go" />')
-        specs = _decode_cev(source)[0][1]
-        assert specs[0]["binding_mode"] == "two-way"
-        assert specs[0]["field"] == "q"
+        comp = self._component('<c-element c-bind="attrs" :c-q="go" />')
+        owner, tables, _ = _typed_binding_tables(comp)
+        [spec] = tables["controlBindings"]
+        assert owner.type_key == comp.class_id
+        assert (spec["binding_mode"], spec["field"]) == ("two-way", "q")
 
     @pytest.mark.parametrize(
         "template",
@@ -887,12 +932,12 @@ class TestBindingTarget:
     )
     @pytest.mark.parametrize(("binding", "mode"), [(':c-q="go"', "two-way"), (":c-q", "one-way")])
     def test_editable_input_types_support_both_directions(self, input_type, binding, mode):
-        source = self._load(f'<input type="{input_type}" {binding}>')
-        assert _decode_cev(source)[0][1][0]["binding_mode"] == mode
+        spec = self._typed_control(f'<input type="{input_type}" {binding}>')
+        assert spec["binding_mode"] == mode
 
     def test_hidden_supports_one_way_only(self):
-        source = self._load('<input type="hidden" :c-q>')
-        assert _decode_cev(source)[0][1][0]["binding_mode"] == "one-way"
+        spec = self._typed_control('<input type="hidden" :c-q>')
+        assert spec["binding_mode"] == "one-way"
         with pytest.raises(ValueError, match=r"supports one-way State bindings only"):
             self._load('<input type="hidden" :c-q="go">')
 
@@ -905,11 +950,12 @@ class TestBindingTarget:
     @pytest.mark.parametrize("type_attr", ["", ' type=""', " type"])
     @pytest.mark.parametrize("binding", [':c-q="go"', ":c-q"])
     def test_missing_empty_and_bare_type_are_text(self, type_attr, binding):
-        source = self._load(f"<input{type_attr} {binding}>")
-        assert _decode_cev(source)[0][1][0]["field"] == "q"
+        spec = self._typed_control(f"<input{type_attr} {binding}>")
+        assert spec["field"] == "q"
 
     def test_input_type_is_case_insensitive_but_not_whitespace_trimmed(self):
-        assert _decode_cev(self._load('<input type="TEXT" :c-q="go">'))
+        spec = self._typed_control('<input type="TEXT" :c-q="go">')
+        assert spec["field"] == "q"
         with pytest.raises(ValueError, match=r"not a recognized input type"):
             self._load('<input type=" text " :c-q="go">')
 
@@ -945,8 +991,8 @@ class TestBindingTarget:
     def test_uppercase_tag_names_are_classified_the_same(self):
         # HTML tag names are case insensitive, so the spelling must not change
         # the verdict, for a control or for a custom element.
-        assert _decode_cev(self._load("<INPUT :c-q>"))[0][1][0]["field"] == "q"
-        assert _decode_cev(self._load("<My-Widget :c-q></My-Widget>"))[0][1][0]["field"] == "q"
+        assert self._typed_control("<INPUT :c-q>")["field"] == "q"
+        assert self._typed_control("<My-Widget :c-q></My-Widget>")["field"] == "q"
         with pytest.raises(ValueError, match=self._NO_VALUE):
             self._load("<DIV :c-q></DIV>")
 
@@ -974,17 +1020,13 @@ class TestStageTwoSpread:
 
             template = '<button c-bind="btn">go</button><input c-bind="inp">'
 
-        out = _rendered(Comp())
-        pairs = _decode_cev(out)
-        assert "@c-click" not in out
-        assert ":c-q" not in out
-        on = next(specs for name, specs in pairs if name == DATA_CEV_ON)
-        assert on[0]["event"] == "click"
-        assert on[0]["prevent"] is True
-        bind = next(specs for name, specs in pairs if name == DATA_CEV_BIND)
-        assert bind[0]["binding_mode"] == "two-way"
-        assert bind[0]["field"] == "q"
-        assert bind[0]["debounce"] == 250
+        owner, tables, compiled = _typed_binding_tables(Comp)
+        [event] = tables["eventBindings"]
+        [control] = tables["controlBindings"]
+        assert owner.type_key == Comp.class_id
+        assert (event["event"], event["handler"], event["prevent"]) == ("click", "go", True)
+        assert (control["binding_mode"], control["field"], control["debounce"]) == ("two-way", "q", 250)
+        assert "data-cev-" not in compiled.template
 
     def test_multiple_select_and_binding_are_accepted_through_spread(self):
         app = Citry(secret=SIGNING_KEY)
@@ -1004,11 +1046,13 @@ class TestStageTwoSpread:
 
             template = '<select c-bind="attrs"><option value="a">A</option></select>'
 
-        out = _rendered(Comp())
-        assert " multiple" in out
-        bind = next(specs for name, specs in _decode_cev(out) if name == DATA_CEV_BIND)
-        assert bind[0]["binding_mode"] == "two-way"
-        assert bind[0]["field"] == "tags"
+        owner, tables, compiled = _typed_binding_tables(Comp)
+        [control] = tables["controlBindings"]
+        attrs = [value for key, value in owner.prepared_data.items() if key.startswith("citryAttrs")]
+        assert (control["binding_mode"], control["field"]) == ("two-way", "tags")
+        assert any(attrs_for_element.get("multiple") is True for attrs_for_element in attrs)
+        assert "v-citry-control=" in compiled.template
+        assert "data-cev-" not in compiled.template
 
     def test_binding_spread_onto_an_element_without_a_value_is_rejected(self):
         # The target check runs in the shared spec builder, so a binding that
@@ -1054,13 +1098,23 @@ class TestStageTwoSpread:
 
             template = '<button @c-click="a" c-bind="extra">go</button>'
 
-        out = _rendered(Comp())
-        ((name, specs),) = _decode_cev(out)
-        assert name == DATA_CEV_ON
-        # The literal @c-click (stage one) and the spread @c-mouseover (stage
-        # two) both survive in one merged attribute.
+        owner, tables, compiled = _typed_binding_tables(Comp)
+        specs = tables["eventBindings"]
+        # The literal listener stays in the Vue template while the spread
+        # listener is represented by a typed runtime event site.
         assert [s["event"] for s in specs] == ["click", "mouseover"]
         assert [s["handler"] for s in specs] == ["a", "b"]
+        runtime_event = specs[1]
+        [site] = compiled.runtime_event_sites
+        start, end = site["sourceStart"], site["sourceEnd"]
+        opening = compiled.template.encode()[start:end].decode()
+
+        assert "v-on:click" in compiled.template
+        assert "v-citry-runtime-events=" in opening
+        assert site["bindingKey"] in opening
+        assert owner.prepared_data[site["bindingKey"]] == runtime_event["id"]
+        assert "v-on:mouseover" not in compiled.template
+        assert "data-cev-" not in compiled.template
 
     def test_spread_validation_error_is_render_time_with_same_wording(self):
         app = Citry()
@@ -1115,9 +1169,10 @@ class TestBindingShapedText:
 
             template = '<c-raw><button @c-click="ghost">x</button></c-raw>'
 
-        source = _compiled_html(Comp)
-        assert '@c-click="ghost"' in source
-        assert not _decode_cev(source)
+        owner, tables, compiled = _typed_binding_tables(Comp)
+        assert not any(tables.values())
+        assert "citry-opaque-html" in compiled.template
+        assert any('@c-click="ghost"' in item["html"] for item in owner.prepared_data["opaqueHtml"].values())
 
     @pytest.mark.parametrize(
         "template",
@@ -1132,12 +1187,14 @@ class TestBindingShapedText:
     def test_comments_and_native_text_containers_are_literal(self, template):
         app = Citry()
         comp = type("Comp", (Component,), {"citry": app, "template": template})
-        source = _compiled_html(comp)
-        assert '@c-click="ghost"' in source
-        assert not _decode_cev(source)
+        _, tables, compiled = _typed_binding_tables(comp)
+        assert not any(tables.values())
+        assert '@c-click="ghost"' in compiled.template
 
 
 class TestNestedTemplateBindings:
+    """Nested string-template bindings remain attached to their lexical owner."""
+
     def test_nested_template_attr_uses_its_owner_events_scope(self):
         app = Citry(secret=SIGNING_KEY)
 
@@ -1160,10 +1217,11 @@ class TestNestedTemplateBindings:
 
             template = "<c-card c-body=\"<input @c-focus='go' :c-q='go'>\" />"
 
-        source = _compiled_html(Page)
-        emitted = dict(_decode_cev(source))
-        assert emitted[DATA_CEV_ON][0]["handler"] == "go"
-        assert emitted[DATA_CEV_BIND][0]["field"] == "q"
+        owner, tables, compiled = _typed_binding_tables(Page)
+        assert owner.type_key == Page.class_id
+        assert tables["eventBindings"][0]["handler"] == "go"
+        assert tables["controlBindings"][0]["field"] == "q"
+        assert "data-cev-" not in compiled.template
         assert _events_ext(app).two_way_binding_targets(Page) == frozenset({"q"})
 
     def test_invalid_nested_template_binding_fails_when_fragment_compiles(self):
@@ -1193,10 +1251,10 @@ class TestComponentTagSpreadBoundary:
     """
     Component-boundary entries from a render-time spread follow A1's split.
 
-    ``@c-*`` is captured as a component-tag client binding and remains absent from emitted
-    HTML until the client work lands. ``:c-*`` is element-only and therefore
-    fails at input resolution, just as its directly authored form fails while
-    the template loads.
+    ``@c-*`` is captured as a component-call browser binding, separate from
+    the child's Python kwargs. ``:c-*`` is element-only and therefore fails
+    at input resolution, just as its directly authored form fails while the
+    template loads.
     """
 
     def test_event_binding_via_spread_is_compiled_for_the_boundary_manifest(self):
@@ -1218,17 +1276,101 @@ class TestComponentTagSpreadBoundary:
 
             template = '<c-Child c-bind="a"></c-Child>'
 
-        render = Parent().render()
-        graph = render.context.ownership
-        assert graph is not None
-        call = next(call for call in graph.snapshot().component_invocations if call.authored_tag == "child")
-        client_binding = call.client_bindings[0]
+        owner, tables, compiled = _typed_binding_tables(Parent)
+        [event] = tables["eventBindings"]
+        [call] = compiled.local_calls
+        [binding] = call["bindings"]
 
-        assert client_binding.source.value == "spread"
-        assert client_binding.payload.type == "citry-dom-event"
-        assert client_binding.payload.event == "click"
-        assert client_binding.payload.handler == "go"
-        assert "data-cev" not in render.serialize(deps_strategy="ignore")
+        assert owner.type_key == Parent.class_id
+        assert (event["event"], event["handler"]) == ("click", "go")
+        assert call["typeKey"] == Child.class_id
+        assert binding["kind"] == "event"
+        assert binding["name"] == "v-on:click"
+        assert f"dispatchComponent('{event['id']}', $event)" in binding["value"]
+
+    def test_runtime_component_event_carrier_cannot_be_forged(self):
+        forged = RuntimeComponentEventBinding("@c-click", "go", "<c-Child c-bind='a'>", (9, 19))
+
+        assert not is_authenticated_runtime_component_event_binding(forged)
+
+    def test_event_binding_via_spread_accepts_only_a_handler_name(self):
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Payload:
+            value: int
+
+        class Parent(Component):
+            citry = app
+
+            class Events:
+                def go(self, data: Payload):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"a": {"@c-click": "go(1)"}}
+
+            template = '<c-Child c-bind="a"></c-Child>'
+
+        with pytest.raises(TypeError, match="accept a handler name without arguments"):
+            _typed_binding_tables(Parent)
+
+    def test_runtime_and_authored_listener_collision_is_rejected(self):
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = app
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                return {"a": {"@c-click": "go"}}
+
+            template = '<c-Child v-on:click="noop" c-bind="a"></c-Child>'
+
+        with pytest.raises(TypeError, match="more than one listener named 'v-on:click'"):
+            _typed_binding_tables(Parent)
+
+    def test_cached_runtime_component_listener_replays(self):
+        app = Citry(cache=InMemoryCache())
+        renders = 0
+
+        class Child(Component):
+            citry = app
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = app
+
+            class Cache:
+                enabled = True
+
+            class Events:
+                def go(self):
+                    return None
+
+            def template_data(self, kwargs, slots):
+                nonlocal renders
+                renders += 1
+                return {"a": {"@c-click": "go"}}
+
+            template = '<c-Child c-bind="a"></c-Child>'
+
+        first = _typed_binding_tables(Parent)
+        second = _typed_binding_tables(Parent)
+
+        assert renders == 1
+        assert first[1]["eventBindings"] == second[1]["eventBindings"]
+        assert first[2].local_calls == second[2].local_calls
 
     def test_state_binding_via_spread_is_rejected(self):
         # The secret: a State-declaring component mints its token at render.
@@ -1282,14 +1424,19 @@ class TestResolvedControlTypeValidation:
     @pytest.mark.parametrize("resolved_type", ["hidden", "file", "submit", "image", "reset", "button", "wat"])
     def test_literal_binding_plus_c_type_is_revalidated(self, resolved_type):
         comp = self._component('<input c-type="t" :c-q="go">', {"t": resolved_type})
-        with pytest.raises(ValueError, match=r"after dynamic attributes resolved"):
+        with pytest.raises(ValueError, match=r"after all attribute hooks resolved"):
             _rendered(comp())
 
     def test_literal_binding_plus_c_type_accepts_valid_case_insensitive_type(self):
         comp = self._component('<input c-type="t" :c-q="go">', {"t": "TEXT"})
-        out = _rendered(comp())
-        assert 'type="TEXT"' in out
-        assert _decode_cev(out)[0][1][0]["binding_mode"] == "two-way"
+        owner, tables, compiled = _typed_binding_tables(comp)
+        [spec] = tables["controlBindings"]
+        assert compiled.template.startswith("<input ")
+        assert "v-citry-control=" in compiled.template
+        assert any(
+            attrs.get("type") == "TEXT" for key, attrs in owner.prepared_data.items() if key.startswith("citryAttrs")
+        )
+        assert spec["binding_mode"] == "two-way"
 
     def test_literal_binding_plus_spread_type_is_revalidated(self):
         comp = self._component('<input :c-q="go" c-bind="attrs">', {"attrs": {"type": "file"}})
@@ -1303,18 +1450,22 @@ class TestResolvedControlTypeValidation:
 
     def test_case_variant_type_is_recognized_and_later_spread_wins(self):
         accepted = self._component('<input :c-q="go" c-bind="attrs">', {"attrs": {"TYPE": "TEXT"}})
-        assert _decode_cev(_rendered(accepted()))[0][1][0]["binding_mode"] == "two-way"
+        accepted_owner, accepted_tables, _ = _typed_binding_tables(accepted)
+        assert accepted_owner.type_key == accepted.class_id
+        assert accepted_tables["controlBindings"][0]["binding_mode"] == "two-way"
         overridden = self._component(
             '<input type="submit" :c-q="go" c-bind="attrs">',
             {"attrs": {"TYPE": "TEXT"}},
         )
-        out = _rendered(overridden())
-        assert 'type="TEXT"' in out
-        assert _decode_cev(out)[0][1][0]["binding_mode"] == "two-way"
+        owner, tables, _ = _typed_binding_tables(overridden)
+        attrs = [value for key, value in owner.prepared_data.items() if key.startswith("citryAttrs")]
+        assert any(name.casefold() == "type" and value == "TEXT" for item in attrs for name, value in item.items())
+        assert tables["controlBindings"][0]["binding_mode"] == "two-way"
 
     def test_bare_resolved_type_is_default_text(self):
         comp = self._component('<input :c-q="go" c-bind="attrs">', {"attrs": {"type": True}})
-        assert _decode_cev(_rendered(comp()))[0][1][0]["binding_mode"] == "two-way"
+        _, tables, _ = _typed_binding_tables(comp)
+        assert tables["controlBindings"][0]["binding_mode"] == "two-way"
 
     def test_existing_compiled_binding_is_revalidated_without_raw_binding_key(self):
         comp = self._component('<input c-type="t" :c-q="go">', {"t": "file"})
@@ -1338,15 +1489,18 @@ class TestResolvedControlTypeValidation:
     )
     def test_computed_c_element_binding_uses_owner_and_final_tag(self, binding, binding_mode):
         comp = self._component(f'<c-element c-is="tag" {binding} />', {"tag": "input"})
-        out = _rendered(comp())
-        specs = dict(_decode_cev(out))[DATA_CEV_BIND]
-        assert specs[0]["cid"] == comp.class_id
-        assert specs[0]["field"] == "q"
-        assert specs[0]["binding_mode"] == binding_mode
+        owner, tables, _ = _typed_binding_tables(comp)
+        [spec] = tables["controlBindings"]
+        assert owner.type_key == comp.class_id
+        assert spec["field"] == "q"
+        assert spec["binding_mode"] == binding_mode
 
     def test_computed_c_element_binding_rejects_final_valueless_tag(self):
         comp = self._component('<c-element c-is="tag" :c-q="go" />', {"tag": "div"})
-        with pytest.raises(ValueError, match=r"\(in Comp template, <div> after dynamic attributes resolved\)"):
+        with pytest.raises(
+            ValueError,
+            match=r"':c-q': <div> holds no value.*\(in Comp template, <div> after all attribute hooks resolved\)",
+        ):
             _rendered(comp())
 
     def test_computed_c_element_binding_rejects_final_input_type(self):
@@ -1379,13 +1533,14 @@ class TestResolvedControlTypeValidation:
                 },
             },
         )
-        specs = dict(_decode_cev(_rendered(comp())))
-        assert specs[DATA_CEV_ON][0]["cid"] == comp.class_id
-        assert specs[DATA_CEV_ON][0]["handler"] == "go"
-        assert specs[DATA_CEV_POLL][0]["cid"] == comp.class_id
-        assert specs[DATA_CEV_POLL][0]["handler"] == "go"
-        assert specs[DATA_CEV_BIND][0]["cid"] == comp.class_id
-        assert specs[DATA_CEV_BIND][0]["field"] == "q"
+        owner, tables, _ = _typed_binding_tables(comp)
+        [event] = tables["eventBindings"]
+        [poll] = tables["pollBindings"]
+        [control] = tables["controlBindings"]
+        assert owner.type_key == comp.class_id
+        assert event["handler"] == "go"
+        assert poll["handler"] == "go"
+        assert control["field"] == "q"
 
     @pytest.mark.parametrize(
         ("attrs", "error"),
@@ -1403,24 +1558,8 @@ class TestResolvedControlTypeValidation:
             _rendered(comp())
 
 
-class TestCompiledBindingSpecValidation:
-    """Existing internal specs are never silently accepted, dropped, or merged."""
-
-    def _canonical(self):
-        return {
-            "binding_mode": "two-way",
-            "cid": "Comp_123456",
-            "debounce": None,
-            "field": "q",
-            "handler": "go",
-            "key": None,
-            "lazy": False,
-            "on": None,
-            "throttle": None,
-        }
-
-    def _encode(self, value):
-        return base64.b64encode(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).decode()
+class TestReservedEventsMetadataAttributes:
+    """Authored HTML cannot impersonate internal Events metadata."""
 
     def _render_attrs(self, attrs):
         app = Citry(secret=SIGNING_KEY)
@@ -1442,29 +1581,12 @@ class TestCompiledBindingSpecValidation:
 
         return _rendered(Comp())
 
-    def _validate_resolved_attrs(self, attrs):
-        app = Citry(secret=SIGNING_KEY)
-
-        class Comp(Component):
-            citry = app
-
-            class State:
-                q: str = ""
-
-            class Events:
-                def go(self, state):
-                    return None
-
-            template = "<input>"
-
-        return rewrite_resolved_attrs(_events_ext(app).resolve(Comp), Comp.class_id, Comp.__name__, "input", attrs)
-
     @pytest.mark.parametrize(
         "name",
         [
-            DATA_CEV_ON,
-            DATA_CEV_POLL,
-            DATA_CEV_BIND,
+            "data-cev-on",
+            "data-cev-poll",
+            "data-cev-bind",
             "data-cev-future",
             "DATA-CEV-ON",
             "Data-Cev-Future",
@@ -1477,7 +1599,7 @@ class TestCompiledBindingSpecValidation:
             (Component,),
             {"citry": app, "template": f'<input {name}="manual">'},
         )
-        with pytest.raises(ValueError, match=rf"{name!r} is reserved compiler output.*line 1"):
+        with pytest.raises(RuntimeError, match=rf"{name!r}.*reserved internal Events namespace"):
             _compiled_html(comp)
 
     def test_static_compiler_owned_attribute_cannot_duplicate_a_raw_binding(self):
@@ -1491,12 +1613,12 @@ class TestCompiledBindingSpecValidation:
 
             template = '<input :c-q data-cev-bind="manual">'
 
-        with pytest.raises(ValueError, match=r"data-cev-bind.*reserved compiler output"):
+        with pytest.raises(RuntimeError, match=r"data-cev-bind.*reserved internal Events namespace"):
             _compiled_html(Comp)
 
-    @pytest.mark.parametrize("name", [DATA_CEV_ON, DATA_CEV_POLL, DATA_CEV_BIND, "data-cev-future"])
+    @pytest.mark.parametrize("name", ["data-cev-on", "data-cev-poll", "data-cev-bind", "data-cev-future"])
     def test_spread_cannot_author_compiler_owned_attributes(self, name):
-        with pytest.raises(RuntimeError, match=rf"{name!r} arrived.*compiler-owned"):
+        with pytest.raises(RuntimeError, match=rf"{name!r}.*reserved internal Events namespace"):
             self._render_attrs({name: "manual"})
 
     def test_dynamic_attribute_cannot_author_compiler_owned_attributes(self):
@@ -1510,7 +1632,7 @@ class TestCompiledBindingSpecValidation:
 
             template = '<input c-data-cev-on="manual">'
 
-        with pytest.raises(RuntimeError, match=r"data-cev-on.*compiler-owned"):
+        with pytest.raises(RuntimeError, match=r"data-cev-on.*reserved internal Events namespace"):
             _rendered(Comp())
 
     def test_c_element_spread_cannot_author_compiler_owned_attributes(self):
@@ -1524,41 +1646,8 @@ class TestCompiledBindingSpecValidation:
 
             template = '<c-element is="input" c-bind="attrs" />'
 
-        with pytest.raises(RuntimeError, match=r"data-cev-bind.*compiler-owned"):
+        with pytest.raises(RuntimeError, match=r"data-cev-bind.*reserved internal Events namespace"):
             _rendered(Comp())
-
-    @pytest.mark.parametrize(
-        "mutate",
-        [
-            lambda spec: spec.pop("binding_mode"),
-            lambda spec: (spec.pop("binding_mode"), spec.__setitem__("mode", "two")),
-            lambda spec: spec.__setitem__("binding_mode", "two"),
-            lambda spec: spec.__setitem__("binding_mode", "future"),
-            lambda spec: spec.__setitem__("binding_mode", ["two-way"]),
-            lambda spec: spec.pop("field"),
-            lambda spec: spec.__setitem__("extra", None),
-            lambda spec: spec.__setitem__("lazy", "false"),
-            lambda spec: spec.__setitem__("key", ["enter"]),
-            lambda spec: (spec.__setitem__("binding_mode", "one-way"), spec.__setitem__("handler", "go")),
-            lambda spec: spec.__setitem__("handler", None),
-        ],
-    )
-    def test_invalid_canonical_shapes_fail(self, mutate):
-        spec = self._canonical()
-        mutate(spec)
-        with pytest.raises(ValueError, match=r"data-cev-bind.*spec 0"):
-            self._validate_resolved_attrs({DATA_CEV_BIND: self._encode([spec])})
-
-    @pytest.mark.parametrize("encoded", ["%%%", base64.b64encode(b"{}").decode(), base64.b64encode(b"[1]").decode()])
-    def test_invalid_encoding_container_or_entry_fails(self, encoded):
-        with pytest.raises(ValueError, match=r"data-cev-bind"):
-            self._validate_resolved_attrs({DATA_CEV_BIND: encoded})
-
-    def test_invalid_prior_spec_is_not_silently_merged_with_new_binding(self):
-        legacy = self._canonical()
-        legacy["mode"] = legacy.pop("binding_mode")
-        with pytest.raises(ValueError, match=r"data-cev-bind.*spec 0"):
-            self._validate_resolved_attrs({DATA_CEV_BIND: self._encode([legacy]), ":c-q": "go"})
 
 
 class TestPassthrough:
@@ -1597,21 +1686,10 @@ class TestPassthrough:
         assert Comp.get_template().source == "<div><p>hello</p></div>"
 
 
-class TestPublishedContract:
-    """The compiled data-cev-* contract WP17 reads (a frozen constant + encoding)."""
+class TestTypedPreparedBindingContract:
+    """Event, poll, and control metadata is carried in typed prepared tables."""
 
-    def test_enumerates_the_three_attributes(self):
-        assert set(DATA_CEV_ATTRS) == {DATA_CEV_ON, DATA_CEV_POLL, DATA_CEV_BIND}
-
-    def test_each_entry_describes_its_payload_keys(self):
-        for name, entry in DATA_CEV_ATTRS.items():
-            assert isinstance(entry, CevAttr)
-            assert entry.name == name
-            assert entry.payload_keys  # non-empty
-            assert "cid" in entry.payload_keys
-
-    def test_contract_matches_emitted_keys(self):
-        # The constant must stay in step with what the builders emit.
+    def test_typed_specs_are_self_identifying_and_match_compiled_directives(self):
         app = Citry(secret=SIGNING_KEY)
 
         class Comp(Component):
@@ -1626,13 +1704,42 @@ class TestPublishedContract:
 
             template = '<input @c-keyup.enter="go" :c-q.debounce.300ms="go"><div @c-poll.5s="go">p</div>'
 
-        emitted = dict(_decode_cev(_compiled_html(Comp)))
-        for name, specs in emitted.items():
-            assert set(specs[0]) == set(DATA_CEV_ATTRS[name].payload_keys)
+        owner, tables, compiled = _typed_binding_tables(Comp)
+        [event] = tables["eventBindings"]
+        [poll] = tables["pollBindings"]
+        [control] = tables["controlBindings"]
 
-    def test_encoding_is_documented_as_base64(self):
-        assert "base64" in BINDING_SPEC_ENCODING.lower()
-
-    def test_contract_is_frozen(self):
-        with pytest.raises(TypeError):
-            DATA_CEV_ATTRS["data-cev-new"] = None  # type: ignore[index]
+        assert owner.type_key == Comp.class_id
+        assert set(event) == {
+            "id",
+            "event",
+            "handler",
+            "args",
+            "prevent",
+            "stop",
+            "self",
+            "once",
+            "key",
+            "debounce",
+            "throttle",
+        }
+        assert set(poll) == {"id", "handler", "args", "interval"}
+        assert set(control) == {
+            "id",
+            "field",
+            "binding_mode",
+            "handler",
+            "lazy",
+            "on",
+            "key",
+            "debounce",
+            "throttle",
+        }
+        assert all("cid" not in spec for specs in tables.values() for spec in specs)
+        assert (event["event"], event["handler"], event["key"]) == ("keyup", "go", "enter")
+        assert (poll["handler"], poll["interval"]) == ("go", 5000)
+        assert (control["field"], control["handler"], control["debounce"]) == ("q", "go", 300)
+        assert "v-on:keyup.enter" in compiled.template
+        assert "v-citry-event-timing" in compiled.template
+        assert "v-citry-control" in compiled.template
+        assert "data-cev-" not in compiled.template

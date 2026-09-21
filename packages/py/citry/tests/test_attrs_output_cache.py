@@ -164,7 +164,7 @@ def test_cache_does_not_retain_nodes_or_contexts(output_cache):
     assert context_ref() is None
 
 
-def test_independent_engines_and_clear_keep_input_callbacks_live(output_cache):
+def test_independent_engines_and_clear_keep_input_callbacks_live():
     first, second = Citry(), Citry()
     calls = []
     data = {"title": "same"}
@@ -190,8 +190,6 @@ def test_independent_engines_and_clear_keep_input_callbacks_live(output_cache):
 
     assert 'title="same"' in output(first_component)
     assert 'title="same"' in output(second_component)
-    if html._CACHEABLE_ESCAPE_BACKEND:
-        assert output_cache
     first.clear()
     data["title"] = "changed<&"
     assert 'title="changed&lt;&amp;"' in output(first_component)

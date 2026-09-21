@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from pathlib import Path
 from typing import get_type_hints
 
 import pytest
@@ -308,10 +309,17 @@ def test_context_menu_depends_on_one_shared_menu_runtime_and_style() -> None:
     assert html.count(".cui-context-menu-host") == 1
 
 
-def test_js_and_css_assets_are_direct_multiline_literals() -> None:
-    assert CContextMenu.js.startswith("\n")
+def test_javascript_asset_is_file_backed_and_css_is_a_multiline_literal() -> None:
+    component_dir = Path(__file__).parents[1]
+    javascript_source = (component_dir / "runtime.source.js").read_text(encoding="utf-8")
+    javascript_bundle = (component_dir / "runtime.min.js").read_text(encoding="utf-8")
+
+    assert CContextMenu.js_file == "runtime.min.js"
+    assert getattr(CContextMenu, "js", None) is None
+    assert javascript_bundle
+    assert javascript_source.startswith("\n")
+    assert "$component({" in javascript_source
     assert CContextMenu.css.startswith("\n")
-    assert "$component({" in CContextMenu.js
     assert "display: contents" in CContextMenu.css
     assert "pointer-events: none" in CContextMenu.css
     assert "user-select" not in CContextMenu.css

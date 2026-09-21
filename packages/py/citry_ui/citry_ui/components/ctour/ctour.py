@@ -334,20 +334,23 @@ class CTour(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "open": snapshot["open"],
-            "active": snapshot["active"],
-            "dismissible": snapshot["dismissible"],
-            "closeOnEscape": snapshot["close_on_escape"],
-            "closeOnOutside": snapshot["close_on_outside"],
-            "skippable": snapshot["skippable"],
-            "scroll": snapshot["scroll"],
-            "missingTarget": snapshot["missing_target"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "open": snapshot["open"],
+                "active": snapshot["active"],
+                "dismissible": snapshot["dismissible"],
+                "closeOnEscape": snapshot["close_on_escape"],
+                "closeOnOutside": snapshot["close_on_outside"],
+                "skippable": snapshot["skippable"],
+                "scroll": snapshot["scroll"],
+                "missingTarget": snapshot["missing_target"],
+                "size": snapshot["size"],
+            }
         }
 
     template = """
       <c-CInternalTourDeclarations><c-slot required /></c-CInternalTourDeclarations>
       <c-CInternalTour
+        ref="root"
         c-root_id="root_id"
         c-dialog_id="dialog_id"
         c-open="open"
@@ -453,7 +456,8 @@ class CInternalTourDeclarations(LibraryComponent):
 
 
 class CInternalTour(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -580,6 +584,7 @@ class CInternalTour(LibraryComponent):
             </button>
             <c-for each="item in items">
               <c-CInternalTourStep
+                #c-key="item['declaration'].value"
                 c-item="item"
                 c-skippable="skippable"
                 c-labels="labels"

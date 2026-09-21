@@ -46,6 +46,8 @@ _ALLOWED_ASSET_ROUTES = frozenset(
         ("asset/{file_name}", "citry_asset"),
         ("citry.js", "citry_client_runtime"),
         ("ext/events/runtime.js", "citry_events_runtime"),
+        ("ext/events/definitions/{digest}.js", "citry_vue_definition"),
+        ("ext/events/assets/{digest}.css", "citry_vue_style_asset"),
     }
 )
 _ALLOWED_ASSET_CONTENT_TYPES = frozenset({"text/css", "text/javascript"})

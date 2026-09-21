@@ -265,13 +265,15 @@ class CHoverCard(LibraryComponent):
     ) -> dict[str, object]:
         snapshot = self._snapshot(kwargs)
         return {
-            "open": snapshot["open"],
-            "disabled": snapshot["disabled"],
-            "delay": snapshot["delay"],
-            "closeDelay": snapshot["close_delay"],
-            "placement": snapshot["placement"],
-            "arrow": snapshot["arrow"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "open": snapshot["open"],
+                "disabled": snapshot["disabled"],
+                "delay": snapshot["delay"],
+                "closeDelay": snapshot["close_delay"],
+                "placement": snapshot["placement"],
+                "arrow": snapshot["arrow"],
+                "size": snapshot["size"],
+            }
         }
 
     template = """
@@ -322,8 +324,11 @@ class CHoverCard(LibraryComponent):
           size: {},
           onOpenChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          const host = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const nearestHost = (element) => (
             element?.closest?.("[data-citry-hover-card-host]") ?? null
           );

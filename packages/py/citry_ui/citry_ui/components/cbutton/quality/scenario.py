@@ -15,7 +15,6 @@ def button_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-grid"
             aria-labelledby="button-states-title"
-            x-data="{ clientLoading: false }"
           >
             <h1 id="button-states-title">
               Button states
@@ -82,12 +81,21 @@ def button_states_component(app: Citry) -> type[Component]:
             </c-CButton>
             <c-CButton
               variant="outline"
-              $c-props="{ loading: clientLoading }"
+              :loading="clientLoading"
               @click="clientLoading = true"
             >
               Client-controlled loading
             </c-CButton>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                clientLoading: false
+              };
+            },
+          });
         """
 
     return CitryUiButtonStates

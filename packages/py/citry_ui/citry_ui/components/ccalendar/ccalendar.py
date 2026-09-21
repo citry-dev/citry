@@ -142,6 +142,7 @@ def _first_day(value: object) -> int | None:
 class CCalendar(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
+        client_messages = ("citry-ui-calendar-unavailable",)
 
     class Dependencies:
         js: ClassVar = (FORM_CONTROL_RUNTIME_DEPENDENCY,)
@@ -363,7 +364,26 @@ class CCalendar(LibraryComponent):
             "describedby": cast("str | None", external_described_by),
             "errormessage": cast("str | None", external_error_message),
         }
-        self._cui_calendar_data = client_data
+        prop_names = {
+            "value",
+            "visibleDate",
+            "min",
+            "max",
+            "unavailableDates",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "firstDayOfWeek",
+            "showAdjacentDays",
+            "fixedWeeks",
+            "variant",
+            "size",
+        }
+        self._cui_calendar_data = {
+            "serverDefaults": {key: value for key, value in client_data.items() if key in prop_names},
+            **{key: value for key, value in client_data.items() if key not in prop_names},
+        }
         self._cui_calendar_snapshot = snapshot
         return snapshot
 

@@ -56,7 +56,7 @@ async function exerciseFormatting(folder) {
 	const formatted = (await vscode.workspace.openTextDocument(uri)).getText();
 	assert.notEqual(formatted, source, "Citry formatting did not change the deliberately untidy fixture");
 	if (fixture) {
-		assert.match(formatted, /<article class="card" x-data="/);
+		assert.match(formatted, /<article class="card" v-show="/);
 		assert.doesNotMatch(formatted, /<article class=\\"card\\"/);
 		assert.ok(
 			formatted.includes(

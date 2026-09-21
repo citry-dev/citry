@@ -57,7 +57,7 @@ A single tag can mix all the attribute kinds:
   c-class="theme_class"
   c-disabled="not user.is_active"
   c-bind="extra_attrs"
-  c-:class="alpine_binding"
+  c-:class="vue_binding"
   c-body="<>
     <p>Once upon a time</p>
     <p>in a land far, far away.</p>
@@ -73,8 +73,8 @@ Line by line:
 - `c-disabled="not user.is_active"` is a **dynamic boolean**: a `True` result
   adds the bare attribute, `False` or `None` drops it.
 - `c-bind="extra_attrs"` **spreads** a dict of attributes onto the tag.
-- `c-:class="alpine_binding"` writes a **literal `:class`** attribute (Citry
-  strips one leading `c-`), which a client framework like Vue or Alpine reads.
+- `c-:class="vue_binding"` writes a **literal `:class`** attribute (Citry
+  strips one leading `c-`), which Vue reads in the browser.
 - `c-body="<>...</>"` passes a **nested template** as the value, rendered against
   the same context.
 

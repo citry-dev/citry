@@ -88,12 +88,33 @@ def _repository_root() -> Path:
     raise RuntimeError(msg)
 
 
-def _page() -> str:
+def _page(*, refresh: bool = False) -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
+    if refresh:
+        app.set_mounted_prefix("/citry")
     app.register_library(ComponentLibrary("citry-ui-context-menu-e2e", _COMPONENTS))
 
     class Page(Component):
         citry = app
+
+        js = """$component({
+          data() {
+            const state = Citry.vue.reactive({
+              basicEvents: [], basicActions: [],
+              controlledOpen: false, controlledAccept: false,
+              moveFocusOnClose: false, controlledRequests: [],
+              nativeEvents: [], longClicks: 0, longSubmits: 0,
+              disabledLocked: false, disabledEvents: [],
+              reentrantMutate: false, reentrantRequests: 0,
+              throwingCalls: 0, innerEvents: [], outerEvents: [],
+            });
+            window.__contextState = state;
+            return state;
+          },
+          onServerRender({component}) {
+            window.__contextState = component;
+          },
+        });"""
         css = """
           body {
             min-height: 50rem;
@@ -120,24 +141,19 @@ def _page() -> str:
               <title>ContextMenu browser contract</title>
             </head>
             <body>
-              <section
-                id="basic-owner"
-                x-data="{ events: [], actions: [] }"
-              >
+              <section id="basic-owner">
                 <c-CContextMenu
                   id="basic"
                   aria_label="Document actions"
-                  $c-props="{
-                    onOpenChange: (open, detail) => events.push({
+                  :onOpenChange="(open, detail) => window.__contextState.basicEvents.push({
                       open,
                       reason: detail.reason,
                       controlled: detail.controlled,
                       forced: detail.forced,
                       x: detail.clientX,
                       y: detail.clientY
-                    }),
-                    onAction: (value, detail) => actions.push({ value, kind: detail.kind })
-                  }"
+                    })"
+                  :onAction="(value, detail) => window.__contextState.basicActions.push({ value, kind: detail.kind })"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
@@ -157,32 +173,27 @@ def _page() -> str:
                     </c-CMenuSubmenu>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="basic-events" x-text="JSON.stringify(events)"></output>
-                <output id="basic-actions" x-text="JSON.stringify(actions)"></output>
+                <output id="basic-events" v-text="JSON.stringify(window.__contextState.basicEvents)"></output>
+                <output id="basic-actions" v-text="JSON.stringify(window.__contextState.basicActions)"></output>
               </section>
 
-              <section
-                id="controlled-owner"
-                x-data="{ open: false, accept: false, moveFocusOnClose: false, requests: [] }"
-              >
+              <section id="controlled-owner">
                 <c-CContextMenu
                   id="controlled"
                   aria_label="Controlled actions"
-                  $c-props="{
-                    open,
-                    onOpenChange: (next, detail) => {
-                      requests.push({ next, reason: detail.reason });
+                  :open="window.__contextState.controlledOpen"
+                  :onOpenChange="(next, detail) => {
+                      window.__contextState.controlledRequests.push({ next, reason: detail.reason });
                       if (next) {
-                        if (!accept) return false;
-                        open = true;
+                        if (!window.__contextState.controlledAccept) return false;
+                        window.__contextState.controlledOpen = true;
                         return true;
                       }
-                      open = false;
-                      if (moveFocusOnClose) {
+                      window.__contextState.controlledOpen = false;
+                      if (window.__contextState.moveFocusOnClose) {
                         document.querySelector('#controlled-focus-b').focus();
                       }
-                    }
-                  }"
+                    }"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div
@@ -198,22 +209,31 @@ def _page() -> str:
                     <c-CMenuItem value="inspect">Inspect</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <button id="accept-controlled" @click="accept = true" type="button">Accept</button>
-                <button id="move-controlled-focus" @click="moveFocusOnClose = true" type="button">Move focus</button>
-                <output id="controlled-requests" x-text="JSON.stringify(requests)"></output>
+                <button
+                  id="accept-controlled"
+                  @click="window.__contextState.controlledAccept = true"
+                  type="button"
+                >Accept</button>
+                <button
+                  id="move-controlled-focus"
+                  @click="window.__contextState.moveFocusOnClose = true"
+                  type="button"
+                >Move focus</button>
+                <output
+                  id="controlled-requests"
+                  v-text="JSON.stringify(window.__contextState.controlledRequests)"
+                ></output>
               </section>
 
-              <section id="native-owner" x-data="{ events: [] }">
+              <section id="native-owner">
                 <c-CContextMenu
                   id="native"
                   aria_label="Native preservation"
-                  $c-props="{
-                    onOpenChange: (open, detail) => events.push({
+                  :onOpenChange="(open, detail) => window.__contextState.nativeEvents.push({
                       open,
                       reason: detail.reason,
                       forced: detail.forced
-                    })
-                  }"
+                    })"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div class="target" c-bind="target_attrs" tabindex="0">
@@ -229,17 +249,17 @@ def _page() -> str:
                     <c-CMenuItem value="custom">Custom</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="native-events" x-text="JSON.stringify(events)"></output>
+                <output id="native-events" v-text="JSON.stringify(window.__contextState.nativeEvents)"></output>
               </section>
 
-              <section id="long-owner" x-data="{ clicks: 0, submits: 0 }">
-                <form id="long-form" @submit.prevent="submits += 1">
+              <section id="long-owner">
+                <form id="long-form" @submit.prevent="window.__contextState.longSubmits += 1">
                   <c-CContextMenu id="long" aria_label="Touch actions">
                     <c-fill name="target" data="{ target_attrs }">
                       <button
                         class="target"
                         c-bind="target_attrs"
-                        @click="clicks += 1"
+                        @click="window.__contextState.longClicks += 1"
                         type="submit"
                       >Touch target</button>
                     </c-fill>
@@ -248,23 +268,31 @@ def _page() -> str:
                     </c-fill>
                   </c-CContextMenu>
                 </form>
-                <output id="long-counts" x-text="JSON.stringify({ clicks, submits })"></output>
+                <output
+                  id="long-counts"
+                  v-text="JSON.stringify({
+                    clicks: window.__contextState.longClicks,
+                    submits: window.__contextState.longSubmits,
+                  })"
+                ></output>
               </section>
 
-              <section id="disabled-owner" x-data="{ locked: false, events: [] }">
-                <button id="toggle-locked" @click="locked = !locked" type="button">Toggle</button>
-                <fieldset id="disabled-fieldset" x-bind:disabled="locked">
+              <section id="disabled-owner">
+                <button
+                  id="toggle-locked"
+                  @click="window.__contextState.disabledLocked = !window.__contextState.disabledLocked"
+                  type="button"
+                >Toggle</button>
+                <fieldset id="disabled-fieldset" :disabled="window.__contextState.disabledLocked">
                   <legend>Context target</legend>
                   <c-CContextMenu
                     id="disabled-context"
                     aria_label="Disabled actions"
-                    $c-props="{
-                      onOpenChange: (open, detail) => events.push({
+                    :onOpenChange="(open, detail) => window.__contextState.disabledEvents.push({
                         open,
                         reason: detail.reason,
                         forced: detail.forced
-                      })
-                    }"
+                      })"
                   >
                     <c-fill name="target" data="{ target_attrs }">
                       <button
@@ -278,25 +306,27 @@ def _page() -> str:
                     </c-fill>
                   </c-CContextMenu>
                 </fieldset>
-                <output id="disabled-events" x-text="JSON.stringify(events)"></output>
+                <output id="disabled-events" v-text="JSON.stringify(window.__contextState.disabledEvents)"></output>
               </section>
 
-              <section id="reentrant-owner" x-data="{ mutate: false, requests: 0 }">
-                <button id="arm-reentrant" @click="mutate = true" type="button">Arm</button>
+              <section id="reentrant-owner">
+                <button
+                  id="arm-reentrant"
+                  @click="window.__contextState.reentrantMutate = true"
+                  type="button"
+                >Arm</button>
                 <c-CContextMenu
                   id="reentrant"
                   aria_label="Reentrant actions"
-                  $c-props="{
-                    open: false,
-                    onOpenChange: (next) => {
-                      requests += 1;
-                      if (next && mutate) {
+                  :open="false"
+                  :onOpenChange="(next) => {
+                      window.__contextState.reentrantRequests += 1;
+                      if (next && window.__contextState.reentrantMutate) {
                         document.querySelector('#reentrant-target').remove();
                         return true;
                       }
                       return false;
-                    }
-                  }"
+                    }"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
@@ -309,22 +339,17 @@ def _page() -> str:
                     <c-CMenuItem value="mutate">Mutate</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="reentrant-requests" x-text="requests"></output>
+                <output id="reentrant-requests" v-text="window.__contextState.reentrantRequests"></output>
               </section>
 
-              <section
-                id="throwing-owner"
-                x-data="{ calls: 0 }"
-              >
+              <section id="throwing-owner">
                 <c-CContextMenu
                   id="throwing"
                   aria_label="Throwing actions"
-                  $c-props="{
-                    onOpenChange: () => {
-                      calls += 1;
+                  :onOpenChange="() => {
+                      window.__contextState.throwingCalls += 1;
                       throw new Error('context callback boom');
-                    }
-                  }"
+                    }"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
@@ -337,16 +362,16 @@ def _page() -> str:
                     <c-CMenuItem value="throw">Throw</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="throwing-calls" x-text="calls"></output>
+                <output id="throwing-calls" v-text="window.__contextState.throwingCalls"></output>
               </section>
 
-              <section id="nested-owner" x-data="{ inner: [], outer: [] }">
+              <section id="nested-owner">
                 <c-CContextMenu
                   id="outer-context"
                   aria_label="Outer actions"
-                  $c-props="{
-                    onOpenChange: (open, detail) => outer.push({ open, reason: detail.reason })
-                  }"
+                  :onOpenChange="(open, detail) => window.__contextState.outerEvents.push({
+                    open, reason: detail.reason,
+                  })"
                 >
                   <c-fill name="target" data="{ target_attrs as outer_target_attrs }">
                     <div class="target" c-bind="outer_target_attrs" tabindex="0">
@@ -354,9 +379,9 @@ def _page() -> str:
                       <c-CContextMenu
                         id="inner-context"
                         aria_label="Inner actions"
-                        $c-props="{
-                          onOpenChange: (open, detail) => inner.push({ open, reason: detail.reason })
-                        }"
+                        :onOpenChange="(open, detail) => window.__contextState.innerEvents.push({
+                          open, reason: detail.reason,
+                        })"
                       >
                         <c-fill name="target" data="{ target_attrs }">
                           <button c-bind="target_attrs" type="button">Inner zone</button>
@@ -371,8 +396,8 @@ def _page() -> str:
                     <c-CMenuItem value="outer">Outer action</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="inner-events" x-text="JSON.stringify(inner)"></output>
-                <output id="outer-events" x-text="JSON.stringify(outer)"></output>
+                <output id="inner-events" v-text="JSON.stringify(window.__contextState.innerEvents)"></output>
+                <output id="outer-events" v-text="JSON.stringify(window.__contextState.outerEvents)"></output>
               </section>
 
               <c-CContextMenu id="hostile" aria_label="Hostile repair">
@@ -403,14 +428,28 @@ def _page() -> str:
           </html>
         """
 
-    return str(Page())
+    if not refresh:
+        return app, str(Page())
+
+    class RefreshPage(Page):
+        template = Page.template.replace(
+            "<body>",
+            '<body><button class="refresh-context" type="button" @c-click="refresh">Refresh context</button>',
+        )
+
+        class Events:
+            def refresh(self):
+                return RefreshPage()
+
+    return app, str(RefreshPage())
 
 
 def _load(page) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    _, html = _page()
+    page.set_content(html, wait_until="load")
     page.wait_for_function(
         """
           document.querySelectorAll('[data-citry-context-menu-host]').length === 11
@@ -862,7 +901,7 @@ def test_long_press_suppresses_only_derived_click_and_fieldset_disables_live(pag
     disabled_target = page.locator("#disabled-context-target")
     disabled_target.click(button="right")
     page.wait_for_function("document.querySelector('#disabled-context-menu')?.matches(':popover-open')")
-    page.evaluate("Alpine.$data(document.querySelector('#disabled-owner')).locked = true")
+    page.evaluate("window.__contextState.disabledLocked = true")
     page.wait_for_function(
         """
           !document.querySelector('#disabled-context-menu')?.matches(':popover-open')
@@ -973,7 +1012,7 @@ def test_keyboard_geometry_repairs_on_window_and_shadow_scroll(page) -> None:
     target.focus()
     page.keyboard.press("Shift+F10")
     page.wait_for_function("document.querySelector('#basic-menu')?.matches(':popover-open')")
-    assert target.get_attribute("style") is None
+    assert not target.get_attribute("style")
     page.keyboard.press("Escape")
     page.wait_for_function("!document.querySelector('#basic-menu')?.matches(':popover-open')")
     pointer_style.evaluate("element => element.remove()")
@@ -1217,8 +1256,13 @@ def test_callback_exception_rolls_back_before_native_default_continues(page) -> 
     assert sum("context callback boom" in error for error in errors) == 1
 
 
-def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page) -> None:
-    errors = _load(page)
+def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serve_citry_ui_live) -> None:
+    app, html = _page(refresh=True)
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    page.wait_for_function("document.querySelectorAll('[data-citry-context-menu-initialized]').length === 11")
 
     page.locator("#inner-context-target").click(button="right")
     page.wait_for_function("document.querySelector('#inner-context-menu')?.matches(':popover-open')")
@@ -1231,15 +1275,7 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page) -> N
     before = page.locator("#basic-point").bounding_box()
     assert before is not None
     assert page.locator("#basic").get_attribute("data-invocation") == "pointer"
-    page.evaluate(
-        """
-          () => {
-            const root = document.querySelector('#basic');
-            Alpine.destroyTree(root);
-            Alpine.initTree(root);
-          }
-        """
-    )
+    page.locator(".refresh-context").evaluate("element => element.click()")
     page.wait_for_function(
         """
           document.querySelector('#basic')?.hasAttribute('data-citry-context-menu-initialized')

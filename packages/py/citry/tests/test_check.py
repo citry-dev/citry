@@ -12,6 +12,7 @@ from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
 from citry._checker import TRANSFORM_NOTE, check_project
+from citry._diagnostic_catalog import TEMPLATE_MARKER_NAME_INVALID
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
 
 if TYPE_CHECKING:
@@ -291,40 +292,6 @@ class TestRegistryMode:
         assert report.notes == (TRANSFORM_NOTE,)
         assert len(report.findings) == 1
         assert "Broken.template" in report.findings[0].origin
-
-    def test_static_component_props_report_unknown_and_missing_keys(self, tmp_path):
-        engine = Citry(autodiscover=False)
-
-        class Child(Component):
-            citry = engine
-            js = """
-              $component({
-                props: {
-                  title: { type: String, required: true },
-                  count: { type: Number, required: true },
-                  enabled: { type: Boolean, required: true },
-                },
-                init() {},
-              });
-            """
-            template = """
-              <span></span>
-            """
-
-        class Parent(Component):
-            citry = engine
-            template = """
-              <c-child $c-props="{ title: title, count: 'many', extra: true }" />
-              <c-child $c-props="{ title, ...{} }" />
-            """
-
-        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-
-        assert [finding.code for finding in report.findings if finding.code.startswith("citry.browser.")] == [
-            "citry.browser.incompatible-component-prop",
-            "citry.browser.unknown-component-prop",
-            "citry.browser.missing-component-prop",
-        ]
 
     def test_complete_tag_rules_validate_registered_aliases(self, tmp_path):
         engine = Citry(autodiscover=False)
@@ -722,7 +689,7 @@ class TestRegistryMode:
             citry = engine
             template = """
             <c-i18n c-client="True" tag="main">
-              <span x-text="$i18n.format.number(total, {format: 'missing'})"></span>
+              <span v-text="$i18n.format.number(total, {format: 'missing'})"></span>
             </c-i18n>
             """
             messages = "unused = Present"
@@ -1315,14 +1282,14 @@ def test_registry_check_reports_unknown_alpine_roots_and_respects_component_poli
             colors: list[str]
 
         class Lint:
-            rule_unknown_alpine_variable = "warning"
-            alpine_variables = {"customGlobal": str}
+            rule_unknown_vue_variable = "warning"
+            vue_variables = {"customGlobal": str}
 
     report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.alpine.unknown-variable"]
+    findings = [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
 
     assert [(item.message, item.severity) for item in findings] == [
-        ("Alpine variable 'disabled1' is not available in this component.", "warning")
+        ("Vue variable 'disabled1' is not available in this component.", "warning")
     ]
 
 
@@ -1337,22 +1304,38 @@ def test_registry_check_defaults_unknown_alpine_roots_to_error(tmp_path):
             disabled: bool
 
     report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.alpine.unknown-variable"]
+    findings = [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
 
     assert len(findings) == 1
     assert findings[0].severity == "error"
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected_severity", "expected_exit"),
-    [("off", None, 0), ("warn", "warning", 0), ("strict", "error", 1)],
-)
-def test_registry_check_applies_the_configured_csp_compatibility_mode(
-    tmp_path,
-    mode,
-    expected_severity,
-    expected_exit,
-):
+def test_registry_check_consumes_native_vue_options_namespace(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = '<button @click="save()" :title="label"></button>'
+        js = "$component({ methods: { save() {} }, computed: { label() { return 'ready' } } })"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    assert not [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
+
+
+def test_registry_check_declines_unknown_vue_namespace_after_options_spread(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = '<button @click="dynamicName()"></button>'
+        js = "$component({ methods: { save() {} }, ...dynamicOptions })"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    assert not [item for item in report.findings if item.code == "citry.vue.unknown-variable"]
+
+
+@pytest.mark.parametrize("mode", ["off", "warn", "strict"])
+def test_registry_check_does_not_apply_the_retired_expression_csp_evaluator(tmp_path, mode):
     engine = Citry(autodiscover=False, security_csp=mode)
 
     class Card(Component):
@@ -1363,48 +1346,8 @@ def test_registry_check_applies_the_configured_csp_compatibility_mode(
             items: list[dict[str, int]]
 
     report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
 
-    assert report.exit_code == expected_exit
-    assert [item.severity for item in findings] == ([] if expected_severity is None else [expected_severity])
-
-
-def test_registry_check_reports_one_csp_finding_for_a_shared_template(tmp_path):
-    (tmp_path / "shared.html").write_text('<button @click="items.map(item => item.id)"></button>', encoding="utf-8")
-    engine = Citry(dirs=[tmp_path], autodiscover=False, security_csp="strict")
-
-    class First(Component):
-        citry = engine
-        template_file = "shared.html"
-
-        class JsData:
-            items: list[dict[str, int]]
-
-    class Second(Component):
-        citry = engine
-        template_file = "shared.html"
-
-        class JsData:
-            items: list[dict[str, int]]
-
-    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-
-    assert [item.code for item in report.findings].count("citry.csp.incompatible-browser-code") == 1
-
-
-def test_registry_check_reports_malformed_csp_expression_without_crashing(tmp_path):
-    engine = Citry(autodiscover=False, security_csp="strict")
-
-    class Card(Component):
-        citry = engine
-        template = '<span x-text="\'unterminated"></span>'
-
-    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
-    findings = [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
-
-    assert report.exit_code == 1
-    assert len(findings) == 1
-    assert "unterminated string" in findings[0].message
+    assert not [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
 
 
 def test_registry_check_reports_unknown_component_js_variables_and_missing_context_binding(tmp_path):
@@ -1414,9 +1357,11 @@ def test_registry_check_reports_unknown_component_js_variables_and_missing_conte
         citry = engine
         js = """
         const outside = notCheckedHere;
-        $component(({ data }) => {
-          console.log(data.ready, configuredClient);
-          scope.ready = data.ready;
+        $component({
+          onServerRender({ component }) {
+            console.log(component.ready, configuredClient);
+            scope.ready = component.ready;
+          }
         });
         """
 
@@ -1451,3 +1396,308 @@ def test_registry_check_respects_component_js_rule_severity(tmp_path):
     assert [(item.message, item.severity) for item in findings] == [
         ("Component JavaScript variable 'missingClient' is not defined.", "warning")
     ]
+
+
+_VUE_COMPONENT_PROP_JS = """
+$component({ props: {
+  requiredTitle: { type: String, required: true },
+  requiredCount: { type: Number, required: true },
+  requiredRows: { type: Array, required: true },
+  requiredDefault: { type: Boolean, required: true, default: false },
+  optionalText: { type: String },
+  optionalMixed: { type: [String, Number] },
+  defaultedCount: { type: Number, default: 1 },
+} });
+"""
+_VUE_COMPONENT_PROP_CODES = {
+    "citry.browser.missing-component-prop",
+    "citry.browser.incompatible-component-prop",
+}
+
+
+def _check_vue_component_prop_template(
+    tmp_path: Path,
+    template_source: str,
+    *,
+    dynamic_props: bool = False,
+):
+    engine = Citry(autodiscover=False)
+    type(
+        "Card",
+        (Component,),
+        {
+            "citry": engine,
+            "template": "<div></div>",
+            "js": _VUE_COMPONENT_PROP_JS,
+            "__module__": __name__,
+        },
+    )
+    page_namespace: dict[str, object] = {
+        "citry": engine,
+        "template": template_source,
+        "__module__": __name__,
+    }
+    if dynamic_props:
+
+        class PageJsData:
+            dynamic_props: dict[str, str]
+
+        page_namespace["JsData"] = PageJsData
+    type("Page", (Component,), page_namespace)
+    return check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+
+def _vue_component_prop_findings(report):
+    return [finding for finding in report.findings if finding.code in _VUE_COMPONENT_PROP_CODES]
+
+
+def _check_mark_template(tmp_path: Path, template_source: str):
+    engine = Citry(autodiscover=False)
+    type(
+        "Page",
+        (Component,),
+        {"citry": engine, "template": template_source, "__module__": __name__},
+    )
+    return check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+
+def test_registry_check_reports_native_vue_component_prop_presence_and_literal_types(tmp_path):
+    valid = (
+        '<c-card :required-title="\'ready\'" :requiredCount="2" v-bind:required-rows="[]" '
+        ':requiredDefault="false" :optional-text="null" :optional-mixed="null" '
+        ':defaultedCount="null" ordinary="fall-through attribute" />'
+    )
+    assert _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, valid)) == []
+
+    missing = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, "<c-card />"))
+    assert [finding.code for finding in missing] == ["citry.browser.missing-component-prop"] * 4
+    assert [finding.message for finding in missing] == [
+        "Required Vue prop 'requiredTitle' is missing for <c-card>.",
+        "Required Vue prop 'requiredCount' is missing for <c-card>.",
+        "Required Vue prop 'requiredRows' is missing for <c-card>.",
+        "Required Vue prop 'requiredDefault' is missing for <c-card>.",
+    ]
+    assert all(finding.start_index == 1 and finding.end_index == 7 for finding in missing)
+
+    incompatible_source = (
+        '<c-card :required-title="1" :requiredCount="\'many\'" :requiredRows="1" :requiredDefault="false" />'
+    )
+    incompatible = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, incompatible_source))
+    assert [finding.code for finding in incompatible] == ["citry.browser.incompatible-component-prop"] * 3
+    assert [finding.message for finding in incompatible] == [
+        "Vue prop 'required-title' expects string, but this binding is number.",
+        "Vue prop 'requiredCount' expects number, but this binding is string.",
+        "Vue prop 'requiredRows' expects unknown[], but this binding is number.",
+    ]
+    expected_ranges = (
+        (incompatible_source.index(':required-title="') + len(':required-title="'), 1),
+        (incompatible_source.index(':requiredCount="') + len(':requiredCount="'), len("'many'")),
+        (incompatible_source.index(':requiredRows="') + len(':requiredRows="'), 1),
+    )
+    assert [(finding.start_index, finding.end_index) for finding in incompatible] == [
+        (start, start + width) for start, width in expected_ranges
+    ]
+
+
+def test_registry_check_tracks_vue_component_prop_spread_order_and_dynamic_uncertainty(tmp_path):
+    check = lambda source: _vue_component_prop_findings(  # noqa: E731 - keep scenario inputs compact
+        _check_vue_component_prop_template(tmp_path, source, dynamic_props=True)
+    )
+    static_object = (
+        "<c-card v-bind=\"{ requiredTitle: 'ready', requiredCount: 2, requiredRows: [], requiredDefault: false }\" />"
+    )
+    assert check(static_object) == []
+
+    assert check('<c-card v-bind="dynamic_props" />') == []
+
+    explicit_after_dynamic = '<c-card v-bind="dynamic_props" :required-title="1" />'
+    after = check(explicit_after_dynamic)
+    assert [finding.code for finding in after] == ["citry.browser.incompatible-component-prop"]
+    assert after[0].message == "Vue prop 'required-title' expects string, but this binding is number."
+    assert after[0].start_index == explicit_after_dynamic.index(':required-title="') + len(':required-title="')
+    assert after[0].end_index == after[0].start_index + 1
+
+    explicit_before_dynamic = '<c-card :required-title="1" v-bind="dynamic_props" />'
+    assert check(explicit_before_dynamic) == []
+
+
+def test_registry_check_maps_vue_prop_ranges_after_utf8_text(tmp_path):
+    source = 'é<c-card :required-title="1" :requiredCount="2" :requiredRows="[]" :requiredDefault="false" />'
+
+    findings = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, source))
+
+    assert len(findings) == 1
+    finding = findings[0]
+    value_start = len(source[: source.index(':required-title="') + len(':required-title="')].encode("utf-8"))
+    utf16_column = len(source[: source.index(':required-title="') + len(':required-title="')].encode("utf-16-le")) // 2
+    assert finding.code == "citry.browser.incompatible-component-prop"
+    assert (finding.start_index, finding.end_index) == (value_start, value_start + 1)
+    assert (finding.line, finding.column, finding.end_line, finding.end_column) == (
+        0,
+        utf16_column,
+        0,
+        utf16_column + 1,
+    )
+
+
+@pytest.mark.parametrize("asset_kind", ["inline", "file"])
+def test_registry_check_precollects_shared_vue_props_without_loading_js(tmp_path, monkeypatch, asset_kind):
+    import citry.component as component_module
+
+    def fail_load_js(*args, **kwargs):
+        pytest.fail("the registry check must inspect authored JavaScript without loading the component asset")
+
+    monkeypatch.setattr(component_module, "load_js", fail_load_js)
+    engine = Citry(autodiscover=False)
+    browser_source: dict[str, object] = {}
+    if asset_kind == "inline":
+        browser_source["js"] = _VUE_COMPONENT_PROP_JS
+    else:
+        javascript_file = tmp_path / "props.js"
+        javascript_file.write_text(_VUE_COMPONENT_PROP_JS, encoding="utf-8")
+        browser_source["js_file"] = javascript_file
+
+    card_namespace = {
+        "citry": engine,
+        "template": "<div></div>",
+        "__module__": __name__,
+        **browser_source,
+    }
+    Card = type("Card", (Component,), card_namespace)
+    type("AliasCard", (Card,), {"name": "alias-card", "__module__": __name__})
+
+    shared_template = tmp_path / "shared.html"
+    shared_template.write_text("<c-card /><c-alias-card />", encoding="utf-8")
+    for page_name in ("PageOne", "PageTwo"):
+        type(
+            page_name,
+            (Component,),
+            {"citry": engine, "template_file": shared_template, "__module__": __name__},
+        )
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    findings = _vue_component_prop_findings(report)
+    expected = [
+        f"Required Vue prop '{name}' is missing for <c-card>."
+        for name in ("requiredTitle", "requiredCount", "requiredRows", "requiredDefault")
+    ] + [
+        f"Required Vue prop '{name}' is missing for <c-alias-card>."
+        for name in ("requiredTitle", "requiredCount", "requiredRows", "requiredDefault")
+    ]
+    assert [finding.message for finding in findings] == expected
+    assert len([finding for finding in report.findings if finding.origin == str(shared_template)]) == 8
+
+
+def test_registry_check_keeps_unknown_child_diagnostics_and_known_vue_props(tmp_path):
+    source = (
+        '<c-card :required-title="\'ready\'" :requiredCount="2" :requiredRows="[]" '
+        ':requiredDefault="false" ordinary="fall-through" /><c-ghost />'
+    )
+
+    report = _check_vue_component_prop_template(tmp_path, source)
+
+    assert _vue_component_prop_findings(report) == []
+    assert [(finding.code, finding.message) for finding in report.findings] == [
+        ("citry.template.unknown-component", "Component <c-ghost> is not registered.")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "message", "start_marker", "end_marker"),
+    [
+        (
+            '<c-component is="mark" />',
+            "Marker requires a literal name attribute.",
+            "c-component",
+            "c-component",
+        ),
+        (
+            '<c-component is="mark" :name="dynamic" />',
+            "Marker name must be a static literal.",
+            ":name",
+            "dynamic",
+        ),
+        (
+            '<c-component is="mark" name="9bad" />',
+            "Marker name must match [A-Za-z][A-Za-z0-9_-]*.",
+            "9bad",
+            "9bad",
+        ),
+        (
+            '<c-component is="mark" name="valid" title="extra" />',
+            "Marker accepts only its name attribute.",
+            "title",
+            "title",
+        ),
+        (
+            '<c-component is="mark" name="valid" NAME="other" />',
+            "Marker accepts only its name attribute.",
+            "NAME",
+            "NAME",
+        ),
+        (
+            '<c-component is="mark" name="valid"><c-fill name="Default">x</c-fill></c-component>',
+            "Marker accepts only its default slot.",
+            "Default",
+            "Default",
+        ),
+        (
+            '<c-component is="mark" name="valid"><c-fill c-name="fillName">x</c-fill></c-component>',
+            "Marker accepts only its default slot.",
+            "fillName",
+            "fillName",
+        ),
+        (
+            '<c-mark name="9bad" />',
+            "Marker name must match [A-Za-z][A-Za-z0-9_-]*.",
+            "9bad",
+            "9bad",
+        ),
+    ],
+)
+def test_registry_check_reports_invalid_literal_marker_authoring(
+    tmp_path: Path,
+    source: str,
+    message: str,
+    start_marker: str,
+    end_marker: str,
+):
+    report = _check_mark_template(tmp_path, source)
+
+    findings = [finding for finding in report.findings if finding.code == TEMPLATE_MARKER_NAME_INVALID]
+
+    assert len(findings) == 1
+    finding = findings[0]
+    expected_start = len(source[: source.index(start_marker)].encode("utf-8"))
+    expected_end = len(source[: source.index(end_marker) + len(end_marker)].encode("utf-8"))
+    assert finding.message == message
+    assert (finding.start_index, finding.end_index) == (expected_start, expected_end)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<c-component c-is="selector" name="valid" />',
+        '<c-component is="card" />',
+    ],
+)
+def test_registry_check_leaves_dynamic_and_nonmark_component_selectors_alone(tmp_path: Path, source: str):
+    report = _check_mark_template(tmp_path, source)
+
+    assert not [finding for finding in report.findings if finding.code == TEMPLATE_MARKER_NAME_INVALID]
+
+
+@pytest.mark.parametrize(
+    ("source", "message_fragment"),
+    [
+        ('<c-mark :name="dynamic" />', "must have one of the following attributes: 'name', 'c-name'"),
+        ('<c-mark NAME="other" />', "Found invalid attributes: NAME"),
+        ('<c-component is="mark" name="one" name="two" />', "Duplicate attribute 'name' found."),
+    ],
+)
+def test_registry_check_keeps_parser_owned_mark_syntax_rejections(tmp_path: Path, source: str, message_fragment: str):
+    report = _check_mark_template(tmp_path, source)
+
+    assert [finding.code for finding in report.findings] == ["citry.parse.syntax"]
+    assert message_fragment in report.findings[0].message

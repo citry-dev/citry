@@ -78,12 +78,12 @@ jobs:
       - name: Run the check suite
         run: python scripts/check.py --profile full
 
-      # Run the package's CLI directly as well as through pytest. `-S` hides
-      # installed site packages, exercising its standard-library schema checker.
-      # `always()` preserves check.py's run-every-phase diagnostic behavior.
-      - name: Validate the client graph protocol package directly
+      # Run the Vue client and Events package checks directly as well as through
+      # check.py. `always()` preserves check.py's run-every-phase diagnostic
+      # behavior when an earlier phase fails.
+      - name: Check the Vue client package directly
         if: always()
-        run: python -S packages/protocol/client_graph/v1/validate.py
+        run: pnpm --dir packages/js/citry-client run check
 
       - name: Validate the Events protocol package directly
         if: always()
@@ -93,4 +93,4 @@ jobs:
         if: always()
         run: >-
           uv run --no-sync python -m packages.protocol._tooling.check
-          packages/protocol/events/v1 packages/protocol/client_graph/v1
+          packages/protocol/events/v1

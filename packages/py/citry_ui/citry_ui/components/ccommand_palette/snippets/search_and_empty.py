@@ -38,7 +38,6 @@ class SearchAndEmpty(Component):
     template = """
       <section
         class="command-palette-search"
-        x-data="{open:true,query:'theme'}"
       >
         <h2>Exact substring search</h2>
         <div role="group" aria-label="Search examples">
@@ -51,15 +50,19 @@ class SearchAndEmpty(Component):
           label="Appearance commands"
           c-entries="commands"
           empty_label="No appearance commands match"
-          $c-props="{
-            open,
-            query,
-            onOpenChange:(value)=>open=value,
-            onQueryChange:(value)=>query=value,
-          }"
+          :open="open" :query="query" :onOpenChange="(value)=>open=value" :onQueryChange="(value)=>query=value"
         />
-        <output>Owner query: <span x-text="query || 'empty'">theme</span></output>
+        <output>Owner query: <span v-text="query || 'empty'">theme</span></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open:true,query:'theme'
+          };
+        },
+      });
     """
 
     css = """

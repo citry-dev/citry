@@ -71,7 +71,7 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
         template = """
           <c-CAccordion>
             <c-for each="item in items">
-              <c-CAccordionItem c-value="f'item-{item}'">
+              <c-CAccordionItem #c-key="item" c-value="f'item-{item}'">
                 <c-fill name="title">Section {{ item }}</c-fill>
                 <c-fill name="default">Panel {{ item }}</c-fill>
               </c-CAccordionItem>

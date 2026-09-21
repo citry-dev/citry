@@ -35,6 +35,7 @@ _ROOT_OWNED = frozenset(
         "hidden",
         "id",
         "inert",
+        "ref",
         "role",
         "tabindex",
     }
@@ -130,6 +131,11 @@ class CInfiniteScroll(LibraryComponent):
     class Slots:
         default: SlotInput[CInfiniteScrollDefaultSlotData] | None = None
 
+    @dataclass(slots=True)
+    class JsData:
+        # Keep this camelCase spelling in sync with the JavaScript data key.
+        serverDefaults: dict[str, object]  # noqa: N815
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_infinite_scroll_snapshot", None)
         if cached is not None:
@@ -207,12 +213,19 @@ class CInfiniteScroll(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            key: snapshot[key]
-            for key in ("has_more", "loading", "error", "disabled", "auto", "root_margin", "threshold")
+            "serverDefaults": {
+                "hasMore": snapshot["has_more"],
+                "loading": snapshot["loading"],
+                "error": snapshot["error"],
+                "disabled": snapshot["disabled"],
+                "auto": snapshot["auto"],
+                "rootMargin": snapshot["root_margin"],
+                "threshold": snapshot["threshold"],
+            }
         }
 
     template = """
-      <div class="cui-infinite-scroll" c-id="root_id" c-bind="root_attrs" data-citry-ui-part="infinite-scroll">
+      <div ref="root" class="cui-infinite-scroll" c-id="root_id" c-bind="root_attrs" data-citry-ui-part="infinite-scroll">
         <div c-aria-busy="content_busy" data-citry-ui-part="content">{{ content }}</div>
         <div data-citry-ui-part="status" role="status" aria-live="polite" aria-atomic="true">
           <span c-hidden="not show_loading" c-$c-tr:citry-ui-infinite-scroll-loading="True if catalog['loading'] else None">{{ tr('citry-ui-infinite-scroll-loading') if catalog['loading'] else labels['loading'] }}</span>

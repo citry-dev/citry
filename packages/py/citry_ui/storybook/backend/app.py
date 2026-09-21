@@ -95,13 +95,11 @@ def _render(
                 scenario_id=scenario.id,
                 content=content,
             ).render(citry=engine)
-            if scenario.client_interactive:
-                html = rendered.serialize(deps_strategy="fragment")
-            else:
-                html = rendered.serialize(
-                    deps_strategy="simple",
-                    deps_position="prepend",
-                )
+            # Scenario metadata controls the readiness policy, while the
+            # rendered component graph decides whether browser assets exist.
+            # Fragment serialization preserves either outcome without dropping
+            # Vue Options from a scenario classified as statically inspectable.
+            html = rendered.serialize(deps_strategy="fragment")
     except ScenarioArgsError as error:
         return _response(request, str(error), status=400)
     return _response(request, html, content_type="text/html; charset=utf-8")

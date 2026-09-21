@@ -1,5 +1,7 @@
 """Browser tests for CTooltip's owned overlay behavior."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +20,7 @@ def _tooltip_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {controlled:false,open:false,accept:false,disabled:false,placement:'top',label:'Jupiter moon'};}});"
         css = """
           :where(.space-tooltip) {
             --cui-tooltip-background: rgb(15 35 54);
@@ -32,16 +35,7 @@ def _tooltip_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                controlled: false,
-                open: false,
-                accept: false,
-                disabled: false,
-                placement: 'top',
-                label: 'Jupiter moon',
-              }"
-            >
+            <body>
               <main style="display: flex; gap: 6rem; padding: 220px; min-block-size: 900px">
                 <c-CTooltip
                   id="europa-tooltip"
@@ -49,12 +43,11 @@ def _tooltip_page() -> str:
                   class_="space-tooltip"
                   c-delay="60"
                   c-close_delay="120"
-                  $c-props="{
-                    open: controlled ? open : undefined,
-                    text: label,
-                    disabled,
-                    placement,
-                    onOpenChange: (nextOpen, detail) => {
+                  :open="controlled ? open : undefined"
+                  :text="label"
+                  :disabled="disabled"
+                  :placement="placement"
+                  :onOpenChange="(nextOpen, detail) => {
                       window.__tooltipRequest = {
                         nextOpen,
                         reason: detail.reason,
@@ -63,8 +56,7 @@ def _tooltip_page() -> str:
                       };
                       window.__tooltipRequests = (window.__tooltipRequests || 0) + 1;
                       if (accept) open = nextOpen;
-                    },
-                  }"
+                    }"
                 >
                   <c-fill name="activator" data="{ activator_attrs }">
                     <c-CButton c-attrs="activator_attrs">
@@ -363,7 +355,7 @@ def test_controlled_owner_can_decline_then_accept_requests(page):
     page.locator("#force-open").click()
     page.wait_for_function("document.querySelector('#europa-tooltip').matches(':popover-open')")
     requests = page.evaluate("window.__tooltipRequests")
-    page.evaluate("Alpine.$data(document.body).open = false")
+    page.evaluate("window.__state.open = false")
     page.wait_for_function("!document.querySelector('#europa-tooltip').matches(':popover-open')")
     assert page.evaluate("window.__tooltipRequests") == requests
 

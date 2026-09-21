@@ -8,10 +8,6 @@ class TagsInputFormsAndReset(Component):
     template = """
       <section
         class="tags-input-forms"
-        x-data="{
-          cancelReset:false,
-          result:'No Form action yet',
-        }"
       >
         <form
           id="tags-input-external-form"
@@ -45,7 +41,7 @@ class TagsInputFormsAndReset(Component):
         />
 
         <label>
-          <input type="checkbox" x-model="cancelReset" />
+          <input type="checkbox" v-model="cancelReset" />
           Cancel the next reset
         </label>
 
@@ -66,10 +62,20 @@ class TagsInputFormsAndReset(Component):
           />
         </div>
 
-        <output aria-live="polite" x-text="result">
+        <output aria-live="polite" v-text="result">
           No Form action yet
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            cancelReset:false,
+            result:'No Form action yet',
+          };
+        },
+      });
     """
 
     css = """

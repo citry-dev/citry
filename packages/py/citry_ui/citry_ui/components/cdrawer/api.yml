@@ -38,7 +38,7 @@ inputs:
       - {id: close-label, name: close_label, type: non-empty str, default: {kind: literal, value: Close}, effect: Names the built-in close Button.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Merges consumer classes onto the native Dialog.}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Merges consumer inline styles onto the native Dialog.}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native Dialog, ARIA, Alpine, and data attributes without replacing owned state or structure.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native Dialog, ARIA, Vue, and data attributes without replacing owned state or structure.'}
 
   - id: cdrawer-client-inputs
     component: CDrawer

@@ -12,7 +12,13 @@ from citry_ui import CToolbar
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(template: str, *, include_css: bool = False, data: dict[str, object] | None = None) -> str:
+def _render(
+    template: str,
+    *,
+    include_css: bool = False,
+    data: dict[str, object] | None = None,
+    static_fallback: bool = False,
+) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("{{ css }}" if include_css else "")
@@ -24,7 +30,8 @@ def _render(template: str, *, include_css: bool = False, data: dict[str, object]
         def template_data(self, kwargs, slots):
             return {"css": app.get("css")(), **(data or {})}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _root(html: str) -> str:
@@ -57,7 +64,7 @@ def test_schema_defaults_and_public_types_are_exact() -> None:
 
 
 def test_default_toolbar_renders_named_horizontal_composite() -> None:
-    root = _root(_render(_toolbar()))
+    root = _root(_render(_toolbar(), static_fallback=True))
     assert 'role="toolbar"' in root
     assert 'aria-label="Editor tools"' in root
     assert 'aria-orientation="horizontal"' in root
@@ -73,7 +80,8 @@ def test_configuration_and_root_customization_are_exact() -> None:
             '<c-CToolbar label="Map tools" orientation="vertical" c-loop="False" '
             'variant="outline" size="lg" class_="custom" '
             "style=\"inline-size:20rem\" c-attrs=\"{'data-test': 'toolbar'}\">"
-            "<button>A</button><button>B</button><button>C</button></c-CToolbar>"
+            "<button>A</button><button>B</button><button>C</button></c-CToolbar>",
+            static_fallback=True,
         )
     )
     assert 'class="cui-toolbar custom"' in root

@@ -135,7 +135,7 @@ Decorative and meaningful semantics are decided on the server and work without
 JavaScript. The SVG is non-interactive, ignores pointer events, and contains
 only reviewed package-owned geometry.
 
-`attrs` accepts inert metadata but rejects executable Alpine and Citry
+`attrs` accepts inert metadata but rejects executable Vue and Citry
 directives, event attributes, geometry, focus controls, and accessible-name
 overrides. Citry runtime data namespaces are reserved. Trusted
 `Markup`/`__html__` values are rejected across every input, including nested

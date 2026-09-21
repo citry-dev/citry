@@ -136,8 +136,8 @@ class CSpinner(LibraryComponent):
         self,
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
-    ) -> dict[str, str]:
-        return self._normalized(kwargs)
+    ) -> dict[str, dict[str, str]]:
+        return {"serverDefaults": self._normalized(kwargs)}
 
     template = """
       <span
@@ -158,8 +158,10 @@ class CSpinner(LibraryComponent):
           intent: {},
           size: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const spinner = els[0];
+        onServerRender: ({component}) => {
+          const spinner = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
           const allowedValues = {
             intent: ["neutral", "primary", "success", "warn", "danger"],
             size: ["sm", "md", "lg"],
@@ -214,7 +216,7 @@ class CSpinner(LibraryComponent):
             }
           };
 
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             setAttribute("aria-label", resolveLabel());
             setData("intent", resolveChoice("intent"));
             setData("size", resolveChoice("size"));

@@ -33,7 +33,7 @@ inputs:
       - {id: close-label, name: close_label, type: non-empty str, default: {kind: literal, value: Close}, effect: Sets the built-in close Button's accessible name.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native Dialog classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native Dialog inline styles from CSS text, a property mapping, or nested sequence and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native Dialog, ARIA, Alpine, and data attributes. It may also contribute class and style values; prefer the top-level inputs for those.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native Dialog, ARIA, Vue, and data attributes. It may also contribute class and style values; prefer the top-level inputs for those.'}
 
   - id: cdialog-client-inputs
     component: CDialog

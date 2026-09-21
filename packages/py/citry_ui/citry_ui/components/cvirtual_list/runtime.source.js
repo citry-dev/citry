@@ -1,7 +1,10 @@
 $component({
   props: {overscan: {}, itemSize: {}, onRangeChange: {}},
-  init: ({els, data, props, effect}) => {
-    const root = els[0];
+  onServerRender: ({component}) => {
+    const root = component.$refs.root.$el;
+    const data = component.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
     const before = root.querySelector('[data-citry-virtual-list-spacer="before"]');
     const after = root.querySelector('[data-citry-virtual-list-spacer="after"]');
     const handoffKey = Symbol.for("citry-ui:virtual-list-handoff");

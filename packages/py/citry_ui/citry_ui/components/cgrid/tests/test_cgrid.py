@@ -279,20 +279,28 @@ def test_roots_reject_owned_runtime_and_structural_attributes(component, attribu
         _render(component(attrs={attribute: "consumer"}))
 
 
-def test_roots_allow_unrelated_targeted_bindings_and_listeners():
-    html = _render(
-        CGrid(
-            attrs={
-                "x-data": "{selected: false}",
-                ":class": "{selected}",
-                "@click": "selected = true",
-            }
-        )
-    )
+def test_python_attrs_reject_executable_vue_bindings():
+    with pytest.raises(RuntimeError, match="cannot come from"):
+        _render(CGrid(attrs={":class": "{selected}"}))
 
-    assert 'x-data="{selected: false}"' in html
-    assert ':class="{selected}"' in html
-    assert '@click="selected = true"' in html
+
+def test_authored_native_template_bindings_remain_compilable():
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = (
+            '<main x-data="{selected: false}">'
+            '<button :class="{selected}" @click="selected = true">Select</button>'
+            "<c-CGrid />"
+            "</main>"
+        )
+
+    html = str(Page())
+    assert '"x-data": "{selected: false}"' in html
+    assert "_normalizeClass({selected: _ctx.selected})" in html
+    assert "onClick: $event => (_ctx.selected = true)" in html
 
 
 def test_css_exposes_breakpoints_variables_and_direct_child_safety_without_javascript():

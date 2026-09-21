@@ -7,8 +7,10 @@ for a small inline source and for the real ``content/index.md``.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from lxml import html as lxml_html
 from pygments.lexers import get_lexer_by_name
 
 from docs_site._internal.build import configure_docs_globals
@@ -35,9 +37,34 @@ print("hello")
 """
 
 
+def _prepared_render(html: str) -> tuple[dict, str]:
+    document = lxml_html.document_fromstring(html)
+    marker = "CitryStable.startPrepared("
+    [script] = [node for node in document.xpath("//script") if node.text and marker in node.text]
+    start = script.text.index(marker) + len(marker)
+    transport, _ = json.JSONDecoder().raw_decode(script.text[start:])
+    assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
+    render_source = "\n".join(
+        node.text for node in document.xpath("//script") if node.text and "function render(_ctx, _cache" in node.text
+    )
+    return transport, render_source
+
+
+def _landing_opaque_html(transport: dict) -> str:
+    manifest = transport["manifest"]
+    root = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
+    [call] = root["preparedData"]["calls"].values()
+    assert call["parentId"] == root["id"]
+    child = next(item for item in manifest["occurrences"] if item["id"] == call["id"])
+    assert child["parentId"] == root["id"]
+    [record] = child["preparedData"]["opaqueHtml"].values()
+    return record["html"]
+
+
 def test_full_page_structure() -> None:
     result = render_page(SAMPLE)
     html = result.html
+    document = lxml_html.document_fromstring(html)
 
     # A complete HTML document came out.
     assert "<!DOCTYPE html>" in html
@@ -45,9 +72,9 @@ def test_full_page_structure() -> None:
     assert "</html>" in html
 
     # Head metadata from the front matter.
-    assert "<title>Sample - Citry</title>" in html
-    assert '<meta name="description" content="A sample page."/>' in html
-    assert '<meta name="robots" content="index,follow"/>' in html
+    assert document.xpath("string(//title)") == "Sample - Citry"
+    assert document.xpath('string(//meta[@name="description"]/@content)') == "A sample page."
+    assert document.xpath('string(//meta[@name="robots"]/@content)') == "index,follow"
 
     # Content wrapper and rendered markdown (the article also carries the
     # search-index hook, so match the opening tag rather than an exact string).
@@ -201,12 +228,14 @@ def test_content_index_renders() -> None:
     configure_docs_globals(config)
     source = (config.content_dir / "index.md").read_text(encoding="utf-8")
     result = render_page(source)
-    html = result.html
+    transport, render_source = _prepared_render(result.html)
 
-    assert "<!DOCTYPE html>" in html
+    assert "<!DOCTYPE html>" in result.html
     assert result.meta.layout == "landing"
-    assert 'class="landing-shell"' in html
-    assert 'class="djc-layout"' not in html
+    assert 'class: "landing-shell"' in render_source
+    assert 'id: "landing-main"' in render_source
+    assert 'class: "djc-layout"' not in render_source
+    assert '<section class="landing-hero">' in _landing_opaque_html(transport)
     assert isinstance(result.toc_tokens, list)
 
 
@@ -222,17 +251,20 @@ def test_site_default_description_backfills_a_page_with_no_usable_body() -> None
     # the meta/OG/Twitter description tags (they are never left empty).
     html = render_page("---\ntitle: Bare\n---\n\n# Bare page\n").html
     default = config.default_description
-    assert f'<meta name="description" content="{default}"/>' in html
-    assert f'<meta property="og:description" content="{default}"' in html
-    assert f'<meta name="twitter:description" content="{default}"' in html
+    document = lxml_html.document_fromstring(html)
+    assert document.xpath('string(//meta[@name="description"]/@content)') == default
+    assert document.xpath('string(//meta[@property="og:description"]/@content)') == default
+    assert document.xpath('string(//meta[@name="twitter:description"]/@content)') == default
 
 
 def test_first_paragraph_beats_site_default_at_render() -> None:
     # With no front-matter description but a real first paragraph, the derived
     # paragraph wins over the site default (tier 2 before tier 3).
     html = render_page("---\ntitle: T\n---\n\nA real intro paragraph.\n").html
-    assert '<meta name="description" content="A real intro paragraph."/>' in html
-    assert config.default_description not in html
+    document = lxml_html.document_fromstring(html)
+    description = document.xpath('string(//meta[@name="description"]/@content)')
+    assert description == "A real intro paragraph."
+    assert description != config.default_description
 
 
 def test_internal_md_link_rewritten_external_untouched(tmp_path: Path) -> None:

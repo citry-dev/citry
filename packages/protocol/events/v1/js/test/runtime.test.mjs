@@ -239,7 +239,6 @@ test("every public validator checks strict JSON before record shape", () => {
 	instance.publicState = { self: instance };
 	const manifest = {
 		protocol: protocol.PROTOCOL,
-		clientGraphRevision: null,
 		componentClasses: [],
 		componentInstances: [],
 	};
@@ -355,7 +354,93 @@ test("result preflight validates an entire batch before returning any result", (
 	assert.equal(checked.issue.path, "/results/1/actions/0/url");
 });
 
-test("exchange validation enforces advertised actions and swaps", () => {
+test("result validators keep strict-JSON precedence and caller path prefixes", () => {
+	const invalid = {
+		requestId: "request-1",
+		results: [
+			{
+				ok: true,
+				actions: [{ action: "data", value: { nested: Number.NaN } }],
+			},
+		],
+	};
+	assert.deepEqual(protocol.validateResultEnvelope(invalid, "/reply"), {
+		path: "/reply/results/0/actions/0/value/nested",
+		category: "strict_json",
+		message: "The value contains a non-finite number.",
+	});
+	assert.deepEqual(
+		protocol.validateAction(
+			{ action: "event", eventName: "changed", detail: { value: undefined } },
+			"/action",
+		),
+		{
+			path: "/action/detail/value",
+			category: "strict_json",
+			message: "The value contains a non-JSON value.",
+		},
+	);
+});
+
+test("result preflight validates nested accessors once without invoking them", () => {
+	const calls = protocol.buildCallEnvelope("request-1", [
+		protocol.buildCall({
+			componentClassId: "Counter",
+			handlerName: "increment",
+			args: {},
+		}),
+	]);
+	let getterCalls = 0;
+	const detail = {};
+	Object.defineProperty(detail, "value", {
+		enumerable: true,
+		get() {
+			getterCalls += 1;
+			return "hidden";
+		},
+	});
+	const checked = protocol.preflightResultEnvelope(
+		{
+			protocol: protocol.PROTOCOL,
+			requestId: "request-1",
+			results: [
+				{
+					ok: true,
+					actions: [{ action: "event", eventName: "changed", detail }],
+				},
+			],
+		},
+		calls,
+	);
+	assert.equal(checked.ok, false);
+	assert.deepEqual(checked.issue, {
+		path: "/results/0/actions/0/detail/value",
+		category: "strict_json",
+		message: "A JSON property must be an enumerable data property.",
+	});
+	assert.equal(getterCalls, 0);
+});
+
+test("successful result preflight preserves the validated result array identity", () => {
+	const calls = protocol.buildCallEnvelope("request-1", [
+		protocol.buildCall({
+			componentClassId: "Counter",
+			handlerName: "increment",
+			args: {},
+		}),
+	]);
+	const reply = {
+		protocol: protocol.PROTOCOL,
+		requestId: "request-1",
+		results: [{ ok: true, actions: [{ action: "data", value: { count: 1 } }] }],
+	};
+	const checked = protocol.preflightResultEnvelope(reply, calls);
+	assert.equal(checked.ok, true);
+	assert.equal(checked.results, reply.results);
+	assert.equal(checked.results[0], reply.results[0]);
+});
+
+test("exchange validation enforces advertised actions, swaps, and renderers", () => {
 	const call = protocol.buildCall({
 		componentClassId: "Counter",
 		handlerName: "increment",
@@ -393,6 +478,45 @@ test("exchange validation enforces advertised actions and swaps", () => {
 		path: "/results/0/actions/0/swap",
 		category: "capability",
 		message: "The result uses a swap the caller did not advertise.",
+	});
+
+	const prepared = {
+		action: "render",
+		target: "render:counter_1",
+		swap: "none",
+		renderer: "vue-prepared/1",
+		prepared: { revision: "r1" },
+	};
+	assert.equal(protocol.validateAction(prepared), null);
+	assert.deepEqual(
+		protocol.validateAction({
+			...prepared,
+			prepared: { missingSchemaField: true, nested: Number.NaN },
+		}),
+		{
+			path: "/prepared/nested",
+			category: "strict_json",
+			message: "The value contains a non-finite number.",
+		},
+	);
+	for (const invalid of [
+		{ ...prepared, html: "<p>mixed</p>" },
+		{ ...prepared, prepared: [] },
+		{ ...prepared, renderer: "unknown/1" },
+	])
+		assert.ok(protocol.validateAction(invalid));
+	const htmlOnly = protocol.buildCallEnvelope("request-renderer", [call], {
+		actions: ["render"],
+		swaps: ["none"],
+		renderers: ["html-fragment/1"],
+	});
+	const preparedReply = protocol.buildResultEnvelope("request-renderer", [
+		protocol.buildOkResult([prepared]),
+	]);
+	assert.deepEqual(protocol.validateExchange(htmlOnly, preparedReply), {
+		path: "/results/0/actions/0/renderer",
+		category: "capability",
+		message: "The result uses a renderer the caller did not advertise.",
 	});
 });
 

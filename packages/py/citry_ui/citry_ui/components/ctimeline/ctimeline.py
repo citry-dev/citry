@@ -337,6 +337,7 @@ class CInternalTimeline(LibraryComponent):
       <ol class="cui-timeline" c-bind="attrs" data-citry-ui-part="timeline">
         <c-for each="item in items">
           <c-CInternalTimelineItem
+            #c-key="item['index']"
             c-declaration="item['declaration']"
             c-index="item['index']"
             c-count="count"

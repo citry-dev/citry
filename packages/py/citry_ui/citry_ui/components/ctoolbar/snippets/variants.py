@@ -8,6 +8,7 @@ class ToolbarVariants(Component):
     template = """
       <c-CCol gap="md">
         <c-CToolbar
+          #c-key="f'{variant}-{size}'"
           c-for="variant, size in [('plain', 'sm'), ('soft', 'md'), ('outline', 'lg')]"
           c-label="variant + ' ' + size + ' tools'"
           c-variant="variant"

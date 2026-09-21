@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -8,16 +10,6 @@ class ButtonConfiguration(Component):
     template = """
       <section
         class="button-configurator"
-        x-data="{
-          variant: 'solid',
-          intent: 'primary',
-          size: 'md',
-          loading_pos: 'center',
-          loading: false,
-          disabled: false,
-          block: false,
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p>Specimen catalog</p>
@@ -26,15 +18,7 @@ class ButtonConfiguration(Component):
 
         <div class="button-configurator__stage">
           <c-CButton
-            $c-props="{
-              variant,
-              intent,
-              size,
-              loadingPosition: loading_pos,
-              loading,
-              disabled,
-              block,
-            }"
+            :variant="variant" :intent="intent" :size="size" :loadingPosition="loading_pos" :loading="loading" :disabled="disabled" :block="block"
           >
             <c-fill name="start">
               <span aria-hidden="true">✿</span>
@@ -48,14 +32,40 @@ class ButtonConfiguration(Component):
           </c-CButton>
 
           <p class="button-configurator__status" aria-live="polite">
-            <span x-text="variant">solid</span>
+            <span v-text="variant">solid</span>
             ·
-            <span x-text="intent">primary</span>
+            <span v-text="intent">primary</span>
             ·
-            <span x-text="size">md</span>
+            <span v-text="size">md</span>
           </p>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            variant: 'solid',
+            intent: 'primary',
+            size: 'md',
+            loading_pos: 'center',
+            loading: false,
+            disabled: false,
+            block: false,
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

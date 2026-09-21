@@ -32,10 +32,11 @@ A ``CitryRender`` holds:
   context is kept (the collected data lives in its ``extra``); this can be
   narrowed to specific fields once we know what serialize needs.
 
-Serialization joins the parts, stamps the ``data-cid-<id>`` markers, and
-places the collected dependencies into the page per the ``deps_strategy`` /
-``deps_position`` arguments (docs/design/dependencies.md section 7),
-including the ``fragment`` strategy for HTML partials.
+Serialization joins the parts, adds static or prepared-runtime ownership
+metadata as needed, and places collected dependencies into the page per the
+``deps_strategy`` / ``deps_position`` arguments
+(docs/design/dependencies.md section 7), including the ``fragment`` strategy
+for HTML partials.
 
 Example:
     Render and serialize a component::
@@ -55,8 +56,8 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass
+from html import unescape
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
-from weakref import ReferenceType, ref
 
 from citry.citry_element import _DEFAULT_CITRY_ELEMENT, CitryElement
 from citry.component_like import _DEFAULT_COMPONENT_LIKE, ComponentLike, _resolve_component_like
@@ -67,10 +68,24 @@ from citry.util.html import escape
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from citry._vue.capture import (
+        PreparedDynamicElementClose,
+        PreparedDynamicElementOpen,
+        PreparedElementClose,
+        PreparedElementOpen,
+        PreparedSourceText,
+        PreparedStaticRun,
+        PreparedTextValue,
+        PreparedTrustedHtmlValue,
+        PreparedVerbatimHtml,
+    )
+    from citry._vue.direct import DirectExecutionFrame
+    from citry._vue.leaf_program import PreparedLeafProgram
     from citry.citry import Citry
     from citry.citry_context import CitryContext
+    from citry.citry_element import _PreparedCallMetadata
+    from citry.client_directives import ComponentTagClientBindingKind
     from citry.component import Component
-    from citry.ownership import OwnershipGraph, PhysicalRegionId
     from citry.settings import SecurityCspMode, SecurityJavascriptMode, SecurityScriptIntegrityMode
 
 _VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_context", default=None)
@@ -82,10 +97,15 @@ _VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_contex
 #     before any serialize()).
 #   - Placeholder: a spot whose final text an extension supplies at serialize
 #     time (the <c-js>/<c-css> built-ins render these).
+#   - Typed prepared records: source, text, elements, and leaf programs kept
+#     structured for native Vue assembly.
 # A CitryRender's `parts`, and what a node's render() returns, are made of these.
-RenderPart: TypeAlias = (
-    "str | CitryRender | PhysicalRegionPart | PhysicalRegionRender | DeferredComponent | Placeholder"
+PreparedRenderPart: TypeAlias = (
+    "PreparedSourceText | PreparedVerbatimHtml | PreparedTextValue | PreparedTrustedHtmlValue | "
+    "PreparedElementOpen | PreparedElementClose | PreparedDynamicElementOpen | PreparedDynamicElementClose | "
+    "PreparedStaticRun | PreparedLeafProgram"
 )
+RenderPart: TypeAlias = "str | CitryRender | DeferredComponent | Placeholder | PreparedRenderPart"
 
 # How collected JS/CSS dependencies are handled when serializing (see
 # CitryRender.serialize and docs/design/dependencies.md section 7.1).
@@ -155,6 +175,28 @@ OnRenderGenerator: TypeAlias = (
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedOccurrenceMetadata:
+    """Immutable prepared-call facts retained after the live component is gone."""
+
+    call: _PreparedCallMetadata | None
+    raw_slots_present: bool
+    component_tag_client_bindings: tuple[PreparedComponentBinding, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedComponentBinding:
+    """Authenticated component-call binding detached from its parser node."""
+
+    kind: ComponentTagClientBindingKind
+    key: str
+    value: str
+    source: str
+    span: tuple[int, int]
+    authenticated: bool
+    provenance: Literal["authored", "runtime-spread"] = "authored"
+
+
+@dataclass(frozen=True, slots=True)
 class RenderFrame:
     """Immutable identity needed to traverse and serialize one render frame."""
 
@@ -164,6 +206,7 @@ class RenderFrame:
     is_component_root: bool
     root_markers: tuple[str, ...]
     is_transparent_root: bool = False
+    prepared_occurrence: PreparedOccurrenceMetadata | None = None
     """True for a transparent component's whole output, excluding caller-owned interiors."""
 
     @classmethod
@@ -180,8 +223,48 @@ class RenderFrame:
                 is_component_root=is_component_root,
                 is_transparent_root=is_transparent_root,
                 root_markers=tuple(context._get_root_markers()) if is_component_root else (),
+                prepared_occurrence=None,
             )
         component_class = type(component)
+        from citry.client_directives import (  # noqa: PLC0415
+            ComponentTagClientBinding,
+            ComponentTagClientBindingKind,
+            RuntimeComponentEventBinding,
+            is_authenticated_component_tag_client_binding,
+            is_authenticated_runtime_component_event_binding,
+        )
+
+        prepared_bindings: list[PreparedComponentBinding] = []
+        for binding in component._component_tag_client_bindings:
+            if type(binding) is RuntimeComponentEventBinding:
+                if type(binding.key) is not str or type(binding.value) is not str or type(binding.source) is not str:
+                    raise TypeError("runtime component event key, handler, and source must be exact strings")
+                prepared_bindings.append(
+                    PreparedComponentBinding(
+                        ComponentTagClientBindingKind.CITRY_HANDLER,
+                        binding.key,
+                        binding.value,
+                        binding.source,
+                        binding.span,
+                        is_authenticated_runtime_component_event_binding(binding),
+                        "runtime-spread",
+                    )
+                )
+                continue
+            if type(binding) is not ComponentTagClientBinding:
+                raise TypeError("component-call binding metadata changed after resolution")
+            if type(binding.source) is not str:
+                raise TypeError("component-call binding source must be template text")
+            prepared_bindings.append(
+                PreparedComponentBinding(
+                    binding.kind,
+                    binding.key,
+                    binding.value,
+                    binding.source,
+                    binding.span,
+                    is_authenticated_component_tag_client_binding(binding),
+                )
+            )
         return cls(
             render_id=component.id,
             class_id=component._citry_class_id,
@@ -189,6 +272,11 @@ class RenderFrame:
             is_component_root=is_component_root,
             is_transparent_root=is_transparent_root,
             root_markers=tuple(context._get_root_markers()) if is_component_root else (),
+            prepared_occurrence=PreparedOccurrenceMetadata(
+                call=component._prepared_call_metadata,
+                raw_slots_present=bool(component.raw_slots),
+                component_tag_client_bindings=tuple(prepared_bindings),
+            ),
         )
 
 
@@ -211,7 +299,7 @@ class CitryRender:
 
     """
 
-    __slots__ = ("__weakref__", "context", "frame", "parts")
+    __slots__ = ("__weakref__", "context", "frame", "parts", "render_target")
 
     def __init__(
         self,
@@ -221,12 +309,18 @@ class CitryRender:
         is_component_root: bool = False,
         frame: RenderFrame | None = None,
         is_transparent_root: bool = False,
+        render_target: Literal["html", "prepared"] | None = None,
     ) -> None:
         self.parts = parts
         self.context = context
         self.frame = frame or RenderFrame.from_context(
             context, is_component_root=is_component_root, is_transparent_root=is_transparent_root
         )
+        if render_target is None:
+            from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+            render_target = "prepared" if direct_prepared_render_active() else "html"
+        self.render_target = render_target
 
     @property
     def is_component_root(self) -> bool:
@@ -246,10 +340,11 @@ class CitryRender:
         """
         Turn this render into a final HTML string.
 
-        Each component's root element(s) get a ``data-cid-<id>`` marker so the
-        rendered HTML records which component produced which part of the page,
-        and the JS/CSS collected from the rendered components is placed into the
-        output per the chosen strategy and position.
+        Static component-root HTML receives ``data-cid-<id>`` attributes.
+        When prepared output requires Vue, Citry preserves the document shell,
+        replaces its logical UI with one generated host, and emits the validated
+        manifest and assets that mount the occurrence graph there. Collected
+        JS/CSS is placed per the chosen strategy and position.
 
         Args:
             deps_strategy: How to handle the collected JS/CSS.
@@ -257,16 +352,15 @@ class CitryRender:
                 - ``"document"`` (default): emit the tags, plus the
                 client-side dependency manager and the page manifest when
                 a component needs per-instance browser behavior, including
-                ``js_data()`` scope seeding and ``$component`` callbacks.
+                ``js_data()`` Vue-instance seeding and ``$component`` callbacks.
                 - ``"simple"``: the tags only, no JavaScript runtime. For
                   static pages and emails; per-instance JS does not run
                   (CSS variables still work, they are pure CSS).
                 - ``"fragment"``: HTML meant to be inserted into an
                   already-loaded page (an HTMX swap, ``fetch`` +
-                  ``innerHTML``, ...): nothing is inlined; the output ends
-                  with a JSON manifest of URLs the client-side manager
-                  fetches, each once per page however many fragments need
-                  it. Requires a mounted web integration.
+                  ``innerHTML``, ...). The output carries a descriptor for
+                  the compatible document runtime to validate, load, and
+                  mount. Requires a mounted web integration.
                 - ``"ignore"``: no tags inserted.
             deps_position: Where the tags go (``document``/``simple`` only).
 
@@ -347,69 +441,56 @@ class CitryRender:
         return f"CitryRender(parts={len(self.parts)})"
 
 
-class _PhysicalRegion:
-    """Internal common identity for both transparent physical wrappers."""
+class RenderDecoration(CitryRender):
+    """Atomic transparent visual wrapper around one structured render body."""
 
-    __slots__ = ()
+    __slots__ = ("closing", "omit_around_document", "opening")
 
-    if TYPE_CHECKING:
-        region_id: PhysicalRegionId
-        part: RenderPart
+    def __init__(
+        self,
+        parts: list[RenderPart],
+        context: CitryContext,
+        *,
+        opening: tuple[object, ...],
+        closing: tuple[object, ...],
+        omit_around_document: bool = False,
+        frame: RenderFrame | None = None,
+    ) -> None:
+        from citry._vue.capture import PreparedElementClose, PreparedElementOpen, PreparedTextValue  # noqa: PLC0415
 
-        @property
-        def graph(self) -> OwnershipGraph: ...
+        if type(opening) is not tuple or type(closing) is not tuple:
+            raise TypeError("render decoration edges must be immutable tuples")
+        allowed = (PreparedElementOpen, PreparedElementClose, PreparedTextValue)
+        if not opening or not closing or any(type(part) not in allowed for part in (*opening, *closing)):
+            raise TypeError("render decoration edges must be nonempty fixed typed structure")
+        for part in (*opening, *closing):
+            if type(part) is PreparedElementOpen and (
+                part.event_bindings
+                or part.poll_bindings
+                or part.control_bindings
+                or part.browser_bindings
+                or part.runtime_event_bindings
+                or part.runtime_poll_bindings
+                or part.runtime_events_candidate
+                or any(attr.name.startswith(("v-", "@", ":", "#")) for attr in part.attrs)
+            ):
+                raise TypeError("render decoration element structure must be inert")
+        if type(omit_around_document) is not bool:
+            raise TypeError("render decoration document policy must be a boolean")
+        super().__init__(parts=parts, context=context, frame=frame)
+        self.opening = opening
+        self.closing = closing
+        self.omit_around_document = omit_around_document
 
-
-class PhysicalRegionPart(_PhysicalRegion):
-    """One exact physical occurrence of a logical slot or fill result."""
-
-    __slots__ = ("__weakref__", "_graph_ref", "part", "region_id")
-
-    def __init__(self, graph: OwnershipGraph, region_id: PhysicalRegionId, part: RenderPart) -> None:
-        self._graph_ref: ReferenceType[OwnershipGraph] = ref(graph)
-        self.region_id = region_id
-        self.part = part
-
-    @property
-    def graph(self) -> OwnershipGraph:
-        """Return the live graph without making the graph/result pair cyclic."""
-        graph = self._graph_ref()
-        if graph is None:
-            raise RuntimeError("A physical region outlived its ownership graph.")
-        return graph
-
-    def __repr__(self) -> str:
-        return f"PhysicalRegionPart(region_id={int(self.region_id)}, part={self.part!r})"
-
-
-def unwrap_physical_region(part: RenderPart) -> RenderPart:
-    """Remove one or more transparent physical-occurrence wrappers."""
-    while isinstance(part, _PhysicalRegion):
-        part = part.part
-    return part
-
-
-class PhysicalRegionRender(CitryRender, _PhysicalRegion):
-    """A region wrapper that remains a transparent ``CitryRender`` to hooks."""
-
-    __slots__ = ("_graph_ref", "part", "region_id")
-
-    def __init__(self, graph: OwnershipGraph, region_id: PhysicalRegionId, part: CitryRender) -> None:
-        super().__init__(parts=part.parts, context=part.context, frame=part.frame)
-        self._graph_ref: ReferenceType[OwnershipGraph] = ref(graph)
-        self.region_id = region_id
-        self.part = part
-
-    @property
-    def graph(self) -> OwnershipGraph:
-        """Return the live graph without making the graph/result pair cyclic."""
-        graph = self._graph_ref()
-        if graph is None:
-            raise RuntimeError("A physical region outlived its ownership graph.")
-        return graph
-
-    def __repr__(self) -> str:
-        return f"PhysicalRegionRender(region_id={int(self.region_id)}, part={self.part!r})"
+    def _with_frame(self, context: CitryContext, frame: RenderFrame) -> RenderDecoration:
+        return RenderDecoration(
+            self.parts,
+            context,
+            opening=self.opening,
+            closing=self.closing,
+            omit_around_document=self.omit_around_document,
+            frame=frame,
+        )
 
 
 class Placeholder:
@@ -471,7 +552,7 @@ class DeferredComponent:
 
     """
 
-    __slots__ = ("element", "parent", "physical_parent_region_id", "provides")
+    __slots__ = ("direct_parent_execution", "element", "parent", "provides")
 
     def __init__(
         self,
@@ -479,12 +560,12 @@ class DeferredComponent:
         parent: Component,
         provides: dict[str, Any] | None = None,
         *,
-        physical_parent_region_id: PhysicalRegionId | None = None,
+        direct_parent_execution: DirectExecutionFrame | None = None,
     ) -> None:
         self.element = element
         self.parent = parent
         self.provides = provides if provides is not None else {}
-        self.physical_parent_region_id = physical_parent_region_id
+        self.direct_parent_execution = direct_parent_execution
 
     def __repr__(self) -> str:
         return f"DeferredComponent({self.element!r})"
@@ -492,14 +573,31 @@ class DeferredComponent:
 
 # The imported identities come from their defining modules; the local classes
 # are captured here before callers can replace any dispatch aliases.
-_DEFAULT_VALUE_TYPES = (_DEFAULT_COMPONENT_LIKE, _DEFAULT_CITRY_ELEMENT, CitryRender, PhysicalRegionPart)
+_DEFAULT_VALUE_TYPES = (_DEFAULT_COMPONENT_LIKE, _DEFAULT_CITRY_ELEMENT, CitryRender)
+
+
+def _default_value_dispatch_for(kind: type[object]) -> bool:
+    """Whether an exact built-in type still has the renderer's default protocol meaning."""
+    return (
+        ComponentLike is _DEFAULT_VALUE_TYPES[0]
+        and CitryElement is _DEFAULT_VALUE_TYPES[1]
+        and CitryRender is _DEFAULT_VALUE_TYPES[2]
+        and not issubclass(kind, ComponentLike)
+    )
 
 
 def _render_slot_value(slot: Slot, data: Any, fallback: Slot | None, context: CitryContext) -> RenderPart:
     """Keep the insertion context while a Python slot produces a component value."""
     token = _VALUE_CONTEXT.set(context)
     try:
-        return slot(data, fallback=fallback, provides=context.provides)
+        rendered = slot(data, fallback=fallback, provides=context.provides)
+        from citry._vue.capture import PreparedTextValue, vue_render_active  # noqa: PLC0415
+        from citry.slots import _EscapedSlotText  # noqa: PLC0415
+
+        if vue_render_active() and isinstance(rendered, _EscapedSlotText) and "<" not in rendered:
+            source = "python-slot-text"
+            return PreparedTextValue(source, (0, len(source)), unescape(str(rendered)))
+        return rendered
     finally:
         _VALUE_CONTEXT.reset(token)
 
@@ -559,24 +657,18 @@ def _render_value(
     # Exact strings and ordinary slotted renders have no instance-level
     # protocol members. Keep registration and class changes visible on each call.
     kind = type(value)
+    if kind is str and _default_value_dispatch_for(kind):
+        return escape(value)
     if (
-        ComponentLike is _DEFAULT_VALUE_TYPES[0]
-        and CitryElement is _DEFAULT_VALUE_TYPES[1]
-        and CitryRender is _DEFAULT_VALUE_TYPES[2]
-        and PhysicalRegionPart is _DEFAULT_VALUE_TYPES[3]
+        kind is _DEFAULT_VALUE_TYPES[2]
+        and _default_value_dispatch_for(kind)
+        and kind.__bases__ == (object,)
+        and "__citry_element__" not in kind.__dict__
+        and "__getattribute__" not in kind.__dict__
+        and "__getattr__" not in kind.__dict__
+        and "__class__" not in kind.__dict__
     ):
-        if kind is str and not issubclass(str, ComponentLike):
-            return escape(value)
-        if (
-            kind is _DEFAULT_VALUE_TYPES[2]
-            and kind.__bases__ == (object,)
-            and "__citry_element__" not in kind.__dict__
-            and "__getattribute__" not in kind.__dict__
-            and "__getattr__" not in kind.__dict__
-            and "__class__" not in kind.__dict__
-            and not issubclass(kind, ComponentLike)
-        ):
-            return value
+        return value
     if isinstance(value, ComponentLike):
         value = _resolve_component_like(value, citry)
     if isinstance(value, CitryElement):
@@ -590,6 +682,38 @@ def _render_value(
             return render_simple_value(value, context, provides)
 
         value = render_impl(value, provides=provides)
-    if isinstance(value, (CitryRender, PhysicalRegionPart)):
+        # A component supplied by a Python expression renders in its own tree,
+        # rather than through the surrounding tree's DeferredComponent commit
+        # path. Mark that finalized root with the same composition carrier so
+        # prepared assembly can distinguish it from an unauthenticated
+        # authored child missing parser call metadata.
+        from citry._vue.direct import wrap_python_composition_result  # noqa: PLC0415
+
+        value = wrap_python_composition_result(value)
+    if isinstance(value, CitryRender):
+        return value
+    # Prepared slot text can pass through another expression while a simple
+    # component flattens its callback result.  Keep that checked render part
+    # intact; treating the dataclass as an ordinary Python value serializes
+    # its repr instead of the captured text.
+    from citry._vue.capture import PreparedTextValue  # noqa: PLC0415
+
+    if isinstance(value, PreparedTextValue):
         return value
     return escape(value)
+
+
+def selected_render_ids(render: CitryRender) -> frozenset[str]:
+    """Return component render IDs reachable through the final selected tree."""
+    selected: set[str] = set()
+    pending = [render]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if current.frame.is_component_root and current.frame.render_id is not None:
+            selected.add(current.frame.render_id)
+        pending.extend(part for part in current.parts if isinstance(part, CitryRender))
+    return frozenset(selected)

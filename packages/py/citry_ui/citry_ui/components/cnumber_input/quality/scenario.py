@@ -12,7 +12,6 @@ def number_input_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack number-input-quality"
             aria-labelledby="number-input-states-title"
-            x-data="{controlled:'2.5',last:'No NumberInput action yet'}"
           >
             <h1 id="number-input-states-title">NumberInput states</h1>
             <form
@@ -30,7 +29,7 @@ def number_input_states_component(app: Citry) -> type[Component]:
                     max="10"
                     step="0.25"
                     c-attrs="{'data-quality-states':'required exact form step keyboard reset field description'}"
-                    $c-props="{onValueChange:(next,detail)=>last=`${detail.source}: ${next}`}"
+                    :onValueChange="(next,detail)=>last=`${detail.source}: ${next}`"
                   />
                 </c-fill>
               </c-CField>
@@ -42,7 +41,7 @@ def number_input_states_component(app: Citry) -> type[Component]:
                 value="2.5"
                 c-input_attrs="{'aria-label':'Controlled quantity'}"
                 c-attrs="{'data-quality-states':'controlled refusal acceptance callback'}"
-                $c-props="{value:controlled,onValueChange:(next)=>{controlled=next;last=`Accepted ${next}`}}"
+                :value="controlled" :onValueChange="(next)=>{controlled=next;last=`Accepted ${next}`}"
               />
               <c-CNumberInput
                 value="2"
@@ -84,8 +83,17 @@ def number_input_states_component(app: Citry) -> type[Component]:
                 />
               </div>
             </div>
-            <output x-text="last">No NumberInput action yet</output>
+            <output v-text="last">No NumberInput action yet</output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlled:'2.5',last:'No NumberInput action yet'
+              };
+            },
+          });
         """
         css = """
           :where(.number-input-quality form) { display:grid;gap:.75rem }

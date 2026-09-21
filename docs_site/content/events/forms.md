@@ -6,7 +6,7 @@ description: Turn named form controls into typed Python data and show server val
 # Handle and validate forms
 
 On a form submit, Citry can collect named controls into a typed Python object.
-If validation fails, the form stays in place and Alpine can show the returned
+If validation fails, the form stays in place and Vue can show the returned
 errors beside the relevant fields.
 
 Start with [Server events](/events/) if you have not called a Python handler
@@ -63,7 +63,7 @@ class ContactForm(Component):
           <input name="name">
           <input name="email">
           <span
-            x-text="$error('submit')?.fieldErrors?.email"
+            v-text="$error('submit')?.fieldErrors?.email"
           ></span>
           <button
             type="submit"
@@ -90,7 +90,7 @@ in JavaScript.
 `fieldErrors` object uses the names passed to `EventError`:
 
 ```citry-html
-<span x-text="$error('submit')?.fieldErrors?.email"></span>
+<span v-text="$error('submit')?.fieldErrors?.email"></span>
 ```
 
 [`$loading('submit')`][$loading] covers this handler's time waiting in the
@@ -107,6 +107,13 @@ A successful `submit` call clears only its own error. Other handlers in the
 same component keep their errors, so independent forms can show independent
 feedback. Call `$error()` without a name when a component-wide banner should
 show the newest retained error.
+
+A well-formed server `ok: false` result, including `invalid_args`, is recorded
+for `$error(...)` and consumed by a declarative `@c-*` binding. Imperative
+`$sendEvent(...)` keeps ordinary Promise semantics: catch its rejection when
+the caller handles a server failure. Client-side argument expressions that
+cannot be encoded as JSON, malformed Events protocol responses, and render or
+lifecycle failures still surface as runtime errors.
 
 The [event bindings guide](/events/bindings/) covers submit modifiers and the
 other loading and error helpers. [Use event routes directly](/events/http/)

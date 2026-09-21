@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -8,33 +10,13 @@ class CheckboxConfiguration(Component):
     template = """
       <section
         class="checkbox-configurator"
-        x-data="{
-          variant: 'solid',
-          size: 'md',
-          label_pos: 'end',
-          checked: true,
-          indeterminate: false,
-          required: false,
-          disabled: false,
-          invalid: false,
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p>Living collection</p>
           <h2>Configure the record marker</h2>
         </header>
         <c-CCheckbox
-          $c-props="{
-            variant,
-            size,
-            label_pos,
-            checked,
-            indeterminate,
-            required,
-            disabled,
-            invalid,
-          }"
+          :variant="variant" :size="size" :label_pos="label_pos" :checked="checked" :indeterminate="indeterminate" :required="required" :disabled="disabled" :invalid="invalid"
           @input="checked = $event.target.checked; indeterminate = false"
         >
           <c-fill name="default">Verified against the herbarium sheet</c-fill>
@@ -43,6 +25,33 @@ class CheckboxConfiguration(Component):
           </c-fill>
         </c-CCheckbox>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            variant: 'solid',
+            size: 'md',
+            label_pos: 'end',
+            checked: true,
+            indeterminate: false,
+            required: false,
+            disabled: false,
+            invalid: false,
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

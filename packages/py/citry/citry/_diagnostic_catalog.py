@@ -15,15 +15,16 @@ PARSE_VALUE = 'citry.parse.value'
 PARSE_CONFIGURATION = 'citry.parse.configuration'
 TEMPLATE_UNKNOWN_VARIABLE = 'citry.template.unknown-variable'
 TEMPLATE_UNKNOWN_COMPONENT = 'citry.template.unknown-component'
+TEMPLATE_MARKER_NAME_INVALID = 'citry.template.marker-name-invalid'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
-ALPINE_UNKNOWN_VARIABLE = 'citry.alpine.unknown-variable'
+JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
+VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
 CSP_INCOMPATIBLE_BROWSER_CODE = 'citry.csp.incompatible-browser-code'
 COMPONENT_JS_UNKNOWN_VARIABLE = 'citry.component-js.unknown-variable'
 COMPONENT_JS_UNKNOWN_DATA_MEMBER = 'citry.component-js.unknown-data-member'
 BROWSER_INVALID_STATE_BINDING_TARGET = 'citry.browser.invalid-state-binding-target'
 BROWSER_UNKNOWN_STATE_FIELD = 'citry.browser.unknown-state-field'
 BROWSER_UNKNOWN_SERVER_EVENT = 'citry.browser.unknown-server-event'
-BROWSER_UNKNOWN_COMPONENT_PROP = 'citry.browser.unknown-component-prop'
 BROWSER_MISSING_COMPONENT_PROP = 'citry.browser.missing-component-prop'
 BROWSER_INCOMPATIBLE_COMPONENT_PROP = 'citry.browser.incompatible-component-prop'
 CHECK_TEMPLATE_DECLARATION = 'citry.check.template-declaration'
@@ -52,43 +53,25 @@ FORMAT_INELIGIBLE = 'citry.format.ineligible'
 FORMAT_STALE_DOCUMENT = 'citry.format.stale-document'
 FORMAT_CANCELLED = 'citry.format.cancelled'
 
-DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.unknown-variable',
-                                   'configurableSeverity': True,
-                                   'constant': 'ALPINE_UNKNOWN_VARIABLE',
-                                   'defaultSeverity': 'error',
-                                   'documentationPath': '/ide/diagnostics/#citry.alpine.unknown-variable',
-                                   'examples': [{'language': 'citry-html',
-                                                 'source': '<button :disabled="submitting1">Save</button>',
-                                                 'title': 'Unknown name in an Alpine expression'}],
-                                   'messages': {'default': "Alpine variable '{name}' is not available in this "
-                                                           'component.'},
-                                   'parameters': {'name': 'Authored Alpine variable name.'},
-                                   'summary': 'A free identifier in an Alpine expression is absent from the '
-                                              "component's proven browser scope.",
-                                   'surfaces': ['check', 'lsp'],
-                                   'title': 'Unknown Alpine variable',
-                                   'when': 'An Alpine expression references a root that is not supplied by JsData, '
-                                           'x-data, an enclosing x-for, a proven $component scope write, an Alpine or '
-                                           'Citry magic, a browser global, or configured lint-only Alpine variables.'},
- 'citry.browser.incompatible-component-prop': {'code': 'citry.browser.incompatible-component-prop',
+DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'citry.browser.incompatible-component-prop',
                                                'constant': 'BROWSER_INCOMPATIBLE_COMPONENT_PROP',
                                                'defaultSeverity': 'error',
                                                'documentationPath': '/ide/diagnostics/#citry.browser.incompatible-component-prop',
                                                'examples': [{'language': 'citry-html',
-                                                             'source': '<c-card $c-props="{ count: \'many\' }" />',
+                                                             'source': '<c-card :count="\'many\'" />',
                                                              'title': 'Wrong literal type'}],
-                                               'messages': {'default': "Client prop '{name}' expects {expected}, but "
-                                                                       'this value is {actual}.'},
+                                               'messages': {'default': "Vue prop '{name}' expects {expected}, but this "
+                                                                       'binding is {actual}.'},
                                                'parameters': {'actual': 'Proven authored value type.',
-                                                              'expected': "Child component's declared JavaScript type.",
-                                                              'name': 'Authored client-prop key.'},
-                                               'summary': 'A static $c-props value has a proven type outside the child '
-                                                          "component's prop declaration.",
+                                                              'expected': "Child component's accepted Vue prop type.",
+                                                              'name': 'Authored native Vue prop name.'},
+                                               'summary': 'A native Vue binding value has a proven type that the '
+                                                          'declared child prop type does not accept.',
                                                'surfaces': ['check', 'lsp'],
-                                               'title': 'Incompatible client prop',
-                                               'when': 'Citry can prove both the authored value type and the static '
-                                                       '$component({props}) type, and the value cannot satisfy that '
-                                                       'prop.'},
+                                               'title': 'Incompatible Vue prop',
+                                               'when': 'A resolved component receives a native :prop or v-bind:prop '
+                                                       'value with a proven literal, JsData, or loop-binding type that '
+                                                       'is incompatible with its statically declared Vue prop type.'},
  'citry.browser.invalid-state-binding-target': {'code': 'citry.browser.invalid-state-binding-target',
                                                 'constant': 'BROWSER_INVALID_STATE_BINDING_TARGET',
                                                 'defaultSeverity': 'error',
@@ -110,35 +93,18 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                           'defaultSeverity': 'error',
                                           'documentationPath': '/ide/diagnostics/#citry.browser.missing-component-prop',
                                           'examples': [{'language': 'citry-html',
-                                                        'source': '<c-card $c-props="{}" />',
+                                                        'source': '<c-card />',
                                                         'title': 'Missing required prop'}],
-                                          'messages': {'default': "Required client prop '{name}' is missing for "
-                                                                  '<{tag}>.'},
-                                          'parameters': {'name': 'Required client-prop name.',
-                                                         'tag': 'Authored child component tag.'},
-                                          'summary': 'A static $c-props object omits a required prop declared by the '
-                                                     'child component.',
+                                          'messages': {'default': "Required Vue prop '{name}' is missing for <{tag}>."},
+                                          'parameters': {'name': 'Required child Vue prop name.',
+                                                         'tag': 'Resolved native component tag.'},
+                                          'summary': 'A component call omits a required prop declared by the child '
+                                                     "component's Vue props option.",
                                           'surfaces': ['check', 'lsp'],
-                                          'title': 'Missing required client prop',
-                                          'when': 'A statically resolved component receives a direct $c-props object '
-                                                  'without a required static $component({props}) key and no dynamic '
-                                                  'spread can supply it.'},
- 'citry.browser.unknown-component-prop': {'code': 'citry.browser.unknown-component-prop',
-                                          'constant': 'BROWSER_UNKNOWN_COMPONENT_PROP',
-                                          'defaultSeverity': 'error',
-                                          'documentationPath': '/ide/diagnostics/#citry.browser.unknown-component-prop',
-                                          'examples': [{'language': 'citry-html',
-                                                        'source': '<c-card $c-props="{ missing: value }" />',
-                                                        'title': 'Unknown client prop'}],
-                                          'messages': {'default': "Client prop '{name}' is not declared by <{tag}>."},
-                                          'parameters': {'name': 'Authored client-prop key.',
-                                                         'tag': 'Authored child component tag.'},
-                                          'summary': 'A static $c-props object contains a key that the child component '
-                                                     'does not declare.',
-                                          'surfaces': ['check', 'lsp'],
-                                          'title': 'Unknown client prop',
-                                          'when': 'A statically resolved component receives a direct $c-props object '
-                                                  'key absent from its static $component({props}) declaration.'},
+                                          'title': 'Missing required Vue prop',
+                                          'when': 'A resolved registered <c-*> call has no native Vue binding for a '
+                                                  'prop marked required: true, and no dynamic binding could supply '
+                                                  'it.'},
  'citry.browser.unknown-server-event': {'code': 'citry.browser.unknown-server-event',
                                         'constant': 'BROWSER_UNKNOWN_SERVER_EVENT',
                                         'defaultSeverity': 'error',
@@ -159,7 +125,7 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                                    'the component that owns it.',
                                         'surfaces': ['check', 'lsp'],
                                         'title': 'Unknown server event',
-                                        'when': 'An Alpine expression or component JavaScript calls sendEvent, '
+                                        'when': 'An Vue expression or component JavaScript calls sendEvent, '
                                                 '$sendEvent, $loading, or $error with an unknown non-empty string '
                                                 'literal, or a declarative @c-* binding names an unknown handler.'},
  'citry.browser.unknown-state-field': {'code': 'citry.browser.unknown-state-field',
@@ -332,18 +298,18 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                                        'source': '<button @click="items.map(item => '
                                                                  'item.id)">Save</button>',
                                                        'title': 'Move an arrow function into Component.js'}],
-                                         'messages': {'default': 'Alpine CSP 3.17.1 cannot evaluate {detail} here. '
-                                                                 'Move complex logic to Component.js and call a scope '
-                                                                 'method from the template.'},
+                                         'messages': {'default': 'The configured browser security policy cannot accept '
+                                                                 '{detail} here. Move complex logic to Component.js '
+                                                                 'and call a component method from the template.'},
                                          'parameters': {'detail': 'The unsupported directive, host, token, or '
                                                                   'operation.'},
-                                         'summary': 'An Alpine or Citry browser expression uses a host or source form '
-                                                    'unsupported by the pinned Alpine CSP evaluator.',
+                                         'summary': 'A Citry browser expression or asset conflicts with the configured '
+                                                    'browser security policy.',
                                          'surfaces': ['check', 'lsp'],
                                          'title': 'Browser code is incompatible with strict CSP',
                                          'when': 'The selected Citry application configures CSP warning or strict mode '
-                                                 'and a source-classifiable browser expression is incompatible with '
-                                                 'Alpine CSP 3.17.1.'},
+                                                 'and a source-classifiable browser expression or asset violates that '
+                                                 'policy.'},
  'citry.format.cancelled': {'code': 'citry.format.cancelled',
                             'constant': 'FORMAT_CANCELLED',
                             'defaultSeverity': 'information',
@@ -566,6 +532,22 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                 'when': 'A direct tr() call, <c-trans> tag, $c-tr binding, or bounded browser bind() '
                                         'call names a message value or attribute that no component or configured '
                                         'catalog package defines.'},
+ 'citry.js-data.public-name-collision': {'code': 'citry.js-data.public-name-collision',
+                                         'constant': 'JS_DATA_PUBLIC_NAME_COLLISION',
+                                         'defaultSeverity': 'error',
+                                         'documentationPath': '/ide/diagnostics/#citry.js-data.public-name-collision',
+                                         'messages': {'conditional': "JsData field '{name}' conflicts with a reserved "
+                                                                     'or component-defined public instance name when '
+                                                                     'supplied.',
+                                                      'default': "JsData field '{name}' conflicts with a reserved or "
+                                                                 'component-defined public instance name.'},
+                                         'parameters': {'name': 'JsData field name.'},
+                                         'summary': 'A JsData field conflicts with a reserved or component-defined Vue '
+                                                    'public instance name.',
+                                         'surfaces': ['lsp'],
+                                         'title': 'JsData field conflicts with a public instance name',
+                                         'when': 'A source-proven JsData field uses a reserved browser-scope name or '
+                                                 'the name of a public Vue Options property.'},
  'citry.js-data.unsupported-type': {'code': 'citry.js-data.unsupported-type',
                                     'constant': 'JS_DATA_UNSUPPORTED_TYPE',
                                     'defaultSeverity': 'warning',
@@ -624,6 +606,22 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                        'title': 'Invalid template value',
                        'when': 'A parser API receives a value that it cannot convert into Citry template source or a '
                                'supported template value.'},
+ 'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
+                                        'constant': 'TEMPLATE_MARKER_NAME_INVALID',
+                                        'defaultSeverity': 'error',
+                                        'documentationPath': '/ide/diagnostics/#citry.template.marker-name-invalid',
+                                        'messages': {'dynamic': 'Marker name must be a static literal.',
+                                                     'extra': 'Marker accepts only its name attribute.',
+                                                     'invalid': 'Marker name must match [A-Za-z][A-Za-z0-9_-]*.',
+                                                     'missing': 'Marker requires a literal name attribute.',
+                                                     'named_fill': 'Marker accepts only its default slot.'},
+                                        'parameters': {},
+                                        'summary': 'A component marker must have one valid literal name and may '
+                                                   'contain only default slot content.',
+                                        'surfaces': ['check', 'lsp'],
+                                        'title': 'Invalid component marker',
+                                        'when': 'A literal marker omits its name, uses a dynamic or invalid name, adds '
+                                                'an extra attribute, or declares a named fill.'},
  'citry.template.unknown-component': {'code': 'citry.template.unknown-component',
                                       'constant': 'TEMPLATE_UNKNOWN_COMPONENT',
                                       'defaultSeverity': 'error',
@@ -662,7 +660,24 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                      'title': 'Unknown template variable',
                                      'when': 'A name used in an interpolation or Python-valued template attribute is '
                                              'absent from the proven template data, configured globals, and lint-only '
-                                             'variables.'}}
+                                             'variables.'},
+ 'citry.vue.unknown-variable': {'code': 'citry.vue.unknown-variable',
+                                'configurableSeverity': True,
+                                'constant': 'VUE_UNKNOWN_VARIABLE',
+                                'defaultSeverity': 'error',
+                                'documentationPath': '/ide/diagnostics/#citry.vue.unknown-variable',
+                                'examples': [{'language': 'citry-html',
+                                              'source': '<button :disabled="submitting1">Save</button>',
+                                              'title': 'Unknown name in a Vue expression'}],
+                                'messages': {'default': "Vue variable '{name}' is not available in this component."},
+                                'parameters': {'name': 'Authored Vue variable name.'},
+                                'summary': "A free identifier in a Vue expression is absent from the component's "
+                                           'proven browser scope.',
+                                'surfaces': ['check', 'lsp'],
+                                'title': 'Unknown Vue variable',
+                                'when': 'A Vue expression references a root that is not supplied by JsData, an '
+                                        'enclosing v-for alias, a Vue or Citry helper, a browser global, or configured '
+                                        'lint-only Vue variables.'}}
 
 EXTERNAL_CODE_PREFIXES: Final = [{'prefix': 'citry.python.',
   'provider': 'ty',

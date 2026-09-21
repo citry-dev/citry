@@ -47,7 +47,7 @@ done without them.
 ## What this project is
 
 Citry is a fully typed frontend framework for Python with server events and
-Alpine.js, inspired by Vue and Livewire. Its HTML component engine uses
+Vue. Its HTML component engine uses
 Vue-like `<c-*>` tag syntax. The core logic lives in **Rust crates**
 under [`crates/`](crates/) and is exposed to host languages through thin
 bindings.
@@ -631,8 +631,8 @@ forward before continuing.
   - The test: would the sentence still mean something to a reader who has
     not opened any other file? If not, unpack it or add the one-line
     explanation.
-- **Use the client-graph spec as the internal-doc reference and public-facing checklist.**
-  [`packages/protocol/client_graph/v1/spec.md`](packages/protocol/client_graph/v1/spec.md)
+- **Use the Events spec as the internal-doc reference and public-facing checklist.**
+  [`packages/protocol/events/v1/spec.md`](packages/protocol/events/v1/spec.md)
   demonstrates how a protocol or design document can stay precise without
   reading like committee paperwork:
   - Start with what happens and why the reader needs it. Put the motivating
@@ -657,8 +657,8 @@ forward before continuing.
     to fenced code in Markdown and code examples inside docstrings.
   - Use `citry` for complete Python component examples and `citry-html` for
     template-only examples. Use `html` only for plain HTML without Citry or
-    Alpine syntax. The ordinary HTML lexer marks valid attributes such as
-    `$c-props` as errors.
+    Vue syntax. The ordinary HTML lexer marks valid attributes such as
+    `@click` as errors.
   - Keep component examples focused on the contracts the page uses. In
     ordinary documentation, omit an empty `Kwargs` when the component neither
     uses nor discusses inputs, and omit an empty `Slots` when it neither uses

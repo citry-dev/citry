@@ -1,5 +1,7 @@
 """Browser evidence for the production Progress contract."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from typing import Any
@@ -22,6 +24,7 @@ def _progress_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const progressTest=Citry.vue.reactive({value:25,label:'Mapping seabed',valueText:'One quarter mapped',intent:'primary',size:'md',shape:'rounded'});window.__progressTest=progressTest;return {state:{progressTest}};}});"
         css = """
           :where(.progress-brand) {
             --cui-progress-track-color: rgb(232 221 246);
@@ -41,29 +44,17 @@ def _progress_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('progressTest', {
-                value: 25,
-                label: 'Mapping seabed',
-                valueText: 'One quarter mapped',
-                intent: 'primary',
-                size: 'md',
-                shape: 'rounded',
-              })"
-            >
+            <body>
               <c-CProgress
                 class_="progress-brand progress-part"
                 label="Mapping seabed"
                 c-value="25"
-                $c-props="{
-                  value: $store.progressTest.value,
-                  label: $store.progressTest.label,
-                  valueText: $store.progressTest.valueText,
-                  intent: $store.progressTest.intent,
-                  size: $store.progressTest.size,
-                  shape: $store.progressTest.shape,
-                }"
+                :value="state.progressTest.value"
+                :label="state.progressTest.label"
+                :valueText="state.progressTest.valueText"
+                :intent="state.progressTest.intent"
+                :size="state.progressTest.size"
+                :shape="state.progressTest.shape"
               />
               <c-CProgress label="Contacting research vessel" shape="pill" />
               <div dir="rtl">
@@ -117,7 +108,7 @@ def test_client_inputs_update_native_and_public_surfaces(progress_page):
     root = page.locator(".cui-progress").first
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('progressTest'), {
+        """() => Object.assign(window.__progressTest, {
           value: null,
           label: 'Waiting for sonar',
           valueText: null,
@@ -135,7 +126,7 @@ def test_client_inputs_update_native_and_public_surfaces(progress_page):
     assert root.get_attribute("data-size") == "lg"
     assert root.get_attribute("data-shape") == "pill"
 
-    page.evaluate("Alpine.store('progressTest').value = 72")
+    page.evaluate("window.__progressTest.value = 72")
     page.wait_for_timeout(0)
     assert root.get_attribute("value") == "72"
     assert root.evaluate("element => element.position") == 0.72
@@ -147,22 +138,22 @@ def test_invalid_client_values_report_once_per_episode(progress_page):
     page, errors = progress_page
     root = page.locator(".cui-progress").first
 
-    page.evaluate("Alpine.store('progressTest').value = 140")
+    page.evaluate("window.__progressTest.value = 140")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('progressTest').value = 'unknown'")
+    page.evaluate("window.__progressTest.value = 'unknown'")
     page.wait_for_timeout(0)
-    page.evaluate("Alpine.store('progressTest').intent = 'info'")
+    page.evaluate("window.__progressTest.intent = 'info'")
     page.wait_for_timeout(0)
     assert root.get_attribute("value") == "25"
     assert root.get_attribute("data-intent") == "primary"
     assert sum("CProgress value received invalid client value" in error for error in errors) == 1
     assert sum("CProgress intent received invalid client value" in error for error in errors) == 1
 
-    page.evaluate("Alpine.store('progressTest').value = 60")
+    page.evaluate("window.__progressTest.value = 60")
     # Wait for recovery so the next invalid value begins a new episode.
     expect(root).to_have_attribute("value", "60")
     with page.expect_console_message(lambda message: "CProgress value received invalid client value" in message.text):
-        page.evaluate("Alpine.store('progressTest').value = -1")
+        page.evaluate("window.__progressTest.value = -1")
     assert sum("CProgress value received invalid client value" in error for error in errors) == 2
 
 

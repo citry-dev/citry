@@ -36,21 +36,15 @@ from typing import TYPE_CHECKING, get_args
 from citry._csp_validation import _CspRenderValidator
 from citry._javascript_policy import _JavascriptPolicy
 from citry._serialization_security import _ScriptSecurityMaterializer
+from citry.attrs import format_attrs
 from citry.citry_render import (
     CitryRender,
     DepsPosition,
     DepsStrategy,
     Placeholder,
+    RenderDecoration,
     SerializedRender,
     SerializedSecurity,
-    _PhysicalRegion,
-)
-from citry.ownership_manifest import EXTRA_KEY as OWNERSHIP_MANIFEST_KEY
-from citry.ownership_manifest import (
-    OwnershipManifestArtifact,
-    _index_settled_tree,
-    ownership_manifest_required,
-    prepare_ownership_manifest,
 )
 from citry.settings import (
     SecurityCspMode,
@@ -60,6 +54,7 @@ from citry.settings import (
     _validate_security_javascript,
     _validate_security_script_integrity,
 )
+from citry.util.html import escape_to_str
 from citry_core.html_transform import mark_html
 
 if TYPE_CHECKING:
@@ -82,6 +77,167 @@ _VALUED_MARKER_RE = re.compile(r'^[^\s"\'=<>/]+="[^"<>]*"$')
 _DEPS_STRATEGIES = get_args(DepsStrategy)
 _DEPS_POSITIONS = get_args(DepsPosition)
 _CSP_NONCE_RE = re.compile(r"^[A-Za-z0-9+/_-]+={0,2}$")
+_DOCUMENT_ROOT_RE = re.compile(
+    r"\A\s*(?:\ufeff\s*)?(?:(?:<!--.*?-->)\s*)*(?:<!doctype\s+html(?:\s[^>]*)?>|<html(?:\s|>))",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def _looks_like_document(html: str) -> bool:
+    return _DOCUMENT_ROOT_RE.match(html) is not None
+
+
+def _serialize_decoration_edge(parts: tuple[object, ...]) -> str:
+    from citry._vue.capture import (  # noqa: PLC0415
+        PreparedElementClose,
+        PreparedElementOpen,
+        PreparedTextValue,
+        format_prepared_element_attrs,
+    )
+
+    output: list[str] = []
+    for part in parts:
+        if type(part) is PreparedTextValue:
+            output.append(escape_to_str(part.value))
+        elif type(part) is PreparedElementOpen:
+            attrs = list(format_prepared_element_attrs(part))
+            suffix = "" if not attrs else " " + " ".join(attrs)
+            output.append(f"<{part.tag}{suffix}>")
+        elif type(part) is PreparedElementClose:
+            output.append(f"</{part.tag}>")
+        else:
+            raise TypeError(f"unsupported render decoration edge part: {type(part).__name__}")
+    return "".join(output)
+
+
+def _can_defer_vue_body_children(
+    render: CitryRender,
+    *,
+    deps_strategy: DepsStrategy,
+    deps_position: DepsPosition,
+    security_csp: SecurityCspMode,
+    security_javascript: SecurityJavascriptMode,
+    security_script_integrity: SecurityScriptIntegrityMode,
+    csp_nonce: str | None,
+) -> bool:
+    """Allow the existing Vue body shortcut only for a proven direct document."""
+    if (
+        deps_strategy != "document"
+        or deps_position != "smart"
+        or security_csp != "off"
+        or security_javascript != "allow"
+        or security_script_integrity != "off"
+        or csp_nonce is not None
+    ):
+        return False
+    component = render.context.component
+    if component is None:
+        return False
+    from citry.ext.dependencies.extension import DependenciesExtension  # noqa: PLC0415
+
+    hooks = component.citry.extensions._extensions_with_hook("on_serialize")
+    if any(
+        type(hook) is not DependenciesExtension
+        or getattr(hook.on_serialize, "__func__", None) is not DependenciesExtension.on_serialize
+        or getattr(hook._on_serialize_internal, "__func__", None) is not DependenciesExtension._on_serialize_internal
+        for hook in hooks
+    ):
+        return False
+
+    from citry._vue.capture import (  # noqa: PLC0415
+        PreparedElementClose,
+        PreparedElementOpen,
+        PreparedSourceText,
+        PreparedStaticRun,
+        PreparedTextValue,
+        PreparedTrustedHtmlValue,
+        PreparedVerbatimHtml,
+    )
+    from citry._vue.leaf_program import PreparedLeafProgram  # noqa: PLC0415
+
+    inert_parts = (PreparedSourceText, PreparedStaticRun, PreparedTextValue, PreparedVerbatimHtml)
+    document_shell = any(
+        isinstance(part, PreparedElementOpen) and part.tag.lower() in {"html", "head", "body"} for part in render.parts
+    )
+
+    body_depth = 0
+    body_count = 0
+    shell_state = "before-html"
+    for part in render.parts:
+        if isinstance(part, PreparedElementOpen):
+            tag = part.tag.lower()
+            if (
+                document_shell
+                and not body_depth
+                and part.tag.lower() != "body"
+                and any(attr.name.startswith(("@c-", ":c-", "v-", "@", ":", "#")) for attr in part.attrs)
+            ):
+                raise ValueError("Interactive Vue bindings are unsupported in the physical document head.")
+            if tag == "html":
+                if shell_state != "before-html":
+                    return False
+                shell_state = "in-html"
+            elif tag == "head":
+                if shell_state != "in-html":
+                    return False
+                shell_state = "in-head"
+            elif tag == "body":
+                if shell_state not in {"in-html", "after-head"}:
+                    return False
+                body_count += 1
+                body_depth += 1
+                shell_state = "in-body"
+        elif isinstance(part, PreparedElementClose):
+            tag = part.tag.lower()
+            if tag == "head":
+                if shell_state != "in-head":
+                    return False
+                shell_state = "after-head"
+            elif tag == "body":
+                if shell_state != "in-body":
+                    return False
+                body_depth -= 1
+                if body_depth < 0:
+                    return False
+                shell_state = "after-body"
+            elif tag == "html":
+                if shell_state != "after-body":
+                    return False
+                shell_state = "after-html"
+        elif isinstance(part, CitryRender):
+            if body_depth != 1:
+                return False
+        elif isinstance(part, PreparedLeafProgram):
+            if body_depth != 1 or not part.fragment.safe_body or part.vue_errors:
+                return False
+        elif isinstance(part, (Placeholder, PreparedTrustedHtmlValue)) or not isinstance(part, inert_parts):
+            return False
+    if body_count != 1 or body_depth or shell_state != "after-html":
+        return False
+
+    pending = [part for part in render.parts if isinstance(part, CitryRender)]
+    while pending:
+        child = pending.pop()
+        markers = (*child.frame.root_markers, *child.context._get_root_markers())
+        if any(not marker.startswith(('data-cid="', "data-citry")) for marker in markers):
+            return False
+        for part in child.parts:
+            if isinstance(part, CitryRender):
+                pending.append(part)
+            elif isinstance(part, PreparedLeafProgram):
+                if not part.fragment.safe_body or part.vue_errors:
+                    return False
+            elif (
+                isinstance(part, (Placeholder, PreparedTrustedHtmlValue))
+                or (
+                    isinstance(part, (PreparedElementOpen, PreparedElementClose))
+                    and part.tag.lower() in {"html", "head", "body"}
+                )
+                or not isinstance(part, (PreparedElementOpen, PreparedElementClose, *inert_parts))
+            ):
+                return False
+    return True
+
 
 # One scanned frame: the HTML split around child placeholders (always one more
 # segment than placeholders), and per placeholder its id, its own text (with
@@ -214,46 +370,23 @@ def serialize_render_result(
         security_script_integrity=security_script_integrity,
     )
     session.require_implemented_modes()
-    ownership_analysis_cache: dict[tuple[str, int, str | None], bool] = {}
-    needs_ownership_analysis = deps_strategy in ("document", "fragment") or session.security_javascript != "allow"
-    settled_tree_index = (
-        _index_settled_tree(root) if root.context.component is not None and needs_ownership_analysis else None
-    )
-    analysis_artifact: OwnershipManifestArtifact | None
-    if settled_tree_index is not None and ownership_manifest_required(
-        root,
-        _analysis_cache=ownership_analysis_cache,
-        _tree_index=settled_tree_index,
-    ):
-        analysis_artifact = prepare_ownership_manifest(
-            root,
-            _analysis_cache=ownership_analysis_cache,
-            _tree_index=settled_tree_index,
-        )
-    else:
-        analysis_artifact = None
-    artifact = (
-        analysis_artifact
-        if deps_strategy in ("document", "fragment") and session.security_javascript in {"allow", "warn"}
-        else None
-    )
-    if artifact is not None:
-        root.context.extra[OWNERSHIP_MANIFEST_KEY] = artifact
-    else:
-        root.context.extra.pop(OWNERSHIP_MANIFEST_KEY, None)
-    csp_validator = (
-        None
-        if session.security_csp == "off"
-        else _CspRenderValidator(
-            session.security_csp,
-            check_alpine=session.security_javascript in {"allow", "warn"},
-        )
-    )
+    csp_validator = None if session.security_csp == "off" else _CspRenderValidator(session.security_csp)
     javascript_policy = session._javascript_policy
     if javascript_policy is not None:
         javascript_policy.inspect_reached_bindings(root)
     if csp_validator is not None:
         csp_validator.validate_reached_bindings(root)
+    from citry._vue.serialization import analyze_vue_serialization  # noqa: PLC0415
+
+    vue_analysis = analyze_vue_serialization(root)
+    if javascript_policy is not None:
+        javascript_policy.inspect_selected_requirements(vue_analysis.active_policy_requirements)
+
+    vue_required = (
+        session.security_javascript not in {"omit", "forbid"}
+        and root.render_target == "prepared"
+        and bool(vue_analysis.runtime_requirements)
+    )
     # Pass 1 (top-down): build each component's HTML with its children still as
     # placeholders, add its markers, and work out which markers each child
     # inherits. An explicit stack keeps depth off the Python call stack.
@@ -264,6 +397,7 @@ def serialize_render_result(
     # before parents). The root has no parent and may have no component, so it
     # uses the key "".
     frame_by_key: dict[str, _Frame] = {}
+    decorations: dict[str, RenderDecoration] = {}
     order: list[str] = []
     component_classes: dict[str, str] = {}
     root_key = ""
@@ -279,6 +413,7 @@ def serialize_render_result(
     # from authored <template c-render-id> elements, even when an author writes
     # the same logical key and occurrence counter. It never reaches final HTML.
     placeholder_nonce = token_hex(16)
+    omit_handler_marker = f"data-citry-omit-handler-{token_hex(16)}" if session.security_javascript == "omit" else None
 
     # Each stack item is (render, plain markers inherited from the parent,
     # valued markers inherited from the parent, key). Valued markers are the
@@ -293,7 +428,7 @@ def serialize_render_result(
             component_classes[render_frame.render_id] = render_frame.class_name or render_frame.class_id or "component"
 
         children: list[tuple[CitryRender, str]] = []
-        frame = _build_frame(render, children, placeholder_map, placeholder_nonce, artifact)
+        frame = _build_frame(render, children, placeholder_map, placeholder_nonce, omit_handler_marker)
 
         # A render only gets its component's marker when it is that component's
         # root render; a transparent component's output (is_component_root
@@ -301,10 +436,6 @@ def serialize_render_result(
         # Extensions add per-instance markers (e.g. the CSS-variables hash)
         # under the well-known extra key on the component's own context.
         if render_frame.render_id is not None and render_frame.is_component_root:
-            graph = render.context.ownership
-            client_active = (
-                artifact is not None and graph is not None and artifact.is_client_active(graph, render_frame.render_id)
-            )
             extension_markers = list(render_frame.root_markers)
             if component is not None:
                 extension_markers.extend(render.context._get_root_markers())
@@ -315,11 +446,8 @@ def serialize_render_result(
                     if not marker.startswith('data-cid="') and not marker.startswith("data-citry")
                 ]
             extension_markers = list(dict.fromkeys(extension_markers))
-            fixed_id_marker = f'data-cid="{render_frame.render_id}"'
             own_markers = [
                 f"data-cid-{render_frame.render_id}",
-                *(["data-citry-root"] if client_active else []),
-                *([fixed_id_marker] if client_active and fixed_id_marker not in extension_markers else []),
                 *extension_markers,
             ]
         else:
@@ -341,16 +469,6 @@ def serialize_render_result(
         if valued_markers and root_markers:
             segments, placeholders = _apply_valued_markers(segments, placeholders, root_markers, valued_markers)
 
-        if artifact is not None and render_frame.render_id is not None:
-            graph = render.context.ownership
-            if graph is None:
-                msg = f"Component frame {render_frame.class_name!r} has no ownership graph at serialization."
-                raise RuntimeError(msg)
-            instance_in_manifest = render_frame.is_component_root or artifact.has_transparent_placement(render)
-            if instance_in_manifest:
-                segments[0] = artifact.instance_cap(graph, render_frame.render_id, "s") + segments[0]
-                segments[-1] += artifact.instance_cap(graph, render_frame.render_id, "e")
-
         if key in frame_by_key:
             msg = (
                 "The same rendered component id was encountered more than once during serialization; "
@@ -358,9 +476,24 @@ def serialize_render_result(
             )
             raise RuntimeError(msg)
         frame_by_key[key] = (segments, placeholders)
+        if isinstance(render, RenderDecoration):
+            decorations[key] = render
         order.append(key)
         added_by_child = {child_id: added for child_id, _, added in placeholders}
-        for child_render, child_id in children:
+        defer_body_children = (
+            vue_required
+            and key == root_key
+            and _can_defer_vue_body_children(
+                render,
+                deps_strategy=deps_strategy,
+                deps_position=deps_position,
+                security_csp=session.security_csp,
+                security_javascript=session.security_javascript,
+                security_script_integrity=session.security_script_integrity,
+                csp_nonce=session.csp_nonce,
+            )
+        )
+        for child_render, child_id in () if defer_body_children else children:
             added = added_by_child.get(child_id, [])
             # Valued markers reach a child exactly when the plain markers did:
             # the child's placeholder sat at this component's root.
@@ -385,7 +518,13 @@ def serialize_render_result(
         for (child_id, placeholder_html, _), segment in zip(placeholders, segments[1:], strict=True):
             parts.append(finished.get(child_id, placeholder_html))
             parts.append(segment)
-        finished[key] = "".join(parts)
+        body = "".join(parts)
+        decoration = decorations.get(key)
+        if decoration is not None and not (decoration.omit_around_document and _looks_like_document(body)):
+            body = (
+                _serialize_decoration_edge(decoration.opening) + body + _serialize_decoration_edge(decoration.closing)
+            )
+        finished[key] = body
 
     html = finished[root_key]
 
@@ -400,10 +539,31 @@ def serialize_render_result(
     # no component has no Citry instance to reach extensions through, and
     # nothing was collected for it either.
     root_component = root.context.component
+    vue_plan = None
     if root_component is not None:
+        from citry._vue.serialization import prepare_vue_serialization  # noqa: PLC0415
+        from citry.extension import OnSerializeContext  # noqa: PLC0415
+
+        vue_plan = prepare_vue_serialization(
+            OnSerializeContext(
+                citry=root_component.citry,
+                context=root.context,
+                selected_render=root,
+                html=html,
+                placeholders=placeholder_map,
+                deps_strategy=deps_strategy,
+                deps_position=deps_position,
+            ),
+            session._script_security,
+            session.security_csp,
+            javascript_policy,
+            session.security_javascript,
+            vue_analysis,
+        )
         html = root_component.citry.extensions.on_serialize(
             context=root.context,
-            html=html,
+            selected_render=root,
+            html=vue_plan.shell_html if vue_plan is not None else html,
             placeholders=placeholder_map,
             deps_strategy=deps_strategy,
             deps_position=deps_position,
@@ -411,8 +571,9 @@ def serialize_render_result(
             _security_csp=session.security_csp,
             _javascript_policy=javascript_policy,
             _security_javascript=session.security_javascript,
-            _ownership_artifact=analysis_artifact,
         )
+        if vue_plan is not None:
+            html = vue_plan.finalize(html)
 
     # A Placeholder is an optional serialize-time insertion point. Extensions
     # replace the exact placeholder text they own; anything left after every
@@ -422,10 +583,8 @@ def serialize_render_result(
     # install the producing extension.
     for placeholder_html in placeholder_map.values():
         html = html.replace(placeholder_html, "")
-    if analysis_artifact is not None:
-        analysis_artifact.assert_unchanged()
     if javascript_policy is not None:
-        javascript_policy.validate_settled_html(
+        html = javascript_policy.validate_settled_html(
             html,
             marker_prefix=session._script_security.marker_prefix if session._script_security is not None else "",
             trusted_tag_starts=(
@@ -434,6 +593,7 @@ def serialize_render_result(
                 else frozenset()
             ),
             component_classes=component_classes,
+            omit_handler_marker=omit_handler_marker,
         )
         javascript_policy.report()
     if session._script_security is not None:
@@ -521,31 +681,30 @@ def _append_frame_parts(
     children: list[tuple[CitryRender, str]],
     placeholder_map: dict[str, str],
     placeholder_nonce: str,
-    artifact: OwnershipManifestArtifact | None,
+    omit_handler_marker: str | None,
     out: list[str],
 ) -> None:
-    """Append nested content iteratively, preserving region caps and child order."""
-    stack: list[tuple[Iterator[RenderPart], str | None]] = [(iter(parts), None)]
+    """Append nested content iteratively while preserving child order."""
+    stack: list[Iterator[RenderPart]] = [iter(parts)]
     while stack:
-        entries, end_cap = stack[-1]
         try:
-            part = next(entries)
+            part = next(stack[-1])
         except StopIteration:
             stack.pop()
-            if end_cap is not None:
-                out.append(end_cap)
             continue
         if isinstance(part, str):
             out.append(part)
-        elif isinstance(part, _PhysicalRegion):
-            region_artifact = (
-                artifact if artifact is not None and artifact.has_region(part.graph, part.region_id) else None
+        elif isinstance(part, RenderDecoration):
+            part_frame = part.frame
+            decoration_id = (
+                part_frame.render_id
+                if part_frame.is_component_root
+                and part_frame.render_id is not None
+                and part_frame.render_id != render.frame.render_id
+                else f"decoration:{id(part)}:{len(children)}"
             )
-            region_end = None
-            if region_artifact is not None:
-                out.append(region_artifact.region_cap(part.graph, part.region_id, "s"))
-                region_end = region_artifact.region_cap(part.graph, part.region_id, "e")
-            stack.append((iter((part.part,)), region_end))
+            out.append(f'<template c-render-id="{decoration_id}"></template>')
+            children.append((part, decoration_id))
         elif isinstance(part, CitryRender):
             part_frame = part.frame
             if (
@@ -559,18 +718,7 @@ def _append_frame_parts(
             else:
                 # Interior content joins this frame and may be nested beyond
                 # Python's recursion limit.
-                graph = part.context.ownership
-                render_id = part_frame.render_id
-                instance_end = None
-                if (
-                    artifact is not None
-                    and graph is not None
-                    and render_id is not None
-                    and artifact.has_transparent_placement(part)
-                ):
-                    out.append(artifact.instance_cap(graph, render_id, "s"))
-                    instance_end = artifact.instance_cap(graph, render_id, "e")
-                stack.append((iter(part.parts), instance_end))
+                stack.append(iter(part.parts))
         elif isinstance(part, Placeholder):
             # Each occurrence needs its own identity for serialization hooks.
             placeholder_id = f"{part.key}:{len(placeholder_map) + 1}:{placeholder_nonce}"
@@ -578,9 +726,77 @@ def _append_frame_parts(
             placeholder_map[placeholder_id] = text
             out.append(text)
         else:
+            from citry._vue.capture import (  # noqa: PLC0415
+                PreparedDynamicElementClose,
+                PreparedDynamicElementOpen,
+                PreparedElementClose,
+                PreparedElementOpen,
+                PreparedSourceText,
+                PreparedStaticRun,
+                PreparedTextValue,
+                PreparedTrustedHtmlValue,
+                PreparedVerbatimHtml,
+            )
+            from citry._vue.leaf_program import (  # noqa: PLC0415
+                PreparedLeafProgram,
+                static_leaf_parts,
+                typed_leaf_parts,
+            )
+
+            if isinstance(part, PreparedLeafProgram):
+                stack.append(
+                    iter(typed_leaf_parts(part) if omit_handler_marker is not None else static_leaf_parts(part))
+                )
+                continue
+
+            if isinstance(part, PreparedDynamicElementOpen):
+                formatted = str(format_attrs(part.attrs))
+                suffix = f" {formatted}" if formatted else ""
+                out.append(f"<{part.tag}{suffix}>")
+                continue
+            if isinstance(part, PreparedDynamicElementClose):
+                out.append(f"</{part.tag}>")
+                continue
+
+            if isinstance(part, PreparedSourceText):
+                out.append(part.text)
+                continue
+            if isinstance(part, PreparedStaticRun):
+                out.append(part.html)
+                continue
+            if isinstance(part, PreparedTextValue):
+                out.append(escape_to_str(part.value))
+                continue
+            if isinstance(part, PreparedTrustedHtmlValue):
+                out.append(part.html)
+                continue
+            if isinstance(part, PreparedVerbatimHtml):
+                out.append(part.html)
+                continue
+            if isinstance(part, PreparedElementOpen):
+                from citry._vue.capture import format_prepared_element_attrs  # noqa: PLC0415
+
+                rendered_attrs = list(format_prepared_element_attrs(part))
+                if omit_handler_marker is not None and (
+                    part.event_bindings
+                    or part.poll_bindings
+                    or part.runtime_event_bindings
+                    or part.runtime_poll_bindings
+                ):
+                    rendered_attrs.append(omit_handler_marker)
+                suffix = "" if not rendered_attrs else " " + " ".join(rendered_attrs)
+                # The prepared compiler emits an explicit close part for
+                # non-void self-closing syntax (including SVG). Only authored
+                # void ``<img/>``-style tags keep the slash here.
+                ending = "/>" if part.is_void and part.is_self_closing else ">"
+                out.append(f"<{part.tag}{suffix}{ending}")
+                continue
+            if isinstance(part, PreparedElementClose):
+                out.append(f"</{part.tag}>")
+                continue
             # A DeferredComponent here means render() never resolved it.
             msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
-            raise RuntimeError(msg)  # noqa: TRY004
+            raise RuntimeError(msg)
 
 
 def _build_frame(
@@ -588,7 +804,7 @@ def _build_frame(
     children: list[tuple[CitryRender, str]],
     placeholder_map: dict[str, str],
     placeholder_nonce: str,
-    artifact: OwnershipManifestArtifact | None,
+    omit_handler_marker: str | None,
 ) -> str:
     """
     Join one component's parts into an HTML string.
@@ -613,7 +829,7 @@ def _build_frame(
         children=children,
         placeholder_map=placeholder_map,
         placeholder_nonce=placeholder_nonce,
-        artifact=artifact,
+        omit_handler_marker=omit_handler_marker,
         out=out,
     )
     return "".join(out)

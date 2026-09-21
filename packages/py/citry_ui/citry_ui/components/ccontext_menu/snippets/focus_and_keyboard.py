@@ -8,7 +8,7 @@ class ContextMenuFocusAndKeyboard(Component):
     template = """
       <section
         class="context-menu-focus"
-        x-data="{disableInvoker:false,last:'No close yet'}"
+
       >
         <p>
           Focus the row or nested Button, then press the Context Menu key or
@@ -16,7 +16,7 @@ class ContextMenuFocusAndKeyboard(Component):
         </p>
         <c-CContextMenu
           aria_label="Focusable row actions"
-          $c-props="{
+          v-bind="{
             onOpenChange:(next,detail)=>last=
               `${next ? 'opened' : 'closed'} by ${detail.reason}`,
             onAction:(value)=>{
@@ -41,7 +41,7 @@ class ContextMenuFocusAndKeyboard(Component):
                 size="sm"
                 variant="outline"
                 c-attrs="{'data-context-menu-return-target':''}"
-                $c-props="{disabled:disableInvoker}"
+                v-bind="{disabled:disableInvoker}"
               >Nested action</c-CButton>
               <a href="#focus-linked-record">Linked record</a>
             </div>
@@ -77,7 +77,7 @@ class ContextMenuFocusAndKeyboard(Component):
             </p>
             <c-CContextMenu
               aria_label="Modal row actions"
-              $c-props="{
+              v-bind="{
                 onOpenChange:(next,detail)=>last=
                   `modal ${next ? 'opened' : 'closed'} by ${detail.reason}`,
               }"
@@ -95,9 +95,13 @@ class ContextMenuFocusAndKeyboard(Component):
             </c-CContextMenu>
           </c-fill>
         </c-CDialog>
-        <output aria-live="polite" x-text="last">No close yet</output>
+        <output aria-live="polite" v-text="last">No close yet</output>
         <span id="focus-linked-record">Linked destination</span>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {disableInvoker:false,last:'No close yet'};}});
     """
 
     css = """

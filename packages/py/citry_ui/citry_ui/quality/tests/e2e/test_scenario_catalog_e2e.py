@@ -335,9 +335,30 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
     )
 
 
-def test_accordion_quality_form_continuity_and_brand_contrast(page: Any) -> None:
-    page.set_content(render_scenario("accordion.states"), wait_until="load")
-    page.wait_for_selector('[data-quality-states~="brand-fern"][data-citry-accordion-initialized]')
+def test_accordion_quality_form_continuity_and_brand_contrast(page: Any, serve_citry_ui_live: Any) -> None:
+    rendered = build_scenario(
+        "accordion.states",
+        configure_app=lambda app: app.set_mounted_prefix("/citry"),
+    )
+    base_url = serve_citry_ui_live(rendered.app, rendered.html)
+    page.goto(base_url + "/", wait_until="load")
+    page.wait_for_selector(
+        '[data-quality-states~="brand-fern"][data-citry-accordion-initialized]',
+        state="attached",
+    )
+    # Vue invokes mounted callbacks child-first. Every item must therefore
+    # see the nearest accordion service before its callback registers it; this
+    # also covers the nested accordion in the dark fixture.
+    page.wait_for_function(
+        """() => {
+          const roots = [...document.querySelectorAll('[data-citry-accordion-root]')];
+          const items = [...document.querySelectorAll('[data-citry-accordion-item]')];
+          return roots.length > 0
+            && roots.every(root => root.hasAttribute('data-citry-accordion-initialized'))
+            && items.length > 0
+            && items.every(item => item.hasAttribute('data-citry-accordion-item-initialized'));
+        }"""
+    )
     form = page.locator("#accordion-quality-form")
     control = form.locator('[name="ridge-note"]')
     assert form.locator('[data-value="upland"] button').get_attribute("aria-expanded") == "false"
@@ -441,10 +462,15 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
     )
     base_url = serve_citry_ui_live(rendered.app, rendered.html)
     scenario_component = rendered.app.get("CitryUiSplitButtonStates")
-    morph_fragments = [
-        scenario_component(include_lifecycle=False).render().serialize(deps_strategy="fragment"),
-        *(scenario_component().render().serialize(deps_strategy="fragment") for _ in range(3)),
-    ]
+    morph_step = 0
+
+    def refresh(_events: Any) -> Any:
+        nonlocal morph_step
+        morph_step += 1
+        return scenario_component(include_lifecycle=morph_step != 1)
+
+    handler = rendered.app.extensions.get_extension("events").resolve(scenario_component).handlers["refresh"]
+    object.__setattr__(handler, "func", refresh)
     page.goto(base_url + "/", wait_until="load")
     page.wait_for_selector(
         '[data-citry-ui-part="split-button"][data-citry-split-button-initialized]',
@@ -496,28 +522,22 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
     assert lifecycle.count() == 1
 
     morph_snapshots = page.evaluate(
-        r"""async (fragments) => {
-          const internal = Citry.events._internal;
-          const root = document.querySelector('.split-button-quality');
-          const componentId = root.getAttribute('data-cid').trim().split(/\s+/).at(-1);
-          const anchor = internal.getAnchor(componentId);
+        r"""async () => {
           const snapshots = [];
-          for (const html of fragments) {
-            const epoch = anchor.epoch + 1;
-            anchor.epoch = epoch;
-            await internal.applyResult(
-              {
-                ok: true,
-                epoch,
-                actions: [{
-                  action: 'render',
-                  target: 'render:' + anchor.componentId,
-                  swap: 'morph',
-                  html,
-                }],
-              },
-              {anchor, instance: anchor.componentId, event: 'split-button-quality-morph'},
-            );
+          for (let step = 0; step < 4; step += 1) {
+            const root = document.querySelector('.split-button-quality');
+            await new Promise((resolve, reject) => {
+              const done = () => {
+                document.removeEventListener('citry:rendered', done);
+                resolve();
+              };
+              document.addEventListener('citry:rendered', done, {once: true});
+              root.dispatchEvent(new CustomEvent('quality-morph', {bubbles: true}));
+              setTimeout(() => {
+                document.removeEventListener('citry:rendered', done);
+                reject(new Error('timed out waiting for Vue server render'));
+              }, 10_000);
+            });
             await new Promise((resolve) => requestAnimationFrame(
               () => requestAnimationFrame(resolve),
             ));
@@ -537,7 +557,6 @@ def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui
           }
           return snapshots;
         }""",
-        morph_fragments,
     )
     assert len(morph_snapshots) == 4
     removed, *restored = morph_snapshots
@@ -642,8 +661,19 @@ def test_tags_input_quality_form_tokenization_focus_and_morph(page: Any, serve_c
     controlled_editor = controlled.locator('[data-citry-ui-part="input"]')
     controlled_editor.press("Enter")
     assert controlled.locator("option:checked").count() == 1
+    # A refused controlled request is settled by the owner on the next Vue
+    # flush; wait for that owner value instead of sampling the transient DOM
+    # value while the component is handing the request back.
+    page.wait_for_function(
+        """() => document.querySelector(
+          '[data-quality-states~="controlled-value"] [data-citry-ui-part="input"]',
+        ).value === 'owner draft'"""
+    )
     assert controlled_editor.input_value() == "owner draft"
     page.get_by_role("checkbox", name="Accept controlled value requests").check()
+    # Let Vue publish the checkbox's v-model before the next Enter event reads
+    # the owner's acceptance flag.
+    page.wait_for_timeout(20)
     controlled_editor.press("Enter")
     page.wait_for_function(
         """() => document.querySelector(
@@ -676,19 +706,19 @@ def test_tags_input_quality_form_tokenization_focus_and_morph(page: Any, serve_c
     )
     morph_snapshots = []
     for step in range(1, 6):
-        page.evaluate(
-            """() => {
-              void Citry.events.send(
-                document.querySelector('.tags-input-quality'),
-                'refresh',
-                {},
-              );
-            }"""
-        )
+        page.locator(".tags-input-quality").dispatch_event("quality-morph")
         page.wait_for_function(
             "step => Number(document.querySelector('[data-quality-morph-step]').textContent) === step",
             arg=step,
             timeout=10_000,
+        )
+        # The lifecycle branch is a client-side Vue v-if. Its DOM transition
+        # does not emit Citry's server-render completion event, so wait for
+        # Vue's next render turn after observing the expected state instead.
+        page.evaluate(
+            """() => new Promise(resolve => requestAnimationFrame(
+              () => requestAnimationFrame(resolve),
+            ))"""
         )
         expected_step_roots = expected_roots - 1 if step in {2, 4} else expected_roots
         page.wait_for_function(

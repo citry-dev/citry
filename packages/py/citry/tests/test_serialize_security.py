@@ -12,7 +12,6 @@ import pytest
 
 from citry import Citry, Component, Extension, Markup
 from citry.ext.dependencies import Script, Style
-from citry.ext.dependencies.scripts import gen_cache_key
 from citry.util.routing import match_route
 
 if TYPE_CHECKING:
@@ -34,6 +33,40 @@ def _manifest(html: str) -> dict[str, object]:
     return json.loads(match.group(1))
 
 
+def test_strict_csp_validates_exact_opaque_html_payload_before_publication() -> None:
+    app = Citry(autodiscover=False, security_csp="strict")
+
+    class UnsafeOpaque(Component):
+        citry = app
+        template = "{{ body }}"
+        js = "$component({data(){return {active: true};}});"
+
+        def template_data(self, kwargs, slots):
+            return {"body": Markup('<img src="missing" onerror="globalThis.pwned=true">')}
+
+    with pytest.raises(ValueError, match="strict-CSP incompatibility"):
+        UnsafeOpaque().render().serialize()
+
+
+def test_revisable_app_rejects_policy_drift_before_a_later_opaque_revision() -> None:
+    app = Citry(autodiscover=False)
+    app.set_mounted_prefix("/citry")
+
+    class OpaqueEvent(Component):
+        citry = app
+        template = '<button @c-click="refresh">refresh</button>{{ body }}'
+
+        class Events:
+            def refresh(self):
+                return None
+
+        def template_data(self, kwargs, slots):
+            return {"body": "initially plain text"}
+
+    with pytest.raises(ValueError, match="Call-local JavaScript/CSP overrides"):
+        OpaqueEvent().render().serialize(security_csp="strict", csp_nonce="request-nonce")
+
+
 def _fetch_descriptors(html: str, kind: str) -> list[dict[str, object]]:
     manifest = _manifest(html)
     fetch = manifest["fetch"]
@@ -45,6 +78,18 @@ def _fetch_descriptors(html: str, kind: str) -> list[dict[str, object]]:
         encoded = entry[0] if isinstance(entry, list) else entry
         descriptors.append(json.loads(base64.b64decode(encoded)))
     return descriptors
+
+
+def _vue_fragment(html: str) -> dict[str, object]:
+    match = re.search(r"<script\b[^>]*data-citry-vue-fragment[^>]*>(.*?)</script>", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["vue"]
+
+
+def _prepared(html: str) -> dict[str, object]:
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))
 
 
 def _serve(citry: Citry, url: str):
@@ -273,7 +318,7 @@ class TestExternalIntegrity:
         assert script.digests == (digest,)
         assert f'integrity="{digest}"' in result.html
 
-    def test_fragment_descriptors_and_preloader_use_owned_integrity(self):
+    def test_vue_fragment_preloader_uses_owned_integrity(self):
         c = Citry(security_script_integrity="citry")
         c.set_mounted_prefix("/citry")
 
@@ -286,21 +331,10 @@ class TestExternalIntegrity:
                 return {"count": 2}
 
         result = Widget().render().serialize_result(deps_strategy="fragment")
-        descriptors = _fetch_descriptors(result.html, "js")
-        external_records = {record.url: record for record in result.security.scripts if record.url is not None}
-
-        for descriptor in descriptors:
-            attrs = descriptor["attrs"]
-            assert isinstance(attrs, dict)
-            url = attrs["src"]
-            assert isinstance(url, str)
-            digest = _sha384(_serve(c, url).body)
-            assert attrs["integrity"] == digest
-            assert external_records[url].digests == (digest,)
-
         runtime_digest = _sha384(_serve(c, "/citry/citry.js").body)
         assert f's.integrity = "{runtime_digest}";' in result.html
-        assert all("data-citry-security-" not in json.dumps(descriptor) for descriptor in descriptors)
+        prepared = _vue_fragment(result.html)["prepared"]
+        assert prepared["manifest"]["scripts"][0]["source"]["sha256"]
         assert result.security.scripts[0].location == "inline"
         assert result.security.scripts[1].url == "/citry/citry.js"
 
@@ -314,7 +348,7 @@ class TestExternalIntegrity:
 
         result = Widget().render().serialize_result()
 
-        for url in ("/citry/citry.js", "/citry/ext/events/runtime.js"):
+        for url in ("/citry/citry.js",):
             record = next(script for script in result.security.scripts if script.url == url)
             digest = _sha384(_serve(c, url).body)
             assert record.digests == (digest,)
@@ -355,36 +389,29 @@ class TestExternalIntegrity:
         assert record.provenance == "declared-verified"
         assert {digest.partition("-")[0] for digest in record.digests} == {"sha256", "sha384", "sha512"}
 
-    def test_missing_fragment_variable_bytes_keep_legacy_output_but_fail_integrity(self):
-        c = Citry()
+    def test_static_fragment_served_dependency_integrity_matches_owned_bytes(self, tmp_path: Path):
+        source = tmp_path / "owned.js"
+        source.write_text("globalThis.owned = true;", encoding="utf-8")
+        c = Citry(dirs=[tmp_path], security_script_integrity="citry")
         c.set_mounted_prefix("/citry")
 
         class Widget(Component):
             citry = c
             template = "<p>widget</p>"
-            js = "$component(() => {});"
 
-            def js_data(self, kwargs, slots):
-                return {"count": 2}
+            class Dependencies:
+                js = [source]
+                local_files = "serve"
 
-        rendered = Widget().render()
-        record = next(iter(rendered.context.extra["dependencies"]))
-        assert record.js_vars_hash is not None
-        c.cache.delete(gen_cache_key(Widget.class_id, "js", record.js_vars_hash))
+        result = Widget().render().serialize_result(deps_strategy="fragment")
+        record = next(item for item in result.security.scripts if item.url)
+        assert record.digests == (_sha384(_serve(c, record.url).body),)
+        assert "data-citry-vue-fragment" not in result.html
 
-        legacy = rendered.serialize(deps_strategy="fragment")
-        legacy_urls = [descriptor["attrs"]["src"] for descriptor in _fetch_descriptors(legacy, "js")]
-        assert any(f".{record.js_vars_hash}.js" in url for url in legacy_urls)
-
-        secured = Widget().render()
-        secured_record = next(iter(secured.context.extra["dependencies"]))
-        assert secured_record.js_vars_hash is not None
-        c.cache.delete(gen_cache_key(Widget.class_id, "js", secured_record.js_vars_hash))
-        with pytest.raises(RuntimeError, match="Cannot prove the response bytes"):
-            secured.serialize_result(deps_strategy="fragment", security_script_integrity="citry")
-
-    def test_owned_declared_integrity_mismatch_fails(self):
+    def test_owned_declared_integrity_mismatch_fails(self, tmp_path: Path):
         bad = _sha384(b"not the owned body")
+        source = tmp_path / "owned.js"
+        source.write_text("globalThis.owned = true;", encoding="utf-8")
 
         class DeclareWrongDigest(Extension):
             name = "declare_wrong_digest"
@@ -394,13 +421,20 @@ class TestExternalIntegrity:
                     if isinstance(script, Script) and script._owned_resource is not None:
                         script.attrs["integrity"] = bad
 
-        c = Citry(extensions=[DeclareWrongDigest], security_script_integrity="citry")
+        c = Citry(
+            dirs=[tmp_path],
+            extensions=[DeclareWrongDigest],
+            extensions_defaults={"dependencies": {"local_files": "serve"}},
+            security_script_integrity="citry",
+        )
         c.set_mounted_prefix("/citry")
 
         class Widget(Component):
             citry = c
             template = "<p>widget</p>"
-            js = "$component(() => {});"
+
+            class Dependencies:
+                js = [source]
 
         with pytest.raises(ValueError, match="does not match the Citry-owned bytes"):
             Widget().render().serialize_result(deps_strategy="fragment")
@@ -761,7 +795,7 @@ class TestCspNonce:
         assert ".once { display: block; }" in html
         assert style.calls == 1
 
-    def test_fragment_nonce_reaches_preloader_manifests_and_created_dependencies(self):
+    def test_static_fragment_nonce_reaches_direct_dependencies(self):
         nonce = "fragmentNonce"
         c = Citry()
         c.set_mounted_prefix("/citry")
@@ -769,7 +803,6 @@ class TestCspNonce:
         class Card(Component):
             citry = c
             template = "<p>card</p>"
-            js = "$component(() => {});"
 
             class Dependencies:
                 js = [Script(content="globalThis.inlineDependency = true;", wrap=False)]
@@ -779,18 +812,10 @@ class TestCspNonce:
                 ]
 
         result = Card().render().serialize_result(deps_strategy="fragment", csp_nonce=nonce)
-        js_descriptors = _fetch_descriptors(result.html, "js")
-        css_descriptors = _fetch_descriptors(result.html, "css")
-
-        assert f's.nonce = "{nonce}";' in result.html
-        top_level_scripts = re.findall(r"<script\b([^>]*)>", result.html)
-        assert top_level_scripts
-        assert all(f'nonce="{nonce}"' in attrs for attrs in top_level_scripts)
-        assert all(descriptor["attrs"]["nonce"] == nonce for descriptor in js_descriptors)
-        inline_style = next(descriptor for descriptor in css_descriptors if descriptor["tag"] == "style")
-        external_link = next(descriptor for descriptor in css_descriptors if descriptor["tag"] == "link")
-        assert inline_style["attrs"]["nonce"] == nonce
-        assert external_link["attrs"]["nonce"] == nonce
+        assert "data-citry-vue-fragment" not in result.html
+        assert f'<script nonce="{nonce}">globalThis.inlineDependency = true;</script>' in result.html
+        assert f'<style nonce="{nonce}">.inline {{ color: green; }}</style>' in result.html
+        assert re.search(rf'<link[^>]*href="https://cdn\.example\.test/card\.css"[^>]*nonce="{nonce}"', result.html)
 
     def test_nonce_only_rejects_opaque_dependency_output(self):
         c = Citry()
@@ -807,7 +832,7 @@ class TestCspNonce:
 
 
 class TestCspSerializationModes:
-    def test_warn_reports_but_preserves_standard_output(self):
+    def test_native_vue_expressions_need_no_alpine_csp_warning(self):
         c = Citry()
 
         class Card(Component):
@@ -817,14 +842,11 @@ class TestCspSerializationModes:
             """
 
         rendered = Card().render()
-        ordinary = rendered.serialize(security_csp="off")
-        with pytest.warns(RuntimeWarning, match="arrow functions"):
-            warned = rendered.serialize(security_csp="warn")
+        warned = rendered.serialize(security_csp="warn")
+        assert "startPrepared" in warned
+        assert '@click="items.map' not in warned
 
-        assert warned == ordinary
-        assert "Citry events CSP client runtime" not in warned
-
-    def test_strict_rejects_incompatible_expression_at_its_token(self):
+    def test_strict_accepts_precompiled_native_vue_expression(self):
         c = Citry(security_csp="strict")
 
         class Card(Component):
@@ -833,10 +855,10 @@ class TestCspSerializationModes:
                 <button @click="items.map(item => item.id)">Save</button>
             """
 
-        with pytest.raises(ValueError, match=r"Card, attribute '@click', settled HTML bytes .*arrow functions"):
-            Card().render().serialize(deps_strategy="simple")
+        html = Card().render().serialize(csp_nonce="requestNonce")
+        assert "startPrepared" in html
 
-    def test_strict_classifies_browser_decoded_attribute_values(self):
+    def test_strict_accepts_browser_decoded_native_vue_expression(self):
         c = Citry(security_csp="strict")
 
         class Card(Component):
@@ -845,8 +867,7 @@ class TestCspSerializationModes:
                 <button @click="items.map(item =&gt; item.id)">Save</button>
             """
 
-        with pytest.raises(ValueError, match=r"Card, attribute '@click', settled HTML bytes .*arrow functions"):
-            Card().render().serialize(deps_strategy="simple")
+        assert "startPrepared" in Card().render().serialize(csp_nonce="requestNonce")
 
     @pytest.mark.parametrize("mutation", ["edit", "duplicate"])
     def test_warn_late_script_changes_match_off_output(self, mutation):
@@ -914,7 +935,7 @@ class TestCspSerializationModes:
 
         assert warned == ordinary
 
-    def test_strict_checks_component_boundary_expression_that_is_not_final_html(self):
+    def test_strict_compiles_component_boundary_expression(self):
         c = Citry(security_csp="strict")
 
         class Child(Component):
@@ -929,10 +950,9 @@ class TestCspSerializationModes:
                 <c-child @click="items.map(item => item.id)" />
             """
 
-        with pytest.raises(ValueError, match="arrow functions"):
-            Parent().render().serialize(deps_strategy="simple")
+        assert "startPrepared" in Parent().render().serialize(csp_nonce="requestNonce")
 
-    def test_reached_diagnostic_names_component_attribute_and_source_range(self):
+    def test_component_boundary_expression_is_absent_from_final_html(self):
         c = Citry(security_csp="strict")
 
         class Child(Component):
@@ -943,12 +963,8 @@ class TestCspSerializationModes:
             citry = c
             template = '<c-child @click="items.map(item => item.id)" />'
 
-        with pytest.raises(ValueError, match="arrow functions") as error:
-            Parent().render().serialize(deps_strategy="simple")
-
-        assert "Parent" in str(error.value)
-        assert "attribute '@click'" in str(error.value)
-        assert "source bytes" in str(error.value)
+        html = Parent().render().serialize(csp_nonce="requestNonce")
+        assert '@click="items.map' not in html
 
     @pytest.mark.parametrize(
         ("template", "message"),
@@ -992,7 +1008,7 @@ class TestCspSerializationModes:
         with pytest.raises(ValueError, match="javascript: URL"):
             Card().render().serialize(deps_strategy="simple")
 
-    def test_entity_expansion_reports_the_complete_raw_entity_span(self):
+    def test_native_vue_entity_expression_is_compiled_out_of_html(self):
         c = Citry()
 
         class Card(Component):
@@ -1000,14 +1016,8 @@ class TestCspSerializationModes:
             template = '<button @click="&NotEqualTilde;">Save</button>'
 
         rendered = Card().render()
-        ordinary = rendered.serialize(deps_strategy="simple", security_csp="off")
-        start = ordinary.encode().index(b"&NotEqualTilde;")
-        end = start + len(b"&NotEqualTilde;")
-
-        with pytest.raises(ValueError, match="cannot evaluate") as error:
-            rendered.serialize(deps_strategy="simple", security_csp="strict")
-
-        assert f"settled HTML bytes {start}:{end}" in str(error.value)
+        with pytest.raises(ValueError, match="Vue compiler diagnostics"):
+            rendered.serialize(security_csp="strict", csp_nonce="requestNonce")
 
     def test_dedupe_keeps_distinct_sites_and_rendered_instances(self):
         c = Citry(security_csp="strict")
@@ -1048,7 +1058,7 @@ class TestCspSerializationModes:
         with pytest.raises(ValueError, match="native inline event"):
             Card().render().serialize(deps_strategy="simple")
 
-    def test_strict_selects_csp_runtime_for_mounted_and_inline_documents(self):
+    def test_strict_nonces_native_vue_runtime_for_mounted_and_inline_documents(self):
         for mounted in (False, True):
             c = Citry(security_csp="strict")
             if mounted:
@@ -1057,13 +1067,12 @@ class TestCspSerializationModes:
             class Card(Component):
                 citry = c
                 template = """
-                    <div x-data="{ count: 0 }" x-text="count"></div>
+                    <button @click="count += 1">Add</button>
                 """
 
             html = Card().render().serialize(csp_nonce="requestNonce")
-            assert ('src="/citry/ext/events/runtime-csp.js"' in html) is mounted
-            assert ("Citry events CSP client runtime" in html) is not mounted
-            assert 'data-citry-alpine-runtime="csp"' in html
+            assert ('src="/citry/citry.js"' in html) is mounted
+            assert ("Citry interactive runtime" in html) is not mounted
             assert 'nonce="requestNonce"' in html
 
     def test_strict_requires_nonce_only_when_active_code_or_inline_css_is_emitted(self):
@@ -1078,7 +1087,7 @@ class TestCspSerializationModes:
         class Interactive(Component):
             citry = c
             template = """
-                <div x-data="{}"></div>
+                    <button @click="ready = true">Ready</button>
             """
 
         assert "Static" in Static().render().serialize()
@@ -1092,16 +1101,14 @@ class TestCspSerializationModes:
         class Card(Component):
             citry = c
             template = """
-                <div x-data="{}"></div>
+                    <button @click="ready = true">Ready</button>
             """
 
         html = Card().render().serialize(deps_strategy="fragment", csp_nonce="requestNonce")
-        manifest = _manifest(html)
-        descriptors = _fetch_descriptors(html, "js")
-
-        assert "document.currentScript.remove()" not in html
-        assert manifest["alpineRuntime"] == "csp"
-        assert any(descriptor["attrs"].get("src") == "/citry/ext/events/runtime-csp.js" for descriptor in descriptors)
+        vue = _vue_fragment(html)
+        assert 'nonce="requestNonce"' in html
+        assert vue["prepared"]["nonce"] == "requestNonce"
+        assert "data-citry-vue-fragment" in html
 
 
 class TestJavascriptDeliveryPolicy:
@@ -1121,7 +1128,14 @@ class TestJavascriptDeliveryPolicy:
         with pytest.warns(RuntimeWarning, match="security_javascript='warn'"):
             warned = rendered.serialize(deps_strategy=strategy, security_javascript="warn")
 
-        assert warned == allowed
+        if strategy in {"simple", "ignore"}:
+            assert warned == allowed
+        else:
+            assert "startPrepared" in warned if strategy == "document" else "data-citry-vue-fragment" in warned
+            if strategy == "document":
+                assert _prepared(warned)["manifest"]["scripts"]
+            else:
+                assert _vue_fragment(warned)["prepared"]["manifest"]["scripts"]
 
     @pytest.mark.parametrize("strategy", ["document", "simple", "fragment"])
     def test_omit_keeps_html_and_css_without_managed_javascript(self, strategy):
@@ -1288,7 +1302,10 @@ class TestJavascriptDeliveryPolicy:
                 def save(self):
                     return None
 
-        with pytest.raises(ValueError, match=r"browser handler|data-cev-on"):
+        with pytest.raises(
+            ValueError,
+            match=r"selected event, poll, or State control bindings require the Citry Events runtime",
+        ):
             Card().render().serialize(deps_strategy="ignore")
 
     def test_omit_composes_with_strict_csp_and_integrity(self):
@@ -1346,7 +1363,7 @@ class TestJavascriptDeliveryPolicy:
         allowed = rendered.serialize(security_javascript="allow")
 
         assert "globalThis.cardReady" not in omitted
-        assert "globalThis.cardReady" in allowed
+        assert _prepared(allowed)["manifest"]["scripts"]
         with pytest.raises(ValueError, match="executable component Script"):
             rendered.serialize(security_javascript="forbid")
 

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import re
 import time
+from base64 import b64encode
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -17,18 +18,15 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
-_GRAPH_MANIFEST_RE = re.compile(
-    r"<script\b(?=[^>]*\bdata-citry-graph\b)[^>]*>(.*?)</script>",
-    re.DOTALL,
-)
-
-
-def _client_active_tabs_page() -> str:
+def _client_active_tabs_page() -> tuple[str, list[dict[str, str]]]:
     app = Citry(
         autodiscover=False,
         secret="preview-bridge-regression-secret",  # noqa: S106 - test key
     )
     app.register_library(citry_ui)
+    # The probe declares Events, and Vue serialization needs to know where their
+    # routes live before it can build the app's call URLs.
+    app.set_mounted_prefix("/__citry_playground__")
 
     class EventProbe(Component):
         citry = app
@@ -41,27 +39,41 @@ def _client_active_tabs_page() -> str:
                 return None
 
         template = """
-          <section id="event-probe" x-init="window.__initialState = $state.count">
-            <output id="initial-state" x-text="$state.count"></output>
+          <section id="event-probe">
+            <output id="initial-state" v-text="$state.count"></output>
             <button type="button" @c-click="ping">Ping</button>
           </section>
         """
 
+        js = """
+          $component({
+            onServerRender: ({component}) => {
+              window.__initialState = component.$state.count;
+            },
+          })
+        """
+
     class Demo(Component):
         citry = app
+        js = """
+          $component({
+            data() {
+              return {state: Citry.vue.reactive({selected: "account", changes: 0})};
+            },
+          })
+        """
+
         template = """
-          <main x-data="{ selected: 'account', changes: 0 }">
+          <main>
             <c-CTabs
               id="outer-tabs"
               default_value="account"
               aria_label="Outer sections"
-              $c-props="{
-                value: selected,
-                onValueChange: (value, detail) => {
-                  selected = value;
-                  changes += 1;
-                  window.__outerChange = { value, source: detail.source, changes };
-                },
+              :value="state.selected"
+              :onValueChange="(value, detail) => {
+                state.selected = value;
+                state.changes += 1;
+                window.__outerChange = { value, source: detail.source, changes: state.changes };
               }"
             >
               <c-CTab value="account">Account</c-CTab>
@@ -82,12 +94,39 @@ def _client_active_tabs_page() -> str:
               <c-CTabPanel value="profile">Profile panel</c-CTabPanel>
               <c-CTabPanel value="security">Security panel</c-CTabPanel>
             </c-CTabs>
-            <output id="selected-value" x-text="selected">account</output>
+            <output id="selected-value" v-text="state.selected">account</output>
             <c-EventProbe />
           </main>
         """
 
-    return f"<!doctype html><html lang='en'><head></head><body>{Demo()}</body></html>"
+    html = f"<!doctype html><html lang='en'><head></head><body>{Demo()}</body></html>"
+
+    # PreviewBridge serves playground-owned assets through its callback rather
+    # than exposing the application's Citry mount directly. Keep this fixture
+    # on the same channel so the test exercises the real prepared Vue startup.
+    from citry._vue.events import definition_bundle, style_asset  # noqa: PLC0415
+    from citry.ext.dependencies.emission import _runtime_js  # noqa: PLC0415
+    from docs_site._internal.static_deps import _prepared_owned_assets  # noqa: PLC0415
+
+    assets = [
+        {
+            "path": "/__citry_playground__/citry.js",
+            "contentType": "text/javascript",
+            "content": _runtime_js(),
+        }
+    ]
+    for kind, digest in sorted(_prepared_owned_assets(html, app)):
+        content = definition_bundle(app, digest) if kind == "js" else style_asset(app, digest)
+        assert content is not None
+        directory = "definitions" if kind == "js" else "assets"
+        assets.append(
+            {
+                "path": f"/__citry_playground__/ext/events/{directory}/{digest}.{kind}",
+                "contentType": "text/javascript" if kind == "js" else "text/css",
+                "content": content.decode("utf-8"),
+            }
+        )
+    return html, assets
 
 
 def _render_through_preview_bridge(
@@ -97,6 +136,23 @@ def _render_through_preview_bridge(
     *,
     assets: list[dict[str, str]] | None = None,
 ) -> None:
+    if assets:
+        by_path = {asset["path"]: asset for asset in assets}
+
+        def fulfill_playground_asset(route: Any) -> None:
+            path = urlsplit(route.request.url).path
+            asset = by_path.get(path)
+            if asset is None:
+                route.continue_()
+                return
+            route.fulfill(
+                status=200,
+                content_type=asset["contentType"],
+                headers={"Access-Control-Allow-Origin": "*"},
+                body=asset["content"],
+            )
+
+        page.route("**/__citry_playground__/**", fulfill_playground_asset)
     page.goto(base_url + "/", wait_until="domcontentloaded")
     page.evaluate(
         """async ({ baseUrl, html, assets }) => {
@@ -132,20 +188,45 @@ def _render_through_preview_bridge(
     )
 
 
-def _ownership_instance_count(html: str) -> int:
-    match = _GRAPH_MANIFEST_RE.search(html)
-    assert match is not None
-    manifest = json.loads(match.group(1))
-    return sum(len(graph["componentInstances"]) for graph in manifest["graphs"])
+def _prepared_manifest(html: str) -> dict[str, Any]:
+    marker = "CitryStable.startPrepared("
+    start = html.index(marker) + len(marker)
+    configuration, consumed = json.JSONDecoder().raw_decode(html[start:])
+    assert html[start + consumed :].startswith(").catch")
+    manifest = configuration["manifest"]
+    assert manifest["protocol"] == "citry-vue-prepared/1"
+    return manifest
 
 
-def test_preview_bridge_waits_for_alpine_before_processing_citry_manifests(
+def _inline_prepared_assets(html: str, assets: list[dict[str, str]]) -> str:
+    """Inline prepared Vue assets so the sandbox does not resolve paths at ``blob:null``."""
+    marker = "CitryStable.startPrepared("
+    start = html.index(marker) + len(marker)
+    configuration, consumed = json.JSONDecoder().raw_decode(html[start:])
+    by_path = {asset["path"]: asset for asset in assets}
+
+    def data_url(source: dict[str, Any]) -> str:
+        path = source["url"]
+        asset = by_path[path]
+        encoded = b64encode(asset["content"].encode()).decode()
+        return f"data:{asset['contentType']};base64,{encoded}"
+
+    manifest = configuration["manifest"]
+    for definition in manifest["definitions"]:
+        definition["url"] = data_url(definition)
+    for asset in [*manifest["scripts"], *manifest["styles"]]:
+        asset["source"]["url"] = data_url(asset["source"])
+    return html[:start] + json.dumps(configuration) + html[start + consumed :]
+
+
+def test_preview_bridge_mounts_vue_before_committing_the_candidate(
     page: Any,
     workspace_static_url: str,
 ) -> None:
-    html = _client_active_tabs_page()
-    expected_lifecycles = _ownership_instance_count(html)
-    _render_through_preview_bridge(page, workspace_static_url, html)
+    html, assets = _client_active_tabs_page()
+    html = _inline_prepared_assets(html, assets)
+    expected_occurrences = len(_prepared_manifest(html)["occurrences"])
+    _render_through_preview_bridge(page, workspace_static_url, html, assets=assets)
     preview = page.frame_locator("#preview")
     roots = preview.locator("[data-citry-tabs-root][data-citry-tabs-initialized]")
     expect(roots).to_have_count(2)
@@ -177,64 +258,38 @@ def test_preview_bridge_waits_for_alpine_before_processing_citry_manifests(
     runtime = preview.locator("body").evaluate(
         """body => {
           const doc = body.ownerDocument;
-          const debug = doc.defaultView.Citry.alpine._debug();
+          const win = doc.defaultView;
+          const apps = win.CitryStable ? [...win.CitryStable._apps.values()] : [];
+          const app = apps[0];
           return {
-            alpine: {
-              installed: debug.installed,
-              ready: debug.ready,
-              started: debug.started,
-            },
-            hooks: debug.hooks,
-            runtime: {
-              ownershipRevisions: debug.runtime.ownershipRevisions,
-              ownershipStates: debug.runtime.ownershipStates,
-              dependencyClaims: debug.runtime.dependencyClaims,
-              graphFailures: debug.runtime.graphFailures,
-              pendingCalls: debug.runtime.pendingCalls,
-              lifecycles: debug.runtime.lifecycles,
-              propsEffects: debug.runtime.propsEffects,
-            },
-            manifests: {
-              graphs: doc.querySelectorAll(
-                'script[data-citry-graph][data-citry-graph-processed]'
-              ).length,
-              events: doc.querySelectorAll(
-                'script[data-citry-events][data-citry-events-processed]'
-              ).length,
-              dependencies: doc.querySelectorAll(
-                'script[data-citry][data-citry-processed]'
-              ).length,
-              eventsPairedWithGraph: doc.querySelector(
-                'script[data-citry-events]'
-              )?.previousElementSibling?.matches(
-                'script[data-citry-graph]'
-              ) === true,
-            },
+            stable: typeof win.CitryStable?.startPrepared === 'function',
+            apps: apps.length,
+            revision: app?.revision ?? null,
+            mounted: app?.mounted?.size ?? 0,
+            terminal: app?.terminal ?? null,
+            legacyManifests: doc.querySelectorAll(
+              'script[data-citry-graph], script[data-citry-events], script[data-citry]'
+            ).length,
+            preparedBootstraps: [...doc.scripts].filter(script =>
+              script.textContent.includes('CitryStable.startPrepared(')
+            ).length,
           };
         }"""
     )
-    assert runtime["alpine"] == {"installed": True, "ready": True, "started": True}
-    assert runtime["hooks"] == {"installs": 1, "roots": 1, "init": 1, "morph": 0, "starts": 1}
-    assert runtime["runtime"] == {
-        "ownershipRevisions": 1,
-        "ownershipStates": 1,
-        "dependencyClaims": 1,
-        "graphFailures": 0,
-        "pendingCalls": 0,
-        "lifecycles": expected_lifecycles,
-        "propsEffects": 1,
-    }
-    assert runtime["manifests"] == {
-        "graphs": 1,
-        "events": 1,
-        "dependencies": 1,
-        "eventsPairedWithGraph": True,
+    assert runtime == {
+        "stable": True,
+        "apps": 1,
+        "revision": 0,
+        "mounted": expected_occurrences,
+        "terminal": False,
+        "legacyManifests": 0,
+        "preparedBootstraps": 1,
     }
     assert page.evaluate("window.__previewCommitted") is True
     assert page.evaluate("window.__previewDiagnostics") == []
 
 
-def test_preview_bridge_waits_for_ordered_external_scripts_before_manifests(
+def test_preview_bridge_waits_for_ordered_external_scripts_before_vue_bootstrap(
     page: Any,
     workspace_static_url: str,
 ) -> None:
@@ -257,14 +312,13 @@ def test_preview_bridge_waits_for_ordered_external_scripts_before_manifests(
         <body>
           <script>
             window.__activationOrder = [];
-            new MutationObserver(() => {
-              if (document.querySelector('script[data-citry]')) {
-                window.__activationOrder.push('manifest');
-              }
-            }).observe(document, { childList: true, subtree: true });
           </script>
           <script src="/__tests__/ordered-script.js"></script>
-          <script type="application/json" data-citry>{}</script>
+          <script>
+            // A prepared Vue bootstrap is activated only after the preceding
+            // parser-style external script has settled.
+            window.__activationOrder.push('vue-bootstrap');
+          </script>
         </body>
       </html>
     """
@@ -276,7 +330,7 @@ def test_preview_bridge_waits_for_ordered_external_scripts_before_manifests(
         .evaluate("body => body.ownerDocument.defaultView.__activationOrder")
     )
 
-    assert order == ["external", "manifest"]
+    assert order == ["external", "vue-bootstrap"]
     assert page.evaluate("window.__previewDiagnostics") == []
 
 

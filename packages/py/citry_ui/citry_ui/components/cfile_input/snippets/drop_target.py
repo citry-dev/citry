@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class FileDropTarget(Component):
     template = """
-      <div x-data="{names: []}">
+      <div >
         <c-CDropTarget
           label="Supporting documents"
           name="documents"
@@ -15,8 +15,17 @@ class FileDropTarget(Component):
         >
           PDF or image files
         </c-CDropTarget>
-        <p x-text="names.join(', ')"></p>
+        <p v-text="names.join(', ')"></p>
       </div>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            names: []
+          };
+        },
+      });
     """
 
 

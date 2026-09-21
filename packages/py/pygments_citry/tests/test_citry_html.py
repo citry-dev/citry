@@ -96,20 +96,19 @@ def test_fragment_delimiters_are_special_only_inside_nested_values():
     assert standalone == [(Text, "<>")]
 
 
-def test_direct_client_props_value_is_javascript():
-    toks = lex_template('<c-child $c-props="{ enabled: true, count: localCount }" />')
-    assert (Name.Attribute, "$c-props") in toks
+def test_vue_component_prop_value_is_javascript():
+    toks = lex_template('<c-child :enabled="true" :count="localCount" />')
+    assert (Name.Attribute, ":enabled") in toks
     assert (Keyword.Constant, "true") in toks
     assert (Name.Other, "localCount") in toks
     assert not any(token is Error for token, _ in toks)
 
 
-def test_server_dynamic_client_props_value_is_python():
-    toks = lex_template('<c-child c-$c-props="primary if enabled else fallback" />')
-    assert (Name.Attribute, "c-$c-props") in toks
-    assert (Keyword, "if") in toks
-    assert (Keyword, "else") in toks
-    assert (Name, "fallback") in toks
+def test_vue_component_prop_object_value_is_javascript():
+    toks = lex_template('<c-child v-bind="{ enabled: ready, count }" />')
+    assert (Name.Attribute, "v-bind") in toks
+    assert (Name.Other, "ready") in toks
+    assert (Name.Other, "count") in toks
     assert not any(token is Error for token, _ in toks)
 
 

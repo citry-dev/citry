@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path, PurePosixPath
 
 import pytest
+from lxml import html as lxml_html
 
+from citry import citry as default_citry
+from citry._vue.events import definition_bundle
 from docs_site._internal.components.ui_demo import UiDemo
 from docs_site._internal.project import load_docs_project
 from docs_site._internal.ui_library_projection import UiLibraryCatalog, UiLibraryProjection
 from docs_site._internal.ui_previews import (
     UiPreview,
+    UiPreviewDocument,
     UiPreviewError,
     discover_ui_previews,
     load_ui_preview_controls,
@@ -53,6 +58,18 @@ def _write_sources(root: Path, *, snippet: str) -> None:
         'title="Primary action" source_open />\n',
         encoding="utf-8",
     )
+
+
+def _prepared_configuration(html: str) -> dict[str, object]:
+    document = lxml_html.document_fromstring(html)
+    marker = "CitryStable.startPrepared("
+    bootstraps = [script.text or "" for script in document.xpath("//script") if marker in (script.text or "")]
+    assert len(bootstraps) == 1
+    source = bootstraps[0]
+    start = source.index(marker) + len(marker)
+    configuration, _ = json.JSONDecoder().raw_decode(source[start:])
+    assert type(configuration) is dict
+    return configuration
 
 
 def test_discovery_ignores_documented_directives_and_derives_private_route(
@@ -732,8 +749,30 @@ preview
         csp_nonce="DocsPreviewNonce",
     )
 
-    assert "citry-ui-preview-height" in html
-    assert 'nonce="DocsPreviewNonce"' in html
+    document = lxml_html.document_fromstring(html)
+    scripts = document.xpath("//script")
+    assert scripts
+    assert all(script.get("nonce") == "DocsPreviewNonce" for script in scripts)
+    assert all(style.get("nonce") == "DocsPreviewNonce" for style in document.xpath("//style"))
+
+    configuration = _prepared_configuration(html)
+    assert configuration["nonce"] == "DocsPreviewNonce"
+    manifest = configuration["manifest"]
+    assert type(manifest) is dict
+    preview_scripts = [
+        asset for asset in manifest["scripts"] if asset["owner"].get("typeKey") == UiPreviewDocument.class_id
+    ]
+    assert len(preview_scripts) == 1
+    source = preview_scripts[0]["source"]
+    assert source["kind"] == "owned"
+    bundle = definition_bundle(default_citry, source["sha256"])
+    assert bundle is not None
+    assert b"citry-ui-preview-height" in bundle
+
+    definition_bundles = [definition_bundle(default_citry, asset["sha256"]) for asset in manifest["definitions"]]
+    assert definition_bundles
+    assert all(bundle is not None for bundle in definition_bundles)
+    assert any(b"Strict preview" in bundle for bundle in definition_bundles if bundle is not None)
 
 
 def test_preview_cannot_reach_into_another_component_family(tmp_path: Path) -> None:

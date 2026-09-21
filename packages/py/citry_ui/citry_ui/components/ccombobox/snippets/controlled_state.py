@@ -14,13 +14,6 @@ class ControlledMissionTarget(Component):
     template = """
       <section
         class="controlled-target"
-        x-data
-        x-init="Alpine.store('missionTarget', {
-          value: null,
-          query: '',
-          open: false,
-          lastReason: 'none',
-        })"
       >
         <c-CField>
           <c-fill name="label">
@@ -29,41 +22,46 @@ class ControlledMissionTarget(Component):
           <c-fill name="default">
             <c-CCombobox
               c-options="targets"
-              $c-props="{
-                value: $store.missionTarget.value,
-                inputValue: $store.missionTarget.query,
-                open: $store.missionTarget.open,
-                onValueChange: (next, detail) => {
-                  $store.missionTarget.value = next;
-                  $store.missionTarget.lastReason = `value: ${detail.reason}`;
-                },
-                onInputValueChange: (next, detail) => {
-                  $store.missionTarget.query = next;
-                  $store.missionTarget.lastReason = `query: ${detail.reason}`;
-                },
-                onOpenChange: (next, detail) => {
-                  $store.missionTarget.open = next;
-                  $store.missionTarget.lastReason = `popup: ${detail.reason}`;
-                },
-              }"
+              :value="value" :inputValue="query" :open="open" :onValueChange="(next, detail) => {
+                  value = next;
+                  lastReason = `value: ${detail.reason}`;
+                }" :onInputValueChange="(next, detail) => {
+                  query = next;
+                  lastReason = `query: ${detail.reason}`;
+                }" :onOpenChange="(next, detail) => {
+                  open = next;
+                  lastReason = `popup: ${detail.reason}`;
+                }"
             />
           </c-fill>
         </c-CField>
         <dl aria-live="polite">
           <div>
             <dt>Value</dt>
-            <dd x-text="$store.missionTarget.value ?? 'none'">none</dd>
+            <dd v-text="value ?? 'none'">none</dd>
           </div>
           <div>
             <dt>Query</dt>
-            <dd x-text="$store.missionTarget.query || 'empty'">empty</dd>
+            <dd v-text="query || 'empty'">empty</dd>
           </div>
           <div>
             <dt>Last request</dt>
-            <dd x-text="$store.missionTarget.lastReason">none</dd>
+            <dd v-text="lastReason">none</dd>
           </div>
         </dl>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            value: null,
+            query: '',
+            open: false,
+            lastReason: 'none',
+          };
+        },
+      });
     """
 
     def template_data(

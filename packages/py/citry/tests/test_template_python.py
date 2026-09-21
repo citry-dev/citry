@@ -132,11 +132,10 @@ def test_fill_binding_is_unknown_only_inside_its_body() -> None:
 
 
 def test_static_and_browser_values_are_not_python_queries() -> None:
-    source = '<c-slot name="header" required /><c-card $c-props="items"></c-card>'
+    source = '<c-slot name="header" required /><c-card :items="items"></c-card>'
     template = parse_template(source)
 
-    for marker in ("header", "required", "items"):
-        index = source.index(marker) + 1
+    for index in (source.index("header") + 1, source.index("required") + 1, source.rindex("items") + 1):
         assert template_python_query_at(template, index) is None
 
 

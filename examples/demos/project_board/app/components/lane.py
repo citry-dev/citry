@@ -56,11 +56,11 @@ class Lane(Component):
             taskId > 0 &&
             sourceLane !== laneKey
           ) {
-            $dispatch('board:move', {
+            $el.dispatchEvent(new CustomEvent('board:move', { bubbles: true, detail: {
               taskId,
               lane: laneKey,
               focusControl: false,
-            });
+            }}));
           }
         "
       >

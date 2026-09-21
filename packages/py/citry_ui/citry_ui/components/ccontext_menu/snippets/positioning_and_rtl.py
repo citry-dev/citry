@@ -9,13 +9,7 @@ class ContextMenuPositioningAndRtl(Component):
       <section
         class="context-menu-positioning"
         style="--cui-menu-inline-size:18rem"
-        x-data="{
-          surfaceDir:'ltr',
-          targetDir:'rtl',
-          externalOpen:false,
-          lastPoint:'none',
-          lastInvocation:'none',
-        }"
+
         :dir="surfaceDir"
       >
         <div class="context-menu-positioning__controls">
@@ -57,11 +51,11 @@ class ContextMenuPositioningAndRtl(Component):
               }))
             "
           >Test fully offscreen rejection</button>
-          <output x-text="`Accepted point: ${lastPoint}; invocation: ${lastInvocation}`">
+          <output v-text="`Accepted point: ${lastPoint}; invocation: ${lastInvocation}`">
             Accepted point: none; invocation: none
           </output>
           <output
-            x-text="`Visual viewport: ${Math.round(visualViewport?.width ?? innerWidth)} x
+            v-text="`Visual viewport: ${Math.round(visualViewport?.width ?? innerWidth)} x
               ${Math.round(visualViewport?.height ?? innerHeight)} CSS px`"
           >Visual viewport diagnostic</output>
         </div>
@@ -69,7 +63,7 @@ class ContextMenuPositioningAndRtl(Component):
         <div class="context-menu-positioning__board">
           <c-CContextMenu
             aria_label="Top start actions"
-            $c-props="{
+            v-bind="{
               onOpenChange:(next,detail)=>{
                 if (next) {
                   lastPoint=`${Math.round(detail.clientX)}, ${Math.round(detail.clientY)}`;
@@ -123,7 +117,7 @@ class ContextMenuPositioningAndRtl(Component):
           <c-CContextMenu
             id="context-position-external"
             aria_label="Bottom end actions"
-            $c-props="{
+            v-bind="{
               open:externalOpen,
               onOpenChange:(next,detail)=>{
                 externalOpen=next;
@@ -166,7 +160,7 @@ class ContextMenuPositioningAndRtl(Component):
 
         <div
           class="context-menu-positioning__repair-scroller"
-          x-ref="repairScroller"
+          ref="repairScroller"
         >
           <div class="context-menu-positioning__repair-spacer">Scrollable repair boundary</div>
           <div class="context-menu-positioning__transformed">
@@ -191,6 +185,16 @@ class ContextMenuPositioningAndRtl(Component):
           verify the same collision-safe 18 rem surface.
         </p>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {
+          surfaceDir:'ltr',
+          targetDir:'rtl',
+          externalOpen:false,
+          lastPoint:'none',
+          lastInvocation:'none',
+        };}});
     """
 
     css = """

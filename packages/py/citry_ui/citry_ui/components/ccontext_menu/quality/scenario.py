@@ -1,5 +1,7 @@
 """Shared ContextMenu scenario used by repository quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from __future__ import annotations
 
 from typing import Any
@@ -51,7 +53,7 @@ def context_menu_states_component(app: Citry) -> type[Component]:
           <section
             class="context-menu-quality__lifecycle"
             @c-quality-morph="refresh"
-            x-data="{lifecycleNotices:0}"
+
           >
             <output hidden data-quality-morph-step>{{ morph_step }}</output>
             <c-if cond="include_lifecycle">
@@ -61,9 +63,7 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                   id="quality-context-menu-lifecycle"
                   aria_label="Lifecycle target actions"
                   c-attrs="{'data-quality-states':lifecycle_states}"
-                  $c-props="{
-                    onOpenChange:()=>lifecycleNotices += 1,
-                  }"
+                  :onOpenChange="()=>lifecycleNotices += 1"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div
@@ -81,9 +81,18 @@ def context_menu_states_component(app: Citry) -> type[Component]:
             </c-if>
             <output aria-live="polite">
               Lifecycle callbacks:
-              <span data-quality-lifecycle-notices x-text="lifecycleNotices">0</span>
+              <span data-quality-lifecycle-notices v-text="lifecycleNotices">0</span>
             </output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                lifecycleNotices:0,
+              };
+            },
+          });
         """
 
     class CitryUiContextMenuStates(Component):
@@ -93,16 +102,7 @@ def context_menu_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack context-menu-quality"
             aria-labelledby="context-menu-states-title"
-            x-data="{
-              lastAction:'none',
-              lastReason:'none',
-              lastPoint:'none',
-              controlled:true,
-              controlledOpen:false,
-              acceptClaim:true,
-              targetClicks:0,
-              submits:0,
-            }"
+
           >
             <h1 id="context-menu-states-title">ContextMenu states</h1>
 
@@ -117,14 +117,11 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                       'closed open pointer keyboard command checkbox radio group '
                       'separator submenu danger typeahead md'
                   }"
-                  $c-props="{
-                    onOpenChange:(next,detail)=>{
+                  :onOpenChange="(next,detail)=>{
                       lastReason=detail.reason;
                       lastPoint=`${Math.round(detail.clientX)},${Math.round(detail.clientY)}`;
-                    },
-                    onAction:(value,detail)=>
-                      lastAction=`${detail.path.join('/') || 'root'}:${value}`,
-                  }"
+                    }" :onAction="(value,detail)=>
+                      lastAction=`${detail.path.join('/') || 'root'}:${value}`"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div
@@ -185,9 +182,7 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'controlled claim accept refuse release external same-open no-flash'
                   }"
-                  $c-props="{
-                    open:controlled ? controlledOpen : null,
-                    onOpenChange:(next,detail)=>{
+                  :open="controlled ? controlledOpen : null" :onOpenChange="(next,detail)=>{
                       lastReason=detail.reason;
                       lastPoint=`${Math.round(detail.clientX)},${Math.round(detail.clientY)}`;
                       if (!next) {
@@ -197,8 +192,7 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                       if (!acceptClaim) return false;
                       controlledOpen=true;
                       return true;
-                    },
-                  }"
+                    }"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div
@@ -299,15 +293,15 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                     <context-menu-quality-host>Custom element</context-menu-quality-host>
                     <div
                       data-citry-context-menu-native
-                      x-init="const root=$el.attachShadow({mode:'closed'});root.textContent='Closed shadow content'"
+                      ref="closedShadowHost"
                     >Marked opaque host</div>
                     <div
                       data-quality-open-shadow
-                      x-init="const root=$el.attachShadow({mode:'open'});root.textContent='Open shadow selection text'"
+                      ref="openShadowHost"
                     >Open shadow host</div>
                     <iframe
                       title="Separate quality document"
-                      srcdoc="<!doctype html><html lang='en'><title>Child</title><p>Child document menu.</p></html>"
+                      srcdoc="&lt;!doctype html&gt;&lt;html lang='en'&gt;&lt;title&gt;Child&lt;/title&gt;&lt;p&gt;Child document menu.&lt;/p&gt;&lt;/html&gt;"
                     ></iframe>
                     <div data-quality-eligible tabindex="0">Eligible file row</div>
                   </div>
@@ -344,8 +338,8 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                   </c-CContextMenu>
                 </form>
                 <output>
-                  clicks <span data-quality-target-clicks x-text="targetClicks">0</span>;
-                  submits <span data-quality-submits x-text="submits">0</span>
+                  clicks <span data-quality-target-clicks v-text="targetClicks">0</span>;
+                  submits <span data-quality-submits v-text="submits">0</span>
                 </output>
               </article>
 
@@ -436,12 +430,35 @@ def context_menu_states_component(app: Citry) -> type[Component]:
             />
 
             <output id="context-menu-quality-log" aria-live="polite">
-              action <span data-quality-action x-text="lastAction">none</span>;
-              reason <span data-quality-reason x-text="lastReason">none</span>;
-              point <span data-quality-point x-text="lastPoint">none</span>
+              action <span data-quality-action v-text="lastAction">none</span>;
+              reason <span data-quality-reason v-text="lastReason">none</span>;
+              point <span data-quality-point v-text="lastPoint">none</span>
             </output>
             <span id="context-menu-quality-destination">Native link destination</span>
           </section>
+        """
+
+        js = """
+          $component({
+            data() {
+              return {
+                lastAction:'none',
+                lastReason:'none',
+                lastPoint:'none',
+                controlled:true,
+                controlledOpen:false,
+                acceptClaim:true,
+                targetClicks:0,
+                submits:0,
+              };
+            },
+            mounted() {
+              this.$refs.closedShadowHost.attachShadow({mode:'closed'}).textContent =
+                'Closed shadow content';
+              this.$refs.openShadowHost.attachShadow({mode:'open'}).textContent =
+                'Open shadow selection text';
+            },
+          });
         """
 
         css = """

@@ -15,7 +15,7 @@ class DividerVariantsAndSizes(Component):
             <c-for each="size in sizes">
               <div>
                 <span>{{ size }}</span>
-                <c-CDivider c-variant="variant" c-size="size" c-decorative="True" />
+                <c-CDivider #c-key="f'{variant}-{size}'" c-variant="variant" c-size="size" c-decorative="True" />
               </div>
             </c-for>
           </div>

@@ -48,8 +48,8 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from citry.citry_render import CitryRender
     from citry.citry_template import CitryTemplate
+    from citry.client_directives import ComponentTagClientBinding, RuntimeComponentEventBinding
     from citry.component import Component
-    from citry.ownership import ComponentInvocationId, ComponentTagClientBindingRecord, OwnershipGraph
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +58,25 @@ class _ElementMorphMetadata:
 
     key: str | None
     morph_mode: Literal["ignore"] | None
+    authored_bindings: tuple[ComponentTagClientBinding, ...] = ()
+    # Events compiles each literal binding into a plain JSON-shaped mapping, which
+    # the prepared renderer hands to the browser unchanged.
+    event_bindings: tuple[dict[str, object], ...] = ()
+    poll_bindings: tuple[dict[str, object], ...] = ()
+    control_bindings: tuple[dict[str, object], ...] = ()
+    owner_name: str | None = None
+    runtime_events_candidate: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedCallMetadata:
+    """Private lexical component-call identity for prepared rendering."""
+
+    source: str
+    source_span: tuple[int, int]
+    explicit_key: str | None
+    origin: str | None = None
+    slot_free_body: bool = False
 
 
 class CitryElement:
@@ -78,20 +97,12 @@ class CitryElement:
             Values are raw inputs here (strings, functions, elements, Slots);
             they normalize to ``Slot`` instances when the component instance is
             created at render time.
-        component_tag_client_bindings: The final source-ordered ``$c-props``, Alpine event,
-            and Citry event contributions captured from a component tag. They
-            are framework metadata, not Python kwargs.
-        ownership_invocation_id: The render-local component call record that
-            this element will bind to its concrete component instance.
-        ownership_graph: The render-local graph that allocated
-            ``ownership_invocation_id``. Retained explicitly so a lazy value
-            invoked during another root render cannot bind a graph-local ID
-            against the wrong graph.
+        component_tag_client_bindings: The final source-ordered bindings
+            captured from a component tag, including native Vue props and event
+            listeners and Citry server events. They are framework metadata,
+            not Python kwargs.
         element_morph_metadata: Private metadata materialized only by the
             dynamic ordinary-element built-in.
-        forward_ownership_invocation: Whether this element is the transparent
-            dynamic selector and must forward the invocation to its selected
-            target instead of consuming it.
 
     """
 
@@ -99,10 +110,8 @@ class CitryElement:
         "comp_cls",
         "component_tag_client_bindings",
         "element_morph_metadata",
-        "forward_ownership_invocation",
         "kwargs",
-        "ownership_graph",
-        "ownership_invocation_id",
+        "prepared_call_metadata",
         "slots",
     )
 
@@ -112,20 +121,16 @@ class CitryElement:
         kwargs: dict[str, Any],
         slots: dict[str, Any] | None = None,
         *,
-        component_tag_client_bindings: tuple[ComponentTagClientBindingRecord, ...] = (),
-        ownership_invocation_id: ComponentInvocationId | None = None,
-        ownership_graph: OwnershipGraph | None = None,
+        component_tag_client_bindings: tuple[ComponentTagClientBinding | RuntimeComponentEventBinding, ...] = (),
         element_morph_metadata: _ElementMorphMetadata | None = None,
-        forward_ownership_invocation: bool = False,
+        prepared_call_metadata: _PreparedCallMetadata | None = None,
     ) -> None:
         self.comp_cls = comp_cls
         self.kwargs = kwargs
         self.slots = slots or {}
         self.component_tag_client_bindings = component_tag_client_bindings
-        self.ownership_invocation_id = ownership_invocation_id
-        self.ownership_graph = ownership_graph
         self.element_morph_metadata = element_morph_metadata
-        self.forward_ownership_invocation = forward_ownership_invocation
+        self.prepared_call_metadata = prepared_call_metadata
 
     def render(
         self,

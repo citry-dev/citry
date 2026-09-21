@@ -21,18 +21,43 @@ function nextTask() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function destroyCanvasAlpine(canvas) {
-  const destroyTree = globalThis.Alpine?.destroyTree;
-  if (typeof destroyTree !== "function") {
-    return;
-  }
-  for (const child of Array.from(canvas.children)) {
-    destroyTree(child);
-  }
+function waitForOperation(operation, deadline, signal, timeoutMessage) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeout;
+    const dispose = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const finish = (callback, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      dispose();
+      callback(value);
+    };
+    const onAbort = () => finish(reject, abortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    timeout = setTimeout(
+      () => finish(reject, new Error(timeoutMessage)),
+      Math.max(0, deadline - performance.now()),
+    );
+    // Both handlers remain attached after a timeout or abort so a provider
+    // that settles late cannot create an unhandled rejection.
+    operation.then(
+      (value) => finish(resolve, value),
+      (error) => finish(reject, error),
+    );
+    if (signal.aborted) {
+      queueMicrotask(onAbort);
+    }
+  });
 }
 
 function destroyMount(record) {
-  destroyCanvasAlpine(record.mount);
+  // Removing the fragment host lets Citry's document observer unmount the
+  // owning Vue app and retire its component callbacks and pending work.
   record.mount.remove();
 }
 
@@ -87,6 +112,78 @@ function waitForReady(canvas, selector, timeoutMs, signal) {
       );
     }, timeoutMs);
   });
+}
+
+async function activateVueFragment(mount, timeoutMs, signal) {
+  const tag = mount.querySelector(
+    'script[type="application/json"][data-citry-vue-fragment]',
+  );
+  if (!tag) {
+    return;
+  }
+  const deadline = performance.now() + timeoutMs;
+  while (typeof globalThis.Citry?.fragments?.load !== "function") {
+    if (signal.aborted) {
+      throw abortError();
+    }
+    if (performance.now() >= deadline) {
+      throw new Error("Citry's Vue fragment manager did not become available.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  const manifest = JSON.parse(tag.textContent);
+  const loading = Promise.resolve().then(
+    () => globalThis.Citry.fragments.load(manifest, tag),
+  );
+  await waitForOperation(
+    loading,
+    deadline,
+    signal,
+    `Citry's Vue fragment did not settle within ${timeoutMs} ms.`,
+  );
+}
+
+async function waitForStyles(mount, timeoutMs, signal) {
+  if (signal.aborted) {
+    throw abortError();
+  }
+  const pending = Array.from(
+    mount.querySelectorAll('link[rel="stylesheet"]'),
+  ).filter((link) => link.sheet === null);
+  await Promise.all(pending.map((link) => new Promise((resolve, reject) => {
+    let timeout;
+    const dispose = () => {
+      clearTimeout(timeout);
+      link.removeEventListener("load", onLoad);
+      link.removeEventListener("error", onError);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onLoad = () => {
+      dispose();
+      resolve();
+    };
+    const onError = () => {
+      dispose();
+      reject(new Error(`Citry stylesheet failed to load: ${link.href}`));
+    };
+    const onAbort = () => {
+      dispose();
+      reject(abortError());
+    };
+    link.addEventListener("load", onLoad, { once: true });
+    link.addEventListener("error", onError, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
+    timeout = setTimeout(() => {
+      dispose();
+      reject(new Error(`Citry stylesheet did not load within ${timeoutMs} ms: ${link.href}`));
+    }, timeoutMs);
+    // The resource can settle between the initial filter and listener setup.
+    if (link.sheet !== null) {
+      queueMicrotask(onLoad);
+    } else if (signal.aborted) {
+      queueMicrotask(onAbort);
+    }
+  })));
 }
 
 export function beginCitryCanvasRender(context, canvas) {
@@ -147,6 +244,17 @@ export async function mountCitryCanvasHtml(context, token, html) {
 
   try {
     const citry = context.storyContext.parameters.citry;
+    await activateVueFragment(
+      mount,
+      citry?.readyTimeoutMs ?? 10_000,
+      token.signal,
+    );
+    await waitForStyles(
+      mount,
+      citry?.readyTimeoutMs ?? 10_000,
+      token.signal,
+    );
+    assertCurrent(token);
     if (citry?.clientInteractive) {
       if (!citry.readySelector) {
         throw new Error(`Interactive Citry scenario ${context.id} has no readiness selector.`);

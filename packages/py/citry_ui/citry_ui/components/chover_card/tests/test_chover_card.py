@@ -14,7 +14,7 @@ from citry import Citry, Component
 from citry_ui import CButton, CHoverCard
 
 
-def _render(value: object) -> str:
+def _render(value: object, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -25,7 +25,8 @@ def _render(value: object) -> str:
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
             return {"value": value}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _card(**kwargs: object) -> CHoverCard:
@@ -60,7 +61,8 @@ def test_hover_card_renders_hidden_supplementary_top_layer_anatomy() -> None:
             class_="profile-preview",
             attrs={"data-profile": "ada"},
             slots={"activator": activator, "default": "Supplementary biography"},
-        )
+        ),
+        static_fallback=True,
     )
     surface = re.search(r'<div class="cui-hover-card(?:\s|\")[^>]*>', html)
 

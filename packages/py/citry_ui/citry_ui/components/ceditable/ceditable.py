@@ -331,6 +331,24 @@ class CEditable(LibraryComponent):
         )
         effective_editing = bool(kwargs.editing) and not disabled and not readonly
         data = {
+            "serverValue": value,
+            "serverEditing": effective_editing,
+            "serverRequired": required,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
+            "serverInvalid": invalid,
+            "serverSubmitMode": kwargs.submit_mode,
+            "serverSelectOnFocus": bool(kwargs.select_on_focus),
+            "serverActionPosition": kwargs.action_position,
+            "serverVariant": kwargs.variant,
+            "serverSize": kwargs.size,
+            "placeholder": placeholder,
+            "catalogPlaceholder": catalog_placeholder,
+            "externalDescribedBy": external_described_by,
+            "externalErrorMessage": external_error_message,
+        }
+        snapshot = {
+            **data,
             "value": value,
             "editing": effective_editing,
             "required": required,
@@ -342,13 +360,6 @@ class CEditable(LibraryComponent):
             "actionPosition": kwargs.action_position,
             "variant": kwargs.variant,
             "size": kwargs.size,
-            "placeholder": placeholder,
-            "catalogPlaceholder": catalog_placeholder,
-            "externalDescribedBy": external_described_by,
-            "externalErrorMessage": external_error_message,
-        }
-        snapshot = {
-            **data,
             "input_id": input_id,
             "name": kwargs.name,
             "form": form_owner,
@@ -461,8 +472,15 @@ class CEditable(LibraryComponent):
           submitMode: {}, selectOnFocus: {}, actionPosition: {}, variant: {}, size: {},
           onValueChange: {}, onEditChange: {},
         },
-        init: ({ els, data, props, effect, inject, i18n }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
+          const i18n = component.$i18n;
           const preview = root.querySelector(':scope > [data-citry-ui-part="preview"]');
           const previewValue = preview?.querySelector('[data-citry-ui-part="preview-value"]');
           const editAction = preview?.querySelector('[data-citry-ui-part="edit-action"]');
@@ -478,18 +496,18 @@ class CEditable(LibraryComponent):
             throw new Error("[citry-ui] CEditable settled anatomy is invalid.");
           }
 
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const invalidEpisodes = new Set();
           const prior = root[editableHandoffKey];
           delete root[editableHandoffKey];
-          const serverFingerprint = data.value;
-          let committed = prior?.serverFingerprint === serverFingerprint ? prior.committed : data.value;
+          const serverFingerprint = data.serverValue;
+          let committed = prior?.serverFingerprint === serverFingerprint ? prior.committed : data.serverValue;
           let draft = prior?.serverFingerprint === serverFingerprint ? prior.draft : committed;
           let dirty = prior?.serverFingerprint === serverFingerprint ? Boolean(prior.dirty) : false;
           let internalEditing = prior?.serverFingerprint === serverFingerprint
             ? Boolean(prior.internalEditing)
-            : data.editing;
+            : data.serverEditing;
           let editing = false;
           let controlledValue = false;
           let controlledEditing = false;
@@ -504,15 +522,15 @@ class CEditable(LibraryComponent):
           let generation = 0;
           let pendingFocus = false;
           let configuration = {
-            required: data.required,
-            disabled: data.disabled,
-            readonly: data.readonly,
-            invalid: data.invalid,
-            submitMode: data.submitMode,
-            selectOnFocus: data.selectOnFocus,
-            actionPosition: data.actionPosition,
-            variant: data.variant,
-            size: data.size,
+            required: data.serverRequired,
+            disabled: data.serverDisabled,
+            readonly: data.serverReadonly,
+            invalid: data.serverInvalid,
+            submitMode: data.serverSubmitMode,
+            selectOnFocus: data.serverSelectOnFocus,
+            actionPosition: data.serverActionPosition,
+            variant: data.serverVariant,
+            size: data.serverSize,
           };
 
           const report = (name, value, suffix = "") => {
@@ -751,7 +769,7 @@ class CEditable(LibraryComponent):
             setTimeout(() => {
               if (!active || event.defaultPrevented || scheduled !== generation) return;
               const previous = committed;
-              const next = data.value;
+              const next = data.serverValue;
               nativeInvalid = false;
               dirty = false;
               draft = next;
@@ -806,7 +824,7 @@ class CEditable(LibraryComponent):
             fieldsetObservers.push(observer);
           }
 
-          const stop = effect(() => {
+          const stop = Citry.vue.watchEffect(() => {
             clientValue = props.value;
             clientEditing = props.editing;
             onValueChange = typeof props.onValueChange === "function" ? props.onValueChange : null;
@@ -817,15 +835,15 @@ class CEditable(LibraryComponent):
             else invalidEpisodes.delete("onEditChange");
 
             configuration = {
-              required: field ? field.required : boolean("required", data.required),
-              disabled: field ? field.disabled : Boolean(form?.disabled) || boolean("disabled", data.disabled),
-              readonly: field ? field.readonly : Boolean(form?.readonly) || boolean("readonly", data.readonly),
-              invalid: field ? field.invalid : boolean("invalid", data.invalid),
-              submitMode: choice("submitMode", data.submitMode, ["enter", "blur", "both", "explicit"]),
-              selectOnFocus: boolean("selectOnFocus", data.selectOnFocus),
-              actionPosition: choice("actionPosition", data.actionPosition, ["inside", "outside"]),
-              variant: choice("variant", data.variant, ["outline", "filled", "plain"]),
-              size: choice("size", data.size, ["sm", "md", "lg"]),
+              required: field ? field.required : boolean("required", data.serverRequired),
+              disabled: field ? field.disabled : Boolean(form?.disabled) || boolean("disabled", data.serverDisabled),
+              readonly: field ? field.readonly : Boolean(form?.readonly) || boolean("readonly", data.serverReadonly),
+              invalid: field ? field.invalid : boolean("invalid", data.serverInvalid),
+              submitMode: choice("submitMode", data.serverSubmitMode, ["enter", "blur", "both", "explicit"]),
+              selectOnFocus: boolean("selectOnFocus", data.serverSelectOnFocus),
+              actionPosition: choice("actionPosition", data.serverActionPosition, ["inside", "outside"]),
+              variant: choice("variant", data.serverVariant, ["outline", "filled", "plain"]),
+              size: choice("size", data.serverSize, ["sm", "md", "lg"]),
             };
 
             if (clientValue === undefined || clientValue === null) {

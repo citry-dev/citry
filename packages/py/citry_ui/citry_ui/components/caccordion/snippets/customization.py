@@ -8,13 +8,6 @@ class CustomizeAccordion(Component):
     template = """
       <section
         class="accordion-configurator"
-        x-data="{
-          variant: 'separated',
-          size: 'md',
-          indicator: true,
-          indicator_position: 'end',
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p>Live configuration</p>
@@ -23,12 +16,7 @@ class CustomizeAccordion(Component):
         <c-CAccordion
           value="watershed"
           class_="accordion-configurator__group"
-          $c-props="{
-            variant,
-            size,
-            indicator,
-            indicatorPosition: indicator_position,
-          }"
+          :variant="variant" :size="size" :indicator="indicator" :indicatorPosition="indicator_position"
         >
           <c-CAccordionItem value="watershed">
             <c-fill name="title">Watershed</c-fill>
@@ -40,6 +28,29 @@ class CustomizeAccordion(Component):
           </c-CAccordionItem>
         </c-CAccordion>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            variant: 'separated',
+            size: 'md',
+            indicator: true,
+            indicator_position: 'end',
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

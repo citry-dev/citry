@@ -25,6 +25,7 @@ class TestCitryInstance:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }
@@ -86,26 +87,26 @@ class TestCitryInstance:
 
     def test_lint_settings_are_typed_copied_and_stored(self):
         variables = {"request": Annotated[str, "Current request."]}
-        alpine_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}
+        vue_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}
         component_js_globals = {"analytics": Annotated[object, "Application analytics client."]}
         lint = LintSettings(
             rule_unknown_template_variable="warning",
             template_variables=variables,
-            rule_unknown_alpine_variable="warning",
-            alpine_variables=alpine_variables,
+            rule_unknown_vue_variable="warning",
+            vue_variables=vue_variables,
             rule_unknown_component_js_variable="warning",
             component_js_globals=component_js_globals,
         )
         app = Citry(lint=lint)
         variables["later"] = str
-        alpine_variables["later"] = str
+        vue_variables["later"] = str
         component_js_globals["later"] = str
 
         assert app.settings.lint is lint
         assert lint.template_variables == {
             "request": Annotated[str, "Current request."],
         }
-        assert lint.alpine_variables == {
+        assert lint.vue_variables == {
             "$featureFlags": Annotated[dict[str, bool], "Feature flags."],
         }
         assert lint.rule_unknown_component_js_variable == "warning"
@@ -119,8 +120,8 @@ class TestCitryInstance:
             LintSettings(rule_unknown_template_variable=severity)
         with pytest.raises(ValueError, match="rule_i18n_missing_param_type"):
             LintSettings(rule_i18n_missing_param_type=severity)
-        with pytest.raises(ValueError, match="rule_unknown_alpine_variable"):
-            LintSettings(rule_unknown_alpine_variable=severity)
+        with pytest.raises(ValueError, match="rule_unknown_vue_variable"):
+            LintSettings(rule_unknown_vue_variable=severity)
         with pytest.raises(ValueError, match="rule_unknown_component_js_variable"):
             LintSettings(rule_unknown_component_js_variable=severity)
 
@@ -131,8 +132,8 @@ class TestCitryInstance:
 
     @pytest.mark.parametrize("name", ["", "two words", "class", "item.name", "1value"])
     def test_lint_settings_reject_invalid_alpine_variable_names(self, name):
-        with pytest.raises(ValueError, match="invalid Alpine variable name"):
-            LintSettings(alpine_variables={name: str})
+        with pytest.raises(ValueError, match="invalid Vue variable name"):
+            LintSettings(vue_variables={name: str})
         with pytest.raises(ValueError, match="invalid JavaScript identifier"):
             LintSettings(component_js_globals={name: str})
 
@@ -157,6 +158,7 @@ class TestCitryInstance:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }

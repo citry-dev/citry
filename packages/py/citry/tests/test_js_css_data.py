@@ -5,6 +5,8 @@ from dataclasses import is_dataclass
 import pytest
 
 from citry import Citry, Component, Extension
+from citry._vue.capture import render_prepared
+from citry._vue.direct_capture import assemble_typed_render
 
 
 def _data_probe(captured: list) -> type[Extension]:
@@ -17,6 +19,15 @@ def _data_probe(captured: list) -> type[Extension]:
             captured.append(ctx)
 
     return Probe
+
+
+def _assemble(component):
+    rendered = render_prepared(component)
+    return assemble_typed_render(
+        rendered,
+        revision=0,
+        tag_for_type=lambda type_key: f"x-{type_key.lower().replace('_', '-')}",
+    )
 
 
 class TestJsCssDataMethods:
@@ -49,7 +60,12 @@ class TestJsCssDataMethods:
             def css_data(self, kwargs, slots):
                 return {"row-color": "red"}
 
-        assert str(Card(rows=3)) == '<p data-cid-c1="">3</p>'
+        assembly = _assemble(Card(rows=3))
+        [occurrence] = assembly.view.occurrences
+        definition = assembly.compile_inputs[occurrence.definition_id]
+        assert definition.template.startswith("<p>{{ preparedData.")
+        assert "3" in occurrence.prepared_data.values()
+        assert occurrence.server_data == {"rows": 3}
         assert captured[-1].js_data == {"rows": 3}
         assert captured[-1].css_data == {"row-color": "red"}
 
@@ -160,7 +176,12 @@ class TestJsCssDataSchemas:
             def css_data(self, kwargs, slots):
                 return {}
 
-        assert str(Card()) == '<p data-cid-c1="">default title</p>'
+        assembly = _assemble(Card())
+        [occurrence] = assembly.view.occurrences
+        definition = assembly.compile_inputs[occurrence.definition_id]
+        assert definition.template.startswith("<p>{{ preparedData.")
+        assert "default title" in occurrence.prepared_data.values()
+        assert occurrence.server_data == {"rows": 3}
         assert captured[-1].template_data == {"title": "default title"}
         assert captured[-1].js_data == {"rows": 3}
         assert captured[-1].css_data == {"color": "red"}

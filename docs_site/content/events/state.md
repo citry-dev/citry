@@ -115,6 +115,11 @@ class State:
 
 `_public` selects which fields client expressions may read. `_model` selects
 which public fields they may write through `$state` or a two-way binding.
+The client may replace a writable top-level field. Objects and arrays read from
+`$state` are read-only views, so changing their nested members is rejected. To
+update a nested value, copy the object or array, edit the copy, and replace the
+whole top-level State field.
+
 These lists are capability controls, not secrecy controls. Signed State travels
 through the browser and must be treated as client input. Server-held State
 keeps its values out of the token, but client-writable fields are still client
@@ -154,17 +159,16 @@ class Events:
 This is the golden rule for Events rendering: if a later render needs a value,
 the handler must obtain it and pass it to the new tree.
 
-## Put data in State, js_data, or x-data deliberately
+## Put data in State, js_data, or Vue data deliberately
 
 | Data kind | Put it in | Lifetime |
 |---|---|---|
 | Small values a later server call needs, or values used by `:c-*` | `State` | Survives calls and self-renders; signed storage travels through the browser. |
 | Large or derived browser values | `js_data()` | Recomputed for each render; transport is deduplicated, but each instance gets a fresh nested graph. |
-| Client-only UI state such as an open accordion | `x-data` | Owned by Alpine in the current client region. |
+| Client-only UI state such as an open accordion | Vue `data()` | Owned by the current Vue component instance. |
 
 `js_data()` is not persistent Events State. Citry seeds its top-level keys into
-the instance's reactive Alpine scope, but a server rerender refreshes those
-server-owned keys. Put ongoing browser-only changes and functions on `scope`,
-and put values needed by later server calls in Events `State`. See [Client
+the instance's reactive Vue instance, but a server rerender refreshes those
+server-owned keys. Put ongoing browser-only values in Vue `data()` and behavior in `methods`; put values needed by later server calls in Events `State`. See [Client
 interactivity](/concepts/client-interactivity/) for the complete component
 boundary and Component.js contract.

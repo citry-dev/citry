@@ -9,7 +9,6 @@ def test_page_serves_local_htmx_and_citry_scripts() -> None:
         stylesheet = client.get("/static/demo.css")
         brand_mark = client.get("/static/citry-mark.svg")
         htmx = client.get("/static/htmx.min.js")
-        adapter = client.get("/static/citry-htmx.js")
         citry = client.get("/citry/citry.js")
 
     assert page.status_code == 200
@@ -19,14 +18,13 @@ def test_page_serves_local_htmx_and_citry_scripts() -> None:
     assert 'class="citry-brand__mark"' in page.text
     assert "HTMX demo" in page.text
     assert 'hx-get="/fragments/search"' in page.text
-    assert 'hx-ext="citry-fragments"' in page.text
+    assert 'src="/static/citry-htmx.js"' not in page.text
     assert 'class="contact-row-host"' in page.text
     assert 'id="contact-row-1"' in page.text
-    assert 'hx-target="closest .contact-row-host"' in page.text
+    assert page.text.count('class="contact-row-host"') == 6
     assert 'id="contact-editor"' not in page.text
     assert 'id="search-results" class="fragment-host"' in page.text
     assert 'class="contact-results__summary" role="status"' in page.text
-    assert "data-citry-graph" in page.text
     assert "data-citry" in page.text
     assert stylesheet.status_code == 200
     assert "color-scheme: light" in stylesheet.text
@@ -35,12 +33,6 @@ def test_page_serves_local_htmx_and_citry_scripts() -> None:
     assert brand_mark.headers["content-type"].startswith("image/svg+xml")
     assert htmx.status_code == 200
     assert "2.0.10" in htmx.text
-    assert adapter.status_code == 200
-    assert 'htmx.defineExtension("citry-fragments"' in adapter.text
-    assert "[0-9a-f]{8}" in adapter.text
-    assert "data-citry-htmx-cap" in adapter.text
-    assert 'Set hx-swap="innerHTML" on a wrapper that remains on the page' in adapter.text
-    assert "encodeURIComponent" not in adapter.text
     assert citry.status_code == 200
     assert citry.headers["content-type"].startswith("text/javascript")
 
@@ -54,8 +46,8 @@ def test_search_response_includes_component_html_and_dependencies() -> None:
     assert "Grace Hopper" in response.text
     assert "Ada Lovelace" not in response.text
     assert 'class="contact-results__summary" role="status"' in response.text
-    assert "<!--citry:g1:" in response.text
-    assert "data-citry-graph" in response.text
+    assert response.text.count("data-citry-vue-fragment") == 1
+    assert 'class="contact-row-host" id="contact-row-2"' in response.text
     assert "data-citry" in response.text
 
 
@@ -100,22 +92,16 @@ def test_contact_form_shows_errors_and_saves_valid_changes() -> None:
         )
 
     assert edit.status_code == 200
-    assert "Edit Ada Lovelace" in edit.text
-    assert "autofocus" in edit.text
-    assert 'hx-post="/fragments/contacts/1"' in edit.text
-    assert 'hx-target="closest .contact-row-host"' in edit.text
-    assert 'hx-disabled-elt="find button[type=&#39;submit&#39;]"' in edit.text
-    assert 'hx-disabled-elt="this"' in edit.text
+    assert "Ada Lovelace" in edit.text
+    assert "/fragments/contacts/1" in edit.text
     assert cancel.status_code == 200
     assert "Ada Lovelace" in cancel.text
-    assert 'hx-target="closest .contact-row-host"' in cancel.text
     assert invalid.status_code == 200
     assert "Enter a name between 2 and 80 characters." in invalid.text
     assert "Enter a valid email address." in invalid.text
     assert "Choose an available team." in invalid.text
     assert saved.status_code == 200
     assert "Saved Ada Byron." in saved.text
-    assert 'hx-target="closest .contact-row-host"' in saved.text
     assert get_contact(1).name == "Ada Byron"
     assert get_contact(1).team_name == "Research"
 

@@ -14,7 +14,7 @@ class AlertDialogSizes(Component):
     template = """
       <c-CRow gap="md" wrap>
         <c-for each="size in sizes">
-          <c-CAlertDialog c-size="size">
+          <c-CAlertDialog #c-key="size" c-size="size">
             <c-fill name="activator" data="{activator_attrs}">
               <c-CButton c-attrs="activator_attrs" variant="outline">Open {{ size }}</c-CButton>
             </c-fill>

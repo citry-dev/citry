@@ -156,13 +156,15 @@ class CDialog(LibraryComponent):
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
         return {
-            "open": kwargs.open,
-            "dismissible": kwargs.dismissible,
-            "closeOnEscape": kwargs.close_on_escape,
-            "closeOnOutside": kwargs.close_on_outside,
-            "initialFocus": kwargs.initial_focus,
-            "size": kwargs.size,
-            "scroll": kwargs.scroll,
+            "serverDefaults": {
+                "open": kwargs.open,
+                "dismissible": kwargs.dismissible,
+                "closeOnEscape": kwargs.close_on_escape,
+                "closeOnOutside": kwargs.close_on_outside,
+                "initialFocus": kwargs.initial_focus,
+                "size": kwargs.size,
+                "scroll": kwargs.scroll,
+            }
         }
 
     template = """
@@ -277,8 +279,11 @@ class CDialog(LibraryComponent):
           scroll: {},
           onOpenChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          const host = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const nearestHost = (element) => element?.closest?.("[data-citry-dialog-host]") ?? null;
           const dialog = [...host.querySelectorAll('[data-citry-dialog-surface]')]
             .find((candidate) => nearestHost(candidate) === host);

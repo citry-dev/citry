@@ -28,39 +28,36 @@ def _tag_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const tagTest=Citry.vue.reactive({
+            selected:'alpha',events:[],itemDisabled:false,variant:'soft',size:'md',
+          }); window.__tagTest=tagTest; return {state:{tagTest},accept:false,fieldsetDisabled:false};}});
+        """
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><title>Tag contract</title><c-css /></head>
-            <body
-              x-data="{accept: false, fieldsetDisabled: false}"
-              x-init="Alpine.store('tagTest', {
-                selected: 'alpha', events: [], itemDisabled: false,
-                variant: 'soft', size: 'md'
-              })"
-            >
+            <body>
               <c-CTagGroup
                 label="Controlled topics"
                 selection_mode="single"
                 actionable
                 removable
                 id="controlled"
-                $c-props="{
-                  value: $store.tagTest.selected,
-                  variant: $store.tagTest.variant,
-                  size: $store.tagTest.size,
-                  onValueChange: (value, detail) => {
-                    $store.tagTest.events.push(['value', value, detail.previousValue]);
-                    if (accept) $store.tagTest.selected = value;
-                  },
-                  onAction: (value) => $store.tagTest.events.push(['action', value]),
-                  onRemove: (values, detail) => $store.tagTest.events.push([
+                :value="state.tagTest.selected"
+                :variant="state.tagTest.variant"
+                :size="state.tagTest.size"
+                :onValueChange="(value, detail) => {
+                    state.tagTest.events.push(['value', value, detail.previousValue]);
+                    if (accept) state.tagTest.selected = value;
+                  }"
+                :onAction="(value) => state.tagTest.events.push(['action', value])"
+                :onRemove="(values, detail) => state.tagTest.events.push([
                     'remove', values.join(','), detail.source
-                  ])
-                }"
+                  ])"
               >
                 <c-CTag value="alpha">Alpha</c-CTag>
-                <c-CTag value="beta" $c-props="{disabled: $store.tagTest.itemDisabled}">Beta</c-CTag>
+                <c-CTag value="beta" :disabled="state.tagTest.itemDisabled">Beta</c-CTag>
                 <c-CTag value="gamma">Gamma</c-CTag>
               </c-CTagGroup>
 
@@ -70,18 +67,16 @@ def _tag_page() -> str:
                 c-value="['wifi']"
                 removable
                 id="uncontrolled"
-                $c-props="{
-                  onRemove: (values, detail) => $store.tagTest.events.push([
+                :onRemove="(values, detail) => state.tagTest.events.push([
                     'remove', values.join(','), detail.source
-                  ])
-                }"
+                  ])"
               >
                 <c-CTag value="wifi">Wi-Fi</c-CTag>
                 <c-CTag value="parking">Parking</c-CTag>
                 <c-CTag value="pool">Pool</c-CTag>
               </c-CTagGroup>
 
-              <fieldset id="native-fieldset" x-bind:disabled="fieldsetDisabled">
+              <fieldset id="native-fieldset" :disabled="fieldsetDisabled">
                 <legend>Native ownership</legend>
                 <c-CTagGroup
                   label="Fieldset topics"
@@ -133,21 +128,21 @@ def test_controlled_selection_action_order_and_reactive_presentation(page: Any) 
     beta_label = beta.locator('[data-citry-ui-part="tag-label"]')
 
     beta_label.click()
-    page.wait_for_function("Alpine.store('tagTest').events.length === 2")
-    assert page.evaluate("Alpine.store('tagTest').events") == [
+    page.wait_for_function("window.__tagTest.events.length === 2")
+    assert page.evaluate("window.__tagTest.events") == [
         ["value", "beta", "alpha"],
         ["action", "beta"],
     ]
     assert alpha.get_attribute("aria-selected") == "true"
     assert beta.get_attribute("aria-selected") == "false"
 
-    page.evaluate("Alpine.$data(document.body).accept = true")
+    page.evaluate("window.__state.accept = true")
     beta_label.click()
-    page.wait_for_function("Alpine.store('tagTest').selected === 'beta'")
+    page.wait_for_function("window.__tagTest.selected === 'beta'")
     page.wait_for_function("document.querySelector('#controlled [data-value=beta]').hasAttribute('data-selected')")
     assert beta.get_attribute("aria-selected") == "true"
 
-    page.evaluate("Object.assign(Alpine.store('tagTest'), {variant: 'outline', size: 'lg'})")
+    page.evaluate("Object.assign(window.__tagTest, {variant: 'outline', size: 'lg'})")
     page.wait_for_function("document.querySelector('#controlled').dataset.size === 'lg'")
     assert controlled.get_attribute("data-variant") == "outline"
     assert controlled.locator('[data-citry-ui-part="tag"][data-size="lg"]').count() == 3
@@ -176,8 +171,8 @@ def test_roving_keyboard_typeahead_remove_button_and_selected_delete(page: Any) 
     assert wifi.evaluate("element => element === document.activeElement")
 
     page.keyboard.press("Delete")
-    page.wait_for_function("Alpine.store('tagTest').events.some((event) => event[0] === 'remove')")
-    assert page.evaluate("Alpine.store('tagTest').events.at(-1)") == [
+    page.wait_for_function("window.__tagTest.events.some((event) => event[0] === 'remove')")
+    assert page.evaluate("window.__tagTest.events.at(-1)") == [
         "remove",
         "wifi",
         "delete-key",
@@ -189,23 +184,23 @@ def test_item_and_native_fieldset_disabled_states_dominate_activation(page: Any)
     errors = _load(page)
     controlled = page.locator("#controlled")
     beta = controlled.get_by_role("row", name="Beta")
-    page.evaluate("Alpine.store('tagTest').itemDisabled = true")
+    page.evaluate("window.__tagTest.itemDisabled = true")
     page.wait_for_function(
         "document.querySelector('#controlled [data-value=beta]').getAttribute('aria-disabled') === 'true'"
     )
-    before = page.evaluate("Alpine.store('tagTest').events.length")
+    before = page.evaluate("window.__tagTest.events.length")
     beta.click(force=True)
     page.wait_for_timeout(30)
-    assert page.evaluate("Alpine.store('tagTest').events.length") == before
+    assert page.evaluate("window.__tagTest.events.length") == before
 
     page.locator("#fieldset-group").get_by_role("row", name="One").focus()
-    page.evaluate("Alpine.$data(document.body).fieldsetDisabled = true")
+    page.evaluate("window.__state.fieldsetDisabled = true")
     page.wait_for_function("document.querySelector('#fieldset-group').hasAttribute('data-disabled')")
     assert page.locator("#fieldset-group").get_by_role("row", name="One").get_attribute("tabindex") == "-1"
     assert page.locator("#fieldset-group [data-citry-ui-part='list']").evaluate(
         "element => element === document.activeElement"
     )
-    page.evaluate("Alpine.$data(document.body).fieldsetDisabled = false")
+    page.evaluate("window.__state.fieldsetDisabled = false")
     page.wait_for_function("!document.querySelector('#fieldset-group').hasAttribute('data-disabled')")
     assert errors == []
 

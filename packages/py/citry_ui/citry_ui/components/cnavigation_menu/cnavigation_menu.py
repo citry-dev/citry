@@ -305,14 +305,16 @@ class CNavigationMenu(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "value": snapshot["value"],
-            "orientation": snapshot["orientation"],
-            "disabled": snapshot["disabled"],
-            "delay": snapshot["delay"],
-            "closeDelay": snapshot["close_delay"],
-            "loop": snapshot["loop"],
-            "variant": snapshot["variant"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "value": snapshot["value"],
+                "orientation": snapshot["orientation"],
+                "disabled": snapshot["disabled"],
+                "delay": snapshot["delay"],
+                "closeDelay": snapshot["close_delay"],
+                "loop": snapshot["loop"],
+                "variant": snapshot["variant"],
+                "size": snapshot["size"],
+            }
         }
 
     def on_render(self) -> Any:
@@ -359,8 +361,11 @@ class CNavigationMenu(LibraryComponent):
           size: {},
           onValueChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const list = root.querySelector(':scope > [data-citry-ui-part="list"]');
           if (!(root instanceof HTMLElement) || !(list instanceof HTMLUListElement)) {
             throw new Error("[citry-ui] CNavigationMenu requires its owned nav/list anatomy.");

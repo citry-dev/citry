@@ -10,7 +10,7 @@ from threading import Event, Thread
 import pytest
 
 from citry import Citry, CitryContext, CitryRender, Component, Markup
-from citry.citry_render import Placeholder
+from citry.citry_render import Placeholder, RenderDecoration
 from citry.ext.debug import Debug
 from citry.extension import Extension
 
@@ -384,6 +384,38 @@ class TestSlotHighlighting:
 
 
 class TestSerialization:
+    def test_decorated_component_root_cannot_be_reused_twice(self):
+        app = _debug_app(components=True)
+
+        class Card(Component):
+            citry = app
+            template = "<p>card</p>"
+
+        rendered = Card().render()
+        repeated = CitryRender(parts=[rendered, rendered], context=CitryContext())
+        with pytest.raises(RuntimeError, match="same rendered component id"):
+            repeated.serialize(deps_strategy="ignore")
+
+    def test_python_composed_decorated_child_keeps_prepared_identity(self):
+        app = _debug_app(components=True)
+        app.set_mounted_prefix("/citry")
+
+        class Child(Component):
+            citry = app
+            template = "<p>child</p>"
+            js = "$component(() => {});"
+
+        class Host(Component):
+            citry = app
+
+            def on_render(self):
+                return Child().render()
+
+        html = Host().render().serialize(deps_strategy="document")
+        assert "Child (c2)" in html
+        assert '"renderId":"c2"' in html
+        assert '"typeKey":"Child_' in html
+
     @pytest.mark.parametrize("strategy", ["ignore", "simple", "document", "fragment"])
     def test_every_dependency_strategy_resolves_boundaries(self, strategy):
         app = _debug_app(components=True)
@@ -435,6 +467,7 @@ class TestSerialization:
 
     def test_debug_preserves_dependency_event_key_and_ownership_markers(self):
         app = _debug_app(components=True)
+        app.set_mounted_prefix("/citry")
 
         class Widget(Component):
             citry = app
@@ -461,31 +494,32 @@ class TestSerialization:
             class Debug:
                 highlight_components = False
 
-        html = Page().render().serialize(deps_strategy="document")
+        rendered = Page().render()
+        html = rendered.serialize(deps_strategy="simple")
         section = re.search(r"<section[^>]*>", html)
         assert section is not None
         assert 'data-cid-c2=""' in section.group()
-        assert 'data-cid="c2"' in section.group()
         assert "data-ccss-" in section.group()
-        assert "data-citry-key" not in section.group()
-        assert '"morphKey":"stable"' in html
+        assert "data-ccss-" in html
+        assert "data-citry-key" not in html
         assert not re.search(r"citry-debug-component[^>]*data-(?:cid|ccss|citry-key)", html)
-        assert '<script type="application/json" data-citry-graph>' in html
-        assert '<script type="application/json" data-citry-events>' in html
         assert ".widget { color: var(--tone); }" in html
+        prepared = rendered.serialize(deps_strategy="document")
+        assert '"renderId":"c2"' in prepared
+        assert '"typeKey":"Widget_' in prepared
+        assert '"placementKey":"citryPlacement' in prepared
+        assert '"eventContext"' in prepared
 
-    @pytest.mark.parametrize("side", ["open", "close"])
-    def test_extension_after_debug_can_drop_one_side_without_leaking_marker(self, side):
+    def test_extension_after_debug_can_atomically_drop_boundary(self):
         class DropBoundary(Extension):
             name = "drop_boundary"
 
             def on_component_rendered(self, ctx):
                 if not isinstance(ctx.render, CitryRender):
                     return None
-                if not ctx.render.parts or not isinstance(ctx.render.parts[0], Placeholder):
+                if not isinstance(ctx.render, RenderDecoration):
                     return None
-                parts = ctx.render.parts[1:] if side == "open" else ctx.render.parts[:-1]
-                return CitryRender(parts=parts, context=ctx.render.context)
+                return CitryRender(parts=list(ctx.render.parts), context=ctx.render.context)
 
         app = Citry(
             extensions=[Debug, DropBoundary],
@@ -634,7 +668,7 @@ class TestCrossCitryEmbedding:
         assert "Foreign (c1):" in html
         assert html.count("citry-debug-component") == 2
 
-    def test_root_without_debug_omits_embedded_boundary_but_keeps_content(self):
+    def test_embedded_boundary_travels_when_root_has_no_debug(self):
         foreign = self._foreign_render()
         root_app = Citry()
 
@@ -649,7 +683,8 @@ class TestCrossCitryEmbedding:
 
         html = Host().render().serialize(deps_strategy="ignore")
         assert "foreign" in html
-        assert "citry-debug" not in html
+        assert "Foreign (c1):" in html
+        assert html.count("citry-debug-component") == 1
         assert "c-render-id" not in html
 
 

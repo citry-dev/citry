@@ -300,7 +300,14 @@ class CPagination(LibraryComponent):
         return control
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._pagination_data
+        return {
+            **{
+                key: value
+                for key, value in self._pagination_data.items()
+                if key not in {"page", "disabled", "variant", "size"}
+            },
+            "serverDefaults": {key: self._pagination_data[key] for key in ("page", "disabled", "variant", "size")},
+        }
 
     template = """
       <nav
@@ -361,14 +368,19 @@ class CPagination(LibraryComponent):
     js = r"""
       $component({
         props: {page: {}, disabled: {}, variant: {}, size: {}, onPageChange: {}},
-        init: ({els, data, props, effect, i18n}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const i18n = component.$i18n;
           const list = root.querySelector('[data-citry-ui-part="list"]');
-          let current = data.page;
+          let current = defaults.page;
           let callback = null;
-          let effectiveDisabled = data.disabled;
-          let effectiveVariant = data.variant;
-          let effectiveSize = data.size;
+          let effectiveDisabled = defaults.disabled;
+          let effectiveVariant = defaults.variant;
+          let effectiveSize = defaults.size;
           let translationBindings = [];
           const invalid = new Set();
           const report = (name, value) => {
@@ -495,9 +507,9 @@ class CPagination(LibraryComponent):
               invalid.delete("page");
               current = props.page;
             } else report("page", props.page);
-            effectiveDisabled = resolveBoolean("disabled", data.disabled);
-            effectiveVariant = resolveChoice("variant", data.variant, ["soft", "outline", "plain"]);
-            effectiveSize = resolveChoice("size", data.size, ["sm", "md", "lg"]);
+            effectiveDisabled = resolveBoolean("disabled", defaults.disabled);
+            effectiveVariant = resolveChoice("variant", defaults.variant, ["soft", "outline", "plain"]);
+            effectiveSize = resolveChoice("size", defaults.size, ["sm", "md", "lg"]);
             root.dataset.variant = effectiveVariant;
             root.dataset.size = effectiveSize;
             render();

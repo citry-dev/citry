@@ -1,5 +1,7 @@
 """Browser tests for the production CButton."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +20,7 @@ def _interaction_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {loading:true,disabled:false};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -25,12 +28,7 @@ def _interaction_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                loading: true,
-                disabled: false,
-              }"
-            >
+            <body>
               <form
                 id="probe-form"
                 @submit.prevent="
@@ -44,10 +42,8 @@ def _interaction_page() -> str:
                   <c-CButton
                     type="submit"
                     c-attrs="submit_attrs"
-                    $c-props="{
-                      loading,
-                      disabled,
-                    }"
+                    :loading="loading"
+                    :disabled="disabled"
                     @click="window.__buttonClicks = (window.__buttonClicks || 0) + 1"
                   >
                     <c-fill name="start">
@@ -103,6 +99,7 @@ def _reactive_configuration_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {variant:'outline',intent:'danger',size:'lg',block:true,loadingPosition:'end'};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -110,24 +107,14 @@ def _reactive_configuration_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                variant: 'outline',
-                intent: 'danger',
-                size: 'lg',
-                block: true,
-                loadingPosition: 'end',
-              }"
-            >
+            <body>
               <c-CButton
                 c-attrs="button_attrs"
-                $c-props="{
-                  variant,
-                  intent,
-                  size,
-                  block,
-                  loadingPosition,
-                }"
+                :variant="variant"
+                :intent="intent"
+                :size="size"
+                :block="block"
+                :loadingPosition="loadingPosition"
               >
                 Save
               </c-CButton>
@@ -244,6 +231,7 @@ def _loading_presentation_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {centeredLoading:false};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -251,7 +239,7 @@ def _loading_presentation_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body x-data="{ centeredLoading: false }">
+            <body>
               <c-CButton
                 loading
                 loading_pos="start"
@@ -291,7 +279,7 @@ def _loading_presentation_page() -> str:
               </c-CButton>
               <c-CButton
                 c-attrs="center_attrs"
-                $c-props="{ loading: centeredLoading }"
+                :loading="centeredLoading"
               >
                 <c-fill name="start">
                   S
@@ -332,6 +320,7 @@ def _link_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {disabled:false,loading:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -339,19 +328,12 @@ def _link_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                disabled: false,
-                loading: true,
-              }"
-            >
+            <body>
               <c-CButton
                 href="/field-guide"
                 c-attrs="link_attrs"
-                $c-props="{
-                  disabled,
-                  loading,
-                }"
+                :disabled="disabled"
+                :loading="loading"
                 @click="
                   window.__linkClicks = (window.__linkClicks || 0) + 1;
                   window.__linkModifier = $event.ctrlKey;

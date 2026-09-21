@@ -153,7 +153,7 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
             await _send_response(send, RouteResponse(content="Not Found", status=404))
             return
         method: str = scope["method"]
-        if method not in matched.route.methods and method != "HEAD":
+        if matched.route.methods is not None and method not in matched.route.methods and method != "HEAD":
             await _send_response(send, RouteResponse(content="Method Not Allowed", status=405))
             return
 

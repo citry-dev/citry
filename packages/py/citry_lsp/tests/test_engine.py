@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
+import subprocess
 from functools import lru_cache
 from pathlib import Path
+from shutil import copytree
+from types import SimpleNamespace
 
 import pytest
 from lsprotocol import types
 
 import citry_lsp.engine as engine_module
 from citry import Citry, Component, ComponentLibrary, LibraryComponent, SlotInput, TemplateAnalysis
+from citry._diagnostic_catalog import TEMPLATE_MARKER_NAME_INVALID
 from citry_core.template_parser import CITRY_DIRECTIVE_NAMES, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES
 from citry_lsp.catalog import CatalogIndex, FieldRecord
 from citry_lsp.engine import (
-    _ALPINE_SYNTAX,
     _CITRY_SYNTAX,
     _STRUCTURAL_ATTRIBUTES,
     _STRUCTURAL_TAG_SPECS,
+    _VUE_SYNTAX,
     DocumentState,
     HtmlProjection,
     TemplateVariableHover,
@@ -42,6 +46,7 @@ from citry_lsp.engine import (
 )
 from citry_lsp.project import ProjectState, load_project
 from citry_lsp.protocol import ProjectStatus
+from citry_lsp.regions import standalone_js_region
 
 _DEFINITION_ENGINE = Citry(autodiscover=False)
 
@@ -282,7 +287,7 @@ class Page(Component):
           format="progress",
         )
       }}</output>
-      <span x-text="$i18n.tr('account-greeting', { name: 'Ada' })"></span>
+      <span v-text="$i18n.tr('account-greeting', { name: 'Ada' })"></span>
       <c-trans message="account-rich" c-values="{'name': 'Ada'}">
         <c-fill name="terms_link"><a href="/terms">terms</a></c-fill>
       </c-trans>
@@ -348,7 +353,7 @@ def test_i18n_completion_hover_and_definition_use_the_compiler_index(tmp_path):
 def test_c_tr_navigation_targets_exact_fluent_output_and_checks_values(tmp_path):
     project, app_file, source = _i18n_project(tmp_path)
     authored = source.replace(
-        "<span x-text=\"$i18n.tr('account-greeting', { name: 'Ada' })\"></span>",
+        "<span v-text=\"$i18n.tr('account-greeting', { name: 'Ada' })\"></span>",
         "<span c-aria-label=\"tr('account-greeting', attr='aria-label', name='Ada')\" "
         '$c-tr:account-greeting.aria-label[aria-label]="{ name: 1 }"></span>',
     )
@@ -617,8 +622,8 @@ class Page(Component):
 
 def test_i18n_magic_is_semantic_only_inside_a_client_provider(tmp_path):
     project, _app_file, _source = _i18n_project(tmp_path)
-    inside = '<c-i18n tag="main" c-client="True"><span x-text="$i18n.tr(\'account-wrapper\')"></span></c-i18n>'
-    outside = "<span x-text=\"$i18n.tr('account-wrapper')\"></span>"
+    inside = '<c-i18n tag="main" c-client="True"><span v-text="$i18n.tr(\'account-wrapper\')"></span></c-i18n>'
+    outside = "<span v-text=\"$i18n.tr('account-wrapper')\"></span>"
     inside_document = _document(inside, project)
     outside_document = _document(outside, project)
 
@@ -798,7 +803,7 @@ def test_private_fluent_term_definition_uses_the_live_source_unit(tmp_path):
 def test_i18n_browser_projection_exposes_nested_service_types(tmp_path):
     project, app_file, source = _i18n_project(tmp_path)
     source = source.replace(
-        "<span x-text=\"$i18n.tr('account-greeting', { name: 'Ada' })\"></span>",
+        "<span v-text=\"$i18n.tr('account-greeting', { name: 'Ada' })\"></span>",
         "<input @input=\"result = $i18n.parse.number('1', { format: 'measurement' }).state\" />",
     )
     document = DocumentState(app_file.as_uri(), "python", source, 2)
@@ -814,7 +819,7 @@ def test_i18n_browser_projection_exposes_nested_service_types(tmp_path):
     assert "CitryI18nNumericParseResult" in projection.source
     assert 'format: "measurement"' in projection.source
     assert "/** @type {CitryI18nService} */\nvar $i18n;" in projection.source
-    assert "@property {CitryI18nService | null} i18n" in projection.source
+    assert "@property {CitryI18nService | null} i18n" not in projection.source
 
     js_projection = browser_projection(
         document,
@@ -822,7 +827,7 @@ def test_i18n_browser_projection_exposes_nested_service_types(tmp_path):
         project,
     )
     assert js_projection is not None
-    assert "@property {CitryI18nService | null} i18n" in js_projection.source
+    assert "@property {CitryI18nService | null} i18n" not in js_projection.source
     assert "@typedef {Object} CitryI18nFormatter" in js_projection.source
 
 
@@ -1044,24 +1049,130 @@ def test_html_projection_requires_the_current_parser_tree():
     assert html_projection(document, _position(invalid, "email", 2), project) is None
 
 
-def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins(tmp_path):
+def test_native_slot_binding_intelligence_is_scoped_to_the_slot_body():
+    source = '<NativeChild :value="item" #default="{ item }"><span :title="item" /></NativeChild>'
+    project = _syntax_state()
+    document = _document(source, project)
+    documents = {document.uri: document}
+    declaration = _position(source, '#default="{ item', len('#default="{ item'))
+    body_use = _position(source, ':title="item', len(':title="item'))
+    same_element_use = _position(source, ':value="item', len(':value="item'))
+
+    body_hover = hover(document, body_use, project, documents)
+    assert body_hover is not None
+    assert "(variable) item: unknown" in body_hover.contents.value
+    assert "Vue `v-slot` binding" in body_hover.contents.value
+    declaration_hover = hover(document, declaration, project, documents)
+    assert declaration_hover is not None
+    declaration_target = definition(document, body_use, project, documents)
+    assert isinstance(declaration_target, types.Location)
+    assert declaration_target.range == declaration_hover.range
+    assert hover(document, same_element_use, project, documents) is None
+    slot_references = references(document, body_use, project, documents, include_declaration=True)
+    assert slot_references is not None
+    assert len(slot_references) == 2
+
+
+def test_native_slot_pattern_projection_uses_a_parameter_declaration(tmp_path):
+    template_source = (
+        '<NativeChild :value="item.trim()" '
+        '#[slotNames[名]].tail="{ item: local = fallback, shadow: item, nested: [first, ...rest] }">'
+        '<span :title="item" v-text="local + first + rest.length" />'
+        '</NativeChild><p :data-value="item" />'
+    )
+    template_file = tmp_path / "card.html"
+    app_file = tmp_path / "app.py"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file.write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class JsData:\n"
+        "        slotNames: dict[str, str]\n"
+        "        名: str\n"
+        "        fallback: str\n"
+        "        item: str\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(document.source, document.version, project)
+    documents = {document.uri: document}
+    authored_pattern = "{ item: local = fallback, shadow: item, nested: [first, ...rest] }"
+    authored_position = _position(template_source, "local =", len("local"))
+
+    projection = browser_projection(document, authored_position, project, documents)
+
+    assert projection is not None
+    assert f"void (({authored_pattern}) => {{}});" in projection.source
+    assert projection.virtual_range == types.Range(
+        start=_position(projection.source, authored_pattern),
+        end=_position(projection.source, authored_pattern, len(authored_pattern)),
+    )
+    assert projection.position == _position(projection.source, "local =", len("local"))
+    assert projection.source_range == types.Range(
+        start=_position(template_source, authored_pattern),
+        end=_position(template_source, authored_pattern, len(authored_pattern)),
+    )
+    body_projection = browser_projection(
+        document,
+        _position(template_source, ':title="item', len(':title="item')),
+        project,
+        documents,
+    )
+    same_element_projection = browser_projection(
+        document,
+        _position(template_source, "item.trim", len("item")),
+        project,
+        documents,
+    )
+    sibling_projection = browser_projection(
+        document,
+        _position(template_source, ':data-value="item', len(':data-value="item')),
+        project,
+        documents,
+    )
+    assert body_projection is not None
+    assert "/** @type {unknown} */\nvar item;" in body_projection.source
+    assert same_element_projection is not None
+    assert "/** @type {string} */\nvar item;" in same_element_projection.source
+    assert sibling_projection is not None
+    assert "/** @type {string} */\nvar item;" in sibling_projection.source
+    dynamic_name_projection = browser_projection(
+        document,
+        _position(template_source, "].tail", len("].ta")),
+        project,
+        documents,
+    )
+    assert dynamic_name_projection is not None
+    assert "void (\nslotNames[名] .tail\n);" in dynamic_name_projection.source
+    assert dynamic_name_projection.position == _position(
+        dynamic_name_projection.source,
+        ".tail",
+        len(".ta"),
+    )
+
+
+def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tmp_path):
     template_source = (
         '<button @c-click="save" @c-blur="missing" '
-        'x-text="title.toUpperCase() + notice.toUpperCase() + ready.valueOf() + disabled1 + '
+        'v-text="title.toUpperCase() + label.toUpperCase() + notice.toUpperCase() + ready.valueOf() + disabled1 + '
         '$state.progress.toFixed()" '
         "@click=\"sendEvent('save'); $sendEvent('save'); sendEvent('missing'); "
         "$loading('missing'); $error()\"></button>"
         '<input :c-progress.debounce.300ms="save">'
-        '<template x-for="color in colors"><span x-text="color.toUpperCase()"></span></template>'
+        '<template v-for="color in colors"><span v-text="color.toUpperCase()"></span></template>'
     )
     js_source = (
         "$component({\n"
         "  props: { label: { type: String, required: true }, page: { type: Number, default: null } },\n"
-        "  init({ data, scope, props, state, sendEvent, loading, error }) {\n"
-        "    scope.notice = data.title; Object.assign(scope, { ready: true });\n"
-        "    data.title.toUpperCase(); scope.count.toFixed(); scope.notice.toUpperCase();\n"
-        "    props.label.toUpperCase(); state.progress.toFixed();\n"
-        "    sendEvent('save'); sendEvent('missing'); loading('missing'); error();\n"
+        "  onServerRender({ component: current, revision }) {\n"
+        "    current.title.toUpperCase(); current.count.toFixed();\n"
+        "    current.label.toUpperCase(); current.$state.progress.toFixed();\n"
+        "    current.$sendEvent('save'); revision.toFixed();\n"
         "  },\n"
         "});\n"
     )
@@ -1128,7 +1239,7 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     assert state_target.uri == app_file.as_uri()
     assert state_target.range.start.line == 13
 
-    loop_declaration = _position(template_source, 'x-for="color', len('x-for="co'))
+    loop_declaration = _position(template_source, 'v-for="color', len('v-for="co'))
     loop_use = _position(template_source, "color.to", len("color"))
     loop_hover = hover(template, loop_use, project, documents)
     assert loop_hover is not None
@@ -1150,34 +1261,32 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     assert loop_references is not None
     assert len(loop_references) == 2
 
-    js_title_target = definition(javascript, _position(js_source, "data.title", len("data.ti")), project, documents)
-    assert js_title_target == title_target
+    js_title_target = definition(
+        javascript, _position(js_source, "current.title", len("current.ti")), project, documents
+    )
+    assert js_title_target is None
     scope_target = definition(
         template,
         _position(template_source, "notice.to", len("notice")),
         project,
         documents,
     )
-    assert isinstance(scope_target, types.Location)
-    assert scope_target.uri == js_file.as_uri()
-    assert scope_target.range.start.line == 3
+    assert scope_target is None
     scope_hover = hover(
         template,
         _position(template_source, "notice.to", len("notice")),
         project,
         documents,
     )
-    assert scope_hover is not None
-    assert "notice: string" in scope_hover.contents.value
+    assert scope_hover is None
     js_references = references(
         javascript,
-        _position(js_source, "data.title", len("data.ti")),
+        _position(js_source, "current.title", len("current.ti")),
         project,
         documents,
         include_declaration=True,
     )
-    assert js_references is not None
-    assert {location.uri for location in js_references} == {js_file.as_uri(), app_file.as_uri()}
+    assert js_references is None
 
     template_projection = browser_projection(
         template,
@@ -1187,21 +1296,20 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     )
     assert template_projection is not None
     assert "var title;" in template_projection.source
+    assert "var label;" in template_projection.source
     assert "function $provide(key, value)" in template_projection.source
     assert template_projection.owned_root_names == (
         "title",
         "count",
         "invalid",
         "colors",
-        "notice",
-        "ready",
     )
     loop_projection = browser_projection(template, loop_use, project, documents)
     assert loop_projection is not None
     assert "/** @type {string} */\nvar color;" in loop_projection.source
     js_projection = browser_projection(
         javascript,
-        _position(js_source, "data.title", len("data.title")),
+        _position(js_source, "current.title", len("current.title")),
         project,
         documents,
     )
@@ -1209,15 +1317,13 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     assert "var title;" not in js_projection.source
     assert "label: string" in js_projection.source
     assert "page: number | null" in js_projection.source
-    assert "notice?: string" in js_projection.source
-    assert "ready?: boolean" in js_projection.source
-    assert "@typedef {{progress: number}} CitryEventsState" in js_projection.source
+    assert "CitryDeepReadonly<number>" in js_projection.source
     assert "function((" not in js_projection.source
     assert "/** @typedef {Object} CitryEventError" in js_projection.source
     assert "function $component(definition)" in js_projection.source
     assert "function $provide(key, value)" not in js_projection.source
     assert "secret" not in js_projection.source
-    assert js_projection.citry_owns_position
+    assert not js_projection.citry_owns_position
 
     template_state_projection = browser_projection(
         template,
@@ -1231,13 +1337,13 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
         javascript,
         _position(
             js_source,
-            "props.label.toUpperCase(); state.progress",
-            len("props.label.toUpperCase(); state.pro"),
+            "current.$state.progress",
+            len("current.$state.pro"),
         ),
         project,
         documents,
     )
-    assert callback_state_target == state_target
+    assert callback_state_target is None
 
     magic_hover = hover(
         template,
@@ -1268,30 +1374,30 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     assert "https://citry.dev/reference/browser-apis/#component" in component_hover.contents.value
     context_hover = hover(
         javascript,
-        _position(js_source, "props.label", len("pro")),
+        _position(js_source, "component: current", len("component: cur")),
         project,
         documents,
     )
     assert context_hover is not None
-    assert "(parameter) props: Readonly<CitryClientProps>" in context_hover.contents.value
+    assert "(parameter) current: CitryComponentPublicInstance" in context_hover.contents.value
     assert "https://citry.dev/reference/browser-apis/#component" in context_hover.contents.value
     send_event_context_hover = hover(
         javascript,
-        _position(js_source, "sendEvent('save", len("send")),
+        _position(js_source, "revision })", len("rev")),
         project,
         documents,
     )
     assert send_event_context_hover is not None
-    assert "(function) sendEvent" in send_event_context_hover.contents.value
+    assert "(parameter) revision" in send_event_context_hover.contents.value
     assert "https://citry.dev/reference/browser-apis/#component" in send_event_context_hover.contents.value
     props_projection = browser_projection(
         javascript,
-        _position(js_source, "props.label", len("pro")),
+        _position(js_source, "current.label", len("current.la")),
         project,
         documents,
     )
     assert props_projection is not None
-    assert props_projection.citry_owns_position
+    assert not props_projection.citry_owns_position
 
     loading_items = completion_items(
         template,
@@ -1304,11 +1410,11 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     assert loading_items[0].text_edit.new_text == "save"
     callback_loading_items = completion_items(
         javascript,
-        _position(js_source, "loading('missing", len("loading('")),
+        _position(js_source, "revision.toFixed", len("revision.")),
         project,
         documents,
     )
-    assert [item.label for item in callback_loading_items] == ["save"]
+    assert callback_loading_items == []
 
     dynamic_props_source = js_source.replace(
         "{ label: { type: String, required: true }, page: { type: Number, default: null } }",
@@ -1330,15 +1436,14 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
     js_codes = [finding.code for finding in browser_diagnostics(javascript, project, documents)]
     python_codes = [finding.code for finding in browser_diagnostics(python, project, documents)]
     assert template_codes == [
-        "citry.alpine.unknown-variable",
+        "citry.vue.unknown-variable",
+        "citry.vue.unknown-variable",
+        "citry.vue.unknown-variable",
         "citry.browser.unknown-server-event",
         "citry.browser.unknown-server-event",
         "citry.browser.unknown-server-event",
     ]
-    assert js_codes == [
-        "citry.browser.unknown-server-event",
-        "citry.browser.unknown-server-event",
-    ]
+    assert js_codes == []
     assert python_codes == ["citry.js-data.unsupported-type"]
     event_target = definition(
         javascript,
@@ -1346,16 +1451,16 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
         project,
         documents,
     )
-    assert isinstance(event_target, types.Location)
-    assert event_target.uri == app_file.as_uri()
-    assert event_target.range.start.line == 17
+    assert event_target is None
     declarative_target = definition(
         template,
         _position(template_source, '@c-click="save', len('@c-click="sa')),
         project,
         documents,
     )
-    assert declarative_target == event_target
+    assert isinstance(declarative_target, types.Location)
+    assert declarative_target.uri == app_file.as_uri()
+    assert declarative_target.range.start.line == 17
     state_binding_target = definition(
         template,
         _position(
@@ -1366,7 +1471,7 @@ def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins
         project,
         documents,
     )
-    assert state_binding_target == event_target
+    assert state_binding_target == declarative_target
     declarative_items = completion_items(
         template,
         _position(template_source, '@c-click="save', len('@c-click="sa')),
@@ -1515,81 +1620,318 @@ def test_citry_event_binding_hover_explains_the_dom_event_and_links_to_docs():
     assert "Component.State.query" in state_result.contents.value
 
 
-def test_static_component_props_report_contract_errors_and_navigate_to_child_js(tmp_path):
-    template_source = (
-        '<c-child $c-props="{ title: title, count: \'many\', extra: true }" /><c-child $c-props="{ title, ...{} }" />'
+def test_callback_projection_delegates_closed_instance_and_official_vue_types(tmp_path):
+    template_source = '<output v-text="title"></output>'
+    js_source = """$component({
+      props: { label: String },
+      data() { return { local: 1, labelLength: this.label.length }; },
+      setup() { return { setupValue: 1 }; },
+      methods: {
+        save() { this.local += 1; String(this.theme); },
+        invalidThis() {
+          this.label = 'forbidden';
+          this.notAnOption = true;
+        },
+      },
+      computed: {
+        writable: { get() { return this.local; }, set(/** @type {number} */ value) { this.local = value; } },
+        brokenComputed: 42,
+      },
+      inject: ['theme'],
+      onServerRender({ component: current }) {
+        current.title = 'changed';
+        current.local = 2;
+        current.setupValue = 2;
+        current.writable = 2;
+        current.theme = 'dark';
+        current.save();
+        current.$state.editable = { nested: 2 };
+        Citry.vue.ref(1).value = 2;
+        Citry.vue.computed(() => current.title.length);
+        current.label = 'forbidden';
+        current.$state.editable.nested = 3;
+        current.$state.locked = { nested: 3 };
+        current.missing = true;
+        Citry.vue.notARealVueApi();
+      },
+    });
+    """
+    (tmp_path / "card.html").write_text(template_source, encoding="utf8")
+    js_file = tmp_path / "card.js"
+    js_file.write_text(js_source, encoding="utf8")
+    app_source = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template_file = 'card.html'
+    js_file = 'card.js'
+    class JsData:
+        title: str
+    class State:
+        editable: dict[str, int]
+        locked: dict[str, int]
+        _public = ('editable', 'locked')
+        _model = ('editable',)
+"""
+    (tmp_path / "app.py").write_text(app_source, encoding="utf8")
+    project = load_project(tmp_path, "app:engine")
+    javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
+    javascript.update(js_source, 1, project)
+    projection = browser_projection(
+        javascript,
+        _position(js_source, "current.title", len("current.title")),
+        project,
+        {javascript.uri: javascript},
     )
-    child_js = (
-        "$component({\n"
-        "  props: {\n"
-        "    title: { type: String, required: true },\n"
-        "    count: { type: Number, required: true },\n"
-        "    enabled: { type: Boolean, required: true },\n"
-        "  },\n"
-        "  init() {},\n"
-        "});\n"
+    assert projection is not None
+    assert "ComputedOptions[string]" in projection.source
+    bundled_types = Path(engine_module.__file__).parent / "types" / "node_modules"
+    spaced_types = tmp_path / "official Vue types" / "node_modules"
+    copytree(bundled_types, spaced_types)
+    bundled_vue = (bundled_types / "vue").resolve().as_posix()
+    spaced_vue = (spaced_types / "vue").resolve().as_posix()
+    projected_source = projection.source.replace(bundled_vue, spaced_vue)
+    assert projected_source != projection.source
+    projected = tmp_path / "projection.js"
+    projected.write_text("// @ts-check\n" + projected_source, encoding="utf8")
+    repository = Path(__file__).resolve().parents[4]
+    tsc = repository / "packages" / "js" / "citry-client" / "node_modules" / ".bin" / "tsc"
+    checked = subprocess.run(
+        [
+            str(tsc),
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--allowJs",
+            "--checkJs",
+            "--moduleResolution",
+            "bundler",
+            "--module",
+            "preserve",
+            "--target",
+            "es2022",
+            str(projected),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
     )
-    app_source = (
+    diagnostics = checked.stdout + checked.stderr
+    assert checked.returncode == 1
+    assert "Cannot assign to 'label' because it is a read-only property" in diagnostics
+    assert "Index signature in type '{ readonly [x: string]: number; }' only permits reading" in diagnostics
+    assert "Cannot assign to 'locked' because it is a read-only property" in diagnostics
+    assert "Property 'missing' does not exist" in diagnostics
+    assert "Property 'notARealVueApi' does not exist" in diagnostics
+    assert "Property 'notAnOption' does not exist" in diagnostics
+    broken_computed_line = projection.source[: projection.source.index("brokenComputed: 42")].count("\n") + 2
+    assert f"projection.js({broken_computed_line},9)" in diagnostics
+    assert (
+        "Type 'number' is not assignable to type 'ComputedGetter<any> | WritableComputedOptions<any, any>'"
+    ) in diagnostics
+    writable_option_line = projection.source[: projection.source.index("writable: {")].count("\n") + 2
+    assert f"projection.js({writable_option_line}," not in diagnostics
+    assert "Cannot find module" not in diagnostics
+    assert "does not satisfy the constraint 'ComponentInjectOptions'" not in diagnostics
+
+    unsupported_js = """$component({
+      mixins: [],
+      extends: {},
+      render() { return null; },
+      setup() { return () => null; },
+    });
+    $component({
+      props: 42,
+      data() { return 1; },
+      methods: { broken: 1 },
+      inject: 42,
+    });
+    """
+    unsupported_source = projected_source.replace(js_source, unsupported_js)
+    assert unsupported_source != projected_source
+    unsupported = tmp_path / "unsupported-options.js"
+    unsupported.write_text("// @ts-check\n" + unsupported_source, encoding="utf8")
+    unsupported_check = subprocess.run(
+        [
+            str(tsc),
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--allowJs",
+            "--checkJs",
+            "--moduleResolution",
+            "bundler",
+            "--module",
+            "preserve",
+            "--target",
+            "es2022",
+            str(unsupported),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    unsupported_diagnostics = unsupported_check.stdout + unsupported_check.stderr
+    assert unsupported_check.returncode == 1
+    assert "Type 'never[]' is not assignable to type 'undefined'" in unsupported_diagnostics
+    assert "Type '{}' is not assignable to type 'undefined'" in unsupported_diagnostics
+    assert "Type '() => null' is not assignable to type 'undefined'" in unsupported_diagnostics
+    assert "Type '() => () => null' is not assignable to type 'CitryComponentSetup'" in unsupported_diagnostics
+    assert (
+        "Type 'number' is not assignable to type '{ labelLength: unknown; local: unknown; }'"
+        in unsupported_diagnostics
+    )
+    assert "'broken' does not exist" in unsupported_diagnostics
+    assert "Type 'number' is not assignable to type '\"theme\"[] | {" in unsupported_diagnostics
+
+
+def test_open_inject_projection_keeps_explicit_options_and_accepts_unknown_keys(tmp_path):
+    template_source = '<output v-text="title"></output>'
+    js_source = """const extraInjectOptions = {};
+    $component({
+      inject: {
+        theme: 'theme',
+        ...extraInjectOptions,
+      },
+      onServerRender({ component }) {
+        component.theme;
+      },
+    });
+    """
+    (tmp_path / "card.html").write_text(template_source, encoding="utf-8")
+    js_file = tmp_path / "card.js"
+    js_file.write_text(js_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
         "from pathlib import Path\n"
         "from citry import Citry, Component\n"
         "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
-        "class Child(Component):\n"
+        "class Card(Component):\n"
         "    citry = engine\n"
-        "    js_file = 'child.js'\n"
-        "    template = '<span></span>'\n"
-        "class Parent(Component):\n"
-        "    citry = engine\n"
-        "    template_file = 'parent.html'\n"
-        "    class JsData:\n"
-        "        title: str\n"
+        "    template_file = 'card.html'\n"
+        "    js_file = 'card.js'\n",
+        encoding="utf-8",
     )
-    template_file = tmp_path / "parent.html"
-    child_js_file = tmp_path / "child.js"
-    app_file = tmp_path / "app.py"
-    template_file.write_text(template_source, encoding="utf-8")
-    child_js_file.write_text(child_js, encoding="utf-8")
-    app_file.write_text(app_source, encoding="utf-8")
     project = load_project(tmp_path, "app:engine")
-    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
-    javascript = DocumentState(child_js_file.as_uri(), "javascript", child_js, 1)
-    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
-    for document in (template, javascript, python):
-        document.update(document.source, document.version, project)
-    documents = {document.uri: document for document in (template, javascript, python)}
+    javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
+    javascript.update(js_source, 1, project)
 
-    prop_findings = [
-        finding
-        for finding in browser_diagnostics(template, project, documents)
-        if str(finding.code).startswith("citry.browser.")
-    ]
-    assert [finding.code for finding in prop_findings] == [
-        "citry.browser.incompatible-component-prop",
-        "citry.browser.unknown-component-prop",
-        "citry.browser.missing-component-prop",
-    ]
-    assert "expects number" in prop_findings[0].message
-    assert "extra" in prop_findings[1].message
-    assert "enabled" in prop_findings[2].message
+    projection = browser_projection(
+        javascript,
+        _position(js_source, "component.theme", len("component.")),
+        project,
+        {javascript.uri: javascript},
+    )
 
-    key_position = _position(template_source, "title: title", 2)
-    target = definition(template, key_position, project, documents)
-    assert isinstance(target, types.Location)
-    assert target.uri == child_js_file.as_uri()
-    assert target.range.start.line == 2
-    prop_hover = hover(template, key_position, project, documents)
-    assert prop_hover is not None
-    assert "(property) title: string" in prop_hover.contents.value
+    assert projection is not None
+    known_inject = "{theme: string | symbol | {from?: string | symbol, default?: unknown}}"
+    assert f"{known_inject} & Record<string | symbol," in projection.source
+    projected = tmp_path / "open-inject.js"
+    projected.write_text("// @ts-check\n" + projection.source, encoding="utf-8")
+    repository = Path(__file__).resolve().parents[4]
+    tsc = repository / "packages" / "js" / "citry-client" / "node_modules" / ".bin" / "tsc"
+    checked = subprocess.run(
+        [
+            str(tsc),
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--allowJs",
+            "--checkJs",
+            "--moduleResolution",
+            "bundler",
+            "--module",
+            "preserve",
+            "--target",
+            "es2022",
+            str(projected),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected_severity"),
-    [
-        ("off", None),
-        ("warn", types.DiagnosticSeverity.Warning),
-        ("strict", types.DiagnosticSeverity.Error),
-    ],
+def test_callback_projection_exposes_i18n_as_a_nullable_service(tmp_path):
+    js_source = """$component({
+      onServerRender({ component }) {
+        component.$i18n?.tr("account-greeting", { name: "Ada" });
+        component.$i18n.tr("account-greeting", { name: "Ada" });
+      },
+    });
+    """
+    js_file = tmp_path / "card.js"
+    js_file.write_text(js_source, encoding="utf-8")
+    app_source = """from pathlib import Path
+from citry import Citry, Component
+
+engine = Citry(
+    dirs=[Path(__file__).parent],
+    autodiscover=False,
+    extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
 )
-def test_browser_diagnostics_apply_the_project_csp_mode(tmp_path, mode, expected_severity):
+
+class Card(Component):
+    citry = engine
+    js_file = "card.js"
+"""
+    (tmp_path / "app.py").write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.i18n is not None
+    assert project.i18n.configured
+    javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
+    javascript.update(js_source, 1, project)
+
+    projection = browser_projection(
+        javascript,
+        _position(js_source, "component.$i18n", len("component.")),
+        project,
+        {javascript.uri: javascript},
+    )
+
+    assert projection is not None
+    assert "$i18n: CitryI18nService | null" in projection.source
+    projected = tmp_path / "callback-i18n.js"
+    projected.write_text("// @ts-check\n" + projection.source, encoding="utf-8")
+    repository = Path(__file__).resolve().parents[4]
+    tsc = repository / "packages" / "js" / "citry-client" / "node_modules" / ".bin" / "tsc"
+    checked = subprocess.run(
+        [
+            str(tsc),
+            "--ignoreConfig",
+            "--noEmit",
+            "--strict",
+            "--allowJs",
+            "--checkJs",
+            "--moduleResolution",
+            "bundler",
+            "--module",
+            "preserve",
+            "--target",
+            "es2022",
+            str(projected),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    diagnostics = checked.stdout + checked.stderr
+    unsafe_call_line = projection.source[: projection.source.index("component.$i18n.tr")].count("\n") + 2
+    assert checked.returncode == 1
+    assert f"callback-i18n.js({unsafe_call_line},9)" in diagnostics
+    assert "possibly 'null'" in diagnostics
+    assert "Property '$i18n' does not exist" not in diagnostics
+    assert "Property 'tr' does not exist" not in diagnostics
+    assert "Cannot find module" not in diagnostics
+
+
+@pytest.mark.parametrize("mode", ["off", "warn", "strict"])
+def test_browser_diagnostics_do_not_apply_the_retired_expression_csp_evaluator(tmp_path, mode):
     template_source = '<button @click="items.map(item => item.id)"></button>'
     template_file = tmp_path / "card.html"
     template_file.write_text(template_source, encoding="utf-8")
@@ -1599,42 +1941,6 @@ def test_browser_diagnostics_apply_the_project_csp_mode(tmp_path, mode, expected
         f"engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, security_csp={mode!r})\n"
         "class Card(Component):\n"
         "    citry = engine\n"
-        "    template_file = 'card.html'\n"
-        "    class JsData:\n"
-        "        items: list[dict[str, int]]\n",
-        encoding="utf-8",
-    )
-    project = load_project(tmp_path, "app:engine")
-    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
-    document.update(template_source, 1, project)
-
-    findings = [
-        item
-        for item in browser_diagnostics(document, project, {document.uri: document})
-        if item.code == "citry.csp.incompatible-browser-code"
-    ]
-
-    if expected_severity is None:
-        assert findings == []
-    else:
-        assert len(findings) == 1
-        assert findings[0].severity == expected_severity
-        assert findings[0].code_description == types.CodeDescription(
-            "https://citry.dev/ide/diagnostics/#citry.csp.incompatible-browser-code"
-        )
-        assert findings[0].range == types.Range(types.Position(0, 31), types.Position(0, 33))
-
-
-def test_browser_diagnostics_report_malformed_csp_expression_without_crashing(tmp_path):
-    template_source = '<span x-text="\'unterminated"></span>'
-    template_file = tmp_path / "card.html"
-    template_file.write_text(template_source, encoding="utf-8")
-    (tmp_path / "app.py").write_text(
-        "from pathlib import Path\n"
-        "from citry import Citry, Component\n"
-        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, security_csp='strict')\n"
-        "class Card(Component):\n"
-        "    citry = engine\n"
         "    template_file = 'card.html'\n",
         encoding="utf-8",
     )
@@ -1642,14 +1948,9 @@ def test_browser_diagnostics_report_malformed_csp_expression_without_crashing(tm
     document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
     document.update(template_source, 1, project)
 
-    findings = [
-        item
-        for item in browser_diagnostics(document, project, {document.uri: document})
-        if item.code == "citry.csp.incompatible-browser-code"
-    ]
+    findings = browser_diagnostics(document, project, {document.uri: document})
 
-    assert len(findings) == 1
-    assert "unterminated string" in findings[0].message
+    assert not [item for item in findings if item.code == "citry.csp.incompatible-browser-code"]
 
 
 def test_component_js_unknown_variables_use_lint_globals_and_default_to_error(tmp_path):
@@ -1705,7 +2006,7 @@ $component(({ data }) => {
 
 
 def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_literals(tmp_path):
-    template_source = "<p x-text=\"submitting.valueOf() ? title.toUpperCase() : ''\"></p>"
+    template_source = "<p v-text=\"submitting.valueOf() ? title.toUpperCase() : ''\"></p>"
     template_file = tmp_path / "card.html"
     app_file = tmp_path / "app.py"
     template_file.write_text(template_source, encoding="utf-8")
@@ -1756,6 +2057,135 @@ def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_li
 
     assert completion_items(template, _position(template_source, "title", 2), project, edited_documents) == []
     assert definition(template, _position(template_source, "title", 2), project, edited_documents) is None
+
+
+def test_js_data_namespace_joins_optional_roots_across_shared_template_owners(tmp_path):
+    template_source = '<output v-text="shared"></output><output v-text="optional"></output>'
+    template_file = tmp_path / "card.html"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_source = """from pathlib import Path
+from citry import Citry, Component
+
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+
+class First(Component):
+    citry = engine
+    template_file = "card.html"
+
+    def js_data(self, kwargs, slots):
+        if kwargs.show_optional:
+            return {"shared": "first", "optional": True}
+        return {"shared": "fallback", **kwargs.extra}
+
+class Second(Component):
+    citry = engine
+    template_file = "card.html"
+
+    def js_data(self, kwargs, slots):
+        if kwargs.show_optional:
+            return {"shared": 2, "optional": None}
+        return {"shared": 3}
+"""
+    app_file = tmp_path / "app.py"
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    template.update(template_source, 1, project)
+    open_documents = {template.uri: template}
+    position = _position(template_source, "optional", 2)
+    region = template.region_at(position)
+    assert region is not None
+    consumers = engine_module._template_consumers(template, region, project, open_documents)
+
+    roots = engine_module._template_js_data_roots(template, region, project, open_documents)
+    joined = {root.name: root for root in roots}
+    projection = browser_projection(template, position, project, open_documents)
+
+    assert {component.name for component in consumers} == {"first", "second"}
+    assert engine_module._shared_js_data_policy(consumers, project, template, open_documents) == "open"
+    assert set(joined) == {"optional", "shared"}
+    assert joined["optional"].presence == "conditional"
+    assert joined["optional"].wire_type.javascript == "true | null"
+    assert len(joined["optional"].producers) == 2
+    assert joined["shared"].presence == "always"
+    assert joined["shared"].wire_type.javascript == '"first" | 2 | 3'
+    assert len(joined["shared"].producers) == 2
+    assert projection is not None
+    assert "optional?: true | null" in projection.source
+    assert 'shared: "first" | 2 | 3' in projection.source
+    assert "& Record<string, unknown>" in projection.source
+
+
+def test_js_data_public_name_diagnostics_cover_reserved_prefixes_and_dedupe_shared_owners(
+    tmp_path,
+    monkeypatch,
+):
+    from citry._diagnostic_catalog import JS_DATA_PUBLIC_NAME_COLLISION
+
+    app_source = (
+        "first = {'$private': 1, '_hidden': 1, 'preparedData': 1, 'save': 1}\n"
+        "second = {'$private': 1, '_hidden': 1, 'preparedData': 1, 'save': 1}\n"
+    )
+    app_file = tmp_path / "app.py"
+    app_file.write_text(app_source, encoding="utf-8")
+    js_source = "$component({ methods: { save() {} } });"
+    js_file = tmp_path / "card.js"
+    js_file.write_text(js_source, encoding="utf-8")
+    app_uri = app_file.as_uri()
+    js_uri = js_file.as_uri()
+
+    def data_root(name, line, *, presence="always"):
+        start = app_source.splitlines()[line].index(name)
+        location = types.Location(
+            app_uri,
+            types.Range(
+                types.Position(line, start),
+                types.Position(line, start + len(name)),
+            ),
+        )
+        return SimpleNamespace(name=name, presence=presence, locations=(location,), fields=())
+
+    roots_by_owner = {
+        "First": tuple(
+            data_root(name, 0, presence="conditional" if name == "save" else "always")
+            for name in ("$private", "_hidden", "preparedData", "save")
+        ),
+        "Second": tuple(
+            data_root(name, 1, presence="always") for name in ("$private", "_hidden", "preparedData", "save")
+        ),
+    }
+    components = (SimpleNamespace(name="First"), SimpleNamespace(name="Second"))
+    project = SimpleNamespace(catalog=SimpleNamespace(components=components), i18n=None)
+    app_document = DocumentState(app_uri, "python", app_source, 1)
+    js_document = DocumentState(js_uri, "javascript", js_source, 1)
+    documents = {app_uri: app_document, js_uri: js_document}
+    js_region = standalone_js_region(js_source)
+    monkeypatch.setattr(
+        engine_module,
+        "_component_js_data_roots",
+        lambda component, *_args: SimpleNamespace(roots=roots_by_owner[component.name]),
+    )
+    monkeypatch.setattr(
+        engine_module,
+        "_component_js_asset_source",
+        lambda *_args: (js_source, js_uri, js_region.source_map),
+    )
+
+    python_diagnostics = engine_module._js_data_public_name_diagnostics(app_document, project, documents)
+    javascript_diagnostics = engine_module._js_data_public_name_diagnostics(js_document, project, documents)
+
+    assert len(python_diagnostics) == 8
+    assert {diagnostic.range.start.line for diagnostic in python_diagnostics} == {0, 1}
+    assert {diagnostic.code for diagnostic in python_diagnostics} == {JS_DATA_PUBLIC_NAME_COLLISION}
+    assert sum("'save'" not in diagnostic.message for diagnostic in python_diagnostics) == 6
+    assert sum("when supplied" in diagnostic.message for diagnostic in python_diagnostics) == 1
+    assert len(javascript_diagnostics) == 1
+    assert javascript_diagnostics[0].code == JS_DATA_PUBLIC_NAME_COLLISION
+    assert not javascript_diagnostics[0].message.endswith("when supplied.")
+    assert javascript_diagnostics[0].range == types.Range(
+        start=_position(js_source, "save"),
+        end=_position(js_source, "save", len("save")),
+    )
 
 
 def test_css_file_completes_hovers_and_navigates_declared_css_data(tmp_path):
@@ -2151,6 +2581,148 @@ def test_unknown_component_only_fires_in_registry_mode():
     assert static.diagnostics == ()
 
 
+def test_mark_builtin_catalog_and_completion_expose_its_required_name_and_default_slot():
+    project = _registry_state()
+    assert project.catalog is not None
+    mark = project.catalog.get("c-mark")
+    assert mark is not None
+    assert mark.builtin is True
+    assert [(field.name, field.required) for field in mark.schemas.kwargs.fields] == [("name", True)]
+    assert [(field.name, field.required) for field in mark.schemas.slots.fields] == [("default", False)]
+
+    attribute_source = "<c-mark "
+    slot_source = '<c-mark><c-fill name="'
+    attributes = completion_items(
+        _document(attribute_source, project),
+        _position(attribute_source, " ", 1),
+        project,
+    )
+    slots = completion_items(
+        _document(slot_source, project),
+        _position(slot_source, '"', 1),
+        project,
+    )
+
+    attribute_labels = {item.label for item in attributes}
+    assert "name" in attribute_labels
+    assert "c-name" not in attribute_labels
+    assert {item.label for item in slots} == {"default"}
+
+
+@pytest.mark.parametrize(
+    ("source", "message", "start_marker", "end_marker"),
+    [
+        (
+            '<c-component is="mark" />',
+            "Marker requires a literal name attribute.",
+            "c-component",
+            "c-component",
+        ),
+        (
+            '<c-component is="mark" :name="dynamic" />',
+            "Marker name must be a static literal.",
+            ":name",
+            "dynamic",
+        ),
+        (
+            '<c-component is="mark" name="9bad" />',
+            "Marker name must match [A-Za-z][A-Za-z0-9_-]*.",
+            "9bad",
+            "9bad",
+        ),
+        (
+            '<c-component is="mark" name="valid" title="extra" />',
+            "Marker accepts only its name attribute.",
+            "title",
+            "title",
+        ),
+        (
+            '<c-component is="mark" name="valid" NAME="other" />',
+            "Marker accepts only its name attribute.",
+            "NAME",
+            "NAME",
+        ),
+        (
+            '<c-mark NAME="other" />',
+            "Marker accepts only its name attribute.",
+            "NAME",
+            "NAME",
+        ),
+        (
+            '<c-mark name="valid" NAME="other" />',
+            "Marker accepts only its name attribute.",
+            "NAME",
+            "NAME",
+        ),
+        (
+            '<c-component is="mark" name="valid"><c-fill name="Default">x</c-fill></c-component>',
+            "Marker accepts only its default slot.",
+            "Default",
+            "Default",
+        ),
+        (
+            '<c-component is="mark" name="valid"><c-fill c-name="fillName">x</c-fill></c-component>',
+            "Marker accepts only its default slot.",
+            "fillName",
+            "fillName",
+        ),
+        (
+            '<c-mark :name="dynamic" />',
+            "Marker name must be a static literal.",
+            ":name",
+            "dynamic",
+        ),
+        (
+            '<c-mark name="9bad" />',
+            "Marker name must match [A-Za-z][A-Za-z0-9_-]*.",
+            "9bad",
+            "9bad",
+        ),
+    ],
+)
+def test_literal_mark_authoring_diagnostics_work_without_registry_ownership(
+    source: str,
+    message: str,
+    start_marker: str,
+    end_marker: str,
+):
+    document = _document(source, _syntax_state())
+
+    findings = [item for item in document.diagnostics if item.code == TEMPLATE_MARKER_NAME_INVALID]
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.message == message
+    assert finding.range == types.Range(
+        _position(source, start_marker),
+        _position(source, end_marker, len(end_marker)),
+    )
+    assert finding.code_description == types.CodeDescription(
+        "https://citry.dev/ide/diagnostics/#citry.template.marker-name-invalid"
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<c-component c-is="selector" name="valid" />',
+        '<c-component is="card" />',
+    ],
+)
+def test_literal_marker_diagnostics_ignore_dynamic_and_nonmark_selectors(source: str):
+    document = _document(source, _syntax_state())
+
+    assert not [item for item in document.diagnostics if item.code == TEMPLATE_MARKER_NAME_INVALID]
+
+
+def test_duplicate_mark_name_uses_the_parser_syntax_diagnostic():
+    source = '<c-component is="mark" name="one" name="two" />'
+    document = _document(source, _syntax_state())
+
+    assert [item.code for item in document.diagnostics] == ["citry.parse.syntax"]
+    assert "Duplicate attribute 'name' found." in document.diagnostics[0].message
+
+
 def test_component_attribute_and_slot_completion():
     project = _registry_state()
     tag_source = "<c-ca"
@@ -2439,11 +3011,6 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
     project = _syntax_state()
 
     plain = completion_items(_document("<div ", project), types.Position(0, len("<div ")), project)
-    component = completion_items(
-        _document("<c-unknown ", project),
-        types.Position(0, len("<c-unknown ")),
-        project,
-    )
     conditional = completion_items(
         _document("<c-if ", project),
         types.Position(0, len("<c-if ")),
@@ -2466,7 +3033,6 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
     )
 
     plain_by_label = {item.label: item for item in plain}
-    component_labels = {item.label for item in component}
     assert {
         "c-if",
         "c-elif",
@@ -2481,22 +3047,18 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
     } <= set(plain_by_label)
     assert plain_by_label["c-for"].insert_text == 'c-for="${1:item} in ${2:items}"'
     assert plain_by_label["#c-key"].insert_text == '#c-key="${1:key}"'
-    assert {"$c-props", "c-$c-props"} <= component_labels
-    component_by_label = {item.label: item for item in component}
-    assert component_by_label["$c-props"].insert_text == '\\$c-props="${1:{}}"'
-    assert component_by_label["c-$c-props"].insert_text == 'c-\\$c-props="${1:expression}"'
     assert {item.label for item in conditional} == {"cond"}
     assert {item.label for item in fill} == {"name", "c-name", "data", "fallback", "c-bind"}
     assert {"c-if", "c-elif", "c-else", "c-for", "c-empty"} <= {item.label for item in slot}
-    assert not {"#c-key", "#c-ignore", "$c-props", "c-$c-props"} & {item.label for item in slot}
+    assert not {"#c-key", "#c-ignore"} & {item.label for item in slot}
     assert len(dynamic_component) == len({item.label for item in dynamic_component})
 
 
-def test_plain_html_attribute_completion_includes_alpine_core_and_shorthands():
+def test_plain_html_attribute_completion_includes_vue_core_and_shorthands():
     project = _syntax_state()
-    plain_source = "<button x-"
+    plain_source = "<button v-"
     component_source = "<c-unknown @"
-    element_source = '<c-element is="button" x-'
+    element_source = '<c-element is="button" v-'
 
     plain = completion_items(
         _document(plain_source, project),
@@ -2516,60 +3078,42 @@ def test_plain_html_attribute_completion_includes_alpine_core_and_shorthands():
 
     plain_by_label = {item.label: item for item in plain}
     assert {
-        "x-data",
-        "x-init",
-        "x-show",
-        "x-bind",
-        "x-on",
-        "x-text",
-        "x-html",
-        "x-model",
-        "x-modelable",
-        "x-transition",
-        "x-effect",
-        "x-ignore",
-        "x-ref",
-        "x-cloak",
-        "x-id",
+        "v-show",
+        "v-bind",
+        "v-on",
+        "v-text",
+        "v-html",
+        "v-model",
+        "v-for",
+        "v-if",
         "@click",
         "@submit",
         ":class",
         ":aria-expanded",
     } <= set(plain_by_label)
-    assert plain_by_label["x-text"].insert_text == 'x-text="${1:expression}"'
-    assert plain_by_label["x-cloak"].insert_text == "x-cloak"
+    assert plain_by_label["v-text"].insert_text == 'v-text="${1:expression}"'
     assert plain_by_label["@click"].insert_text == '@click="${1:expression}"'
     assert plain_by_label[":aria-expanded"].insert_text == ':aria-expanded="${1:expression}"'
     component_labels = {item.label for item in component}
-    assert {"@click", "x-on"} <= component_labels
-    assert not {"x-text", ":aria-expanded"} & component_labels
-    assert {"x-text", ":aria-expanded"} <= {item.label for item in element}
+    assert {"@click", "v-on", ":aria-expanded", "v-bind"} <= component_labels
+    assert not {"v-text", "v-html", "v-show", "v-for"} & component_labels
+    assert {"v-text", ":aria-expanded"} <= {item.label for item in element}
 
 
-def test_template_only_alpine_completion_stays_on_template_elements():
+def test_vue_structural_directives_are_available_on_html_elements_without_vue_names():
     project = _syntax_state()
-    div_source = "<div "
-    template_source = "<template "
-
-    div_labels = {
+    source = "<div "
+    labels = {
         item.label
         for item in completion_items(
-            _document(div_source, project),
-            types.Position(0, len(div_source)),
-            project,
-        )
-    }
-    template_labels = {
-        item.label
-        for item in completion_items(
-            _document(template_source, project),
-            types.Position(0, len(template_source)),
+            _document(source, project),
+            types.Position(0, len(source)),
             project,
         )
     }
 
-    assert not {"x-if", "x-for", "x-teleport"} & div_labels
-    assert {"x-if", "x-for", "x-teleport"} <= template_labels
+    assert {"v-if", "v-for", "v-show"} <= labels
+    assert not any(label.startswith("x-") for label in labels)
 
 
 @pytest.mark.parametrize(
@@ -2628,7 +3172,6 @@ def test_attribute_completion_uses_a_zero_width_edit_after_whitespace():
     ("source", "partial", "label", "expected_new_text"),
     [
         ("<div #c-kooops>", "#c-kooops", "#c-key", '#c-key="${1:key}"'),
-        ("<c-card $c-prooops>", "$c-prooops", "$c-props", '\\$c-props="${1:{}}"'),
         ("<c-slot requiired>", "requiired", "required", "required"),
         (
             '<c-card c-body="<div c-ioops></div>">',
@@ -2917,31 +3460,31 @@ def test_syntax_hover_metadata_is_exhaustive_unique_and_parser_owned():
     assert all(spec.documentation_url.startswith("https://citry.dev/") for spec in _CITRY_SYNTAX)
 
 
-def test_alpine_syntax_metadata_is_unique_and_links_to_upstream_directives():
-    labels = [spec.label for spec in _ALPINE_SYNTAX]
+def test_vue_syntax_metadata_is_unique_and_links_to_upstream_directives():
+    labels = [spec.label for spec in _VUE_SYNTAX]
 
     assert len(labels) == len(set(labels))
-    assert all(spec.documentation_url.startswith("https://alpinejs.dev/directives/") for spec in _ALPINE_SYNTAX)
+    assert all(
+        spec.documentation_url.startswith("https://vuejs.org/api/built-in-directives.html#") for spec in _VUE_SYNTAX
+    )
 
 
 @pytest.mark.parametrize(
     ("source", "attribute", "documentation_path"),
     [
-        ('<span x-text="title"></span>', "x-text", "/directives/text"),
-        ("<span x-cloak></span>", "x-cloak", "/directives/cloak"),
-        ('<button @click="open = true"></button>', "@click", "/directives/on"),
-        ('<button x-on:click="open = true"></button>', "x-on:click", "/directives/on"),
-        ('<button :aria-expanded="open"></button>', ":aria-expanded", "/directives/bind"),
+        ('<span v-text="title"></span>', "v-text", "#v-text"),
+        ('<button @click="open = true"></button>', "@click", "#v-on"),
+        ('<button v-on:click="open = true"></button>', "v-on:click", "#v-on"),
+        ('<button :aria-expanded="open"></button>', ":aria-expanded", "#v-bind"),
         (
-            '<button x-bind:aria-expanded="open"></button>',
-            "x-bind:aria-expanded",
-            "/directives/bind",
+            '<button v-bind:aria-expanded="open"></button>',
+            "v-bind:aria-expanded",
+            "#v-bind",
         ),
-        ("<div x-transition.opacity></div>", "x-transition.opacity", "/directives/transition"),
-        ('<input x-model.number="count" />', "x-model.number", "/directives/model"),
+        ('<input v-model.number="count" />', "v-model.number", "#v-model"),
     ],
 )
-def test_alpine_syntax_hover_documents_directives_and_shorthands(
+def test_vue_syntax_hover_documents_directives_and_shorthands(
     source,
     attribute,
     documentation_path,
@@ -2957,20 +3500,20 @@ def test_alpine_syntax_hover_documents_directives_and_shorthands(
         _position(source, attribute, len(attribute)),
     )
     assert f"`{attribute}`" in result.contents.value
-    assert f"https://alpinejs.dev{documentation_path}" in result.contents.value
+    assert f"https://vuejs.org/api/built-in-directives.html{documentation_path}" in result.contents.value
 
 
-def test_alpine_syntax_hover_maps_nested_and_inline_python_attribute_names():
+def test_vue_syntax_hover_maps_nested_and_inline_python_attribute_names():
     project = _syntax_state()
     nested_source = "<c-card c-body=\"<>😀<button @click='open = true'>Open</button></>\" />"
     python_source = (
-        'from citry import Component\nclass Card(Component):\n    template = """😀<span x-cloak></span>"""\n'
+        'from citry import Component\nclass Card(Component):\n    template = """😀<span v-show></span>"""\n'
     )
 
     nested = hover(_document(nested_source, project), _position(nested_source, "@click", 2), project)
     inline = hover(
         _document(python_source, project, language_id="python"),
-        _position(python_source, "x-cloak", 2),
+        _position(python_source, "v-show", 2),
         project,
     )
 
@@ -2981,19 +3524,19 @@ def test_alpine_syntax_hover_maps_nested_and_inline_python_attribute_names():
     )
     assert inline is not None
     assert inline.range == types.Range(
-        _position(python_source, "x-cloak"),
-        _position(python_source, "x-cloak", len("x-cloak")),
+        _position(python_source, "v-show"),
+        _position(python_source, "v-show", len("v-show")),
     )
 
 
 @pytest.mark.parametrize(
     ("source", "marker"),
     [
-        ('<c-card x-text="title"></c-card>', "x-text"),
-        ('<c-if cond="ready" x-text="title"></c-if>', "x-text"),
+        ('<c-card v-text="title"></c-card>', "v-text"),
+        ('<c-if cond="ready" v-text="title"></c-if>', "v-text"),
     ],
 )
-def test_alpine_syntax_hover_respects_citry_owned_and_component_only_channels(source, marker):
+def test_vue_syntax_hover_respects_citry_owned_and_component_only_channels(source, marker):
     project = _syntax_state()
 
     assert hover(_document(source, project), _position(source, marker, 1), project) is None
@@ -3018,12 +3561,6 @@ def test_alpine_syntax_hover_respects_citry_owned_and_component_only_channels(so
         ('<div c-bind="attrs"></div>', "c-bind", "/syntax/dynamic-attributes/#c-bind-spread"),
         ('<div #c-key="row.id"></div>', "#c-key", "/syntax/dynamic-attributes/#c-key"),
         ("<div #c-ignore></div>", "#c-ignore", "/syntax/dynamic-attributes/#c-ignore"),
-        ('<c-card $c-props="{ open }" />', "$c-props", "/concepts/client-interactivity/#pass-client-props-down"),
-        (
-            '<c-card c-$c-props="props"></c-card>',
-            "c-$c-props",
-            "/concepts/client-interactivity/#pass-client-props-down",
-        ),
         ('<c-if cond="ready"></c-if>', "cond", "/syntax/control-flow/"),
         ('<c-for each="item in items"></c-for>', "each", "/syntax/control-flow/"),
         ('<c-slot name="body"></c-slot>', "name", "/concepts/slots/"),
@@ -5431,3 +5968,205 @@ def test_configuration_parse_error_uses_zero_width_fallback(monkeypatch):
         "https://citry.dev/ide/diagnostics/#citry.parse.configuration"
     )
     assert document.diagnostics[0].range.start == types.Position(0, 0)
+
+
+def _vue_component_prop_fixture(tmp_path: Path, template_source: str) -> tuple[ProjectState, DocumentState]:
+    template_file = tmp_path / "page.html"
+    javascript_file = tmp_path / "card.js"
+    app_file = tmp_path / "app.py"
+    template_file.write_text(template_source, encoding="utf-8")
+    javascript_file.write_text(
+        "$component({\n"
+        "  props: {\n"
+        "    requiredTitle: { type: String, required: true },\n"
+        "    requiredCount: { type: Number, required: true },\n"
+        "    requiredRows: { type: Array, required: true },\n"
+        "    requiredDefault: { type: Boolean, required: true, default: false },\n"
+        "    optionalText: { type: String },\n"
+        "    optionalMixed: { type: [String, Number] },\n"
+        "    defaultedCount: { type: Number, default: 1 },\n"
+        "  },\n"
+        "});\n",
+        encoding="utf-8",
+    )
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template = '<div></div>'\n"
+        "    js_file = 'card.js'\n"
+        "\n"
+        "class Page(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'page.html'\n"
+        "    class JsData:\n"
+        "        maybe: str | int | None\n"
+        "        maybeProps: dict[str, object]\n"
+        "        visible: bool\n"
+        "        row: str\n"
+        "        rows: list[int]\n"
+        "        item: str\n"
+        "        objects: list[dict[str, int]]\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    return project, document
+
+
+def _vue_component_prop_findings(
+    document: DocumentState,
+    project: ProjectState,
+    source: str,
+    version: int,
+) -> list[types.Diagnostic]:
+    document.update(source, version, project)
+    documents = {document.uri: document}
+    return [
+        finding
+        for finding in browser_diagnostics(document, project, documents)
+        if finding.code
+        in {
+            "citry.browser.missing-component-prop",
+            "citry.browser.incompatible-component-prop",
+        }
+    ]
+
+
+def test_native_vue_component_props_report_required_and_proven_incompatible_values(tmp_path):
+    project, document = _vue_component_prop_fixture(tmp_path, "<c-card />")
+
+    valid_source = (
+        '<c-card :required-title="\'ready\'" :requiredCount="2" v-bind:required-rows="[]" '
+        ':requiredDefault="false" :optional-text="null" :optional-mixed="maybe" '
+        'unknown="ordinary fallthrough attribute" />'
+    )
+    assert _vue_component_prop_findings(document, project, valid_source, 2) == []
+    assert browser_diagnostics(document, project, {document.uri: document}) == ()
+
+    missing_source = "<c-card />"
+    missing = _vue_component_prop_findings(document, project, missing_source, 3)
+    assert [finding.code for finding in missing] == [
+        "citry.browser.missing-component-prop",
+        "citry.browser.missing-component-prop",
+        "citry.browser.missing-component-prop",
+        "citry.browser.missing-component-prop",
+    ]
+    assert [
+        next(
+            name
+            for name in ("requiredTitle", "requiredCount", "requiredRows", "requiredDefault")
+            if name in finding.message
+        )
+        for finding in missing
+    ] == ["requiredTitle", "requiredCount", "requiredRows", "requiredDefault"]
+    missing_range = types.Range(
+        start=_position(missing_source, "c-card"),
+        end=_position(missing_source, "c-card", len("c-card")),
+    )
+    assert all(finding.range == missing_range for finding in missing)
+
+    incompatible_source = (
+        '<c-card :required-title="1" :requiredCount="\'many\'" :requiredRows="1" :requiredDefault="false" />'
+    )
+    incompatible = _vue_component_prop_findings(document, project, incompatible_source, 4)
+    assert [finding.code for finding in incompatible] == [
+        "citry.browser.incompatible-component-prop",
+        "citry.browser.incompatible-component-prop",
+        "citry.browser.incompatible-component-prop",
+    ]
+    assert ["required-title" in finding.message for finding in incompatible] == [True, False, False]
+    assert ["requiredCount" in finding.message for finding in incompatible] == [False, True, False]
+    assert ["requiredRows" in finding.message for finding in incompatible] == [False, False, True]
+    assert ["expects string" in finding.message for finding in incompatible] == [True, False, False]
+    assert ["expects number" in finding.message for finding in incompatible] == [False, True, False]
+    assert ["expects unknown[]" in finding.message for finding in incompatible] == [False, False, True]
+    assert ["this binding is number" in finding.message for finding in incompatible] == [True, False, True]
+    assert ["this binding is string" in finding.message for finding in incompatible] == [False, True, False]
+    value_markers = (
+        (':required-title="1"', len(':required-title="')),
+        (":requiredCount=\"'many'\"", len(':requiredCount="')),
+        (':requiredRows="1"', len(':requiredRows="')),
+    )
+    assert [finding.range for finding in incompatible] == [
+        types.Range(
+            start=_position(incompatible_source, marker, offset),
+            end=_position(incompatible_source, marker, len(marker) - 1),
+        )
+        for marker, offset in value_markers
+    ]
+
+
+def test_native_vue_component_props_follow_bind_order_and_modifier_uncertainty(tmp_path):
+    project, document = _vue_component_prop_fixture(tmp_path, "<c-card />")
+
+    static_object = (
+        "<c-card v-bind=\"{ requiredTitle: 'ready', requiredCount: 2, requiredRows: [], requiredDefault: false }\" />"
+    )
+    assert _vue_component_prop_findings(document, project, static_object, 2) == []
+
+    dynamic_object = '<c-card v-bind="maybeProps" />'
+    assert _vue_component_prop_findings(document, project, dynamic_object, 3) == []
+
+    restored_explicit = '<c-card v-bind="maybeProps" :required-title="1" />'
+    restored = _vue_component_prop_findings(document, project, restored_explicit, 4)
+    assert [finding.code for finding in restored] == ["citry.browser.incompatible-component-prop"]
+    assert "required-title" in restored[0].message
+    assert restored[0].range == types.Range(
+        start=_position(restored_explicit, ':required-title="1"', len(':required-title="')),
+        end=_position(restored_explicit, ':required-title="1"', len(':required-title="1"') - 1),
+    )
+
+    modifiers = (
+        '<c-card :required-title.prop="\'ready\'" :requiredCount.attr="2" '
+        ':requiredRows="[]" :requiredDefault="false" />'
+    )
+    ignored = _vue_component_prop_findings(document, project, modifiers, 5)
+    assert [finding.code for finding in ignored] == [
+        "citry.browser.missing-component-prop",
+        "citry.browser.missing-component-prop",
+    ]
+    assert "requiredTitle" in ignored[0].message
+    assert "requiredCount" in ignored[1].message
+
+    unknown_modifier = '<c-card :required-title.future="1" />'
+    assert _vue_component_prop_findings(document, project, unknown_modifier, 6) == []
+
+
+def test_native_vue_component_prop_ranges_and_loop_types_keep_template_scope(tmp_path):
+    source = (
+        'é<template v-if="visible"><c-card :required-title="5" :requiredCount="2" '
+        ':requiredRows="[]" :requiredDefault="false" /></template>\n'
+        '<c-card :required-title="\'ready\'" :required-count="row" '
+        ':requiredRows="[]" :requiredDefault="false" />\n'
+        '<template v-for="row in rows"><c-card :required-title="\'ready\'" '
+        ':required-count="row" :requiredRows="[]" :requiredDefault="false" /></template>\n'
+        '<template v-for="item in objects"><c-card :required-title="\'ready\'" '
+        ':required-count="item.score" :requiredRows="[]" :requiredDefault="false" /></template>'
+    )
+    project, document = _vue_component_prop_fixture(tmp_path, source)
+
+    findings = _vue_component_prop_findings(document, project, source, 2)
+
+    assert [finding.code for finding in findings] == [
+        "citry.browser.incompatible-component-prop",
+        "citry.browser.incompatible-component-prop",
+    ]
+    title_marker = ':required-title="5"'
+    row_marker = ':required-count="row"'
+    assert findings[0].range == types.Range(
+        start=_position(source, title_marker, len(':required-title="')),
+        end=_position(source, title_marker, len(title_marker) - 1),
+    )
+    assert "required-title" in findings[0].message
+    assert "number" in findings[0].message
+    assert findings[1].range == types.Range(
+        start=_position(source, row_marker, len(':required-count="')),
+        end=_position(source, row_marker, len(row_marker) - 1),
+    )
+    assert "required-count" in findings[1].message
+    assert "string" in findings[1].message
