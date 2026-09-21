@@ -358,7 +358,7 @@ def browser_starter(project: ExampleProject, base_url: str, browser_name: str) -
             else None,
         )
         page.goto(base_url + "/", wait_until="networkidle")
-        page.wait_for_function("window.Alpine && window.Citry && Citry.events")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         expected_mode, expected_eyebrow = STARTER_HOST_COPY[project.host]
         if page.locator(".mode-label").text_content() != expected_mode:
             raise AssertionError(f"{project.id}: the header does not name its host")
@@ -411,7 +411,7 @@ def browser_starter(project: ExampleProject, base_url: str, browser_name: str) -
             raise AssertionError(f"Expected three search Event requests, saw {event_requests}")
 
         page.reload(wait_until="networkidle")
-        page.wait_for_function("window.Alpine && window.Citry && Citry.events")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         page.get_by_text("6 matching projects", exact=True).wait_for()
         if page.get_by_role("searchbox", name="Filter projects").input_value():
             raise AssertionError("Reload did not restore the empty initial query")
@@ -441,7 +441,7 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
         page = browser.new_page()
         console_errors, page_errors, failed_requests, http_errors = _browser_problems(page)
         page.goto(base_url + "/", wait_until="networkidle")
-        page.wait_for_function("window.Alpine && window.Citry && Citry.events")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         accessibility_findings = axe_high_impact_findings(page)
         if accessibility_findings:
             raise AssertionError(
@@ -788,7 +788,7 @@ def browser_standalone(project_dir: Path, browser_name: str) -> None:
             else None,
         )
         page.goto(document.resolve().as_uri())
-        page.wait_for_function("window.Alpine")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         accessibility_findings = axe_high_impact_findings(page)
         if accessibility_findings:
             raise AssertionError(

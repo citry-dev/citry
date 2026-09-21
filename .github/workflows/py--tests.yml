@@ -372,6 +372,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -383,11 +385,21 @@ jobs:
         with:
           python-version: "3.14"
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
       - name: Build the Citry UI wheel and source distribution
         run: uv build --package citry-ui --out-dir dist
 
       - name: Build the matching local Citry wheel
         run: uv build --package citry --wheel --out-dir dist
+
+      - name: Build the matching local Citry Core wheel
+        run: >-
+          uv build --package citry-core --wheel --out-dir dist
+          --config-setting 'maturin.build-args=--features abi3-py310'
 
       - name: Check the exact wheel inventory
         run: >-
@@ -412,7 +424,8 @@ jobs:
           path: |
             dist/citry_ui-*.whl
             dist/citry_ui-*.tar.gz
-            dist/citry-*.whl
+            dist/citry-[0-9]*.whl
+            dist/citry_core-[0-9]*.whl
           if-no-files-found: error
 
   citry-ui-wheel-install:
@@ -446,10 +459,14 @@ jobs:
           # pip download may have selected the published Citry version while
           # resolving citry-ui. Replace that candidate with the wheel built
           # from this checkout before the wheelhouse is used offline.
-          local_citry=$(find dist -maxdepth 1 -name 'citry-*.whl' -print -quit)
+          local_citry=$(find dist -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -print -quit)
           test -n "$local_citry"
-          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-*.whl' -delete
+          local_citry_core=$(find dist -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -print -quit)
+          test -n "$local_citry_core"
+          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -delete
+          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -delete
           cp "$local_citry" "$RUNNER_TEMP/wheelhouse/"
+          cp "$local_citry_core" "$RUNNER_TEMP/wheelhouse/"
 
       - name: Install and exercise the wheel with pip outside the checkout
         shell: bash
@@ -543,10 +560,14 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/wheelhouse"
           python -m pip download --dest "$RUNNER_TEMP/wheelhouse" dist/citry_ui-*.whl
-          local_citry=$(find dist -maxdepth 1 -name 'citry-*.whl' -print -quit)
+          local_citry=$(find dist -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -print -quit)
           test -n "$local_citry"
-          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-*.whl' -delete
+          local_citry_core=$(find dist -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -print -quit)
+          test -n "$local_citry_core"
+          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -delete
+          find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -delete
           cp "$local_citry" "$RUNNER_TEMP/wheelhouse/"
+          cp "$local_citry_core" "$RUNNER_TEMP/wheelhouse/"
 
       - name: Install the exact wheel and matching local Citry
         shell: bash

@@ -16,7 +16,7 @@ def test_page_and_citry_runtime_are_served() -> None:
     assert "Atlas" in page.text
     assert ':c-query.debounce.300ms="refresh"' not in page.text
     assert "/citry/" in page.text
-    assert "/citry/ext/events/runtime.js" in page.text
+    assert "/citry/citry.js" in page.text
     assert runtime.status_code == 200
     assert runtime.headers["content-type"].startswith("text/javascript")
     assert events_runtime.status_code == 200
@@ -31,7 +31,7 @@ def test_page_escapes_project_data(monkeypatch: pytest.MonkeyPatch) -> None:
     with TestClient(web_app) as client:
         page = client.get("/")
 
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page.text
+    assert r"\u003cscript>alert(1)\u003c/script>" in page.text
     assert "<script>alert(1)</script>" not in page.text
 
 

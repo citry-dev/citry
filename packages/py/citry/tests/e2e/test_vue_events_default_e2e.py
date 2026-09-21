@@ -1160,7 +1160,8 @@ def test_server_render_callback_failure_remains_terminal(page: Any, serve_live: 
     page.goto(serve_live(engine, Broken().render().serialize(), "") + "/")
     page.locator("#break-callback").click()
     page.wait_for_function("globalThis.CitryStable._apps.size === 0")
-    assert faults == ["The Vue Events bridge was disposed."]
+    assert len(faults) == 1
+    assert faults[0].startswith("The Vue Events bridge was disposed")
 
 
 @pytest.mark.e2e

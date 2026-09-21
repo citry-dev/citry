@@ -356,6 +356,8 @@ categories:
       - { key: "$loading", anchor: loading, role: "js:function" }
       - { key: "$error", anchor: error, role: "js:function" }
       - { key: "$sendEvent", anchor: send-event, role: "js:function" }
+      - { key: "$onEvent", anchor: on-event, role: "js:function" }
+      - { key: Citry.events, anchor: citry-events, role: "js:data" }
 
   - kind: generated_python
     slug: attributes

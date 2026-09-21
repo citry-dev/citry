@@ -1843,7 +1843,7 @@ def test_prepared_root_markers_project_to_multi_roots_and_child_physical_roots()
     marker_values = [
         value for key, value in child.prepared_data.items() if key.startswith("citryAttrs") and "data-probe" in value
     ]
-    assert marker_values == [{"data-probe": "own", "data-flag": True}]
+    assert marker_values == [{"data-probe": "own", "data-flag": ""}]
     child_template = assembly.compile_inputs[child.definition_id].template
     assert child_template.count('v-bind="preparedData.citryAttrs') == 2
     child_input = assembly.compile_inputs[child.definition_id]

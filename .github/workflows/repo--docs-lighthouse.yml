@@ -129,6 +129,45 @@ jobs:
             composition.ledger-dashboard \
             --output lhsite/__quality/citry-ui/ledger-dashboard/index.html
 
+      - name: Add the exact Citry runtime to the Lighthouse site
+        shell: bash
+        run: |
+          mkdir -p lhsite/citry
+          cp packages/py/citry/citry/_vue/runtime.js lhsite/citry/citry.js
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          class AssetParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.references = []
+
+              def handle_starttag(self, _tag, attrs):
+                  for name, value in attrs:
+                      if name in {"href", "src"} and value:
+                          path = urlsplit(value).path
+                          if path.startswith("/citry/"):
+                              self.references.append(path)
+
+          pages = (
+              Path("lhsite/__quality/citry-ui/orbit-access/index.html"),
+              Path("lhsite/__quality/citry-ui/ledger-dashboard/index.html"),
+          )
+          missing = []
+          for page in pages:
+              parser = AssetParser()
+              parser.feed(page.read_text(encoding="utf-8"))
+              for reference in parser.references:
+                  target = Path("lhsite") / reference.removeprefix("/")
+                  if not target.is_file():
+                      missing.append(f"{page}: {reference}")
+          if missing:
+              raise SystemExit("Missing Citry UI Lighthouse assets:\n" + "\n".join(missing))
+          print("All /citry/ assets referenced by the representative pages exist under lhsite.")
+          PY
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
 
