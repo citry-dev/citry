@@ -27,7 +27,7 @@ import tempfile
 import threading
 import time
 import urllib.request
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +35,7 @@ import pytest
 
 from docs_site._internal.build import build_site
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.static_server import StaticSiteHandler
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -44,7 +45,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "e2e: browser end-to-end test (needs Playwright and a browser binary)")
 
 
-class _QuietHandler(SimpleHTTPRequestHandler):
+class _QuietHandler(StaticSiteHandler):
     def log_message(self, *args: Any) -> None:  # keep test output quiet
         pass
 
