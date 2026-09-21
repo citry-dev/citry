@@ -32,6 +32,21 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.e2e
 
 
+def _watch_citry_ready(page: Any) -> None:
+    page.add_init_script(
+        """
+        window.__citryReadyApps = [];
+        document.addEventListener('citry:ready', event => {
+          window.__citryReadyApps.push(event.detail.appId);
+        });
+        """
+    )
+
+
+def _wait_for_citry_ready(page: Any) -> None:
+    page.wait_for_function("window.__citryReadyApps?.length === 1")
+
+
 def _formats() -> FormatRegistry:
     return FormatRegistry(
         number={
@@ -748,9 +763,16 @@ def test_one_hundred_message_switch_stays_atomic_and_within_the_commit_budget(
         },
     )
     outputs = "\n".join(
-        f'<output data-switch-message="{index}" x-text="$i18n.tr(\'switch-message-{index:03d}\')"></output>'
+        f'<output data-switch-message="{index}" v-text="$i18n.tr(\'switch-message-{index:03d}\')"></output>'
         for index in range(100)
     )
+
+    class I18nProbe(Component):
+        citry = app
+        template = '<output id="i18n-probe" v-text="$i18n.tr(\'switch-message-000\')"></output>'
+        js = """$component({onServerRender({component}){
+          globalThis.__i18nService = component.$i18n;
+        }});"""
 
     class Page(Component):
         citry = app
@@ -759,22 +781,25 @@ def test_one_hundred_message_switch_stays_atomic_and_within_the_commit_budget(
               <body>
                 <c-i18n c-client="True" tag="main">
                   {outputs}
+                  <c-i18n-probe />
                 </c-i18n>
               </body>
             </html>
         """
 
     base = serve_document(Page().render().serialize())
+    _watch_citry_ready(page)
     page.goto(base + "/")
+    _wait_for_citry_ready(page)
     page.wait_for_function(
         "document.querySelectorAll('[data-switch-message]').length === 100 "
-        "&& document.querySelector('[data-switch-message=\"99\"]')?.textContent === 'English 099'"
+        "&& document.querySelector('[data-switch-message=\"99\"]')?.textContent === 'English 099' "
+        "&& globalThis.__i18nService"
     )
     result = page.evaluate(
         """
         async () => {
-          const host = document.querySelector('[data-switch-message]');
-          const service = Alpine.evaluate(host, '$i18n');
+          const service = globalThis.__i18nService;
           const durations = [];
           let running = true;
           let mixedFrames = 0;

@@ -1,6 +1,8 @@
 /** Private citry-events/1 bridge for a Vue-owned component tree. */
 
 import {
+  assertValidActionList as assertProtocolActionList,
+  buildOkResult,
   buildCall,
   buildCallEnvelope,
   preflightResultEnvelope,
@@ -13,6 +15,9 @@ import {
   type JsonValue,
 } from "@citry/protocol-events-v1";
 export { collectFormArgs } from "./citry-events-shared";
+
+/** Validate and copy a public action list before a caller can apply any item. */
+export const assertValidActionList = (actions: unknown): EventAction[] => assertProtocolActionList(actions);
 
 export interface VueEventContext {
   serverRenderId: string;
@@ -54,8 +59,16 @@ export interface VueEventsHost {
   commitRender(prepared: PreparedVueRender, source: VueEventSource): Promise<void>;
   commitState(serverRenderId: string, stateToken: string, source: VueEventSource): void;
   dispatchEvent(name: string, detail: JsonValue | undefined, source: VueEventSource): void;
+  dispatchEventGlobal?(name: string, detail: JsonValue | undefined): void;
   redirect(url: string): void;
   updateUrl(url: string, mode: "push" | "replace"): void;
+  resolveTarget?(target: string): VueEventSource | null;
+  lifecycle?(
+    kind: "before" | "after" | "error" | "swapped" | "stale",
+    source: VueEventSource,
+    event: string,
+    detail?: JsonObject,
+  ): boolean | undefined;
   takePendingState?(source: VueEventSource, handler: string): JsonObject | undefined;
   restorePendingState?(source: VueEventSource, updates: JsonObject): void;
 }
@@ -64,10 +77,22 @@ export interface VueEventsBridgeOptions {
   endpoint: string | ((context: VueEventContext, handler: string) => string);
   eventBaseUrl?: string;
   host: VueEventsHost;
-  csrf?: { header?: string; token: string | (() => string) };
+  csrf?: { cookie?: string; header?: string; token?: string | (() => string) };
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
+  runtimeConfig?: () => VueEventRuntimeConfig;
+  transport?: () => VueEventTransport | null;
   activity?: (source: VueEventSource, descriptor: EventComponentClass) => VueEventActivity;
+}
+
+export interface VueEventRuntimeConfig {
+  csrf?: { cookie?: string; header?: string; token?: string | (() => string) };
+  timeout?: number;
+  url?: string;
+}
+
+export interface VueEventTransport {
+  send(envelope: unknown): Promise<unknown> | unknown;
 }
 
 export interface VueEventSend {
@@ -75,6 +100,7 @@ export interface VueEventSend {
   handler: string;
   args?: JsonObject;
   stateUpdates?: JsonObject;
+  options?: { timeout?: number };
 }
 
 export interface VueEventActivity {
@@ -101,8 +127,22 @@ const validContext = (value: VueEventContext): boolean =>
   validateDescriptor(value.descriptor) === null &&
   value.descriptor.componentClassId === value.componentClassId;
 
-const stale = (): Error => new Error("The Vue event source is stale or retired.");
 class VueEventCancellation extends Error {}
+class VueEventStale extends VueEventCancellation {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(
+      reason === "disposed"
+        ? "The Vue Events bridge was disposed; the source is stale or retired."
+        : reason === "superseded"
+          ? "The Vue event call was superseded by a newer call."
+          : "The Vue event source is stale or retired.",
+    );
+    this.reason = reason;
+  }
+}
+const stale = (reason = "retired"): Error => new VueEventStale(reason);
 
 const activityError = (error: unknown) => {
   if (
@@ -125,6 +165,28 @@ const eventUrl = (base: string, context: VueEventContext, handler: string): stri
     throw new Error("Vue Events eventBaseUrl must be a path ending in '/'.");
   }
   return `${base}${encodeURIComponent(context.componentClassId)}/${encodeURIComponent(handler)}`;
+};
+
+const configuredEventRoutes = (url: string, endpoint: string, eventBaseUrl: string | undefined) => {
+  if (typeof url !== "string" || url.length === 0) return { endpoint, eventBaseUrl };
+  if (url.includes("?") || url.includes("#")) throw new Error("Citry Events url must not contain a query or fragment.");
+  const normalized = url.endsWith("/") ? url : `${url}/`;
+  if (normalized.endsWith("/call/")) {
+    return { endpoint: normalized.slice(0, -1), eventBaseUrl: `${normalized.slice(0, -5)}e/` };
+  }
+  if (normalized.endsWith("/e/")) {
+    return { endpoint: `${normalized.slice(0, -2)}call`, eventBaseUrl: normalized };
+  }
+  return { endpoint: `${normalized}call`, eventBaseUrl: `${normalized}e/` };
+};
+
+const readCookie = (name: string): string => {
+  if (typeof document === "undefined" || typeof document.cookie !== "string") return "";
+  const item = document.cookie
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(`${name}=`));
+  return item ? decodeURIComponent(item.slice(name.length + 1)) : "";
 };
 
 const isWellFormedUtf16 = (value: string): boolean => {
@@ -217,6 +279,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     activity?: VueEventActivity;
     intent?: unknown;
     activityFinished: boolean;
+    lifecycleStarted: boolean;
+    external: boolean;
+    callerRenderId?: string;
     stateUpdates?: JsonObject;
     stateAccepted: boolean;
     settled: boolean;
@@ -230,6 +295,45 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   let active: Job | null = null;
   let running = false;
   let disposed = false;
+
+  const supersedeEarlier = (input: VueEventSend): void => {
+    const error = stale("superseded");
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      const job = queue[index];
+      if (
+        job.input.source.stableId === input.source.stableId &&
+        job.input.source.generation === input.source.generation &&
+        job.input.handler === input.handler
+      ) {
+        queue.splice(index, 1);
+        lifecycle("stale", job.input.source, job.input.handler, { reason: "superseded" });
+        job.cancel(error);
+      }
+    }
+    if (
+      active &&
+      active.input.source.stableId === input.source.stableId &&
+      active.input.source.generation === input.source.generation &&
+      active.input.handler === input.handler
+    )
+      active.cancel(error);
+  };
+
+  const lifecycle = (
+    kind: "before" | "after" | "error" | "swapped" | "stale",
+    source: VueEventSource,
+    event: string,
+    detail?: JsonObject,
+  ): boolean => {
+    try {
+      return options.host.lifecycle?.(kind, source, event, detail) !== false;
+    } catch (error) {
+      // A lifecycle observer is an integration hook. Its failure must not
+      // turn a committed server result into a failed Events call.
+      console.error(`[Citry] citry:events:${kind} listener failed:`, error);
+      return true;
+    }
+  };
 
   const ownerState = (source: VueEventSource) => {
     const existing = owners.get(source.stableId);
@@ -247,7 +351,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
 
   const current = (source: VueEventSource): VueEventContext => {
     const context = options.host.resolve(source);
-    if (context === null || !validContext(context)) throw stale();
+    if (context === null || !validContext(context)) throw stale("retired");
     return context;
   };
 
@@ -258,7 +362,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       state.generation !== source.generation ||
       (epoch !== undefined && epoch !== state.acceptedEpoch)
     ) {
-      throw new Error("The Vue event response was superseded before its action fired.");
+      throw stale(state.retired ? "retired" : "epoch");
     }
     current(source);
   };
@@ -266,7 +370,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   const delay = (milliseconds: number, state: Owner): Promise<void> =>
     new Promise((resolve, reject) => {
       if (state.retired || disposed) {
-        reject(stale());
+        reject(stale(state.retired ? "retired" : "disposed"));
         return;
       }
       const timer = globalThis.setTimeout(() => {
@@ -278,7 +382,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
 
   const continuationCurrent = (source: VueEventSource, state: Owner, epoch: number, job: Job): void => {
     if (disposed || epoch !== state.acceptedEpoch) {
-      throw new Error("The Vue event response was superseded before its action fired.");
+      throw stale(disposed ? "disposed" : "epoch");
     }
     if (!job.acceptedRemount) stillCurrent(source, state, epoch);
   };
@@ -307,7 +411,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     renderPlan?: unknown,
   ) => {
     if (action.action === "data") {
-      continuationCurrent(source, state, epoch, job);
+      if (!job.external) continuationCurrent(source, state, epoch, job);
       onData(action.value);
       return;
     }
@@ -351,6 +455,10 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       job.committingTransaction = prepared.transaction;
       try {
         await Promise.race([options.host.commitRender(prepared, source), job.cancelled]);
+        // The host replaces the placeholder with the actual roots after the
+        // commit. Keeping the field here preserves the bridge contract for
+        // hosts that do not have a DOM-specific implementation.
+        lifecycle("swapped", source, job.input.handler, { els: [] });
       } finally {
         job.committingTransaction = undefined;
       }
@@ -360,15 +468,18 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     } else if (action.action === "event") {
       stillCurrent(source, state, epoch);
       const rootTarget = `render:${current(source).serverRenderId}`;
-      if (action.target !== undefined && action.target !== rootTarget) {
+      const callerTarget = job.callerRenderId === undefined ? undefined : `render:${job.callerRenderId}`;
+      if (action.target !== undefined && action.target !== rootTarget && action.target !== callerTarget) {
         throw new Error("The experimental Vue Events bridge accepts only its current root Event target.");
       }
-      options.host.dispatchEvent(action.eventName, action.detail, source);
+      if (job.external && action.target === undefined && options.host.dispatchEventGlobal)
+        options.host.dispatchEventGlobal(action.eventName, action.detail);
+      else options.host.dispatchEvent(action.eventName, action.detail, source);
     } else if (action.action === "redirect") {
-      continuationCurrent(source, state, epoch, job);
+      if (!job.external) continuationCurrent(source, state, epoch, job);
       options.host.redirect(action.url);
     } else {
-      continuationCurrent(source, state, epoch, job);
+      if (!job.external) continuationCurrent(source, state, epoch, job);
       options.host.updateUrl(action.url, action.mode);
     }
   };
@@ -415,7 +526,14 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         );
       };
       if ("wait" in action && action.wait === false) {
-        void run().catch((error) => console.error("[Citry] applying a detached Vue event action failed:", error));
+        void run().catch((error) => {
+          if (error instanceof VueEventStale) {
+            lifecycle("stale", source, job.input.handler, { reason: error.reason });
+          } else if (!(error instanceof VueEventCancellation)) {
+            lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
+          }
+          console.error("[Citry] applying a detached Vue event action failed:", error);
+        });
       } else await run();
     }
     return data;
@@ -423,18 +541,30 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
 
   const sendNow = async (job: Job): Promise<JsonValue | undefined> => {
     const input = job.input;
-    if (disposed) throw stale();
+    if (disposed) throw stale("disposed");
     const context = current(input.source);
     const state = ownerState(input.source);
     job.owner = state;
     const appId = options.host.appId(input.source);
-    if (typeof appId !== "string" || appId.length === 0) throw stale();
+    if (typeof appId !== "string" || appId.length === 0) throw stale("retired");
     const committedRevision = options.host.revision(input.source);
-    if (!Number.isInteger(committedRevision) || committedRevision < 0) throw stale();
+    if (!Number.isInteger(committedRevision) || committedRevision < 0) throw stale("retired");
     if (!Object.prototype.hasOwnProperty.call(context.descriptor.eventHandlers, input.handler))
       throw new Error(`Unknown event handler '${input.handler}'.`);
     const handlerOptions = context.descriptor.eventHandlers[input.handler];
+    job.callerRenderId = context.serverRenderId;
+    job.lifecycleStarted = true;
+    if (!lifecycle("before", input.source, input.handler))
+      throw new VueEventCancellation(`Citry Events send '${input.handler}' was cancelled by citry:events:before.`);
     const useGet = handlerOptions.httpMethod === "GET";
+    const runtimeConfig = options.runtimeConfig?.() ?? {};
+    const configuredEndpoint =
+      typeof options.endpoint === "function" && !useGet
+        ? options.endpoint(context, input.handler)
+        : typeof options.endpoint === "string"
+          ? options.endpoint
+          : "";
+    const routes = configuredEventRoutes(runtimeConfig.url ?? "", configuredEndpoint, options.eventBaseUrl);
     if (useGet && input.stateUpdates !== undefined) throw new Error("GET events cannot send pending State updates.");
     const taken = useGet
       ? undefined
@@ -463,21 +593,36 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       "X-Citry-Vue-Occurrence": input.source.stableId,
       "X-Citry-Vue-Revision": String(committedRevision),
     };
-    if (!useGet && options.csrf) {
-      const token = typeof options.csrf.token === "function" ? options.csrf.token() : options.csrf.token;
-      if (token) headers[options.csrf.header ?? "X-CSRFToken"] = token;
+    const csrf = runtimeConfig.csrf ?? options.csrf;
+    if (!useGet && csrf) {
+      const token = csrf.token
+        ? typeof csrf.token === "function"
+          ? csrf.token()
+          : csrf.token
+        : readCookie(csrf.cookie ?? "csrftoken");
+      if (token) headers[csrf.header ?? "X-CSRFToken"] = token;
     }
+    // The Vue bridge currently serializes queued jobs and emits one-call
+    // envelopes. `allowBatching` therefore selects the per-event route for
+    // isolated handlers; it does not yet recreate Alpine's same-tick
+    // multi-call envelope/dependency scheduler.
     const isolated = useGet || handlerOptions.allowBatching === false;
-    const endpoint = isolated
-      ? eventUrl(options.eventBaseUrl ?? "", context, input.handler)
-      : typeof options.endpoint === "function"
-        ? options.endpoint(context, input.handler)
-        : options.endpoint;
-    const timeoutMs = options.timeoutMs ?? 30_000;
+    const endpoint = isolated ? eventUrl(routes.eventBaseUrl ?? "", context, input.handler) : routes.endpoint;
+    const callTimeout = input.options?.timeout;
+    const timeoutMs = callTimeout ?? runtimeConfig.timeout ?? options.timeoutMs ?? 30_000;
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Vue Events timeoutMs must be positive.");
     const controller = new AbortController();
     job.controller = controller;
+    const selectedTransport = options.transport?.() ?? null;
     const operation = (async (): Promise<{ raw: unknown } | { attachment: Blob; filename: string }> => {
+      if (selectedTransport) {
+        try {
+          return { raw: await selectedTransport.send(envelope) };
+        } catch (error) {
+          if (error !== null && typeof error === "object") reportableFailures.add(error);
+          throw error;
+        }
+      }
       let requestUrl = endpoint;
       if (useGet) {
         const query = flatQuery(input.args ?? {});
@@ -571,10 +716,21 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
           const value = await sendNow(job);
           job.stateAccepted = true;
           job.activity?.succeed(job.intent);
+          if (job.lifecycleStarted) lifecycle("after", job.input.source, job.input.handler, { ok: true });
           job.resolve(value);
         } catch (error) {
           if (!job.stateAccepted && job.stateUpdates !== undefined)
             options.host.restorePendingState?.(job.input.source, job.stateUpdates);
+          if (job.lifecycleStarted) {
+            if (error instanceof VueEventStale) {
+              lifecycle("stale", job.input.source, job.input.handler, { reason: error.reason });
+            } else if (!(error instanceof VueEventCancellation)) {
+              lifecycle("error", job.input.source, job.input.handler, {
+                error: activityError(error) as JsonObject,
+              });
+            }
+            lifecycle("after", job.input.source, job.input.handler, { ok: false });
+          }
           if (!(error instanceof VueEventCancellation)) {
             job.activity?.fail(job.intent, activityError(error));
             if (job.activity && error !== null && typeof error === "object" && reportableFailures.has(error))
@@ -597,10 +753,15 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   const unsupportedBrowserMethods = new Set(["HEAD", "OPTIONS", "CONNECT", "TRACE", "TRACK"]);
 
   const send = (input: VueEventSend): Promise<JsonValue | undefined> => {
-    if (disposed) return Promise.reject(stale());
+    if (disposed) return Promise.reject(stale("disposed"));
     let activity: VueEventActivity | undefined;
     let intent: unknown;
     try {
+      if (
+        input.options?.timeout !== undefined &&
+        (!Number.isFinite(input.options.timeout) || input.options.timeout <= 0)
+      )
+        throw new Error("Citry Events timeout must be a positive finite number.");
       const context = current(input.source);
       if (!Object.prototype.hasOwnProperty.call(context.descriptor.eventHandlers, input.handler))
         throw new Error(`Unknown event handler '${input.handler}'.`);
@@ -611,6 +772,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         );
       activity = options.activity?.(input.source, context.descriptor);
       intent = activity?.enqueue(input.handler);
+      if (context.descriptor.eventHandlers[input.handler].latestCallWins === true) supersedeEarlier(input);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -631,6 +793,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       activity,
       intent,
       activityFinished: false,
+      lifecycleStarted: false,
+      external: false,
       stateAccepted: false,
       settled: false,
       cancelled,
@@ -660,22 +824,70 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     return promise;
   };
 
+  const applyActionsExternally = async (
+    actions: readonly EventAction[],
+    source?: VueEventSource,
+  ): Promise<JsonValue | undefined> => {
+    const result = buildOkResult(actions);
+    if (!source) {
+      let data: JsonValue | undefined;
+      for (const action of result.actions) {
+        if (typeof action.delay === "number" && action.delay > 0) {
+          const delay = action.delay;
+          await new Promise((resolve) => globalThis.setTimeout(resolve, delay * 1000));
+        }
+        if (action.action === "data") data = action.value;
+        else if (action.action === "redirect") options.host.redirect(action.url);
+        else if (action.action === "url") options.host.updateUrl(action.url, action.mode);
+        else if (action.action === "event") {
+          if (action.target !== undefined || !options.host.dispatchEventGlobal)
+            throw new Error("Citry.events.applyActions needs a mounted component for targeted Event actions.");
+          options.host.dispatchEventGlobal(action.eventName, action.detail);
+        } else {
+          throw new Error("Citry.events.applyActions needs a mounted component for Render and State actions.");
+        }
+      }
+      return data;
+    }
+    const externalContext = current(source);
+    const state = ownerState(source);
+    state.acceptedEpoch += 1;
+    const cancelled = new Promise<never>(() => undefined);
+    const job = {
+      input: { source, handler: "__external__" },
+      acceptedRemount: false,
+      activityFinished: true,
+      lifecycleStarted: false,
+      external: true,
+      callerRenderId: externalContext.serverRenderId,
+      stateAccepted: true,
+      settled: true,
+      cancelled,
+      cancel() {},
+      resolve() {},
+      reject() {},
+    } satisfies Job;
+    const prepared = options.host.preflightResult?.(result, source) ?? { result };
+    return applyActions(prepared.result, source, state, state.acceptedEpoch, job, prepared.renderPlan);
+  };
+
   const retire = (source: VueEventSource, acceptedTransaction?: unknown): void => {
     const state = owners.get(source.stableId);
     if (state?.generation === source.generation) {
       state.retired = true;
       for (const [timer, reject] of state.timers) {
         globalThis.clearTimeout(timer);
-        reject(stale());
+        reject(stale("retired"));
       }
       state.timers.clear();
       owners.delete(source.stableId);
     }
-    const error = new VueEventCancellation("The Vue event source is stale or retired.");
+    const error = new VueEventStale("retired");
     for (let index = queue.length - 1; index >= 0; index -= 1) {
       const job = queue[index];
       if (job.input.source.stableId === source.stableId && job.input.source.generation === source.generation) {
         queue.splice(index, 1);
+        lifecycle("stale", source, job.input.handler, { reason: "retired" });
         job.cancel(error);
       }
     }
@@ -700,13 +912,16 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       state.retired = true;
       for (const [timer, reject] of state.timers) {
         globalThis.clearTimeout(timer);
-        reject(new Error("The Vue Events bridge was disposed."));
+        reject(stale("disposed"));
       }
       state.timers.clear();
     }
     owners.clear();
-    const error = new VueEventCancellation("The Vue Events bridge was disposed.");
-    for (const job of queue.splice(0)) job.cancel(error);
+    const error = new VueEventStale("disposed");
+    for (const job of queue.splice(0)) {
+      lifecycle("stale", job.input.source, job.input.handler, { reason: "disposed" });
+      job.cancel(error);
+    }
     active?.cancel(error);
   };
 
@@ -714,5 +929,5 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     error instanceof VueEventCancellation ||
     (error !== null && typeof error === "object" && handledFailures.has(error));
 
-  return { send, retire, dispose, isDeclarativeFailureHandled };
+  return { send, applyActions: applyActionsExternally, retire, dispose, isDeclarativeFailureHandled };
 };

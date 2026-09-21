@@ -7,9 +7,21 @@ const source = await readFile(new URL("../../../py/citry/citry/_vue/client.js", 
 const helperContract = source.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
 
 function runtime() {
+  const document = {
+    currentScript: null,
+    dispatched: [],
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent(event) {
+      this.dispatched.push(event);
+      return true;
+    },
+  };
   const context = {
     CitryVueFragments: { installFragmentManager() {} },
-    document: { currentScript: null },
+    document,
+    location: { assign() {} },
+    history: { state: null, pushState() {}, replaceState() {} },
     queueMicrotask,
     btoa,
     Vue: {
@@ -41,6 +53,8 @@ function runtime() {
   return {
     stable,
     realm,
+    document,
+    publicEvents: context.Citry.events,
     definition() {
       const definition = realm({
         render,
@@ -59,6 +73,20 @@ function runtime() {
     },
   };
 }
+
+test("public applyActions validates the complete list before any targetless action runs", async () => {
+  const fixture = runtime();
+  await assert.rejects(
+    fixture.publicEvents.applyActions(
+      fixture.realm([
+        { action: "event", eventName: "before-invalid" },
+        { action: "event", eventName: "after-invalid", unexpected: true },
+      ]),
+    ),
+    /unknown field|invalid action/i,
+  );
+  assert.equal(fixture.document.dispatched.length, 0);
+});
 
 const runtimeSpec = (id, overrides = {}) => ({
   id,

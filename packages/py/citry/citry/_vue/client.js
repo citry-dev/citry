@@ -23,11 +23,219 @@
   const registeredTypeOptions = new Map();
   const browserPluginFactories = new Map();
   const instanceRecords = new WeakMap();
+  const publicEventsConfig = Object.create(null);
+  const publicEventTransports = new Map();
+  let publicSend = (target, name, args, opts) => {
+    for (const app of apps.values()) {
+      const source = app.resolvePublicTarget?.(target);
+      if (source) return app.publicSend?.(source, name, args, opts);
+    }
+    return Promise.reject(new Error("Citry.events.send found no current mounted prepared Vue component for its target."));
+  };
+  let publicApplyActions = actions => {
+    let checked;
+    try {
+      checked = snapshotPublicActions(actions);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const targets = checked.map(action => {
+      if (!action || typeof action !== "object") return null;
+      if (action.action === "state") return `render:${action.targetRenderId}`;
+      return action.action === "render" || action.action === "event" ? action.target : null;
+    }).filter(target => typeof target === "string");
+    const owners = [];
+    for (const target of targets) {
+      // A marker is caller-relative: its first segment identifies the
+      // component whose render response owns the marker.
+      const marker = /^mark:([^:]+):/.exec(target);
+      const lookup = marker ? `render:${marker[1]}` : target;
+      let owner;
+      for (const app of apps.values()) {
+        const source = app.resolvePublicTarget?.(lookup);
+        if (source) { owner = {app, source}; break; }
+      }
+      if (!owner) return Promise.reject(new Error(`Citry.events.applyActions target '${target}' is stale or retired.`));
+      owners.push(owner);
+    }
+    if (owners.length) {
+      const app = owners[0].app;
+      if (owners.some(owner => owner.app !== app))
+        return Promise.reject(new Error("Citry.events.applyActions cannot combine targets from different Vue apps."));
+      return app.publicApplyActions?.(checked, owners[0].source);
+    }
+    return applyPublicActionsWithoutApp(checked);
+  };
+  const publicEvents = {
+    send(target, name, args, opts) {
+      return publicSend(target, name, args, opts);
+    },
+    on(name, callback) {
+      if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.on needs a non-empty event name");
+      if (typeof callback !== "function") throw new TypeError("Citry.events.on needs a callback function");
+      const listener = event => callback(event.detail);
+      document.addEventListener(name, listener);
+      return () => document.removeEventListener(name, listener);
+    },
+    configure(options = {}) {
+      plain(options, "Citry.events.configure options");
+      if (options.csrf !== undefined) plain(options.csrf, "Citry.events.configure csrf");
+      Object.assign(publicEventsConfig, options);
+      if (options.csrf !== undefined)
+        publicEventsConfig.csrf = {...options.csrf};
+    },
+    registerTransport(name, implementation) {
+      if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.registerTransport needs a non-empty name");
+      if (!implementation || typeof implementation.send !== "function")
+        throw new TypeError("Citry.events.registerTransport needs an implementation with send(envelope)");
+      publicEventTransports.set(name, implementation);
+    },
+    applyActions(actions) {
+      return publicApplyActions(actions);
+    },
+  };
+  if (Object.prototype.hasOwnProperty.call(citryNamespace, "events") && citryNamespace.events !== undefined) {
+    if (!citryNamespace.events || typeof citryNamespace.events !== "object")
+      throw new TypeError("the global Citry.events namespace must be an object");
+    Object.assign(citryNamespace.events, publicEvents);
+  } else {
+    Object.defineProperty(citryNamespace, "events", {value: publicEvents, enumerable: true, configurable: true, writable: true});
+  }
   const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
   const plain = (value, name) => {
     if (!value || Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError(name + " must be a plain object");
     return value;
   };
+  const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const knownActionKinds = new Set(["render", "data", "state", "event", "redirect", "url"]);
+  const knownSwaps = new Set(["morph", "replace", "inner", "append", "prepend", "remove", "none"]);
+  const knownRenderers = new Set(["html-fragment/1", "vue-prepared/1"]);
+  const safeRenderId = value => typeof value === "string" && /^[a-z0-9_-]+$/.test(value);
+  const strictPublicJson = (value, path = "", ancestors = new Set()) => {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw new TypeError(`Citry.events.applyActions received non-finite JSON at ${path || "/"}`);
+      return;
+    }
+    if (typeof value !== "object") throw new TypeError(`Citry.events.applyActions received non-JSON data at ${path || "/"}`);
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null && !Array.isArray(value))
+      throw new TypeError(`Citry.events.applyActions received a non-JSON object at ${path || "/"}`);
+    if (Object.getOwnPropertySymbols(value).length)
+      throw new TypeError(`Citry.events.applyActions received symbol-keyed data at ${path || "/"}`);
+    if (ancestors.has(value)) throw new TypeError(`Citry.events.applyActions received cyclic data at ${path || "/"}`);
+    for (const name of Object.getOwnPropertyNames(value)) {
+      if (Array.isArray(value) && name === "length") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      if (!descriptor?.enumerable || !("value" in descriptor))
+        throw new TypeError(`Citry.events.applyActions received accessor or non-enumerable data at ${path || "/"}`);
+    }
+    if (Array.isArray(value)) {
+      const names = Object.keys(value);
+      if (names.length !== value.length || names.some((name, index) => name !== String(index)))
+        throw new TypeError(`Citry.events.applyActions received a sparse or named array at ${path || "/"}`);
+    }
+    ancestors.add(value);
+    for (const [key, child] of Object.entries(value)) strictPublicJson(child, `${path}/${key}`, ancestors);
+    ancestors.delete(value);
+  };
+  const publicTarget = (value, path) => {
+    if (typeof value !== "string" || value.length === 0)
+      throw new TypeError(`Citry.events.applyActions needs a non-empty target at ${path}`);
+    if (value.startsWith("render:") && !safeRenderId(value.slice(7)))
+      throw new TypeError(`Citry.events.applyActions needs a valid render target at ${path}`);
+  };
+  const publicTiming = (action, path) => {
+    if (has(action, "delay") && (typeof action.delay !== "number" || !Number.isFinite(action.delay) || action.delay < 0))
+      throw new TypeError(`Citry.events.applyActions needs a finite non-negative delay at ${path}/delay`);
+    if (has(action, "wait") && action.wait !== false)
+      throw new TypeError(`Citry.events.applyActions requires wait=false at ${path}/wait`);
+  };
+  const assertPublicActionList = actions => {
+    if (!Array.isArray(actions)) throw new TypeError("Citry.events.applyActions needs an action array");
+    strictPublicJson(actions);
+    let dataActions = 0;
+    for (let index = 0; index < actions.length; index += 1) {
+      const action = actions[index];
+      const path = `/actions/${index}`;
+      if (!action || Array.isArray(action) || (Object.getPrototypeOf(action) !== Object.prototype && Object.getPrototypeOf(action) !== null))
+        throw new TypeError(`Citry.events.applyActions received an invalid action at ${path}`);
+      if (typeof action.action !== "string" || !knownActionKinds.has(action.action))
+        throw new TypeError(`Citry.events.applyActions received an invalid action kind at ${path}`);
+      const required = {
+        render: ["target", "swap"],
+        data: ["value"],
+        state: ["targetRenderId", "stateToken"],
+        event: ["eventName"],
+        redirect: ["url"],
+        url: ["url", "mode"],
+      }[action.action];
+      for (const name of required) if (!has(action, name)) throw new TypeError(`Citry.events.applyActions is missing ${path}/${name}`);
+      const fields = {
+        render: ["action", "target", "swap", "renderer", "html", "prepared", "delay", "wait"],
+        data: ["action", "value", "delay"],
+        state: ["action", "targetRenderId", "stateToken", "delay", "wait"],
+        event: ["action", "eventName", "detail", "target", "delay", "wait"],
+        redirect: ["action", "url", "delay", "wait"],
+        url: ["action", "url", "mode", "delay", "wait"],
+      }[action.action];
+      for (const name of Object.keys(action)) if (!fields.includes(name)) throw new TypeError(`Citry.events.applyActions found an unknown field at ${path}/${name}`);
+      if (action.action === "render") {
+        publicTarget(action.target, `${path}/target`);
+        if (!knownSwaps.has(action.swap)) throw new TypeError(`Citry.events.applyActions received an invalid render swap at ${path}/swap`);
+        const renderer = has(action, "renderer") ? action.renderer : "html-fragment/1";
+        if (!knownRenderers.has(renderer)) throw new TypeError(`Citry.events.applyActions received an invalid renderer at ${path}/renderer`);
+        const content = renderer === "html-fragment/1" ? "html" : "prepared";
+        const other = content === "html" ? "prepared" : "html";
+        if (!has(action, content) || has(action, other)) throw new TypeError(`Citry.events.applyActions received invalid render content at ${path}`);
+        if (content === "html" && typeof action.html !== "string") throw new TypeError(`Citry.events.applyActions needs string HTML at ${path}/html`);
+        if (content === "prepared" && (!action.prepared || Array.isArray(action.prepared) || (Object.getPrototypeOf(action.prepared) !== Object.prototype && Object.getPrototypeOf(action.prepared) !== null)))
+          throw new TypeError(`Citry.events.applyActions needs prepared object data at ${path}/prepared`);
+      } else if (action.action === "data") {
+        dataActions += 1;
+      } else if (action.action === "state") {
+        if (typeof action.targetRenderId !== "string" || !safeRenderId(action.targetRenderId)) throw new TypeError(`Citry.events.applyActions needs a valid state target at ${path}/targetRenderId`);
+        if (typeof action.stateToken !== "string" || action.stateToken.length === 0) throw new TypeError(`Citry.events.applyActions needs a state token at ${path}/stateToken`);
+      } else if (action.action === "event") {
+        if (typeof action.eventName !== "string" || action.eventName.length === 0 || action.eventName.startsWith("citry:")) throw new TypeError(`Citry.events.applyActions needs a public event name at ${path}/eventName`);
+        if (has(action, "target")) publicTarget(action.target, `${path}/target`);
+      } else if (action.action === "redirect") {
+        if (typeof action.url !== "string" || action.url.length === 0) throw new TypeError(`Citry.events.applyActions needs a redirect URL at ${path}/url`);
+      } else {
+        if (typeof action.url !== "string" || action.url.length === 0 || (action.mode !== "push" && action.mode !== "replace")) throw new TypeError(`Citry.events.applyActions needs a URL and mode at ${path}`);
+      }
+      publicTiming(action, path);
+    }
+    if (dataActions > 1) throw new TypeError("Citry.events.applyActions accepts at most one data action");
+    return actions;
+  };
+  const snapshotPublicActions = actions => {
+    const protocolValidator = global.CitryVueEvents?.assertValidActionList;
+    if (typeof protocolValidator === "function") protocolValidator(actions);
+    else assertPublicActionList(actions);
+    return structuredClone(actions);
+  };
+  async function applyPublicActionsWithoutApp(actions) {
+    let data;
+    const apply = async action => {
+      if (!action || typeof action !== "object" || typeof action.action !== "string")
+        throw new TypeError("Citry.events.applyActions received an invalid action");
+      if (typeof action.delay === "number" && action.delay > 0)
+        await new Promise(resolve => setTimeout(resolve, action.delay * 1000));
+      if (action.action === "data") data = action.value;
+      else if (action.action === "redirect") global.location.assign(action.url);
+      else if (action.action === "url") global.history[action.mode === "push" ? "pushState" : "replaceState"](global.history.state, "", action.url);
+      else if (action.action === "event") {
+        if (action.target !== undefined) throw new Error("Citry.events.applyActions needs a mounted component for targeted Event actions.");
+        document.dispatchEvent(new CustomEvent(action.eventName, {detail: action.detail, bubbles: true}));
+      } else throw new Error("Citry.events.applyActions needs a mounted component for Render and State actions.");
+    };
+    for (const action of actions) {
+      if (action?.wait === false) void apply(action).catch(error => console.error("[Citry] applying a public action failed:", error));
+      else await apply(action);
+    }
+    return data;
+  }
   const clone = value => structuredClone(value);
   const freezeDetached = value => {
     if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -39,7 +247,7 @@
   const detached = value => freezeDetached(clone(value));
   const RESERVED_TEMPLATE_CONTEXT_NAMES = new Set([
     "$attrs", "$citryEvents", "$data", "$el", "$emit", "$error", "$event", "$forceUpdate", "$loading",
-    "$nextTick", "$options", "$parent", "$props", "$refs", "$root", "$sendEvent", "$slots", "$state", "$watch",
+    "$nextTick", "$onEvent", "$options", "$parent", "$props", "$refs", "$root", "$sendEvent", "$slots", "$state", "$watch",
   ]);
   function templateContextNames(value, label) {
     if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !/^\$[A-Za-z][A-Za-z0-9_]*$/.test(item) ||
@@ -1189,6 +1397,7 @@
     const activity = {
       descriptor,
       view,
+      listeners: new Map(),
       loading(name) {
         if (name === undefined) return view.total > 0;
         return (view.loading[requireEventHandler(record, name)] ?? 0) > 0;
@@ -1228,6 +1437,31 @@
         if (count > 0) view.loading[intent.handler] = count;
         else delete view.loading[intent.handler];
       },
+      subscribe(name, callback) {
+        if (typeof name !== "string" || name.length === 0) throw new TypeError("$onEvent needs a non-empty event name");
+        if (typeof callback !== "function") throw new TypeError("$onEvent needs a callback function");
+        const listeners = activity.listeners.get(name) || new Set();
+        listeners.add(callback);
+        activity.listeners.set(name, listeners);
+        let active = true;
+        return () => {
+          if (!active) return;
+          active = false;
+          listeners.delete(callback);
+          if (!listeners.size) activity.listeners.delete(name);
+        };
+      },
+      dispatch(name, detail) {
+        const listeners = activity.listeners.get(name);
+        if (!listeners) return;
+        for (const callback of [...listeners]) {
+          try { callback(detail); }
+          catch (error) { queueMicrotask(() => { throw error; }); }
+        }
+      },
+      dispose() {
+        activity.listeners.clear();
+      },
       latestStarted: Object.create(null),
     };
     return activity;
@@ -1252,7 +1486,7 @@
       throw new TypeError("inject must be a Vue array or plain object with string local names");
     const pluginContextNames = definitionRegistry(appId).templateContextNames;
     const propsKeys = Array.isArray(userOptions.props) ? userOptions.props : Object.keys(userOptions.props || {});
-    const eventPublicNames = ["$loading", "$error", "$state", "$sendEvent"];
+    const eventPublicNames = ["$loading", "$error", "$state", "$sendEvent", "$onEvent"];
     for (const name of eventPublicNames) if (propsKeys.includes(name) || injectedKeys.includes(name) ||
         own(userOptions.methods || {}, name) || own(userOptions.computed || {}, name))
       throw new Error("reserved Events public name collision: " + name);
@@ -1292,7 +1526,7 @@
       if (!occurrence || occurrence.typeKey !== typeKey || app.mounted.has(occurrence.id)) throw new Error("invalid mounted occurrence");
       const generation = ++app.nextMountGeneration;
       const initialLive = app.snapshot.value.get(occurrence.id);
-      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
+      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
       record.events = createEventActivity(record, occurrence.eventContext?.descriptor || null);
       record.state = createStateFacade(record, occurrence.eventContext);
       instanceRecords.set(this, record);
@@ -1308,9 +1542,15 @@
       Object.defineProperty(this, "$loading", {enumerable: false, configurable: true, value: record.events.loading});
       Object.defineProperty(this, "$error", {enumerable: false, configurable: true, value: record.events.error});
       Object.defineProperty(this, "$state", {enumerable: false, configurable: true, value: record.state.facade});
-      Object.defineProperty(this, "$sendEvent", {enumerable: false, configurable: true, value: (name, args) => {
+      Object.defineProperty(this, "$sendEvent", {enumerable: false, configurable: true, value: (name, args, opts) => {
         requireEventHandler(record, name);
-        return record.app.eventSend(record, name, args);
+        return record.app.eventSend(record, name, args, opts);
+      }});
+      Object.defineProperty(this, "$onEvent", {enumerable: false, configurable: true, value: (name, callback) => {
+        if (!record.events?.descriptor)
+          throw new Error("this component declares no Events class; $onEvent needs a component Events declaration");
+        if (!record.events?.subscribe) throw new Error("Citry Events subscriptions are unavailable");
+        return subscribeRecordEvent(record, name, callback);
       }});
       if (reservedOptionKeys.has("$citryEvents") || "$citryEvents" in this) throw new Error("$citryEvents/public instance collision");
       Object.defineProperty(this, "$citryEvents", {enumerable: false, configurable: true, value: Object.freeze({
@@ -2018,6 +2258,57 @@
         return mounted.component.$el;
       throw new Error("Citry Events dispatch source has no live DOM root");
     };
+    const liveRootElements = (component, seen = new Set(), output = []) => {
+      const visit = vnode => {
+        if (!vnode || typeof vnode !== "object" || seen.has(vnode)) return;
+        seen.add(vnode);
+        if (vnode.component?.subTree) { visit(vnode.component.subTree); return; }
+        if (vnode.type === V.Fragment && Array.isArray(vnode.children)) {
+          for (const child of vnode.children) visit(child);
+          return;
+        }
+        if (typeof Element === "function" && vnode.el instanceof Element && vnode.el.isConnected) {
+          if (!output.includes(vnode.el)) output.push(vnode.el);
+          return;
+        }
+        if (Array.isArray(vnode.children)) for (const child of vnode.children) visit(child);
+      };
+      visit(component?.$?.subTree);
+      if (!output.length && typeof Element === "function" && component?.$el instanceof Element && component.$el.isConnected)
+        output.push(component.$el);
+      return output;
+    };
+    const componentContains = (component, element) =>
+      liveRootElements(component).some(root => root === element || root.contains(element));
+    const sourceForElement = element => {
+      if (typeof Element !== "function" || !(element instanceof Element) || !element.isConnected) return null;
+      const candidates = [];
+      for (const [id, mounted] of ownedApp.mounted) {
+        if (!componentContains(mounted.component, element)) continue;
+        let depth = 0, cursor = id;
+        while (ownedApp.occurrences.get(cursor)?.parentId !== null) {
+          depth += 1;
+          cursor = ownedApp.occurrences.get(cursor).parentId;
+        }
+        const source = sources.get(id);
+        if (source?.generation === mounted.record.generation) candidates.push({source, depth});
+      }
+      candidates.sort((left, right) => right.depth - left.depth);
+      return candidates[0]?.source || null;
+    };
+    const sourceForTarget = target => {
+      if (typeof target === "string") {
+        const renderId = target.startsWith("render:") ? target.slice("render:".length) : target;
+        for (const occurrence of ownedApp.occurrences.values()) {
+          if (occurrence.renderId !== renderId) continue;
+          const mounted = ownedApp.mounted.get(occurrence.id), source = sources.get(occurrence.id);
+          if (mounted && source?.generation === mounted.record.generation) return source;
+          return null;
+        }
+        return null;
+      }
+      return sourceForElement(target);
+    };
     for (const typeKey of new Set(manifest.occurrences.map(item => item.typeKey))) {
       let options = registeredTypeOptions.get(typeKey)?.options || {};
       for (const plugin of definitionRegistry(appId).browserPlugins) if (typeof plugin.decorateTypeOptions === "function")
@@ -2152,6 +2443,7 @@
       appId(source) { return sources.get(source.stableId)?.generation === source.generation ? appId : ""; },
       resolve(source) { return sources.get(source.stableId)?.generation === source.generation ? contexts.get(source.stableId) || null : null; },
       revision(source) { return sources.get(source.stableId)?.generation === source.generation ? definitionRegistry(appId).revision : -1; },
+      resolveTarget(target) { return sourceForTarget(target); },
       preflightResult(result, source) {
         const renders = result.ok ? result.actions.filter(action => action.action === "render") : [];
         if (!renders.length) return {result};
@@ -2535,7 +2827,41 @@
           contexts.set(id, {...value, stateToken});
       },
       dispatchEvent(name, detail, source) {
+        const mounted = ownedApp.mounted.get(source.stableId);
+        if (!mounted || mounted.record.generation !== source.generation)
+          throw new Error("Citry Events dispatch source is stale or retired");
+        mounted.record.events.dispatch(name, detail);
         dispatchCarrier(source).dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
+      },
+      dispatchEventGlobal(name, detail) {
+        document.dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
+      },
+      lifecycle(kind, source, event, extra = {}) {
+        // A committed self-render may retire the sender and mount its
+        // replacement before the bridge emits `swapped`/`after`. Those
+        // notifications describe the committed instance, so follow the
+        // stable occurrence identity for post-commit hooks while keeping
+        // cancellation/error checks bound to the original generation.
+        const effectiveSource = kind === "swapped" || kind === "after"
+          ? sources.get(source.stableId) || source
+          : source;
+        const context = contexts.get(effectiveSource.stableId);
+        const mounted = ownedApp.mounted.get(effectiveSource.stableId);
+        if (!context || !mounted || mounted.record.generation !== effectiveSource.generation) return true;
+        const details = {
+          instance: context.serverRenderId,
+          class: context.componentClassId,
+          event,
+          ...extra,
+        };
+        if (kind === "swapped") details.els = liveRootElements(mounted.component);
+        const roots = liveRootElements(mounted.component);
+        const carrier = roots[0] || document;
+        return carrier.dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
+          detail: details,
+          bubbles: true,
+          cancelable: kind === "before",
+        }));
       },
       redirect(url) { global.location.assign(url); },
       updateUrl(url, mode) { global.history[mode === "push" ? "pushState" : "replaceState"]({}, "", url); },
@@ -2577,6 +2903,15 @@
         eventBaseUrl: configuration.eventBaseUrl,
         host,
         csrf: configuration.csrf || {token: cookieToken},
+        runtimeConfig: () => publicEventsConfig,
+        transport: () => {
+          const name = typeof publicEventsConfig.transport === "string" && publicEventsConfig.transport
+            ? publicEventsConfig.transport : "fetch";
+          const implementation = publicEventTransports.get(name);
+          if (implementation) return implementation;
+          if (name === "fetch") return null;
+          throw new Error("Citry Events transport is not registered: " + name);
+        },
         activity(source, descriptor) {
           const mounted = ownedApp.mounted.get(source.stableId);
           if (!mounted || mounted.record.generation !== source.generation)
@@ -2690,15 +3025,28 @@
       if (!source) throw new Error("Citry polling binding has no mounted Vue owner");
       return sendDeclarativeEvent(record, binding, source, args);
     };
-    definitionRegistry(appId).eventSend = async (record, handler, args) => {
+    definitionRegistry(appId).eventSend = async (record, handler, args, opts) => {
       if (record.app !== ownedApp || ownedApp.mounted.get(record.occurrenceId)?.record !== record)
         throw new Error("Citry Events source is stale or retired");
       const checkedArgs = args === undefined ? {} : args;
       plain(checkedArgs, "Citry Events arguments");
       const source = sources.get(record.occurrenceId);
       if (!source) throw new Error("Citry Events call has no mounted Vue owner");
-      return ensureEventsBridge().send({source, handler, args: checkedArgs});
+      const options = opts === undefined ? undefined : opts && typeof opts === "object" ? {timeout: opts.timeout} : opts;
+      return ensureEventsBridge().send({source, handler, args: checkedArgs, options});
     };
+    ownedApp.resolvePublicTarget = sourceForTarget;
+    ownedApp.publicSend = (source, handler, args, opts) => {
+      const mounted = ownedApp.mounted.get(source.stableId);
+      if (!mounted || mounted.record.generation !== source.generation)
+        return Promise.reject(new Error("Citry.events.send target is stale or retired."));
+      requireEventHandler(mounted.record, handler);
+      const checkedArgs = args === undefined ? {} : args;
+      plain(checkedArgs, "Citry Events arguments");
+      const options = opts === undefined ? undefined : opts && typeof opts === "object" ? {timeout: opts.timeout} : opts;
+      return ensureEventsBridge().send({source, handler, args: checkedArgs, options});
+    };
+    ownedApp.publicApplyActions = (actions, source) => ensureEventsBridge().applyActions(actions, source);
     attachPreparedHost(appId, {
       onOccurrenceMounted({stableId, generation, occurrence}) {
         sources.set(stableId, {stableId, generation});
@@ -2948,29 +3296,57 @@
 
   function disposeCallbacks(record) {
     const scope = record.callbackScope, cleanup = record.callbackCleanup;
-    record.callbackScope = undefined; record.callbackCleanup = undefined;
+    const subscriptions = record.callbackSubscriptions;
+    record.callbackScope = undefined; record.callbackCleanup = undefined; record.callbackSubscriptions = undefined;
     let error;
     try { scope?.stop(); } catch (caught) { error = caught; }
+    for (const unsubscribe of subscriptions || []) {
+      try { unsubscribe(); }
+      catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] callback event cleanup failed:", caught); }
+    }
     try { if (cleanup) cleanup(); }
     catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] callback cleanup failed:", caught); }
     if (error !== undefined) throw error;
   }
+  function subscribeRecordEvent(record, name, handler) {
+    const unsubscribe = record.events.subscribe(name, handler);
+    const subscriptions = record.callbackSubscriptions;
+    if (!subscriptions) return unsubscribe;
+    let active = true;
+    const off = () => {
+      if (!active) return;
+      active = false;
+      subscriptions.delete(off);
+      unsubscribe();
+    };
+    subscriptions.add(off);
+    return off;
+  }
   function dispose(record) {
     disposeEventTimings(record);
+    record.events?.dispose?.();
     disposeCallbacks(record);
   }
   async function runCallback(component, record, callback, revision) {
     if (!callback) return;
     const scope = V.effectScope(true);
+    const subscriptions = new Set();
     record.callbackScope = scope;
+    record.callbackSubscriptions = subscriptions;
     try {
-      const cleanup = scope.run(() => callback({component, revision}));
+      const cleanup = scope.run(() => callback({
+        component,
+        revision,
+        onEvent: (name, handler) => subscribeRecordEvent(record, name, handler),
+      }));
       if (cleanup !== undefined && typeof cleanup !== "function") throw new TypeError("onServerRender must return a function or undefined");
       record.callbackCleanup = cleanup;
     } catch (error) {
       scope.stop();
+      for (const unsubscribe of subscriptions) unsubscribe();
       record.callbackScope = undefined;
       record.callbackCleanup = undefined;
+      record.callbackSubscriptions = undefined;
       throw error;
     }
   }

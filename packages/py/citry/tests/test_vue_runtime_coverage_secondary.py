@@ -10,6 +10,7 @@ paths that protect the browser-facing protocol.
 
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -208,6 +209,12 @@ def test_vue_serialization_plan_validates_hook_output_and_can_defer_assets() -> 
     assert "globalThis.ready = true" in output
     assert ".ready { color: red }" in output
 
+    document = '<!doctype html><html><head><title>Page</title></head><body><div id="mount"></div></body></html>'
+    output = plan.finalize(document)
+    assert output.index(".ready { color: red }") < output.index("</head>")
+    assert output.index("globalThis.ready = true") < output.rindex("</body>")
+    assert output.index(".ready { color: red }") < output.index("globalThis.ready = true")
+
     with pytest.raises(ValueError, match="preserve exactly one"):
         plan.finalize('<div id="mount"><span></span></div>')
 
@@ -224,6 +231,38 @@ def test_vue_serialization_plan_validates_hook_output_and_can_defer_assets() -> 
         deferred_to_dependency_manager=True,
     )
     assert deferred.finalize('<div id="mount"></div>') == '<div id="mount"></div>'
+
+
+def test_explicit_id_generator_makes_vue_app_id_deterministic() -> None:
+    app = Citry(autodiscover=False, id_generator=lambda: "snapshot")
+
+    class Page(Component):
+        citry = app
+        template = "<button :title=\"'ready'\">ready</button>"
+
+    first = Page().render().serialize()
+    second = Page().render().serialize()
+
+    assert first == second
+    app_ids = re.findall(r'"appId":"([0-9a-f]{32})"', first)
+    assert len(app_ids) == 1
+
+
+def test_default_vue_app_ids_remain_unique_between_serializations() -> None:
+    app = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = app
+        template = "<button :title=\"'ready'\">ready</button>"
+
+    first = Page().render().serialize()
+    second = Page().render().serialize()
+
+    first_id = re.search(r'"appId":"([0-9a-f]{32})"', first)
+    second_id = re.search(r'"appId":"([0-9a-f]{32})"', second)
+    assert first_id is not None
+    assert second_id is not None
+    assert first_id.group(1) != second_id.group(1)
 
 
 def test_serialization_js_detection_is_conservative_without_component_identity() -> None:

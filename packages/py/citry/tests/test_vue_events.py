@@ -689,6 +689,9 @@ def test_vue_document_append_dependencies_execute_before_bootstrap() -> None:
 
     html = Page().render().serialize(deps_position="append")
     assert html.index("Citry interactive runtime") < html.index("CitryStable.startPrepared")
+    assert html.index("Citry interactive runtime") < html.rindex("</body>")
+    assert html.index("CitryStable.startPrepared") < html.rindex("</body>")
+    assert html.rindex("</html>") > html.rindex("</script>")
     assert html.count('id="citry-vue-') == 1
 
 

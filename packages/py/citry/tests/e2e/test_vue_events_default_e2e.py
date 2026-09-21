@@ -8,12 +8,26 @@ from typing import Any
 import pytest
 
 from citry import Citry, Component, Extension
-from citry.citry_template import CitryTemplate
 from citry.ext.events import EventError, actions, event
 from citry.ext.events.renderers import dispatcher_for
 
 pytest.importorskip("playwright.sync_api")
 _PlaywrightTimeoutError = pytest.importorskip("playwright.sync_api").TimeoutError
+
+
+def _watch_citry_ready(page: Any) -> None:
+    page.add_init_script(
+        """
+        window.__citryReadyApps = [];
+        document.addEventListener('citry:ready', event => {
+          window.__citryReadyApps.push(event.detail.appId);
+        });
+        """
+    )
+
+
+def _wait_for_citry_ready(page: Any) -> None:
+    page.wait_for_function("window.__citryReadyApps?.length === 1")
 
 
 def _wait_for_two_runtime_rows(page: Any, faults: list[str], console_errors: list[str], status: int | None) -> None:
@@ -220,6 +234,100 @@ def test_public_events_renderer_mounts_and_applies_a_real_render(page: Any, serv
     assert len(calls) == 2
     assert calls[0]["calls"][0]["stateToken"] != calls[1]["calls"][0]["stateToken"]
     assert faults == []
+
+
+@pytest.mark.e2e
+def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_stack(
+    page: Any, serve_live: Any
+) -> None:
+    engine = Citry(secret="vue-events-public-compat-secret", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class PageState:
+        count: int = 0
+
+        def render(self):
+            return Page(count=self.count)
+
+    class Page(Component):
+        citry = engine
+        State = PageState
+        template = '<main><button id="refresh" @c-click="refresh">{{ count }}</button></main>'
+        js = """$component({onServerRender({component, revision}){
+          component.$onEvent('ping', detail => (globalThis.__vueEventSeen ||= []).push({revision, detail}));
+        }});"""
+
+        def template_data(self, kwargs, slots):
+            return kwargs
+
+        class Events:
+            def refresh(self, state: PageState):
+                state.count += 1
+                return [state.render(), actions.Dispatch("ping", {"count": state.count})]
+
+    dispatcher_for(engine)
+    page_errors: list[str] = []
+    console_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.add_init_script(
+        """
+        window.__vueEventLifecycle = [];
+        for (const name of ['before', 'swapped', 'after'])
+          document.addEventListener(`citry:events:${name}`, event =>
+            window.__vueEventLifecycle.push({name, detail: event.detail, els: event.detail?.els?.length ?? null}));
+        """
+    )
+    page.goto(serve_live(engine, Page(count=0).render().serialize(), "") + "/")
+    page.wait_for_function("document.querySelector('#refresh')?.textContent === '0'")
+
+    applied = page.evaluate(
+        """async () => {
+          let detail = null;
+          const stop = Citry.events.on('public-ping', value => { detail = value; });
+          const data = await Citry.events.applyActions([
+            {action: 'event', eventName: 'public-ping', detail: {source: 'global'}},
+            {action: 'data', value: 9},
+          ]);
+          stop();
+          return {data, detail};
+        }"""
+    )
+    assert applied == {"data": 9, "detail": {"source": "global"}}
+
+    page.locator("#refresh").click()
+    page.wait_for_function("document.querySelector('#refresh')?.textContent === '1'")
+    try:
+        page.wait_for_function("globalThis.__vueEventSeen?.length === 1")
+    except _PlaywrightTimeoutError as error:
+        pytest.fail(
+            f"first event subscription did not fire: {error}; seen={page.evaluate('globalThis.__vueEventSeen')}; "
+            f"lifecycle={page.evaluate('globalThis.__vueEventLifecycle')}; page_errors={page_errors}; "
+            f"console_errors={console_errors}",
+            pytrace=False,
+        )
+    page.locator("#refresh").click()
+    page.wait_for_function("document.querySelector('#refresh')?.textContent === '2'")
+    page.wait_for_function("globalThis.__vueEventSeen?.length === 2")
+
+    assert page.evaluate("globalThis.__vueEventSeen") == [
+        {"revision": 1, "detail": {"count": 1}},
+        {"revision": 2, "detail": {"count": 2}},
+    ]
+    lifecycle = page.evaluate("globalThis.__vueEventLifecycle")
+    assert [entry["name"] for entry in lifecycle] == [
+        "before",
+        "swapped",
+        "after",
+        "before",
+        "swapped",
+        "after",
+    ]
+    for entry in lifecycle:
+        assert entry["detail"]["event"] == "refresh"
+        assert entry["detail"]["class"]
+        assert entry["detail"]["instance"]
+    assert all(entry["els"] is not None and entry["els"] > 0 for entry in lifecycle if entry["name"] == "swapped")
 
 
 @pytest.mark.e2e
@@ -1153,14 +1261,22 @@ def test_shared_stylesheet_survives_until_its_last_occurrence_owner_is_removed(p
         class Dependencies:
             css = ["/shared-owner.css"]
 
+    class RootState:
+        show_first: bool = True
+        show_second: bool = True
+
+        def render(self):
+            return Root(show_first=self.show_first, show_second=self.show_second)
+
     class Root(Component):
         citry = engine
+        State = RootState
         template = """
           <main>
             <button id="remove-first" @c-click="remove_first">remove first</button>
             <button id="remove-second" @c-click="remove_second">remove second</button>
-            <c-StyledFirst />
-            <c-StyledSecond />
+            <c-if cond="show_first"><c-StyledFirst /></c-if>
+            <c-if cond="show_second"><c-StyledSecond /></c-if>
           </main>
         """
         js = """$component({onServerRender(){
@@ -1170,26 +1286,19 @@ def test_shared_stylesheet_survives_until_its_last_occurrence_owner_is_removed(p
         }});"""
 
         class Events:
-            def remove_first(self):
-                Root.template = """
-                  <main>
-                    <button id="remove-first" @c-click="remove_first">remove first</button>
-                    <button id="remove-second" @c-click="remove_second">remove second</button>
-                    <c-StyledSecond />
-                  </main>
-                """
-                Root._citry_template = CitryTemplate(source=Root.template, origin="shared-owner:first-removed")
-                return Root()
+            def remove_first(self, state: RootState):
+                state.show_first = False
+                return state.render()
 
-            def remove_second(self):
-                Root.template = """
-                  <main>
-                    <button id="remove-first" @c-click="remove_first">remove first</button>
-                    <button id="remove-second" @c-click="remove_second">remove second</button>
-                  </main>
-                """
-                Root._citry_template = CitryTemplate(source=Root.template, origin="shared-owner:all-removed")
-                return Root()
+            def remove_second(self, state: RootState):
+                state.show_second = False
+                return state.render()
+
+        def template_data(self, kwargs, slots):
+            return {
+                "show_first": kwargs.get("show_first", True),
+                "show_second": kwargs.get("show_second", True),
+            }
 
     dispatcher_for(engine)
     html = Root().render().serialize()
@@ -1199,8 +1308,10 @@ def test_shared_stylesheet_survives_until_its_last_occurrence_owner_is_removed(p
         "**/shared-owner.css",
         lambda route: route.fulfill(body=".shared-owner{color:rgb(12, 34, 56)}", content_type="text/css"),
     )
+    _watch_citry_ready(page)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
+    _wait_for_citry_ready(page)
     page.locator("#second-owner").wait_for()
     sheet = '[data-citry-css-url="/shared-owner.css"]'
     assert page.locator(sheet).count() == 1
@@ -1628,7 +1739,9 @@ def test_runtime_spread_preserves_empty_source_attributes_and_dynamic_true(
     dispatcher_for(engine)
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
+    _watch_citry_ready(page)
     page.goto(serve_live(engine, Surface().render().serialize(), "") + "/")
+    _wait_for_citry_ready(page)
 
     button = page.locator("#source-values")
     assert button.get_attribute("data-bare") == ""
@@ -2253,8 +2366,13 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
 
     class Child(Component):
         citry = engine
-        template = '<button id="slow-child" @c-click="increment">{{ count }}</button>'
+        template = '<button id="slow-child" @click="send">{{ count }}</button>'
         State = ChildState
+        js = """$component({methods:{send(){
+          return this.$sendEvent('increment')
+            .catch(()=>undefined)
+            .finally(()=>{globalThis.__citryGenerationSettled=true;});
+        }}});"""
 
         class Events:
             def increment(self, state: ChildState):
@@ -2294,7 +2412,9 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
         });
         """
     )
+    _watch_citry_ready(page)
     page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
+    _wait_for_citry_ready(page)
     initial_generation = page.evaluate(
         """()=>{const app=[...CitryStable._apps.values()][0];return [...app.mounted.values()]
           .find(item=>item.record.occurrenceId!==app.rootId).record.generation}"""
@@ -2305,9 +2425,8 @@ def test_event_response_is_rejected_after_source_generation_changes(page: Any, s
     page.locator("#toggle-slow-child").click()
     page.wait_for_function("document.querySelector('#slow-child')?.textContent === '0'")
     page.wait_for_function(
-        "window.performance.getEntriesByType('resource').some(entry => entry.name.endsWith('/ext/events/call'))"
+        "window.__citryGenerationSettled === true && [...CitryStable._apps.values()][0]?.busy === false"
     )
-    page.wait_for_timeout(700)
     assert page.locator("#slow-child").text_content() == "0"
     assert len(requests) == 1
     app_state = page.evaluate(

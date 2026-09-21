@@ -462,6 +462,210 @@ const basicHost = (resolve = () => contextFor()) => ({
   updateUrl() {},
 });
 
+test("Vue Events emits the complete lifecycle around a committed render", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const lifecycle = [];
+  const host = {
+    ...basicHost(),
+    lifecycle(kind, actualSource, event, detail) {
+      lifecycle.push({ kind, source: actualSource, event, detail });
+      return true;
+    },
+    async prepareRender(action) {
+      return { transaction: action.prepared };
+    },
+    abortRender() {},
+    async commitRender() {},
+  };
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) =>
+      resultResponse(JSON.parse(init.body), [
+        { action: "render", target: "render:server_1", swap: "morph", renderer: "vue-prepared/1", prepared: {} },
+        { action: "data", value: { saved: true } },
+      ]),
+  });
+
+  assert.deepEqual(await bridge.send({ source, handler: "move" }), { saved: true });
+  assert.deepEqual(
+    lifecycle.map((item) => item.kind),
+    ["before", "swapped", "after"],
+  );
+  assert.equal(lifecycle[0].source, source);
+  assert.equal(lifecycle[0].event, "move");
+  assert.deepEqual(lifecycle[1].detail, { els: [] });
+  assert.deepEqual(lifecycle[2].detail, { ok: true });
+});
+
+test("a string endpoint remains the default route when no page URL is configured", async () => {
+  let requestedUrl;
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events/call",
+    host: basicHost(),
+    fetch: async (url, init) => {
+      requestedUrl = url;
+      return resultResponse(JSON.parse(init.body), [{ action: "data", value: true }]);
+    },
+  });
+
+  assert.equal(await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), true);
+  assert.equal(requestedUrl, "/events/call");
+});
+
+test("public action application keeps targetless events page-wide in a mixed action list", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const local = [];
+  const global = [];
+  const host = {
+    ...basicHost(),
+    dispatchEvent(name) {
+      local.push(name);
+    },
+    dispatchEventGlobal(name) {
+      global.push(name);
+    },
+  };
+  const bridge = bridgeModule.createVueEventsBridge({ endpoint: "/events", host });
+
+  assert.equal(
+    await bridge.applyActions(
+      [
+        { action: "event", eventName: "page-ready" },
+        { action: "event", eventName: "component-ready", target: "render:server_1" },
+        { action: "data", value: 7 },
+      ],
+      source,
+    ),
+    7,
+  );
+  assert.deepEqual(global, ["page-ready"]);
+  assert.deepEqual(local, ["component-ready"]);
+});
+
+test("latestCallWins supersedes an active predecessor and drops its response", async () => {
+  const latestDescriptor = {
+    componentClassId: "Board_1",
+    eventHandlers: { move: { ...descriptor.eventHandlers.move, latestCallWins: true } },
+  };
+  const source = { stableId: "board", generation: 1 };
+  const responses = [];
+  const lifecycle = [];
+  let requests = 0;
+  const host = {
+    ...basicHost(() => ({ ...contextFor(), descriptor: latestDescriptor })),
+    lifecycle(kind, _source, event, detail) {
+      lifecycle.push({ kind, event, detail });
+      return true;
+    },
+  };
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events/call",
+    host,
+    fetch: async (_url, init) => {
+      requests += 1;
+      const envelope = JSON.parse(init.body);
+      return new Promise((resolve) =>
+        responses.push(() => resolve(resultResponse(envelope, [{ action: "data", value: requests }]))),
+      );
+    },
+  });
+
+  const first = bridge.send({ source, handler: "move" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const second = bridge.send({ source, handler: "move" });
+  await assert.rejects(first, /superseded/);
+  while (requests < 2) await new Promise((resolve) => setTimeout(resolve, 0));
+  responses[1]();
+  assert.equal(await second, 2);
+  responses[0]();
+  assert.deepEqual(
+    lifecycle.filter((item) => item.kind === "stale").map((item) => item.detail.reason),
+    ["superseded"],
+  );
+});
+
+test("Vue Events cancellation is reported by after without an error lifecycle", async () => {
+  const lifecycle = [];
+  let fetched = false;
+  const host = {
+    ...basicHost(),
+    lifecycle(kind, _source, _event, detail) {
+      lifecycle.push([kind, detail]);
+      return kind !== "before";
+    },
+  };
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async () => {
+      fetched = true;
+      throw new Error("before listener should stop the request");
+    },
+  });
+  await assert.rejects(bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), /cancelled/);
+  assert.equal(fetched, false);
+  assert.deepEqual(
+    lifecycle.map(([kind]) => kind),
+    ["before", "after"],
+  );
+  assert.deepEqual(lifecycle[1][1], { ok: false });
+});
+
+test("page configuration is read for each Vue Events bridge send", async () => {
+  let configuration = { url: "/first/ext/events/", csrf: { token: "first" }, timeout: 1000 };
+  const requests = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/fallback/call",
+    eventBaseUrl: "/fallback/e/",
+    host: basicHost(),
+    runtimeConfig: () => configuration,
+    fetch: async (url, init) => {
+      requests.push({ url, init });
+      return resultResponse(JSON.parse(init.body), [{ action: "data", value: "ok" }]);
+    },
+  });
+  const source = { stableId: "board", generation: 1 };
+  await bridge.send({ source, handler: "move" });
+  configuration = { url: "/second/ext/events/", csrf: { token: "second" }, timeout: 2000 };
+  await bridge.send({ source, handler: "move" });
+  assert.deepEqual(
+    requests.map((request) => [request.url, request.init.headers["X-CSRFToken"]]),
+    [
+      ["/first/ext/events/call", "first"],
+      ["/second/ext/events/call", "second"],
+    ],
+  );
+});
+
+test("registered Vue Events transports receive the protocol envelope", async () => {
+  const envelopes = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: basicHost(),
+    runtimeConfig: () => ({ transport: "memory" }),
+    transport: () => ({
+      send(envelope) {
+        envelopes.push(envelope);
+        return {
+          protocol: "citry-events/1",
+          requestId: envelope.requestId,
+          results: [
+            { ok: true, sendSequence: envelope.calls[0].sendSequence, actions: [{ action: "data", value: 7 }] },
+          ],
+        };
+      },
+    }),
+    fetch: async () => {
+      throw new Error("registered transport should replace fetch");
+    },
+  });
+  const value = await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+  assert.equal(value, 7);
+  assert.equal(envelopes.length, 1);
+  assert.equal(envelopes[0].calls[0].handlerName, "move");
+});
+
 test("GET uses the exact per-event URL and flat metadata without consuming State drafts", async () => {
   const getDescriptor = {
     componentClassId: "Board_1",

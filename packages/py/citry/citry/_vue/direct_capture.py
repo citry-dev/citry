@@ -1635,7 +1635,7 @@ def assemble_typed_render(
                     prepared_key_binding = None
                     if element_attrs_key is not None:
                         data_values[element_attrs_key] = {
-                            name: "" if value is True else _json_plain(value)
+                            name: _json_plain(value)
                             for name, value in effective_data_attrs.items()
                         }
                     if "key" in element_metadata:

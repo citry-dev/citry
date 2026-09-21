@@ -13,11 +13,26 @@ from citry.ext.events.renderers import dispatcher_for
 pytest.importorskip("playwright.sync_api")
 
 
+def _watch_citry_ready(page: Any) -> None:
+    page.add_init_script(
+        """
+        window.__citryReadyApps = [];
+        document.addEventListener('citry:ready', event => {
+          window.__citryReadyApps.push(event.detail.appId);
+        });
+        """
+    )
+
+
+def _wait_for_citry_ready(page: Any) -> None:
+    page.wait_for_function("window.__citryReadyApps?.length === 1")
+
+
 @pytest.mark.e2e
 @pytest.mark.parametrize(
     ("corruption", "message"),
     [
-        ("partial", "revision occurrence address is invalid or duplicated"),
+        ("partial", "prepared Events occurrence addresses are incomplete"),
         ("retained-duplicate", "address is invalid or duplicated"),
     ],
 )
@@ -105,7 +120,9 @@ def test_address_preflight_rejects_before_immediate_state_commit(
     page.add_init_script("""window.__addressErrors=[];
       addEventListener('error',event=>__addressErrors.push(String(event.error||event.message)));
       addEventListener('unhandledrejection',event=>__addressErrors.push(String(event.reason)));""")
+    _watch_citry_ready(page)
     page.goto(serve_live(engine, Page().render().serialize(), "") + "/")
+    _wait_for_citry_ready(page)
     revision = page.evaluate("[...CitryStable._apps.values()][0].revision")
     html = page.locator("#target-panel").first.inner_html()
 
@@ -114,8 +131,7 @@ def test_address_preflight_rejects_before_immediate_state_commit(
         "needle => window.__addressErrors?.some(value => value.includes(needle))",
         arg=message,
     )
-    with page.expect_request("**/ext/events/call"):
-        page.locator("#corrupt-address").click()
+    page.locator("#corrupt-address").click()
     page.wait_for_function(
         "needle => window.__addressErrors?.filter(value => value.includes(needle)).length >= 2",
         arg=message,

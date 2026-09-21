@@ -169,6 +169,48 @@ The method returns a Promise for the handler's data result and rejects with a
 structured event error. Use declarative `@c-*` bindings when no browser code
 needs the returned result.
 
+<h3 class="doc-heading" id="on-event"><code>$onEvent</code></h3>
+
+Subscribe to a server-dispatched event for this component instance:
+
+```js
+const stop = this.$onEvent("cart:changed", (detail) => {
+  refreshBadge(detail);
+});
+```
+
+The callback receives the event detail and `stop()` removes that subscription.
+Subscriptions are released when the component is unmounted or remounted.
+`$onEvent` requires a component Events declaration.
+
+<h3 class="doc-heading" id="citry-events"><code>Citry.events</code></h3>
+
+Use the page-wide API from ordinary scripts or other browser integrations:
+
+```js
+const stop = Citry.events.on("cart:changed", (detail) => {
+  refreshHeader(detail);
+});
+await Citry.events.send("render_abc123", "refresh", {page: 2});
+```
+
+`send(target, name, args?, opts?)` accepts a current render ID or an Element
+inside its mounted component. The returned Promise has the same data and
+error behavior as `$sendEvent`. The other methods are:
+
+| Method | Purpose |
+| --- | --- |
+| `on(name, callback)` | Listen page-wide for a server-dispatched event; the callback receives its detail. |
+| `configure({csrf, timeout, url, transport})` | Set defaults used by current and future event calls. |
+| `registerTransport(name, {send})` | Register a transport that returns a Citry event result envelope. |
+| `applyActions(actions)` | Apply a validated result action list from an intercepted or custom transport. |
+
+Event calls also emit bubbling `citry:events:before`, `after`, `error`,
+`swapped`, and `stale` events. Their detail always includes `instance`,
+`class`, and `event`; `after` adds `ok`, `error` adds `error`, `swapped` adds
+`els`, and `stale` adds `reason`. The `before` event is cancellable with
+`preventDefault()`.
+
 The Events guides cover [State](/events/state/), [template
 bindings](/events/bindings/), [returned actions](/events/actions/), and
 [direct HTTP routes](/events/http/).
