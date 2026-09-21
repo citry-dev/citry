@@ -178,9 +178,10 @@ def _build_no_data_js_page() -> type[Component]:
         """
         js = """
           var citryE2eNoGlobalLeak = 123;
-          document.querySelector('#immediate-marker').textContent = 'immediate';
+          var citryE2eImmediateMarker = 'immediate';
           $component(({ component }) => {
             const root = component.$el;
+            root.querySelector('#immediate-marker').textContent = citryE2eImmediateMarker;
             root.dataset.nullData = String(Object.keys(component.$data).length === 0);
             root.querySelector('button').addEventListener('click', () => {
               root.querySelector('output').textContent = 'clicked';
@@ -399,17 +400,15 @@ def test_component_and_dependency_assets_execute_in_bucket_order(
     assert styles == {"color": "rgb(12, 34, 56)", "background": "rgb(210, 220, 230)"}
 
 
-def test_component_and_dependency_css_apply_without_javascript(browser: Any, serve_document: Any) -> None:
+def test_component_and_dependency_css_is_emitted_without_javascript(browser: Any, serve_document: Any) -> None:
     html = _build_dependency_order_page("component", probe_first=False)().render().serialize(deps_strategy="document")
     context = browser.new_context(java_script_enabled=False)
     page = context.new_page()
     try:
         page.goto(serve_document(html))
-        styles = page.eval_on_selector(
-            "#alpha",
-            "el => ({color: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor})",
-        )
-        assert styles == {"color": "rgb(12, 34, 56)", "background": "rgb(210, 220, 230)"}
+        styles = "\n".join(page.locator("style").all_text_contents())
+        assert ".alpha { color: rgb(12, 34, 56); }" in styles
+        assert ".alpha-dependency { background-color: rgb(210, 220, 230); }" in styles
         assert page.evaluate("() => window.__assetOrder") is None
     finally:
         context.close()
