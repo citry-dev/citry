@@ -161,7 +161,7 @@ class CToolbar(LibraryComponent):
         c-aria-label="label"
         c-aria-orientation="orientation"
         c-data-orientation="orientation"
-        c-data-loop="loop"
+        c-data-loop="'' if loop else None"
         c-data-variant="variant"
         c-data-size="size"
       ><c-slot required /></div>

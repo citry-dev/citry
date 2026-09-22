@@ -314,7 +314,7 @@ class CPagination(LibraryComponent):
         class="cui-pagination"
         c-bind="attrs"
         data-citry-ui-part="pagination"
-        c-data-disabled="disabled"
+        c-data-disabled="'' if disabled else None"
         c-data-variant="variant"
         c-data-size="size"
         c-aria-label="tr('citry-ui-pagination-label') if catalog_label else label"
@@ -338,7 +338,7 @@ class CPagination(LibraryComponent):
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"
-                  c-data-current="item['current']"
+                  c-data-current="'' if item['current'] else None"
                   data-citry-ui-part="control"
                 >{{ item['text'] }}</a>
               </c-elif>
@@ -354,7 +354,7 @@ class CPagination(LibraryComponent):
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"
-                  c-data-current="item['current']"
+                  c-data-current="'' if item['current'] else None"
                   c-disabled="item['disabled']"
                   data-citry-ui-part="control"
                 >{{ item['text'] }}</button>

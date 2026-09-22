@@ -296,9 +296,9 @@ class CCarousel(LibraryComponent):
         c-$c-tr:citry-ui-carousel-role[aria-roledescription]="True if catalog_role_description else None"
         c-data-index="index"
         c-data-orientation="orientation"
-        c-data-loop="loop"
-        c-data-disabled="disabled"
-        c-data-draggable="draggable"
+        c-data-loop="'' if loop else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-draggable="'' if draggable else None"
         c-data-variant="variant"
         c-data-size="size"
         data-citry-carousel-root
@@ -784,7 +784,7 @@ class CCarouselSlide(LibraryComponent):
         c-$c-tr:citry-ui-carousel-slide-role[aria-roledescription]="True if catalog_role_description else None"
         c-data-value="value"
         c-data-index="index"
-        c-data-active="active"
+        c-data-active="'' if active else None"
         data-citry-carousel-slide
         data-citry-ui-part="slide"
       ><c-slot required /></div>

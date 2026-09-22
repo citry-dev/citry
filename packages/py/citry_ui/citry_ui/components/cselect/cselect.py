@@ -572,13 +572,13 @@ class CSelect(LibraryComponent):
     template = """
       <div
         class="cui-select"
-        c-data-open="open"
-        c-data-empty="empty"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-match-width="matchWidth"
+        c-data-open="'' if open else None"
+        c-data-empty="'' if empty else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-match-width="'' if matchWidth else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"
@@ -667,8 +667,8 @@ class CSelect(LibraryComponent):
                   c-aria-selected="'true' if option.selected else 'false'"
                   c-aria-disabled="'true' if option.disabled else 'false'"
                   c-data-value="option.value"
-                  c-data-selected="option.selected"
-                  c-data-disabled="option.disabled"
+                  c-data-selected="'' if option.selected else None"
+                  c-data-disabled="'' if option.disabled else None"
                   data-citry-ui-part="option"
                 >
                   <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>
@@ -702,8 +702,8 @@ class CSelect(LibraryComponent):
                     c-aria-selected="'true' if option.selected else 'false'"
                     c-aria-disabled="'true' if option.disabled else 'false'"
                     c-data-value="option.value"
-                    c-data-selected="option.selected"
-                    c-data-disabled="option.disabled"
+                    c-data-selected="'' if option.selected else None"
+                    c-data-disabled="'' if option.disabled else None"
                     data-citry-ui-part="option"
                   >
                     <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>

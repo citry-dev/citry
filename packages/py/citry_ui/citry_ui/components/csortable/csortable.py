@@ -450,7 +450,7 @@ class CInternalSortable(LibraryComponent):
             "attrs": {
                 **kwargs.attrs,
                 "aria-disabled": "true" if kwargs.disabled else "false",
-                "data-disabled": True if kwargs.disabled else None,
+                "data-disabled": "" if kwargs.disabled else None,
                 "data-layout": kwargs.layout,
                 "data-size": kwargs.size,
             },
@@ -507,7 +507,7 @@ class CInternalSortableItem(LibraryComponent):
             "attrs": {
                 **declaration.attrs,
                 "aria-disabled": "true" if declaration.disabled else None,
-                "data-disabled": True if declaration.disabled else None,
+                "data-disabled": "" if declaration.disabled else None,
                 "data-value": declaration.value,
                 "role": "listitem",
             },

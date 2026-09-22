@@ -80,7 +80,7 @@ def test_closed_and_disabled_panels_are_inert_and_form_safe() -> None:
     assert " hidden" in panel.group(0)
     assert " inert" in panel.group(0)
     item = _occurrence(_manifest(html), "CNavigationMenuItem")["preparedData"]
-    assert item["citryAttrs0"]["data-disabled"] is True
+    assert item["citryAttrs0"]["data-disabled"] == ""
     assert item["citryAttrs1"]["disabled"] is True
     assert item["citryAttrs2"]["hidden"] is True
     assert item["citryAttrs2"]["inert"] is True

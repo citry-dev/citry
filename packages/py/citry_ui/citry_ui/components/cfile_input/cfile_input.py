@@ -341,7 +341,7 @@ class CFileInput(LibraryComponent):
             "aria_invalid": "true" if invalid else None,
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "attrs": caller_attrs,
         }
 
@@ -392,9 +392,9 @@ class CFileInput(LibraryComponent):
         c-aria-invalid="aria_invalid"
         c-aria-describedby="aria_describedby"
         c-aria-errormessage="aria_errormessage"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"
@@ -694,9 +694,9 @@ class CDropTarget(LibraryComponent):
       <label
         class="cui-drop-target"
         c-bind="attrs"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         data-citry-ui-part="drop-target"

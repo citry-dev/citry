@@ -212,7 +212,7 @@ class CAlertDialog(LibraryComponent):
           aria-modal="true"
           c-aria-labelledby="title_id"
           c-aria-describedby="description_id"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           c-data-size="size"
           c-data-scroll="scroll"
           c-bind="attrs"

@@ -292,7 +292,7 @@ class CTooltip(LibraryComponent):
         <div
           class="cui-tooltip"
           c-id="tooltip_id"
-          c-data-open="open and not disabled"
+          c-data-open="'' if open and not disabled else None"
           c-data-placement="placement"
           c-bind="attrs"
           popover="manual"

@@ -148,9 +148,9 @@ class CForm(LibraryComponent):
         c-autocomplete="autocomplete"
         c-novalidate="novalidate"
         c-aria-busy="aria_busy"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-submitting="submitting"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-submitting="'' if submitting else None"
         c-bind="attrs"
         data-citry-ui-part="form"
       >

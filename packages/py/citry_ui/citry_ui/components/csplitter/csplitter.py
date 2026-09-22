@@ -698,7 +698,7 @@ class CInternalSplitter(LibraryComponent):
             "attrs": {
                 **kwargs.attrs,
                 "data-orientation": kwargs.orientation,
-                "data-disabled": kwargs.disabled,
+                "data-disabled": "" if kwargs.disabled else None,
                 "data-variant": kwargs.variant,
                 "data-size": kwargs.size,
             },

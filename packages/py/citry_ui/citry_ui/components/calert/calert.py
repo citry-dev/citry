@@ -283,7 +283,7 @@ class CAlert(LibraryComponent):
         c-data-variant="variant"
         c-data-size="size"
         c-data-announce="announce"
-        c-data-icon="icon"
+        c-data-icon="'' if icon else None"
         c-bind="attrs"
         data-citry-ui-part="alert"
       >
@@ -322,7 +322,7 @@ class CAlert(LibraryComponent):
                   {'cui-alert__glyph--logical': glyph.logical},
                 ]"
                 c-data-cui-alert-intent="glyph.intent"
-                c-data-cui-alert-hidden="glyph.intent != intent"
+                c-data-cui-alert-hidden="'' if glyph.intent != intent else None"
               >
                 {{ glyph.content }}
               </g>

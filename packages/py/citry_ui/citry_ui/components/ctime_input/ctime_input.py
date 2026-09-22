@@ -232,7 +232,7 @@ class CTimeInput(LibraryComponent):
             "autocomplete": kwargs.autocomplete,
             "variant": kwargs.variant,
             "size": kwargs.size,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
             "attrs": merge_root_attrs(caller_attrs, kwargs.class_, kwargs.style),
@@ -280,11 +280,11 @@ class CTimeInput(LibraryComponent):
         c-aria-invalid="'true' if invalid else None"
         c-aria-describedby="aria_describedby"
         c-aria-errormessage="aria_errormessage"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-empty="not value"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if not value else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"

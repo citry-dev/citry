@@ -550,7 +550,7 @@ class CInternalTour(LibraryComponent):
         class="cui-tour"
         c-id="root_id"
         c-bind="attrs"
-        c-data-open="open"
+        c-data-open="'' if open else None"
         c-data-active="active"
         c-data-value="active_value"
         c-data-size="size"
@@ -565,7 +565,7 @@ class CInternalTour(LibraryComponent):
           c-aria-labelledby="active_title_id"
           c-aria-describedby="active_description_id"
           aria-modal="false"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           data-citry-tour-dialog
           data-citry-ui-part="dialog"
         >
@@ -625,7 +625,7 @@ class CInternalTourStep(LibraryComponent):
                 "data-target-id": declaration.target_id,
                 "data-placement": declaration.placement,
                 "data-describe": "true" if declaration.describe else "false",
-                "data-current": bool(item["active"]),
+                "data-current": "" if item["active"] else None,
             },
             "target_id": declaration.target_id,
             "placement": declaration.placement,
@@ -666,7 +666,7 @@ class CInternalTourStep(LibraryComponent):
             <c-else><span aria-live="polite" data-citry-ui-part="progress">{{ progress }}</span></c-else>
             <span aria-hidden="true" data-citry-ui-part="steps">
               <c-for each="step_position in step_positions">
-                <span c-data-current="step_position == index" data-citry-ui-part="step-dot"></span>
+                <span c-data-current="'' if step_position == index else None" data-citry-ui-part="step-dot"></span>
               </c-for>
             </span>
           </div>

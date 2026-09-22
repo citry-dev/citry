@@ -300,8 +300,8 @@ class CCombobox(LibraryComponent):
                     "aria-selected": "true" if option.value == kwargs.value else "false",
                     "aria-disabled": "true" if option.disabled else None,
                     "data-value": option.value,
-                    "data-selected": option.value == kwargs.value,
-                    "data-disabled": option.disabled,
+                    "data-selected": "" if option.value == kwargs.value else None,
+                    "data-disabled": "" if option.disabled else None,
                     "data-citry-ui-part": "option",
                 },
             )
@@ -348,7 +348,7 @@ class CCombobox(LibraryComponent):
             "has_error_slot": "error" in self.raw_slots,
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
             "input_attrs": caller_input_attrs,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             **{key: value for key, value in messages.items() if key.startswith("catalog_")},
         }
 
@@ -475,13 +475,13 @@ class CCombobox(LibraryComponent):
       <div
         class="cui-combobox"
         c-id="root_id"
-        c-data-open="open"
-        c-data-loading="loading"
-        c-data-empty="empty"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-open="'' if open else None"
+        c-data-loading="'' if loading else None"
+        c-data-empty="'' if empty else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"

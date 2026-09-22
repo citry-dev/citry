@@ -404,7 +404,7 @@ class CDatePicker(LibraryComponent):
             "display_value": display_value,
             "described_by": described_by,
             "error_message": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "variant": kwargs.variant,
             "size": kwargs.size,
             "attrs": merge_root_attrs(caller_attrs, kwargs.class_, kwargs.style),
@@ -457,11 +457,11 @@ class CDatePicker(LibraryComponent):
       <div
         class="cui-date-picker"
         c-id="root_id"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-empty="not value"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if not value else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"

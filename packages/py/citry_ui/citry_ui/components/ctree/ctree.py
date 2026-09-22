@@ -325,7 +325,7 @@ class CTree(LibraryComponent):
         role="tree"
         c-aria-label="label"
         c-data-selection-mode="selectionMode"
-        c-data-disabled="disabled"
+        c-data-disabled="'' if disabled else None"
         c-data-variant="variant"
         c-data-size="size"
         data-citry-ui-part="tree"
@@ -738,10 +738,10 @@ class CTreeItem(LibraryComponent):
                 "aria-selected": ("true" if selected else "false") if context.selection_mode != "none" else None,
                 "data-value": value,
                 "data-level": context.level,
-                "data-expanded": expanded,
-                "data-selected": selected,
-                "data-disabled": context.root_disabled or bool(kwargs.disabled),
-                "data-cui-tree-item-disabled": bool(kwargs.disabled),
+                "data-expanded": "" if expanded else None,
+                "data-selected": "" if selected else None,
+                "data-disabled": "" if context.root_disabled or kwargs.disabled else None,
+                "data-cui-tree-item-disabled": "" if kwargs.disabled else None,
             }
         )
         child_context = _TreeContext(

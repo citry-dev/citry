@@ -230,7 +230,7 @@ class CDrawer(LibraryComponent):
           c-aria-labelledby="title_id"
           c-aria-describedby="described_by"
           aria-modal="true"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           c-data-placement="placement"
           c-data-size="size"
           c-data-scroll="scroll"

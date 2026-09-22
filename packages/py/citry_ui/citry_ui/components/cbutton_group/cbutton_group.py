@@ -136,8 +136,8 @@ class CButtonGroup(LibraryComponent):
         c-bind="attrs"
         data-citry-ui-part="button-group"
         c-data-orientation="orientation"
-        c-data-attached="attached"
-        c-data-grow="grow"
+        c-data-attached="'' if attached else None"
+        c-data-grow="'' if grow else None"
         role="group"
         c-aria-label="label"
       >

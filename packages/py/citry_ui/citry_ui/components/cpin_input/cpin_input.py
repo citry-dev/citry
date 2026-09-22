@@ -379,7 +379,7 @@ class CPinInput(LibraryComponent):
             "aria_labelledby": aria_labelledby,
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
         }
         self._cui_pin_input_data = {
             "id": public_id,
@@ -422,13 +422,13 @@ class CPinInput(LibraryComponent):
       <div
         class="cui-pin-input"
         c-id="root_id"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-filled="filled"
-        c-data-complete="complete"
-        c-data-attached="attached"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-filled="'' if filled else None"
+        c-data-complete="'' if complete else None"
+        c-data-attached="'' if attached else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="root_attrs"
@@ -462,7 +462,7 @@ class CPinInput(LibraryComponent):
           data-citry-ui-part="input"
         />
         <span aria-hidden="true" data-citry-ui-part="cells">
-          <span c-for="cell in cells" c-data-index="cell['index']" c-data-filled="cell['filled']" c-data-masked="cell['filled'] and mask" data-citry-ui-part="cell">
+          <span c-for="cell in cells" c-data-index="cell['index']" c-data-filled="'' if cell['filled'] else None" c-data-masked="'' if cell['filled'] and mask else None" data-citry-ui-part="cell">
             <span data-citry-ui-part="character">{{ cell['character'] }}</span>
             <span data-citry-ui-part="caret"></span>
             <span c-if="cell['separator']" data-citry-ui-part="separator">

@@ -359,7 +359,7 @@ class CCheckbox(LibraryComponent):
             "has_body": has_label or has_description,
             "label_attrs": {"for": input_id},
             "description_id": description_id,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "field_supports_required": "true" if field is not None else None,
             "field_supports_readonly": "false" if field is not None else None,
             "attrs": root_attrs,
@@ -403,9 +403,9 @@ class CCheckbox(LibraryComponent):
     template = """
       <span
         class="cui-checkbox"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-label-pos="label_pos"

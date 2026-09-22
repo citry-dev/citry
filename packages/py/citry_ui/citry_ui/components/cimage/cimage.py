@@ -622,8 +622,8 @@ class CImage(LibraryComponent):
         c-bind="attrs"
         data-citry-ui-part="image-root"
         c-data-fit="fit"
-        c-data-has-placeholder="has_placeholder"
-        c-data-has-fallback="has_fallback"
+        c-data-has-placeholder="'' if has_placeholder else None"
+        c-data-has-fallback="'' if has_fallback else None"
       >
         <c-if cond="has_sources">
           <picture data-citry-ui-part="picture">

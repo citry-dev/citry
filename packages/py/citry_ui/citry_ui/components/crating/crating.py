@@ -388,6 +388,8 @@ class CRating(LibraryComponent):
                 described_by, readonly_value_id if readonly and value is not None else None
             ),
             "error_message": error_message,
+            # Keep the boolean for the per-choice condition; the template
+            # converts the matching marker to an empty presence value.
             "field_control": field is not None,
             "readonly_value_label": readonly_value_label,
         }
@@ -442,10 +444,10 @@ class CRating(LibraryComponent):
         c-aria-disabled="'true' if disabled else None"
         c-aria-readonly="'true' if readonly else None"
         c-tabindex="0 if readonly and not disabled else None"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-required="required"
-        c-data-invalid="invalid"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-required="'' if required else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-style="ratio_style"
@@ -476,7 +478,7 @@ class CRating(LibraryComponent):
               c-aria-describedby="described_by"
               c-aria-errormessage="error_message"
               c-aria-invalid="'true' if invalid else None"
-              c-data-citry-field-control="field_control and choice['id'] == public_id"
+              c-data-citry-field-control="'' if field_control and choice['id'] == public_id else None"
               c-bind="input_attrs"
               data-citry-ui-part="input"
             />

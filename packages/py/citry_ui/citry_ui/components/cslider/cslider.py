@@ -449,7 +449,7 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         "disabled": disabled,
         "readonly": readonly,
         "invalid": invalid,
-        "field_control": field is not None,
+        "field_control": "" if field is not None else None,
         "aria_describedby": described_by,
         "aria_errormessage": error_message,
         "upper_aria_describedby": upper_described_by,
@@ -510,9 +510,9 @@ _SLIDER_TEMPLATE = """
     c-data-variant="variant"
     c-data-size="size"
     c-data-show-value="show_value"
-    c-data-disabled="disabled"
-    c-data-readonly="readonly"
-    c-data-invalid="invalid"
+    c-data-disabled="'' if disabled else None"
+    c-data-readonly="'' if readonly else None"
+    c-data-invalid="'' if invalid else None"
     c-bind="root_attrs"
     c-data-citry-ui-part="part"
   >

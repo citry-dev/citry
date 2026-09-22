@@ -289,7 +289,7 @@ class CTextarea(LibraryComponent):
             "variant": variant,
             "size": size,
             "resize": resize,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "attrs": caller_attrs,
         }
 
@@ -351,10 +351,10 @@ class CTextarea(LibraryComponent):
         c-autocomplete="autocomplete"
         c-inputmode="inputmode"
         c-placeholder="placeholder"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-resize="resize"

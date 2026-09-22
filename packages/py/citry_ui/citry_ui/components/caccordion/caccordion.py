@@ -623,13 +623,13 @@ class CAccordion(LibraryComponent):
       <div
         class="cui-accordion"
         c-id="group_id"
-        c-data-multiple="multiple"
-        c-data-collapsible="collapsible"
-        c-data-disabled="disabled"
-        c-data-loop="loop"
+        c-data-multiple="'' if multiple else None"
+        c-data-collapsible="'' if collapsible else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-loop="'' if loop else None"
         c-data-variant="variant"
         c-data-size="size"
-        c-data-indicator="indicator"
+        c-data-indicator="'' if indicator else None"
         c-data-indicator-pos="indicator_pos"
         c-bind="attrs"
         data-citry-accordion-root
@@ -1388,7 +1388,7 @@ class CAccordionItem(LibraryComponent):
         #c-key="value"
         c-data-value="value"
         c-data-state="'open' if expanded else 'closed'"
-        c-data-disabled="disabled"
+        c-data-disabled="'' if disabled else None"
         c-bind="attrs"
         data-citry-accordion-item
         data-citry-ui-part="accordion-item"
@@ -1411,7 +1411,7 @@ class CAccordionItem(LibraryComponent):
               c-aria-expanded="'true' if expanded else 'false'"
               c-aria-controls="panel_id"
               c-data-state="'open' if expanded else 'closed'"
-              c-data-disabled="disabled"
+              c-data-disabled="'' if disabled else None"
               c-bind="trigger_attrs"
               data-citry-accordion-trigger
               data-citry-ui-part="accordion-trigger"

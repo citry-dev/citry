@@ -224,17 +224,17 @@ class CTabs(LibraryComponent):
         root_attrs = {
             **merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
             "id": group_id,
-            "data-citry-tabs-root": True,
+            "data-citry-tabs-root": "",
             "data-value": selected_value,
             "data-activation": kwargs.activation,
             "data-orientation": kwargs.orientation,
             "data-direction": kwargs.direction,
-            "data-loop": kwargs.loop,
+            "data-loop": "" if kwargs.loop else None,
             "data-density": kwargs.density,
             "data-variant": kwargs.variant,
             "data-align": kwargs.align,
-            "data-grow": kwargs.grow,
-            "data-disabled": kwargs.disabled,
+            "data-grow": "" if kwargs.grow else None,
+            "data-disabled": "" if kwargs.disabled else None,
             "dir": kwargs.direction,
         }
         list_attrs = {
@@ -244,7 +244,7 @@ class CTabs(LibraryComponent):
             "aria-orientation": kwargs.orientation,
             "aria-label": kwargs.aria_label,
             "aria-labelledby": kwargs.aria_labelledby,
-            "data-citry-tabs-list": True,
+            "data-citry-tabs-list": "",
             "data-orientation": kwargs.orientation,
         }
         self.provide(
@@ -894,11 +894,11 @@ class CInternalTab(LibraryComponent):
                 "aria-selected": "true" if selected else "false",
                 "tabindex": 0 if selected and not disabled else -1,
                 "disabled": disabled,
-                "data-citry-tabs-tab": True,
-                "data-citry-tabs-own-disabled": declaration.disabled,
+                "data-citry-tabs-tab": "",
+                "data-citry-tabs-own-disabled": "" if declaration.disabled else None,
                 "data-value": declaration.value,
                 "data-state": "active" if selected else "inactive",
-                "data-disabled": disabled,
+                "data-disabled": "" if disabled else None,
             },
             "content": Slot(
                 lambda ctx: declaration.content(
@@ -955,7 +955,7 @@ class CInternalTabPanel(LibraryComponent):
                 "aria-labelledby": f"{kwargs.group_id}-tab-{token}",
                 "tabindex": 0,
                 "hidden": not selected,
-                "data-citry-tabs-panel": True,
+                "data-citry-tabs-panel": "",
                 "data-value": declaration.value,
                 "data-state": "active" if selected else "inactive",
             },

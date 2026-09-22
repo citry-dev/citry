@@ -1002,6 +1002,8 @@ def test_nested_tabs_keep_selection_and_behavior_inside_the_nearest_root(page):
 
 def test_reactive_root_configuration_does_not_disable_nested_tabs(page):
     _load(page, _nested_tabs_page())
+    initial_inner = page.locator("#inner-tabs")
+    assert initial_inner.get_attribute("data-loop") == ""
     page.locator("#update-outer-tabs").click()
     page.wait_for_function("document.querySelector('#outer-tabs').hasAttribute('data-disabled')")
 

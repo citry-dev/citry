@@ -379,6 +379,29 @@ def test_controlled_value_query_and_client_items_rehydrate_by_stable_value(page)
     ]
 
 
+def test_presence_data_values_stay_empty_across_initial_and_controlled_renders(page):
+    _load(page, _local_page())
+    root = page.locator(".cui-combobox")
+    field = page.locator(".cui-field")
+    disabled_option = page.locator('[data-citry-ui-part="option"][data-value="grace"]')
+
+    assert field.get_attribute("data-required") == ""
+    assert root.get_attribute("data-open") is None
+    assert disabled_option.get_attribute("data-disabled") == ""
+
+    page.locator("#set-controlled").click()
+    page.wait_for_function("document.querySelector('[role=combobox]').value === 'Linus Torvalds'")
+    assert field.get_attribute("data-required") == ""
+    assert disabled_option.get_attribute("data-disabled") == ""
+
+    page.get_by_role("combobox").fill("ada")
+    page.wait_for_function("document.querySelector('.cui-combobox').hasAttribute('data-open')")
+    assert root.get_attribute("data-open") == ""
+    page.get_by_role("combobox").press("Escape")
+    page.wait_for_function("!document.querySelector('.cui-combobox').hasAttribute('data-open')")
+    assert root.get_attribute("data-open") is None
+
+
 def test_value_query_and_open_ownership_remain_independent(page):
     _load(page, _local_page())
     root = page.locator(".cui-combobox")

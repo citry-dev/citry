@@ -190,7 +190,7 @@ class CSkeleton(LibraryComponent):
             c-for="line in lines"
             class="cui-skeleton__line"
             data-citry-ui-part="line"
-            c-data-last="has_multiple_lines and line == lines[-1]"
+            c-data-last="'' if has_multiple_lines and line == lines[-1] else None"
           ></span>
         </c-if>
       </span>

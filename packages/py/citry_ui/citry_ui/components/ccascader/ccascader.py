@@ -458,8 +458,8 @@ class CInternalCascader(LibraryComponent):
             "popup_id": f"{root_id}-popup",
             "root_attrs": {
                 **cast("dict[str, object]", data["attrs"]),
-                "data-disabled": True if data["disabled"] else None,
-                "data-open": True if data["open"] else None,
+                "data-disabled": "" if data["disabled"] else None,
+                "data-open": "" if data["open"] else None,
                 "data-size": data["size"],
                 "data-variant": data["variant"],
             },
@@ -526,12 +526,12 @@ class CInternalCascaderOption(LibraryComponent):
             "aria-disabled": "true" if option.disabled else "false",
             "aria-expanded": ("true" if active else "false") if option.children else None,
             "aria-selected": "true" if selected else "false",
-            "data-active": True if active else None,
+            "data-active": "" if active else None,
             "data-citry-cascader-child-group": _group_id(kwargs.root_id, path) if option.children else None,
             "data-citry-cascader-parent": _item_id(kwargs.root_id, option.parent.path) if option.parent else None,
-            "data-disabled": True if option.disabled else None,
+            "data-disabled": "" if option.disabled else None,
             "data-level": kwargs.level,
-            "data-selected": True if selected else None,
+            "data-selected": "" if selected else None,
             "data-value": option.value,
         }
         return {

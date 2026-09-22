@@ -208,13 +208,13 @@ class CSidebar(LibraryComponent):
         c-id="root_id"
         c-aria-label="label"
         c-bind="attrs"
-        c-data-collapsed="collapsed"
+        c-data-collapsed="'' if collapsed else None"
         c-data-collapsible="collapsible"
-        c-data-has-header="has_header"
+        c-data-has-header="'' if has_header else None"
         c-data-side="side"
         c-data-variant="variant"
         c-data-size="size"
-        c-data-sticky="sticky"
+        c-data-sticky="'' if sticky else None"
         data-citry-ui-part="sidebar"
       >
         <button

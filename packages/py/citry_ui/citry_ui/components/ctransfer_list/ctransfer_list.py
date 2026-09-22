@@ -593,10 +593,10 @@ class CInternalTransferList(LibraryComponent):
         class="cui-transfer-list"
         c-bind="attrs"
         c-id="root_id"
-        c-data-required="True if required else None"
-        c-data-disabled="True if disabled else None"
-        c-data-available-empty="True if available_total == 0 else None"
-        c-data-chosen-empty="True if chosen_total == 0 else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-available-empty="'' if available_total == 0 else None"
+        c-data-chosen-empty="'' if chosen_total == 0 else None"
         c-data-size="size"
         c-aria-disabled="'true' if disabled else 'false'"
         data-citry-ui-part="transfer-list"
@@ -765,7 +765,7 @@ class CInternalTransferListItem(LibraryComponent):
                 **declaration.attrs,
                 "aria-disabled": "true" if declaration.disabled else None,
                 "aria-selected": "false",
-                "data-disabled": True if declaration.disabled else None,
+                "data-disabled": "" if declaration.disabled else None,
                 "data-value": declaration.value,
             },
             "content": item["content"],

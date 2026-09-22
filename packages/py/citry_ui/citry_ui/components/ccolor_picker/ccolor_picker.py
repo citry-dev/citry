@@ -223,9 +223,9 @@ class CColorPicker(LibraryComponent):
             **data,
             "root_attrs": {
                 **cast("dict[str, object]", data["attrs"]),
-                "data-disabled": True if data["disabled"] else None,
-                "data-readonly": True if data["readonly"] else None,
-                "data-open": True if data["open"] else None,
+                "data-disabled": "" if data["disabled"] else None,
+                "data-readonly": "" if data["readonly"] else None,
+                "data-open": "" if data["open"] else None,
                 "data-format": data["format"],
                 "data-size": data["size"],
                 "data-variant": data["variant"],

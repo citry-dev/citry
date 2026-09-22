@@ -199,7 +199,7 @@ class CDivider(LibraryComponent):
             c-data-variant="variant"
             c-data-size="size"
             c-data-inset="inset"
-            c-data-decorative="effective_decorative"
+            c-data-decorative="'' if effective_decorative else None"
             c-aria-hidden="decorative"
           />
         </c-if>
@@ -212,7 +212,7 @@ class CDivider(LibraryComponent):
             c-data-variant="variant"
             c-data-size="size"
             c-data-inset="inset"
-            c-data-decorative="effective_decorative"
+            c-data-decorative="'' if effective_decorative else None"
             c-role="vertical_role"
             c-aria-orientation="vertical_aria_orientation"
             c-aria-hidden="decorative"

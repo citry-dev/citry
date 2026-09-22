@@ -458,7 +458,7 @@ class CNativeSelect(LibraryComponent):
             "variant": variant,
             "size": size,
             "empty": empty,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "field_supports_required": ("true" if supports_required else "false") if field is not None else None,
             "field_supports_readonly": "false" if field is not None else None,
             "attrs": caller_attrs,
@@ -506,10 +506,10 @@ class CNativeSelect(LibraryComponent):
         c-aria-describedby="aria_describedby"
         c-aria-errormessage="aria_errormessage"
         c-autocomplete="autocomplete"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
-        c-data-empty="empty"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if empty else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"

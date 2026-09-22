@@ -400,7 +400,7 @@ class CNumberInput(LibraryComponent):
             "catalog_decrement_label": catalog["decrement_label"],
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "root_attrs": merge_root_attrs(root_attrs, kwargs.class_, kwargs.style),
             "input_attrs": input_attrs,
             "variant": variant,
@@ -459,11 +459,11 @@ class CNumberInput(LibraryComponent):
     template = """
       <div
         class="cui-number-input"
-        c-data-empty="value is None"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-empty="'' if value is None else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="root_attrs"

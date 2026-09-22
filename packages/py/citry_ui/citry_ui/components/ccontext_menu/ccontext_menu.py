@@ -404,8 +404,8 @@ class CContextMenu(LibraryComponent):
       <div
         class="cui-context-menu-host"
         c-id="root_id"
-        c-data-open="open"
-        c-data-disabled="disabled"
+        c-data-open="'' if open else None"
+        c-data-disabled="'' if disabled else None"
         c-data-size="size"
         c-bind="root_attrs"
         data-citry-context-menu-host

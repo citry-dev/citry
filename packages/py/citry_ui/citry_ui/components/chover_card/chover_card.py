@@ -291,9 +291,9 @@ class CHoverCard(LibraryComponent):
         <div
           class="cui-hover-card"
           c-id="hover_card_id"
-          c-data-open="open and not disabled"
+          c-data-open="'' if open and not disabled else None"
           c-data-placement="placement"
-          c-data-arrow="arrow"
+          c-data-arrow="'' if arrow else None"
           c-data-size="size"
           c-bind="attrs"
           popover="manual"

@@ -444,7 +444,7 @@ class CInternalFormCollection(LibraryComponent):
                 **kwargs.attrs,
                 "aria-describedby": kwargs.description_id if kwargs.description is not None else None,
                 "data-count": count,
-                "data-disabled": True if kwargs.disabled else None,
+                "data-disabled": "" if kwargs.disabled else None,
                 "data-size": kwargs.size,
             },
             **{
@@ -533,10 +533,10 @@ class CInternalFormCollectionItem(LibraryComponent):
             **item,
             "attrs": {
                 **declaration.attrs,
-                "data-disabled": True if disabled else None,
-                "data-citry-form-collection-item-disabled": True if declaration.disabled else None,
-                "data-first": True if index == 0 else None,
-                "data-last": True if index == count - 1 else None,
+                "data-disabled": "" if disabled else None,
+                "data-citry-form-collection-item-disabled": "" if declaration.disabled else None,
+                "data-first": "" if index == 0 else None,
+                "data-last": "" if index == count - 1 else None,
                 "data-value": declaration.value,
             },
             "value": declaration.value,

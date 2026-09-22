@@ -339,7 +339,7 @@ class CRadioGroup(LibraryComponent):
             "has_label": has_label,
             "labelledby": labelledby,
             "describedby": describedby,
-            "field_control": field_context is not None,
+            "field_control": "" if field_context is not None else None,
             "field_supports_required": "true" if field_context is not None else None,
             "field_supports_readonly": "false" if field_context is not None else None,
             "attrs": merge_root_attrs(attrs, kwargs.class_, kwargs.style),
@@ -389,9 +389,9 @@ class CRadioGroup(LibraryComponent):
         c-aria-invalid="'true' if invalid else None"
         c-aria-labelledby="labelledby"
         c-aria-describedby="describedby"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-orientation="orientation"
         c-data-variant="variant"
         c-data-size="size"
@@ -766,8 +766,8 @@ class CRadio(LibraryComponent):
     template = """
       <span
         class="cui-radio"
-        c-data-checked="checked"
-        c-data-disabled="effective_disabled"
+        c-data-checked="'' if checked else None"
+        c-data-disabled="'' if effective_disabled else None"
         c-data-value="value"
         c-bind="attrs"
         data-citry-ui-part="radio"

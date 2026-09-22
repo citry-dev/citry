@@ -640,8 +640,8 @@ class CDisclosure(LibraryComponent):
         c-data-variant="variant"
         c-data-size="size"
         c-data-state="'open' if open else 'closed'"
-        c-data-disabled="disabled"
-        c-data-indicator="indicator"
+        c-data-disabled="'' if disabled else None"
+        c-data-indicator="'' if indicator else None"
         c-data-indicator-pos="indicator_pos"
         c-bind="attrs"
         data-citry-disclosure-root
@@ -665,7 +665,7 @@ class CDisclosure(LibraryComponent):
               c-aria-expanded="'true' if open else 'false'"
               c-aria-controls="panel_id"
               c-data-state="'open' if open else 'closed'"
-              c-data-disabled="disabled"
+              c-data-disabled="'' if disabled else None"
               c-bind="trigger_attrs"
               data-citry-disclosure-trigger
               data-citry-ui-part="disclosure-trigger"

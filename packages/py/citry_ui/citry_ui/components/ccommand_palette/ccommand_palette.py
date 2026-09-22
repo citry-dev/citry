@@ -783,8 +783,8 @@ class CCommandPalette(LibraryComponent):
           c-id="dialog_id"
           c-open="open"
           c-aria-labelledby="title_id"
-          c-data-open="open"
-          c-data-disabled="disabled"
+          c-data-open="'' if open else None"
+          c-data-disabled="'' if disabled else None"
           c-data-size="size"
           c-bind="attrs"
           data-citry-command-palette-root
@@ -856,7 +856,7 @@ class CCommandPalette(LibraryComponent):
                     c-aria-describedby="entry.command.description_id"
                     c-aria-disabled="'true' if entry.command.disabled else None"
                     c-data-value="entry.command.value"
-                    c-data-disabled="entry.command.disabled"
+                    c-data-disabled="'' if entry.command.disabled else None"
                     c-data-intent="entry.command.intent"
                     c-data-region-index="entry.region_index"
                     data-citry-ui-part="command-palette-command"
@@ -947,7 +947,7 @@ class CCommandPalette(LibraryComponent):
                       c-aria-describedby="command.description_id"
                       c-aria-disabled="'true' if command.disabled else None"
                       c-data-value="command.value"
-                      c-data-disabled="command.disabled"
+                      c-data-disabled="'' if command.disabled else None"
                       c-data-intent="command.intent"
                       data-citry-ui-part="command-palette-command"
                     >

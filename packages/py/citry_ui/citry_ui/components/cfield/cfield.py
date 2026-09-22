@@ -164,7 +164,7 @@ class CField(LibraryComponent):
             "aria-invalid": "true" if kwargs.invalid else None,
             "aria-describedby": described_by,
             "aria-errormessage": error_id if kwargs.invalid and has_error else None,
-            FIELD_CONTROL_MARKER: True,
+            FIELD_CONTROL_MARKER: "",
         }
         self.provide(
             FIELD_CONTEXT_KEY,
@@ -247,10 +247,10 @@ class CField(LibraryComponent):
       <div
         class="cui-field"
         c-id="field_id"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-orientation="orientation"
         c-data-density="density"
         data-citry-field-root
@@ -659,7 +659,7 @@ class CInput(LibraryComponent):
             "placeholder": kwargs.placeholder,
             "variant": kwargs.variant,
             "size": kwargs.size,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "attrs": caller_attrs,
         }
 
@@ -717,10 +717,10 @@ class CInput(LibraryComponent):
         c-autocomplete="autocomplete"
         c-inputmode="inputmode"
         c-placeholder="placeholder"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"
