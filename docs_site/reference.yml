@@ -351,6 +351,7 @@ categories:
     entries:
       - { key: "$component", anchor: component, role: "js:function" }
       - { key: onServerRender, anchor: on-server-render, role: "js:function" }
+      - { key: onEvent, anchor: on-server-render-on-event, role: "js:function" }
       - { key: Citry.vue, anchor: citry-vue, role: "js:data" }
       - { key: "$state", anchor: state, role: "js:data" }
       - { key: "$loading", anchor: loading, role: "js:function" }
