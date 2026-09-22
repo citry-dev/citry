@@ -1462,6 +1462,7 @@
                   [...l.style]
                     .filter((e) => !["anchor-name", "left", "top"].includes(e))
                     .forEach((e) => l.style.removeProperty(e)),
+                  syncPointAnchor(),
                   l.style.setProperty("anchor-name", n.pointAnchorName),
                   (R ?? (v.isOpen() ? O : null))
                     ? ae(R ?? O)
