@@ -253,8 +253,16 @@ def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_st
         citry = engine
         State = PageState
         template = '<main><button id="refresh" @c-click="refresh">{{ count }}</button></main>'
-        js = """$component({onServerRender({component, revision}){
-          component.$onEvent('ping', detail => (globalThis.__vueEventSeen ||= []).push({revision, detail}));
+        js = """$component({onServerRender({revision, onEvent}){
+          (globalThis.__vueCallbackTimeline ||= []).push(['run', revision]);
+          const stop = onEvent('ping', detail => {
+            (globalThis.__vueEventSeen ||= []).push({revision, detail});
+            globalThis.__vueCallbackTimeline.push(['event', revision, detail]);
+          });
+          return ()=>{
+            stop();
+            globalThis.__vueCallbackTimeline.push(['cleanup', revision]);
+          };
         }});"""
 
         def template_data(self, kwargs, slots):
@@ -313,6 +321,15 @@ def test_vue_events_callback_subscriptions_and_root_lifecycle_do_not_stale_or_st
     assert page.evaluate("globalThis.__vueEventSeen") == [
         {"revision": 1, "detail": {"count": 1}},
         {"revision": 2, "detail": {"count": 2}},
+    ]
+    assert page.evaluate("globalThis.__vueCallbackTimeline") == [
+        ["run", 0],
+        ["cleanup", 0],
+        ["run", 1],
+        ["event", 1, {"count": 1}],
+        ["cleanup", 1],
+        ["run", 2],
+        ["event", 2, {"count": 2}],
     ]
     lifecycle = page.evaluate("globalThis.__vueEventLifecycle")
     assert [entry["name"] for entry in lifecycle] == [

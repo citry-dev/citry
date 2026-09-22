@@ -45,17 +45,21 @@ plain bindings object or `undefined` synchronously.
 <h3 class="doc-heading" id="on-server-render"><code>onServerRender</code></h3>
 
 Add `onServerRender` when work must run after the initial mount and again after
-Citry updates this component in an accepted server render:
+an accepted server render that updates this component:
 
 ```js
 $component({
-  onServerRender({ component, revision }) {
+  onServerRender({ component, revision, onEvent }) {
     const root = component.$refs.root;
     if (!(root instanceof HTMLElement)) return;
 
     const controller = connectWidget(root);
+    const stop = onEvent("cart:changed", (detail) => refreshBadge(detail));
     console.log("rendered revision", revision);
-    return () => controller.disconnect();
+    return () => {
+      stop();
+      controller.disconnect();
+    };
   },
 });
 ```
@@ -70,12 +74,22 @@ The component template declares the referenced element:
 | --- | --- |
 | `component` | The live Vue public instance for this Citry component. |
 | `revision` | The accepted server revision visible to the component. |
+| [`onEvent`](#on-server-render-on-event) | A lifecycle-scoped function that subscribes to a server-dispatched event for this component instance and returns an unsubscribe function. |
+
+<h4 class="doc-heading" id="on-server-render-on-event"><code>onEvent</code> in the callback context</h4>
+
+The `onEvent` member belongs to the `onServerRender` callback context. It
+follows the component occurrence across accepted server renders and is cleaned
+up with that callback's cleanup. It does not require a component `Events`
+declaration. This lifecycle-scoped helper is separate from
+[`$onEvent`](#on-event), which is the instance API guarded by an `Events`
+declaration.
 
 The callback runs when this component mounts and after an accepted server
-render updates it. An unrelated Vue update does not call it. The callback may
-return a cleanup function or `undefined`. Citry runs cleanup before the next
-callback and when the component unmounts. A different return value is an
-error.
+render that updates this component. An unrelated Vue update does not call it.
+The callback may return a cleanup function or `undefined`. Citry runs cleanup
+before the next callback and when the component unmounts. A different return
+value is an error.
 
 Effects registered synchronously inside the callback run in a Vue effect scope
 that Citry stops at the same time. Asynchronous continuations must arrange
@@ -84,8 +98,8 @@ their own cleanup.
 The callback form of `$component` is shorthand for `onServerRender`:
 
 ```js
-$component(({ component, revision }) => {
-  console.log(component, revision);
+$component(({ component, revision, onEvent }) => {
+  console.log(component, revision, onEvent);
 });
 ```
 

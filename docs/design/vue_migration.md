@@ -358,11 +358,11 @@ does not promise atomic observations across components to synchronous watchers.
 ## Browser authoring contracts
 
 Use native Vue Options in `$component({...})`, with `Citry.vue` exposing the
-exact bundled runtime's Composition API. `onServerRender({component, revision})`
+exact bundled runtime's Composition API. `onServerRender({component, revision, onEvent})`
 is Citry's integration callback and may return cleanup. Native data/setup,
 methods, computed values and lifecycle hooks own ordinary local state.
 `$component(callback)` is the shorthand for registering that same
-`onServerRender` callback, with the same two context fields and cleanup rules.
+`onServerRender` callback, with the same three context fields and cleanup rules.
 
 Python `js_data` supplies reactive instance values. Collisions with local data
 or declared Vue props must be explicit errors, not silently resolved by order.
@@ -1319,7 +1319,7 @@ unknown record even though the native Vue instance supports reactive member
 assignment. Its projected type must preserve known `JsData`/Options members
 and distinguish the writable instance from readonly nested State values.
 Tests should check actual generated declarations and delegated diagnostics,
-not only that the callback's two context-field names are recognized.
+not only that the callback's three context-field names are recognized.
 
 The typing implementation is testing a declaration bundle generated from the
 pinned official Vue types. The development-only
@@ -3673,7 +3673,7 @@ Those corrections now pass six focused cases, including a real fragment. The
 exporter reads the exact generated bootstrap framing or the inert fragment
 record, then exports definitions and owned script/style assets. The real browser
 run advanced beyond asset loading and found a remaining landing callback using
-the prior context shape. That docs callback now receives `{component, revision}`
+the prior context shape. That docs callback now receives `{component, revision, onEvent}`
 and accesses its single element root through `component.$el`; no runtime API
 change was needed. Browser verification and independent docs review continue.
 The frozen docs startup stage now passes the real Chromium landing interaction
@@ -4314,7 +4314,8 @@ uses JavaScript syntax and lexical scope to collect public names from Options
 props, methods, computed properties, inject entries, and object returns from
 data/setup. Python analysis, the checker and LSP consume these facts and their
 explicit unknown-section state. The callback-context and i18n consumers still
-need final verification against the actual two-field `onServerRender` contract.
+need final verification against the actual three-field `onServerRender`
+contract.
 
 Each known name retains its origin and exact source position for diagnostics
 and navigation. A computed
@@ -4350,9 +4351,9 @@ installed plugin context names.
 The proposed native result contains authenticated helper call/argument spans,
 free references, public-name records, section states, callback-context bindings,
 and component-instance member references. `onServerRender` bindings expose
-`component` and `revision`, including local aliases and resolved reference
-spans. Retire the unused callback scope-write analysis rather than carrying it
-into this model.
+`component`, `revision`, and `onEvent`, including local aliases and resolved
+reference spans. Retire the unused callback scope-write analysis rather than
+carrying it into this model.
 
 Prior art also exposed two syntax authorities: Rust's OXC visitor recognizes
 the root-unresolved `$component` helper, while

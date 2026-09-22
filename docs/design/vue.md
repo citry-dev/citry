@@ -402,7 +402,8 @@ than parse JavaScript patterns again in Python.
 
 `$component({...})` defines Vue Options. The template namespace includes proven
 keys returned by `data()` and `setup()`, plus `methods`, `computed`, and declared
-`props`. A bare `$component(callback)` and `onServerRender({component, revision})`
+`props`. A bare `$component(callback)` and
+`onServerRender({component, revision, onEvent})`
 are post-render callbacks and introduce no template bindings. Their parameters
 must not be confused with Vue's native `data` or `setup` parameters.
 
@@ -2308,7 +2309,8 @@ global spelling `Vue.ref` remains possible, but one connected application must
 use one shared runtime.
 
 A retained bare callback runs once after initial mount and once after each
-accepted server render, never from a generic Vue `onUpdated` hook. Other current
+accepted server render that updates its component, never from a generic Vue
+`onUpdated` hook. Other current
 triggers require a separate audit. Vue `setup()` and `data()` run once for the
 component lifetime; server-revision cleanup is a separate lifecycle. Create a
 fresh detached Vue `effectScope` for each callback run. Stop the prior scope and

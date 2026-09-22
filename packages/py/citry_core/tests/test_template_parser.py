@@ -114,9 +114,9 @@ def test_browser_analysis_exposes_oxc_free_references() -> None:
 def test_component_source_analysis_exposes_only_runtime_initializer_facts() -> None:
     source = """
 const outside = missingOutside;
-$component({ onServerRender({ component }) {
+$component({ onServerRender({ component, onEvent: listen }) {
   component;
-  console.log(missingInside);
+  listen("cart:changed", detail => console.log(detail, missingInside));
 } });
 """
 
@@ -124,7 +124,10 @@ $component({ onServerRender({ component }) {
 
     assert valid
     assert [name for name, _start, _end in references] == ["console", "missingInside"]
-    assert [(name, local) for name, local, _start, _end, _references in bindings] == [("component", "component")]
+    assert [(name, local) for name, local, _start, _end, _references in bindings] == [
+        ("component", "component"),
+        ("onEvent", "listen"),
+    ]
     assert all(references for _name, _local, _start, _end, references in bindings)
     assert len(calls) == 1
     assert public_names == []

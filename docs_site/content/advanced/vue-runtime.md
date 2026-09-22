@@ -46,7 +46,7 @@ from the pinned runtime are available through `Citry.vue`.
 ## React to accepted server renders
 
 Use the `onServerRender` option for work that must run after initial mount and
-after an accepted server render updates that component:
+after an accepted server render that updates this component:
 
 ```js
 $component({

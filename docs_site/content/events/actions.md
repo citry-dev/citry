@@ -38,6 +38,8 @@ the response changes State or the page.
 first connected element in its current Vue subtree, falling back to its
 connected Vue root node when the subtree has no element. A multi-root component
 uses one canonical carrier, so a document listener receives it once.
+Dispatch is targeted to the component occurrence that invoked the server
+handler; it does not select an arbitrary component or CSS target.
 
 ```python
 return actions.Dispatch("task-row:saved", {"title": title})

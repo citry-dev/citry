@@ -7817,6 +7817,12 @@ _COMPONENT_CONTEXT_SPECS = {
         "The committed server-render revision.",
         f"{_BROWSER_APIS_URL}#component",
     ),
+    "onEvent": _BrowserApiSpec(
+        "parameter",
+        "(name: string, callback: (detail: unknown) => void) => CitryCleanup",
+        "Subscribe to a server-dispatched event for this component instance.",
+        f"{_BROWSER_APIS_URL}#on-server-render-on-event",
+    ),
 }
 
 
@@ -8108,6 +8114,7 @@ def _browser_preamble(
             " * @typedef {Object} CitryComponentContext",
             " * @property {CitryComponentPublicInstance} component",
             " * @property {number} revision",
+            " * @property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} onEvent",
             " */",
             "/** @callback CitryComponentSetup",
             " * @param {Readonly<CitryClientProps>} props",

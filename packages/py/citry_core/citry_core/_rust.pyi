@@ -25,6 +25,7 @@
 #   This matches how typeshed defines modules.
 
 from collections.abc import Mapping
+from typing import Literal
 
 ########################################################
 # Internationalization
@@ -469,7 +470,15 @@ class template_parser:
     ) -> tuple[
         bool,
         list[tuple[str, int, int]],
-        list[tuple[str, str, int, int, list[tuple[int, int]]]],
+        list[
+            tuple[
+                Literal["component", "revision", "onEvent"],
+                str,
+                int,
+                int,
+                list[tuple[int, int]],
+            ]
+        ],
         list[tuple[int, int, int, int, int, int | None, int | None]],
         list[
             tuple[str, str, str, int, int, int | None, int | None, bool | None, bool | None, bool | None, str | None]

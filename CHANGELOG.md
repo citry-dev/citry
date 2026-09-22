@@ -15,8 +15,9 @@
   unsupported-helper diagnostic. `Component.js_data()` seeds reactive Vue
   instance members, `$component({...})` accepts supported Vue Options,
   `Citry.vue` exposes Composition API helpers, and
-  `onServerRender({ component, revision })` runs after mount and each accepted
-  server revision.
+  `onServerRender({ component, revision, onEvent })` runs after mount and each
+  accepted server render that updates this component. `onEvent` subscribes to
+  events for that component instance and returns an unsubscribe function.
 - Events renders can address a component occurrence with `render:<id>` or a
   caller-relative `<c-mark name="...">` with `mark:<name>`. A contiguous group
   can update several independent targets atomically.
@@ -28,7 +29,8 @@
 - **Breaking:** Alpine, its morph plugin, Citry's browser ownership graph, and
   the public Alpine integration APIs are removed. Replace `x-*` expressions
   with Vue syntax and migrate `$component` initializers to Vue Options or
-  `onServerRender`; the callback now receives only `component` and `revision`.
+  `onServerRender`; the callback now receives only `component`, `revision`, and
+  `onEvent`.
 - **Breaking:** addressed Events renders no longer accept arbitrary CSS
   selectors or non-`morph` swap modes. Target a component occurrence or an
   explicit marker. Several matches for one target are no longer supported.

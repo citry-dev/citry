@@ -95,7 +95,7 @@ $component({
 ## React after a server render
 
 Use `onServerRender` when an integration must inspect the updated DOM or start
-work again after Citry updates this component in an accepted server render:
+work again after an accepted server render that updates this component:
 
 ```js
 $component({

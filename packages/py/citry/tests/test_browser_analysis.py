@@ -626,10 +626,10 @@ def test_unknown_vue_lint_uses_native_names_and_respects_unknown_namespace() -> 
 def test_component_source_analysis_keeps_initializer_bindings_and_free_names_separate():
     source = """
 const outside = missingOutside;
-$component({ onServerRender({ component: current, revision, data }) {
+$component({ onServerRender({ component: current, revision, onEvent: listen, data }) {
   const local = data.ready;
   current.ready = local;
-  console.log(revision, missingInside);
+  listen("cart:changed", detail => console.log(revision, detail, missingInside));
 } });
 """
 
@@ -639,6 +639,7 @@ $component({ onServerRender({ component: current, revision, data }) {
     assert [(item.name, item.local_name) for item in analysis.bindings] == [
         ("component", "current"),
         ("revision", "revision"),
+        ("onEvent", "listen"),
     ]
     assert [item.name for item in analysis.references] == ["console", "missingInside"]
 

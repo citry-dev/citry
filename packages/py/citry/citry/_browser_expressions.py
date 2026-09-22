@@ -47,6 +47,7 @@ BrowserExpressionMode = Literal["expression", "statement", "loop", "binding-patt
 BrowserExpressionEvaluator = Literal["normal", "raw"]
 BrowserExpressionTransform = Literal["identity", "citry-args", "v-model", "v-for", "dynamic-slot"]
 BrowserExpressionHost = Literal["vue", "citry-event-args", "citry-i18n-values"]
+BrowserComponentContextName = Literal["component", "revision", "onEvent"]
 SERVER_EVENT_CALL_NAMES = frozenset({"$error", "$loading", "$sendEvent", "error", "loading", "sendEvent"})
 
 
@@ -230,7 +231,7 @@ class BrowserDeclarativeEvent:
 class BrowserComponentBinding:
     """One local name destructured from the `$component` context."""
 
-    name: str
+    name: BrowserComponentContextName
     local_name: str
     start_index: int
     end_index: int
@@ -2733,6 +2734,7 @@ __all__ = [
     "BrowserCompletion",
     "BrowserComponentBinding",
     "BrowserComponentCall",
+    "BrowserComponentContextName",
     "BrowserComponentMember",
     "BrowserComponentMemberReference",
     "BrowserComponentPropContribution",

@@ -1190,10 +1190,11 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     js_source = (
         "$component({\n"
         "  props: { label: { type: String, required: true }, page: { type: Number, default: null } },\n"
-        "  onServerRender({ component: current, revision }) {\n"
+        "  onServerRender({ component: current, revision, onEvent: listen }) {\n"
         "    current.title.toUpperCase(); current.count.toFixed();\n"
         "    current.label.toUpperCase(); current.$state.progress.toFixed();\n"
         "    current.$sendEvent('save'); revision.toFixed();\n"
+        "    listen('cart:changed', detail => console.log(detail));\n"
         "  },\n"
         "});\n"
     )
@@ -1341,6 +1342,10 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     assert "CitryDeepReadonly<number>" in js_projection.source
     assert "function((" not in js_projection.source
     assert "/** @typedef {Object} CitryEventError" in js_projection.source
+    assert (
+        "@property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} onEvent"
+        in js_projection.source
+    )
     assert "function $component(definition)" in js_projection.source
     assert "function $provide(key, value)" not in js_projection.source
     assert "secret" not in js_projection.source
@@ -1404,13 +1409,27 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     assert "https://citry.dev/reference/browser-apis/#component" in context_hover.contents.value
     send_event_context_hover = hover(
         javascript,
-        _position(js_source, "revision })", len("rev")),
+        _position(js_source, "revision, onEvent", len("rev")),
         project,
         documents,
     )
     assert send_event_context_hover is not None
     assert "(parameter) revision" in send_event_context_hover.contents.value
     assert "https://citry.dev/reference/browser-apis/#component" in send_event_context_hover.contents.value
+    on_event_context_hover = hover(
+        javascript,
+        _position(js_source, "onEvent: listen", len("onEvent: lis")),
+        project,
+        documents,
+    )
+    assert on_event_context_hover is not None
+    assert (
+        "(parameter) listen: (name: string, callback: (detail: unknown) => void) => CitryCleanup"
+        in on_event_context_hover.contents.value
+    )
+    assert (
+        "https://citry.dev/reference/browser-apis/#on-server-render-on-event" in on_event_context_hover.contents.value
+    )
     props_projection = browser_projection(
         javascript,
         _position(js_source, "current.label", len("current.la")),
@@ -1659,7 +1678,11 @@ def test_callback_projection_delegates_closed_instance_and_official_vue_types(tm
         brokenComputed: 42,
       },
       inject: ['theme'],
-      onServerRender({ component: current }) {
+      onServerRender({ component: current, onEvent }) {
+        const stop = onEvent('cart:changed', detail => {
+          JSON.stringify(detail);
+        });
+        stop();
         current.title = 'changed';
         current.local = 2;
         current.setupValue = 2;

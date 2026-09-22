@@ -835,7 +835,7 @@ fn component_context_bindings(params: &FormalParameters<'_>) -> Vec<ComponentBin
         .iter()
         .filter_map(|property| {
             let name = property.key.static_name()?;
-            if !matches!(name.as_ref(), "component" | "revision") {
+            if !matches!(name.as_ref(), "component" | "revision" | "onEvent") {
                 return None;
             }
             let identifier = property.value.get_binding_identifier()?;
@@ -1537,10 +1537,10 @@ mod tests {
     fn component_analysis_reports_context_bindings_and_only_initializer_free_names() {
         let source = r#"
 const outside = missingOutside;
-$component({ onServerRender({ component: current, revision, data }) {
+$component({ onServerRender({ component: current, revision, onEvent: listen, data }) {
   const local = data.title;
   current.ready = local;
-  console.log(revision, missingInside);
+  listen("cart:changed", detail => console.log(revision, detail, missingInside));
 } });
 "#;
 
@@ -1553,7 +1553,11 @@ $component({ onServerRender({ component: current, revision, data }) {
                 .iter()
                 .map(|binding| (binding.name.as_str(), binding.local_name.as_str()))
                 .collect::<Vec<_>>(),
-            [("component", "current"), ("revision", "revision")]
+            [
+                ("component", "current"),
+                ("revision", "revision"),
+                ("onEvent", "listen"),
+            ]
         );
         assert!(analysis
             .bindings
@@ -1761,7 +1765,7 @@ $component /* kept */ ({
     #[test]
     fn only_on_server_render_authenticates_context_aliases() {
         let analysis = analyze_component_source(
-            "$component({ onServerRender({ component: direct }) { direct.x } }); $component({ onServerRender({ component: current }) { current.z } })",
+            "$component({ init({ onEvent: ignored }) { ignored(\"init\", () => {}); } }); $component({ onServerRender({ component: direct, onEvent: listen }) { direct.x; listen(\"server\", () => {}); } }); $component({ onServerRender({ component: current }) { current.z } })",
         );
         assert_eq!(
             analysis
@@ -1769,14 +1773,14 @@ $component /* kept */ ({
                 .iter()
                 .map(|binding| binding.local_name.as_str())
                 .collect::<Vec<_>>(),
-            ["direct", "current"]
+            ["direct", "listen", "current"]
         );
     }
 
     #[test]
     fn server_callback_component_alias_members_are_scope_authenticated() {
         let analysis = analyze_component_source(
-            "$component({ onServerRender({ component: instance, revision }) { instance.$i18n.resolve(revision); { const instance = other; instance.$i18n; } } })",
+            "$component({ onServerRender({ component: instance, revision, onEvent: subscribe }) { instance.$i18n.resolve(revision); { const instance = other; instance.$i18n; } } })",
         );
 
         assert_eq!(
@@ -1785,7 +1789,11 @@ $component /* kept */ ({
                 .iter()
                 .map(|binding| (binding.name.as_str(), binding.local_name.as_str()))
                 .collect::<Vec<_>>(),
-            [("component", "instance"), ("revision", "revision")]
+            [
+                ("component", "instance"),
+                ("revision", "revision"),
+                ("onEvent", "subscribe"),
+            ]
         );
         assert_eq!(
             analysis
