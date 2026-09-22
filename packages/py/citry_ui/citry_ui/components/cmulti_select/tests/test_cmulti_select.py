@@ -94,8 +94,14 @@ def test_progressive_native_proxy_and_custom_combobox_share_values() -> None:
     assert 'aria-expanded="false"' in control
     assert 'aria-multiselectable="true"' in listbox
     assert re.search(r'<select[^>]+name="planet"[^>]+multiple[^>]*>', html)
-    assert re.search(r'<option value="earth" selected>Earth</option>', html)
-    assert re.search(r'<option value="mars" selected>Mars</option>', html)
+    assert re.search(
+        r'<option(?=[^>]*\bvalue="earth")(?=[^>]*\bselected(?:\s|=|>))[^>]*>Earth</option>',
+        html,
+    )
+    assert re.search(
+        r'<option(?=[^>]*\bvalue="mars")(?=[^>]*\bselected(?:\s|=|>))[^>]*>Mars</option>',
+        html,
+    )
     assert html.count('data-citry-ui-part="chip"') == 2
 
 

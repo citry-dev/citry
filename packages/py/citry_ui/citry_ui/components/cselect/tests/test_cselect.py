@@ -91,7 +91,10 @@ def test_progressive_native_proxy_and_custom_combobox_share_exact_value() -> Non
     assert 'role="listbox"' in listbox
     assert 'aria-label="Planet"' in listbox
     assert re.search(r'<select[^>]+name="planet"[^>]*>', html)
-    assert re.search(r'<option value="earth" selected>Earth</option>', html)
+    assert re.search(
+        r'<option(?=[^>]*\bvalue="earth")(?=[^>]*\bselected(?:\s|=|>))[^>]*>Earth</option>',
+        html,
+    )
     assert "tabindex" not in re.search(r"<select[^>]+data-cui-select-native[^>]*>", html).group(0)
 
 
