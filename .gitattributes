@@ -54,6 +54,8 @@ packages/py/citry_core/pyproject.toml text eol=lf
 
 # Vendored compiler declarations and snapshots preserve upstream whitespace.
 packages/py/citry_lsp/citry_lsp/types/node_modules/** whitespace=-blank-at-eol,-blank-at-eof
+
+# Vendored Vize snapshots preserve upstream whitespace.
 third_party/rust/vize_atelier_core/**/*.snap whitespace=-blank-at-eol
 
 # The VS Code extension bundle is generated and minified. JavaScript template
