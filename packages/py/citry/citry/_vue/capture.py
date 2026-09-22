@@ -22,7 +22,7 @@ from citry.util.html import Markup
 from .direct import DirectProjectionRender, bind_nested_template, wrap_python_composition_result
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Iterable, Iterator, Mapping
 
     from citry.assets import HasHtml
     from citry.citry_context import CitryContext
@@ -99,7 +99,9 @@ def vue_owned_native_properties(
     ``v-bind`` and dynamic arguments are conservative because their runtime
     property is not known at capture time.
     """
-    attrs = tuple(authored_attrs) if authored_attrs is not None else ()
+    attrs: tuple[object, ...] = (
+        () if authored_attrs is None else tuple(cast("Iterable[object]", authored_attrs))
+    )
     input_type: str | None = None
     dynamic_input_type = has_spread
     for attribute in attrs:
@@ -111,7 +113,10 @@ def vue_owned_native_properties(
             (":type.", "v-bind:type.", "v-bind.", "v-bind:[", ":[")
         ):
             dynamic_input_type = True
-    data_names = tuple(data_attrs.keys()) if hasattr(data_attrs, "keys") else tuple(data_attrs or ())
+    if hasattr(data_attrs, "keys"):
+        data_names: tuple[object, ...] = tuple(cast("Mapping[object, object]", data_attrs).keys())
+    else:
+        data_names = tuple(cast("Iterable[object]", data_attrs or ()))
     if any(str(name).casefold().removeprefix("c-") == "type" for name in data_names):
         dynamic_input_type = True
     if dynamic_input_type:
@@ -142,8 +147,8 @@ def vue_owned_native_properties(
             (":selected.", "v-bind:selected.")
         ):
             owned.add("selected")
-    for name in data_names:
-        normalized = str(name).casefold().removeprefix("c-")
+    for data_name in data_names:
+        normalized = str(data_name).casefold().removeprefix("c-")
         if normalized == "value":
             owned.add("value" if tag.casefold() == "option" else ("selected" if "selected" in available else "value"))
         elif normalized == "checked":
@@ -155,7 +160,7 @@ def vue_owned_native_properties(
 
 def vue_owned_native_marker(properties: object) -> str:
     """Serialize the private Vue ownership directive for trusted compiler output."""
-    values = tuple(sorted(set(properties) & _NATIVE_PROPERTIES))
+    values: tuple[str, ...] = tuple(sorted(set(cast("Iterable[str]", properties)) & _NATIVE_PROPERTIES))
     expression = (
         "[]"
         if not values

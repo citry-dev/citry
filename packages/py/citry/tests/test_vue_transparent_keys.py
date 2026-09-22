@@ -195,11 +195,7 @@ def test_keyed_transparent_slot_identity_is_independent_of_root_occurrence() -> 
         root = next(item for item in assembly.view.occurrences if item.id == root_id)
         template = assembly.compile_inputs[root.definition_id].template
         slot_ids = tuple(re.findall(r"citrySlot[0-9a-f]+", template))
-        children = tuple(
-            item.placement_key
-            for item in assembly.view.occurrences
-            if item.type_key == Child.class_id
-        )
+        children = tuple(item.placement_key for item in assembly.view.occurrences if item.type_key == Child.class_id)
         assert all(placement_key is not None for placement_key in children)
         return slot_ids, tuple(placement_key for placement_key in children if placement_key is not None)
 

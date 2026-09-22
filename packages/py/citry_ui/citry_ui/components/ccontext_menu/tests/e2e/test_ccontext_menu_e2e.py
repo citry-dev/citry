@@ -1587,9 +1587,7 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serv
     assert not any(error.startswith("[pageerror]") for error in errors)
 
 
-def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanly(
-    page, serve_citry_ui_live
-) -> None:
+def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanly(page, serve_citry_ui_live) -> None:
     app, html = _reordered_context_menu_page()
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)

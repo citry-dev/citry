@@ -7,7 +7,7 @@ import json
 import math
 import re
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
@@ -261,10 +261,11 @@ _AUTHORED_VUE_BINDING = re.compile(r"^(?:v-|:|@|#)")
 
 def _has_authored_vue_binding(attributes: object) -> bool:
     """Return whether structured attributes contain an authored Vue binding."""
+    candidate_attributes: tuple[object, ...] = tuple(cast("Iterable[object]", attributes or ()))
     return any(
         getattr(attribute, "origin", None) == "source"
         and _AUTHORED_VUE_BINDING.match(str(getattr(attribute, "name", "")))
-        for attribute in tuple(attributes or ())
+        for attribute in candidate_attributes
     )
 
 
@@ -895,7 +896,7 @@ def assemble_typed_render(
                     if lexical_owner is None:
                         raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
                     relative_receiver_path = receiver_placement_path(receiver_owner, lexical_owner)
-                    source_key = (
+                    source_key: tuple[object, ...] = (
                         occurrence_types[occurrence_id],
                         fill_source.kind,
                         part.source,
