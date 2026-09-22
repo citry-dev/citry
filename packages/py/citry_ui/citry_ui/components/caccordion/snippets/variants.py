@@ -17,11 +17,11 @@ class AccordionVariants(Component):
           <article>
             <h2>{{ variant }}</h2>
             <c-CAccordion #c-key="variant" c-variant="variant" value="rain">
-              <c-CAccordionItem value="rain">
+              <c-CAccordionItem #c-key="f'{variant}:rain'" value="rain">
                 <c-fill name="title">Rainfall</c-fill>
                 <c-fill name="default">Frequent mist keeps the forest green.</c-fill>
               </c-CAccordionItem>
-              <c-CAccordionItem value="light">
+              <c-CAccordionItem #c-key="f'{variant}:light'" value="light">
                 <c-fill name="title">Filtered light</c-fill>
                 <c-fill name="default">Sunflecks move across the understory.</c-fill>
               </c-CAccordionItem>
@@ -35,7 +35,7 @@ class AccordionVariants(Component):
               <div>
                 <h3>{{ size }}</h3>
                 <c-CAccordion #c-key="size" c-size="size" value="moss" variant="soft">
-                  <c-CAccordionItem value="moss">
+                  <c-CAccordionItem #c-key="f'{size}:moss'" value="moss">
                     <c-fill name="title">Moss cover</c-fill>
                     <c-fill name="default">Soft ground holds overnight rain.</c-fill>
                   </c-CAccordionItem>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import xml.etree.ElementTree as ET
 from collections import UserDict
 from dataclasses import replace
@@ -130,6 +131,26 @@ def test_same_type_native_slot_receivers_share_reusable_definition() -> None:
 
     assert len(cards) == 2
     assert cards[0].definition_id == cards[1].definition_id
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "citry_ui.components.csplitter.snippets.vertical_nested",
+        "citry_ui.components.ctabs.snippets.nested_tabs",
+    ],
+)
+def test_nested_ui_preview_slot_sites_are_assembled_without_collisions(module_name: str) -> None:
+    preview = importlib.import_module(module_name).preview
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(preview),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+
+    assert assembly.view.root_id
+    assert assembly.compile_inputs
 
 
 def test_ctabs_transparent_projection_puts_nested_calls_in_physical_definition() -> None:

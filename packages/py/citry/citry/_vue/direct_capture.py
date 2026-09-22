@@ -918,7 +918,7 @@ def assemble_typed_render(
                     # projected into another definition, but it would make
                     # ordinary instances of the same component produce
                     # occurrence-specific definitions.
-                    if relative_receiver_path is not None and receiver_owner != occurrence_id:
+                    if relative_receiver_path is not None and (receiver_owner != occurrence_id or placement_route):
                         source_key = (*source_key, relative_receiver_path)
                     site_identity = (source_key, placement_route)
                     site_index = slot_site_counts[site_identity]

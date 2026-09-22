@@ -15,9 +15,9 @@ class SkeletonList(Component):
       <div class="skeleton-list" aria-label="Loading specimen index" aria-busy="true">
         <c-for each="item in items">
           <c-CRow #c-key="item" c-gap="'sm'" c-align="'center'">
-            <c-CSkeleton kind="circle" width="2.5rem" />
-            <c-CSkeleton kind="text" c-lines="2" c-last_line_width="f'{45 + item * 8}%'" />
-            <c-CSkeleton width="3.5rem" height="1.5rem" />
+            <c-CSkeleton #c-key="f'{item}:icon'" kind="circle" width="2.5rem" />
+            <c-CSkeleton #c-key="f'{item}:text'" kind="text" c-lines="2" c-last_line_width="f'{45 + item * 8}%'" />
+            <c-CSkeleton #c-key="f'{item}:badge'" width="3.5rem" height="1.5rem" />
           </c-CRow>
         </c-for>
       </div>
