@@ -35,10 +35,10 @@ class PaletteLayers(Component):
               <div ref="paletteOwner">
                 <c-CCommandPalette
                   label="Deployment workflow commands"
-                c-entries="commands"
-                :open="paletteOpen" :onOpenChange="(value)=>paletteOpen=value" :onAction="(value)=>{
-                    if (value==='show-details') popoverOpen=true;
-                  }"
+                  c-entries="commands"
+                  :open="paletteOpen"
+                  :onOpenChange="(value) => paletteOpen = value"
+                  :onAction="handlePaletteAction"
                 >
                   <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                     <c-CButton
@@ -50,7 +50,8 @@ class PaletteLayers(Component):
               </div>
 
               <c-CPopover
-                :open="popoverOpen" :onOpenChange="(value)=>popoverOpen=value"
+                :open="popoverOpen"
+                :onOpenChange="(value) => popoverOpen = value"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton variant="outline" c-attrs="activator_attrs">Details anchor</c-CButton>
@@ -60,9 +61,11 @@ class PaletteLayers(Component):
               </c-CPopover>
               <button
                 type="button"
-                @click="$refs.paletteOwner.remove(); removed=true"
+                @click="removePaletteOwner"
                 v-show="!removed"
-              >Remove palette owner</button>
+              >
+                Remove palette owner
+              </button>
               <output v-text="removed ? 'Palette owner removed' : 'Palette owner present'">
                 Palette owner present
               </output>
@@ -87,20 +90,28 @@ class PaletteLayers(Component):
       $component({
         data() {
           return {
-            removed:false,
-            paletteOpen:false,popoverOpen:false
+            removed: false,
+            paletteOpen: false,
+            popoverOpen: false,
           };
+        },
+        methods: {
+          handlePaletteAction(value) {
+            if (value === 'show-details') this.popoverOpen = true;
+          },
+          removePaletteOwner() {
+            this.$refs.paletteOwner.remove();
+            this.removed = true;
+          },
         },
         mounted() {
           this.$nextTick(() => {
-          const host=this.$refs.shadowHost;
-          const fixture=this.$refs.shadowFixture;
-          if (!host.shadowRoot && fixture) {
-
-          host.attachShadow({mode:'open'}).append(fixture);
-
-          }
-          })
+            const host = this.$refs.shadowHost;
+            const fixture = this.$refs.shadowFixture;
+            if (!host.shadowRoot && fixture) {
+              host.attachShadow({ mode: 'open' }).append(fixture);
+            }
+          });
         },
       });
     """

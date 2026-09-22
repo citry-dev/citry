@@ -23,7 +23,9 @@ class ScrollAreaNativeCallback(Component):
           <button
             type="button"
             @click="window.setTimeout(()=>imageVisible=true,350)"
-          >Load a delayed image</button>
+          >
+            Load a delayed image
+          </button>
           <button type="button" @click="expanded=!expanded">
             Toggle content stylesheet
           </button>
@@ -47,11 +49,7 @@ class ScrollAreaNativeCallback(Component):
               )
             )
           "
-          :onScrollChange="(detail)=>{
-              callbackCount += 1;
-              lastInline = Math.round(detail.inlineOffset);
-              lastBlock = Math.round(detail.blockOffset);
-            }"
+          :onScrollChange="handleScrollChange"
         >
           <div
             class="scroll-area-callback__content"
@@ -95,23 +93,30 @@ class ScrollAreaNativeCallback(Component):
       $component({
         data() {
           return {
-            rows:6,
-            sentinelTop:150,
-            imageVisible:false,
-            expanded:false,
-            nativeCount:0,
-            settled:0,
-            callbackCount:0,
-            lastInline:0,
-            lastBlock:0,
+            rows: 6,
+            sentinelTop: 150,
+            imageVisible: false,
+            expanded: false,
+            nativeCount: 0,
+            settled: 0,
+            callbackCount: 0,
+            lastInline: 0,
+            lastBlock: 0,
           };
+        },
+        methods: {
+          handleScrollChange(detail) {
+            this.callbackCount += 1;
+            this.lastInline = Math.round(detail.inlineOffset);
+            this.lastBlock = Math.round(detail.blockOffset);
+          },
         },
         mounted() {
           this.$nextTick(() => {
-          const host = this.$refs.shadowHost;
-          const fixture = this.$refs.shadowFixture;
-          if (!host.shadowRoot && fixture) host.attachShadow({mode:'open'}).append(fixture);
-          })
+            const host = this.$refs.shadowHost;
+            const fixture = this.$refs.shadowFixture;
+            if (!host.shadowRoot && fixture) host.attachShadow({ mode: 'open' }).append(fixture);
+          });
         },
       });
     """

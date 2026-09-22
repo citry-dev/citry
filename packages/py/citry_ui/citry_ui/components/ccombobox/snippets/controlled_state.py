@@ -22,16 +22,12 @@ class ControlledMissionTarget(Component):
           <c-fill name="default">
             <c-CCombobox
               c-options="targets"
-              :value="value" :inputValue="query" :open="open" :onValueChange="(next, detail) => {
-                  value = next;
-                  lastReason = `value: ${detail.reason}`;
-                }" :onInputValueChange="(next, detail) => {
-                  query = next;
-                  lastReason = `query: ${detail.reason}`;
-                }" :onOpenChange="(next, detail) => {
-                  open = next;
-                  lastReason = `popup: ${detail.reason}`;
-                }"
+              :value="value"
+              :inputValue="query"
+              :open="open"
+              :onValueChange="handleValueChange"
+              :onInputValueChange="handleInputValueChange"
+              :onOpenChange="handleOpenChange"
             />
           </c-fill>
         </c-CField>
@@ -60,6 +56,20 @@ class ControlledMissionTarget(Component):
             open: false,
             lastReason: 'none',
           };
+        },
+        methods: {
+          handleValueChange(next, detail) {
+            this.value = next;
+            this.lastReason = `value: ${detail.reason}`;
+          },
+          handleInputValueChange(next, detail) {
+            this.query = next;
+            this.lastReason = `query: ${detail.reason}`;
+          },
+          handleOpenChange(next, detail) {
+            this.open = next;
+            this.lastReason = `popup: ${detail.reason}`;
+          },
         },
       });
     """

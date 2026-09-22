@@ -48,12 +48,10 @@ def combobox_states_component(app: Citry) -> type[Component]:
                   id="quality-controlled-combobox"
                   name="controlled_destination"
                   c-options="objects"
-                  :value="controlledValue" :inputValue="controlledQuery" :onValueChange="(value, detail) => {
-                      controlledValue = value;
-                      controlledQuery = detail.option?.label || '';
-                    }" :onInputValueChange="(value) => {
-                      controlledQuery = value;
-                    }"
+                  :value="controlledValue"
+                  :inputValue="controlledQuery"
+                  :onValueChange="handleValueChange"
+                  :onInputValueChange="handleInputValueChange"
                 />
               </c-fill>
             </c-CField>
@@ -67,7 +65,8 @@ def combobox_states_component(app: Citry) -> type[Component]:
                   name="remote_destination"
                   c-min_chars="1"
                   c-debounce_ms="0"
-                  :loadOptions="loadOptions" :onLoadError="() => window.__qualityComboboxFailed = true"
+                  :loadOptions="loadOptions"
+                  :onLoadError="handleLoadError"
                 >
                   <c-fill name="loading">
                     Reading the catalog...
@@ -125,26 +124,38 @@ def combobox_states_component(app: Citry) -> type[Component]:
                 controlledQuery: 'Vega',
                 remoteFailure: false,
                 objects: [
-                { value: 'vega', label: 'Vega', disabled: false },
-                { value: 'rigel', label: 'Rigel', disabled: false },
-                { value: 'sirius', label: 'Sirius', disabled: false },
+                  { value: 'vega', label: 'Vega', disabled: false },
+                  { value: 'rigel', label: 'Rigel', disabled: false },
+                  { value: 'sirius', label: 'Sirius', disabled: false },
                 ],
                 async loadOptions({ query, signal }) {
-                await new Promise((resolve, reject) => {
-                const timer = setTimeout(resolve, 20);
-                signal.addEventListener('abort', () => {
-                clearTimeout(timer);
-                reject(new DOMException('Aborted', 'AbortError'));
-                });
-                });
-                if (this.remoteFailure) {
-                throw new Error('Representative failure');
-                }
-                return this.objects.filter((object) =>
-                object.label.toLowerCase().includes(query.toLowerCase())
-                );
+                  await new Promise((resolve, reject) => {
+                    const timer = setTimeout(resolve, 20);
+                    signal.addEventListener('abort', () => {
+                      clearTimeout(timer);
+                      reject(new DOMException('Aborted', 'AbortError'));
+                    });
+                  });
+                  if (this.remoteFailure) {
+                    throw new Error('Representative failure');
+                  }
+                  return this.objects.filter((object) =>
+                    object.label.toLowerCase().includes(query.toLowerCase())
+                  );
                 },
               };
+            },
+            methods: {
+              handleValueChange(value, detail) {
+                this.controlledValue = value;
+                this.controlledQuery = detail.option?.label || '';
+              },
+              handleInputValueChange(value) {
+                this.controlledQuery = value;
+              },
+              handleLoadError() {
+                window.__qualityComboboxFailed = true;
+              },
             },
           });
         """

@@ -14,7 +14,9 @@ class FilterSequence(Component):
           <h2>Build an exposure sequence</h2>
         </header>
 
-        <c-CForm @submit.prevent="result = JSON.stringify(new window.FormData($el).getAll('filter'))">
+        <c-CForm
+          @submit.prevent="result = JSON.stringify(new window.FormData($el).getAll('filter'))"
+        >
           <div class="filter-sequence__rows">
             <template v-for="(row, index) in rows" :key="row.id">
               <div class="filter-sequence__row">
@@ -66,9 +68,9 @@ class FilterSequence(Component):
         data() {
           return {
             rows: [
-            { id: 1, value: 'Luminance' },
-            { id: 2, value: 'Hydrogen-alpha' },
-            { id: 3, value: 'Oxygen III' },
+              { id: 1, value: 'Luminance' },
+              { id: 2, value: 'Hydrogen-alpha' },
+              { id: 3, value: 'Oxygen III' },
             ],
             nextId: 4,
             result: '',

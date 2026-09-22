@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -30,9 +28,14 @@ class TabsConfiguration(Component):
           <c-CTabs
             default_value="mercury"
             aria_label="Solar system chapters"
-            :variant="variant" :density="density" :orientation="orientation" :align="align" :grow="grow" :loop="loop" :disabled="disabled" :onValueChange="(value) => {
-                selected = value;
-              }"
+            :variant="variant"
+            :density="density"
+            :orientation="orientation"
+            :align="align"
+            :grow="grow"
+            :loop="loop"
+            :disabled="disabled"
+            :onValueChange="(value) => selected = value"
           >
             <c-CTab value="mercury">
               Mercury
@@ -67,10 +70,10 @@ class TabsConfiguration(Component):
             selected: 'mercury',
             accent: 'violet',
             accents: {
-            violet: 'light-dark(#6d28d9, #c4b5fd)',
-            coral: 'light-dark(#c2410c, #fdba74)',
-            teal: 'light-dark(#0f766e, #5eead4)',
-            pink: 'light-dark(#be185d, #f9a8d4)',
+              violet: 'light-dark(#6d28d9, #c4b5fd)',
+              coral: 'light-dark(#c2410c, #fdba74)',
+              teal: 'light-dark(#0f766e, #5eead4)',
+              pink: 'light-dark(#be185d, #f9a8d4)',
             },
             variant: 'underline',
             density: 'default',
