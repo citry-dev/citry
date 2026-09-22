@@ -3009,7 +3009,14 @@ class CMenu(LibraryComponent):
               isControlled: () => controlled,
               isOpen: () => logicalOpen,
               declarationSignature: () => JSON.stringify(
-                [...registrations.values()].map((entry) => entry.serverBaseline),
+                [...registrations.values()]
+                  .filter((entry) => entry.root?.isConnected)
+                  .sort((left, right) => {
+                    if (left.root === right.root) return 0;
+                    return left.root.compareDocumentPosition(right.root)
+                      & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+                  })
+                  .map((entry) => entry.serverBaseline),
               ),
               requestOpen: requestRootOpen,
               repairOwned() {

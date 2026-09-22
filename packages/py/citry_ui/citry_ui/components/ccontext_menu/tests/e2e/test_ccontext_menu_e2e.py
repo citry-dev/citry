@@ -106,7 +106,7 @@ def _page(*, refresh: bool = False) -> tuple[Citry, str]:
               nativeEvents: [], longClicks: 0, longSubmits: 0,
               disabledLocked: false, disabledEvents: [],
               reentrantMutate: false, reentrantRequests: 0,
-              throwingCalls: 0, innerEvents: [], outerEvents: [],
+              throwingCalls: 0, innerEvents: [], outerEvents: [], geometryEvents: [],
             });
             window.__contextState = state;
             return state;
@@ -410,7 +410,11 @@ def _page(*, refresh: bool = False) -> tuple[Citry, str]:
               </c-CContextMenu>
 
               <div class="transform-shell">
-                <c-CContextMenu id="geometry" aria_label="Geometry actions">
+                <c-CContextMenu
+                  id="geometry"
+                  aria_label="Geometry actions"
+                  :onOpenChange="(open) => window.__contextState.geometryEvents.push(open)"
+                >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
                       class="target"
@@ -442,6 +446,76 @@ def _page(*, refresh: bool = False) -> tuple[Citry, str]:
                 return RefreshPage()
 
     return app, str(RefreshPage())
+
+
+def _reordered_context_menu_page() -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-context-menu-reorder-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(ComponentLibrary("citry-ui-context-menu-reorder-e2e", _COMPONENTS))
+
+    class ReorderMenu(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Slots:
+            pass
+
+        class Events:
+            def advance(self, state):
+                return ReorderMenu(step=1 if state.step == 0 else 0)
+
+        template = """
+          <section id="reorder-context-owner">
+            <button class="advance-reorder" type="button" @c-click="advance">Reorder</button>
+            <c-CContextMenu
+              id="reorder-context"
+              aria_label="Reorder actions"
+              :onOpenChange="(open, detail) => window.__contextReorderEvents.push({ open, reason: detail.reason })"
+            >
+              <c-fill name="target" data="{ target_attrs }">
+                <button id="reorder-context-target" type="button" c-bind="target_attrs">
+                  Reorder target
+                </button>
+              </c-fill>
+              <c-fill name="menu">
+                <c-for each="item in items">
+                  <c-CMenuItem c-value="item['value']" #c-key="item['value']">
+                    {{ item["label"] }}
+                  </c-CMenuItem>
+                </c-for>
+              </c-fill>
+            </c-CContextMenu>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            del slots
+            commands = {
+                "first": {"value": "first", "label": "First action"},
+                "second": {"value": "second", "label": "Second action"},
+            }
+            order = ("first", "second") if kwargs.step == 0 else ("second", "first")
+            return {
+                "items": tuple(commands[value] for value in order),
+            }
+
+    class Page(Component):
+        citry = app
+        js = """$component({data(){window.__contextReorderEvents=[];return{};}});"""
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body><c-reorder-menu /><c-js /></body>
+          </html>
+        """
+
+    return app, str(Page())
 
 
 def _load(page) -> list[str]:
@@ -1292,6 +1366,9 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serv
     page.evaluate(
         """
           () => {
+            const nonceStyle = document.createElement('style');
+            nonceStyle.setAttribute('nonce', 'ccontext-menu-test-nonce');
+            document.head.append(nonceStyle);
             const host = document.createElement('div');
             host.id = 'context-shadow-host';
             document.body.append(host);
@@ -1305,10 +1382,134 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serv
         "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry')"
         ".hasAttribute('data-citry-context-menu-initialized')"
     )
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot"
+        ".querySelector('style[data-citry-context-menu-runtime]')?.nonce === 'ccontext-menu-test-nonce'"
+    )
+    page.evaluate(
+        """
+          () => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const root = shadow.querySelector('#geometry');
+            const point = shadow.querySelector('#geometry-point');
+            const menu = shadow.querySelector('#geometry-menu');
+            const previous = point.style.getPropertyValue('anchor-name');
+            root.removeAttribute('data-citry-context-menu-initialized');
+            point.style.setProperty('anchor-name', '--_cui-menu-anchor-ref-handoff');
+            menu.style.setProperty('position-anchor', previous);
+          }
+        """
+    )
+    page.wait_for_function(
+        """
+          (() => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const root = shadow.querySelector('#geometry');
+            const point = shadow.querySelector('#geometry-point');
+            const menu = shadow.querySelector('#geometry-menu');
+            return root?.hasAttribute('data-citry-context-menu-initialized')
+              && point?.style.getPropertyValue('anchor-name') === '--_cui-menu-anchor-ref-handoff'
+              && menu?.style.getPropertyValue('position-anchor') === '--_cui-menu-anchor-ref-handoff';
+          })()
+        """
+    )
+    page.evaluate(
+        """
+          () => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const root = shadow.querySelector('#geometry');
+            const point = shadow.querySelector('#geometry-point');
+            const menu = shadow.querySelector('#geometry-menu');
+            root.removeAttribute('data-citry-context-menu-initialized');
+            point.style.setProperty('anchor-name', '--_cui-menu-anchor-ref-untrusted');
+            menu.style.setProperty('position-anchor', '--_cui-untrusted-menu-anchor');
+          }
+        """
+    )
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry')"
+        ".hasAttribute('data-citry-context-menu-initialized')"
+    )
+    page.evaluate(
+        """
+          () => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            shadow.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-handoff'
+            );
+            shadow.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-menu-anchor-ref-handoff'
+            );
+          }
+        """
+    )
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry')"
+        ".hasAttribute('data-citry-context-menu-initialized')"
+    )
     page.locator("#geometry-target").click(button="right")
     page.wait_for_function(
         "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
         ".matches(':popover-open')"
+    )
+    page.wait_for_function("window.__contextState.geometryEvents.length === 1")
+    assert page.evaluate("window.__contextState.geometryEvents") == [True]
+    page.keyboard.press("Escape")
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.evaluate(
+        """
+          () => document.querySelector('#context-shadow-host').shadowRoot
+            .querySelector('style[data-citry-context-menu-runtime]').remove()
+        """
+    )
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot"
+        ".querySelector('style[data-citry-context-menu-runtime]')"
+    )
+    page.locator("#geometry-target").click(button="right")
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot"
+        ".querySelector('style[data-citry-context-menu-runtime]')?.nonce === 'ccontext-menu-test-nonce'"
+    )
+    page.keyboard.press("Escape")
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.evaluate(
+        """
+          () => {
+            const style = document.querySelector('#context-shadow-host').shadowRoot
+              .querySelector('style[data-citry-context-menu-runtime]');
+            style.textContent = 'tampered';
+            style.setAttribute('nonce', 'wrong-nonce');
+          }
+        """
+    )
+    page.locator("#geometry-target").click(button="right")
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.wait_for_function(
+        """
+          (() => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const style = shadow.querySelector('style[data-citry-context-menu-runtime]');
+            return shadow.querySelectorAll('style[data-citry-context-menu-runtime]').length === 1
+              && style?.nonce === 'ccontext-menu-test-nonce'
+              && style?.textContent === ':where([data-citry-context-menu-point]){position:fixed;inset:auto;'
+                + 'width:1px;height:1px;margin:0;padding:0;border:0;background:transparent;'
+                + 'overflow:visible;pointer-events:none}';
+          })()
+        """
     )
 
     page.evaluate(
@@ -1384,6 +1585,47 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serv
     page.wait_for_timeout(50)
     assert not page.locator("#outer-clone").get_attribute("data-citry-context-menu-initialized")
     assert not any(error.startswith("[pageerror]") for error in errors)
+
+
+def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanly(
+    page, serve_citry_ui_live
+) -> None:
+    app, html = _reordered_context_menu_page()
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(f"[pageerror] {error}"))
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    page.wait_for_function(
+        "document.querySelector('#reorder-context')?.hasAttribute('data-citry-context-menu-initialized')"
+    )
+
+    page.locator("#reorder-context-target").click(button="right")
+    page.wait_for_function("document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
+    assert page.locator("#reorder-context-menu [role=menuitem]").all_inner_texts() == [
+        "First action",
+        "Second action",
+    ]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True]
+
+    page.locator(".advance-reorder").evaluate("element => element.click()")
+    page.wait_for_function(
+        "document.querySelector('#reorder-context-menu [role=menuitem]')?.textContent.includes('Second action')"
+    )
+    page.wait_for_function("!document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
+    assert page.locator("#reorder-context-menu [role=menuitem]").all_inner_texts() == [
+        "Second action",
+        "First action",
+    ]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True]
+
+    page.locator("#reorder-context-target").click(button="right")
+    page.wait_for_function("document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
+    assert page.locator("#reorder-context-menu [role=menuitem]").all_inner_texts() == [
+        "Second action",
+        "First action",
+    ]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True, True]
+    assert errors == []
 
 
 def test_point_close_capability_loss_and_invalid_target_fail_closed(page) -> None:

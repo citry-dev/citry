@@ -44,7 +44,8 @@ class RowsAndResize(Component):
         },
         methods: {
           applyPreviewControls(event) {
-            Object.assign(this, event.detail);
+            this.rows = Number(event.detail.rows);
+            this.resize = event.detail.resize;
           },
         },
         mounted() {

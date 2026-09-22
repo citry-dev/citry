@@ -1,6 +1,11 @@
 
       const menuKey = Symbol.for("citry-ui:menu-root-runtime"),
-        menuRuntime = globalThis[menuKey];
+        menuRuntime = globalThis[menuKey],
+        contextMenuRuntimeNonce =
+          globalThis.document?.currentScript?.nonce ||
+          globalThis.document?.currentScript?.getAttribute("nonce") ||
+          null,
+        shadowPointStyleText = `:where([data-citry-context-menu-point]){position:fixed;inset:auto;width:1px;height:1px;margin:0;padding:0;border:0;background:transparent;overflow:visible;pointer-events:none}`;
       if (
         1 !== menuRuntime?.generation ||
         1 !== menuRuntime.helpers?.externalActivationVersion ||
@@ -11,6 +16,11 @@
         );
       const mutationScopes = (globalThis[
           Symbol.for("citry-ui:context-menu-mutations")
+        ] ??= new WeakMap()),
+        // Keep one shared style per live open root. Its WeakMap entry is
+        // bounded by the root lifetime, and prevents one allocation per menu.
+        shadowStyleRoots = (globalThis[
+          Symbol.for("citry-ui:context-menu-shadow-styles")
         ] ??= new WeakMap()),
         watchMutations = (root, ready, owner, callback) => {
           let scope,
@@ -322,7 +332,61 @@
                     e.host.ownerDocument === P))
               );
             },
+            ensureShadowStyles = () => {
+              const e = i.getRootNode();
+              if (!At() || !(e instanceof ShadowRoot)) return;
+              const t = P.querySelector("style[nonce], script[nonce]"),
+                n = contextMenuRuntimeNonce || t?.nonce || t?.getAttribute("nonce") || null,
+                o = shadowStyleRoots.get(e),
+                r = new Set([
+                  o,
+                  ...e.querySelectorAll("style[data-citry-context-menu-runtime]"),
+                ].filter(Boolean)),
+                a = (t) =>
+                  t instanceof HTMLStyleElement &&
+                  t.getRootNode() === e &&
+                  t.getAttribute("data-citry-context-menu-runtime") === "" &&
+                  t.textContent === shadowPointStyleText &&
+                  (t.nonce || t.getAttribute("nonce") || null) === n,
+                s = [...r].find(a);
+              if (s) {
+                for (const t of r)
+                  t !== s && t.getRootNode() === e && t.remove();
+                return void shadowStyleRoots.set(e, s);
+              }
+              for (const t of r) t.getRootNode() === e && t.remove();
+              const l = P.createElement("style");
+              (n && l.setAttribute("nonce", n),
+                l.setAttribute("data-citry-context-menu-runtime", ""),
+                (l.textContent = shadowPointStyleText),
+                e.append(l),
+                shadowStyleRoots.set(e, l));
+            },
+            syncPointAnchor = () => {
+              const e = l.style.getPropertyValue("anchor-name");
+              const t = c.style.getPropertyValue("position-anchor");
+              if (e === n.pointAnchorName) {
+                if (t === e) return !0;
+                if (
+                  !i.hasAttribute(u) &&
+                  /^--_cui-menu-anchor-ref-[A-Za-z0-9_-]+$/.test(t)
+                ) {
+                  c.style.setProperty("position-anchor", e);
+                  return !0;
+                }
+                return !1;
+              }
+              if (
+                i.hasAttribute(u) ||
+                !/^--_cui-menu-anchor-ref-[A-Za-z0-9_-]+$/.test(e) ||
+                (t !== e && t !== n.pointAnchorName)
+              )
+                return !1;
+              t !== e && c.style.setProperty("position-anchor", e);
+              return (n.pointAnchorName = e), !0;
+            },
             G = () =>
+              (ensureShadowStyles(),
               At() &&
               3 === a.length &&
               3 === [...i.children].length &&
@@ -336,7 +400,7 @@
               !s.shadowRoot &&
               s.getRootNode() === i.getRootNode() &&
               l.getRootNode() === i.getRootNode() &&
-              c.getRootNode() === i.getRootNode(),
+              c.getRootNode() === i.getRootNode()),
             Q = () =>
               G() &&
               s.id === n.targetId &&
@@ -357,7 +421,7 @@
                   "style",
                 ].includes(e.name),
               ) &&
-              l.style.getPropertyValue("anchor-name") === n.pointAnchorName &&
+              syncPointAnchor() &&
               [...l.style].every((e) => ["anchor-name", "left", "top"].includes(e)) &&
               c instanceof HTMLDivElement &&
               c.id === n.surfaceId &&
@@ -1038,9 +1102,18 @@
                 : ((R = null), De(e.source), !1);
             },
             Re = (e) => {
-              if (!e.isTrusted || !fe(e) || !Qe()) return;
-              const t = me(e);
-              if (e.shiftKey) return void we(t);
+              const t = k?.source ?? null,
+                fallback = Boolean(
+                  k &&
+                    e.isTrusted &&
+                    2 === e.button &&
+                    !e.composedPath().includes(s) &&
+                    Math.hypot(e.clientX - k.x, e.clientY - k.y) <= 2,
+                );
+              if (e.currentTarget === P && !fallback) return;
+              if (!e.isTrusted || (!fe(e) && !fallback) || !Qe()) return;
+              const o = fallback ? t : me(e);
+              if (e.shiftKey) return void we(o);
               if (L) {
                 const t = L;
                 return (
@@ -1050,16 +1123,16 @@
               }
               const n = k?.selection ?? !0;
               (k && (rt(k.task), (k = null)), Le());
-              if (xe(e, n) || _()) return void we(t);
-              const o = e.pointerType ?? "",
-                r = ["touch", "pen"].includes(o)
+              if (xe(e, n) || _()) return void we(o);
+              const r = e.pointerType ?? "",
+                a = ["touch", "pen"].includes(r)
                   ? "long-press"
                   : e.button < 0
                     ? "keyboard"
                     : "contextmenu";
               if (
                 I &&
-                "long-press" === r &&
+                "long-press" === a &&
                 I.generation === x &&
                 (!(e.pointerId > 0) || e.pointerId === I.pointerId) &&
                 e.pointerType === I.pointerType &&
@@ -1068,16 +1141,18 @@
               )
                 return void (v.isOpen() && e.preventDefault());
               const i =
-                "keyboard" === r
-                  ? re("keyboard", t)
+                fallback
+                  ? re("pointer", o)
+                  : "keyboard" === a
+                  ? re("keyboard", o)
                   : ie(
-                      "long-press" === r ? "long-press" : "pointer",
-                      t,
+                      "long-press" === a ? "long-press" : "pointer",
+                      o,
                       e.clientX,
                       e.clientY,
                       e,
                     );
-              if (i && Oe(i, r, e) && "keyboard" !== r) {
+              if (i && Oe(i, a, e) && "keyboard" !== a) {
                 const e = i.generation;
                 Ot = $(() => {
                   ((Ot = null),
@@ -1134,6 +1209,9 @@
                 (Le(), rt(k?.task));
                 const n = {
                   pointerId: e.pointerId,
+                  source: t,
+                  x: e.clientX,
+                  y: e.clientY,
                   selection: he(),
                   focusSource: null,
                   generation: x,
@@ -1304,6 +1382,7 @@
               (P[t]("pointermove", Ce, !0),
                 P[t]("pointerup", Se, !0),
                 P[t]("pointercancel", Se, !0),
+                P[t]("contextmenu", Re, !0),
                 q[t]("blur", je),
                 P[t]("visibilitychange", ze),
                 P[t]("selectionchange", Gt));
@@ -1515,6 +1594,7 @@
                 P.removeEventListener("pointermove", Ce, !0),
                 P.removeEventListener("pointerup", Se, !0),
                 P.removeEventListener("pointercancel", Se, !0),
+                P.removeEventListener("contextmenu", Re, !0),
                 P.removeEventListener("pointerdown", Jt, !0),
                 i.removeEventListener("click", Ie, !0),
                 i.removeEventListener("focusin", Ne, !0),

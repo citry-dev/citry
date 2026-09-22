@@ -61,10 +61,10 @@ class DisclosureFormsAndFocus(Component):
             }
             if (this.invalidTarget === null) {
               this.invalidTarget = event.target;
-              this.$nextTick(() => {
+              window.setTimeout(() => {
                 this.invalidTarget?.focus();
                 this.invalidTarget = null;
-              });
+              }, 0);
             }
           },
         },
