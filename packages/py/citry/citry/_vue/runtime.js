@@ -1206,11 +1206,14 @@ global.CitryVueFragments = CitryVueFragments;
     if (lifetime.timer) clearTimeout(lifetime.timer);
     if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
     if (document.hidden) return;
+    lifetime.pending = false;
     scheduleDelay(lifetime, lifetime.binding.interval, () => {
       if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
       if (document.hidden) return;
+      // A slow request must not create a chain of already-expired timers. If
+      // its deadline passes, restart the interval when the request settles.
+      if (lifetime.inFlight) { lifetime.pending = true; return; }
       schedulePoll(lifetime);
-      if (lifetime.inFlight) return;
       let args;
       try {
         args = lifetime.args === undefined ? {} : lifetime.args();
@@ -1228,7 +1231,10 @@ global.CitryVueFragments = CitryVueFragments;
         return lifetime.record.app.eventPoll(lifetime.record, lifetime.bindingId, args);
       })
         .catch(error => { if (!lifetime.record.app.terminal) reportPollFailure(lifetime, error); })
-        .finally(() => { lifetime.inFlight = false; });
+        .finally(() => {
+          lifetime.inFlight = false;
+          if (lifetime.pending) schedulePoll(lifetime);
+        });
     });
   }
   function registerPoll(element, handle) {
