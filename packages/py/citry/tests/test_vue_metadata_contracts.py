@@ -37,6 +37,23 @@ def test_empty_string_component_key_roundtrips_through_cache_call_metadata() -> 
     assert _prepared_call_to_wire(value)[2] == ""
 
 
+def test_object_event_binding_roundtrips_through_cache_call_metadata() -> None:
+    value = _prepared_call_from_wire(
+        [
+            'v-on="listeners"',
+            [0, 16],
+            None,
+            None,
+            True,
+            False,
+            [["events-object", "v-on", "listeners", 'v-on="listeners"', [0, 16], "authored"]],
+        ],
+        "call",
+    )
+    assert value.bindings[0].kind == "events-object"
+    assert _prepared_call_to_wire(value)[6][0][0] == "events-object"
+
+
 def test_empty_string_key_reaches_group_duplicate_detection() -> None:
     app = Citry(autodiscover=False, extensions=[])
 

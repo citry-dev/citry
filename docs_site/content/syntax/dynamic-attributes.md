@@ -206,6 +206,27 @@ You can access `$event` inside the expression:
 
 Read more about [child events](/concepts/client-interactivity/#listen-to-child-events).
 
+### `v-on` object form
+
+Pass an object of Vue listeners when several event names come from one Vue
+expression:
+
+```citry-html
+<c-ActionButton v-on="listeners" />
+```
+
+Vue expands the object into component listeners. Write the exact `v-on`
+attribute directly in the template. A Python hook or runtime mapping cannot
+turn data into browser code. `c-bind` remains a Python data spread:
+
+```citry-html
+<c-ActionButton c-bind="attrs" />
+```
+
+Keys such as `v-on` supplied by `attrs`, a `c-v-on` expression, or a `v-on`
+value containing `{{ ... }}` are rejected. Use an authored Vue expression for
+the listener object.
+
 ### `@c-event`
 
 Vue event handlers run in the browser. Prefix the event name with `c-`, as in

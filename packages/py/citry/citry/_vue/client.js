@@ -12,7 +12,7 @@
     Object.defineProperty(citryNamespace, "vue", {value: V, enumerable: true, configurable: false, writable: false});
   }
   if (global.Citry === undefined) global.Citry = citryNamespace;
-  const HELPER_CONTRACT = "b07c87b430051e17febc97559c81ee2384fec3608e510c7a517de3003e636ed5";
+  const HELPER_CONTRACT = "f30a03c6ab842434ce11a1b4b6eac1d98ecc9d88a33207f373b88d974da3613e";
   if (global.CitryStable) {
     if (global.CitryStable.compilerRuntime?.helperContract !== HELPER_CONTRACT)
       throw new Error("an incompatible Citry Vue runtime is already loaded");
@@ -469,7 +469,7 @@
       const bindings = Object.freeze(item.bindings.map(binding => {
         plain(binding, "component call binding");
         if (Object.keys(binding).sort().join(",") !== "kind,name,sourceEnd,sourceStart,value" ||
-            !["prop", "props-object", "event", "ref-static", "ref-expression"].includes(binding.kind) ||
+            !["prop", "props-object", "events-object", "event", "ref-static", "ref-expression"].includes(binding.kind) ||
             typeof binding.name !== "string" || typeof binding.value !== "string" ||
             !Number.isInteger(binding.sourceStart) || !Number.isInteger(binding.sourceEnd) ||
             binding.sourceStart < 0 || binding.sourceEnd <= binding.sourceStart)

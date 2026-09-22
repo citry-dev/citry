@@ -1769,7 +1769,8 @@ def _collect_browser_expressions(
                 else:
                     host = "vue"
             raw_boundary_expression = component_boundary and (
-                canonical_attribute.startswith(("@", "v-on:", ":", "v-bind:"))
+                canonical_attribute == "v-on"
+                or canonical_attribute.startswith(("@", "v-on:", ":", "v-bind:"))
             )
             found.append(
                 BrowserExpression(
@@ -2482,6 +2483,8 @@ def _browser_attribute(
     if looks_like_i18n_binding(name):
         return ("expression", 0, len(source)) if source.strip() else None
     base_name = name.split(".", 1)[0]
+    if name == "v-on":
+        return "expression", 0, len(source)
     if name.startswith(("@", "v-on:")):
         return "statement", 0, len(source)
     if name.startswith((":", "v-bind:")):

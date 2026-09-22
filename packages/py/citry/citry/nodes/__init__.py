@@ -1359,7 +1359,9 @@ def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
 
 def _is_special_component_input_key(key: str) -> bool:
     """Whether a fixed component attr needs the general binding pipeline."""
-    return key == "ref" or key.startswith(("@", ":", "#c-", "$c-", "x-on:", "v-bind", "v-on:"))
+    return key in {"ref", "v-on"} or key.startswith(
+        ("@", ":", "#c-", "$c-", "x-on:", "v-bind", "v-on:")
+    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -227,6 +227,7 @@ _ALLOWED_HELPERS = {
     "resolveComponent",
     "renderSlot",
     "toDisplayString",
+    "toHandlers",
     "vModelCheckbox",
     "vModelDynamic",
     "vModelRadio",
@@ -245,7 +246,7 @@ HELPER_CONTRACT_DESCRIPTOR = (
     "createElementBlock=createVNode-ignore-hints;createElementVNode=createVNode-ignore-hints;"
     "createVNode=createVNode-ignore-hints;createCommentVNode=pass;createTextVNode=ignore-hints;"
     "pass=guardReactiveProps,mergeProps,normalizeClass,normalizeProps,normalizeStyle,renderList,"
-    "renderSlot,resolveComponent,resolveDirective,resolveDynamicComponent,toDisplayString,"
+    "renderSlot,resolveComponent,resolveDirective,resolveDynamicComponent,toDisplayString,toHandlers,"
     "vModelCheckbox,vModelDynamic,vModelRadio,vModelSelect,vModelText,vShow,withCtx,withDirectives,"
     "withKeys,withModifiers;"
     "localCalls=declared,componentCallBindings;"

@@ -3516,6 +3516,7 @@ def test_vue_syntax_metadata_is_unique_and_links_to_upstream_directives():
         ('<span v-text="title"></span>', "v-text", "#v-text"),
         ('<button @click="open = true"></button>', "@click", "#v-on"),
         ('<button v-on:click="open = true"></button>', "v-on:click", "#v-on"),
+        ('<c-child v-on="listeners"></c-child>', "v-on", "#v-on"),
         ('<button :aria-expanded="open"></button>', ":aria-expanded", "#v-bind"),
         (
             '<button v-bind:aria-expanded="open"></button>',

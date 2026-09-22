@@ -211,6 +211,41 @@ apply it to the intended element:
 This is explicit for components with one root, several roots, or a nested
 interactive element.
 
+## Forward fallthrough attributes to a chosen child
+
+Use Vue's `$attrs` when a wrapper receives attributes or listeners that it does
+not declare. Set `inheritAttrs: false` and place the values on the child that
+should receive them:
+
+```js
+$component({
+  inheritAttrs: false,
+  // props, emits, and other options
+});
+```
+
+```citry-html
+<header>Wrapper content</header>
+<c-Child v-bind="$attrs" />
+```
+
+Undeclared attributes and listeners remain in `$attrs` until this explicit
+forwarding point. A declared prop is consumed as a prop, and a listener for a
+declared emitted event is consumed by Vue, so neither appears in `$attrs`.
+When the wrapper has several roots, choose the one child or root that receives
+the forwarding expression. A `v-if` on the component call controls that call;
+it does not become a fallthrough attribute.
+
+An object of Vue listeners can also be attached with the object form:
+
+```citry-html
+<c-Child v-on="listeners" />
+```
+
+The listener object is Vue expression data. Python `c-bind` spreads component
+data into Python inputs and cannot create executable `v-on` syntax. Plain
+attributes on a `<c-Child>` tag remain Python kwargs.
+
 ## Understand slot scope
 
 Template-authored fill content keeps the Vue expression context of its call

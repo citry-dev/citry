@@ -478,6 +478,7 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
         "resolveDynamicComponent",
         "resolveDirective",
         "toDisplayString",
+        "toHandlers",
         "vModelCheckbox",
         "vModelDynamic",
         "vModelRadio",
@@ -1380,6 +1381,7 @@ fn validate_local_call(
     let valid_binding_kinds = [
         "prop",
         "props-object",
+        "events-object",
         "event",
         "ref-static",
         "ref-expression",
@@ -1416,6 +1418,7 @@ fn validate_local_call(
                     });
                     let semantic = match binding.kind.as_str() {
                         "props-object" => directive.name == "bind" && argument.is_none(),
+                        "events-object" => directive.name == "on" && argument.is_none(),
                         "prop" => {
                             directive.name == "bind" && argument.is_some_and(|name| name != "ref")
                         }
@@ -2018,6 +2021,49 @@ mod tests {
             .find_map(|item| item.local_call.as_ref())
             .unwrap();
         assert_eq!(call.bindings[0].name, ":disabled");
+    }
+
+    #[test]
+    fn validates_an_authored_object_event_binding_with_utf8_spans() {
+        let template = "<p>ž</p><citry-child v-on=\"listeners\" :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>";
+        let binding_start = template.find("v-on").unwrap();
+        let binding_end = binding_start + "v-on=\"listeners\"".len();
+        let call_start = template.find("<citry-child").unwrap();
+        let call_end = template[call_start..].find('>').unwrap() + call_start + 1;
+        let artifact = compile(CompileRequest {
+            template: template.to_owned(),
+            local_calls: vec![LocalCall {
+                local_id: "citryCallA".to_owned(),
+                type_key: "Child".to_owned(),
+                component_tag: "citry-child".to_owned(),
+                source_start: call_start as u32,
+                source_end: call_end as u32,
+                bindings: vec![ComponentCallBinding {
+                    kind: "events-object".to_owned(),
+                    name: "v-on".to_owned(),
+                    value: "listeners".to_owned(),
+                    source_start: binding_start as u32,
+                    source_end: binding_end as u32,
+                }],
+            }],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        let call = artifact
+            .elements
+            .iter()
+            .find_map(|item| item.local_call.as_ref())
+            .unwrap();
+        assert_eq!(call.bindings[0].kind, "events-object");
+        assert_eq!(&template[binding_start..binding_end], "v-on=\"listeners\"");
+        assert!(artifact.helpers.contains(&"toHandlers".to_owned()));
+        assert!(artifact.code.contains("_toHandlers(_ctx.listeners, true)"));
     }
 
     #[test]

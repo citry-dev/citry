@@ -44,6 +44,12 @@ mod tests {
     }
 
     #[test]
+    fn test_component_boundary_object_events_bypass_python_kwarg_allowlist() {
+        let rules = child_rules();
+        assert!(parse_template(r#"<c-child v-on="listeners" />"#, None, Some(&rules)).is_ok());
+    }
+
+    #[test]
     fn test_unknown_python_kwarg_remains_rejected() {
         let rules = child_rules();
         let error = parse_template(r#"<c-child title="ok" unknown="no" />"#, None, Some(&rules))

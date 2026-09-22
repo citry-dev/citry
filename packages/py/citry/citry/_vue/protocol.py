@@ -379,7 +379,14 @@ def _validate_local_calls(calls: tuple[dict[str, object], ...]) -> None:
         for binding in bindings:
             if type(binding) is not dict or set(binding) != {"kind", "name", "value", "sourceStart", "sourceEnd"}:
                 raise ValueError("local call binding has an invalid shape")
-            if binding["kind"] not in {"prop", "props-object", "event", "ref-static", "ref-expression"}:
+            if binding["kind"] not in {
+                "prop",
+                "props-object",
+                "events-object",
+                "event",
+                "ref-static",
+                "ref-expression",
+            }:
                 raise ValueError("local call binding kind is invalid")
             if any(type(binding[key]) is not str for key in ("name", "value")):
                 raise ValueError("local call binding text is invalid")

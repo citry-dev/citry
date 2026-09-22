@@ -771,7 +771,15 @@ def _prepared_call_from_wire(value: object, path: str) -> ArtifactPreparedCall:
         if len(binding) not in {5, 6}:
             raise CacheArtifactError(f"{path}[6][{index}] must contain exactly five or six fields.")
         kind = _require_nonempty_string(binding[0], f"{path}[6][{index}][0]")
-        if kind not in {"prop", "props-object", "event", "ref-static", "ref-expression", "citry-handler"}:
+        if kind not in {
+            "prop",
+            "props-object",
+            "events-object",
+            "event",
+            "ref-static",
+            "ref-expression",
+            "citry-handler",
+        }:
             raise CacheArtifactError(f"{path}[6][{index}][0] has an unknown binding kind.")
         binding_source = _require_string(binding[3], f"{path}[6][{index}][3]")
         provenance = (

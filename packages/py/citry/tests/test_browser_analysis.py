@@ -118,6 +118,19 @@ def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():
     ]
 
 
+def test_browser_hosts_collect_bare_object_event_expression_on_component_boundary():
+    source = '<c-Child v-on="listeners" />'
+    expression = browser_expressions(parse_template(source))[0]
+
+    assert (expression.attribute, expression.mode, expression.host, expression.evaluator) == (
+        "v-on",
+        "expression",
+        "vue",
+        "raw",
+    )
+    assert [(item.name, item.root) for item in browser_identifiers(expression)] == [("listeners", True)]
+
+
 def test_browser_hosts_keep_citry_state_bindings_out_of_vue_analysis():
     source = '<input :c-query.debounce.300ms="refresh" /><input :C-query="ordinaryVueBinding" />'
 

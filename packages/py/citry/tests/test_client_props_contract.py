@@ -9,6 +9,7 @@ import pytest
 from citry import Citry, Component, Extension
 from citry._vue.capture import render_prepared_direct
 from citry._vue.direct_capture import assemble_typed_render
+from citry.client_directives import ComponentTagClientBindingKind, resolve_component_tag_client_binding_value
 from citry.constness import const_value
 
 
@@ -104,6 +105,18 @@ class TestRemovedClientPropsBoundary:
 
 
 class TestNativeVueComponentBindings:
+    def test_object_event_binding_reports_an_event_specific_empty_expression_error(self):
+        with pytest.raises(TypeError) as error:
+            resolve_component_tag_client_binding_value(
+                "v-on",
+                "",
+                tag_name="c-child",
+                kind=ComponentTagClientBindingKind.EVENTS_OBJECT,
+            )
+
+        assert "Object event binding 'v-on'" in str(error.value)
+        assert "$c-props" not in str(error.value)
+
     def test_authored_prop_stays_out_of_typed_python_kwargs(self):
         registry = Citry(autodiscover=False)
         received: list[tuple[str, dict[str, Any]]] = []

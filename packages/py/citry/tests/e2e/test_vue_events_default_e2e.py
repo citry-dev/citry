@@ -1786,6 +1786,131 @@ def test_component_runtime_event_spread_uses_declared_emit_from_multiple_roots(p
     assert faults == []
 
 
+@pytest.mark.e2e
+def test_multi_root_wrapper_forwards_attrs_and_object_events_to_a_chosen_child(page: Any, serve_live: Any) -> None:
+    engine = Citry(autodiscover=False)
+    engine.set_mounted_prefix("/citry")
+
+    class Child(Component):
+        citry = engine
+        template = """
+            <button id="forwarded-child" @click="fire">
+                child
+            </button>
+        """
+        js = """
+            $component({
+                emits: ["object-event", "undeclared-event"],
+                methods: {
+                    fire() {
+                        this.$emit("object-event", "object-value");
+                        this.$emit("undeclared-event", "undeclared-value");
+                    },
+                },
+            });
+        """
+
+    class Wrapper(Component):
+        citry = engine
+        template = """
+            <section id="wrapper-observation">
+                <output
+                    id="wrapper-attrs"
+                    v-text="Object.keys($attrs).sort().join(',')"
+                ></output>
+                <output id="wrapper-prop" v-text="declaredProp"></output>
+            </section>
+            <c-Child
+                v-bind="$attrs"
+                v-on="listeners"
+            />
+            <button
+                id="wrapper-declared"
+                @click="$emit('declared-event')"
+            >
+                declared
+            </button>
+            <output id="wrapper-object" v-text="objectValue"></output>
+        """
+        js = """
+            $component({
+                inheritAttrs: false,
+                props: { declaredProp: String },
+                emits: ["declared-event"],
+                data() {
+                    return { objectValue: "waiting" };
+                },
+                computed: {
+                    listeners() {
+                        return { "object-event": this.captureObject };
+                    },
+                },
+                methods: {
+                    captureObject(value) {
+                        this.objectValue = value;
+                    },
+                },
+            });
+        """
+
+    class Parent(Component):
+        citry = engine
+        template = """
+            <main>
+                <c-Wrapper
+                    :data-forwarded="'from-parent'"
+                    :declared-prop="'declared-value'"
+                    @undeclared-event="recordUndeclared"
+                    @declared-event="recordDeclared"
+                />
+                <output id="parent-declared" v-text="declaredCount"></output>
+                <output id="parent-undeclared" v-text="undeclaredCount"></output>
+            </main>
+        """
+        js = """
+            $component({
+                data() {
+                    return { declaredCount: 0, undeclaredCount: 0 };
+                },
+                methods: {
+                    recordDeclared() {
+                        this.declaredCount += 1;
+                    },
+                    recordUndeclared() {
+                        this.undeclaredCount += 1;
+                    },
+                },
+            });
+        """
+
+    engine.register(Child)
+    engine.register(Wrapper)
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.goto(serve_live(engine, Parent().render().serialize(), "") + "/")
+    try:
+        page.locator("#forwarded-child").wait_for(timeout=5_000)
+    except _PlaywrightTimeoutError:
+        pytest.fail(f"forwarding wrapper did not mount: faults={faults}; page={page.content()}")
+
+    assert page.locator("#forwarded-child").get_attribute("data-forwarded") == "from-parent"
+    attrs = page.locator("#wrapper-attrs").text_content()
+    assert attrs is not None
+    assert "data-forwarded" in attrs
+    assert "onUndeclaredEvent" in attrs
+    assert "declaredProp" not in attrs
+    assert "onDeclaredEvent" not in attrs
+    assert page.locator("#wrapper-prop").text_content() == "declared-value"
+
+    page.locator("#forwarded-child").click()
+    page.wait_for_function("document.querySelector('#wrapper-object')?.textContent === 'object-value'")
+    page.wait_for_function("document.querySelector('#parent-undeclared')?.textContent === '1'")
+    page.locator("#wrapper-declared").click()
+    page.wait_for_function("document.querySelector('#parent-declared')?.textContent === '1'")
+    assert faults == [], page.content()
+
+
 @pytest.mark.parametrize("force_direct", [False, True], ids=["leaf", "direct"])
 @pytest.mark.e2e
 def test_runtime_spread_preserves_empty_source_attributes_and_dynamic_true(

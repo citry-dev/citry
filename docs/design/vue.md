@@ -258,6 +258,43 @@ Rust implementations. The Python wrappers and stubs must agree with the rebuilt
 extension. Removing registration only, while retaining a Python import of it,
 is a failed cutover.
 
+### Implemented component forwarding contract
+
+Citry component calls support the exact authored `v-on="listeners"` form. The
+Python renderer classifies it as an `events-object` binding and keeps it out of
+the child's Python kwargs. Parser-issued `StaticHtmlAttr` provenance, its
+source text, and its UTF-8 byte span travel through prepared capture and cache
+replay. The native compiler accepts the record only when the Vue AST contains
+`v-on` with no argument at the same source span, then permits Vue's
+`toHandlers` helper in the ordinary-VNode helper contract.
+
+The forwarding pattern for a wrapper is explicit:
+
+```js
+$component({
+  inheritAttrs: false,
+  // other component options
+});
+```
+
+```citry-html
+<header>Wrapper content</header>
+<c-Child v-bind="$attrs" />
+```
+
+Undeclared attributes and listeners appear in `$attrs` and reach the chosen
+forwarding target. Declared props and declared emitted-event listeners are
+consumed by Vue and do not appear there. A multi-root wrapper chooses its
+forwarding target explicitly. A directive such as `v-if` runs at the component
+call site and does not enter fallthrough attrs. Plain component attributes keep
+their Python-kwarg meaning.
+
+Python `c-bind`, `c-*` evaluation, interpolation, hooks, and public fabricated
+metadata cannot create executable Vue `v-on` syntax. Those inputs are rejected
+at the Python provenance boundary. Dynamic `<component :is>` calls remain
+outside this contract and continue to use the native compiler's existing
+rejection rules.
+
 The grammar trio (`grammar.pest`, `grammar.rs`, and `template_grammar.md`) already
 accepts Vue attribute names. No Pest atomicity change is needed. Semantic
 classification, compiler output, diagnostics, and editor metadata must agree

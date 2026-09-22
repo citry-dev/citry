@@ -1219,6 +1219,48 @@ def test_component_call_preserves_native_vue_props_events_and_refs() -> None:
     assert "changed($event)" in compiled.javascript
 
 
+def test_component_call_preserves_bare_object_events_with_authenticated_utf8_metadata() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = registry
+        template = "child"
+
+    class Parent(Component):
+        citry = registry
+        template = '<p>ž</p><c-Child v-on="listeners" #c-key="\'child\'" />'
+
+    rendered = render_prepared_direct(Parent())
+    child_render = next(part for part in rendered.parts if isinstance(part, CitryRender))
+    child = child_render.context.component
+    assert child is not None
+    assert child.kwargs == {}
+    assert child._component_tag_client_bindings[0].kind is ComponentTagClientBindingKind.EVENTS_OBJECT
+
+    assembly = assemble_typed_render(
+        rendered,
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    parent = next(item for item in assembly.view.occurrences if item.type_key == Parent.class_id)
+    compile_input = assembly.compile_inputs[parent.definition_id]
+    call = compile_input.local_calls[0]
+    assert [item["kind"] for item in call["bindings"]] == ["events-object"]
+    binding = call["bindings"][0]
+    encoded = compile_input.template.encode()
+    assert encoded[binding["sourceStart"] : binding["sourceEnd"]].decode() == 'v-on="listeners"'
+
+    with NativeCompiler() as compiler:
+        compiled = compiler.compile(
+            compile_input.template,
+            type_key=Parent.class_id,
+            local_calls=compile_input.local_calls,
+            element_bindings=compile_input.element_bindings,
+            local_call_runs=compile_input.local_call_runs,
+        )
+    assert "_toHandlers(_ctx.listeners, true)" in compiled.javascript
+
+
 def test_component_call_binding_metadata_uses_utf8_spans_and_rejects_fabrication() -> None:
     registry = Citry(autodiscover=False)
 
@@ -1343,8 +1385,11 @@ def test_component_call_accepts_single_quoted_spaced_unicode_binding_source() ->
     ("template", "data"),
     [
         ('<c-Child c-bind="bindings" />', {"bindings": {":disabled": "blocked"}}),
+        ('<c-Child c-bind="bindings" />', {"bindings": {"v-on": "listeners"}}),
         ('<c-Child c-:disabled="binding" />', {"binding": "blocked"}),
+        ('<c-Child c-v-on="binding" />', {"binding": "listeners"}),
         ('<c-Child :disabled="{{ binding }}" />', {"binding": "blocked"}),
+        ('<c-Child v-on="{{ listeners }}" />', {"listeners": {}}),
     ],
 )
 def test_component_call_rejects_executable_bindings_from_runtime_data(template, data) -> None:

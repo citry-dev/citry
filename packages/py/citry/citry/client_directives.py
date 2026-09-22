@@ -23,6 +23,7 @@ class ComponentTagClientBindingKind(str, Enum):
 
     PROP = "prop"
     PROPS_OBJECT = "props-object"
+    EVENTS_OBJECT = "events-object"
     EVENT = "event"
     REF_STATIC = "ref-static"
     REF_EXPRESSION = "ref-expression"
@@ -148,6 +149,8 @@ def classify_component_tag_client_binding_key(key: Any, *, tag_name: str) -> Com
         raise RuntimeError(f"{CLIENT_PROPS_ATTR!r} was removed; use native Vue :prop or v-bind syntax")
     if key.startswith("@c-"):
         return ComponentTagClientBindingKind.CITRY_HANDLER
+    if key == "v-on":
+        return ComponentTagClientBindingKind.EVENTS_OBJECT
     if key.startswith(("@", "v-on:")):
         return ComponentTagClientBindingKind.EVENT
     if key == "v-bind" or key.startswith("v-bind."):
@@ -173,7 +176,12 @@ def resolve_component_tag_client_binding_value(
     if raw_value is None or raw_value is False:
         return None
     if raw_value is True or not isinstance(raw_value, str) or not raw_value.strip():
-        if kind in {ComponentTagClientBindingKind.PROP, ComponentTagClientBindingKind.PROPS_OBJECT}:
+        if kind is ComponentTagClientBindingKind.EVENTS_OBJECT:
+            msg = (
+                f"Object event binding {key!r} on <{tag_name}> must resolve to a non-empty "
+                f"client expression string, got {type(raw_value).__name__}."
+            )
+        elif kind in {ComponentTagClientBindingKind.PROP, ComponentTagClientBindingKind.PROPS_OBJECT}:
             msg = (
                 f"{CLIENT_PROPS_ATTR} on <{tag_name}> must resolve to a non-empty client expression string, "
                 f"got {type(raw_value).__name__}."

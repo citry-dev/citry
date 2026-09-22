@@ -652,7 +652,10 @@ def _handler_only_control(
     inside_form: bool,
 ) -> bool:
     has_handler = any(
-        name.startswith(("@", "v-on:")) or name in {"data-cev-on", "data-cev-poll"} for name in activation_attrs
+        name == "v-on"
+        or name.startswith(("@", "v-on:"))
+        or name in {"data-cev-on", "data-cev-poll"}
+        for name in activation_attrs
     )
     if not has_handler:
         return False

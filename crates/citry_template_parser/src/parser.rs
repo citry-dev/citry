@@ -1746,6 +1746,7 @@ fn is_component_tag_client_binding_attr(name: &str) -> bool {
     is_client_props_attr(name)
         || is_component_boundary_handler_attr(name)
         || name == "v-bind"
+        || name == "v-on"
         || name == "ref"
         || name.starts_with(':')
         || name.starts_with('@')
