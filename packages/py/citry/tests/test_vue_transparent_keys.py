@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from citry import Citry, Component
@@ -165,6 +167,47 @@ def test_descendant_placement_identity_follows_transparent_key_across_reorder() 
         }
 
     assert keyed(["a", "b"]) == keyed(["b", "a"])
+
+
+def test_keyed_transparent_slot_identity_is_independent_of_root_occurrence() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = registry
+        template = "<p>child</p>"
+
+    class Page(Component):
+        citry = registry
+        template = (
+            '<main><c-provide key="theme" c-data="{}" #c-key="\'wrapper\'">'
+            '<c-slot name="first"><c-Child #c-key="\'first\'" /></c-slot>'
+            '<c-slot name="second"><c-Child #c-key="\'second\'" /></c-slot>'
+            "</c-provide></main>"
+        )
+
+    def identities(root_id: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        assembly = assemble_typed_render(
+            render_prepared_direct(Page()),
+            revision=0,
+            root_occurrence_id=root_id,
+            tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+        )
+        root = next(item for item in assembly.view.occurrences if item.id == root_id)
+        template = assembly.compile_inputs[root.definition_id].template
+        slot_ids = tuple(re.findall(r"citrySlot[0-9a-f]+", template))
+        children = tuple(
+            item.placement_key
+            for item in assembly.view.occurrences
+            if item.type_key == Child.class_id
+        )
+        assert all(placement_key is not None for placement_key in children)
+        return slot_ids, tuple(placement_key for placement_key in children if placement_key is not None)
+
+    first = identities("citryOccurrenceFirst")
+    second = identities("citryOccurrenceSecond")
+
+    assert first == second
+    assert len(set(first[0])) == 2
 
 
 def test_keyed_transparent_wrapper_survives_component_cache_replay() -> None:
