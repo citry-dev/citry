@@ -41,6 +41,136 @@ def include_prepared_attribute(value: object) -> bool:
     return value is not None and value is not False
 
 
+VUE_OWNED_NATIVE_DIRECTIVE = "v-citry-vue-owned"
+_NATIVE_PROPERTIES = frozenset({"value", "checked", "selected"})
+
+
+def _attribute_name_and_value(attribute: object) -> tuple[str, object | None]:
+    """Read a source attribute's name and value from either AST or prepared form."""
+    if isinstance(attribute, str):
+        match = re.match(r"\s*([^\s=/>]+)(?:\s*=\s*(.*?))?\s*$", attribute)
+        return (match.group(1), match.group(2)) if match else (attribute.strip(), None)
+    name = getattr(attribute, "name", getattr(attribute, "key", ""))
+    value = getattr(attribute, "value", None)
+    return str(name), value
+
+
+def _source_static_value(value: object | None) -> str | None:
+    """Extract a static attribute value from AST or serialized source text."""
+    if not isinstance(value, str):
+        return None
+    match = re.match(r"\s*[^\s=/>]+\s*=\s*(['\"])(.*?)\1\s*$", value)
+    if match:
+        return match.group(2)
+    return value.strip().strip("'\"")
+
+
+def _native_properties_for_tag(tag: str, input_type: str | None = None) -> frozenset[str]:
+    normalized = tag.casefold()
+    if normalized == "textarea":
+        return frozenset({"value"})
+    if normalized == "select":
+        return frozenset({"selected"})
+    if normalized == "option":
+        return frozenset({"value", "selected"})
+    if normalized != "input":
+        return frozenset()
+    return frozenset({"value", "checked"}) if input_type in {None, "checkbox", "radio"} else frozenset({"value"})
+
+
+def is_native_state_tag(tag: str) -> bool:
+    """Whether the tag can retain browser-managed form state."""
+    return tag.casefold() in {"input", "textarea", "select", "option"}
+
+
+def vue_owned_native_properties(
+    tag: str,
+    authored_attrs: object = (),
+    data_attrs: object = (),
+    *,
+    has_spread: bool = False,
+) -> frozenset[str]:
+    """
+    Return native properties whose values are authored Vue/Python bindings.
+
+    This marker is deliberately property-specific. A ``:value`` binding must
+    not suppress preservation of an independently dirty checkbox, and a
+    ``:checked`` binding must not suppress an input's text value. Object
+    ``v-bind`` and dynamic arguments are conservative because their runtime
+    property is not known at capture time.
+    """
+    attrs = tuple(authored_attrs) if authored_attrs is not None else ()
+    input_type: str | None = None
+    dynamic_input_type = has_spread
+    for attribute in attrs:
+        name, value = _attribute_name_and_value(attribute)
+        normalized = name.casefold()
+        if normalized == "type":
+            input_type = (_source_static_value(value) or "").casefold() or None
+        elif normalized in {":type", "v-bind:type", "v-bind", ":["} or normalized.startswith(
+            (":type.", "v-bind:type.", "v-bind.", "v-bind:[", ":[")
+        ):
+            dynamic_input_type = True
+    data_names = tuple(data_attrs.keys()) if hasattr(data_attrs, "keys") else tuple(data_attrs or ())
+    if any(str(name).casefold().removeprefix("c-") == "type" for name in data_names):
+        dynamic_input_type = True
+    if dynamic_input_type:
+        input_type = None
+    available = _native_properties_for_tag(tag, input_type)
+    if not available:
+        return frozenset()
+    owned: set[str] = set()
+    if has_spread:
+        owned.update(available)
+    for attribute in attrs:
+        name, _value = _attribute_name_and_value(attribute)
+        normalized = name.casefold()
+        if normalized == "v-bind" or normalized.startswith(("v-bind.", ":[", "v-bind:[")):
+            owned.update(available)
+        elif normalized == "v-model" or normalized.startswith("v-model."):
+            if input_type is None:
+                owned.update(available)
+            elif "checked" in available and input_type in {"checkbox", "radio"}:
+                owned.add("checked")
+            else:
+                owned.update(available & {"value", "selected"})
+        elif normalized in {":value", "v-bind:value"} or normalized.startswith((":value.", "v-bind:value.")):
+            owned.add("value" if tag.casefold() == "option" else ("selected" if "selected" in available else "value"))
+        elif normalized in {":checked", "v-bind:checked"} or normalized.startswith((":checked.", "v-bind:checked.")):
+            owned.add("checked")
+        elif normalized in {":selected", "v-bind:selected"} or normalized.startswith(
+            (":selected.", "v-bind:selected.")
+        ):
+            owned.add("selected")
+    for name in data_names:
+        normalized = str(name).casefold().removeprefix("c-")
+        if normalized == "value":
+            owned.add("value" if tag.casefold() == "option" else ("selected" if "selected" in available else "value"))
+        elif normalized == "checked":
+            owned.add("checked")
+        elif normalized == "selected":
+            owned.add("selected")
+    return frozenset(owned & set(available))
+
+
+def vue_owned_native_marker(properties: object) -> str:
+    """Serialize the private Vue ownership directive for trusted compiler output."""
+    values = tuple(sorted(set(properties) & _NATIVE_PROPERTIES))
+    expression = (
+        "[]"
+        if not values
+        else (repr(values[0]) if len(values) == 1 else "[" + ",".join(repr(value) for value in values) + "]")
+    )
+    return f'{VUE_OWNED_NATIVE_DIRECTIVE}="{expression}"'
+
+
+def _is_reserved_vue_owned_name(name: str) -> bool:
+    normalized = name.casefold()
+    return normalized == VUE_OWNED_NATIVE_DIRECTIVE or normalized.startswith(
+        (VUE_OWNED_NATIVE_DIRECTIVE + ".", VUE_OWNED_NATIVE_DIRECTIVE + ":")
+    )
+
+
 def prepared_render_active() -> bool:
     """Whether the current render is using the private prepared target."""
     return _PREPARED_RENDER.get()
@@ -229,12 +359,15 @@ class PreparedElementOpen:
     runtime_event_bindings: tuple[Mapping[str, object], ...] = ()
     runtime_events_candidate: bool = False
     runtime_poll_bindings: tuple[Mapping[str, object], ...] = ()
+    has_spread: bool = False
     authored_attrs: tuple[str, ...] = field(init=False, repr=False)
     data_attrs: Mapping[str, object] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if (self.runtime_event_bindings or self.runtime_poll_bindings) and not self.runtime_events_candidate:
             raise ValueError("runtime event and poll bindings require an authenticated compiled candidate site")
+        if any(attr.origin == "source" and _is_reserved_vue_owned_name(attr.name) for attr in self.attrs):
+            raise ValueError(f"{VUE_OWNED_NATIVE_DIRECTIVE} is reserved compiler output")
         object.__setattr__(
             self,
             "authored_attrs",
@@ -285,6 +418,7 @@ class PreparedDynamicElementOpen:
     runtime_event_bindings: tuple[Mapping[str, object], ...] = ()
     runtime_events_candidate: bool = False
     runtime_poll_bindings: tuple[Mapping[str, object], ...] = ()
+    has_spread: bool = False
     _producer_token: object | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -300,6 +434,8 @@ class PreparedDynamicElementOpen:
         )
         if (self.runtime_event_bindings or self.runtime_poll_bindings) and not self.runtime_events_candidate:
             raise ValueError("runtime event and poll bindings require an authenticated compiled candidate site")
+        if any(attr.origin == "source" and _is_reserved_vue_owned_name(attr.name) for attr in self.authored_attrs):
+            raise ValueError(f"{VUE_OWNED_NATIVE_DIRECTIVE} is reserved compiler output")
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,6 +490,10 @@ def prepared_dynamic_element_open(
         except (UnicodeDecodeError, IndexError) as error:
             raise TypeError("dynamic element authored Vue binding has an invalid source span") from error
         prepared_attrs.append(PreparedAttribute(binding.key, "source", binding.span, source_text))
+    if any(_is_reserved_vue_owned_name(attr.name) for attr in prepared_attrs):
+        raise ValueError(f"{VUE_OWNED_NATIVE_DIRECTIVE} is reserved compiler output")
+    if any(_is_reserved_vue_owned_name(str(name)) for name in attrs):
+        raise ValueError(f"{VUE_OWNED_NATIVE_DIRECTIVE} is reserved compiler output")
     value = PreparedDynamicElementOpen(
         tag,
         MappingProxyType(dict(attrs)),
@@ -367,6 +507,7 @@ def prepared_dynamic_element_open(
         () if normalized is None else tuple(dict(value) for value in normalized.runtime_event_bindings),
         False if normalized is None else normalized.runtime_events_candidate,
         () if normalized is None else tuple(dict(value) for value in normalized.runtime_poll_bindings),
+        False if normalized is None else normalized.has_spread,
     )
     object.__setattr__(value, "_producer_token", _DYNAMIC_ELEMENT_PRODUCER_TOKEN)
     return value
@@ -387,8 +528,10 @@ def is_authenticated_dynamic_element_open(value: PreparedDynamicElementOpen) -> 
             if (
                 attr.origin != "source"
                 or type(attr.value) is not str
-                or (not attr.name.startswith(("@", ":", "v-on:", "v-bind:")) and attr.name != "v-bind")
+                or (not attr.name.startswith(("@", ":", "v-on:", "v-bind:", "v-bind.")) and attr.name != "v-bind")
             ):
+                return False
+            if _is_reserved_vue_owned_name(attr.name):
                 return False
             start, end = attr.span
             try:
@@ -679,6 +822,8 @@ class PreparedElementOpenNode(ElementAttrsNode):
             for attr in self._authored_vue_attrs
         ):
             raise ValueError("v-citry-runtime-events is reserved compiler output for runtime @c-* bindings")
+        if any(_is_reserved_vue_owned_name(attr.key) for attr in self._authored_vue_attrs):
+            raise ValueError(f"{VUE_OWNED_NATIVE_DIRECTIVE} is reserved compiler output")
         self._static_prepared: PreparedElementOpen | None = None
         if (
             len(self._static_source_attrs) == len(attrs)
@@ -784,6 +929,9 @@ class PreparedElementOpenNode(ElementAttrsNode):
         reserved = [name for name in data_attrs if name.lower().startswith("data-cev-")]
         if reserved:
             raise RuntimeError(f"{reserved[0]!r} is compiler-owned Events metadata")
+        private_vue_owned = [name for name in data_attrs if _is_reserved_vue_owned_name(str(name))]
+        if private_vue_owned:
+            raise ValueError(f"{VUE_OWNED_NATIVE_DIRECTIVE} is reserved compiler output")
         if control_bindings:
             from citry.ext.events.bindings import _validate_final_control_bindings  # noqa: PLC0415
 
@@ -838,6 +986,7 @@ class PreparedElementOpenNode(ElementAttrsNode):
             runtime_event_bindings,
             self._runtime_events_candidate,
             runtime_poll_bindings,
+            self._has_spread,
         )
 
     def _data_attr_span(self, name: str) -> tuple[int, int]:

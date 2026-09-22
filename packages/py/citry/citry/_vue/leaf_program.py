@@ -28,6 +28,9 @@ from .capture import (
     PreparedVerbatimHtmlNode,
     _reject_executable_dynamic_attrs,
     include_prepared_attribute,
+    is_native_state_tag,
+    vue_owned_native_marker,
+    vue_owned_native_properties,
     vue_render_active,
 )
 from .compiler import _ElementBindingDeclaration, _generated_event_args, _generated_vue_attr, _RuntimeEventDeclaration
@@ -269,6 +272,20 @@ class _Compiler:
             if node._has_spread
             else [source for attr, source in node._static_source_attrs if attr.key not in dynamic_keys]
         )
+        native_marker = (
+            vue_owned_native_marker(
+                vue_owned_native_properties(
+                    node.tag,
+                    node._authored_vue_attrs,
+                    dynamic_keys,
+                    has_spread=node._has_spread,
+                )
+            )
+            if is_native_state_tag(node.tag)
+            else ""
+        )
+        if native_marker:
+            attrs.append(native_marker)
         authored_attributes = tuple(
             PreparedAttribute(attr.key, "source", attr.position, source)
             for attr, source in node._static_source_attrs
@@ -1035,4 +1052,5 @@ def _prepared_open(operation: _Open, resolved: PreparedElementOpen | dict[str, o
         (),
         (),
         (),
+        has_spread=operation.node._has_spread,
     )

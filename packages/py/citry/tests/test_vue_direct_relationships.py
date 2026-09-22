@@ -3126,8 +3126,8 @@ def test_leaf_program_compiles_constant_and_fixed_name_attribute_plans() -> None
     assert program.resolved_opens
     assert all(type(value) is dict for value in program.resolved_opens.values())
     html = rendered.serialize(deps_strategy="ignore")
-    assert '<i data-kind="constant"></i><input type="text" title="A" hidden/>' in html
-    assert '<i data-kind="constant"></i><input type="text" title="B"/>' in html
+    assert '<i data-kind="constant"></i><input type="text" v-citry-vue-owned="[]" title="A" hidden/>' in html
+    assert '<i data-kind="constant"></i><input type="text" v-citry-vue-owned="[]" title="B"/>' in html
 
 
 def test_leaf_program_keeps_class_merging_on_general_attribute_resolver() -> None:

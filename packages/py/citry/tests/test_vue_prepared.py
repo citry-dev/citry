@@ -104,6 +104,27 @@ def test_direct_definition_composer_preserves_bindings_calls_slots_and_utf8_span
     assert compiled.definitions["root-def"].directive_signature[0].name == "v-show"
 
 
+def test_compatibility_definition_composer_emits_native_state_metadata() -> None:
+    view = PreparedView(
+        0,
+        "root",
+        (PreparedOccurrence("root", "Root", "root-def", {}, {}, None, None),),
+        (
+            PreparedDefinition(
+                "root-def",
+                "Root",
+                (
+                    ElementOpen("input", (), None, None, (0, 1)),
+                    ElementClose("input", (1, 2)),
+                ),
+            ),
+        ),
+    )
+
+    template = definition_compile_inputs(view)["root-def"].template
+    assert '<input v-citry-vue-owned="[]"></input>' in template
+
+
 def test_direct_capture_keys_slots_by_nearest_prepared_element_and_preserves_void_boundaries() -> None:
     template = _direct_definition_template(
         """

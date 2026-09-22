@@ -22,6 +22,7 @@ from citry._vue.capture import (
     PreparedVerbatimHtmlNode,
     render_prepared,
     typed_render_scope,
+    vue_owned_native_properties,
 )
 from citry._vue.compiler import NativeCompiler
 from citry._vue.direct_capture import UnsupportedPreparedView, assemble_typed_render
@@ -35,6 +36,75 @@ from citry.slots import Slot
 
 def _assembled_view(render, **kwargs):
     return assemble_typed_render(render, **kwargs).view
+
+
+@pytest.mark.parametrize(
+    ("tag", "authored", "data", "expected"),
+    [
+        ("input", (":value",), (), frozenset({"value"})),
+        ("input", (":checked",), (), frozenset({"checked"})),
+        ("input", ('type="checkbox"', "v-model"), (), frozenset({"checked"})),
+        ("input", (":type", ":checked"), (), frozenset({"checked"})),
+        ("input", ("v-bind:type", ":checked"), (), frozenset({"checked"})),
+        ("input", (":[kind]", ":checked"), (), frozenset({"value", "checked"})),
+        ("input", ("v-model.lazy",), (), frozenset({"value", "checked"})),
+        ("input", ('v-bind="props"',), (), frozenset({"value", "checked"})),
+        ("input", ('v-bind.prop="props"',), (), frozenset({"value", "checked"})),
+        ("option", ('v-bind="props"',), (), frozenset({"value", "selected"})),
+        ("option", ("v-bind:[prop]",), (), frozenset({"value", "selected"})),
+        ("select", (":value",), (), frozenset({"selected"})),
+        ("option", (":value",), (), frozenset({"value"})),
+        ("option", (":selected",), (), frozenset({"selected"})),
+        ("option", (), {"c-value"}, frozenset({"value"})),
+        ("input", (), {"value"}, frozenset({"value"})),
+        ("option", (), {"value", "selected"}, frozenset({"value", "selected"})),
+        ("input", (), {"type", "checked"}, frozenset({"checked"})),
+        ("input", (), {"c-type", "c-checked"}, frozenset({"checked"})),
+        ("input", ('value="static"',), (), frozenset()),
+    ],
+)
+def test_native_vue_ownership_marker_is_property_specific(tag, authored, data, expected) -> None:
+    assert vue_owned_native_properties(tag, authored, data) == expected
+
+
+def test_leaf_c_bind_spread_marks_all_available_native_properties() -> None:
+    assert vue_owned_native_properties("input", (), ("title",), has_spread=True) == frozenset({"value", "checked"})
+
+
+def test_authored_native_ownership_marker_is_reserved() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Forged(Component):
+        citry = registry
+        template = "<input v-citry-vue-owned=\"'value'\">"
+
+    with pytest.raises(ValueError, match="reserved compiler output"):
+        render_prepared(Forged())
+
+
+def test_python_native_ownership_marker_is_reserved() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Forged(Component):
+        citry = registry
+        template = '<input c-bind="attrs">'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"v-citry-vue-owned": "'value'"}}
+
+    with pytest.raises(ValueError, match="reserved compiler output"):
+        render_prepared(Forged())
+
+
+def test_native_vue_ownership_marker_is_vue_internal_metadata() -> None:
+    with NativeCompiler() as compiler:
+        compiled = compiler.compile(
+            "<section><input v-citry-vue-owned=\"'value'\"></section>",
+            type_key="native-owner",
+        )
+    assert compiled.directive_signature == ()
+    assert compiled.replacement_sites == ()
+    assert '_resolveDirective("citry-vue-owned")' in compiled.javascript
 
 
 def test_prepared_nodes_preserve_source_and_python_text_semantics() -> None:
@@ -1365,7 +1435,7 @@ def test_authored_and_python_attribute_targets_use_html_ascii_identity(vue_attr:
 
 
 @pytest.mark.parametrize("vue_attr", [':[field]="draft"', 'v-bind:[field]="draft"'])
-def test_dynamic_argument_binding_rejects_python_attrs_but_survives_alone(vue_attr: str) -> None:
+def test_dynamic_element_browser_bindings_reject_python_attrs_but_survive_alone(vue_attr: str) -> None:
     registry = Citry(autodiscover=False, extensions=[])
 
     class Mixed(Component):
@@ -1411,6 +1481,25 @@ def test_dynamic_argument_binding_rejects_python_attrs_but_survives_alone(vue_at
     )
     dynamic_definition = dynamic_assembly.compile_inputs[dynamic_assembly.view.occurrences[0].definition_id]
     assert vue_attr in dynamic_definition.template
+
+
+def test_dynamic_element_object_bind_modifier_survives_alone() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class NativeDynamicOnly(Component):
+        citry = registry
+        template = '<c-element c-is="tag" v-bind.prop="attrs"></c-element>'
+
+        def template_data(self, kwargs, slots):
+            return {"tag": "input"}
+
+    assembly = assemble_typed_render(
+        render_prepared(NativeDynamicOnly()),
+        revision=0,
+        tag_for_type=lambda type_key: f"c-{type_key.split('_', 1)[0].lower()}",
+    )
+    definition = assembly.compile_inputs[assembly.view.occurrences[0].definition_id]
+    assert 'v-bind.prop="attrs"' in definition.template
 
 
 @pytest.mark.parametrize("vue_attr", [':[field]="draft"', 'v-bind:[field]="draft"'])

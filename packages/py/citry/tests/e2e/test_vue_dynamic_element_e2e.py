@@ -2366,6 +2366,178 @@ def test_dynamic_element_changes_tag_across_a_prepared_revision(page: Any, serve
     assert faults == []
 
 
+def test_dynamic_element_native_binding_survives_section_to_input_revision(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="dynamic-element-native-binding-e2e", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class DynamicState:
+        tag = "section"
+
+        def render(self):
+            return View(tag=self.tag)
+
+    class View(Component):
+        citry = engine
+        State = DynamicState
+        template = (
+            '<button id="swap-native" @c-click="swap">swap</button>'
+            '<c-element c-is="tag" id="dynamic-native" :value="\'server-after\'" />'
+        )
+
+        class Events:
+            def swap(self, state: DynamicState):
+                state.tag = "input"
+                return state.render()
+
+        def template_data(self, kwargs, slots):
+            return {"tag": kwargs["tag"]}
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.goto(serve_live(engine, View(tag="section").render().serialize(), "") + "/")
+    page.wait_for_selector("section#dynamic-native", state="attached")
+    page.locator("#swap-native").click()
+    page.wait_for_function("document.querySelector('#dynamic-native')?.tagName === 'INPUT'")
+    assert page.locator("#dynamic-native").input_value() == "server-after"
+    assert faults == []
+
+
+def test_uncontrolled_native_baseline_change_wins_over_dirty_value(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="native-baseline-change-e2e", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class DynamicState:
+        value = "server-before"
+
+        def render(self):
+            return View(value=self.value)
+
+    class View(Component):
+        citry = engine
+        State = DynamicState
+        template = (
+            '<button id="change-baseline" @c-click="change">change</button>'
+            '<input id="uncontrolled-baseline" c-defaultValue="value" />'
+        )
+
+        class Events:
+            def change(self, state: DynamicState):
+                state.value = "server-after"
+                return state.render()
+
+        def template_data(self, kwargs, slots):
+            return {"value": kwargs["value"]}
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.goto(serve_live(engine, View(value="server-before").render().serialize(), "") + "/")
+    input_locator = page.locator("#uncontrolled-baseline")
+    input_locator.fill("browser-dirty")
+    page.locator("#change-baseline").click()
+    page.wait_for_function("document.querySelector('#uncontrolled-baseline')?.defaultValue === 'server-after'")
+    assert input_locator.input_value() == "server-after"
+    assert faults == []
+
+
+def test_unchanged_uncontrolled_native_properties_survive_server_publication(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="native-baseline-unchanged-e2e", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class DynamicState:
+        step = 0
+
+        def render(self):
+            return View(step=self.step)
+
+    class View(Component):
+        citry = engine
+        State = DynamicState
+        template = (
+            '<button id="publish-unchanged" @c-click="publish">publish</button>'
+            '<output id="publish-step">{{ step }}</output>'
+            '<input id="uncontrolled-text" value="server-text" />'
+            '<input id="uncontrolled-check" type="checkbox" />'
+            '<select id="uncontrolled-select"><option value="a" selected>A</option>'
+            '<option value="b">B</option></select>'
+        )
+
+        class Events:
+            def publish(self, state: DynamicState):
+                state.step += 1
+                return state.render()
+
+        def template_data(self, kwargs, slots):
+            return {"step": kwargs["step"]}
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.goto(serve_live(engine, View(step=0).render().serialize(), "") + "/")
+    page.locator("#uncontrolled-text").fill("browser-text")
+    page.locator("#uncontrolled-check").check()
+    page.locator("#uncontrolled-select").select_option("b")
+    page.locator("#publish-unchanged").click()
+    page.wait_for_function("document.querySelector('#publish-step')?.textContent.trim() === '1'")
+    assert page.locator("#uncontrolled-text").input_value() == "browser-text"
+    assert page.locator("#uncontrolled-check").is_checked()
+    assert page.locator("#uncontrolled-select").input_value() == "b"
+    assert faults == []
+
+
+def test_native_vue_ownership_releases_when_server_definition_removes_binding(page: Any, serve_live: Any) -> None:
+    engine = Citry(secret="native-ownership-release-e2e", autodiscover=False)  # noqa: S106
+    engine.set_mounted_prefix("/citry")
+
+    class DynamicState:
+        owned = True
+        step = 0
+
+        def render(self):
+            return View(owned=self.owned, step=self.step)
+
+    class View(Component):
+        citry = engine
+        State = DynamicState
+        template = (
+            '<button id="release-ownership" @c-click="release">release</button>'
+            '<button id="publish-after-release" @c-click="publish">publish</button>'
+            '<output id="ownership-state">{{ owned }}</output>'
+            '<output id="ownership-step">{{ step }}</output>'
+            '<c-if cond="owned"><input id="ownership-input" :value="\'vue-owned\'" /></c-if>'
+            '<c-else><input id="ownership-input" value="server-default" /></c-else>'
+        )
+
+        class Events:
+            def release(self, state: DynamicState):
+                state.owned = False
+                return state.render()
+
+            def publish(self, state: DynamicState):
+                state.owned = False
+                state.step += 1
+                return state.render()
+
+        def template_data(self, kwargs, slots):
+            return {"owned": kwargs["owned"], "step": kwargs["step"]}
+
+    dispatcher_for(engine)
+    faults: list[str] = []
+    page.on("pageerror", lambda error: faults.append(str(error)))
+    page.goto(serve_live(engine, View(owned=True, step=0).render().serialize(), "") + "/")
+    before = page.locator("#ownership-input")
+    before.fill("browser-dirty")
+    page.locator("#release-ownership").click()
+    page.wait_for_function("document.querySelector('#ownership-state')?.textContent.trim() === 'False'")
+    assert before.input_value() == "server-default"
+    before.fill("browser-dirty")
+    page.locator("#publish-after-release").click()
+    page.wait_for_function("document.querySelector('#ownership-step')?.textContent.trim() === '1'")
+    assert before.input_value() == "browser-dirty"
+    assert faults == []
+
+
 def test_dynamic_element_keeps_authored_vue_bindings_and_key_across_revision(
     page: Any,
     serve_live: Any,

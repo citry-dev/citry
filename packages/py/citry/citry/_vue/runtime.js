@@ -1090,6 +1090,10 @@ global.CitryVueFragments = CitryVueFragments;
   }
 
   const controlLifetimes = new WeakMap();
+  // Vue-owned native state is private runtime metadata. Keep it out of the
+  // DOM so application code cannot accidentally forge ownership by assigning
+  // an expando with the same name.
+  const vueOwnedNativeProperties = new WeakMap();
   const eventTimingLifetimes = new WeakMap();
   const eventTimingDirectives = new WeakMap();
   const runtimeEventTimingDirectives = new WeakMap();
@@ -1428,6 +1432,17 @@ global.CitryVueFragments = CitryVueFragments;
     const aggregate = {handles,children:[],active:true,writing:false,signature:controlSignature(element, handles),pending:new Set()};
     controlLifetimes.set(element, aggregate);
     for (const handle of handles) installControl(element, handle, aggregate);
+  }
+
+  function setVueOwnedNativeProperties(element, value) {
+    const values = Array.isArray(value) ? value : [value];
+    const properties = values.filter(property =>
+      property === "value" || property === "checked" || property === "selected");
+    if (properties.length === 0) {
+      vueOwnedNativeProperties.delete(element);
+      return;
+    }
+    vueOwnedNativeProperties.set(element, Object.freeze([...new Set(properties)]));
   }
 
   function createEventActivity(record, descriptor = null) {
@@ -3173,6 +3188,11 @@ global.CitryVueFragments = CitryVueFragments;
       },
       beforeUnmount(element) { disposeControl(element); },
     });
+    vueApp.directive("citry-vue-owned", {
+      mounted(element, binding) { setVueOwnedNativeProperties(element, binding.value); },
+      updated(element, binding) { setVueOwnedNativeProperties(element, binding.value); },
+      beforeUnmount(element) { vueOwnedNativeProperties.delete(element); },
+    });
     const runtimeEventLifetimes = new WeakMap();
     const disposeRuntimeEvents = element => {
       const lifetime = runtimeEventLifetimes.get(element);
@@ -3664,41 +3684,70 @@ global.CitryVueFragments = CitryVueFragments;
     }
   }
 
+  function isNativeControl(value) {
+    return typeof HTMLInputElement === "function" && value instanceof HTMLInputElement ||
+      typeof HTMLTextAreaElement === "function" && value instanceof HTMLTextAreaElement ||
+      typeof HTMLSelectElement === "function" && value instanceof HTMLSelectElement;
+  }
+
   function nativeControlElements(root) {
-    if (!(root instanceof Element)) return [];
+    if (typeof Element !== "function" || !(root instanceof Element)) return [];
     const elements = [];
-    const isNativeControl = value => value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement ||
-      value instanceof HTMLSelectElement;
     if (isNativeControl(root)) elements.push(root);
     elements.push(...root.querySelectorAll("input,textarea,select"));
     return elements;
   }
 
+  function nativeOwnedProperties(element) {
+    const properties = new Set(vueOwnedNativeProperties.get(element) || []);
+    const tag = element.tagName.toLowerCase();
+    if (controlLifetimes.has(element)) {
+      if (tag === "select") properties.add("selected");
+      else if (tag === "textarea") properties.add("value");
+      else if (tag === "input") {
+        const type = element.type.toLowerCase();
+        properties.add(type === "checkbox" || type === "radio" ? "checked" : "value");
+      }
+    }
+    if (tag === "select" && properties.has("selected") === false) {
+      for (const option of element.options) {
+        const owned = vueOwnedNativeProperties.get(option) || [];
+        if (owned.includes("selected") || owned.includes("value")) {
+          properties.add("selected");
+          break;
+        }
+      }
+    }
+    return properties;
+  }
+
   function captureNativeControlState(root) {
     const snapshots = [];
     for (const element of nativeControlElements(root)) {
-      if (controlLifetimes.has(element)) continue;
-      if (element instanceof HTMLInputElement) {
+      const owned = nativeOwnedProperties(element);
+      if (typeof HTMLInputElement === "function" && element instanceof HTMLInputElement) {
         const type = element.type.toLowerCase();
         if (type === "file") continue;
-        if (type === "checkbox" || type === "radio") {
-          if (element.checked === element.defaultChecked) continue;
-          snapshots.push({root, element, kind: "checked", value: element.checked});
-          continue;
+        if ((type === "checkbox" || type === "radio") && !owned.has("checked") &&
+            element.checked !== element.defaultChecked) {
+          snapshots.push({root, element, kind: "checked", baseline: element.defaultChecked, value: element.checked});
         }
-        if (element.value !== element.defaultValue) snapshots.push({root, element, kind: "value", value: element.value});
+        if (!owned.has("value") && element.value !== element.defaultValue)
+          snapshots.push({root, element, kind: "value", baseline: element.defaultValue, value: element.value});
         continue;
       }
-      if (element instanceof HTMLTextAreaElement) {
-        if (element.value !== element.defaultValue) snapshots.push({root, element, kind: "value", value: element.value});
+      if (typeof HTMLTextAreaElement === "function" && element instanceof HTMLTextAreaElement) {
+        if (!owned.has("value") && element.value !== element.defaultValue)
+          snapshots.push({root, element, kind: "value", baseline: element.defaultValue, value: element.value});
         continue;
       }
+      if (owned.has("selected")) continue;
       const options = [...element.options];
       const values = options.map(option => option.value);
       const selected = options.map(option => option.selected);
       const defaults = options.map(option => option.defaultSelected);
       if (selected.some((value, index) => value !== defaults[index]))
-        snapshots.push({root, element, kind: "selected", values, selected});
+        snapshots.push({root, element, kind: "selected", values, defaults, selected});
     }
     return snapshots;
   }
@@ -3706,14 +3755,25 @@ global.CitryVueFragments = CitryVueFragments;
   function restoreNativeControlState(snapshots) {
     for (const snapshot of snapshots || []) {
       const {root, element} = snapshot;
-      if (!(root instanceof Element) || !root.isConnected || !element.isConnected || !root.contains(element)) continue;
-      if (snapshot.kind === "value" && "value" in element) element.value = snapshot.value;
-      else if (snapshot.kind === "checked" && "checked" in element) element.checked = snapshot.value;
-      else if (snapshot.kind === "selected" && element instanceof HTMLSelectElement) {
+      if (typeof Element !== "function" || !(root instanceof Element) || !root.isConnected ||
+          !element.isConnected || !root.contains(element)) continue;
+      const owned = nativeOwnedProperties(element);
+      if (owned.has(snapshot.kind)) continue;
+      if (snapshot.kind === "value" && "value" in element) {
+        element.value = element.defaultValue === snapshot.baseline ? snapshot.value : element.defaultValue;
+      }
+      else if (snapshot.kind === "checked" && "checked" in element) {
+        element.checked = element.defaultChecked === snapshot.baseline ? snapshot.value : element.defaultChecked;
+      }
+      else if (snapshot.kind === "selected" && typeof HTMLSelectElement === "function" &&
+          element instanceof HTMLSelectElement) {
         const options = [...element.options];
-        if (options.length !== snapshot.values.length || options.some((option, index) => option.value !== snapshot.values[index]))
-          continue;
-        options.forEach((option, index) => { option.selected = snapshot.selected[index]; });
+        const unchanged = options.length === snapshot.values.length &&
+          !options.some((option, index) => option.value !== snapshot.values[index] ||
+            option.defaultSelected !== snapshot.defaults[index]);
+        options.forEach((option, index) => {
+          option.selected = unchanged ? snapshot.selected[index] : option.defaultSelected;
+        });
       }
     }
   }

@@ -130,6 +130,25 @@ def _slot_key_attr(expression: str | None) -> str:
     return "" if expression is None else f' :key="{expression}"'
 
 
+def _is_tracked_directive(directive: object) -> bool:
+    """
+    Return whether a compiled directive has a Citry runtime contract.
+
+    The private native-state marker is Vue-internal metadata. It needs Vue's
+    ``withDirectives`` wrapper, but it is intentionally excluded from Citry's
+    lifecycle signature because it does not define a server replacement site.
+    Keep the signature limited to directives with an explicit Citry contract.
+    """
+    return isinstance(directive, dict) and directive.get("runtimeLifecycle") is True
+
+
+def _needs_directive_wrapper(directive: object) -> bool:
+    """Return whether Vue emits a ``withDirectives`` wrapper for this site."""
+    return _is_tracked_directive(directive) or (
+        isinstance(directive, dict) and directive.get("name") == "citry-vue-owned"
+    )
+
+
 class _DynamicElementDeclaration(TypedDict):
     alias: str
     tag: str
@@ -328,7 +347,7 @@ class NativeCompiler:
                 )
                 for element in response.get("elements", [])
                 for directive in element.get("directives", [])
-                if directive.get("runtimeLifecycle") is True
+                if _is_tracked_directive(directive)
             )
             discovered_sites = tuple(
                 {
@@ -343,7 +362,7 @@ class NativeCompiler:
             directive_element_count = sum(
                 1
                 for element in response.get("elements", [])
-                if any(item.get("runtimeLifecycle") is True for item in element.get("directives", []))
+                if any(_needs_directive_wrapper(item) for item in element.get("directives", []))
             )
             discovered_runs = _normalize_local_call_runs(response.get("localCallRuns", []), local_call_runs)
             discovered_calls = _normalize_local_calls(response.get("elements", []), local_calls)
@@ -365,8 +384,8 @@ class NativeCompiler:
             if any(token in preamble or token in code for token in _FORBIDDEN_CODE):
                 raise ValueError("ordinary target emitted cached or static compiler constructs")
             emits_directives = "withDirectives" in helpers
-            if emits_directives != bool(discovered_signature):
-                raise ValueError("runtime directive metadata does not match the emitted compiler helpers")
+            if emits_directives != bool(directive_element_count):
+                raise ValueError("compiled directive sites do not match the emitted compiler helpers")
             if code.count("_withDirectives(") != directive_element_count:
                 raise ValueError("runtime directive metadata count does not match emitted sites")
             discovered_sites = _normalize_replacement_sites(discovered_sites)
@@ -725,6 +744,25 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                     attrs.append(f'v-bind="preparedData.{node.attrs_binding_key}"')
                 if node.key_binding_key is not None:
                     attrs.append(f':key="preparedData.{node.key_binding_key}"')
+                # Keep the compatibility composer on the same native-state
+                # contract as the direct assembler.  ``ElementOpen`` predates
+                # the typed ``has_spread`` field, so its generated attrs
+                # binding is the only spread provenance available here.
+                if node.tag.casefold() in {"input", "textarea", "select", "option"}:
+                    from .capture import (  # noqa: PLC0415
+                        vue_owned_native_marker,
+                        vue_owned_native_properties,
+                    )
+
+                    attrs.append(
+                        vue_owned_native_marker(
+                            vue_owned_native_properties(
+                                node.tag,
+                                node.authored_attrs,
+                                has_spread=node.attrs_binding_key is not None,
+                            )
+                        )
+                    )
                 seen_events: set[str] = set()
                 for binding in node.event_bindings:
                     event = str(binding["event"])

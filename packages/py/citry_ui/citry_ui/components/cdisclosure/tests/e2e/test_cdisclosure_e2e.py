@@ -982,7 +982,7 @@ def test_incompatible_runtime_generation_fails_closed_without_replacing_closed_v
     ]
 
 
-def test_server_fingerprint_morph_handoff_preserves_data_only_updates_and_resets_replaced_descendants(
+def test_server_fingerprint_morph_handoff_preserves_data_only_updates_and_unchanged_native_values(
     page: Any,
     serve_citry_ui_live: Any,
 ):
@@ -1008,10 +1008,10 @@ def test_server_fingerprint_morph_handoff_preserves_data_only_updates_and_resets
     page.wait_for_function("document.querySelector('#events-step').textContent.trim() === '1'")
     assert page.evaluate("document.querySelector('#events-disclosure') === window.__eventsDisclosureRoot")
     assert trigger.get_attribute("aria-expanded") == "true"
-    # This server revision remounts/replaces the component's rendered state, so
-    # it adopts the server baseline. Browser-owned values survive only data-only
-    # reactive updates that keep the mounted component state.
-    assert page.locator("#morph-input").input_value() == "preserved"
+    # The server baseline is unchanged, so the retained element keeps its
+    # dirty native value even though the surrounding component received an
+    # event-driven publication.
+    assert page.locator("#morph-input").input_value() == "browser-owned"
 
     page.evaluate("window.__disclosureMorph.controlled = false")
     page.wait_for_function("document.querySelector('#events-disclosure button').ariaExpanded === 'false'")

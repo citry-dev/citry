@@ -32,6 +32,9 @@ from .capture import (
     StaticRunOpening,
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
+    is_native_state_tag,
+    vue_owned_native_marker,
+    vue_owned_native_properties,
 )
 from .compiler import (
     DefinitionCompileInput,
@@ -1857,7 +1860,21 @@ def assemble_typed_render(
                     output.append(f"<{alias}")
                     for attr in part.authored_attrs:
                         output.append(f" {attr.value}")
+                    native_marker = (
+                        vue_owned_native_marker(
+                            vue_owned_native_properties(
+                                part.tag,
+                                part.authored_attrs,
+                                effective_dynamic_attrs,
+                                has_spread=part.has_spread,
+                            )
+                        )
+                        if is_native_state_tag(part.tag)
+                        else ""
+                    )
                     output.append(f' v-bind="preparedData.{attrs_key}"')
+                    if native_marker:
+                        output.append(f" {native_marker}")
                     key_key = None
                     if part.key is not None:
                         key_key = data_key("Key", alias, (0, 0), data_owner_id)
@@ -2256,6 +2273,15 @@ def _append_element_open(
 ) -> None:
     start = output.byte_length
     attrs = list(part.authored_attrs)
+    native_marker = (
+        vue_owned_native_marker(
+            vue_owned_native_properties(part.tag, part.attrs, part.data_attrs, has_spread=part.has_spread)
+        )
+        if is_native_state_tag(part.tag)
+        else ""
+    )
+    if native_marker:
+        attrs.append(native_marker)
     if attrs_binding_key is not None:
         attrs.append(f'v-bind="preparedData.{attrs_binding_key}"')
     if key_binding_key is not None:

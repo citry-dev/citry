@@ -150,7 +150,7 @@ def classify_component_tag_client_binding_key(key: Any, *, tag_name: str) -> Com
         return ComponentTagClientBindingKind.CITRY_HANDLER
     if key.startswith(("@", "v-on:")):
         return ComponentTagClientBindingKind.EVENT
-    if key == "v-bind":
+    if key == "v-bind" or key.startswith("v-bind."):
         return ComponentTagClientBindingKind.PROPS_OBJECT
     if key in {":ref", "v-bind:ref"}:
         return ComponentTagClientBindingKind.REF_EXPRESSION
