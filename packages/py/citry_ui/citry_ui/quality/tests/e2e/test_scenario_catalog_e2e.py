@@ -338,6 +338,32 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
     )
 
 
+def test_repeatable_contacts_initial_rows_keep_v_model_through_reverse_and_remove(page: Any) -> None:
+    page.set_content(render_scenario("workflow.repeatable-contacts"), wait_until="load")
+    page.wait_for_selector("#repeatable-contacts-form[data-citry-form-initialized]", state="attached")
+
+    form = page.locator("#repeatable-contacts-form")
+    assert form.locator('input[type="email"]').count() == 2
+    row_legends = form.locator("fieldset > legend:not([hidden])")
+    assert row_legends.all_text_contents() == ["Ada Lovelace", "Grace Hopper"]
+
+    primary_email = form.locator('input[name="contacts[1][email]"]')
+    primary_email.fill("ada+draft@example.com")
+    primary_fieldset = form.locator('fieldset > fieldset:has(input[name="contacts[1][email]"])')
+
+    page.get_by_role("button", name="Reverse order").click()
+    page.wait_for_function(
+        """() => [...document.querySelectorAll('#repeatable-contacts-form fieldset > legend:not([hidden])')]
+          .map(legend => legend.textContent.trim()).join('|') === 'Grace Hopper|Ada Lovelace'"""
+    )
+    assert primary_email.input_value() == "ada+draft@example.com"
+
+    primary_fieldset.get_by_role("button", name="Remove").click()
+    page.wait_for_function("document.querySelector('input[name=\"contacts[1][email]\"]') === null")
+    assert form.locator('input[type="email"]').count() == 1
+    assert row_legends.all_text_contents() == ["Grace Hopper"]
+
+
 def test_accordion_quality_form_continuity_and_brand_contrast(page: Any, serve_citry_ui_live: Any) -> None:
     rendered = build_scenario(
         "accordion.states",

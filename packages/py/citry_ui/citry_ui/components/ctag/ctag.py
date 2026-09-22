@@ -585,6 +585,11 @@ class CTagGroup(LibraryComponent):
             schedule();
             return () => { registrations.delete(entry.root); schedule(); };
           };
+          // Vue invokes mounted callbacks from children towards parents. A
+          // CTag can therefore reach this group before the group callback has
+          // installed its registration function. Notify already-mounted tags
+          // once the group-side registry becomes available.
+          root.dispatchEvent(new Event("citry:tag-group-ready"));
           const ownedEntry = (target) => {
             const tag = target.closest?.('[data-citry-ui-part="tag"]');
             return tag?.closest('[data-citry-ui-part="tag-group"]') === root ? registrations.get(tag) : null;
@@ -923,7 +928,12 @@ class CTag(LibraryComponent):
             root, label, indicator, remove, value: root.dataset.value,
             localDisabled, disabled: localDisabled, textValue,
           };
-          unregister = group.__citryTagRegister?.(entry) ?? null;
+          const register = () => {
+            if (unregister || !group.__citryTagRegister) return;
+            unregister = group.__citryTagRegister(entry) ?? null;
+          };
+          group.addEventListener("citry:tag-group-ready", register, {once: true});
+          register();
           const apply = () => {
             if (props.disabled === undefined) { invalid.delete("disabled"); localDisabled = data.disabled; }
             else if (typeof props.disabled === "boolean") {
@@ -938,12 +948,14 @@ class CTag(LibraryComponent):
             } else report("textValue", props.textValue);
             entry.localDisabled = localDisabled;
             entry.textValue = textValue;
+            register();
             group.__citryTagRegister?.(entry);
           };
           const stop = Citry.vue.watchEffect(apply);
           root.setAttribute("data-citry-tag-initialized", "");
           return () => {
             stop?.(); unregister?.();
+            group.removeEventListener("citry:tag-group-ready", register);
             root.removeAttribute("data-citry-tag-initialized");
           };
         },

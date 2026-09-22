@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import citry_ui
-from citry import Citry, Component
+from citry import Citry, Component, DepsStrategy
 from citry_ui.components.caccordion.quality.scenario import accordion_states_component
 from citry_ui.components.calert.quality.scenario import alert_states_component
 from citry_ui.components.calert_dialog.quality.scenario import alert_dialog_states_component
@@ -326,6 +326,7 @@ def build_scenario(
     *,
     configure_app: Callable[[Citry], None] | None = None,
     self_contained: bool = False,
+    deps_strategy: DepsStrategy = "document",
 ) -> RenderedScenario:
     """
     Build a complete scenario after an optional host configures Citry.
@@ -333,7 +334,8 @@ def build_scenario(
     The app uses ``/citry`` when the host has not configured a prefix, keeping
     the default suitable for host routes and Lighthouse.  ``self_contained``
     inlines prepared browser assets for documents loaded without that host,
-    while retaining the mounted Events transport URLs.
+    while retaining the mounted Events transport URLs. ``deps_strategy`` can
+    select the public static serializer for tests and no-JavaScript previews.
     """
     scenario = scenario_by_id(scenario_id)
     if scenario.status is not ScenarioStatus.READY:
@@ -387,16 +389,22 @@ def build_scenario(
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
             return {"page_title": f"{scenario.purpose} | Citry UI quality"}
 
-    html = str(ScenarioPage())
-    if self_contained:
+    page = ScenarioPage()
+    html = page.render().serialize(deps_strategy=deps_strategy)
+    if self_contained and deps_strategy == "document":
         html = _inline_prepared_assets(html, app)
     return RenderedScenario(scenario=scenario, app=app, html=html)
 
 
-def render_scenario(scenario_id: str, *, embedded: bool = False) -> str:
+def render_scenario(
+    scenario_id: str,
+    *,
+    embedded: bool = False,
+    deps_strategy: DepsStrategy = "document",
+) -> str:
     """Render a ready scenario as a component fragment or complete page."""
     if not embedded:
-        return build_scenario(scenario_id, self_contained=True).html
+        return build_scenario(scenario_id, self_contained=True, deps_strategy=deps_strategy).html
 
     scenario = scenario_by_id(scenario_id)
     if scenario.status is not ScenarioStatus.READY:
@@ -409,7 +417,7 @@ def render_scenario(scenario_id: str, *, embedded: bool = False) -> str:
     app = Citry(secret="citry-ui-quality-scenarios", autodiscover=False)  # noqa: S106
     app.register_library(citry_ui)
     app.set_mounted_prefix("/citry")
-    return str(factory(app)())
+    return factory(app)().render().serialize(deps_strategy=deps_strategy)
 
 
 def main() -> int:

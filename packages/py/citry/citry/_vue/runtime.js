@@ -2347,8 +2347,13 @@ global.CitryVueFragments = CitryVueFragments;
       if (typeof childId !== "string" || childId.length === 0)
         throw new TypeError("Citry component event child id must be a non-empty string");
       const child = ownedApp.occurrences.get(childId);
-      if (!child || child.parentId !== record.occurrenceId)
-        throw new Error("Citry component event child is not a direct child of its source");
+      if (!child)
+        throw new Error("Citry component event child is not a descendant of its source");
+      let cursor = child.parentId;
+      while (cursor !== null && cursor !== record.occurrenceId)
+        cursor = ownedApp.occurrences.get(cursor)?.parentId ?? null;
+      if (cursor !== record.occurrenceId)
+        throw new Error("Citry component event child is not a descendant of its source");
       const mounted = ownedApp.mounted.get(childId);
       if (!mounted || mounted.record.app !== ownedApp || mounted.record.occurrenceId !== childId)
         throw new Error("Citry component event child is stale or retired");

@@ -215,7 +215,7 @@ def image_states_component(app: Citry) -> type[Component]:
                     type="button"
                     @click="
                       reactiveSource='https://images.citry.test/northstar/horsehead-1280.jpg?frame=rapid-a';
-                      queueMicrotask(
+                      globalThis.queueMicrotask(
                         ()=>reactiveSource='https://images.citry.test/northstar/orion-640.jpg?frame=rapid-b'
                       );
                     "

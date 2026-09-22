@@ -338,6 +338,68 @@ def test_generic_browser_bindings_assemble_from_leaf_typed_fallback() -> None:
     assert "$probe" in compiled.javascript
 
 
+def test_generic_browser_binding_values_expression_preserves_comparisons() -> None:
+    registry = Citry()
+
+    class Root(Component):
+        citry = registry
+        template = '<p c-title="title">{{ value }}</p>'
+
+        def template_data(self, kwargs, slots):
+            return {"title": "initial", "value": 2}
+
+    rendered = render_prepared_direct(Root())
+    leaf = rendered.parts[0]
+    while isinstance(leaf, CitryRender):
+        leaf = leaf.parts[0]
+    assert isinstance(leaf, PreparedLeafProgram)
+    parts = typed_leaf_parts(leaf)
+    parts = [
+        replace(
+            part,
+            browser_bindings=(
+                prepared_browser_binding(
+                    helper="$probe",
+                    operand="less-than",
+                    target="attribute",
+                    name="title",
+                    values_expression="value < 3",
+                ),
+                prepared_browser_binding(
+                    helper="$probe",
+                    operand="greater-than",
+                    target="attribute",
+                    name="data-state",
+                    values_expression="value > 1",
+                ),
+            ),
+        )
+        if isinstance(part, PreparedElementOpen)
+        else part
+        for part in parts
+    ]
+    object.__setattr__(leaf, "cached_typed_parts", tuple(parts))
+
+    assembly = assemble_typed_render(
+        rendered,
+        revision=0,
+        tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
+        template_context_names=("$probe",),
+    )
+    compile_input = next(iter(assembly.compile_inputs.values()))
+    assert "value < 3" in compile_input.template
+    assert "value > 1" in compile_input.template
+    assert "&lt;" not in compile_input.template
+    assert "&gt;" not in compile_input.template
+
+    compiled = NativeCompiler().compile(
+        compile_input.template,
+        type_key="BrowserBindingComparisonExpressions",
+        element_bindings=compile_input.element_bindings,
+    )
+    assert "$probe" in compiled.javascript
+
+
 def test_direct_render_builds_relationships_without_an_ownership_module() -> None:
     registry = Citry()
 

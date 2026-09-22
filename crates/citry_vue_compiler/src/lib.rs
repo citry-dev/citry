@@ -1487,8 +1487,6 @@ fn html_escape_attr(value: &str) -> String {
         .replace('&', "&amp;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
 }
 
 fn apply_edits(source: &str, edits: &[Edit]) -> String {
@@ -2018,6 +2016,38 @@ mod tests {
             .find_map(|item| item.local_call.as_ref())
             .unwrap();
         assert_eq!(call.bindings[0].name, ":disabled");
+    }
+
+    #[test]
+    fn preserves_comparison_operators_in_declared_component_bindings() {
+        let template = "<citry-child @input=\"value = value < 3\" :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>";
+        let binding_start = template.find("@input").unwrap();
+        let binding_end = binding_start + "@input=\"value = value < 3\"".len();
+        let artifact = compile(CompileRequest {
+            template: template.to_owned(),
+            local_calls: vec![LocalCall {
+                local_id: "citryCallA".to_owned(),
+                type_key: "Child".to_owned(),
+                component_tag: "citry-child".to_owned(),
+                source_start: 0,
+                source_end: (template.find('>').unwrap() + 1) as u32,
+                bindings: vec![ComponentCallBinding {
+                    kind: "event".to_owned(),
+                    name: "@input".to_owned(),
+                    value: "value = value < 3".to_owned(),
+                    source_start: binding_start as u32,
+                    source_end: binding_end as u32,
+                }],
+            }],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        });
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "comparison binding must remain valid Vue source: {:?}",
+            artifact.diagnostics
+        );
     }
 
     #[test]

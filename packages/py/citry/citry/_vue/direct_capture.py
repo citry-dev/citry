@@ -9,7 +9,7 @@ import re
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from html import escape, unescape
+from html import unescape
 from typing import TYPE_CHECKING, TypeAlias, TypeGuard, TypeVar, cast
 
 from citry.attrs import _html_attr_identity, validate_html_attr_name
@@ -44,6 +44,7 @@ from .compiler import (
     _LocalCallRunDeclaration,
     _OpaqueHtmlDeclaration,
     _RuntimeEventDeclaration,
+    _vue_attribute_escape,
 )
 from .direct import (
     DirectCallRunRender,
@@ -1365,7 +1366,7 @@ def assemble_typed_render(
                             emitted_listener_names.add(listener_name)
                         output.append(" ")
                         component_binding_start = output.byte_length
-                        source_attr = f'{component_binding.key}="{escape(component_binding.value, quote=True)}"'
+                        source_attr = f'{component_binding.key}="{_vue_attribute_escape(component_binding.value)}"'
                         output.append(source_attr)
                         call_bindings.append(
                             {
@@ -1579,7 +1580,9 @@ def assemble_typed_render(
                             if browser_binding.values_expression is None
                             else f", () => ({browser_binding.values_expression})"
                         )
-                        expression = escape(f"{browser_binding.helper}(preparedData.{operand_key}{thunk})", quote=True)
+                        expression = _vue_attribute_escape(
+                            f"{browser_binding.helper}(preparedData.{operand_key}{thunk})"
+                        )
                         directive = f":{browser_binding.name}"
                         browser_attrs.append(f'{directive}="{expression}"')
                     effective_data_attrs = dict(part.data_attrs)

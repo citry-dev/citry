@@ -373,7 +373,7 @@ def test_image_quality_no_javascript_keeps_native_alt_geometry_and_sources(brows
     page = context.new_page()
     try:
         _install_image_routes(page)
-        page.set_content(render_scenario("image.states"), wait_until="load")
+        page.set_content(render_scenario("image.states", deps_strategy="simple"), wait_until="load")
         basic = page.locator('#quality-image-basic [data-citry-ui-part="image"]')
         assert basic.get_attribute("alt") == "Orion Nebula, captured from Northstar Ridge"
         assert basic.get_attribute("width") == "1280"

@@ -29,9 +29,16 @@ def _tag_page() -> str:
     class Page(Component):
         citry = app
         js = """
-          $component({data(){const tagTest=Citry.vue.reactive({
-            selected:'alpha',events:[],itemDisabled:false,variant:'soft',size:'md',
-          }); window.__tagTest=tagTest; return {state:{tagTest},accept:false,fieldsetDisabled:false};}});
+          $component({
+            data(){
+              const tagTest=Citry.vue.reactive({
+                selected:'alpha',events:[],itemDisabled:false,variant:'soft',size:'md',
+              });
+              window.__tagTest=tagTest;
+              return {state:{tagTest},accept:false,fieldsetDisabled:false};
+            },
+            onServerRender({component}) { window.__state = component; },
+          });
         """
         template = """
           <!doctype html>

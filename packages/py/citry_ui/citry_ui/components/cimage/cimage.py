@@ -1319,6 +1319,16 @@ class CImage(LibraryComponent):
               record.abort = setTimeout(() => {
                 if (root[handoffKey] === record && !root[imageOwner]?.active) abortHandoff(record);
               }, 1000);
+              // Vue removes a keyed old root just after running its cleanup.
+              // If the root is detached, the handoff cannot be consumed by a
+              // later render, so clear its readiness marker after this patch.
+              // A connected root keeps the short handoff window used by
+              // same-root updates.
+              globalThis.setTimeout(() => {
+                if (root[handoffKey] === record && !root.isConnected && !root[imageOwner]?.active) {
+                  abortHandoff(record);
+                }
+              }, 0);
               return;
             }
             root.removeAttribute(imageReady);

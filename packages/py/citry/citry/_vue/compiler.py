@@ -38,7 +38,20 @@ from .prepared import (
 
 def _generated_vue_attr(name: str, value: str) -> str:
     """Serialize one compiler-owned Vue attribute without changing its expression."""
-    return f'{name}="{html.escape(value, quote=True)}"'
+    return f'{name}="{_vue_attribute_escape(value)}"'
+
+
+def _vue_attribute_escape(value: str) -> str:
+    """
+    Escape a Vue directive value while retaining JavaScript comparisons.
+
+    Vue's template parser accepts ``<`` and ``>`` directly inside quoted
+    directive values. Encoding those operators as HTML entities is unsafe for
+    the native compiler: an encoded ``&lt;`` can be parsed as JavaScript
+    ``&lt`` (a bitwise expression) instead of the comparison operator. Quotes
+    and ampersands still need escaping for the surrounding HTML attribute.
+    """
+    return html.escape(value, quote=True).replace("&lt;", "<").replace("&gt;", ">")
 
 
 def _generated_event_args(args: object, *, el_expression: str = "$event.currentTarget") -> str:
