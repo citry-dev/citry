@@ -12,6 +12,15 @@ pytest.importorskip("playwright.sync_api")
 pytestmark = pytest.mark.e2e
 
 
+def _pause_fake_clock(page: Any) -> None:
+    # Clock calls are separate protocol commands. Choose an explicit future
+    # virtual timestamp, then set Date to it before pausing at that timestamp,
+    # so the target cannot become stale between the two commands.
+    target = page.evaluate("new Date(Date.now() + 1_000).toISOString()")
+    page.clock.set_fixed_time(target)
+    page.clock.pause_at(target)
+
+
 @dataclass
 class CombinedTimingArgs:
     value: int
@@ -61,7 +70,7 @@ def test_combined_event_timing_uses_throttle_admission_then_debounce(
     )
     page.clock.install()
     page.goto(serve_live(app, Timed().render().serialize(), "") + "/")
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
     button = page.locator("#timed")
     for elapsed, value in steps:
         page.clock.run_for(elapsed)
@@ -99,7 +108,7 @@ def test_combined_control_timing_keeps_rejected_drafts_but_debounces_admitted_ch
     )
     page.clock.install()
     page.goto(serve_live(app, TimedControl().render().serialize(), "") + "/")
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
     control = page.locator("#timed")
     control.fill("first")
     page.clock.run_for(10)
@@ -154,7 +163,7 @@ def test_combined_pending_debounce_survives_an_unchanged_revision(page: Any, ser
     )
     page.clock.install()
     page.goto(serve_live(app, Stable().render().serialize(), "") + "/")
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
     page.locator("#pending").click()
     page.clock.run_for(10)
     page.locator("#advance").click()
@@ -206,7 +215,7 @@ def test_combined_replacement_cancels_pending_and_retained_lifetimes(page: Any, 
     )
     page.clock.install()
     page.goto(serve_live(app, Replace().render().serialize(), "") + "/")
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
     page.locator("#retained").click()
     page.clock.run_for(10)
     page.locator("#pending").click()

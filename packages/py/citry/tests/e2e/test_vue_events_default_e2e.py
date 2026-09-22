@@ -15,6 +15,15 @@ pytest.importorskip("playwright.sync_api")
 _PlaywrightTimeoutError = pytest.importorskip("playwright.sync_api").TimeoutError
 
 
+def _pause_fake_clock(page: Any) -> None:
+    # Clock calls are separate protocol commands. Choose an explicit future
+    # virtual timestamp, then set Date to it before pausing at that timestamp,
+    # so the target cannot become stale between the two commands.
+    target = page.evaluate("new Date(Date.now() + 1_000).toISOString()")
+    page.clock.set_fixed_time(target)
+    page.clock.pause_at(target)
+
+
 def _watch_citry_ready(page: Any) -> None:
     page.add_init_script(
         """
@@ -2258,7 +2267,7 @@ def test_native_runtime_debounce_keeps_pending_work_across_reordered_revision(pa
     page.clock.install()
     page.goto(serve_live(engine, RetainedDebounce(revision=0).render().serialize(), "") + "/")
     page.evaluate("window.__retainedDebounceElement=document.querySelector('#runtime-debounce')")
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
 
     def timing_snapshot() -> dict[str, Any]:
         return page.evaluate(

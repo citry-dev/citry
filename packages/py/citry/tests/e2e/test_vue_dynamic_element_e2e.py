@@ -20,14 +20,13 @@ pytest.importorskip("playwright.sync_api")
 pytestmark = pytest.mark.e2e
 
 
-def _pause_fake_clock(page: Any) -> float:
-    # Date and pause_at are separate browser commands. Pin Date at the
-    # page-ready instant first so the pause target cannot become stale while
-    # the second command is in flight.
-    target = page.evaluate("new Date().toISOString()")
+def _pause_fake_clock(page: Any) -> None:
+    # Clock calls are separate protocol commands. Choose an explicit future
+    # virtual timestamp, then set Date to it before pausing at that timestamp,
+    # so the target cannot become stale between the two commands.
+    target = page.evaluate("new Date(Date.now() + 1_000).toISOString()")
     page.clock.set_fixed_time(target)
     page.clock.pause_at(target)
-    return float(page.evaluate("performance.now()"))
 
 
 def _client_bundle_source(vue_root: Path) -> str:
@@ -475,11 +474,29 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
 
     page.route(event_url, route_poll)
     page.clock.install()
+    # Install this probe after Playwright's clock so it wraps the fake
+    # setTimeout implementation. The poll callback is where the next interval
+    # is armed; recording virtual performance.now there gives the test the
+    # actual timer dispatch point rather than the later Python route callback.
+    page.add_init_script(
+        """
+        globalThis.__citryPollTimerDispatchTimes = [];
+        const citryClockSetTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = function(callback, delay, ...args) {
+          if (delay !== 1000 || typeof callback !== 'function')
+            return citryClockSetTimeout.call(this, callback, delay, ...args);
+          return citryClockSetTimeout.call(this, function(...callbackArgs) {
+            globalThis.__citryPollTimerDispatchTimes.push(performance.now());
+            return callback.apply(this, callbackArgs);
+          }, delay, ...args);
+        };
+        """
+    )
     page.goto(serve_live(engine, PollRows(rows=["a", "b"]).render().serialize(), "") + "/")
     page.wait_for_function(
         "() => [...document.querySelectorAll('.row-poller')].map(node => node.dataset.row).join(',') === 'a,b'"
     )
-    clock_origin = _pause_fake_clock(page)
+    _pause_fake_clock(page)
 
     page.clock.run_for(1_000)
     wait_for_poll_routes(1)
@@ -495,6 +512,11 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     second_poll = poll_routes[1].request.post_data_json["calls"][0]
     assert second_poll["handlerName"] == "poll"
     assert first_poll["callerRenderId"] == second_poll["callerRenderId"]
+    timer_dispatch_times = page.evaluate("globalThis.__citryPollTimerDispatchTimes")
+    assert len(timer_dispatch_times) >= 2, (
+        f"poll timer probe did not observe both initial dispatches: {timer_dispatch_times}"
+    )
+    second_poll_timer_dispatched_at = float(timer_dispatch_times[-1])
     poll_routes[1].continue_()
     page.wait_for_function(
         "() => { const app=CitryStable._apps.values().next().value; "
@@ -517,22 +539,30 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert after_remove["pollingLifetimeCount"] == 1
     assert event_lifetime_count(after_remove) == 1
     assert all(lifetime["current"] for mounted in after_remove["mounted"] for lifetime in mounted["lifetimes"])
-    second_poll_deadline = clock_origin + 2_000
+    # schedulePoll arms the next interval at the timer callback. Use the
+    # surviving row's measured virtual dispatch time instead of Python route
+    # observation time, which happens later and is not a timer deadline.
+    second_poll_deadline = second_poll_timer_dispatched_at + 1_000
     now_before_deadline = float(page.evaluate("performance.now()"))
     remaining_until_deadline = second_poll_deadline - now_before_deadline
     assert remaining_until_deadline > 0, (
-        f"surviving poll deadline already passed: origin={clock_origin}, "
+        f"surviving poll deadline already passed: timer={second_poll_timer_dispatched_at}, "
         f"now={now_before_deadline}, deadline={second_poll_deadline}"
     )
-    # Leave at least a fraction of a millisecond before the surviving timer's
-    # second deadline. Rounding up, then subtracting one, keeps this advance
-    # strictly before the deadline even when performance.now() is fractional.
-    before_deadline = max(0, math.ceil(remaining_until_deadline) - 1)
+    # Leave at least a full millisecond before the surviving timer's second
+    # deadline. Flooring rather than rounding up keeps this advance strictly
+    # before the measured virtual deadline when performance.now() is fractional.
+    before_deadline = max(0, math.floor(remaining_until_deadline) - 1)
     page.clock.run_for(before_deadline)
     assert len(poll_routes) == 2
-    page.clock.run_for(1)
-    # wait_for_timeout advances the installed fake clock too; use it only after
-    # crossing the deadline so queued request/event work is drained first.
+    remaining_after_before = second_poll_deadline - float(page.evaluate("performance.now()"))
+    assert remaining_after_before > 0, (
+        f"surviving poll deadline crossed unexpectedly: timer={second_poll_timer_dispatched_at}, "
+        f"now={float(page.evaluate('performance.now()'))}, deadline={second_poll_deadline}"
+    )
+    page.clock.run_for(math.ceil(remaining_after_before) + 1)
+    # Let the held route and queued browser work settle after crossing the
+    # virtual deadline. The transition itself was performed explicitly above.
     page.wait_for_timeout(30)
     after_remaining_deadline = poll_lifetime_snapshot()
     assert len(poll_routes) == 3, (
