@@ -22,7 +22,7 @@ class ScrollAreaNativeCallback(Component):
           </button>
           <button
             type="button"
-            @click="setTimeout(()=>imageVisible=true,350)"
+            @click="window.setTimeout(()=>imageVisible=true,350)"
           >Load a delayed image</button>
           <button type="button" @click="expanded=!expanded">
             Toggle content stylesheet

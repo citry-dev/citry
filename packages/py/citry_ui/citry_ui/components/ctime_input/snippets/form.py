@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class TimeInputForm(Component):
     template = """
-      <form @submit.prevent="result=JSON.stringify(Object.fromEntries(new FormData($event.target)))">
+      <form @submit.prevent="result=JSON.stringify(Object.fromEntries(new window.FormData($event.target)))">
         <c-CField required>
           <c-fill name="label">Delivery time</c-fill>
           <c-fill name="default"><c-CTimeInput name="delivery" value="14:30" /></c-fill>

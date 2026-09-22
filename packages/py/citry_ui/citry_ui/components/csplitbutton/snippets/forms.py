@@ -14,9 +14,9 @@ class SplitButtonForms(Component):
           id="accession-form"
           ref="accession"
           @submit.prevent="
-            result = `Submitted ${new FormData($event.target, $event.submitter).get('action')}`
+            result = `Submitted ${new window.FormData($event.target, $event.submitter).get('action')}`
           "
-          @reset="setTimeout(() => result = 'Reset accession', 0)"
+          @reset="window.setTimeout(() => result = 'Reset accession', 0)"
         >
           <label>
             Accession name
@@ -93,8 +93,8 @@ class SplitButtonForms(Component):
         <button
           type="button"
           @click="
-            document.getElementById(owner).requestSubmit(
-              document.getElementById('external-commit-actions-primary')
+            window.document.getElementById(owner).requestSubmit(
+              window.document.getElementById('external-commit-actions-primary')
             )
           "
         >

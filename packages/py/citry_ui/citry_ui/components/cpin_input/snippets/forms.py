@@ -11,7 +11,7 @@ class PinInputForms(Component):
         pass
 
     template = """
-      <form class="pin-input-demo-stack" @submit.prevent="result=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+      <form class="pin-input-demo-stack" @submit.prevent="result=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
         <c-CField required>
           <c-fill name="label">One-time code</c-fill>
           <c-fill name="default"><c-CPinInput name="code" value="01" /></c-fill>

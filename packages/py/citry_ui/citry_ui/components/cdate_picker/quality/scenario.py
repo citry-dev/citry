@@ -13,7 +13,7 @@ def date_picker_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack date-picker-quality" aria-labelledby="date-picker-states-title" >
             <h1 id="date-picker-states-title">DatePicker states</h1>
-            <form id="date-picker-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+            <form id="date-picker-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
               <c-CField required>
                 <c-fill name="label">Required arrival date</c-fill>
                 <c-fill name="description">Choose an available date in August or September 2026.</c-fill>

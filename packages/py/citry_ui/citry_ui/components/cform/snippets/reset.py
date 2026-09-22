@@ -21,7 +21,7 @@ class FormReset(Component):
               $event.preventDefault();
               status = 'Reset canceled; edits preserved.';
             } else {
-              setTimeout(() => status = 'Defaults restored.', 0);
+              window.setTimeout(() => status = 'Defaults restored.', 0);
             }
           "
         >

@@ -26,8 +26,8 @@ class ContextMenuPositioningAndRtl(Component):
             @click="
               externalOpen=true;
               lastInvocation='external';
-              $nextTick(()=>setTimeout(()=>{
-                const point=document.querySelector('#context-position-external-point');
+              $nextTick(()=>window.setTimeout(()=>{
+                const point=window.document.querySelector('#context-position-external-point');
                 const box=point?.getBoundingClientRect();
                 if (box) lastPoint=`${Math.round(box.x)}, ${Math.round(box.y)}`;
               }))
@@ -36,15 +36,15 @@ class ContextMenuPositioningAndRtl(Component):
           <button type="button" @click="$refs.repairScroller.scrollTop += 32">
             Scroll repair fixture
           </button>
-          <button type="button" @click="window.dispatchEvent(new Event('resize'))">
+          <button type="button" @click="window.dispatchEvent(new window.Event('resize'))">
             Resize repair fixture
           </button>
           <button
             type="button"
             @click="
-              const target=document.querySelector('[data-context-menu-offscreen-target]');
+              const target=window.document.querySelector('[data-context-menu-offscreen-target]');
               target.focus();
-              target.dispatchEvent(new KeyboardEvent('keydown', {
+              target.dispatchEvent(new window.KeyboardEvent('keydown', {
                 bubbles:true,
                 key:'F10',
                 shiftKey:true,
@@ -55,8 +55,8 @@ class ContextMenuPositioningAndRtl(Component):
             Accepted point: none; invocation: none
           </output>
           <output
-            v-text="`Visual viewport: ${Math.round(visualViewport?.width ?? innerWidth)} x
-              ${Math.round(visualViewport?.height ?? innerHeight)} CSS px`"
+            v-text="`Visual viewport: ${Math.round(window.visualViewport?.width ?? window.innerWidth)} x
+              ${Math.round(window.visualViewport?.height ?? window.innerHeight)} CSS px`"
           >Visual viewport diagnostic</output>
         </div>
 

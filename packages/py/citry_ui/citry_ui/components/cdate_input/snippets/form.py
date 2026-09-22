@@ -11,7 +11,7 @@ class DateInputForm(Component):
         pass
 
     template = """
-      <form class="date-input-demo-stack" @submit.prevent="result=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+      <form class="date-input-demo-stack" @submit.prevent="result=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
         <c-CField required>
           <c-fill name="label">Departure date</c-fill>
           <c-fill name="default"><c-CDateInput name="departure" value="2026-08-22" /></c-fill>

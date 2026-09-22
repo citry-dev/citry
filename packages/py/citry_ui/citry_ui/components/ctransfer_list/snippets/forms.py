@@ -7,7 +7,7 @@ citry.register_library(citry_ui)
 class TransferListForm(Component):
     template = """
       <form
-        @submit.prevent="result=[...new FormData($el).getAll('reviewers')].join(' → ')"
+        @submit.prevent="result=[...new window.FormData($el).getAll('reviewers')].join(' → ')"
       >
         <c-CTransferList name="reviewers" c-required="True" c-value="['ada']">
           <c-CTransferListItem value="ada" label="Ada" />

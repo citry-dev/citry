@@ -20,7 +20,7 @@ class LaunchDestinationForm(Component):
           <h2>Choose a launch destination</h2>
         </header>
         <c-CForm
-          @submit.prevent="result = `Route: ${new FormData($el).get('destination_id')}`"
+          @submit.prevent="result = `Route: ${new window.FormData($el).get('destination_id')}`"
           @reset="result = 'Flight plan reset.'"
         >
           <c-CField required>

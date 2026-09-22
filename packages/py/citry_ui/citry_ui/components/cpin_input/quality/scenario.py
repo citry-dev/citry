@@ -13,7 +13,7 @@ def pin_input_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack pin-input-quality" aria-labelledby="pin-input-states-title" >
             <h1 id="pin-input-states-title">PinInput states</h1>
-            <form id="pin-input-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+            <form id="pin-input-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
               <c-CField required>
                 <c-fill name="label">Required verification code</c-fill>
                 <c-fill name="description">Enter all six digits.</c-fill>

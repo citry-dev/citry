@@ -16,7 +16,7 @@ class ButtonLoadingStates(Component):
           </div>
           <c-CButton
             :loading="scanning"
-            @click="scanning = true; setTimeout(() => { scanning = false }, 2400)"
+            @click="scanning = true; window.setTimeout(() => { scanning = false }, 2400)"
           >
             Begin listening
           </c-CButton>

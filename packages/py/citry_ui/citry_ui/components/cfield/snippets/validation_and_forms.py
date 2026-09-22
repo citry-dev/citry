@@ -15,7 +15,7 @@ class ValidationAndForms(Component):
         </header>
 
         <c-CForm
-          @submit.prevent="submitted = new FormData($el).get('email')"
+          @submit.prevent="submitted = new window.FormData($el).get('email')"
           @reset="
             submitted = '';
             serverInvalid = false;

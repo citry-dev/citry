@@ -13,7 +13,7 @@ def calendar_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack calendar-quality" aria-labelledby="calendar-states-title" >
             <h1 id="calendar-states-title">Calendar states</h1>
-            <form id="calendar-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+            <form id="calendar-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
               <c-CField required>
                 <c-fill name="label">Required arrival date</c-fill>
                 <c-fill name="description">Choose an available date in August or September 2026.</c-fill>

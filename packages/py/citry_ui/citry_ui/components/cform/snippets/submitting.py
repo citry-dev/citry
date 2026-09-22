@@ -18,7 +18,7 @@ class SubmittingGuard(Component):
           :submitting="submitting"
           @submit.prevent="
             attempts += 1;
-            snapshot = JSON.stringify(Object.fromEntries(new FormData($el)));
+            snapshot = JSON.stringify(Object.fromEntries(new window.FormData($el)));
             submitting = true;
           "
         >

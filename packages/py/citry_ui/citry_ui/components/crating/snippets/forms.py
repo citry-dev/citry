@@ -11,7 +11,7 @@ class RatingForms(Component):
         pass
 
     template = """
-      <form class="rating-demo-stack" @submit.prevent="result=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+      <form class="rating-demo-stack" @submit.prevent="result=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
         <c-CField required>
           <c-fill name="label">Service rating</c-fill>
           <c-fill name="default"><c-CRating name="service" value="2" /></c-fill>

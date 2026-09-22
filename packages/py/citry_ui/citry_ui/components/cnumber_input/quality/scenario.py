@@ -16,7 +16,7 @@ def number_input_states_component(app: Citry) -> type[Component]:
             <h1 id="number-input-states-title">NumberInput states</h1>
             <form
               id="number-input-quality-form"
-              @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))"
+              @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))"
             >
               <c-CField required>
                 <c-fill name="label">Required crate quantity</c-fill>

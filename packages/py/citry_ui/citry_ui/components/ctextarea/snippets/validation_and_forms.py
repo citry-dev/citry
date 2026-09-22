@@ -7,7 +7,7 @@ citry.register_library(citry_ui)
 class TextareaValidation(Component):
     template = """
       <section class="forest-report" >
-        <c-CForm @submit.prevent="submitted = new FormData($event.target).get('habitat')">
+        <c-CForm @submit.prevent="submitted = new window.FormData($event.target).get('habitat')">
           <c-CField required>
             <c-fill name="label">Habitat report</c-fill>
             <c-fill name="default">

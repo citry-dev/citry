@@ -17,7 +17,7 @@ class ComposeForm(Component):
           action="/tracking-requests"
           method="post"
           autocomplete="off"
-          @submit.prevent="saved = new FormData($el).get('object')"
+          @submit.prevent="saved = new window.FormData($el).get('object')"
         >
           <c-CField required>
             <c-fill name="label">

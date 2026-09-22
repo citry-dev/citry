@@ -29,7 +29,7 @@ class ReactiveImage(Component):
             type="button"
             @click="
               source='/static/img/ui/image/horsehead-nebula-1280.jpg?frame=rapid-a';
-              queueMicrotask(()=>source='/static/img/ui/image/orion-nebula-640.jpg?frame=rapid-b');
+              window.queueMicrotask(()=>source='/static/img/ui/image/orion-nebula-640.jpg?frame=rapid-b');
             "
           >Rapid A then B</button>
         </div>

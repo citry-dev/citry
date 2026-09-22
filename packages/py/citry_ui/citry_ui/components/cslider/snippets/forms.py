@@ -5,7 +5,7 @@ class SliderForm(Component):
     template = """
       <form
 
-        @submit.prevent="result=JSON.stringify(Array.from(new FormData($event.target).entries()))"
+        @submit.prevent="result=JSON.stringify(Array.from(new window.FormData($event.target).entries()))"
         class="slider-example-stack"
       >
         <c-CField>

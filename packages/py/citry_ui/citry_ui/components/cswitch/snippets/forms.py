@@ -9,7 +9,11 @@ class SwitchForm(Component):
       <form
         class="switch-form"
 
-        @submit.prevent="result = new FormData($event.target).has('quiet_hours') ? 'Saved' : 'Enable quiet hours'"
+        @submit.prevent="
+          result = new window.FormData($event.target).has('quiet_hours')
+            ? 'Saved'
+            : 'Enable quiet hours'
+        "
       >
         <c-CSwitch name="quiet_hours" value="enabled" required>Quiet hours</c-CSwitch>
         <c-CRow>

@@ -12,7 +12,7 @@ class CheckboxForms(Component):
         <c-CForm
           id="botanical-survey"
           @submit.prevent="result = JSON.stringify(
-            Array.from(new FormData($event.target).entries())
+            Array.from(new window.FormData($event.target).entries())
           )"
           @reset="result = 'The browser restored the server defaults.'"
         >

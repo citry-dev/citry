@@ -13,7 +13,7 @@ def date_input_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack date-input-quality" aria-labelledby="date-input-states-title" >
             <h1 id="date-input-states-title">DateInput states</h1>
-            <form id="date-input-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+            <form id="date-input-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
               <c-CField required>
                 <c-fill name="label">Required arrival date</c-fill>
                 <c-fill name="description">Choose an alternating day in August 2026.</c-fill>

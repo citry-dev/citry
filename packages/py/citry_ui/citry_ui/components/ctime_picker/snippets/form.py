@@ -6,7 +6,7 @@ citry.register_library(citry_ui)
 
 class TimePickerForm(Component):
     template = """
-      <form @submit.prevent="result=JSON.stringify(Object.fromEntries(new FormData($event.target)))">
+      <form @submit.prevent="result=JSON.stringify(Object.fromEntries(new window.FormData($event.target)))">
         <c-CField required>
           <c-fill name="label">Start time</c-fill>
           <c-fill name="default"><c-CTimePicker name="start" min="08:00" max="10:00" value="09:00" /></c-fill>

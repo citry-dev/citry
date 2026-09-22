@@ -5,7 +5,7 @@ class NumberInputForms(Component):
     template = """
       <form
 
-        @submit.prevent="submitted=new FormData($event.target).get('amount')"
+        @submit.prevent="submitted=new window.FormData($event.target).get('amount')"
         class="number-input-example-stack"
       >
         <c-CField required>

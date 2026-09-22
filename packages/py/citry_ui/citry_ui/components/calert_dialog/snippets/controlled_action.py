@@ -13,7 +13,7 @@ class ControlledArchive(Component):
               if (detail.returnValue === 'action') {
                 pending = true;
                 result = 'Archiving...';
-                setTimeout(() => {
+                window.setTimeout(() => {
                   pending = false;
                   open = false;
                   result = 'Record archived';

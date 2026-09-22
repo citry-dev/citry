@@ -55,7 +55,7 @@ def tags_input_states_component(app: Citry) -> type[Component]:
               @submit.prevent="
                 submits += 1;
                 last = JSON.stringify(
-                  Array.from(new FormData($event.target).entries())
+                  Array.from(new window.FormData($event.target).entries())
                 );
               "
               @reset="resets += 1"

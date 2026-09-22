@@ -13,7 +13,7 @@ class TagsInputFormsAndReset(Component):
           id="tags-input-external-form"
           @submit.prevent="
             result = JSON.stringify(
-              Array.from(new FormData($event.target).entries())
+              Array.from(new window.FormData($event.target).entries())
             )
           "
           @reset="
@@ -21,7 +21,7 @@ class TagsInputFormsAndReset(Component):
               $event.preventDefault();
               result='Reset canceled';
             } else {
-              setTimeout(() => result='Server baselines restored', 0);
+              window.setTimeout(() => result='Server baselines restored', 0);
             }
           "
         >

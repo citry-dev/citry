@@ -13,7 +13,7 @@ def time_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack time-quality" aria-labelledby="time-states-title" >
             <h1 id="time-states-title">TimeInput and TimePicker states</h1>
-            <form id="time-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+            <form id="time-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
               <c-CField required>
                 <c-fill name="label">Required native start time</c-fill>
                 <c-fill name="description">Choose a time from 09:00 through 17:00.</c-fill>

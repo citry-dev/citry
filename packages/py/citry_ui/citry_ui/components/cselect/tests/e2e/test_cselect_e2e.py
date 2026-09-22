@@ -42,7 +42,7 @@ def _page() -> str:
           <body>
             <form
               id="planet-form"
-              @submit.prevent="state.select.submits = Array.from(new FormData($event.target).entries())"
+              @submit.prevent="state.select.submits = Array.from(new window.FormData($event.target).entries())"
             >
               <c-CSelect
                 class_="primary-select"

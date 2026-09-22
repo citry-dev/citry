@@ -22,7 +22,7 @@ class ContextMenuFocusAndKeyboard(Component):
             onAction:(value)=>{
               if (value === 'disable-invoker') disableInvoker=true;
               if (value === 'remove-invoker') {
-                document.querySelector('[data-context-menu-return-target]')?.remove();
+                window.document.querySelector('[data-context-menu-return-target]')?.remove();
               }
             },
           }"
@@ -59,7 +59,7 @@ class ContextMenuFocusAndKeyboard(Component):
         </c-CContextMenu>
 
         <div class="context-menu-focus__fallbacks">
-          <button type="button" @click="location.reload()">Reload nested Button</button>
+          <button type="button" @click="window.location.reload()">Reload nested Button</button>
           <button type="button" disabled>Disabled fallback</button>
           <span tabindex="-1">Programmatic fallback</span>
         </div>

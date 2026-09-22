@@ -9,7 +9,7 @@ class RadioForm(Component):
       <form
         class="radio-form"
 
-        @submit.prevent="result = new FormData($event.target).get('plot') || 'Choose a plot'"
+        @submit.prevent="result = new window.FormData($event.target).get('plot') || 'Choose a plot'"
       >
         <c-CRadioGroup name="plot" required>
           <c-fill name="label">Planting plot</c-fill>

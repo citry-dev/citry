@@ -81,11 +81,11 @@ class ContextMenuLayersAndRoots(Component):
           <button
             type="button"
             @click="
-              document.querySelector('[data-context-menu-removable]')?.remove();
+              window.document.querySelector('[data-context-menu-removable]')?.remove();
               last='nested ContextMenu removed'
             "
           >Remove nested ContextMenu</button>
-          <button type="button" @click="location.reload()">
+          <button type="button" @click="window.location.reload()">
             Restore the fixture, then repeat the cycle
           </button>
 

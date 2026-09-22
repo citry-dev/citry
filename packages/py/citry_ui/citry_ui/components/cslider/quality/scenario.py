@@ -18,7 +18,7 @@ def slider_states_component(app: Citry) -> type[Component]:
             <h1 id="slider-states-title">Slider and RangeSlider states</h1>
             <form
               id="slider-quality-form"
-              @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))"
+              @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))"
             >
               <c-CField>
                 <c-fill name="label">Exact volume</c-fill>

@@ -40,7 +40,7 @@ def _page(app: Citry, *, localized: bool = False) -> str:
             <body>
               {provider_open}
               <section>
-                <form id="booking" @submit.prevent="window.__calendarSubmits.push(Array.from(new FormData($event.target).entries()))">
+                <form id="booking" @submit.prevent="window.__calendarSubmits.push(Array.from(new window.FormData($event.target).entries()))">
                   <c-CField control_id="arrival" required>
                     <c-fill name="label">Arrival date</c-fill>
                     <c-fill name="description">Choose an available August day.</c-fill>

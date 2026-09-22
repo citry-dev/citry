@@ -13,7 +13,7 @@ def rating_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack rating-quality" aria-labelledby="rating-states-title" >
             <h1 id="rating-states-title">Rating states</h1>
-            <form id="rating-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+            <form id="rating-quality-form" @submit.prevent="last=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
               <c-CField required>
                 <c-fill name="label">Required product rating</c-fill>
                 <c-fill name="description">Choose a half-star score.</c-fill>

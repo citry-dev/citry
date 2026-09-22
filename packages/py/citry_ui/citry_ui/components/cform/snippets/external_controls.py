@@ -19,7 +19,7 @@ class ExternalControls(Component):
           :disabled="disabled"
           @submit.prevent="
             result = JSON.stringify(
-              Object.fromEntries(new FormData($el, $event.submitter))
+              Object.fromEntries(new window.FormData($el, $event.submitter))
             )
           "
         >

@@ -9,7 +9,7 @@ citry.register_library(citry_ui)
 class DatePickerForm(Component):
     template = """
       <section >
-        <form @submit.prevent="submitted=JSON.stringify(Array.from(new FormData($event.target).entries()))">
+        <form @submit.prevent="submitted=JSON.stringify(Array.from(new window.FormData($event.target).entries()))">
           <c-CField control_id="trip-date" required>
             <c-fill name="label">Trip date</c-fill>
             <c-fill name="description">The submitted value stays canonical.</c-fill>

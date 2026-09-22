@@ -7,7 +7,7 @@ citry.register_library(citry_ui)
 
 class SelectForm(Component):
     template = """
-      <form @submit.prevent="result = Array.from(new FormData($event.target).entries())">
+      <form @submit.prevent="result = Array.from(new window.FormData($event.target).entries())">
         <c-CField required>
           <c-fill name="label">Review status</c-fill>
           <c-fill name="default">

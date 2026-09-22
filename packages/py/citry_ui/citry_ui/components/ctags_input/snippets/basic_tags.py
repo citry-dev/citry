@@ -35,7 +35,7 @@ class BasicTagsInput(Component):
         <form
           @submit.prevent="
             submitted = JSON.stringify(
-              new FormData($event.target).getAll('labels')
+              new window.FormData($event.target).getAll('labels')
             )
           "
         >
