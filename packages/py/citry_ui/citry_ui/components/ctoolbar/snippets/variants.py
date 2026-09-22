@@ -14,9 +14,9 @@ class ToolbarVariants(Component):
           c-variant="variant"
           c-size="size"
         >
-          <c-CButton>Cut</c-CButton>
-          <c-CButton>Copy</c-CButton>
-          <c-CButton>Paste</c-CButton>
+          <c-CButton #c-key="f'{variant}-{size}-cut'">Cut</c-CButton>
+          <c-CButton #c-key="f'{variant}-{size}-copy'">Copy</c-CButton>
+          <c-CButton #c-key="f'{variant}-{size}-paste'">Paste</c-CButton>
         </c-CToolbar>
       </c-CCol>
     """
