@@ -392,6 +392,14 @@ def test_presence_data_values_stay_empty_across_initial_and_controlled_renders(p
     page.locator("#set-controlled").click()
     page.wait_for_function("document.querySelector('[role=combobox]').value === 'Linus Torvalds'")
     assert field.get_attribute("data-required") == ""
+
+    # Keep the input controlled while clearing its query so the disabled Grace
+    # option is present for the second presence-value assertion.
+    page.evaluate("window.__comboDemo.inputValue = ''")
+    page.wait_for_function("document.querySelector('[role=combobox]').value === ''")
+    page.wait_for_function(
+        "document.querySelector('[data-citry-ui-part=option][data-value=grace]')?.hasAttribute('data-disabled')"
+    )
     assert disabled_option.get_attribute("data-disabled") == ""
 
     page.get_by_role("combobox").fill("ada")
