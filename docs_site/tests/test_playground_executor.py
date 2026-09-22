@@ -112,6 +112,11 @@ event_context = occurrence["eventContext"]
 envelope = {{
     "protocol": "citry-events/1",
     "requestId": "playground-render-test",
+    "capabilities": {{
+        "actions": ["render", "data", "state", "event", "redirect", "url"],
+        "swaps": ["morph"],
+        "renderers": ["vue-prepared/1"],
+    }},
     "calls": [{{
         "componentClassId": event_context["componentClassId"],
         "handlerName": payload["handler"],
@@ -124,12 +129,7 @@ if event_context["stateToken"] is not None:
     envelope["calls"][0]["stateToken"] = event_context["stateToken"]
 response = json.loads(adapter["dispatch_event_json"](json.dumps(envelope), payload["run_id"]))
 action = response["results"][0]["actions"][0]
-fragment = json.loads(re.search(
-    r'<script[^>]*data-citry-vue-fragment[^>]*>(.*?)</script>',
-    action["html"],
-    re.DOTALL,
-).group(1))
-manifest = fragment["vue"]["prepared"]["manifest"]
+manifest = action["prepared"]
 paths = []
 for descriptor in manifest["scripts"] + manifest["styles"]:
     path = descriptor["source"].get("url")
@@ -392,10 +392,10 @@ FragmentLoader()
     assert result["ok"]
     [render] = result["actions"]
     assert render["action"] == "render"
-    assert render["target"] == "mark:fragment-target"
-    assert render["swap"] == "replace"
-    assert "data-citry-vue-fragment" in render["html"]
-    assert "citry-loaded-fragment-" in render["html"]
+    assert render["target"].endswith(":fragment-target")
+    assert render["swap"] == "morph"
+    assert render["renderer"] == "vue-prepared/1"
+    assert render["prepared"]["protocol"] == "citry-vue-prepared/1"
     assert assets
     assert all(asset["path"].startswith("/__citry_playground__/") for asset in assets)
     assert {asset["contentType"] for asset in assets} == {"text/css", "text/javascript"}

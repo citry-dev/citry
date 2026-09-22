@@ -231,6 +231,29 @@
           return references;
         }
 
+        function collectPreparedAssetReferences(root) {
+          const references = [];
+          const pattern = /\/__citry_playground__\/ext\/events\/(?:definitions|assets)\/[0-9a-f]{64}\.(?:js|css)/g;
+          for (const element of root.querySelectorAll("script:not([src])")) {
+            const paths = [...new Set(element.textContent.match(pattern) || [])];
+            for (const path of paths) references.push({ element, path });
+          }
+          return references;
+        }
+
+        function collectPreparedManifestAssetReferences(manifest) {
+          const references = [];
+          const add = (asset) => {
+            const path = asset?.url;
+            if (isPlaygroundAsset(path)) references.push({ asset, path });
+          };
+          for (const definition of manifest?.definitions || []) add(definition);
+          for (const assets of [manifest?.scripts, manifest?.styles]) {
+            for (const asset of assets || []) add(asset?.source);
+          }
+          return references;
+        }
+
         function collectManifestAssetReferences(root) {
           const manifests = [];
           const references = [];
@@ -257,13 +280,21 @@
         async function hydrateInitialAssets(root) {
           recordInitiallyLoadedAssets(root);
           const direct = collectDirectAssetReferences(root);
+          const prepared = collectPreparedAssetReferences(root);
           const manifests = collectManifestAssetReferences(root);
           await ensureAssetBlobs([
             ...direct.map((reference) => reference.path),
+            ...prepared.map((reference) => reference.path),
             ...manifests.references.map((reference) => reference.path),
           ]);
           for (const reference of direct) {
             reference.element.setAttribute(reference.attribute, assetBlobUrls.get(reference.path));
+          }
+          for (const reference of prepared) {
+            reference.element.textContent = reference.element.textContent.replaceAll(
+              reference.path,
+              assetBlobUrls.get(reference.path),
+            );
           }
           rewriteManifestAssets(manifests);
         }
@@ -285,6 +316,12 @@
           for (const entry of result?.results || []) {
             if (entry?.ok !== true || !Array.isArray(entry.actions)) continue;
             for (const action of entry.actions) {
+              if (action?.action === "render" && action.renderer === "vue-prepared/1" && action.prepared) {
+                const references = collectPreparedManifestAssetReferences(action.prepared);
+                prepared.push({ action, references });
+                paths.push(...references.map((reference) => reference.path));
+                continue;
+              }
               if (
                 action?.action !== "render"
                 || typeof action.html !== "string"
@@ -300,8 +337,14 @@
           }
           await ensureAssetBlobs(paths);
           for (const item of prepared) {
-            rewriteManifestAssets(item.manifests);
-            item.action.html = item.template.innerHTML;
+            if (item.references) {
+              for (const reference of item.references) {
+                reference.asset.url = assetBlobUrls.get(reference.path);
+              }
+            } else {
+              rewriteManifestAssets(item.manifests);
+              item.action.html = item.template.innerHTML;
+            }
           }
           return result;
         }
@@ -389,7 +432,7 @@
           send("console_error", values.join(" "));
         };
 
-        async function activateScripts(scripts, afterActivation) {
+        async function activateScripts(scripts) {
           for (const oldScript of scripts) {
             // Data blocks retain their original node identity. Citry
             // manifests are staged separately; the rest are already live.
@@ -408,11 +451,9 @@
               });
             }
             oldScript.replaceWith(script);
-            afterActivation();
             ensurePlaygroundTransport();
             if (externalCompletion) {
               await externalCompletion;
-              afterActivation();
               ensurePlaygroundTransport();
             }
           }
@@ -435,7 +476,7 @@
           if (stagedManifests.length) {
             await new Promise((resolve) => setTimeout(resolve, 0));
             // Graph-linked dependency callbacks run in the following task.
-            // They must attach component and Events scopes before Alpine starts.
+            // They must attach component and Events scopes before the runtime starts.
             await new Promise((resolve) => setTimeout(resolve, 0));
           }
         }
@@ -491,11 +532,10 @@
           }
           try {
             const { bodyAttributes, bodyNodes, headNodes, stagedManifests, visitorScripts } = prepared;
-            // The preview document has already loaded. If Citry manifests are
-            // inserted with the rest of the DOM, the dependency manager drains
-            // the ownership graph before the later Events runtime installs
-            // Alpine. Keep the original nodes and positions, but expose them
-            // only after executable scripts have run.
+            // Keep prepared manifests staged until executable scripts register
+            // their Vue definitions and runtime behavior. Then restore the
+            // original nodes and positions before the Events bridge handles
+            // browser behavior.
             for (const node of document.head.querySelectorAll("[data-citry-preview-content]")) node.remove();
             for (const node of headNodes) {
               if (node.nodeType === Node.ELEMENT_NODE) node.setAttribute("data-citry-preview-content", "");
@@ -504,18 +544,8 @@
             for (const attribute of [...document.body.attributes]) document.body.removeAttribute(attribute.name);
             for (const attribute of bodyAttributes) document.body.setAttribute(attribute.name, attribute.value);
             document.body.replaceChildren(...bodyNodes);
-            let releaseAlpineStart = null;
-            const holdAlpineStart = () => {
-              if (releaseAlpineStart || !stagedManifests.length) return;
-              const hold = globalThis.Citry?.alpine?._holdStart;
-              if (typeof hold === "function") releaseAlpineStart = hold();
-            };
-            try {
-              await activateScripts(visitorScripts, holdAlpineStart);
-              await restoreCitryManifests(stagedManifests);
-            } finally {
-              releaseAlpineStart?.();
-            }
+            await activateScripts(visitorScripts);
+            await restoreCitryManifests(stagedManifests);
             ensurePlaygroundTransport();
           } catch (error) {
             send("render_error", error);

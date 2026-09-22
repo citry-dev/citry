@@ -23,7 +23,8 @@ from typing import Any
 import citry_ui
 from citry import Citry, CitryElement, CitryRender, Component, ComponentLike, citry
 from citry.component_like import _resolve_component_like
-from citry.ext.events import EventRequest, EventsDispatcher, TransportContext
+from citry.ext.events import EventRequest, TransportContext
+from citry.ext.events.renderers import dispatcher_for
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
 PLAYGROUND_FILENAME = "<playground>"
@@ -57,10 +58,16 @@ _ALLOWED_ASSET_CONTENT_TYPES = frozenset({"text/css", "text/javascript"})
 class _RuntimeState:
     namespace: dict[str, Any] | None = None
     run_id: int | None = None
+    vue_app_id: str | None = None
+    vue_revision: int | None = None
+    vue_occurrences: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 _runtime_state = _RuntimeState()
-_dispatcher = EventsDispatcher()
+# The browser playground always runs the prepared Vue client. Keep the worker's
+# dispatcher on the same renderer so event Render actions negotiate the
+# vue-prepared/1 wire shape instead of falling back to the HTML encoder.
+_dispatcher = dispatcher_for(citry)
 
 # The default Citry engine belongs only to this disposable Worker. Give it a
 # per-Worker secret so visitor components can use ordinary signed State without
@@ -76,6 +83,56 @@ citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
 # mode includes the exception type and message in the structured handler error;
 # Citry still never sends a traceback over the Events protocol.
 logging.getLogger("citry").setLevel(logging.DEBUG)
+
+
+def _prepared_manifest_from_html(value: object) -> dict[str, object] | None:
+    """Extract the initial prepared Vue manifest from a serialized preview."""
+    if not isinstance(value, str):
+        return None
+    marker = "CitryStable.startPrepared("
+    try:
+        start = value.index(marker) + len(marker)
+        configuration, _end = json.JSONDecoder().raw_decode(value[start:])
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(configuration, dict):
+        return None
+    manifest = configuration.get("manifest")
+    if not isinstance(manifest, dict) or manifest.get("protocol") != "citry-vue-prepared/1":
+        return None
+    return manifest
+
+
+def _remember_prepared_manifest(value: object) -> None:
+    """Remember the Vue request scope represented by an initial or revised view."""
+    if not isinstance(value, dict):
+        return
+    app_id = value.get("appId")
+    revision = value.get("revision")
+    occurrences = value.get("occurrences")
+    if not isinstance(app_id, str) or type(revision) is not int or not isinstance(occurrences, list):
+        return
+
+    occurrence_ids: dict[str, str] = {}
+    for occurrence in occurrences:
+        if not isinstance(occurrence, dict):
+            continue
+        occurrence_id = occurrence.get("id")
+        if not isinstance(occurrence_id, str):
+            continue
+        render_ids = {occurrence.get("renderId")}
+        event_context = occurrence.get("eventContext")
+        if isinstance(event_context, dict):
+            render_ids.add(event_context.get("serverRenderId"))
+        for render_id in render_ids:
+            if isinstance(render_id, str):
+                occurrence_ids[render_id] = occurrence_id
+
+    _runtime_state.vue_app_id = app_id
+    _runtime_state.vue_revision = revision
+    # A prepared Render response contains only the replaced subtree. Keep the
+    # caller mappings for components outside that subtree for later events.
+    _runtime_state.vue_occurrences.update(occurrence_ids)
 
 
 class PreviewContractError(Exception):
@@ -430,7 +487,25 @@ def dispatch_event_json(envelope_json: str, run_id: int) -> str:
     envelope = json.loads(envelope_json)
     body = envelope_json.encode("utf-8")
     content_type = "application/citry-events+json"
-    headers = RouteHeaders([("Content-Type", content_type)])
+    headers_list: list[tuple[str, str]] = [("Content-Type", content_type)]
+    calls = envelope.get("calls") if isinstance(envelope, dict) else None
+    caller_render_id = None
+    if isinstance(calls, list) and calls and isinstance(calls[0], dict):
+        caller_render_id = calls[0].get("callerRenderId")
+    occurrence_id = _runtime_state.vue_occurrences.get(caller_render_id) if isinstance(caller_render_id, str) else None
+    if (
+        isinstance(_runtime_state.vue_app_id, str)
+        and type(_runtime_state.vue_revision) is int
+        and isinstance(occurrence_id, str)
+    ):
+        headers_list.extend(
+            [
+                ("X-Citry-Vue-App", _runtime_state.vue_app_id),
+                ("X-Citry-Vue-Occurrence", occurrence_id),
+                ("X-Citry-Vue-Revision", str(_runtime_state.vue_revision)),
+            ]
+        )
+    headers = RouteHeaders(headers_list)
     request = EventRequest(
         method="POST",
         path=PLAYGROUND_EVENT_PATH,
@@ -448,6 +523,18 @@ def dispatch_event_json(envelope_json: str, run_id: int) -> str:
     # visitor changed the default engine while handling an earlier event.
     citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
     response = _dispatcher.dispatch(envelope, context, request=request)
+    if isinstance(response, dict):
+        results = response.get("results")
+        if isinstance(results, list):
+            for result in results:
+                if not isinstance(result, dict) or result.get("ok") is not True:
+                    continue
+                actions = result.get("actions")
+                if not isinstance(actions, list):
+                    continue
+                for action in actions:
+                    if isinstance(action, dict) and action.get("action") == "render":
+                        _remember_prepared_manifest(action.get("prepared"))
     return json.dumps(_apply_playground_event_policy(envelope, response), allow_nan=False)
 
 
@@ -529,6 +616,9 @@ def run_source_json(source: str, run_id: int = 1) -> str:
     """Execute ``source`` and return the bounded result as a JSON string."""
     _runtime_state.namespace = None
     _runtime_state.run_id = None
+    _runtime_state.vue_app_id = None
+    _runtime_state.vue_revision = None
+    _runtime_state.vue_occurrences = {}
     sys.modules.pop(PLAYGROUND_MODULE_NAME, None)
     linecache.cache.pop(PLAYGROUND_FILENAME, None)
     stdout = io.StringIO()
@@ -567,6 +657,7 @@ def run_source_json(source: str, run_id: int = 1) -> str:
         catalog = _catalog_snapshot(namespace)
         _runtime_state.namespace = namespace
         _runtime_state.run_id = run_id
+        _remember_prepared_manifest(_prepared_manifest_from_html(html))
         diagnostic = None
     except BaseException as error:
         html = None

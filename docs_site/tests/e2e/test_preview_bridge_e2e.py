@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import time
-from base64 import b64encode
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -199,33 +198,11 @@ def _prepared_manifest(html: str) -> dict[str, Any]:
     return manifest
 
 
-def _inline_prepared_assets(html: str, assets: list[dict[str, str]]) -> str:
-    """Inline prepared Vue assets so the sandbox does not resolve paths at ``blob:null``."""
-    marker = "CitryStable.startPrepared("
-    start = html.index(marker) + len(marker)
-    configuration, consumed = json.JSONDecoder().raw_decode(html[start:])
-    by_path = {asset["path"]: asset for asset in assets}
-
-    def data_url(source: dict[str, Any]) -> str:
-        path = source["url"]
-        asset = by_path[path]
-        encoded = b64encode(asset["content"].encode()).decode()
-        return f"data:{asset['contentType']};base64,{encoded}"
-
-    manifest = configuration["manifest"]
-    for definition in manifest["definitions"]:
-        definition["url"] = data_url(definition)
-    for asset in [*manifest["scripts"], *manifest["styles"]]:
-        asset["source"]["url"] = data_url(asset["source"])
-    return html[:start] + json.dumps(configuration) + html[start + consumed :]
-
-
 def test_preview_bridge_mounts_vue_before_committing_the_candidate(
     page: Any,
     workspace_static_url: str,
 ) -> None:
     html, assets = _client_active_tabs_page()
-    html = _inline_prepared_assets(html, assets)
     expected_occurrences = len(_prepared_manifest(html)["occurrences"])
     _render_through_preview_bridge(page, workspace_static_url, html, assets=assets)
     preview = page.frame_locator("#preview")

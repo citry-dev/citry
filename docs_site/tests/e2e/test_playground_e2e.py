@@ -280,10 +280,10 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
 
 def test_playground_runs_edits_reports_errors_and_recovers(
     page: Any,
-    docs_site_url: str,
+    local_docs_site_url: str,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
+    page.goto(local_docs_site_url + "/playground/", wait_until="domcontentloaded")
     page.wait_for_function("window.citryPlayground !== undefined")
 
     assert page.locator(".cm-editor").count() == 1
@@ -471,14 +471,14 @@ class DataProbe(Component):
     template = '''
       <div id="data-probe-root" @data-probe:changed="$el.dataset.state = $event.detail.state">
         <input id="state-input" :c-value="changed">
-        <button
-          id="data-probe"
-          @click="$sendEvent('inspect').then(value => {
-            $el.dataset.method = value.method;
-            $el.dataset.state = value.state;
-            $el.dataset.transport = value.transport;
-          })"
-        >
+          <button
+            id="data-probe"
+            @click="$sendEvent('inspect').then(value => {
+              $event.target.dataset.method = value.method;
+              $event.target.dataset.state = value.state;
+              $event.target.dataset.transport = value.transport;
+            })"
+          >
           Inspect transport
         </button>
       </div>
@@ -515,23 +515,18 @@ class NestedEditor(Component):
     template = """
       <div id="nested-editor" @nested:changed="$el.dataset.value = $event.detail.value">
         <input id="nested-input" :c-value="changed" />
-        <output id="nested-output" x-text="$state.value">start</output>
+        <output id="nested-output" v-text="$state.value">start</output>
       </div>
     """
 
 
 class PropChild(Component):
-    template = """
-      <output id="prop-output" x-text="clientProps.label"></output>
-    """
+    template = '<output id="prop-output" v-text="label"></output>'
 
     js = """
       $component({
         props: {
           label: { type: String, required: true },
-        },
-        init: ({ props, scope }) => {
-          scope.clientProps = props;
         },
       });
     """
@@ -586,20 +581,24 @@ class LoadedFragment(Component):
       <section
         id="loaded-fragment"
         class="loaded-fragment"
-        x-data="{ label: 'before' }"
         @fragment:ping="$el.dataset.ping = $event.detail.kind"
       >
         <button id="fragment-ping" type="button" @c-click="ping">Ping</button>
         <button id="prop-update" type="button" @click="label = 'after'">Update prop</button>
-        <c-PropChild $c-props="{ label }" />
+        <c-PropChild :label="label" />
         <c-NestedEditor />
       </section>
     """
 
     js = """
       window.__fragmentAssetLoads = (window.__fragmentAssetLoads || 0) + 1;
-      $component(({ component }) => {
-        component.$el.setAttribute("data-component-js", component.kind);
+      $component({
+        data() {
+          return { label: "before" };
+        },
+        mounted() {
+          this.$el.setAttribute("data-component-js", this.kind);
+        },
       });
     """
 
@@ -616,24 +615,22 @@ class FragmentLoader(Component):
         def load(self):
             return actions.Render(
                 LoadedFragment(kind="rendered", accent="rgb(45, 67, 89)"),
-                target="#fragment-target",
-                swap="inner",
+                target="mark:fragment-target",
             )
 
         def load_css(self):
-            return actions.Render(CssOnly(), target="#css-target", swap="inner")
+            return actions.Render(CssOnly(), target="mark:css-target")
 
         def load_css_data(self):
             return actions.Render(
                 CssDataProbe(accent="rgb(122, 51, 19)"),
-                target="#css-data-target",
-                swap="inner",
+                target="mark:css-data-target",
             )
 
         def clear_css(self):
             return [
-                actions.Render(Placeholder(), target="#css-initial", swap="inner"),
-                actions.Render(Placeholder(), target="#css-target", swap="inner"),
+                actions.Render(Placeholder(), target="mark:css-initial"),
+                actions.Render(Placeholder(), target="mark:css-target"),
             ]
 
     template = """
@@ -642,14 +639,15 @@ class FragmentLoader(Component):
           <c-LoadedFragment kind="initial" accent="rgb(90, 90, 90)" />
         </div>
         <button id="load-fragment" type="button" @c-click="load">Load</button>
-        <div id="fragment-target"></div>
-        <div id="css-initial"><c-CssOnly /></div>
-        <button id="load-css" type="button" @c-click="load_css">Load CSS probe</button>
-        <button id="clear-css" type="button" @c-click="clear_css">Clear CSS probe</button>
-        <div id="css-target"></div>
-        <div id="css-data-initial"><c-CssDataProbe accent="rgb(122, 51, 19)" /></div>
-        <button id="load-css-data" type="button" @c-click="load_css_data">Load CSS data probe</button>
-        <div id="css-data-target"></div>
+            <div id="fragment-target"><c-mark name="fragment-target" /></div>
+            <div id="css-initial"><c-mark name="css-initial"><c-CssOnly /></c-mark></div>
+            <button id="load-css" type="button" @c-click="load_css">Load CSS probe</button>
+            <button id="clear-css" type="button" @c-click="clear_css">Clear CSS probe</button>
+            <div id="css-target"><c-mark name="css-target" /></div>
+            <div id="css-data-initial"><c-mark name="css-data-initial"><c-CssDataProbe \
+accent="rgb(122, 51, 19)" /></c-mark></div>
+            <button id="load-css-data" type="button" @c-click="load_css_data">Load CSS data probe</button>
+            <div id="css-data-target"><c-mark name="css-data-target" /></div>
       </main>
     """
 
@@ -682,15 +680,37 @@ FragmentLoader()
     render_preview.locator("#load-css").click()
     css_probe = render_preview.locator("#css-target #css-only")
     expect(css_probe).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
-    class_style_sheets = render_preview.locator("[data-citry-css-class]")
-    expect(class_style_sheets).to_have_count(3)
+    class_style_sheets = render_preview.locator("[data-citry-vue-style-app][data-citry-css-url]")
+    expect(class_style_sheets).to_have_count(6)
+    loaded_style_assets = render_preview.locator("body").evaluate(
+        """async body => Promise.all(
+          [...body.ownerDocument.querySelectorAll('link[data-citry-vue-style-app][data-citry-css-url]')]
+            .map(async link => ({href: link.href, css: await fetch(link.href).then(response => response.text())}))
+        )"""
+    )
+    css_only_hrefs = {asset["href"] for asset in loaded_style_assets if ".css-only" in asset["css"]}
+    assert len(css_only_hrefs) == 1
     render_preview.locator("#clear-css").click()
+    page.wait_for_timeout(500)
     expect(render_preview.locator("#css-only")).to_have_count(0, timeout=10_000)
-    expect(class_style_sheets).to_have_count(2, timeout=10_000)
+    expect(class_style_sheets).to_have_count(5, timeout=10_000)
+    remaining_style_hrefs = set(
+        render_preview.locator("body").evaluate(
+            """body => [...body.ownerDocument.querySelectorAll('link[data-citry-vue-style-app][data-citry-css-url]')]
+              .map(link => link.href)"""
+        )
+    )
+    assert not css_only_hrefs & remaining_style_hrefs
+    expect(render_preview.locator("#initial-fragment #loaded-fragment")).to_have_css(
+        "border-top-color", "rgb(90, 90, 90)"
+    )
+    expect(render_preview.locator("#fragment-target #loaded-fragment")).to_have_css(
+        "border-top-color", "rgb(45, 67, 89)"
+    )
     render_preview.locator("#load-css").click()
     css_probe_again = render_preview.locator("#css-target #css-only")
     expect(css_probe_again).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
-    expect(class_style_sheets).to_have_count(3, timeout=10_000)
+    expect(class_style_sheets).to_have_count(6, timeout=10_000)
 
     stylesheet_count = render_preview.locator('style, link[rel~="stylesheet"]').count()
     render_preview.locator("#load-css-data").click()
@@ -730,18 +750,26 @@ class SignupForm(Component):
             return actions.Dispatch("signup:sent", {"email": email})
 
     template = """
-      <section x-data="{ acceptedEmail: '' }" @signup:sent="acceptedEmail = $event.detail.email">
+      <section @signup:sent="acceptedEmail = $event.detail.email">
         <form @c-submit.prevent="submit">
           <input name="email" type="email" required />
           <span
             id="signup-error"
-            x-show="(typeof $error === 'function' ? $error('submit') : $error)?.fieldErrors?.email"
-            x-text="(typeof $error === 'function' ? $error('submit') : $error)?.fieldErrors?.email || ''"
+            v-show="$error('submit')?.fieldErrors?.email"
+            v-text="$error('submit')?.fieldErrors?.email || ''"
           ></span>
           <button type="submit">Send request</button>
         </form>
-        <output id="accepted-email" x-show="acceptedEmail" x-text="acceptedEmail"></output>
+        <output id="accepted-email" v-show="acceptedEmail" v-text="acceptedEmail"></output>
       </section>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { acceptedEmail: "" };
+        },
+      });
     """
 
 

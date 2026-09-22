@@ -38,7 +38,10 @@ class WelcomeCard(Component):
         return {"greetings": kwargs.greetings}
 
     template = """
-      <article class="welcome-card">
+      <article
+        class="welcome-card"
+        @welcome-card:welcomed="greetings = $event.detail.greetings"
+      >
         <p>Welcome, <strong>{{ name }}</strong>.</p>
         <button
           type="button"
@@ -52,21 +55,6 @@ class WelcomeCard(Component):
           <output v-text="greetings">{{ greetings }}</output>
         </p>
       </article>
-    """
-
-    js = """
-      $component({
-        onServerRender({ component }) {
-          const root = component.$el;
-          const receiveWelcome = (event) => {
-            component.greetings = event.detail.greetings;
-          };
-          root.addEventListener('welcome-card:welcomed', receiveWelcome);
-          return () => {
-            root.removeEventListener('welcome-card:welcomed', receiveWelcome);
-          };
-        },
-      });
     """
 
     css = """
