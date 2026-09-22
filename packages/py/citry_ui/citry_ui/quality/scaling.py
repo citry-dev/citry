@@ -681,8 +681,8 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
           <div>
             <c-for each="item in items">
               <c-CButtonGroup #c-key="item" c-label="f'Actions {item}'">
-                <c-CButton variant="outline">Previous</c-CButton>
-                <c-CButton variant="outline">Next</c-CButton>
+                <c-CButton #c-key="'previous'" variant="outline">Previous</c-CButton>
+                <c-CButton #c-key="'next'" variant="outline">Next</c-CButton>
               </c-CButtonGroup>
             </c-for>
           </div>
@@ -775,7 +775,7 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
                 c-id="f'cui-scale-popover-{item}'"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
-                  <c-CButton c-attrs="activator_attrs">
+                  <c-CButton #c-key="'activator'" c-attrs="activator_attrs">
                     Open {{ item }}
                   </c-CButton>
                 </c-fill>
@@ -807,7 +807,7 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
                 c-text="f'Description {item}'"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
-                  <c-CButton c-attrs="activator_attrs">
+                  <c-CButton #c-key="'activator'" c-attrs="activator_attrs">
                     Target {{ item }}
                   </c-CButton>
                 </c-fill>
@@ -836,7 +836,7 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
                 c-id="f'cui-scale-drawer-{item}'"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
-                  <c-CButton c-attrs="activator_attrs">Open {{ item }}</c-CButton>
+                  <c-CButton #c-key="'activator'" c-attrs="activator_attrs">Open {{ item }}</c-CButton>
                 </c-fill>
                 <c-fill name="title">Drawer {{ item }}</c-fill>
                 <c-fill name="default">Body {{ item }}</c-fill>
@@ -891,6 +891,7 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
               >
                 <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                   <c-CButton
+                    #c-key="'activator'"
                     c-disabled="activator_disabled"
                     c-attrs="activator_attrs"
                   >Open {{ item }}</c-CButton>

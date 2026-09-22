@@ -280,6 +280,7 @@ def _render_command_palette_instances(count: int) -> str:
               >
                 <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                   <c-CButton
+                    #c-key="item"
                     c-disabled="activator_disabled"
                     c-attrs="activator_attrs"
                   >Commands {{ item }}</c-CButton>

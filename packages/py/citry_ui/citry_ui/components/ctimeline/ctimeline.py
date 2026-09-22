@@ -313,9 +313,7 @@ class CInternalTimeline(LibraryComponent):
                 "data-side": kwargs.side,
                 "data-line-style": kwargs.line_style,
                 "data-density": kwargs.density,
-                "data-has-opposite": ""
-                if any(item.opposite is not None for item in kwargs.registry.items)
-                else None,
+                "data-has-opposite": "" if any(item.opposite is not None for item in kwargs.registry.items) else None,
                 "data-size": kwargs.size,
             },
             "items": [
