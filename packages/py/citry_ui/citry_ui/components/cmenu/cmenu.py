@@ -1602,7 +1602,10 @@ class CMenu(LibraryComponent):
           };
 
           const closeSubmenu = (submenu, options = {}) => {
-            if (!submenu?.open) {
+            if (
+              !submenu
+              || (!submenu.open && !submenu.childSurface?.matches?.(":popover-open"))
+            ) {
               return;
             }
             for (const child of [...submenus].filter((candidate) => candidate.parent === submenu)) {
@@ -2070,6 +2073,7 @@ class CMenu(LibraryComponent):
             if (
               !submenu
               || submenu.effectiveDisabled
+              || submenu.trigger?.matches?.('[aria-disabled="true"], [data-disabled]')
               || !logicalOpen
               || !layerCoordinator.mayOpen(submenu.layer)
             ) {
@@ -2447,6 +2451,12 @@ class CMenu(LibraryComponent):
             const values = new Set();
             for (const entry of registrations.values()) {
               entry.refresh?.();
+              if (
+                entry.kind === "submenu"
+                && entry.trigger?.matches?.('[aria-disabled="true"], [data-disabled]')
+              ) {
+                closeSubmenu(entry, { restore: false });
+              }
               if (entry.value !== null && entry.value !== undefined) {
                 const level = `${entry.surface.id}:${entry.value}`;
                 if (values.has(level)) {
@@ -2965,8 +2975,12 @@ class CMenu(LibraryComponent):
             surface.removeEventListener("toggle", onToggle);
             if (handoff) {
               for (const submenu of submenus) {
-                submenu.stopGeometry?.();
-                layerCoordinator.unregister(submenu.layer, { cascade: false });
+                if (submenu.trigger?.matches?.('[aria-disabled="true"], [data-disabled]')) {
+                  closeSubmenu(submenu, { restore: false });
+                } else {
+                  submenu.stopGeometry?.();
+                  layerCoordinator.unregister(submenu.layer, { cascade: false });
+                }
               }
             } else {
               closeAllSubmenus();
@@ -2998,6 +3012,7 @@ class CMenu(LibraryComponent):
             primaryTransactions.clear();
             acceptedPrimaryClick = null;
           };
+          cleanup.supportsHandoff = true;
           if (controllerOptions.controller) {
             return {
               cleanup,

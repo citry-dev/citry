@@ -3451,7 +3451,7 @@ global.CitryVueFragments = CitryVueFragments;
     }
   }
 
-  function disposeCallbacks(record) {
+  function disposeCallbacks(record, options = {}) {
     const scope = record.callbackScope, cleanup = record.callbackCleanup;
     const subscriptions = record.callbackSubscriptions;
     record.callbackScope = undefined; record.callbackCleanup = undefined; record.callbackSubscriptions = undefined;
@@ -3461,7 +3461,12 @@ global.CitryVueFragments = CitryVueFragments;
       try { unsubscribe(); }
       catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] callback event cleanup failed:", caught); }
     }
-    try { if (cleanup) cleanup(); }
+    try {
+      if (cleanup) {
+        if (options.handoff === true && cleanup.supportsHandoff === true) cleanup(options);
+        else cleanup();
+      }
+    }
     catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] callback cleanup failed:", caught); }
     if (error !== undefined) throw error;
   }
@@ -4000,7 +4005,7 @@ global.CitryVueFragments = CitryVueFragments;
         const owner = app.mounted.get(callbackOwnerId)?.record;
         if (owner) callbackCleanupRecords.add(owner);
       }
-      for (const record of callbackCleanupRecords) disposeCallbacks(record);
+      for (const record of callbackCleanupRecords) disposeCallbacks(record, {handoff: true});
       for (const id of removed) { const mounted = app.mounted.get(id); if (mounted) dispose(mounted.record); }
       for (const {action, component, record, nextKeys, added} of staged) {
         if (!record || added || expectedRemountIds.has(action.id)) continue;
