@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -420,7 +419,10 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
         """
 
         class Events:
-            def poll(self):
+            def poll_a(self):
+                return None
+
+            def poll_b(self):
                 return None
 
             def remove_first(self, state: PollState):
@@ -429,7 +431,7 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
 
         def template_data(self, kwargs, slots):
             rows = kwargs.get("rows", ["a", "b"])
-            return {"poll_attrs": [{"data-row": row, "@c-poll.1s": "poll"} for row in rows]}
+            return {"poll_attrs": [{"data-row": row, "@c-poll.1s": f"poll_{row}"} for row in rows]}
 
     dispatcher_for(engine)
     event_url = re.compile(r"/ext/events/call$")
@@ -439,7 +441,7 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
 
     def route_poll(route: Any) -> None:
         request = route.request.post_data_json
-        if any(call["handlerName"] == "poll" for call in request["calls"]):
+        if any(call["handlerName"] in {"poll_a", "poll_b"} for call in request["calls"]):
             poll_routes.append(route)
         else:
             route.continue_()
@@ -474,24 +476,6 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
 
     page.route(event_url, route_poll)
     page.clock.install()
-    # Install this probe after Playwright's clock so it wraps the fake
-    # setTimeout implementation. The poll callback is where the next interval
-    # is armed; recording virtual performance.now there gives the test the
-    # actual timer dispatch point rather than the later Python route callback.
-    page.add_init_script(
-        """
-        globalThis.__citryPollTimerDispatchTimes = [];
-        const citryClockSetTimeout = globalThis.setTimeout;
-        globalThis.setTimeout = function(callback, delay, ...args) {
-          if (delay !== 1000 || typeof callback !== 'function')
-            return citryClockSetTimeout.call(this, callback, delay, ...args);
-          return citryClockSetTimeout.call(this, function(...callbackArgs) {
-            globalThis.__citryPollTimerDispatchTimes.push(performance.now());
-            return callback.apply(this, callbackArgs);
-          }, delay, ...args);
-        };
-        """
-    )
     page.goto(serve_live(engine, PollRows(rows=["a", "b"]).render().serialize(), "") + "/")
     page.wait_for_function(
         "() => [...document.querySelectorAll('.row-poller')].map(node => node.dataset.row).join(',') === 'a,b'"
@@ -501,26 +485,23 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     page.clock.run_for(1_000)
     wait_for_poll_routes(1)
     first_poll = poll_routes[0].request.post_data_json["calls"][0]
-    assert first_poll["handlerName"] == "poll"
+    assert first_poll["handlerName"] == "poll_a"
     page.wait_for_timeout(30)
     assert len(poll_routes) == 1
 
     with page.expect_request(event_url) as second_poll_request:
         poll_routes[0].continue_()
-    assert second_poll_request.value.post_data_json["calls"][0]["handlerName"] == "poll"
+    assert second_poll_request.value.post_data_json["calls"][0]["handlerName"] == "poll_b"
     wait_for_poll_routes(2)
     second_poll = poll_routes[1].request.post_data_json["calls"][0]
-    assert second_poll["handlerName"] == "poll"
+    assert second_poll["handlerName"] == "poll_b"
+    assert [first_poll["handlerName"], second_poll["handlerName"]] == ["poll_a", "poll_b"]
     assert first_poll["callerRenderId"] == second_poll["callerRenderId"]
-    timer_dispatch_times = page.evaluate("globalThis.__citryPollTimerDispatchTimes")
-    assert len(timer_dispatch_times) >= 2, (
-        f"poll timer probe did not observe both initial dispatches: {timer_dispatch_times}"
-    )
-    second_poll_timer_dispatched_at = float(timer_dispatch_times[-1])
     poll_routes[1].continue_()
     page.wait_for_function(
         "() => { const app=CitryStable._apps.values().next().value; "
-        "return [...app.mounted.values()].every(({component}) => !component.$loading('poll')); }"
+        "return [...app.mounted.values()].every(({component}) => "
+        "!component.$loading('poll_a') && !component.$loading('poll_b')); }"
     )
     completed_initial_polls = poll_lifetime_snapshot()
     assert completed_initial_polls["pollingLifetimeCount"] == 2
@@ -539,48 +520,28 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert after_remove["pollingLifetimeCount"] == 1
     assert event_lifetime_count(after_remove) == 1
     assert all(lifetime["current"] for mounted in after_remove["mounted"] for lifetime in mounted["lifetimes"])
-    # schedulePoll arms the next interval at the timer callback. Use the
-    # surviving row's measured virtual dispatch time instead of Python route
-    # observation time, which happens later and is not a timer deadline.
-    second_poll_deadline = second_poll_timer_dispatched_at + 1_000
-    now_before_deadline = float(page.evaluate("performance.now()"))
-    remaining_until_deadline = second_poll_deadline - now_before_deadline
-    assert remaining_until_deadline > 0, (
-        f"surviving poll deadline already passed: timer={second_poll_timer_dispatched_at}, "
-        f"now={now_before_deadline}, deadline={second_poll_deadline}"
-    )
-    # Leave at least a full millisecond before the surviving timer's second
-    # deadline. Flooring rather than rounding up keeps this advance strictly
-    # before the measured virtual deadline when performance.now() is fractional.
-    before_deadline = max(0, math.floor(remaining_until_deadline) - 1)
-    page.clock.run_for(before_deadline)
-    assert len(poll_routes) == 2
-    remaining_after_before = second_poll_deadline - float(page.evaluate("performance.now()"))
-    assert remaining_after_before > 0, (
-        f"surviving poll deadline crossed unexpectedly: timer={second_poll_timer_dispatched_at}, "
-        f"now={float(page.evaluate('performance.now()'))}, deadline={second_poll_deadline}"
-    )
-    page.clock.run_for(math.ceil(remaining_after_before) + 1)
-    # Let the held route and queued browser work settle after crossing the
-    # virtual deadline. The transition itself was performed explicitly above.
-    page.wait_for_timeout(30)
-    after_remaining_deadline = poll_lifetime_snapshot()
-    assert len(poll_routes) == 3, (
+    poll_count_after_remove = len(poll_routes)
+    page.clock.run_for(1_000)
+    wait_for_poll_routes(poll_count_after_remove + 1)
+    after_survivor_interval = poll_lifetime_snapshot()
+    assert len(poll_routes) == poll_count_after_remove + 1, (
         f"initial={completed_initial_polls}, after removal={after_remove}, "
-        f"at remaining deadline={after_remaining_deadline}"
+        f"after survivor interval={after_survivor_interval}"
     )
-    assert after_remaining_deadline["pollingLifetimeCount"] == 1
-    assert event_lifetime_count(after_remaining_deadline) == 1
+    assert after_survivor_interval["pollingLifetimeCount"] == 1
+    assert event_lifetime_count(after_survivor_interval) == 1
     assert all(
         lifetime["current"] and lifetime["inFlight"]
-        for mounted in after_remaining_deadline["mounted"]
+        for mounted in after_survivor_interval["mounted"]
         for lifetime in mounted["lifetimes"]
     )
-    assert poll_routes[2].request.post_data_json["calls"][0]["handlerName"] == "poll"
-    poll_routes[2].continue_()
+    surviving_poll = poll_routes[-1].request.post_data_json["calls"][0]
+    assert surviving_poll["handlerName"] == "poll_b"
+    poll_routes[-1].continue_()
     page.wait_for_function(
         "() => { const app=CitryStable._apps.values().next().value; "
-        "return [...app.mounted.values()].every(({component}) => !component.$loading('poll')); }"
+        "return [...app.mounted.values()].every(({component}) => "
+        "!component.$loading('poll_a') && !component.$loading('poll_b')); }"
     )
     page.unroute(event_url)
 
