@@ -8,7 +8,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import citry_ui
 from citry import Citry, Component, DepsStrategy
@@ -97,6 +97,8 @@ from citry_ui.quality.scenarios import Scenario, ScenarioStatus, scenario_by_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from citry.citry_element import CitryElement
 
 _SCENARIO_FACTORIES = {
     "accordion.states": accordion_states_component,
@@ -389,7 +391,7 @@ def build_scenario(
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
             return {"page_title": f"{scenario.purpose} | Citry UI quality"}
 
-    page = ScenarioPage()
+    page = cast("CitryElement", ScenarioPage())
     html = page.render().serialize(deps_strategy=deps_strategy)
     if self_contained and deps_strategy == "document":
         html = _inline_prepared_assets(html, app)
@@ -417,7 +419,8 @@ def render_scenario(
     app = Citry(secret="citry-ui-quality-scenarios", autodiscover=False)  # noqa: S106
     app.register_library(citry_ui)
     app.set_mounted_prefix("/citry")
-    return factory(app)().render().serialize(deps_strategy=deps_strategy)
+    component = cast("CitryElement", factory(app)())
+    return component.render().serialize(deps_strategy=deps_strategy)
 
 
 def main() -> int:

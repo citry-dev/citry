@@ -16,7 +16,11 @@ class AlertDialogSizes(Component):
         <c-for each="size in sizes">
           <c-CAlertDialog #c-key="size" c-size="size">
             <c-fill name="activator" data="{activator_attrs}">
-              <c-CButton #c-key="f'{size}-activator'" c-attrs="activator_attrs" variant="outline">Open {{ size }}</c-CButton>
+              <c-CButton
+                #c-key="f'{size}-activator'"
+                c-attrs="activator_attrs"
+                variant="outline"
+              >Open {{ size }}</c-CButton>
             </c-fill>
             <c-fill name="title">{{ size }} decision surface</c-fill>
             <c-fill name="description">Compare the responsive width for this size.</c-fill>

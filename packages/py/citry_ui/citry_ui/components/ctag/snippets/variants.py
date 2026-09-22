@@ -15,9 +15,17 @@ class TagVariants(Component):
           selection_mode="single"
           value="one"
         >
-          <c-CTag #c-key="f'{variant}-one'" value="one">Selected</c-CTag><c-CTag #c-key="f'{variant}-two'" value="two">Available</c-CTag>
+          <c-CTag #c-key="f'{variant}-one'" value="one">Selected</c-CTag><c-CTag
+            #c-key="f'{variant}-two'"
+            value="two"
+          >Available</c-CTag>
         </c-CTagGroup>
-        <c-CTagGroup #c-key="size" c-for="size in ['sm', 'md', 'lg']" c-label="size" c-size="size">
+        <c-CTagGroup
+          #c-key="size"
+          c-for="size in ['sm', 'md', 'lg']"
+          c-label="size"
+          c-size="size"
+        >
           <c-CTag #c-key="f'{size}-sample'" value="sample">Sample</c-CTag>
         </c-CTagGroup>
       </c-CCol>

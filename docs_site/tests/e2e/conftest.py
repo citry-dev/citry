@@ -335,10 +335,7 @@ def local_docs_site_url() -> Iterator[str]:
         pytest.fail(f"Local docs server did not serve a playground runtime: {error}")
     if not isinstance(runtime, dict) or runtime.get("source") != "workspace":
         output = _stop_process(process)
-        pytest.fail(
-            "Local docs server is serving the published runtime instead of the workspace tuple.\n"
-            + output
-        )
+        pytest.fail("Local docs server is serving the published runtime instead of the workspace tuple.\n" + output)
     workspace_packages = _unique_runtime_packages(runtime.get("packages"), label="Local docs server workspace runtime")
     missing = sorted({"citry-core", "citry", "citry-ui"} - workspace_packages.keys())
     local_missing = sorted(
@@ -355,10 +352,7 @@ def local_docs_site_url() -> Iterator[str]:
         if local_missing:
             details.append("not local: " + ", ".join(local_missing))
         pytest.fail(
-            "Local docs server did not provide a complete workspace tuple ("
-            + "; ".join(details)
-            + ").\n"
-            + output
+            "Local docs server did not provide a complete workspace tuple (" + "; ".join(details) + ").\n" + output
         )
 
     try:

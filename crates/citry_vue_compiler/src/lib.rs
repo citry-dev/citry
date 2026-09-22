@@ -687,9 +687,9 @@ fn walk(
             // example, the `>` in an arrow function).  The parser already
             // recorded the exact opening-tag span, so use that instead of
             // searching the source text for the first greater-than sign.
-            let opening_end = Some(element.loc.span.end);
-            if let Some(item) = declared
-                .filter(|item| item.alias == element.tag && opening_end == Some(item.source_end))
+            let opening_end = element.loc.span.end;
+            if let Some(item) =
+                declared.filter(|item| item.alias == element.tag && opening_end == item.source_end)
             {
                 if !state.matched_dynamic_aliases.insert(item.alias.clone()) {
                     state.diagnostics.push(diag(
@@ -706,7 +706,7 @@ fn walk(
                     "DYNAMIC_ELEMENT_MISMATCH",
                     "reserved dynamic element source has no exact declaration",
                     element.loc.span.start,
-                    opening_end.unwrap_or(element.loc.span.end),
+                    opening_end,
                 ));
             }
         }

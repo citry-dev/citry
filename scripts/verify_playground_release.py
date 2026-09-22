@@ -107,10 +107,15 @@ def validate_published_runtime(runtime: Mapping[str, Any]) -> None:
                 raise PlaygroundReleaseError(f"published package {name!r} has an invalid PyPI filename or SHA-256")
             continue
         if source == "url":
-            url = package.get("url")
-            invalid_url = False
+            url_value = package.get("url")
+            if isinstance(url_value, str):
+                url = url_value
+                invalid_url = False
+            else:
+                url = ""
+                invalid_url = True
             try:
-                parsed = urlsplit(url) if isinstance(url, str) else None
+                parsed = urlsplit(url) if not invalid_url else None
             except ValueError:
                 invalid_url = True
                 parsed = None
