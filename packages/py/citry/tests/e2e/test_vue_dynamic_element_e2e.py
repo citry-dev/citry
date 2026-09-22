@@ -112,9 +112,12 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     page.clock.run_for(5_000)
     assert calls == []
     page.evaluate("globalThis.__citryDocumentHidden=false;document.dispatchEvent(new Event('visibilitychange'))")
-    page.clock.run_for(999)
+    # DOM/event processing can advance the fake clock by a fractional millisecond
+    # after the visibility handler schedules the interval. Leave a small margin
+    # before asserting that the one-second deadline has not arrived.
+    page.clock.run_for(990)
     assert calls == []
-    page.clock.run_for(1)
+    page.clock.run_for(10)
     page.wait_for_function(
         "() => { const app=CitryStable._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
@@ -130,10 +133,10 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     page.clock.run_for(1)
     assert [call["handlerName"] for call in sent_calls()].count("refresh") == 1
     assert [call for call in sent_calls() if call["handlerName"] == "poll"] == []
-    page.clock.run_for(499)
+    page.clock.run_for(490)
     assert [call for call in sent_calls() if call["handlerName"] == "poll"] == []
     with page.expect_request(poll_route_pattern):
-        page.clock.run_for(1)
+        page.clock.run_for(10)
     page.wait_for_function(
         "() => { const app=CitryStable._apps.values().next().value; "
         "return !app.mounted.get(app.rootId).component.$loading('poll'); }"
@@ -503,9 +506,9 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert after_remove["pollingLifetimeCount"] == 1
     assert event_lifetime_count(after_remove) == 1
     assert all(lifetime["current"] for mounted in after_remove["mounted"] for lifetime in mounted["lifetimes"])
-    page.clock.run_for(999)
+    page.clock.run_for(990)
     assert len(poll_routes) == 2
-    page.clock.run_for(1)
+    page.clock.run_for(10)
     page.wait_for_timeout(20)
     after_remaining_deadline = poll_lifetime_snapshot()
     assert len(poll_routes) == 3, (
