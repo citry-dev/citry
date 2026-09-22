@@ -3664,15 +3664,70 @@ global.CitryVueFragments = CitryVueFragments;
     }
   }
 
+  function nativeControlElements(root) {
+    if (!(root instanceof Element)) return [];
+    const elements = [];
+    const isNativeControl = value => value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement ||
+      value instanceof HTMLSelectElement;
+    if (isNativeControl(root)) elements.push(root);
+    elements.push(...root.querySelectorAll("input,textarea,select"));
+    return elements;
+  }
+
+  function captureNativeControlState(root) {
+    const snapshots = [];
+    for (const element of nativeControlElements(root)) {
+      if (controlLifetimes.has(element)) continue;
+      if (element instanceof HTMLInputElement) {
+        const type = element.type.toLowerCase();
+        if (type === "file") continue;
+        if (type === "checkbox" || type === "radio") {
+          if (element.checked === element.defaultChecked) continue;
+          snapshots.push({root, element, kind: "checked", value: element.checked});
+          continue;
+        }
+        if (element.value !== element.defaultValue) snapshots.push({root, element, kind: "value", value: element.value});
+        continue;
+      }
+      if (element instanceof HTMLTextAreaElement) {
+        if (element.value !== element.defaultValue) snapshots.push({root, element, kind: "value", value: element.value});
+        continue;
+      }
+      const options = [...element.options];
+      const values = options.map(option => option.value);
+      const selected = options.map(option => option.selected);
+      const defaults = options.map(option => option.defaultSelected);
+      if (selected.some((value, index) => value !== defaults[index]))
+        snapshots.push({root, element, kind: "selected", values, selected});
+    }
+    return snapshots;
+  }
+
+  function restoreNativeControlState(snapshots) {
+    for (const snapshot of snapshots || []) {
+      const {root, element} = snapshot;
+      if (!(root instanceof Element) || !root.isConnected || !element.isConnected || !root.contains(element)) continue;
+      if (snapshot.kind === "value" && "value" in element) element.value = snapshot.value;
+      else if (snapshot.kind === "checked" && "checked" in element) element.checked = snapshot.value;
+      else if (snapshot.kind === "selected" && element instanceof HTMLSelectElement) {
+        const options = [...element.options];
+        if (options.length !== snapshot.values.length || options.some((option, index) => option.value !== snapshot.values[index]))
+          continue;
+        options.forEach((option, index) => { option.selected = snapshot.selected[index]; });
+      }
+    }
+  }
+
   function captureFocusForPublication() {
     const element = document.activeElement;
     // Body/document focus is the browser's unfocused sentinel, so only retain a user control.
     if (typeof HTMLElement !== "function" || !(element instanceof HTMLElement) ||
         element === document.body || element === document.documentElement)
       return null;
-    const snapshot = {element, selection: null};
     const isTextControl = (typeof HTMLInputElement === "function" && element instanceof HTMLInputElement) ||
       (typeof HTMLTextAreaElement === "function" && element instanceof HTMLTextAreaElement);
+    if (!isTextControl) return null;
+    const snapshot = {element, selection: null};
     if (isTextControl) {
       // Keyed moves can clear an active control's range while Vue temporarily detaches it.
       const start = element.selectionStart, end = element.selectionEnd;
@@ -3768,11 +3823,13 @@ global.CitryVueFragments = CitryVueFragments;
       // Removed instances keep their prior server data until Vue runs beforeUnmount in this flush.
       for (const id of removed) if (priorLive.has(id)) nextLive.set(id, priorLive.get(id));
       const focusSnapshot = captureFocusForPublication();
+      const nativeControlSnapshot = captureNativeControlState(app.hostElement);
       app.snapshot.value = nextLive;
       for (const item of staged) if (item.record && !item.added && !expectedRemountIds.has(item.action.id)) item.record.live.value = nextLive.get(item.action.id);
       for (const item of staged) if (item.record && item.serverShapeChanged && !item.added &&
           !expectedRemountIds.has(item.action.id)) item.component.$forceUpdate();
       await V.nextTick();
+      restoreNativeControlState(nativeControlSnapshot);
       restoreFocusAfterPublication(focusSnapshot);
       if (app.terminal) throw new Error("render failed after prepared revision publication");
       if (!app.mounted.has(app.rootId) || [...app.mounted.keys()].some(id => !app.occurrences.has(id)) ||
