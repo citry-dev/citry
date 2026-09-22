@@ -104,6 +104,34 @@ def test_deferred_slots_in_call_run_forward_one_fill_per_member_to_lexical_owner
     assert compiler_input.template.count('v-text="label"') == 2
 
 
+def test_same_type_native_slot_receivers_share_reusable_definition() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = registry
+        template = '<article class="card"><c-slot /></article>'
+
+    class Page(Component):
+        citry = registry
+        template = (
+            '<main><c-Card><span v-text="message"></span></c-Card>'
+            '<c-Card><span v-text="message"></span></c-Card></main>'
+        )
+
+        def js_data(self, kwargs, slots):
+            return {"message": "parent value"}
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Page()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    cards = [item for item in assembly.view.occurrences if item.type_key == Card.class_id]
+
+    assert len(cards) == 2
+    assert cards[0].definition_id == cards[1].definition_id
+
+
 def test_ctabs_transparent_projection_puts_nested_calls_in_physical_definition() -> None:
     import citry_ui
 

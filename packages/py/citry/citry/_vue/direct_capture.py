@@ -912,7 +912,13 @@ def assemble_typed_render(
                         if receiver_type is None:
                             raise UnsupportedPreparedView("direct slot receiver has no prepared component type")
                         source_key = (*source_key[:-1], receiver_type)
-                    if relative_receiver_path is not None:
+                    # The reusable definition being assembled must not inherit
+                    # the receiver's path under its lexical caller.  That
+                    # path distinguishes flattened descendants when they are
+                    # projected into another definition, but it would make
+                    # ordinary instances of the same component produce
+                    # occurrence-specific definitions.
+                    if relative_receiver_path is not None and receiver_owner != occurrence_id:
                         source_key = (*source_key, relative_receiver_path)
                     site_identity = (source_key, placement_route)
                     site_index = slot_site_counts[site_identity]
