@@ -18,7 +18,7 @@ inputs:
       - {id: reverse, name: reverse, type: bool, default: {kind: literal, value: false}, effect: 'Reverses visual flow without changing DOM, reading, or Tab order.'}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Vue attributes without replacing owned layout or Citry runtime fields.'}
   - id: crow-server-inputs
     component: CRow
     channel: server
@@ -32,7 +32,7 @@ inputs:
       - {id: reverse, name: reverse, type: bool, default: {kind: literal, value: false}, effect: 'Reverses visual flow without changing DOM, reading, or Tab order.'}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Vue attributes without replacing owned layout or Citry runtime fields.'}
 
 slots:
   - id: ccol-slots

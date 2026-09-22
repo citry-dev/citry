@@ -34,7 +34,11 @@ AXE_PATH = Path(__file__).resolve().parents[2] / "node_modules" / "axe-core" / "
 
 PAGE_SENTINELS = {
     "starter-web-v1": b"Project Explorer",
-    "demo-project-board-v1": b"Plan the product launch.",
+    # The Vue prepared renderer sends the document shell and mount host in the
+    # initial response.  The board content is materialized after the browser
+    # starts the prepared app, so use the shell's title as the server-readiness
+    # sentinel instead of content that is intentionally browser-rendered.
+    "demo-project-board-v1": b"Project Board | Citry demo",
     "demo-htmx-v1": b"HTMX + Citry patterns",
 }
 
@@ -358,7 +362,7 @@ def browser_starter(project: ExampleProject, base_url: str, browser_name: str) -
             else None,
         )
         page.goto(base_url + "/", wait_until="networkidle")
-        page.wait_for_function("window.Alpine && window.Citry && Citry.events")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         expected_mode, expected_eyebrow = STARTER_HOST_COPY[project.host]
         if page.locator(".mode-label").text_content() != expected_mode:
             raise AssertionError(f"{project.id}: the header does not name its host")
@@ -411,7 +415,7 @@ def browser_starter(project: ExampleProject, base_url: str, browser_name: str) -
             raise AssertionError(f"Expected three search Event requests, saw {event_requests}")
 
         page.reload(wait_until="networkidle")
-        page.wait_for_function("window.Alpine && window.Citry && Citry.events")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         page.get_by_text("6 matching projects", exact=True).wait_for()
         if page.get_by_role("searchbox", name="Filter projects").input_value():
             raise AssertionError("Reload did not restore the empty initial query")
@@ -441,7 +445,7 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
         page = browser.new_page()
         console_errors, page_errors, failed_requests, http_errors = _browser_problems(page)
         page.goto(base_url + "/", wait_until="networkidle")
-        page.wait_for_function("window.Alpine && window.Citry && Citry.events")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         accessibility_findings = axe_high_impact_findings(page)
         if accessibility_findings:
             raise AssertionError(
@@ -500,6 +504,9 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
         completed_keyboard_card.get_by_role("button", name="Reopen task").click()
         completed_keyboard_card.get_by_role("button", name="Mark complete").wait_for()
         completed_filter.uncheck()
+        # Let the accepted filter update settle before beginning the separate
+        # debounced search so the journey verifies each round trip independently.
+        page.get_by_text("5 tasks shown", exact=True).wait_for()
 
         search = page.get_by_role("searchbox", name="Search tasks")
         search.fill("keyboard")
@@ -517,15 +524,13 @@ def browser_project_board(base_url: str, browser_name: str) -> None:
         title = page.get_by_role("textbox", name="Task title")
         title.fill("x")
         with page.expect_response(
-            lambda response: response.status == 422
-            and "/ext/events/" in response.url
-            and response.url.endswith("/add")
+            lambda response: response.status == 200 and response.url.endswith("/ext/events/call")
         ) as invalid_response_info:
             page.get_by_role("button", name="Add task").click()
+        invalid_result = invalid_response_info.value.json()["results"][0]
+        if invalid_result.get("ok") is not False or invalid_result.get("error", {}).get("status") != 422:
+            raise AssertionError(f"Invalid task title did not produce a semantic 422 result: {invalid_result!r}")
         page.get_by_text("Enter 4 to 80 characters.").wait_for()
-        expected_validation_response = f"422 {invalid_response_info.value.url}"
-        if expected_validation_response in http_errors:
-            http_errors.remove(expected_validation_response)
         if title.input_value() != "x":
             raise AssertionError("Validation failure did not preserve the typed title")
         if title.get_attribute("aria-invalid") != "true":
@@ -653,13 +658,27 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
         page.keyboard.press("Tab")
         if not edit_button.evaluate("element => element === document.activeElement"):
             raise AssertionError("Tab did not move from search to the first Edit button")
+        owned_stylesheet_selector = "style[data-citry-css-url],link[data-citry-css-url]"
+        styles_before_form = page.locator(owned_stylesheet_selector).evaluate_all(
+            "elements => elements.map(element => element.getAttribute('data-citry-css-url'))"
+        )
         page.keyboard.press("Enter")
         editor.get_by_role("heading", name="Edit Ada Lovelace").wait_for()
         grace.get_by_role("heading", name="Grace Hopper").wait_for()
         page.wait_for_function(
             "document.activeElement?.name === 'name' && document.activeElement.closest('#contact-row-1')"
         )
-        form_style = page.locator("link[rel='stylesheet'][href*='ContactForm_']")
+        editor.get_by_role("button", name="Cancel").wait_for(state="attached")
+        form_style_urls = page.locator(owned_stylesheet_selector).evaluate_all(
+            "(elements, before) => elements.map(element => element.getAttribute('data-citry-css-url'))"
+            ".filter(url => !before.includes(url))",
+            styles_before_form,
+        )
+        if len(form_style_urls) != 1:
+            raise AssertionError(
+                f"Expected opening the ContactForm to attach exactly one new owned stylesheet, got {form_style_urls!r}"
+            )
+        form_style = page.locator(f'[data-citry-css-url="{form_style_urls[0]}"]')
         form_style.wait_for(state="attached")
         page.wait_for_function(
             "getComputedStyle(document.querySelector('#contact-row-1 .contact-form')).display === 'grid'"
@@ -788,7 +807,7 @@ def browser_standalone(project_dir: Path, browser_name: str) -> None:
             else None,
         )
         page.goto(document.resolve().as_uri())
-        page.wait_for_function("window.Alpine")
+        page.wait_for_function("window.Citry && Citry.events && window.CitryStable?._apps?.size > 0")
         accessibility_findings = axe_high_impact_findings(page)
         if accessibility_findings:
             raise AssertionError(

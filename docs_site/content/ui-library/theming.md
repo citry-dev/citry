@@ -27,7 +27,7 @@ component tag.
 ```
 
 Both inputs accept Citry's structured class/style values. Use `attrs` for
-other native, ARIA, Alpine, and `data-*` attributes. If `attrs` also contains
+other native, ARIA, Vue, and `data-*` attributes. If `attrs` also contains
 class or style values, Citry merges them with the direct inputs.
 Python annotations can import the corresponding `CClassValue` and
 `CStyleValue` aliases from `citry_ui`.

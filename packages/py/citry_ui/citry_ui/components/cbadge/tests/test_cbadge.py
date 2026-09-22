@@ -142,23 +142,16 @@ def test_badge_rejects_owned_runtime_and_structural_attributes(attribute):
         _render(CBadge(attrs={attribute: "consumer"}, slots={"default": "Badge"}))
 
 
-def test_unrelated_bindings_visibility_and_listeners_remain_available():
-    html = _render(
-        CBadge(
-            attrs={
-                "x-data": "{shown: true}",
-                "x-show": "shown",
-                ":class": "{active: shown}",
-                "@click": "shown = false",
-            },
-            slots={"default": "Available"},
-        )
-    )
+@pytest.mark.parametrize("attribute", [":class", "@click"])
+def test_python_attrs_cannot_introduce_executable_vue_syntax(attribute):
+    with pytest.raises(TypeError, match=r"Python-resolved attributes?.*cannot introduce Vue syntax"):
+        _render(CBadge(attrs={attribute: "active"}, slots={"default": "Available"}))
 
-    assert 'x-data="{shown: true}"' in html
-    assert 'x-show="shown"' in html
-    assert ':class="{active: shown}"' in html
-    assert '@click="shown = false"' in html
+
+@pytest.mark.parametrize("attribute", ["v-bind:role", "v-bind:aria-hidden.prop"])
+def test_vue_spellings_of_owned_bindings_keep_pointed_errors(attribute):
+    with pytest.raises(ValueError, match="cannot dynamically bind HTML attribute"):
+        _render(CBadge(attrs={attribute: "value"}, slots={"default": "Badge"}))
 
 
 def test_direct_choices_are_detrusted_before_rendering():

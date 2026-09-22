@@ -155,7 +155,7 @@ class CCol(LibraryComponent):
         c-data-gap="gap"
         c-data-align="align"
         c-data-justify="justify"
-        c-data-reverse="reverse"
+        c-data-reverse="'' if reverse else None"
       >
         <c-slot />
       </c-element>
@@ -212,8 +212,8 @@ class CRow(LibraryComponent):
         c-data-gap="gap"
         c-data-align="align"
         c-data-justify="justify"
-        c-data-reverse="reverse"
-        c-data-wrap="wrap"
+        c-data-reverse="'' if reverse else None"
+        c-data-wrap="'' if wrap else None"
       >
         <c-slot />
       </c-element>

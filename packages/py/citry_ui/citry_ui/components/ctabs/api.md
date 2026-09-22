@@ -72,7 +72,8 @@ to maintain a structural-only list component.
 ## Try the configuration
 
 Change accent, variant, density, orientation, alignment, growth, focus looping,
-and disabled state. The controls use public CSS variables and `$c-props`.
+and disabled state. The controls use public CSS variables and native Vue
+bindings.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/ctabs/snippets/configuration.py"
@@ -123,12 +124,10 @@ Supplying client `value` makes selection controlled. A user request calls
 <c-CTabs
   default_value="planets"
   aria_label="Night sky topics"
-  $c-props="{
-    value: currentTopic,
-    onValueChange: (value, detail) => {
-      currentTopic = value;
-      observationLog.record(detail);
-    },
+  :value="currentTopic"
+  :onValueChange="(value, detail) => {
+    currentTopic = value;
+    observationLog.record(detail);
   }"
 >
   ...

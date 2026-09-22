@@ -192,7 +192,7 @@ class CBreadcrumbs(LibraryComponent):
         c-aria-label="tr('citry-ui-breadcrumbs-label') if catalog_label else label"
         c-$c-tr:citry-ui-breadcrumbs-label[aria-label]="True if catalog_label else None"
         c-data-size="size"
-        c-data-wrap="wrap"
+        c-data-wrap="'' if wrap else None"
         c-bind="attrs"
         data-citry-ui-part="breadcrumbs"
       >

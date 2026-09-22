@@ -1,5 +1,7 @@
 """Browser tests for the production CButton."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +20,7 @@ def _interaction_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {loading:true,disabled:false,showSubmit:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -25,12 +28,7 @@ def _interaction_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                loading: true,
-                disabled: false,
-              }"
-            >
+            <body>
               <form
                 id="probe-form"
                 @submit.prevent="
@@ -40,14 +38,12 @@ def _interaction_page() -> str:
                 @reset="window.__buttonResets = (window.__buttonResets || 0) + 1"
               >
                 <input id="probe-input" name="title" value="Original" />
-                <span id="submit-mount">
+                <span id="submit-mount" v-if="showSubmit">
                   <c-CButton
                     type="submit"
                     c-attrs="submit_attrs"
-                    $c-props="{
-                      loading,
-                      disabled,
-                    }"
+                    :loading="loading"
+                    :disabled="disabled"
                     @click="window.__buttonClicks = (window.__buttonClicks || 0) + 1"
                   >
                     <c-fill name="start">
@@ -79,6 +75,13 @@ def _interaction_page() -> str:
               >
                 Toggle disabled
               </button>
+              <button
+                id="remove-submit"
+                type="button"
+                @click="showSubmit = false"
+              >
+                Remove submit button
+              </button>
               <c-js />
             </body>
           </html>
@@ -103,6 +106,7 @@ def _reactive_configuration_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {variant:'outline',intent:'danger',size:'lg',block:true,loadingPosition:'end'};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -110,24 +114,14 @@ def _reactive_configuration_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                variant: 'outline',
-                intent: 'danger',
-                size: 'lg',
-                block: true,
-                loadingPosition: 'end',
-              }"
-            >
+            <body>
               <c-CButton
                 c-attrs="button_attrs"
-                $c-props="{
-                  variant,
-                  intent,
-                  size,
-                  block,
-                  loadingPosition,
-                }"
+                :variant="variant"
+                :intent="intent"
+                :size="size"
+                :block="block"
+                :loadingPosition="loadingPosition"
               >
                 Save
               </c-CButton>
@@ -244,6 +238,7 @@ def _loading_presentation_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {centeredLoading:false};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -251,7 +246,7 @@ def _loading_presentation_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body x-data="{ centeredLoading: false }">
+            <body>
               <c-CButton
                 loading
                 loading_pos="start"
@@ -291,7 +286,7 @@ def _loading_presentation_page() -> str:
               </c-CButton>
               <c-CButton
                 c-attrs="center_attrs"
-                $c-props="{ loading: centeredLoading }"
+                :loading="centeredLoading"
               >
                 <c-fill name="start">
                   S
@@ -332,6 +327,7 @@ def _link_page() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {disabled:false,loading:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -339,19 +335,12 @@ def _link_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                disabled: false,
-                loading: true,
-              }"
-            >
+            <body>
               <c-CButton
                 href="/field-guide"
                 c-attrs="link_attrs"
-                $c-props="{
-                  disabled,
-                  loading,
-                }"
+                :disabled="disabled"
+                :loading="loading"
                 @click="
                   window.__linkClicks = (window.__linkClicks || 0) + 1;
                   window.__linkModifier = $event.ctrlKey;
@@ -617,11 +606,25 @@ def test_removing_button_runs_component_listener_cleanup(page):
     page.evaluate(
         """() => {
           window.__removedButton = document.querySelector('#submit-action');
-          document.querySelector('#submit-mount').remove();
+          document.querySelector('#remove-submit').click();
         }"""
     )
-    page.wait_for_timeout(100)
+    page.wait_for_function("!document.querySelector('#submit-action')")
 
     assert page.evaluate("!window.__removedButton.hasAttribute('data-citry-button-initialized')") is True
-    page.evaluate("window.__removedButton.click()")
-    assert page.evaluate("window.__buttonClicks || 0") == 0
+    event = page.evaluate(
+        """() => {
+          const click = new MouseEvent('click', {bubbles: true, cancelable: true});
+          const dispatched = window.__removedButton.dispatchEvent(click);
+          return {
+            dispatched,
+            defaultPrevented: click.defaultPrevented,
+            callerListenerCalls: window.__buttonClicks || 0,
+          };
+        }"""
+    )
+    # The CButton guard is installed in onServerRender and blocks activation
+    # while loading. Vue removes that component listener during the supported
+    # v-if unmount; a caller-authored listener may remain on a retained,
+    # detached DOM object by Vue's design.
+    assert event == {"dispatched": True, "defaultPrevented": False, "callerListenerCalls": 1}

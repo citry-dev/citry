@@ -54,7 +54,7 @@ class SimpleElement(CitryElement):
     __slots__ = ("caller", "content")
 
     def __init__(self, element: CitryElement, caller: CitryContext, content: SimpleContent | None) -> None:
-        super().__init__(element.comp_cls, element.kwargs, ownership_graph=caller.ownership)
+        super().__init__(element.comp_cls, element.kwargs)
         self.caller = caller
         self.content = content
 
@@ -80,7 +80,6 @@ class SimpleContent:
                 component=context.component,
                 provides={**context.provides, **provides},
                 sandboxed=context.sandboxed,
-                ownership=context.ownership,
                 template_record=context.template_record,
                 _simple_scope=context._simple_scope,
             )
@@ -114,16 +113,8 @@ def prepare_simple_element(
 ) -> SimpleElement:
     """Check a simple call before it can record an independent component boundary."""
     name = element.comp_cls.__name__
-    if (
-        element.component_tag_client_bindings
-        or element.element_morph_metadata is not None
-        or element.ownership_invocation_id is not None
-        or element.forward_ownership_invocation
-    ):
-        msg = (
-            f"Component {name} uses simple=True; component bindings, range metadata"
-            " and forwarded invocations are unsupported."
-        )
+    if element.component_tag_client_bindings or element.element_morph_metadata is not None:
+        msg = f"Component {name} uses simple=True; component bindings and range metadata are unsupported."
         raise TypeError(msg)
     if caller.component is None:
         raise RuntimeError("A simple call requires an insertion owner.")
@@ -150,17 +141,24 @@ def simple_deferred(
 ) -> DeferredComponent:
     """Queue a checked simple call at its current physical insertion region."""
     prepared = prepare_simple_element(element, caller, body=body)
+    from citry._vue.direct import active_execution  # noqa: PLC0415
+
     return DeferredComponent(
         prepared,
         cast("Component", caller.component),
         caller.provides,
-        physical_parent_region_id=caller.ownership.current_region_id() if caller.ownership is not None else None,
+        direct_parent_execution=active_execution(),
     )
 
 
 def _validate_body(body: list[BodyItem], cls: type[Component]) -> bool:
     """Check every authored branch and nested template before inputs prune any work."""
     from citry._i18n_directives import looks_like_i18n_binding  # noqa: PLC0415
+    from citry._vue.capture import (  # noqa: PLC0415
+        PreparedElementCloseNode,
+        PreparedSourceTextNode,
+        PreparedVerbatimHtmlNode,
+    )
     from citry.component_render import _compile_nested_template  # noqa: PLC0415
 
     pending: list[Any] = list(body)
@@ -168,7 +166,10 @@ def _validate_body(body: list[BodyItem], cls: type[Component]) -> bool:
     while pending:
         item = pending.pop()
         kind = type(item)
-        if kind in (str, ExprNode):
+        if isinstance(
+            item,
+            (str, ExprNode, PreparedSourceTextNode, PreparedVerbatimHtmlNode, PreparedElementCloseNode),
+        ):
             continue
         if kind in (ExprHtmlAttr, StaticHtmlAttr, TemplateHtmlAttr) and looks_like_i18n_binding(
             item.key.removeprefix("c-")
@@ -189,7 +190,7 @@ def _validate_body(body: list[BodyItem], cls: type[Component]) -> bool:
             for branch in item.branches:
                 pending.extend(branch[1])
                 pending.extend(branch[2])
-        elif kind is ElementAttrsNode:
+        elif isinstance(item, ElementAttrsNode):
             pending.extend(item.attrs)
         elif kind is ElementKeyNode:
             pending.append(item.attr)
@@ -211,11 +212,11 @@ def _prepared_template(cls: type[Component]) -> tuple[CitryTemplate | None, list
     """Retain checked nodes only while their loaded template record is current."""
     from citry.component_render import _get_compiled_template  # noqa: PLC0415
 
-    compiled = _get_compiled_template(cls)
+    compiled = _get_compiled_template(cls, prepared=True)
     cached = cls.__dict__.get("_citry_simple_template")
     if cached is not None and cached[0] is compiled:
         return cached
-    if compiled is None or compiled.generate is None:
+    if compiled is None or compiled.prepared_generate is None:
         return None, [], False
     with compiled.compile_lock:
         cached = cls.__dict__.get("_citry_simple_template")
@@ -224,7 +225,7 @@ def _prepared_template(cls: type[Component]) -> tuple[CitryTemplate | None, list
         extensions = cls.citry.extensions
         body = extensions.on_template_foreign_compiled(
             cls,
-            compiled.generate(),
+            compiled.prepared_generate(),
             provider_metadata=compiled.foreign_provider_metadata,
             template_id=compiled.template_id,
             origin=compiled.origin,
@@ -290,7 +291,6 @@ def render_simple(element: SimpleElement) -> SimpleRender:
         variables=data,
         component=caller.component,
         provides=caller.provides,
-        ownership=caller.ownership,
         sandboxed=caller.sandboxed,
         template_record=compiled,
         _simple_scope=SimpleScope(cls, element.content),

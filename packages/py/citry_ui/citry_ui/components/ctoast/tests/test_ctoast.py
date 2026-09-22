@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Iterator, Sequence
 from typing import get_type_hints
 
@@ -18,9 +20,27 @@ def _app() -> Citry:
     return app
 
 
-def _render(**kwargs) -> str:
+def _rendered(**kwargs):
     app = _app()
-    return citry_ui.CToastRegion(**kwargs).render(citry=app).serialize(deps_strategy="fragment")
+    return citry_ui.CToastRegion(**kwargs).render(citry=app)
+
+
+def _render(*, static_fallback: bool = False, **kwargs) -> str:
+    rendered = _rendered(**kwargs)
+    if static_fallback:
+        return rendered.serialize(security_javascript="omit")
+    return rendered.serialize(deps_strategy="fragment")
+
+
+def _prepared_manifest(html: str) -> dict[str, object]:
+    script = re.search(
+        r'<script\b(?=[^>]*type="application/json")(?=[^>]*data-citry-vue-fragment)[^>]*>(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert script is not None
+    envelope = json.loads(script.group(1))
+    return envelope["vue"]["prepared"]["manifest"]
 
 
 def test_toast_region_renders_semantic_queue_and_form_safe_controls() -> None:
@@ -45,9 +65,13 @@ def test_toast_region_renders_semantic_queue_and_form_safe_controls() -> None:
             ),
             citry_ui.CToastMessage(id="queued", title="Queued"),
         ),
+        static_fallback=True,
     )
 
-    assert '<section class="cui-toast-region" id="notices"' in html
+    section = re.search(r"<section\b[^>]*>", html)
+    assert section is not None
+    assert re.search(r'\bclass="cui-toast-region"', section.group(0))
+    assert re.search(r'\bid="notices"', section.group(0))
     assert 'role="region"' in html
     assert 'aria-label="Application notifications"' in html
     assert html.count('aria-live="polite"') == 1
@@ -131,13 +155,18 @@ def test_toast_region_merges_unrelated_attrs_class_and_style() -> None:
     html = _render(
         class_=["brand-notices", {"ready": True}],
         style={"--cui-toast-width": "28rem"},
-        attrs={"data-workflow": "sync", "@click": "clicked = true"},
+        attrs={"data-workflow": "sync"},
+        static_fallback=True,
     )
 
     assert 'class="cui-toast-region brand-notices ready"' in html
     assert "--cui-toast-width: 28rem" in html
     assert 'data-workflow="sync"' in html
-    assert '@click="clicked = true"' in html
+
+
+def test_toast_region_rejects_python_generated_vue_listener_attributes() -> None:
+    with pytest.raises(TypeError, match="Python-resolved attributes cannot introduce Vue syntax"):
+        _render(attrs={"@click": "clicked = true"})
 
 
 def test_toast_strings_are_plain_canonical_and_escaped() -> None:
@@ -149,7 +178,8 @@ def test_toast_strings_are_plain_canonical_and_escaped() -> None:
                 description="A\rB",
                 action_label="<strong>Undo</strong>",
             ),
-        )
+        ),
+        static_fallback=True,
     )
 
     assert "&lt;img src=x onerror=&#34;evil&#34;&gt;\nSaved" in html
@@ -178,10 +208,17 @@ class _OneShotMessages(Sequence[citry_ui.CToastMessage]):
 
 def test_toast_region_uses_one_message_snapshot_for_html_and_client_data() -> None:
     messages = _OneShotMessages()
-    html = _render(items=messages)
+    rendered = _rendered(items=messages)
+    html = rendered.serialize(security_javascript="omit")
+    prepared = rendered.serialize(deps_strategy="fragment")
 
     assert messages.iterations == 1
     assert 'data-citry-toast-id="once"' in html
+    manifest = _prepared_manifest(prepared)
+    occurrence = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
+    items = occurrence["serverData"]["serverDefaults"]["items"]
+    assert items[0]["id"] == "once"
+    assert items[0]["title"] == "Read once"
 
 
 def test_toast_public_types_are_runtime_introspectable() -> None:

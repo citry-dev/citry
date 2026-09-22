@@ -34,9 +34,9 @@ Do not place links, buttons, inputs, editable content, or other focus stops
 inside an Item. The family follows the listbox interaction model and rejects
 interactive descendants during enhancement.
 
-## Control chosen values from Alpine
+## Control chosen values from Vue
 
-Pass `value` and `onValueChange` through `$c-props` for controlled state.
+Pass `value` and `onValueChange` with native Vue bindings for controlled state.
 Transfer and reorder actions become requests: the visible order changes only
 after the owner accepts the proposed array.
 

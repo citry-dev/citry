@@ -91,7 +91,10 @@ def test_progressive_native_proxy_and_custom_combobox_share_exact_value() -> Non
     assert 'role="listbox"' in listbox
     assert 'aria-label="Planet"' in listbox
     assert re.search(r'<select[^>]+name="planet"[^>]*>', html)
-    assert re.search(r'<option value="earth" selected>Earth</option>', html)
+    assert re.search(
+        r'<option(?=[^>]*\bvalue="earth")(?=[^>]*\bselected(?:\s|=|>))[^>]*>Earth</option>',
+        html,
+    )
     assert "tabindex" not in re.search(r"<select[^>]+data-cui-select-native[^>]*>", html).group(0)
 
 
@@ -117,7 +120,10 @@ def test_empty_required_readonly_and_form_proxy_states_are_coherent() -> None:
     native = re.search(r"<select[^>]+data-cui-select-native[^>]*>", html).group(0)
     assert " disabled" in native
     assert " required" not in native
-    assert re.search(r'<input name="planet" value="" type="hidden"', html)
+    assert re.search(
+        r'<input\b(?=[^>]*\bname="planet")(?=[^>]*\bvalue="")(?=[^>]*\btype="hidden")[^>]*>',
+        html,
+    )
 
 
 def test_field_owns_state_and_accessible_relationships() -> None:

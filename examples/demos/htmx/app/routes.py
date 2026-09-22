@@ -12,6 +12,7 @@ from app.components.contact_form import ContactForm
 from app.components.search_results import SearchResults
 from app.components.team_picker import TeamPicker
 from app.data import DEPARTMENTS, get_contact, list_teams, search_contacts, update_contact
+from citry import Markup
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -40,6 +41,21 @@ def _fragment_response(component: CitryElement) -> HTMLResponse:
     return HTMLResponse(_fragment(component))
 
 
+def _search_results_fragment(query: str = "") -> str:
+    contacts = search_contacts(query)
+    rows = Markup().join(
+        Markup('<li><div class="contact-row-host" id="contact-row-{}">{}</div></li>').format(
+            contact.id,
+            # `format` escapes each argument, and this one is already the serialized
+            # output of a rendered component, so it has to arrive as Markup or the
+            # row's own tags would be shown to the reader as text.
+            Markup(_fragment(ContactDetail(contact=contact))),  # noqa: S704
+        )
+        for contact in contacts
+    )
+    return _fragment(SearchResults(rows_html=rows, count=len(contacts), query=query))
+
+
 def _contact_or_404(contact_id: int) -> ContactView:
     try:
         return get_contact(contact_id)
@@ -53,7 +69,7 @@ def _form_text(form: Mapping[str, object], name: str) -> str:
 
 
 def _page_html() -> str:
-    search_results = _fragment(SearchResults(contacts=search_contacts(), query=""))
+    search_results = _search_results_fragment()
     team_picker = _fragment(TeamPicker(department="engineering", teams=list_teams("engineering")))
     department_options = "".join(f'<option value="{value}">{label}</option>' for value, label in DEPARTMENTS)
     return f"""<!doctype html>
@@ -64,10 +80,9 @@ def _page_html() -> str:
     <title>HTMX + Citry patterns</title>
     <link rel="stylesheet" href="/static/demo.css" />
     <script src="/static/htmx.min.js"></script>
-    <script src="/static/citry-htmx.js"></script>
     <script src="/citry/citry.js"></script>
   </head>
-  <body hx-ext="citry-fragments">
+  <body>
     <a class="skip-link" href="#demo-content">Skip to the demo</a>
     <header class="site-header">
       <div class="site-header__inner">
@@ -172,7 +187,7 @@ def search(q: str = "") -> HTMLResponse:
     # Keep one search slow so the demo can show HTMX canceling an older request.
     if q.strip().casefold() == "ada":
         time.sleep(0.75)
-    return _fragment_response(SearchResults(contacts=search_contacts(q), query=q.strip()))
+    return HTMLResponse(_search_results_fragment(q.strip()))
 
 
 @router.get("/fragments/team-picker", response_class=HTMLResponse)

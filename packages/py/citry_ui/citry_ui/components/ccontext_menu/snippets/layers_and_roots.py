@@ -8,16 +8,13 @@ class ContextMenuLayersAndRoots(Component):
     template = """
       <section
         class="context-menu-layers"
-        x-data="{
-          last:'No layer request yet',
-          counterTick:0,
-        }"
+
       >
         <article>
           <h3>Deepest target wins</h3>
           <c-CContextMenu
             aria_label="Outer card actions"
-            $c-props="{
+            v-bind="{
               onOpenChange:(next,detail)=>last=
                 `outer ${next ? 'open' : 'close'} ${detail.reason}`,
             }"
@@ -31,7 +28,7 @@ class ContextMenuLayersAndRoots(Component):
                 Outer card
                 <c-CContextMenu
                   aria_label="Inner badge actions"
-                  $c-props="{
+                  v-bind="{
                     onOpenChange:(next,detail)=>last=
                       `inner ${next ? 'open' : 'close'} ${detail.reason}`,
                   }"
@@ -84,11 +81,11 @@ class ContextMenuLayersAndRoots(Component):
           <button
             type="button"
             @click="
-              document.querySelector('[data-context-menu-removable]')?.remove();
+              window.document.querySelector('[data-context-menu-removable]')?.remove();
               last='nested ContextMenu removed'
             "
           >Remove nested ContextMenu</button>
-          <button type="button" @click="location.reload()">
+          <button type="button" @click="window.location.reload()">
             Restore the fixture, then repeat the cycle
           </button>
 
@@ -134,18 +131,9 @@ class ContextMenuLayersAndRoots(Component):
           </p>
         </article>
 
-        <article
-          x-data
-          x-init="$nextTick(()=>{
-            const shadow=$refs.shadowHost.attachShadow({mode:'open'});
-            document.querySelectorAll('style').forEach(
-              (style)=>shadow.append(style.cloneNode(true))
-            );
-            shadow.append($refs.shadowFixture);
-          })"
-        >
+        <article>
           <h3>Open ShadowRoot scope</h3>
-          <div x-ref="shadowFixture">
+          <div ref="shadowFixture">
             <c-CContextMenu aria_label="Shadow record actions">
               <c-fill name="target" data="{ target_attrs }">
                 <button
@@ -159,7 +147,7 @@ class ContextMenuLayersAndRoots(Component):
               </c-fill>
             </c-CContextMenu>
           </div>
-          <div x-ref="shadowHost" data-context-menu-shadow-host></div>
+          <div ref="shadowHost" data-context-menu-shadow-host></div>
         </article>
 
         <article>
@@ -190,13 +178,28 @@ class ContextMenuLayersAndRoots(Component):
           </button>
           <output
             aria-live="polite"
-            x-text="`${last}; layers ${counterTick >= 0
+            v-text="`${last}; layers ${counterTick >= 0
               ? (globalThis[Symbol.for('citry-ui:anchored-layer-runtime')]?.layers.length ?? 0)
               : 0}; registrations ${globalThis[Symbol.for('citry-ui:anchored-layer-runtime')]
                 ?.stats?.activeCoordinators ?? 0}`"
           >No layer request yet; layers 0; registrations 0</output>
         </div>
       </section>
+    """
+
+    js = r"""
+      $component({data(){return {
+          last:'No layer request yet',
+          counterTick:0,
+        };},
+        mounted() {
+          const shadow=this.$refs.shadowHost.attachShadow({mode:'open'});
+          document.querySelectorAll('style').forEach(
+            (style)=>shadow.append(style.cloneNode(true))
+          );
+          shadow.append(this.$refs.shadowFixture);
+        },
+      });
     """
 
     css = """

@@ -42,7 +42,7 @@ Invalid characters are discarded and reported through `onValueInvalid`.
 ## Control the value
 
 Client `value` controls the exact string. An edit is a request: the displayed
-cells and Form value remain owner-controlled until the Alpine expression
+cells and Form value remain owner-controlled until the Vue expression
 returns the requested value.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cpin_input/snippets/controlled.py" title="Control a PinInput" />

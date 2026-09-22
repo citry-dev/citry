@@ -203,22 +203,9 @@ def test_divider_rejects_owned_runtime_and_structural_attributes(attribute):
         _render(CDivider(attrs={attribute: "consumer"}))
 
 
-def test_unrelated_bindings_visibility_and_listeners_remain_available():
-    html = _render(
-        CDivider(
-            attrs={
-                "x-data": "{shown: true}",
-                "x-show": "shown",
-                ":class": "{active: shown}",
-                "@click": "shown = false",
-            }
-        )
-    )
-
-    assert 'x-data="{shown: true}"' in html
-    assert 'x-show="shown"' in html
-    assert ':class="{active: shown}"' in html
-    assert '@click="shown = false"' in html
+def test_python_attrs_cannot_introduce_vue_directives():
+    with pytest.raises(TypeError, match="Python-resolved attributes cannot introduce Vue syntax"):
+        _render(CDivider(attrs={"@click": "shown = false"}))
 
 
 def test_direct_choices_are_detrusted_and_label_text_is_escaped():

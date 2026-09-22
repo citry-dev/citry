@@ -33,23 +33,12 @@ def test_transparent_control_flow_and_fill_have_one_browser_boundary(page: Any, 
         transparent = True
         template = """
             <c-if cond="visible">
-                <div><c-receiver><b x-data="{label: 'hello'}" x-text="label"></b></c-receiver></div>
+                <div><c-receiver><b>hello</b></c-receiver></div>
             </c-if>
         """
 
     base = serve_live(app, Document(visible=True).render().serialize(), "")
     page.goto(base + "/")
     page.wait_for_function("window.receiverReady && document.querySelector('b').textContent === 'hello'")
-    assert page.evaluate("Citry.manager.ownership.revisions().length") == 1
-    assert (
-        page.evaluate(
-            """
-        () => {
-            const revision = Citry.manager.ownership.revisions()[0];
-            return Citry.manager.ownership.get(revision).graphs[0].componentInstances.length;
-        }
-        """
-        )
-        == 2
-    )
+    assert page.evaluate("() => CitryStable._apps.size") == 1
     assert errors == []

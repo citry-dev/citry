@@ -26,7 +26,7 @@ export interface NativeDynamicAttributeHoverProjection extends ProjectedNativeAt
 }
 
 /**
- * Build a same-length HTML view in which candidate `c-*` and Alpine `:*`
+ * Build a same-length HTML view in which candidate `c-*` and Vue `:*`
  * attributes on ordinary start tags look native to an installed HTML provider.
  *
  * This is intentionally only a lexical candidate pass. The provider decides
@@ -265,13 +265,13 @@ function nativeAttributeProjection(authoredName: string): { nativeName: string; 
 	if (authoredName.startsWith(":c-")) {
 		return undefined;
 	}
-	const alpineName = authoredName.startsWith(":") ? authoredName.slice(1) : "";
-	// A dot starts an Alpine modifier rather than a native attribute suffix,
+	const vueName = authoredName.startsWith(":") ? authoredName.slice(1) : "";
+	// A dot starts an Vue modifier rather than a native attribute suffix,
 	// so decline it until the projection can represent both ranges explicitly.
-	if (!/^[A-Za-z_:][A-Za-z0-9_:-]*$/.test(alpineName)) {
+	if (!/^[A-Za-z_:][A-Za-z0-9_:-]*$/.test(vueName)) {
 		return undefined;
 	}
-	return { nativeName: asciiLowercase(alpineName), prefixLength: 1 };
+	return { nativeName: asciiLowercase(vueName), prefixLength: 1 };
 }
 
 function nestedTemplateValue(value: string): boolean {

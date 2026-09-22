@@ -746,25 +746,27 @@ class CDataGrid(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:
         data = self.template_data(kwargs, slots)
         return {
-            key: data[key]
-            for key in (
-                "sort",
-                "selection",
-                "selected",
-                "disabled",
-                "multi_sort",
-                "total_count",
-                "start_index",
-                "row_height",
-                "viewport_size",
-                "overscan",
-                "initial_index",
-                "is_ready",
-                "column_labels",
-                "labels",
-                "catalog",
-                "editors",
-            )
+            "serverDefaults": {
+                key: data[key]
+                for key in (
+                    "sort",
+                    "selection",
+                    "selected",
+                    "disabled",
+                    "multi_sort",
+                    "total_count",
+                    "start_index",
+                    "row_height",
+                    "viewport_size",
+                    "overscan",
+                    "initial_index",
+                    "is_ready",
+                    "column_labels",
+                    "labels",
+                    "catalog",
+                    "editors",
+                )
+            }
         }
 
     template = """
@@ -774,12 +776,12 @@ class CDataGrid(LibraryComponent):
         c-id="root_id"
         c-data-state="state_output"
         c-data-density="density"
-        c-data-striped="True if striped else None"
-        c-data-column-borders="True if column_borders else None"
-        c-data-sticky-header="True if sticky_header else None"
+        c-data-striped="'' if striped else None"
+        c-data-column-borders="'' if column_borders else None"
+        c-data-sticky-header="'' if sticky_header else None"
         c-data-selection="selection"
-        c-data-editable="True if has_editable else None"
-        c-data-disabled="True if disabled else None"
+        c-data-editable="'' if has_editable else None"
+        c-data-disabled="'' if disabled else None"
         c-aria-disabled="'true' if disabled else 'false'"
         data-citry-ui-part="data-grid"
       >
@@ -816,7 +818,7 @@ class CDataGrid(LibraryComponent):
                     c-data-column-key="resolved.column.key"
                     c-data-column-index="resolved.index"
                     c-data-align="resolved.column.align"
-                    c-data-sortable="True if resolved.column.sortable else None"
+                    c-data-sortable="'' if resolved.column.sortable else None"
                     c-data-sort="resolved.sort_direction"
                     c-data-sort-priority="resolved.sort_priority"
                     c-aria-sort="(
@@ -854,8 +856,8 @@ class CDataGrid(LibraryComponent):
                     c-id="f'{root_id}-row-{resolved_row.supplied_index}'"
                     c-data-row-key="resolved_row.row.key"
                     c-data-row-index="resolved_row.logical_index"
-                    c-data-disabled="True if resolved_row.row.disabled else None"
-                    c-data-selected="True if resolved_row.selected else None"
+                    c-data-disabled="'' if resolved_row.row.disabled else None"
+                    c-data-selected="'' if resolved_row.selected else None"
                     c-aria-disabled="'true' if resolved_row.row.disabled else None"
                     c-aria-selected="(
                       'true' if resolved_row.selected else 'false'
@@ -872,7 +874,7 @@ class CDataGrid(LibraryComponent):
                         c-data-column-key="resolved_cell.column.key"
                         c-data-column-index="resolved_cell.column_index"
                         c-data-align="resolved_cell.column.align"
-                        c-data-editable="True if resolved_cell.editable else None"
+                        c-data-editable="'' if resolved_cell.editable else None"
                         c-data-editor="resolved_cell.column.editor if resolved_cell.editable else None"
                         c-aria-colindex="resolved_cell.column_index + 1"
                         c-tabindex="0 if resolved_row.supplied_index == 0 and resolved_cell.column_index == 0 else -1"

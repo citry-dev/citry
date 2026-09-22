@@ -9,7 +9,7 @@ import citry_ui
 from citry import Citry, Component
 
 
-def _render(source: str, data: dict[str, object] | None = None) -> str:
+def _render(source: str, data: dict[str, object] | None = None, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,18 +20,21 @@ def _render(source: str, data: dict[str, object] | None = None) -> str:
         def template_data(self, kwargs, slots):
             return data or {}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _markup(html: str) -> str:
     start = html.find('<div class="cui-tag-group"')
+    assert start >= 0
     end = html.find("<script", start)
-    return html[start:end]
+    return html[start:] if end < 0 else html[start:end]
 
 
 def test_descriptive_group_uses_native_list_semantics() -> None:
     html = _render(
-        '<c-CTagGroup label="Topics"><c-CTag value="css">CSS</c-CTag><c-CTag value="html">HTML</c-CTag></c-CTagGroup>'
+        '<c-CTagGroup label="Topics"><c-CTag value="css">CSS</c-CTag><c-CTag value="html">HTML</c-CTag></c-CTagGroup>',
+        static_fallback=True,
     )
     markup = _markup(html)
     assert 'role="list"' in markup
@@ -47,7 +50,8 @@ def test_interactive_group_has_grid_relationships_and_form_safe_remove_buttons()
         "c-value=\"['css']\" removable actionable>"
         '<c-CTag value="css">CSS</c-CTag>'
         '<c-CTag value="html">HTML</c-CTag>'
-        "</c-CTagGroup>"
+        "</c-CTagGroup>",
+        static_fallback=True,
     )
     markup = _markup(html)
     assert 'role="grid"' in markup
@@ -72,7 +76,8 @@ def test_named_label_description_start_and_root_destinations_render() -> None:
         '<c-fill name="default">CSS</c-fill>'
         "</c-CTag>"
         "</c-fill>"
-        "</c-CTagGroup>"
+        "</c-CTagGroup>",
+        static_fallback=True,
     )
     assert "Visible topics" in html
     assert "Fallback" not in html
@@ -87,7 +92,8 @@ def test_named_label_description_start_and_root_destinations_render() -> None:
 
 def test_labelled_collection_may_settle_empty() -> None:
     html = _render(
-        '<c-CTagGroup label="Empty"><c-CTag c-for="value in []" c-value="value">{{ value }}</c-CTag></c-CTagGroup>'
+        '<c-CTagGroup label="Empty"><c-CTag c-for="value in []" c-value="value">{{ value }}</c-CTag></c-CTagGroup>',
+        static_fallback=True,
     )
     markup = _markup(html)
     assert 'role="list"' in markup

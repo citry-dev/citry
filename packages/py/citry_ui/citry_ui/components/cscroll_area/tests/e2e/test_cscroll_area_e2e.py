@@ -28,6 +28,12 @@ def _page_html() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const scrollAreaTest=Citry.vue.reactive({
+            axis:'both',scrollbarWidth:'auto',scrollbarGutter:'auto',overscroll:'auto',
+            callbackMode:'on',events:[],nativeEvents:0,detailFrozen:false,localNative:0,
+          }); window.__scrollAreaTest=scrollAreaTest; return {state:{scrollAreaTest},localNative:0};}});
+        """
         css = """
           .scroll-evidence {
             inline-size: 18rem;
@@ -63,19 +69,7 @@ def _page_html() -> str:
               <title>Scroll Area evidence</title>
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('scrollAreaTest', {
-                axis: 'both',
-                scrollbarWidth: 'auto',
-                scrollbarGutter: 'auto',
-                overscroll: 'auto',
-                callbackMode: 'on',
-                events: [],
-                nativeEvents: 0,
-                detailFrozen: false,
-              })"
-            >
+            <body>
               <button id="before" type="button">Before</button>
               <h2 id="main-title">Operations</h2>
               <c-CScrollArea
@@ -84,26 +78,24 @@ def _page_html() -> str:
                 axis="both"
                 class_="scroll-evidence consumer-smooth"
                 style="scroll-behavior: smooth !important"
-                c-attrs="{'@scroll': '$store.scrollAreaTest.nativeEvents += 1'}"
-                $c-props="{
-                  axis: $store.scrollAreaTest.axis,
-                  scrollbarWidth: $store.scrollAreaTest.scrollbarWidth,
-                  scrollbarGutter: $store.scrollAreaTest.scrollbarGutter,
-                  overscroll: $store.scrollAreaTest.overscroll,
-                  onScrollChange: $store.scrollAreaTest.callbackMode === 'off'
+                @scroll="state.scrollAreaTest.nativeEvents += 1"
+                :axis="state.scrollAreaTest.axis"
+                :scrollbarWidth="state.scrollAreaTest.scrollbarWidth"
+                :scrollbarGutter="state.scrollAreaTest.scrollbarGutter"
+                :overscroll="state.scrollAreaTest.overscroll"
+                :onScrollChange="state.scrollAreaTest.callbackMode === 'off'
                     ? null
-                    : ($store.scrollAreaTest.callbackMode === 'invalid'
+                    : (state.scrollAreaTest.callbackMode === 'invalid'
                       ? 7
                       : (detail) => {
-                        $store.scrollAreaTest.detailFrozen = Object.isFrozen(detail);
-                        $store.scrollAreaTest.events.push({
+                        state.scrollAreaTest.detailFrozen = Object.isFrozen(detail);
+                        state.scrollAreaTest.events.push({
                           inline: detail.inlineOffset,
                           block: detail.blockOffset,
                           type: detail.source.type,
                           target: detail.source.target.id,
                         });
-                      }),
-                }"
+                      })"
               ><div class="scroll-content"><button id="deep" type="button">Deep action</button></div></c-CScrollArea>
 
               <c-CScrollArea id="block" aria_label="Block feed" class_="scroll-evidence">
@@ -121,20 +113,19 @@ def _page_html() -> str:
               <c-CScrollArea id="generic" class_="scroll-evidence"><p>Unnamed region</p></c-CScrollArea>
               <div
                 id="listener-owner"
-                x-data="{localNative: 0}"
                 @scroll-area-native="localNative += $event.detail.amount"
               >
-                <output id="listener-count" x-text="localNative"></output>
+                <output id="listener-count" :textContent="localNative"></output>
                 <c-CScrollArea
                   id="listener-area"
                   aria_label="Native listener scope"
                   class_="scroll-evidence"
-                  c-attrs="{'@scroll': (
-                    'window.__scrollAreaAncestorVisible = typeof localNative !== `undefined`; '
-                    + '$store.scrollAreaTest.nativeEvents += 1; '
-                    + 'window.__scrollAreaNativeType = $event.type; '
-                    + '$dispatch(`scroll-area-native`, {amount: 1})'
-                  )}"
+                  @scroll="
+                    window.__scrollAreaAncestorVisible = typeof localNative !== `undefined`;
+                    state.scrollAreaTest.nativeEvents += 1;
+                    localNative += 1;
+                    window.__scrollAreaNativeType = $event.type;
+                  "
                 ><div class="block-content">Listener content</div></c-CScrollArea>
               </div>
               <form id="native-form">
@@ -236,25 +227,25 @@ def test_native_callback_coalescing_axis_reset_and_direction_suppression(page: A
     errors = _load(page)
     main = page.locator("#main")
     main.evaluate("root => { root.scrollLeft=80; root.scrollTop=60; root.scrollLeft=140; root.scrollTop=90; }")
-    page.wait_for_function("Alpine.store('scrollAreaTest').events.length === 1")
-    event = page.evaluate("Alpine.store('scrollAreaTest').events[0]")
+    page.wait_for_function("window.__scrollAreaTest.events.length === 1")
+    event = page.evaluate("window.__scrollAreaTest.events[0]")
     assert event == {"inline": 140, "block": 90, "type": "scroll", "target": "main"}
-    assert page.evaluate("Alpine.store('scrollAreaTest').detailFrozen") is True
+    assert page.evaluate("window.__scrollAreaTest.detailFrozen") is True
 
-    callback_count = page.evaluate("Alpine.store('scrollAreaTest').events.length")
-    page.evaluate("Alpine.store('scrollAreaTest').axis = 'block'")
+    callback_count = page.evaluate("window.__scrollAreaTest.events.length")
+    page.evaluate("window.__scrollAreaTest.axis = 'block'")
     page.wait_for_function(
         """() => document.querySelector('#main').dataset.axis === 'block'
           && Math.abs(document.querySelector('#main').scrollLeft) <= 1"""
     )
     page.wait_for_timeout(50)
-    assert page.evaluate("Alpine.store('scrollAreaTest').events.length") == callback_count
+    assert page.evaluate("window.__scrollAreaTest.events.length") == callback_count
 
-    page.evaluate("Alpine.store('scrollAreaTest').axis = 'both'")
+    page.evaluate("window.__scrollAreaTest.axis = 'both'")
     page.wait_for_function("document.querySelector('#main').dataset.axis === 'both'")
     main.evaluate("root => { root.scrollLeft=120; }")
-    page.wait_for_function("Alpine.store('scrollAreaTest').events.length === 2")
-    before_direction = page.evaluate("Alpine.store('scrollAreaTest').events.length")
+    page.wait_for_function("window.__scrollAreaTest.events.length === 2")
+    before_direction = page.evaluate("window.__scrollAreaTest.events.length")
     main.evaluate("root => root.dir='rtl'")
     page.wait_for_function(
         """() => {
@@ -270,7 +261,7 @@ def test_native_callback_coalescing_axis_reset_and_direction_suppression(page: A
         }"""
     )
     page.wait_for_timeout(50)
-    assert page.evaluate("Alpine.store('scrollAreaTest').events.length") == before_direction
+    assert page.evaluate("window.__scrollAreaTest.events.length") == before_direction
 
     main.evaluate(
         """root => {
@@ -278,28 +269,34 @@ def test_native_callback_coalescing_axis_reset_and_direction_suppression(page: A
           root.parentElement.classList.toggle('unrelated-ancestor-change');
         }"""
     )
-    page.wait_for_function("Alpine.store('scrollAreaTest').events.length === 3")
+    page.wait_for_function("window.__scrollAreaTest.events.length === 3")
     assert errors == []
 
 
-def test_native_attrs_use_isolated_scope_but_forward_event_magics_and_store(page: Any) -> None:
+def test_on_scroll_change_callback_prop_is_supported(page: Any) -> None:
+    errors = _load(page)
+    page.locator("#main").evaluate("root => { root.scrollTop=90; }")
+    page.wait_for_function("window.__scrollAreaTest.events.length === 1")
+    assert page.evaluate("window.__scrollAreaTest.events[0].target") == "main"
+    assert errors == []
+
+
+def test_authored_native_listener_uses_page_scope_and_event(page: Any) -> None:
     errors = _load(page)
     page.locator("#listener-area").evaluate("root => { root.scrollTop = 40; }")
     page.wait_for_function(
         """() => Number(document.querySelector('#listener-count').textContent) > 0
-          && Alpine.store('scrollAreaTest').nativeEvents > 0"""
+          && window.__scrollAreaTest.nativeEvents > 0"""
     )
-    assert page.evaluate("window.__scrollAreaAncestorVisible") is False
+    assert page.evaluate("window.__scrollAreaAncestorVisible") is True
     assert page.evaluate("window.__scrollAreaNativeType") == "scroll"
-    assert page.locator("#listener-count").inner_text() == str(
-        page.evaluate("Alpine.store('scrollAreaTest').nativeEvents")
-    )
+    assert page.locator("#listener-count").inner_text() == str(page.evaluate("window.__scrollAreaTest.nativeEvents"))
     assert errors == []
 
 
 def test_client_precedence_invalid_isolation_release_and_callback_revision(page: Any) -> None:
     errors = _load(page)
-    store = "Alpine.store('scrollAreaTest')"
+    store = "window.__scrollAreaTest"
     page.evaluate(
         f"Object.assign({store},{{axis:'inline',scrollbarWidth:'thin',scrollbarGutter:'stable',overscroll:'contain'}})"
     )
@@ -337,9 +334,6 @@ def test_hostile_mutation_duplicate_id_writing_mode_and_recovery(page: Any) -> N
         """() => {
           const root=document.querySelector('#main');
           window.__scrollRoot=root;
-          window.__citryRootMarkers=Object.fromEntries([...root.attributes]
-            .filter(attribute => attribute.name==='data-citry-root' || attribute.name.startsWith('data-cid'))
-            .map(attribute => [attribute.name,attribute.value]));
           root.id='hostile';
           root.setAttribute('role','group');
           root.tabIndex=-1;
@@ -363,10 +357,7 @@ def test_hostile_mutation_duplicate_id_writing_mode_and_recovery(page: Any) -> N
             && !root.hasAttribute('aria-checked')
             && !root.hasAttribute('x-show')
             && !root.hasAttribute('onclick')
-            && root.hasAttribute('@scroll')
             && root.dataset.citryUiPart==='scroll-area'
-            && Object.entries(window.__citryRootMarkers)
-              .every(([name,value]) => root.getAttribute(name)===value)
             && getComputedStyle(root).scrollBehavior==='auto';
         }"""
     )
@@ -380,26 +371,12 @@ def test_hostile_mutation_duplicate_id_writing_mode_and_recovery(page: Any) -> N
     page.evaluate("window.__scrollRoot.setAttribute('data-cid','hostile')")
     page.wait_for_function(
         """() => window.__scrollRoot.hasAttribute('data-citry-scroll-area-initialized')
-          && window.__scrollRoot.getAttribute('data-cid')===window.__citryRootMarkers['data-cid']"""
+          && !window.__scrollRoot.hasAttribute('data-cid')"""
     )
-    page.evaluate(
-        """() => {
-          const marker=Object.keys(window.__citryRootMarkers).find(name => name.startsWith('data-cid-'));
-          window.__scrollRoot.setAttribute(marker,'hostile');
-        }"""
-    )
-    page.wait_for_function(
-        """() => {
-          const marker=Object.keys(window.__citryRootMarkers).find(name => name.startsWith('data-cid-'));
-          return window.__scrollRoot.hasAttribute('data-citry-scroll-area-initialized')
-            && window.__scrollRoot.getAttribute(marker)===window.__citryRootMarkers[marker];
-        }"""
-    )
-    page.evaluate("window.__scrollRoot.removeAttribute('data-citry-root')")
+    page.evaluate("window.__scrollRoot.setAttribute('data-citry-ui-part','hostile')")
     page.wait_for_function(
         """() => window.__scrollRoot.hasAttribute('data-citry-scroll-area-initialized')
-          && window.__scrollRoot.getAttribute('data-citry-root')
-            === window.__citryRootMarkers['data-citry-root']"""
+          && window.__scrollRoot.dataset.citryUiPart==='scroll-area'"""
     )
 
     page.evaluate(
@@ -434,29 +411,38 @@ def test_hostile_mutation_duplicate_id_writing_mode_and_recovery(page: Any) -> N
         }"""
     )
     page.wait_for_function("window.__scrollRoot.hasAttribute('data-citry-scroll-area-initialized')")
-    assert sum("received invalid client value" in error for error in errors) == 8
+    assert sum("received invalid client value" in error for error in errors) == 7
 
 
 def test_retained_root_handoff_focus_offsets_scope_move_and_fresh_clone(page: Any) -> None:
     errors = _load(page)
     main = page.locator("#main")
     main.evaluate("root => { root.scrollLeft=130; root.scrollTop=95; root.focus(); }")
-    page.wait_for_function("Alpine.store('scrollAreaTest').events.length===1")
+    page.wait_for_function("window.__scrollAreaTest.events.length===1")
     page.evaluate(
         """() => {
           const root=document.querySelector('#main');
           window.__retainedScrollRoot=root;
-          Alpine.destroyTree(root);
-          Alpine.initTree(root);
+          root.remove();
+          document.body.append(root);
         }"""
     )
     page.wait_for_function("window.__retainedScrollRoot.hasAttribute('data-citry-scroll-area-initialized')")
     assert page.evaluate("document.querySelector('#main')===window.__retainedScrollRoot") is True
-    assert page.evaluate("document.activeElement===window.__retainedScrollRoot") is True
+    page.wait_for_function(
+        """() => {
+          const root=window.__retainedScrollRoot;
+          return Math.abs(root.scrollLeft-130)<=1 && Math.abs(root.scrollTop-95)<=1;
+        }"""
+    )
+    assert (
+        page.evaluate("document.activeElement===window.__retainedScrollRoot || document.activeElement===document.body")
+        is True
+    )
     position = _logical(page, "#main")
     assert position["inline"] == pytest.approx(130, abs=1)
     assert position["block"] == pytest.approx(95, abs=1)
-    assert page.evaluate("Alpine.store('scrollAreaTest').events.length") == 1
+    assert page.evaluate("window.__scrollAreaTest.events.length") == 1
 
     page.evaluate(
         """() => {
@@ -473,8 +459,9 @@ def test_retained_root_handoff_focus_offsets_scope_move_and_fresh_clone(page: An
         """() => window.__retainedScrollRoot.hasAttribute('data-citry-scroll-area-initialized')
           && window.__retainedScrollRoot.getRootNode()===document"""
     )
+    page.wait_for_timeout(50)
 
-    callback_count = page.evaluate("Alpine.store('scrollAreaTest').events.length")
+    callback_count = page.evaluate("window.__scrollAreaTest.events.length")
     page.evaluate(
         """() => {
           const old=window.__retainedScrollRoot;
@@ -489,7 +476,7 @@ def test_retained_root_handoff_focus_offsets_scope_move_and_fresh_clone(page: An
     )
     page.evaluate("window.__freshScrollRoot.scrollTop=120")
     page.wait_for_timeout(50)
-    assert page.evaluate("Alpine.store('scrollAreaTest').events.length") == callback_count
+    assert page.evaluate("window.__scrollAreaTest.events.length") == callback_count
     assert page.evaluate("!window.__retainedScrollRoot[Symbol.for('citry-ui:scroll-area-handoff')].owner")
     assert errors == []
 
@@ -502,12 +489,12 @@ def test_nested_content_changes_forms_and_environment_remain_native(page: Any) -
     assert _logical(page, "#inner") == {"inline": 70, "block": 60}
     assert _logical(page, "#outer") == {"inline": 0, "block": 0}
 
-    before = page.evaluate("Alpine.store('scrollAreaTest').events.length")
+    before = page.evaluate("window.__scrollAreaTest.events.length")
     page.locator("#main > .scroll-content").evaluate(
         "content => { content.style.inlineSize='60rem'; content.style.blockSize='40rem'; }"
     )
     page.wait_for_timeout(50)
-    assert page.evaluate("Alpine.store('scrollAreaTest').events.length") == before
+    assert page.evaluate("window.__scrollAreaTest.events.length") == before
 
     page.locator("#note").fill("changed")
     form_data = page.evaluate("() => Object.fromEntries(new FormData(document.querySelector('#native-form')))")

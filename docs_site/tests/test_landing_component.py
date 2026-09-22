@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 from lxml import html as lxml_html
 
+from citry import citry as default_citry
+from citry._vue.events import definition_bundle
 from docs_site._internal.components.landing import (
     _DEPTH_CASES,
     _EDITOR_MARKS,
@@ -35,6 +37,7 @@ from docs_site._internal.components.landing import (
 )
 from docs_site._internal.components.landing_composer import (
     _RECIPES,
+    LandingComposerMarkup,
     _initial_state,
     _instantiate,
     _serialize_source,
@@ -56,32 +59,80 @@ def _landing_nav() -> NavTree:
     )
 
 
+def _prepared_response(html: str) -> tuple[lxml_html.HtmlElement, dict]:
+    document = lxml_html.document_fromstring(html)
+    marker = "CitryStable.startPrepared("
+    [script] = [node for node in document.xpath("//script") if node.text and marker in node.text]
+    start = script.text.index(marker) + len(marker)
+    transport, _ = json.JSONDecoder().raw_decode(script.text[start:])
+    assert transport["manifest"]["protocol"] == "citry-vue-prepared/1"
+    return document, transport
+
+
+def _landing_occurrence(transport: dict) -> dict:
+    manifest = transport["manifest"]
+    root = next(item for item in manifest["occurrences"] if item["id"] == manifest["rootId"])
+    [call] = root["preparedData"]["calls"].values()
+    assert call["parentId"] == root["id"]
+    child = next(item for item in manifest["occurrences"] if item["id"] == call["id"])
+    assert child["parentId"] == root["id"]
+    return child
+
+
+def _landing_content_html(transport: dict) -> str:
+    [record] = _landing_occurrence(transport)["preparedData"]["opaqueHtml"].values()
+    return record["html"]
+
+
+def _prepared_definition_source(transport: dict) -> str:
+    definitions = transport["manifest"]["definitions"]
+    bundles = []
+    for asset in definitions:
+        bundle = definition_bundle(default_citry, asset["sha256"])
+        assert bundle is not None, asset
+        bundles.append(bundle.decode())
+    source = "\n".join(bundles)
+    definition_ids = {item["id"] for item in definitions}
+    assert definition_ids
+    assert all(f'window.CitryStableDefinitions["{definition_id}"]' in source for definition_id in definition_ids)
+    return source
+
+
 def test_landing_layout_keeps_shared_header_and_omits_document_chrome() -> None:
     result = render_page(
         "---\ntitle: Citry\nlayout: landing\n---\n\n# Build the frontend in Python\n",
         nav_tree=_landing_nav(),
         current_path="",
     )
-    document = lxml_html.document_fromstring(result.html)
+    document, transport = _prepared_response(result.html)
+    render_source = _prepared_definition_source(transport)
+    root = next(item for item in transport["manifest"]["occurrences"] if item["id"] == transport["manifest"]["rootId"])
+    root_data = root["preparedData"]
+    rendered_content = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
+    prepared_attrs = [
+        value for key, value in root_data.items() if key.startswith("citryAttrs") and isinstance(value, dict)
+    ]
+    prepared_text = [value for key, value in root_data.items() if key.startswith("citryText")]
 
     assert document.xpath('//body[contains(@class, "citry-landing-page")]')
-    assert document.xpath('//header[contains(@class, "djc-header")]')
-    assert document.xpath('//main[@id="landing-main"]')
-    assert document.xpath('//article[contains(@class, "landing-content")]//*[@id="build-the-frontend-in-python"]')
-    assert document.xpath('//nav[@aria-label="Primary navigation"]/a[@href="/docs/"]')
-    assert not document.xpath('//nav[@aria-label="Section navigation"]')
-    assert not document.xpath('//aside[@id="djc-toc"]')
-    assert not document.xpath('//nav[contains(@class, "djc-breadcrumbs")]')
-    assert not document.xpath('//div[contains(@class, "djc-layout")]')
+    assert 'class: "djc-header"' in render_source
+    assert 'id: "landing-main"' in render_source
+    assert 'class: "landing-content"' in render_source
+    assert "Primary navigation" in render_source
+    assert not any(
+        marker in render_source for marker in ("Section navigation", "djc-toc", "djc-breadcrumbs", "djc-layout")
+    )
+    assert rendered_content.xpath('./h1[@id="build-the-frontend-in-python"]')
+    assert any(attrs.get("href") == "/docs/" for attrs in prepared_attrs)
+    assert "Docs" in prepared_text
     assert document.xpath('//script[@type="module" and @src="/static/playground/landing_composer.js"]')
 
 
 def test_landing_composer_catalog_and_fallback_are_generated_together() -> None:
     """The palette and inert recipe bank share one checked catalog."""
-    source = Path("docs_site/content/index.md").read_text(encoding="utf-8")
-    document = lxml_html.document_fromstring(render_page(source, current_path="").html)
+    document = lxml_html.fragment_fromstring(str(LandingComposerMarkup()), create_parent="div")
     composer = document.xpath("//*[@data-landing-composer]")[0]
-    banks = composer.xpath('.//script[@type="application/json" and @data-composer-recipe-bank]')
+    banks = composer.xpath(".//*[@data-composer-recipe-bank]")
     assert len(banks) == 1
     recipe_markup = json.loads(banks[0].text)
     recipe_document = lxml_html.fragment_fromstring(recipe_markup, create_parent="div")
@@ -138,7 +189,7 @@ def test_every_landing_composer_recipe_produces_runnable_citry_source() -> None:
     source = _serialize_source(state)
     namespace: dict[str, object] = {}
     exec(compile(source, "<landing-composer>", "exec"), namespace)  # noqa: S102 - generated trusted fixture
-    rendered = str(namespace["preview"])
+    rendered = namespace["preview"].render().serialize(security_javascript="omit")
     document = lxml_html.fragment_fromstring(rendered, create_parent="div")
 
     assert document.xpath('.//*[@data-citry-ui-part="tabs"]')
@@ -210,9 +261,11 @@ def test_a_diagnostic_that_loses_its_detail_fails_the_build() -> None:
 def test_the_landing_page_publishes_no_unrendered_markdown() -> None:
     """Nested grids must stay markdown contexts, or headings ship as literal text."""
     source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    document = lxml_html.document_fromstring(render_page(source, current_path="").html)
-    content = document.xpath('//article[contains(@class, "landing-content")]')[0]
-    text = "\n".join(content.itertext())
+    _, transport = _prepared_response(render_page(source, current_path="").html)
+    content_html = _landing_content_html(transport)
+    content = lxml_html.fragment_fromstring(content_html, create_parent="div")
+    visible_text = content.xpath(".//text()[not(ancestor::script or ancestor::template or ancestor::*[@hidden])]")
+    text = "\n".join(visible_text)
 
     assert not [line for line in text.split("\n") if line.startswith(("### ", "- "))]
 
@@ -244,7 +297,8 @@ def test_contributor_grid_can_drop_the_per_person_counts() -> None:
 
 def test_people_section_identifies_the_maintainer_and_keeps_the_people_route() -> None:
     source = Path("docs_site/content/index.md").read_text(encoding="utf-8")
-    document = lxml_html.document_fromstring(render_page(source, current_path="").html)
+    _, transport = _prepared_response(render_page(source, current_path="").html)
+    document = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
     section = document.xpath('//section[@id="people"]')[0]
     maintainer = section.xpath('.//div[contains(@class, "landing-maintainer")]')[0]
 
@@ -446,10 +500,10 @@ def test_editor_demo_pairs_symbols_hovers_notes_and_definitions() -> None:
         "member-chip-status-use": "member-chip-status",
         "member-name-use": "member-name",
         "nested-title-use": "template-title",
-        "member-chip-online-use": "member-chip-online",
+        "client-props": "member-chip-online",
         "member-online-use": "member-online",
         "event-name": "event-invite",
-        "email-use": "scope-email",
+        "email-use": "email-state",
         "inviting-use": "js-inviting",
         "visible-members-use": "visible-members",
         "data-members-slice-use": "js-members",
@@ -459,7 +513,7 @@ def test_editor_demo_pairs_symbols_hovers_notes_and_definitions() -> None:
 
     expected_diagnostics = {
         "unknown-template-variable": "citry.template.unknown-variable",
-        "unknown-alpine-variable": "citry.alpine.unknown-variable",
+        "unknown-vue-variable": "citry.vue.unknown-variable",
         "unknown-event": "citry.browser.unknown-server-event",
     }
     for mark_id, code in expected_diagnostics.items():
@@ -492,14 +546,15 @@ def test_injected_component_markup_survives_the_markdown_pass() -> None:
     everything after it in stray paragraph tags.
     """
     source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    html = render_page(source, current_path="").html
+    _, transport = _prepared_response(render_page(source, current_path="").html)
+    content_html = _landing_content_html(transport)
 
     for stray in ("<p><div", "<p></div>", "<p></p>", "<p></template>"):
-        assert stray not in html, stray
+        assert stray not in content_html, stray
     # The attribute that asks for this is consumed, not published.
-    assert 'markdown="0"' not in html
+    assert 'markdown="0"' not in content_html
 
-    document = lxml_html.document_fromstring(html)
+    document = lxml_html.fragment_fromstring(content_html, create_parent="div")
     # Indentation and newlines inside a code block survive the round trip.
     code = document.xpath('//div[@data-picker-panel="input"]//div[contains(@class, "highlight")]//pre')[0]
     text = code.text_content()
@@ -546,7 +601,8 @@ def test_a_removed_capability_page_fails_the_build(monkeypatch: pytest.MonkeyPat
 def test_every_picker_shares_one_mechanism() -> None:
     """Three sections use the picker; each must ship rows, panels, and carets."""
     source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    document = lxml_html.document_fromstring(render_page(source, current_path="").html)
+    _, transport = _prepared_response(render_page(source, current_path="").html)
+    document = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
     pickers = document.xpath("//div[@data-landing-picker]")
 
     assert len(pickers) == 3
@@ -577,10 +633,14 @@ def test_each_advanced_capability_explains_itself_above_its_code() -> None:
 def test_social_links_point_at_one_set_of_urls() -> None:
     """The header, hero, and footer must not drift to different destinations."""
     source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
-    document = lxml_html.document_fromstring(render_page(source, current_path="").html)
+    _, transport = _prepared_response(render_page(source, current_path="").html)
+    content = lxml_html.fragment_fromstring(_landing_content_html(transport), create_parent="div")
 
-    rows = document.xpath('//div[contains(@class, "social-links")]')
-    assert len(rows) == 2  # the hero and the footer
+    rows = content.xpath('.//div[contains(@class, "social-links")]')
+    assert rows
+    render_source = _prepared_definition_source(transport)
+    assert 'class: "social-links__link"' in render_source
+    assert 'rel: "noopener"' in render_source
     for row in rows:
         links = row.xpath('.//a[contains(@class, "social-links__link")]')
         assert [a.get("aria-label") for a in links] == ["GitHub", "PyPI", "Discord"]
@@ -592,3 +652,15 @@ def test_social_links_point_at_one_set_of_urls() -> None:
         ]
         # An icon-only link needs its name from somewhere.
         assert all(a.get("rel") == "noopener" for a in links)
+
+    settings = default_docs_project().settings
+    expected = [settings.repository.url, settings.pypi_url, settings.discord_url]
+    hrefs = [
+        attrs["href"]
+        for occurrence in transport["manifest"]["occurrences"]
+        for key, attrs in occurrence["preparedData"].items()
+        if key.startswith("citryAttrs") and isinstance(attrs, dict) and attrs.get("href") in expected
+    ]
+    assert set(hrefs) == set(expected)
+    assert len(hrefs) >= len(expected)
+    assert len({hrefs.count(href) for href in expected}) == 1

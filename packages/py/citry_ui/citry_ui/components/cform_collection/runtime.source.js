@@ -1,12 +1,20 @@
 $component({
-  props: {disabled: {}, onAction: {}},
-  init: ({els, data, props, effect}) => {
-    const root = els[0];
+  props: {
+    disabled: {default: undefined},
+    onAction: {default: undefined},
+  },
+  computed: {
+    resolvedDisabled() {
+      return typeof this.disabled === 'boolean' ? this.disabled : this.serverDefaults.disabled;
+    },
+  },
+  onServerRender: ({component}) => {
+    const root = component.$refs.root;
     if (!(root instanceof HTMLFieldSetElement)) {
       throw new Error('[citry-ui] CFormCollection settled anatomy is invalid.');
     }
     const invalid = new Set();
-    let disabled = data.disabled;
+    let disabled = component.resolvedDisabled;
     let callback = null;
     const report = (name, value) => {
       if (invalid.has(name)) return;
@@ -25,12 +33,10 @@ $component({
       for (const button of root.querySelectorAll('[data-citry-form-collection-action]')) {
         const item = button.closest('[data-citry-form-collection-item]');
         const structural = item?.hasAttribute('data-citry-form-collection-item-disabled');
-        button.disabled = disabled || Boolean(structural) || button.dataset.citryInitiallyDisabled === 'true';
+        const serverDisabled = button.dataset.citryFormCollectionActionDisabled === 'true';
+        button.disabled = disabled || Boolean(structural) || serverDisabled;
       }
     };
-    for (const button of root.querySelectorAll('[data-citry-form-collection-action]')) {
-      button.dataset.citryInitiallyDisabled = String(button.disabled);
-    }
     const onClick = event => {
       const button = event.target.closest('[data-citry-form-collection-action]');
       if (!button || !root.contains(button) || button.disabled || disabled) return;
@@ -52,16 +58,16 @@ $component({
     };
     root.addEventListener('click', onClick);
     root.setAttribute('data-citry-form-collection-initialized', '');
-    effect(() => {
-      const nextCallback = props.onAction;
+    Citry.vue.watchEffect(() => {
+      const nextCallback = component.onAction;
       if (nextCallback === undefined || nextCallback === null) { callback = null; invalid.delete('onAction'); }
       else if (typeof nextCallback === 'function') { callback = nextCallback; invalid.delete('onAction'); }
       else report('onAction', nextCallback);
-      const nextDisabled = props.disabled;
+      const nextDisabled = component.disabled;
       if (nextDisabled !== undefined && typeof nextDisabled !== 'boolean') report('disabled', nextDisabled);
       else {
         invalid.delete('disabled');
-        disabled = typeof nextDisabled === 'boolean' ? nextDisabled : data.disabled;
+        disabled = component.resolvedDisabled;
       }
       sync();
     });

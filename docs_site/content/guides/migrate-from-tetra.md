@@ -5,16 +5,15 @@ description: Port Tetra public state, server methods, promise calls, and client 
 
 # Migrate from Tetra
 
-If a Tetra component's encrypted state token, Alpine object, Python instance,
+If a Tetra component's encrypted state token, browser object, Python instance,
 and template all feel like one object, deployment and authorization concerns
 can become hard to separate. Citry keeps the convenient server-method call but
 splits the contract into render inputs, strict JSON State, typed event data,
 and a closed list of browser actions.
 
-Alpine remains available and is bundled automatically. Citry owns the
-component and slot graph, then attaches Alpine scopes to that graph. You still
-use ordinary Alpine directives and expressions without making an Alpine
-`x-data` object the source of component identity.
+Citry uses Vue for browser state and template directives. Citry owns the
+component and slot graph, then mounts a Vue instance for each interactive
+component. Browser state does not define the server component's identity.
 
 The Citry examples assume the configured `citry_app` from
 [Server events](/events/#configure-a-signing-secret-before-using-state)
@@ -47,7 +46,7 @@ class Counter(Component):
       <button
         {% ... attrs %}
         @click="increment(1)"
-        x-text="count"
+        v-text="count"
       ></button>
     """
 ```
@@ -65,30 +64,31 @@ interval. A binding can override it with its own `.debounce.<time>` modifier.
 Debouncing reduces request frequency but is not a server-side rate limit;
 enforce authorization and rate limits on the server.
 The decorator default applies to declarative `@c-*` and `:c-*` bindings.
-Direct `sendEvent(...)` calls do not consult it, so debounce programmatic calls
+Direct `this.$sendEvent(...)` calls do not consult it, so debounce programmatic calls
 in JavaScript when they need the same behavior.
 
 State is signed strict JSON. It is visible in page source and treated as
 client input. Reload records and authorization facts inside each handler; do
 not put model instances or secrets in State.
 
-## Await a server result from Component.js
+## Await a server result from component JavaScript
 
-Tetra generates promise-returning methods on its Alpine object:
+Tetra generates promise-returning methods on its browser object:
 
 ```javascript
 const value = await this.increment(1);
 ```
 
-Citry supplies `sendEvent` to Component.js and `$sendEvent` to Alpine
-expressions:
+Citry supplies `$sendEvent` on the live Vue component instance:
 
 ```javascript
-$component(({ scope, sendEvent }) => {
-  scope.addOne = async () => {
-    const result = await sendEvent("increment", { amount: 1 });
-    return result.count;
-  };
+$component({
+  methods: {
+    async addOne() {
+      const result = await this.$sendEvent("increment", { amount: 1 });
+      return result.count;
+    },
+  },
 });
 ```
 
@@ -120,7 +120,7 @@ def complete(self, task_id):
 ```
 
 Citry returns explicit effects. A browser event hands presentation to client
-code, while a targeted render updates the server-owned region:
+code, while a render replaces the current server-owned component:
 
 ```citry
 --8<-- "docs_site/snippets/migrate_tetra.py:closed-actions"
@@ -134,17 +134,17 @@ The closed action vocabulary prevents Python from traversing arbitrary client
 objects. It also makes every possible response visible in the handler's
 return value.
 
-## Keep Alpine behavior local to the receiving component
+## Keep Vue behavior local to the receiving component
 
 Tetra merges public state, generated server methods, and component JavaScript
-into one Alpine data object. Citry instead keeps three ownership rules:
+into one browser object. Citry instead keeps three ownership rules:
 
 - `State` belongs to the interactive Citry component instance.
-- Component.js adds instance-local Alpine variables through its `scope`
-  callback value.
-- Alpine expressions authored on a child component tag use the parent's
-  scope. Pass a callback through `$c-props` when the child should use it in
-  the child's own scope.
+- `$component({...})` adds instance-local Vue data, methods, computed values,
+  props, and setup bindings.
+- Vue expressions authored on a child component tag belong to the parent.
+  Pass browser values with native Vue props and receive child events with
+  native `v-on` or `@event` bindings.
 
 This distinction matters for slots and multi-root components. Citry's graph
 keeps the component and slot owner explicit even when their DOM ranges overlap
@@ -178,16 +178,16 @@ attributes. `{{ expression }}` remains the text-interpolation spelling.
 | Private pickled component attribute | Reload from the database or derive during the fresh render; use server-held strict JSON State only when it must persist |
 | `@public` method | Public method inside `class Events` |
 | `@public.debounce(200)` | `@event(debounce=200)` |
-| `@public.watch("query")` | `:c-query="refresh"` or an Alpine watcher that calls `$sendEvent` |
+| `@public.watch("query")` | `:c-query="refresh"` or a Vue watcher that calls `this.$sendEvent(...)` |
 | `@click="increment()"` | `@c-click="increment"` for a declarative server call |
-| `await this.method(...)` | `await sendEvent(name, data)` or `$sendEvent(...)` |
+| `await this.method(...)` | `await this.$sendEvent(name, data)` |
 | Public method return value | `actions.Data(value)` or a returned dictionary |
 | Automatic re-render | Return a fresh component or `actions.Render(...)` |
 | `self.client._dispatch(...)` | `actions.Dispatch(name, detail)` |
 | Other `self.client.*` callbacks | A closed action, or a dispatched event handled by client code |
 | Encrypted pickled component | Signed strict JSON State, or `_storage = "server"` for server-held strict JSON |
-| Alpine component script export | Component.js `$component(({ scope, ... }) => {...})` callback |
-| `x-data` / `x-model` | Ordinary Alpine remains available; `$state` and `:c-*` bridge Citry State |
+| Alpine component script export | Vue `$component({...})` options |
+| `x-data` / `x-model` | Vue `data()` / `v-model`; `$state` and `:c-*` bridge Citry State |
 
 ## Choose explicit behavior for larger Tetra features
 
@@ -210,7 +210,7 @@ unpickled from the client token.
 Before shipping a migrated component, check that:
 
 - every public Tetra attribute has been classified as `Kwargs`, State,
-  `js_data`, or local Alpine data;
+  `js_data`, or local Vue data;
 - State contains strict JSON values and no secret;
 - each public method has an explicit render, data, event, or redirect result;
 - server-selected client callbacks have become named Dispatch actions;
@@ -221,4 +221,4 @@ Before shipping a migrated component, check that:
 Continue with [event bindings](/events/bindings/) and [event
 actions](/events/actions/) for the complete runtime workflow. See [Client
 interactivity](/concepts/client-interactivity/) for
-Component.js, `$c-props`, slots, and Alpine ownership.
+component JavaScript, native props, slots, and Vue ownership.

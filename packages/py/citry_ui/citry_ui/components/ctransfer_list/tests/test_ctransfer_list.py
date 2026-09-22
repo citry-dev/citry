@@ -12,7 +12,7 @@ from citry import Citry, Component
 from citry_ui import CTransferList, CTransferListItem
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,7 +20,8 @@ def _render(source: str) -> str:
         citry = app
         template = f"<main>{source}</main>"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_public_schema_and_registration_are_explicit():
@@ -74,7 +75,8 @@ def test_initial_anatomy_progressive_fallback_and_form_owner():
     html = _render(
         '<c-CTransferList id="people" name="reviewers" form="account" c-required="True" '
         'c-value="[\'grace\']"><c-CTransferListItem value="ada" label="Ada" />'
-        '<c-CTransferListItem value="grace" label="Grace" /></c-CTransferList>'
+        '<c-CTransferListItem value="grace" label="Grace" /></c-CTransferList>',
+        static_fallback=True,
     )
 
     assert 'id="people"' in html
@@ -97,7 +99,8 @@ def test_value_controls_initial_panes_native_order_and_selected_state():
         '<c-CTransferListItem value="a" label="A" />'
         '<c-CTransferListItem value="b" label="B" />'
         '<c-CTransferListItem value="c" label="C" />'
-        "</c-CTransferList>"
+        "</c-CTransferList>",
+        static_fallback=True,
     )
     select = re.search(r"<select[^>]*>(.*?)</select>", html, re.DOTALL)
     assert select is not None
@@ -116,7 +119,8 @@ def test_item_slot_data_and_rich_content_are_lazy_and_ordered():
         "{{ value }}:{{ label }}:{{ disabled }}:{{ in_target }}:{{ index }}"
         "</c-fill></c-CTransferListItem>"
         '<c-CTransferListItem value="b" label="Beta" c-disabled="True"><strong>Rich beta</strong>'
-        "</c-CTransferListItem></c-CTransferList>"
+        "</c-CTransferListItem></c-CTransferList>",
+        static_fallback=True,
     )
     assert "a:Alpha:False:False:0" in html
     assert "<strong>Rich beta</strong>" in html
@@ -130,7 +134,8 @@ def test_chosen_disabled_item_keeps_an_ordered_native_form_value_proxy():
         "<c-CTransferList name=\"reviewers\" c-value=\"['locked','open']\">"
         '<c-CTransferListItem value="locked" label="Locked" c-disabled="True" />'
         '<c-CTransferListItem value="open" label="Open" />'
-        "</c-CTransferList>"
+        "</c-CTransferList>",
+        static_fallback=True,
     )
     select = re.search(r"<select[^>]*>(.*?)</select>", html, re.DOTALL)
     assert select is not None
@@ -142,13 +147,16 @@ def test_chosen_disabled_item_keeps_an_ordered_native_form_value_proxy():
 
 
 def test_empty_list_and_visibility_flags_are_server_deterministic():
-    empty = _render("<c-CTransferList />")
+    empty = _render("<c-CTransferList />", static_fallback=True)
     assert "data-available-empty" in empty
     assert "data-chosen-empty" in empty
     assert empty.count("No available items") >= 1
     assert empty.count("No chosen items") >= 1
 
-    available = _render('<c-CTransferList><c-CTransferListItem value="a" label="A" /></c-CTransferList>')
+    available = _render(
+        '<c-CTransferList><c-CTransferListItem value="a" label="A" /></c-CTransferList>',
+        static_fallback=True,
+    )
     root = re.search(r'<div class="cui-transfer-list"[^>]+>', available)
     assert root is not None
     assert "data-available-empty" not in root.group(0)
@@ -195,7 +203,8 @@ def test_attrs_merge_and_owned_surfaces_are_rejected():
     html = _render(
         "<c-CTransferList class_=\"brand\" c-style=\"{'color':'red'}\" c-attrs=\"{'data-test':'root'}\">"
         '<c-CTransferListItem value="a" label="A" class_="row" '
-        "c-attrs=\"{'data-test-item':'a'}\" /></c-CTransferList>"
+        "c-attrs=\"{'data-test-item':'a'}\" /></c-CTransferList>",
+        static_fallback=True,
     )
     assert re.search(r'<div class="cui-transfer-list brand"[^>]+data-test="root"', html)
     assert re.search(r'<div class="cui-transfer-list__option row"[^>]+data-test-item="a"', html)
@@ -223,7 +232,8 @@ def test_nested_transfer_list_inside_item_content_gets_fresh_scope():
     html = _render(
         '<c-CTransferList><c-CTransferListItem value="outer" label="Outer">'
         '<c-CTransferList><c-CTransferListItem value="inner" label="Inner" /></c-CTransferList>'
-        "</c-CTransferListItem></c-CTransferList>"
+        "</c-CTransferListItem></c-CTransferList>",
+        static_fallback=True,
     )
     assert len(re.findall(r'<div class="cui-transfer-list"', html)) == 2
     assert len(re.findall(r'data-value="outer"', html)) == 1
@@ -233,7 +243,8 @@ def test_nested_transfer_list_inside_item_content_gets_fresh_scope():
 def test_explicit_label_overrides_keep_caller_text_and_skip_that_binding():
     html = _render(
         '<c-CTransferList add_label="Include selected" chosen_label="Assigned">'
-        '<c-CTransferListItem value="a" label="A" /></c-CTransferList>'
+        '<c-CTransferListItem value="a" label="A" /></c-CTransferList>',
+        static_fallback=True,
     )
     add = re.search(r'<button[^>]+data-citry-transfer-action="add"[^>]*>(.*?)</button>', html, re.DOTALL)
     assert add is not None

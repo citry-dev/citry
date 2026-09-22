@@ -8,7 +8,7 @@ class ContextMenuNativeContent(Component):
     template = """
       <section
         class="context-menu-native"
-        x-data="{last:'No custom request yet'}"
+
       >
         <p>
           Select text or use the editing, link, image, media, embedded, and
@@ -16,7 +16,7 @@ class ContextMenuNativeContent(Component):
         </p>
         <c-CContextMenu
           aria_label="Document region actions"
-          $c-props="{
+          v-bind="{
             onOpenChange:(next,detail)=>
               last=`${next ? 'Open' : 'Close'}: ${detail.reason}`,
           }"
@@ -46,12 +46,12 @@ class ContextMenuNativeContent(Component):
               <context-menu-native-card>Custom element host</context-menu-native-card>
               <div
                 data-citry-context-menu-native
-                x-init="const root=$el.attachShadow({mode:'closed'});root.textContent='Closed shadow fixture'"
+                ref="closedShadowHost"
               >
                 Marked closed-shadow host
               </div>
               <div
-                x-init="const root=$el.attachShadow({mode:'open'});root.textContent='Select open-shadow text'"
+                ref="openShadowHost"
               >
                 Open-shadow selection fixture
               </div>
@@ -69,9 +69,21 @@ class ContextMenuNativeContent(Component):
             <c-CMenuItem value="archive">Archive file row</c-CMenuItem>
           </c-fill>
         </c-CContextMenu>
-        <output aria-live="polite" x-text="last">No custom request yet</output>
+        <output aria-live="polite" v-text="last">No custom request yet</output>
         <span id="native-content-destination">Linked record destination</span>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {last:'No custom request yet'};},
+        mounted() {
+          this.$refs.closedShadowHost.attachShadow({mode:'closed'}).textContent =
+            'Closed shadow fixture';
+          this.$refs.openShadowHost.attachShadow({mode:'open'}).textContent =
+            'Select open-shadow text';
+        },
+      });
     """
 
     css = """

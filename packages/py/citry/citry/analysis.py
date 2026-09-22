@@ -16,14 +16,20 @@ from itertools import pairwise
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
 
-from citry._alpine_csp import classify_alpine_csp
 from citry._browser_expressions import (
     SERVER_EVENT_CALL_NAMES,
     BrowserBinding,
     BrowserCompletion,
     BrowserComponentBinding,
+    BrowserComponentCall,
+    BrowserComponentContextName,
     BrowserComponentMember,
-    BrowserComponentPropsUse,
+    BrowserComponentMemberReference,
+    BrowserComponentPropContribution,
+    BrowserComponentPropFinding,
+    BrowserComponentPropSite,
+    BrowserComponentPublicName,
+    BrowserComponentSection,
     BrowserComponentSourceAnalysis,
     BrowserDeclarativeEvent,
     BrowserExpression,
@@ -38,19 +44,19 @@ from citry._browser_expressions import (
     BrowserMemberLiteralCall,
     BrowserObjectProperty,
     BrowserProp,
-    BrowserScopeWrite,
     BrowserSourceAnalysis,
     BrowserStateBinding,
     BrowserStateBindingTargetError,
+    MarkLiteralFinding,
     analyze_browser_component_source,
     analyze_browser_expression,
     browser_bindings,
     browser_client_prop_accepts,
     browser_completion_at,
     browser_component_members,
-    browser_component_prop_uses,
+    browser_component_prop_findings,
+    browser_component_prop_sites,
     browser_component_props,
-    browser_component_scope_writes,
     browser_declarative_events,
     browser_expression_at,
     browser_expressions,
@@ -66,15 +72,14 @@ from citry._browser_expressions import (
     browser_member_literal_calls,
     browser_state_binding_target_errors,
     browser_state_bindings,
+    mark_literal_findings,
 )
 from citry._browser_expressions import (
     python_event_handler_coordinates as _python_event_handler_coordinates,
 )
 from citry._diagnostic_catalog import (
-    ALPINE_UNKNOWN_VARIABLE,
     COMPONENT_JS_UNKNOWN_DATA_MEMBER,
     COMPONENT_JS_UNKNOWN_VARIABLE,
-    CSP_INCOMPATIBLE_BROWSER_CODE,
     FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
     FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
     FORMAT_HOST_SYNTAX,
@@ -83,6 +88,7 @@ from citry._diagnostic_catalog import (
     FORMAT_PROVIDER_INVALID,
     FORMAT_PROVIDER_UNAVAILABLE,
     TEMPLATE_UNKNOWN_VARIABLE,
+    VUE_UNKNOWN_VARIABLE,
 )
 from citry._diagnostics import render_diagnostic
 from citry._inline_assets import normalize_inline_asset
@@ -223,29 +229,33 @@ class TemplateLintFinding:
 
 
 @dataclass(frozen=True, slots=True)
-class AlpineLintConsumer:
+class VueLintConsumer:
     """Describe one proven browser namespace used by a physical template."""
 
     known_names: frozenset[str]
-    rule_unknown_alpine_variable: Literal["ignore", "warning", "error"]
+    rule_unknown_vue_variable: Literal["ignore", "warning", "error"]
+    namespace_policy: Literal["closed", "unknown"] = "closed"
 
     def __post_init__(self) -> None:
         if type(self.known_names) is not frozenset or any(
             type(name) is not str or not name for name in self.known_names
         ):
-            msg = "AlpineLintConsumer.known_names must be a frozenset of non-empty strings"
+            msg = "VueLintConsumer.known_names must be a frozenset of non-empty strings"
             raise TypeError(msg)
-        if type(self.rule_unknown_alpine_variable) is not str or self.rule_unknown_alpine_variable not in {
+        if type(self.rule_unknown_vue_variable) is not str or self.rule_unknown_vue_variable not in {
             "ignore",
             "warning",
             "error",
         }:
-            msg = f"Unknown Alpine-variable rule severity: {self.rule_unknown_alpine_variable!r}"
+            msg = f"Unknown Vue-variable rule severity: {self.rule_unknown_vue_variable!r}"
+            raise ValueError(msg)
+        if self.namespace_policy not in {"closed", "unknown"}:
+            msg = f"Unknown Vue namespace policy: {self.namespace_policy!r}"
             raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
-class AlpineLintFinding:
+class VueLintFinding:
     """Report one OXC-proven free root missing from a browser namespace."""
 
     name: str
@@ -258,7 +268,7 @@ class AlpineLintFinding:
 
 @dataclass(frozen=True, slots=True)
 class CspCompatibilityFinding:
-    """Report one browser host incompatible with the selected Alpine CSP build."""
+    """Report one browser host incompatible with the selected Vue CSP build."""
 
     message: str
     code: str
@@ -394,29 +404,23 @@ COMPONENT_JS_AMBIENT_NAMES = frozenset(
 )
 
 
-ALPINE_AMBIENT_NAMES = frozenset(
+VUE_AMBIENT_NAMES = frozenset(
     {
         *COMPONENT_JS_AMBIENT_NAMES,
-        # Alpine's documented magic properties.
+        # Vue template public-instance properties.
         "$data",
-        "$dispatch",
         "$el",
         "$event",
-        "$id",
         "$nextTick",
         "$refs",
         "$root",
-        "$store",
         "$watch",
-        # Citry's Alpine magic/context surface.
+        # Citry's Vue magic/context surface.
         "$error",
-        "$inject",
         "$loading",
         "$onEvent",
-        "$provide",
         "$sendEvent",
         "$state",
-        "$unprovide",
         "sendEvent",
         "onEvent",
     }
@@ -506,34 +510,38 @@ def lint_unknown_template_variables(
     return tuple(findings)
 
 
-def lint_unknown_alpine_variables(
+def lint_unknown_vue_variables(
     expressions: Sequence[BrowserExpression],
-    consumers: Sequence[AlpineLintConsumer],
-) -> tuple[AlpineLintFinding, ...]:
-    """Diagnose OXC-proven Alpine roots missing from any physical owner."""
+    consumers: Sequence[VueLintConsumer],
+) -> tuple[VueLintFinding, ...]:
+    """Diagnose OXC-proven Vue roots missing from any physical owner."""
     if not consumers:
         return ()
-    findings: list[AlpineLintFinding] = []
+    findings: list[VueLintFinding] = []
     for expression in expressions:
         analysis = analyze_browser_expression(expression)
         if not analysis.valid:
             continue
-        lexical = frozenset((*ALPINE_AMBIENT_NAMES, *expression.bindings))
+        lexical = frozenset((*VUE_AMBIENT_NAMES, *expression.bindings))
         for reference in analysis.references:
             if reference.name in lexical:
                 continue
-            missing = [consumer for consumer in consumers if reference.name not in consumer.known_names]
-            active = [consumer for consumer in missing if consumer.rule_unknown_alpine_variable != "ignore"]
+            missing = [
+                consumer
+                for consumer in consumers
+                if consumer.namespace_policy == "closed" and reference.name not in consumer.known_names
+            ]
+            active = [consumer for consumer in missing if consumer.rule_unknown_vue_variable != "ignore"]
             if not active:
                 continue
             severity: Literal["warning", "error"] = (
-                "error" if any(consumer.rule_unknown_alpine_variable == "error" for consumer in active) else "warning"
+                "error" if any(consumer.rule_unknown_vue_variable == "error" for consumer in active) else "warning"
             )
             findings.append(
-                AlpineLintFinding(
+                VueLintFinding(
                     name=reference.name,
-                    message=render_diagnostic(ALPINE_UNKNOWN_VARIABLE, name=reference.name),
-                    code=ALPINE_UNKNOWN_VARIABLE,
+                    message=render_diagnostic(VUE_UNKNOWN_VARIABLE, name=reference.name),
+                    code=VUE_UNKNOWN_VARIABLE,
                     severity=severity,
                     start_index=reference.start_index,
                     end_index=reference.end_index,
@@ -544,78 +552,19 @@ def lint_unknown_alpine_variables(
 
 def lint_csp_compatibility(
     expressions: Sequence[BrowserExpression],
-    consumers: Sequence[AlpineLintConsumer],
+    consumers: Sequence[VueLintConsumer],
     mode: Literal["off", "warn", "strict"] | None,
 ) -> tuple[CspCompatibilityFinding, ...]:
-    """Diagnose source-proven incompatibilities with Alpine CSP 3.17.1."""
-    if mode in {None, "off"}:
+    """
+    Validate the mode for Vue expressions compiled into script assets.
+
+    Asset and dangerous-HTML checks run at serialization boundaries.
+    """
+    del expressions, consumers
+    if mode in {None, "off", "warn", "strict"}:
         return ()
-    if mode not in {"warn", "strict"}:
-        msg = f"Unknown CSP compatibility mode: {mode!r}"
-        raise ValueError(msg)
-    severity: Literal["warning", "error"] = "warning" if mode == "warn" else "error"
-    findings: list[CspCompatibilityFinding] = []
-    seen: set[tuple[int, int, str]] = set()
-    for expression in expressions:
-        classification = classify_alpine_csp(expression)
-        if classification.outcome == "incompatible":
-            detail = classification.detail or "this browser expression"
-            _append_csp_finding(
-                findings,
-                seen,
-                detail,
-                severity,
-                classification.start_index,
-                classification.end_index,
-            )
-            continue
-        if not consumers:
-            continue
-        analysis = analyze_browser_expression(expression)
-        if not analysis.valid:
-            continue
-        lexical = frozenset(expression.bindings)
-        for reference in analysis.references:
-            if (
-                reference.name == "undefined"
-                or reference.name in lexical
-                or reference.name not in COMPONENT_JS_AMBIENT_NAMES
-            ):
-                continue
-            if any(reference.name not in consumer.known_names for consumer in consumers):
-                _append_csp_finding(
-                    findings,
-                    seen,
-                    f"the unprovided JavaScript global {reference.name!r}",
-                    severity,
-                    reference.start_index,
-                    reference.end_index,
-                )
-                break
-    return tuple(findings)
-
-
-def _append_csp_finding(
-    findings: list[CspCompatibilityFinding],
-    seen: set[tuple[int, int, str]],
-    detail: str,
-    severity: Literal["warning", "error"],
-    start_index: int,
-    end_index: int,
-) -> None:
-    key = (start_index, end_index, CSP_INCOMPATIBLE_BROWSER_CODE)
-    if key in seen:
-        return
-    seen.add(key)
-    findings.append(
-        CspCompatibilityFinding(
-            message=render_diagnostic(CSP_INCOMPATIBLE_BROWSER_CODE, detail=detail),
-            code=CSP_INCOMPATIBLE_BROWSER_CODE,
-            severity=severity,
-            start_index=start_index,
-            end_index=end_index,
-        )
-    )
+    msg = f"Unknown CSP compatibility mode: {mode!r}"
+    raise ValueError(msg)
 
 
 def lint_unknown_component_js_variables(
@@ -3871,15 +3820,20 @@ def python_class_static_asset_matches(
 
 
 __all__ = [
-    "ALPINE_AMBIENT_NAMES",
     "SERVER_EVENT_CALL_NAMES",
-    "AlpineLintConsumer",
-    "AlpineLintFinding",
+    "VUE_AMBIENT_NAMES",
     "BrowserBinding",
     "BrowserCompletion",
     "BrowserComponentBinding",
+    "BrowserComponentCall",
+    "BrowserComponentContextName",
     "BrowserComponentMember",
-    "BrowserComponentPropsUse",
+    "BrowserComponentMemberReference",
+    "BrowserComponentPropContribution",
+    "BrowserComponentPropFinding",
+    "BrowserComponentPropSite",
+    "BrowserComponentPublicName",
+    "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
     "BrowserExpression",
@@ -3894,7 +3848,6 @@ __all__ = [
     "BrowserMemberLiteralCall",
     "BrowserObjectProperty",
     "BrowserProp",
-    "BrowserScopeWrite",
     "BrowserSourceAnalysis",
     "BrowserStateBinding",
     "BrowserStateBindingTargetError",
@@ -3909,6 +3862,7 @@ __all__ = [
     "JsonWireType",
     "LspPosition",
     "LspRange",
+    "MarkLiteralFinding",
     "PythonComponentAssetDiscovery",
     "PythonComponentAssetFile",
     "PythonComponentAssetFormatResult",
@@ -3934,6 +3888,8 @@ __all__ = [
     "TemplatePythonRoot",
     "TemplateTagUse",
     "UnknownComponentUse",
+    "VueLintConsumer",
+    "VueLintFinding",
     "analyze_browser_component_source",
     "analyze_browser_expression",
     "analyze_css_data_source",
@@ -3943,9 +3899,9 @@ __all__ = [
     "browser_client_prop_accepts",
     "browser_completion_at",
     "browser_component_members",
-    "browser_component_prop_uses",
+    "browser_component_prop_findings",
+    "browser_component_prop_sites",
     "browser_component_props",
-    "browser_component_scope_writes",
     "browser_declarative_events",
     "browser_expression_at",
     "browser_expressions",
@@ -3975,10 +3931,11 @@ __all__ = [
     "json_wire_type_from_annotation",
     "json_wire_type_from_expression",
     "lint_csp_compatibility",
-    "lint_unknown_alpine_variables",
     "lint_unknown_component_js_members",
     "lint_unknown_component_js_variables",
     "lint_unknown_template_variables",
+    "lint_unknown_vue_variables",
+    "mark_literal_findings",
     "merge_json_wire_types",
     "prepare_python_component_assets",
     "python_class_asset_resolution_signature",

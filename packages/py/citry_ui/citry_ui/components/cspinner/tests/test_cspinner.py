@@ -12,7 +12,7 @@ from citry_ui import CSpinner
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(spinner: object, *, include_css: bool = False) -> str:
+def _render(spinner: object, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -28,7 +28,8 @@ def _render(spinner: object, *, include_css: bool = False) -> str:
                 "css": app.get("css")() if include_css else "",
             }
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_spinner_schema_stays_compact_and_indeterminate():
@@ -44,7 +45,7 @@ def test_spinner_schema_stays_compact_and_indeterminate():
 
 
 def test_spinner_renders_one_labelled_unfocusable_progressbar():
-    html = _render(CSpinner(label="Charting star field"))
+    html = _render(CSpinner(label="Charting star field"), static_fallback=True)
     root = re.search(r'<span[^>]+data-citry-ui-part="spinner"[^>]*>', html)
 
     assert root is not None
@@ -66,7 +67,8 @@ def test_spinner_merges_root_styling_and_metadata():
             class_=["orbit", {"active": True}],
             style={"--cui-spinner-size": "40px"},
             attrs={"id": "alignment", "class": "from-attrs", "aria-describedby": "alignment-help"},
-        )
+        ),
+        static_fallback=True,
     )
     root = re.search(r'<span[^>]+data-citry-ui-part="spinner"[^>]*>', html)
 
@@ -132,7 +134,7 @@ def test_spinner_rejects_owned_runtime_and_structural_attributes(attribute):
 def test_choices_and_label_are_detrusted_before_rendering():
     with pytest.raises(ValueError, match="intent must be one of"):
         _render(CSpinner(label="Task", intent=Markup('primary" onfocus="evil')))
-    html = _render(CSpinner(label=Markup('Aligning "Vega"')))
+    html = _render(CSpinner(label=Markup('Aligning "Vega"')), static_fallback=True)
     assert 'aria-label="Aligning &#34;Vega&#34;"' in html
 
 

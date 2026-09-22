@@ -22,11 +22,6 @@ def native_select_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack native-select-quality"
             aria-labelledby="native-select-states-title"
-            x-data
-            x-init="Alpine.store('nativeSelectQuality', {
-              controlled: true,
-              value: 'reef',
-            })"
           >
             <h1 id="native-select-states-title">Native Select states</h1>
             <c-CForm id="native-select-quality-form">
@@ -39,12 +34,10 @@ def native_select_states_component(app: Citry) -> type[Component]:
                     c-options="grouped_options"
                     placeholder="Choose a habitat"
                     value="reef"
-                    $c-props="{
-                      value: $store.nativeSelectQuality.controlled
-                        ? $store.nativeSelectQuality.value
-                        : undefined,
-                    }"
-                    @input="$store.nativeSelectQuality.value = $event.target.value"
+                    :value="controlled
+                        ? value
+                        : undefined"
+                    @input="value = $event.target.value"
                   />
                 </c-fill>
                 <c-fill name="description">A required native grouped choice.</c-fill>
@@ -54,6 +47,7 @@ def native_select_states_component(app: Citry) -> type[Component]:
               <div class="citry-ui-quality-grid">
                 <c-for each="variant in variants">
                   <c-CNativeSelect
+                    #c-key="variant"
                     c-options="flat_options"
                     c-variant="variant"
                     c-attrs="{'aria-label': variant + ' Native Select'}"
@@ -61,6 +55,7 @@ def native_select_states_component(app: Citry) -> type[Component]:
                 </c-for>
                 <c-for each="size in sizes">
                   <c-CNativeSelect
+                    #c-key="size"
                     c-options="flat_options"
                     c-size="size"
                     c-attrs="{'aria-label': size + ' Native Select'}"
@@ -95,7 +90,7 @@ def native_select_states_component(app: Citry) -> type[Component]:
               <div class="native-select-quality__actions">
                 <c-CButton
                   type="button"
-                  @click="$store.nativeSelectQuality.controlled = false"
+                  @click="controlled = false"
                 >
                   Release controlled value
                 </c-CButton>
@@ -105,6 +100,16 @@ def native_select_states_component(app: Citry) -> type[Component]:
               </div>
             </c-CForm>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: true,
+                value: 'reef',
+              };
+            },
+          });
         """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

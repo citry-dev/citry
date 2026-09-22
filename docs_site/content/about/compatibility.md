@@ -43,13 +43,12 @@ If pip has no prebuilt wheel for your platform, it falls back to the source dist
 Citry's JavaScript browser code is tested aginst Chromium, Firefox, and
 WebKit.
 
-Citry injects a pinned version of [Alpine.js](http://alpinejs.dev/){: target="_blank" rel="noopener"} into the browser:
-
-- Do **NOT** inject your own Alpine runtime.
-- To load custom Alpine plugins, use
-[the pre-start API](/advanced/alpine-runtime/#add-an-alpine-plugin).
+Citry loads a pinned Vue runtime for interactive component output. Do not mount
+another Vue application over Citry-managed component ranges. Composition API
+helpers from the exact runtime used by the page are available through
+`Citry.vue`.
 
 ## See also
 
 - [Installation](/getting-started/installation/) walks through installing citry and confirming it works.
-- [Alpine runtime](/advanced/alpine-runtime/) documents browser loading and deployment.
+- [Vue runtime](/advanced/vue-runtime/) documents browser loading and deployment.

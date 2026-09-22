@@ -28,6 +28,12 @@ def _page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const hoverCard=Citry.vue.reactive({
+            controlled:false,open:false,accept:false,disabled:false,
+            placement:'bottom-start',arrow:true,size:'md',requests:[],
+          }); window.__hoverCard=hoverCard; return {state:{hoverCard}};}});
+        """
         css = """
           .profile-card { --cui-hover-card-duration: 20ms; }
           .profile-layout { display:grid; gap:.5rem; }
@@ -35,21 +41,19 @@ def _page() -> str:
         """
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>HoverCard evidence</title><c-css /></head>
-          <body x-data>
+          <body>
             <main style="display:flex; align-items:center; gap:8rem; padding:14rem; min-block-size:50rem">
               <c-CHoverCard
                 id="ada-card" class_="profile-card" c-delay="60" c-close_delay="120"
-                $c-props="{
-                  open:$store.hoverCard.controlled ? $store.hoverCard.open : undefined,
-                  disabled:$store.hoverCard.disabled,
-                  placement:$store.hoverCard.placement,
-                  arrow:$store.hoverCard.arrow,
-                  size:$store.hoverCard.size,
-                  onOpenChange:(next, detail) => {
-                    $store.hoverCard.requests.push([next, detail.reason, detail.controlled, detail.forced]);
-                    if ($store.hoverCard.accept) $store.hoverCard.open = next;
-                  },
-                }"
+                :open="state.hoverCard.controlled ? state.hoverCard.open : undefined"
+                :disabled="state.hoverCard.disabled"
+                :placement="state.hoverCard.placement"
+                :arrow="state.hoverCard.arrow"
+                :size="state.hoverCard.size"
+                :onOpenChange="(next, detail) => {
+                    state.hoverCard.requests.push([next, detail.reason, detail.controlled, detail.forced]);
+                    if (state.hoverCard.accept) state.hoverCard.open = next;
+                  }"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <a href="#ada" c-bind="activator_attrs">Ada Lovelace</a>
@@ -73,12 +77,6 @@ def _page() -> str:
             <dialog id="modal"><button type="button">Modal focus</button></dialog>
             <c-js />
           </body></html>
-        """
-        js = """
-          Alpine.store('hoverCard', {
-            controlled:false, open:false, accept:false, disabled:false,
-            placement:'bottom-start', arrow:true, size:'md', requests:[],
-          });
         """
 
     return str(Page())
@@ -109,7 +107,7 @@ def test_focus_escape_and_hidden_supplementary_semantics(page: Any) -> None:
     page.keyboard.press("Escape")
     page.wait_for_function("!document.querySelector('#ada-card').matches(':popover-open')")
     assert trigger.evaluate("element => element === document.activeElement") is True
-    assert page.evaluate("Alpine.store('hoverCard').requests.at(-1)[1]") == "escape"
+    assert page.evaluate("window.__hoverCard.requests.at(-1)[1]") == "escape"
     assert errors == []
 
 
@@ -143,19 +141,19 @@ def test_hover_delay_surface_bridge_peer_and_touch_suppression(page: Any) -> Non
 def test_controlled_reject_accept_release_and_modal_force_close(page: Any) -> None:
     errors = _load(page)
     trigger = page.get_by_role("link", name="Ada Lovelace")
-    page.evaluate("Alpine.store('hoverCard').controlled = true")
+    page.evaluate("window.__hoverCard.controlled = true")
     trigger.focus()
-    page.wait_for_function("Alpine.store('hoverCard').requests.length > 0")
+    page.wait_for_function("window.__hoverCard.requests.length > 0")
     assert page.locator("#ada-card").evaluate("element => element.matches(':popover-open')") is False
-    assert page.evaluate("Alpine.store('hoverCard').requests.at(-1)") == [True, "focus", True, False]
+    assert page.evaluate("window.__hoverCard.requests.at(-1)") == [True, "focus", True, False]
 
-    page.evaluate("Object.assign(Alpine.store('hoverCard'), {accept:true, open:true, placement:'top-end', size:'lg'})")
+    page.evaluate("Object.assign(window.__hoverCard, {accept:true, open:true, placement:'top-end', size:'lg'})")
     page.wait_for_function("document.querySelector('#ada-card').matches(':popover-open')")
     assert page.locator("#ada-card").get_attribute("data-size") == "lg"
     page.locator("#modal").evaluate("element => element.showModal()")
     page.wait_for_function("!document.querySelector('#ada-card').matches(':popover-open')")
-    assert page.evaluate("Alpine.store('hoverCard').requests.at(-1).slice(0,2)") == [False, "modal"]
-    assert page.evaluate("Alpine.store('hoverCard').requests.at(-1)[3]") is True
+    assert page.evaluate("window.__hoverCard.requests.at(-1).slice(0,2)") == [False, "modal"]
+    assert page.evaluate("window.__hoverCard.requests.at(-1)[3]") is True
     assert errors == []
 
 
@@ -170,7 +168,7 @@ def test_geometry_rtl_forced_colors_print_and_axe(page: Any) -> None:
     assert card.bounding_box()["width"] <= page.evaluate("visualViewport.width")
 
     page.locator("main").evaluate("element => element.dir = 'rtl'")
-    page.evaluate("Alpine.store('hoverCard').placement = 'bottom-start'")
+    page.evaluate("window.__hoverCard.placement = 'bottom-start'")
     page.wait_for_timeout(50)
     assert card.get_attribute("data-placement") == "bottom-start"
 

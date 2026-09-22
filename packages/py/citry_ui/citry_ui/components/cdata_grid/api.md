@@ -42,9 +42,9 @@ starting on a selected Row removes the dragged range. Disabled Rows are
 skipped. Shift+Space toggles the focused Row in either direction. Touch remains
 ordinary scrolling rather than starting a drag selection.
 
-## Control models from Alpine
+## Control models from Vue
 
-Pass `sort`, `selected`, and callbacks through `$c-props`. Invalid client
+Pass `sort`, `selected`, and callbacks with native Vue bindings. Invalid client
 models are diagnosed and the last valid state remains active.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdata_grid/snippets/controlled.py" title="Control Data Grid models" />

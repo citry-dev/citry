@@ -341,7 +341,7 @@ class CFileInput(LibraryComponent):
             "aria_invalid": "true" if invalid else None,
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "attrs": caller_attrs,
         }
 
@@ -362,17 +362,19 @@ class CFileInput(LibraryComponent):
         field = self.inject(FIELD_CONTEXT_KEY, None)
         form = self.inject(FORM_CONTEXT_KEY, None)
         return {
-            "accept": normalized["accept"],
-            "capture": normalized["capture"],
-            "multiple": normalized["multiple"],
-            "required": bool(field.required) if field is not None else bool(normalized["required"] or False),
-            "disabled": bool(field.disabled) if field is not None else bool(normalized["disabled"] or False),
-            "invalid": bool(field.invalid) if field is not None else bool(normalized["invalid"] or False),
-            "variant": normalized["variant"],
-            "size": normalized["size"],
             "externalDescribedBy": self._external_described_by,
             "externalErrorMessage": self._external_error_message,
             "inheritsFormDisabled": field is None and form is not None,
+            "serverDefaults": {
+                "accept": normalized["accept"],
+                "capture": normalized["capture"],
+                "multiple": normalized["multiple"],
+                "required": bool(field.required) if field is not None else bool(normalized["required"] or False),
+                "disabled": bool(field.disabled) if field is not None else bool(normalized["disabled"] or False),
+                "invalid": bool(field.invalid) if field is not None else bool(normalized["invalid"] or False),
+                "variant": normalized["variant"],
+                "size": normalized["size"],
+            },
         }
 
     template = """
@@ -390,9 +392,9 @@ class CFileInput(LibraryComponent):
         c-aria-invalid="aria_invalid"
         c-aria-describedby="aria_describedby"
         c-aria-errormessage="aria_errormessage"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"
@@ -406,10 +408,19 @@ class CFileInput(LibraryComponent):
           accept: {}, capture: {}, multiple: {}, required: {}, disabled: {}, invalid: {},
           variant: {}, size: {},
         },
-        init: ({els, data, props, effect, inject}) => {
-          const input = els[0];
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const input = component.$el;
+          const data = {...component.serverDefaults,
+            externalDescribedBy: component.externalDescribedBy,
+            externalErrorMessage: component.externalErrorMessage,
+            inheritsFormDisabled: component.inheritsFormDisabled};
+          const props = component.$props;
+          const field = component.fieldService;
+          const form = component.formService;
           const invalidEpisodes = new Set();
           const resetTimers = new Set();
           let nativeInvalid = false;
@@ -551,7 +562,7 @@ class CFileInput(LibraryComponent):
           input.addEventListener("input", onInput);
           input.addEventListener("change", onInput);
           nativeForm?.addEventListener("reset", onReset);
-          const stop = effect(applyState);
+          const stop = Citry.vue.watchEffect(applyState);
           input.setAttribute("data-citry-file-input-initialized", "");
           return () => {
             stop?.();
@@ -666,24 +677,26 @@ class CDropTarget(LibraryComponent):
         )
         form = self.inject(FORM_CONTEXT_KEY, None)
         return {
-            "accept": normalized["accept"],
-            "capture": normalized["capture"],
-            "multiple": normalized["multiple"],
-            "required": bool(normalized["required"] or False),
-            "disabled": bool(normalized["disabled"] or False),
-            "invalid": bool(normalized["invalid"] or False),
-            "variant": normalized["variant"],
-            "size": normalized["size"],
             "hasForm": form is not None,
+            "serverDefaults": {
+                "accept": normalized["accept"],
+                "capture": normalized["capture"],
+                "multiple": normalized["multiple"],
+                "required": bool(normalized["required"] or False),
+                "disabled": bool(normalized["disabled"] or False),
+                "invalid": bool(normalized["invalid"] or False),
+                "variant": normalized["variant"],
+                "size": normalized["size"],
+            },
         }
 
     template = """
       <label
         class="cui-drop-target"
         c-bind="attrs"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         data-citry-ui-part="drop-target"
@@ -716,10 +729,15 @@ class CDropTarget(LibraryComponent):
           accept: {}, capture: {}, multiple: {}, required: {}, disabled: {}, invalid: {},
           variant: {}, size: {},
         },
-        init: ({els, data, props, effect, inject}) => {
-          const root = els[0];
+        inject: {
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = {...component.serverDefaults, hasForm: component.hasForm};
+          const props = component.$props;
           const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const form = component.formService;
           const invalidEpisodes = new Set();
           const resetTimers = new Set();
           let nativeInvalid = false;
@@ -899,7 +917,7 @@ class CDropTarget(LibraryComponent):
           root.addEventListener("dragleave", onDragLeave);
           root.addEventListener("drop", onDrop);
           nativeForm?.addEventListener("reset", onReset);
-          const stop = effect(applyState);
+          const stop = Citry.vue.watchEffect(applyState);
           reconcileStructure();
           return () => {
             stop?.();

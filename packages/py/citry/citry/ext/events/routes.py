@@ -7,8 +7,7 @@ their paths directly; see ``ExtensionManager.urls``), fixed by design
 
     POST      <prefix>/ext/events/call                  batch endpoint (envelope with calls[])
     GET       <prefix>/ext/events/runtime.js            standard events client runtime
-    GET       <prefix>/ext/events/runtime-csp.js        CSP events client runtime
-    GET|POST  <prefix>/ext/events/e/{class_id}/{event}  per-event dispatch
+    declared  <prefix>/ext/events/e/{class_id}/{event}  per-event handler methods
 
 The route handlers are the HTTP transport of the dispatcher: they pick a
 payload codec (``codecs.py``), build the transport context and the CSRF
@@ -48,6 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._owned_resource import _OwnedResource
 from citry._protocol.events import (
     ProtocolValueError,
     add_route_identity,
@@ -73,12 +73,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CALL_PATH",
-    "CSP_RUNTIME_PATH",
-    "EVENTS_CSP_RUNTIME_SRC",
+    "DEFINITION_PATH",
     "EVENTS_RUNTIME_SRC",
     "EVENT_PATH",
     "MAX_ENVELOPE_BYTES",
     "RUNTIME_PATH",
+    "STYLE_ASSET_PATH",
     "events_config_url",
     "events_routes",
     "get_event_url",
@@ -88,13 +88,13 @@ __all__ = [
 # serialize-time emission points the runtime script tag at
 # (citry/ext/events/emission.py; the path is design-pinned on both sides).
 CALL_PATH = "ext/events/call"
+DEFINITION_PATH = "ext/events/definitions/{digest}.js"
+STYLE_ASSET_PATH = "ext/events/assets/{digest}.css"
 RUNTIME_PATH = "ext/events/runtime.js"
-CSP_RUNTIME_PATH = "ext/events/runtime-csp.js"
 EVENT_PATH = "ext/events/e/{class_id}/{event}"
 
 # The committed browser bundle built from packages/js/citry-client.
-EVENTS_RUNTIME_SRC = Path(__file__).parent / "client" / "citry-events.js"
-EVENTS_CSP_RUNTIME_SRC = Path(__file__).parent / "client" / "citry-events-csp.js"
+EVENTS_RUNTIME_SRC = Path(__file__).parents[2] / "_vue" / "runtime.js"
 
 # The default transport-layer byte cap on one envelope (design 7.4 abuse
 # limits; oversized bodies answer payload_too_large without being parsed).
@@ -105,6 +105,13 @@ MAX_ENVELOPE_BYTES = 1024 * 1024
 
 _JSON_CONTENT_TYPE = "application/json"
 _NO_STORE = ("Cache-Control", "no-store")
+_IMMUTABLE_ASSET_HEADERS = (
+    ("Cache-Control", "public, max-age=31536000, immutable"),
+    # These bytes are content addressed and carry no request credentials, so
+    # opaque preview frames can fetch the public asset without opening event
+    # or action responses to cross-origin reads.
+    ("Access-Control-Allow-Origin", "*"),
+)
 
 
 ################################################
@@ -201,17 +208,40 @@ def events_config_url(
 
 def events_routes(citry: Citry) -> list[URLRoute]:
     """The extension's route table, with handlers bound to one ``Citry`` instance."""
-    dispatcher = EventsDispatcher()
+    from citry.ext.events.renderers import dispatcher_for  # noqa: PLC0415
+
+    dispatcher = dispatcher_for(citry)
 
     def serve_runtime(_request: RouteRequest) -> RouteResponse:
-        from citry.ext.events.emission import _runtime_resource  # noqa: PLC0415
+        return _runtime_resource(citry).response()
 
-        return _runtime_resource(citry, "standard").response()
+    def serve_definition(_request: RouteRequest, *, digest: str) -> RouteResponse:
+        from citry._vue.events import definition_bundle  # noqa: PLC0415
 
-    def serve_csp_runtime(_request: RouteRequest) -> RouteResponse:
-        from citry.ext.events.emission import _runtime_resource  # noqa: PLC0415
+        if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
+            return RouteResponse("", status=404, content_type="text/plain")
+        content = definition_bundle(citry, digest)
+        if content is None:
+            return RouteResponse("", status=404, content_type="text/plain")
+        return RouteResponse(
+            content.decode(),
+            content_type="text/javascript",
+            headers=_IMMUTABLE_ASSET_HEADERS,
+        )
 
-        return _runtime_resource(citry, "csp").response()
+    def serve_style_asset(_request: RouteRequest, *, digest: str) -> RouteResponse:
+        from citry._vue.events import style_asset  # noqa: PLC0415
+
+        if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
+            return RouteResponse("", status=404, content_type="text/plain")
+        content = style_asset(citry, digest)
+        if content is None:
+            return RouteResponse("", status=404, content_type="text/plain")
+        return RouteResponse(
+            content.decode(),
+            content_type="text/css",
+            headers=_IMMUTABLE_ASSET_HEADERS,
+        )
 
     # Each dispatch route is a sync/async pair: the plain handler is what the
     # sync hosts (WSGI, sync Django) mount and run, and the async twin rides
@@ -239,9 +269,15 @@ def events_routes(citry: Citry) -> list[URLRoute]:
         ),
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_events_runtime", methods=("GET",)),
         URLRoute(
-            CSP_RUNTIME_PATH,
-            handler=serve_csp_runtime,
-            name="citry_events_runtime_csp",
+            DEFINITION_PATH,
+            handler=serve_definition,
+            name="citry_vue_definition",
+            methods=("GET",),
+        ),
+        URLRoute(
+            STYLE_ASSET_PATH,
+            handler=serve_style_asset,
+            name="citry_vue_style_asset",
             methods=("GET",),
         ),
         URLRoute(
@@ -249,9 +285,19 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             handler=serve_event,
             handler_async=serve_event_async,
             name="citry_events_dispatch",
-            methods=("GET", "POST"),
+            methods=None,
         ),
     ]
+
+
+def _runtime_resource(citry: Citry) -> _OwnedResource:
+    """Serve the same committed Vue runtime used by document serialization."""
+    return _OwnedResource(
+        url=citry.build_url(RUNTIME_PATH),
+        content=EVENTS_RUNTIME_SRC.read_text(encoding="utf8"),
+        content_type="text/javascript",
+        headers=(("Cache-Control", "no-store"),),
+    )
 
 
 @dataclass(frozen=True, slots=True)

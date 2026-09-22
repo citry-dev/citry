@@ -81,7 +81,7 @@ or other output.
 
 Server inputs are passed in Python through `<c-CAccordion ... />` attributes
 or a `CAccordion(...)` composition call. Client inputs are passed in the
-browser through `$c-props="{...}"`.
+browser with native Vue `:` bindings and callback props.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/caccordion/snippets/controlled_value.py"
@@ -210,6 +210,6 @@ panel content use ordinary Citry escaping. The chevron comes from the packaged
 icon allowlist.
 
 Attribute maps are trusted authoring surfaces for unowned values. Accordion
-rejects attributes and Alpine directives that could replace native semantics,
+rejects attributes and Vue directives that could replace native semantics,
 children, expansion visibility, focus ownership, a second popover/command
 activation owner, public mirrors, or Citry runtime markers.

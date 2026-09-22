@@ -8,24 +8,9 @@ class ScrollAreaNativeCallback(Component):
     template = """
       <section
         class="scroll-area-callback"
-        x-data="{
-          rows:6,
-          sentinelTop:150,
-          imageVisible:false,
-          expanded:false,
-          nativeCount:0,
-          settled:0,
-          callbackCount:0,
-          lastInline:0,
-          lastBlock:0,
-        }"
+
         @scroll-area-native="nativeCount += 1"
         @scroll-area-settled="settled += 1"
-        x-init="$nextTick(() => {
-          const host = $refs.shadowHost;
-          const fixture = $refs.shadowFixture;
-          if (!host.shadowRoot && fixture) host.attachShadow({mode:'open'}).append(fixture);
-        })"
       >
         <div class="scroll-area-callback__controls">
           <button type="button" @click="rows += 2">Add content</button>
@@ -37,8 +22,10 @@ class ScrollAreaNativeCallback(Component):
           </button>
           <button
             type="button"
-            @click="setTimeout(()=>imageVisible=true,350)"
-          >Load a delayed image</button>
+            @click="window.setTimeout(()=>imageVisible=true,350)"
+          >
+            Load a delayed image
+          </button>
           <button type="button" @click="expanded=!expanded">
             Toggle content stylesheet
           </button>
@@ -48,38 +35,42 @@ class ScrollAreaNativeCallback(Component):
           axis="both"
           aria_label="Event-scoped audit log"
           style="--cui-scroll-area-max-block-size: 13rem"
-          c-attrs="{
-            '@scroll':'$dispatch(`scroll-area-native`)',
-            '@scrollend':'$dispatch(`scroll-area-settled`)',
-          }"
-          $c-props="{
-            onScrollChange:(detail)=>{
-              callbackCount += 1;
-              lastInline = Math.round(detail.inlineOffset);
-              lastBlock = Math.round(detail.blockOffset);
-            },
-          }"
+          @scroll="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'scroll-area-native', {bubbles:true}
+              )
+            )
+          "
+          @scrollend="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'scroll-area-settled', {bubbles:true}
+              )
+            )
+          "
+          :onScrollChange="handleScrollChange"
         >
           <div
             class="scroll-area-callback__content"
             :class="{'scroll-area-callback__content--expanded':expanded}"
           >
-            <template x-for="row in rows" :key="row">
-              <p x-text="`Audit row ${row}: current native content`"></p>
+            <template v-for="row in rows" :key="row">
+              <p v-text="`Audit row ${row}: current native content`"></p>
             </template>
             <span
               class="scroll-area-callback__sentinel"
               :style="`inset-block-start:${sentinelTop}px`"
             >Absolute marker</span>
-            <template x-if="imageVisible">
+            <template v-if="imageVisible">
               <img
                 class="scroll-area-callback__image"
                 alt="Delayed audit chart"
                 src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
               />
             </template>
-            <div x-ref="shadowHost" class="scroll-area-callback__shadow-host">
-              <div x-ref="shadowFixture">
+            <div ref="shadowHost" class="scroll-area-callback__shadow-host">
+              <div ref="shadowFixture">
                 <p style="inline-size:26rem;min-block-size:5rem;padding:0.5rem">
                   Open ShadowRoot content changes native layout without creating
                   a component callback.
@@ -90,13 +81,44 @@ class ScrollAreaNativeCallback(Component):
         </c-CScrollArea>
 
         <dl class="scroll-area-callback__readout">
-          <dt>Native scroll events</dt><dd x-text="nativeCount">0</dd>
-          <dt>Native scrollend events</dt><dd x-text="settled">0</dd>
-          <dt>Component callbacks</dt><dd x-text="callbackCount">0</dd>
-          <dt>Logical inline offset</dt><dd x-text="lastInline">0</dd>
-          <dt>Block offset</dt><dd x-text="lastBlock">0</dd>
+          <dt>Native scroll events</dt><dd v-text="nativeCount">0</dd>
+          <dt>Native scrollend events</dt><dd v-text="settled">0</dd>
+          <dt>Component callbacks</dt><dd v-text="callbackCount">0</dd>
+          <dt>Logical inline offset</dt><dd v-text="lastInline">0</dd>
+          <dt>Block offset</dt><dd v-text="lastBlock">0</dd>
         </dl>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            rows: 6,
+            sentinelTop: 150,
+            imageVisible: false,
+            expanded: false,
+            nativeCount: 0,
+            settled: 0,
+            callbackCount: 0,
+            lastInline: 0,
+            lastBlock: 0,
+          };
+        },
+        methods: {
+          handleScrollChange(detail) {
+            this.callbackCount += 1;
+            this.lastInline = Math.round(detail.inlineOffset);
+            this.lastBlock = Math.round(detail.blockOffset);
+          },
+        },
+        mounted() {
+          this.$nextTick(() => {
+            const host = this.$refs.shadowHost;
+            const fixture = this.$refs.shadowFixture;
+            if (!host.shadowRoot && fixture) host.attachShadow({ mode: 'open' }).append(fixture);
+          });
+        },
+      });
     """
 
     css = """

@@ -122,6 +122,33 @@ class ProjectBoard(Component):
     def js_data(self, kwargs: Kwargs, slots: Slots):
         return {"helpOpen": False, "notice": ""}
 
+    js = """
+      $component({
+        methods: {
+          handleBoardNotice(event) {
+            this.notice = event.detail.message;
+            if (event.detail.focusBoard) {
+              this.$nextTick(() => this.$refs.boardStatus?.focus());
+            }
+            if (event.detail.focusTaskId) {
+              this.$nextTick(() => {
+                document
+                  .getElementById('task-' + event.detail.focusTaskId)
+                  ?.querySelector('.task-card__move select')
+                  ?.focus();
+              });
+            }
+          },
+        },
+        mounted() {
+          document.addEventListener('board:notice', this.handleBoardNotice);
+        },
+        beforeUnmount() {
+          document.removeEventListener('board:notice', this.handleBoardNotice);
+        },
+      });
+    """
+
     template = """
       <section
         class="board-region"
@@ -137,20 +164,6 @@ class ProjectBoard(Component):
             lane: $event.detail.lane,
             focus_control: Boolean($event.detail.focusControl),
           })
-        "
-        @board:notice.window="
-          notice = $event.detail.message;
-          if ($event.detail.focusBoard) {
-            $nextTick(() => $refs.boardStatus.focus());
-          }
-          if ($event.detail.focusTaskId) {
-            $nextTick(() => {
-              document
-                .getElementById('task-' + $event.detail.focusTaskId)
-                ?.querySelector('.task-card__move select')
-                ?.focus();
-            });
-          }
         "
       >
         <div class="board-toolbar">
@@ -171,15 +184,15 @@ class ProjectBoard(Component):
             class="quiet-button"
             type="button"
             @click="helpOpen = !helpOpen"
-            :aria-expanded="helpOpen.toString()"
+            :aria-expanded="String(helpOpen)"
             aria-controls="board-help"
-            x-text="helpOpen ? 'Hide explanation' : 'How this page works'"
+            v-text="helpOpen ? 'Hide explanation' : 'How this page works'"
           >
             How this page works
           </button>
         </div>
 
-        <aside id="board-help" class="board-help" x-cloak x-show="helpOpen">
+        <aside id="board-help" class="board-help" v-cloak v-show="helpOpen">
           You can open this explanation and dismiss notices without calling
           Python. When you search, add, move, or complete a task, Citry sends
           an Event to Python. Python updates the in-memory tasks and returns a
@@ -189,7 +202,7 @@ class ProjectBoard(Component):
 
         <div
           class="board-stats"
-          x-ref="boardStatus"
+          ref="boardStatus"
           tabindex="-1"
           aria-live="polite"
         >
@@ -197,17 +210,17 @@ class ProjectBoard(Component):
             {{ visible_count }} {{ visible_task_label }} shown
           </strong>
           <span>{{ completed_count }} of {{ total_count }} complete</span>
-          <span x-show="$loading()">Updating board…</span>
+          <span v-show="$loading()">Updating board…</span>
         </div>
         <p
           class="event-error"
           role="alert"
-          x-show="
+          v-show="
             $error('refresh') ||
             $error('set_completed') ||
             $error('move')
           "
-          x-text="
+          v-text="
             (
               $error('refresh') ||
               $error('set_completed') ||
@@ -219,6 +232,7 @@ class ProjectBoard(Component):
         <div class="board-grid">
           <c-for each="lane in lanes">
             <c-Lane
+              #c-key="lane.key"
               c-lane_key="lane.key"
               c-title="lane.title"
               c-count="lane.count"
@@ -226,7 +240,7 @@ class ProjectBoard(Component):
               <c-fill name="default">
                 <c-if cond="lane.tasks">
                   <c-for each="task in lane.tasks">
-                    <c-TaskCard c-task="task" />
+                    <c-TaskCard #c-key="task.id" c-task="task" />
                   </c-for>
                 </c-if>
                 <c-else>
@@ -266,8 +280,8 @@ class ProjectBoard(Component):
                 id="task-title-error"
                 class="field-error"
                 role="alert"
-                x-show="$error('add')?.fieldErrors?.title"
-                x-text="$error('add')?.fieldErrors?.title || ''"
+                v-show="$error('add')?.fieldErrors?.title"
+                v-text="$error('add')?.fieldErrors?.title || ''"
               ></span>
             </label>
             <label class="filter-control">
@@ -289,7 +303,7 @@ class ProjectBoard(Component):
               class="primary-button"
               type="submit"
               :disabled="$loading('add')"
-              x-text="$loading('add') ? 'Adding…' : 'Add task'"
+              v-text="$loading('add') ? 'Adding…' : 'Add task'"
             >
               Add task
             </button>
@@ -297,13 +311,13 @@ class ProjectBoard(Component):
           <p
             class="event-error"
             role="alert"
-            x-show="$error('add') && !$error('add')?.fieldErrors?.title"
-            x-text="$error('add')?.message || ''"
+            v-show="$error('add') && !$error('add')?.fieldErrors?.title"
+            v-text="$error('add')?.message || ''"
           ></p>
         </section>
 
-        <div class="toast" role="status" x-cloak x-show="notice">
-          <span x-text="notice"></span>
+        <div class="toast" role="status" v-cloak v-show="notice">
+          <span v-text="notice"></span>
           <button type="button" @click="notice = ''" aria-label="Dismiss notification">&times;</button>
         </div>
       </section>

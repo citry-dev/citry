@@ -88,12 +88,33 @@ def _repository_root() -> Path:
     raise RuntimeError(msg)
 
 
-def _page() -> str:
+def _page(*, refresh: bool = False) -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
+    if refresh:
+        app.set_mounted_prefix("/citry")
     app.register_library(ComponentLibrary("citry-ui-context-menu-e2e", _COMPONENTS))
 
     class Page(Component):
         citry = app
+
+        js = """$component({
+          data() {
+            const state = Citry.vue.reactive({
+              basicEvents: [], basicActions: [],
+              controlledOpen: false, controlledAccept: false,
+              moveFocusOnClose: false, controlledRequests: [],
+              nativeEvents: [], longClicks: 0, longSubmits: 0,
+              disabledLocked: false, disabledEvents: [],
+              reentrantMutate: false, reentrantRequests: 0,
+              throwingCalls: 0, innerEvents: [], outerEvents: [], geometryEvents: [],
+            });
+            window.__contextState = state;
+            return state;
+          },
+          onServerRender({component}) {
+            window.__contextState = component;
+          },
+        });"""
         css = """
           body {
             min-height: 50rem;
@@ -120,24 +141,19 @@ def _page() -> str:
               <title>ContextMenu browser contract</title>
             </head>
             <body>
-              <section
-                id="basic-owner"
-                x-data="{ events: [], actions: [] }"
-              >
+              <section id="basic-owner">
                 <c-CContextMenu
                   id="basic"
                   aria_label="Document actions"
-                  $c-props="{
-                    onOpenChange: (open, detail) => events.push({
+                  :onOpenChange="(open, detail) => window.__contextState.basicEvents.push({
                       open,
                       reason: detail.reason,
                       controlled: detail.controlled,
                       forced: detail.forced,
                       x: detail.clientX,
                       y: detail.clientY
-                    }),
-                    onAction: (value, detail) => actions.push({ value, kind: detail.kind })
-                  }"
+                    })"
+                  :onAction="(value, detail) => window.__contextState.basicActions.push({ value, kind: detail.kind })"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
@@ -157,32 +173,27 @@ def _page() -> str:
                     </c-CMenuSubmenu>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="basic-events" x-text="JSON.stringify(events)"></output>
-                <output id="basic-actions" x-text="JSON.stringify(actions)"></output>
+                <output id="basic-events" v-text="JSON.stringify(window.__contextState.basicEvents)"></output>
+                <output id="basic-actions" v-text="JSON.stringify(window.__contextState.basicActions)"></output>
               </section>
 
-              <section
-                id="controlled-owner"
-                x-data="{ open: false, accept: false, moveFocusOnClose: false, requests: [] }"
-              >
+              <section id="controlled-owner">
                 <c-CContextMenu
                   id="controlled"
                   aria_label="Controlled actions"
-                  $c-props="{
-                    open,
-                    onOpenChange: (next, detail) => {
-                      requests.push({ next, reason: detail.reason });
+                  :open="window.__contextState.controlledOpen"
+                  :onOpenChange="(next, detail) => {
+                      window.__contextState.controlledRequests.push({ next, reason: detail.reason });
                       if (next) {
-                        if (!accept) return false;
-                        open = true;
+                        if (!window.__contextState.controlledAccept) return false;
+                        window.__contextState.controlledOpen = true;
                         return true;
                       }
-                      open = false;
-                      if (moveFocusOnClose) {
+                      window.__contextState.controlledOpen = false;
+                      if (window.__contextState.moveFocusOnClose) {
                         document.querySelector('#controlled-focus-b').focus();
                       }
-                    }
-                  }"
+                    }"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div
@@ -198,22 +209,31 @@ def _page() -> str:
                     <c-CMenuItem value="inspect">Inspect</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <button id="accept-controlled" @click="accept = true" type="button">Accept</button>
-                <button id="move-controlled-focus" @click="moveFocusOnClose = true" type="button">Move focus</button>
-                <output id="controlled-requests" x-text="JSON.stringify(requests)"></output>
+                <button
+                  id="accept-controlled"
+                  @click="window.__contextState.controlledAccept = true"
+                  type="button"
+                >Accept</button>
+                <button
+                  id="move-controlled-focus"
+                  @click="window.__contextState.moveFocusOnClose = true"
+                  type="button"
+                >Move focus</button>
+                <output
+                  id="controlled-requests"
+                  v-text="JSON.stringify(window.__contextState.controlledRequests)"
+                ></output>
               </section>
 
-              <section id="native-owner" x-data="{ events: [] }">
+              <section id="native-owner">
                 <c-CContextMenu
                   id="native"
                   aria_label="Native preservation"
-                  $c-props="{
-                    onOpenChange: (open, detail) => events.push({
+                  :onOpenChange="(open, detail) => window.__contextState.nativeEvents.push({
                       open,
                       reason: detail.reason,
                       forced: detail.forced
-                    })
-                  }"
+                    })"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div class="target" c-bind="target_attrs" tabindex="0">
@@ -229,17 +249,17 @@ def _page() -> str:
                     <c-CMenuItem value="custom">Custom</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="native-events" x-text="JSON.stringify(events)"></output>
+                <output id="native-events" v-text="JSON.stringify(window.__contextState.nativeEvents)"></output>
               </section>
 
-              <section id="long-owner" x-data="{ clicks: 0, submits: 0 }">
-                <form id="long-form" @submit.prevent="submits += 1">
+              <section id="long-owner">
+                <form id="long-form" @submit.prevent="window.__contextState.longSubmits += 1">
                   <c-CContextMenu id="long" aria_label="Touch actions">
                     <c-fill name="target" data="{ target_attrs }">
                       <button
                         class="target"
                         c-bind="target_attrs"
-                        @click="clicks += 1"
+                        @click="window.__contextState.longClicks += 1"
                         type="submit"
                       >Touch target</button>
                     </c-fill>
@@ -248,23 +268,31 @@ def _page() -> str:
                     </c-fill>
                   </c-CContextMenu>
                 </form>
-                <output id="long-counts" x-text="JSON.stringify({ clicks, submits })"></output>
+                <output
+                  id="long-counts"
+                  v-text="JSON.stringify({
+                    clicks: window.__contextState.longClicks,
+                    submits: window.__contextState.longSubmits,
+                  })"
+                ></output>
               </section>
 
-              <section id="disabled-owner" x-data="{ locked: false, events: [] }">
-                <button id="toggle-locked" @click="locked = !locked" type="button">Toggle</button>
-                <fieldset id="disabled-fieldset" x-bind:disabled="locked">
+              <section id="disabled-owner">
+                <button
+                  id="toggle-locked"
+                  @click="window.__contextState.disabledLocked = !window.__contextState.disabledLocked"
+                  type="button"
+                >Toggle</button>
+                <fieldset id="disabled-fieldset" :disabled="window.__contextState.disabledLocked">
                   <legend>Context target</legend>
                   <c-CContextMenu
                     id="disabled-context"
                     aria_label="Disabled actions"
-                    $c-props="{
-                      onOpenChange: (open, detail) => events.push({
+                    :onOpenChange="(open, detail) => window.__contextState.disabledEvents.push({
                         open,
                         reason: detail.reason,
                         forced: detail.forced
-                      })
-                    }"
+                      })"
                   >
                     <c-fill name="target" data="{ target_attrs }">
                       <button
@@ -278,25 +306,27 @@ def _page() -> str:
                     </c-fill>
                   </c-CContextMenu>
                 </fieldset>
-                <output id="disabled-events" x-text="JSON.stringify(events)"></output>
+                <output id="disabled-events" v-text="JSON.stringify(window.__contextState.disabledEvents)"></output>
               </section>
 
-              <section id="reentrant-owner" x-data="{ mutate: false, requests: 0 }">
-                <button id="arm-reentrant" @click="mutate = true" type="button">Arm</button>
+              <section id="reentrant-owner">
+                <button
+                  id="arm-reentrant"
+                  @click="window.__contextState.reentrantMutate = true"
+                  type="button"
+                >Arm</button>
                 <c-CContextMenu
                   id="reentrant"
                   aria_label="Reentrant actions"
-                  $c-props="{
-                    open: false,
-                    onOpenChange: (next) => {
-                      requests += 1;
-                      if (next && mutate) {
+                  :open="false"
+                  :onOpenChange="(next) => {
+                      window.__contextState.reentrantRequests += 1;
+                      if (next && window.__contextState.reentrantMutate) {
                         document.querySelector('#reentrant-target').remove();
                         return true;
                       }
                       return false;
-                    }
-                  }"
+                    }"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
@@ -309,22 +339,17 @@ def _page() -> str:
                     <c-CMenuItem value="mutate">Mutate</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="reentrant-requests" x-text="requests"></output>
+                <output id="reentrant-requests" v-text="window.__contextState.reentrantRequests"></output>
               </section>
 
-              <section
-                id="throwing-owner"
-                x-data="{ calls: 0 }"
-              >
+              <section id="throwing-owner">
                 <c-CContextMenu
                   id="throwing"
                   aria_label="Throwing actions"
-                  $c-props="{
-                    onOpenChange: () => {
-                      calls += 1;
+                  :onOpenChange="() => {
+                      window.__contextState.throwingCalls += 1;
                       throw new Error('context callback boom');
-                    }
-                  }"
+                    }"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
@@ -337,16 +362,16 @@ def _page() -> str:
                     <c-CMenuItem value="throw">Throw</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="throwing-calls" x-text="calls"></output>
+                <output id="throwing-calls" v-text="window.__contextState.throwingCalls"></output>
               </section>
 
-              <section id="nested-owner" x-data="{ inner: [], outer: [] }">
+              <section id="nested-owner">
                 <c-CContextMenu
                   id="outer-context"
                   aria_label="Outer actions"
-                  $c-props="{
-                    onOpenChange: (open, detail) => outer.push({ open, reason: detail.reason })
-                  }"
+                  :onOpenChange="(open, detail) => window.__contextState.outerEvents.push({
+                    open, reason: detail.reason,
+                  })"
                 >
                   <c-fill name="target" data="{ target_attrs as outer_target_attrs }">
                     <div class="target" c-bind="outer_target_attrs" tabindex="0">
@@ -354,9 +379,9 @@ def _page() -> str:
                       <c-CContextMenu
                         id="inner-context"
                         aria_label="Inner actions"
-                        $c-props="{
-                          onOpenChange: (open, detail) => inner.push({ open, reason: detail.reason })
-                        }"
+                        :onOpenChange="(open, detail) => window.__contextState.innerEvents.push({
+                          open, reason: detail.reason,
+                        })"
                       >
                         <c-fill name="target" data="{ target_attrs }">
                           <button c-bind="target_attrs" type="button">Inner zone</button>
@@ -371,8 +396,8 @@ def _page() -> str:
                     <c-CMenuItem value="outer">Outer action</c-CMenuItem>
                   </c-fill>
                 </c-CContextMenu>
-                <output id="inner-events" x-text="JSON.stringify(inner)"></output>
-                <output id="outer-events" x-text="JSON.stringify(outer)"></output>
+                <output id="inner-events" v-text="JSON.stringify(window.__contextState.innerEvents)"></output>
+                <output id="outer-events" v-text="JSON.stringify(window.__contextState.outerEvents)"></output>
               </section>
 
               <c-CContextMenu id="hostile" aria_label="Hostile repair">
@@ -385,7 +410,11 @@ def _page() -> str:
               </c-CContextMenu>
 
               <div class="transform-shell">
-                <c-CContextMenu id="geometry" aria_label="Geometry actions">
+                <c-CContextMenu
+                  id="geometry"
+                  aria_label="Geometry actions"
+                  :onOpenChange="(open) => window.__contextState.geometryEvents.push(open)"
+                >
                   <c-fill name="target" data="{ target_attrs }">
                     <button
                       class="target"
@@ -403,14 +432,98 @@ def _page() -> str:
           </html>
         """
 
-    return str(Page())
+    if not refresh:
+        return app, str(Page())
+
+    class RefreshPage(Page):
+        template = Page.template.replace(
+            "<body>",
+            '<body><button class="refresh-context" type="button" @c-click="refresh">Refresh context</button>',
+        )
+
+        class Events:
+            def refresh(self):
+                return RefreshPage()
+
+    return app, str(RefreshPage())
+
+
+def _reordered_context_menu_page() -> tuple[Citry, str]:
+    app = Citry(secret="citry-ui-context-menu-reorder-e2e", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(ComponentLibrary("citry-ui-context-menu-reorder-e2e", _COMPONENTS))
+
+    class ReorderMenu(Component):
+        citry = app
+
+        class Kwargs:
+            step: int = 0
+
+        class State(Kwargs):
+            pass
+
+        class Slots:
+            pass
+
+        class Events:
+            def advance(self, state):
+                return ReorderMenu(step=1 if state.step == 0 else 0)
+
+        template = """
+          <section id="reorder-context-owner">
+            <button class="advance-reorder" type="button" @c-click="advance">Reorder</button>
+            <c-CContextMenu
+              id="reorder-context"
+              aria_label="Reorder actions"
+              :onOpenChange="(open, detail) => window.__contextReorderEvents.push({ open, reason: detail.reason })"
+            >
+              <c-fill name="target" data="{ target_attrs }">
+                <button id="reorder-context-target" type="button" c-bind="target_attrs">
+                  Reorder target
+                </button>
+              </c-fill>
+              <c-fill name="menu">
+                <c-for each="item in items">
+                  <c-CMenuItem c-value="item['value']" #c-key="item['value']">
+                    {{ item["label"] }}
+                  </c-CMenuItem>
+                </c-for>
+              </c-fill>
+            </c-CContextMenu>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            del slots
+            commands = {
+                "first": {"value": "first", "label": "First action"},
+                "second": {"value": "second", "label": "Second action"},
+            }
+            order = ("first", "second") if kwargs.step == 0 else ("second", "first")
+            return {
+                "items": tuple(commands[value] for value in order),
+            }
+
+    class Page(Component):
+        citry = app
+        js = """$component({data(){window.__contextReorderEvents=[];return{};}});"""
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8" /><c-css /></head>
+            <body><c-reorder-menu /><c-js /></body>
+          </html>
+        """
+
+    return app, str(Page())
 
 
 def _load(page) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    _, html = _page()
+    page.set_content(html, wait_until="load")
     page.wait_for_function(
         """
           document.querySelectorAll('[data-citry-context-menu-host]').length === 11
@@ -862,7 +975,7 @@ def test_long_press_suppresses_only_derived_click_and_fieldset_disables_live(pag
     disabled_target = page.locator("#disabled-context-target")
     disabled_target.click(button="right")
     page.wait_for_function("document.querySelector('#disabled-context-menu')?.matches(':popover-open')")
-    page.evaluate("Alpine.$data(document.querySelector('#disabled-owner')).locked = true")
+    page.evaluate("window.__contextState.disabledLocked = true")
     page.wait_for_function(
         """
           !document.querySelector('#disabled-context-menu')?.matches(':popover-open')
@@ -973,7 +1086,7 @@ def test_keyboard_geometry_repairs_on_window_and_shadow_scroll(page) -> None:
     target.focus()
     page.keyboard.press("Shift+F10")
     page.wait_for_function("document.querySelector('#basic-menu')?.matches(':popover-open')")
-    assert target.get_attribute("style") is None
+    assert not target.get_attribute("style")
     page.keyboard.press("Escape")
     page.wait_for_function("!document.querySelector('#basic-menu')?.matches(':popover-open')")
     pointer_style.evaluate("element => element.remove()")
@@ -1217,8 +1330,13 @@ def test_callback_exception_rolls_back_before_native_default_continues(page) -> 
     assert sum("context callback boom" in error for error in errors) == 1
 
 
-def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page) -> None:
-    errors = _load(page)
+def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page, serve_citry_ui_live) -> None:
+    app, html = _page(refresh=True)
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    page.wait_for_function("document.querySelectorAll('[data-citry-context-menu-initialized]').length === 11")
 
     page.locator("#inner-context-target").click(button="right")
     page.wait_for_function("document.querySelector('#inner-context-menu')?.matches(':popover-open')")
@@ -1231,15 +1349,7 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page) -> N
     before = page.locator("#basic-point").bounding_box()
     assert before is not None
     assert page.locator("#basic").get_attribute("data-invocation") == "pointer"
-    page.evaluate(
-        """
-          () => {
-            const root = document.querySelector('#basic');
-            Alpine.destroyTree(root);
-            Alpine.initTree(root);
-          }
-        """
-    )
+    page.locator(".refresh-context").evaluate("element => element.click()")
     page.wait_for_function(
         """
           document.querySelector('#basic')?.hasAttribute('data-citry-context-menu-initialized')
@@ -1256,6 +1366,9 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page) -> N
     page.evaluate(
         """
           () => {
+            const nonceStyle = document.createElement('style');
+            nonceStyle.setAttribute('nonce', 'ccontext-menu-test-nonce');
+            document.head.append(nonceStyle);
             const host = document.createElement('div');
             host.id = 'context-shadow-host';
             document.body.append(host);
@@ -1269,10 +1382,134 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page) -> N
         "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry')"
         ".hasAttribute('data-citry-context-menu-initialized')"
     )
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot"
+        ".querySelector('style[data-citry-context-menu-runtime]')?.nonce === 'ccontext-menu-test-nonce'"
+    )
+    page.evaluate(
+        """
+          () => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const root = shadow.querySelector('#geometry');
+            const point = shadow.querySelector('#geometry-point');
+            const menu = shadow.querySelector('#geometry-menu');
+            const previous = point.style.getPropertyValue('anchor-name');
+            root.removeAttribute('data-citry-context-menu-initialized');
+            point.style.setProperty('anchor-name', '--_cui-menu-anchor-ref-handoff');
+            menu.style.setProperty('position-anchor', previous);
+          }
+        """
+    )
+    page.wait_for_function(
+        """
+          (() => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const root = shadow.querySelector('#geometry');
+            const point = shadow.querySelector('#geometry-point');
+            const menu = shadow.querySelector('#geometry-menu');
+            return root?.hasAttribute('data-citry-context-menu-initialized')
+              && point?.style.getPropertyValue('anchor-name') === '--_cui-menu-anchor-ref-handoff'
+              && menu?.style.getPropertyValue('position-anchor') === '--_cui-menu-anchor-ref-handoff';
+          })()
+        """
+    )
+    page.evaluate(
+        """
+          () => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const root = shadow.querySelector('#geometry');
+            const point = shadow.querySelector('#geometry-point');
+            const menu = shadow.querySelector('#geometry-menu');
+            root.removeAttribute('data-citry-context-menu-initialized');
+            point.style.setProperty('anchor-name', '--_cui-menu-anchor-ref-untrusted');
+            menu.style.setProperty('position-anchor', '--_cui-untrusted-menu-anchor');
+          }
+        """
+    )
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry')"
+        ".hasAttribute('data-citry-context-menu-initialized')"
+    )
+    page.evaluate(
+        """
+          () => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            shadow.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-handoff'
+            );
+            shadow.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-menu-anchor-ref-handoff'
+            );
+          }
+        """
+    )
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry')"
+        ".hasAttribute('data-citry-context-menu-initialized')"
+    )
     page.locator("#geometry-target").click(button="right")
     page.wait_for_function(
         "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
         ".matches(':popover-open')"
+    )
+    page.wait_for_function("window.__contextState.geometryEvents.length === 1")
+    assert page.evaluate("window.__contextState.geometryEvents") == [True]
+    page.keyboard.press("Escape")
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.evaluate(
+        """
+          () => document.querySelector('#context-shadow-host').shadowRoot
+            .querySelector('style[data-citry-context-menu-runtime]').remove()
+        """
+    )
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot"
+        ".querySelector('style[data-citry-context-menu-runtime]')"
+    )
+    page.locator("#geometry-target").click(button="right")
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot"
+        ".querySelector('style[data-citry-context-menu-runtime]')?.nonce === 'ccontext-menu-test-nonce'"
+    )
+    page.keyboard.press("Escape")
+    page.wait_for_function(
+        "!document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.evaluate(
+        """
+          () => {
+            const style = document.querySelector('#context-shadow-host').shadowRoot
+              .querySelector('style[data-citry-context-menu-runtime]');
+            style.textContent = 'tampered';
+            style.setAttribute('nonce', 'wrong-nonce');
+          }
+        """
+    )
+    page.locator("#geometry-target").click(button="right")
+    page.wait_for_function(
+        "document.querySelector('#context-shadow-host').shadowRoot.querySelector('#geometry-menu')"
+        ".matches(':popover-open')"
+    )
+    page.wait_for_function(
+        """
+          (() => {
+            const shadow = document.querySelector('#context-shadow-host').shadowRoot;
+            const style = shadow.querySelector('style[data-citry-context-menu-runtime]');
+            return shadow.querySelectorAll('style[data-citry-context-menu-runtime]').length === 1
+              && style?.nonce === 'ccontext-menu-test-nonce'
+              && style?.textContent === ':where([data-citry-context-menu-point]){position:fixed;inset:auto;'
+                + 'width:1px;height:1px;margin:0;padding:0;border:0;background:transparent;'
+                + 'overflow:visible;pointer-events:none}';
+          })()
+        """
     )
 
     page.evaluate(
@@ -1348,6 +1585,45 @@ def test_nested_boundary_morph_handoff_shadow_move_and_hostile_repair(page) -> N
     page.wait_for_timeout(50)
     assert not page.locator("#outer-clone").get_attribute("data-citry-context-menu-initialized")
     assert not any(error.startswith("[pageerror]") for error in errors)
+
+
+def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanly(page, serve_citry_ui_live) -> None:
+    app, html = _reordered_context_menu_page()
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(f"[pageerror] {error}"))
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    page.wait_for_function(
+        "document.querySelector('#reorder-context')?.hasAttribute('data-citry-context-menu-initialized')"
+    )
+
+    page.locator("#reorder-context-target").click(button="right")
+    page.wait_for_function("document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
+    assert page.locator("#reorder-context-menu [role=menuitem]").all_inner_texts() == [
+        "First action",
+        "Second action",
+    ]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True]
+
+    page.locator(".advance-reorder").evaluate("element => element.click()")
+    page.wait_for_function(
+        "document.querySelector('#reorder-context-menu [role=menuitem]')?.textContent.includes('Second action')"
+    )
+    page.wait_for_function("!document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
+    assert page.locator("#reorder-context-menu [role=menuitem]").all_inner_texts() == [
+        "Second action",
+        "First action",
+    ]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True]
+
+    page.locator("#reorder-context-target").click(button="right")
+    page.wait_for_function("document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
+    assert page.locator("#reorder-context-menu [role=menuitem]").all_inner_texts() == [
+        "Second action",
+        "First action",
+    ]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True, True]
+    assert errors == []
 
 
 def test_point_close_capability_loss_and_invalid_target_fail_closed(page) -> None:

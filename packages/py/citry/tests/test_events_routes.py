@@ -16,6 +16,7 @@ from decimal import Decimal
 import pytest
 
 from citry import Citry, Component
+from citry._vue import events as vue_events
 from citry.ext.events import actions, event
 from citry.ext.events.codecs import (
     EnvelopeCodec,
@@ -27,7 +28,8 @@ from citry.ext.events.codecs import (
 from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
-from citry.ext.events.routes import CSP_RUNTIME_PATH, RUNTIME_PATH, events_config_url, get_event_url
+from citry.ext.events.renderers import configure_render_encoder, dispatcher_for
+from citry.ext.events.routes import events_config_url, get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
@@ -51,6 +53,22 @@ def _citry(**kwargs):
     c = Citry(secret=SIGNING_KEY, **kwargs)
     c.set_mounted_prefix("/citry")
     return c
+
+
+def test_route_dispatcher_freezes_one_private_render_configuration_per_engine():
+    c = _citry()
+
+    class PreparedEncoder:
+        renderer = "vue-prepared/1"
+
+        def encode(self, action, target, context):  # pragma: no cover - configuration-only proof
+            raise AssertionError
+
+    configure_render_encoder(c, PreparedEncoder(), preferred_renderer="vue-prepared/1")
+    dispatcher = dispatcher_for(c)
+    assert dispatcher_for(c) is dispatcher
+    with pytest.raises(RuntimeError, match="before the engine's routes are bound"):
+        configure_render_encoder(c, PreparedEncoder(), preferred_renderer="vue-prepared/1")
 
 
 def _greeter(c):
@@ -723,9 +741,11 @@ class TestPerEventRoute:
         assert item["sendSequence"] == 2
         [action] = item["actions"]
         assert action["action"] == "render"
-        # The fragment's root carries the instance markers.
-        assert ">Hello</p>" in action["html"]
-        assert "data-cid" in action["html"]
+        # The baseline HTML renderer carries the settled value and native
+        # occurrence metadata in its fragment bootstrap.
+        assert "Hello" in action["html"]
+        assert "eventContext" in action["html"]
+        assert "citry-vue-" in action["html"]
 
     def test_error_statuses_mirror_onto_http(self):
         c = _citry()
@@ -1192,7 +1212,8 @@ class TestFlatJsonRoute:
         assert response.status_code == 200
         [action] = response.json()["results"][0]["actions"]
         assert action["action"] == "render"
-        assert ">Hi</p>" in action["html"]
+        assert "Hi" in action["html"]
+        assert "eventContext" in action["html"]
 
     def test_envelope_shaped_body_still_binds_as_flat_fields(self):
         # Classification never depends on body shape: under plain
@@ -1300,9 +1321,6 @@ class TestAsyncEventHandlersUnderAsgi:
 
 class TestRuntimeRoute:
     def test_serves_the_built_runtime_bundle_and_matches_the_emitted_path(self):
-        from citry.ext.events.emission import RUNTIME_PATH as EMITTED_PATH
-
-        assert RUNTIME_PATH == EMITTED_PATH
         c = _citry()
         client = _mounted(c)
         response = client.get("/citry/ext/events/runtime.js")
@@ -1311,28 +1329,54 @@ class TestRuntimeRoute:
         assert response.headers.get_list("cache-control") == ["no-store"]
         # The bundle's generated-file banner is its identifying marker
         # (observed from the built file; the versions behind it may move).
-        assert "Citry events client runtime. GENERATED FILE" in response.text
+        assert "Citry interactive runtime. GENERATED FILE" in response.text
 
-    def test_serves_the_distinct_csp_runtime_bundle(self):
+
+class TestImmutableAssetRoutes:
+    def test_content_addressed_vue_assets_allow_opaque_origins_and_keep_cache_policy(self, monkeypatch):
         c = _citry()
+        definition_digest = "a" * 64
+        style_digest = "b" * 64
+
+        monkeypatch.setattr(
+            vue_events,
+            "definition_bundle",
+            lambda _citry, digest: b"globalThis.__definitionLoaded = true;" if digest == definition_digest else None,
+        )
+        monkeypatch.setattr(
+            vue_events,
+            "style_asset",
+            lambda _citry, digest: b".asset { color: red; }" if digest == style_digest else None,
+        )
+
         client = _mounted(c)
+        definition = client.get(f"/citry/ext/events/definitions/{definition_digest}.js")
+        style = client.get(f"/citry/ext/events/assets/{style_digest}.css")
 
-        response = client.get(f"/citry/{CSP_RUNTIME_PATH}")
+        for response, content_type, body in (
+            (definition, "text/javascript", b"globalThis.__definitionLoaded = true;"),
+            (style, "text/css", b".asset { color: red; }"),
+        ):
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith(content_type)
+            assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
+            assert response.headers["access-control-allow-origin"] == "*"
+            assert response.content == body
 
-        assert response.status_code == 200
-        assert response.headers.get_list("cache-control") == ["no-store"]
-        assert "Citry events CSP client runtime. GENERATED FILE" in response.text
-        assert response.text != client.get(f"/citry/{RUNTIME_PATH}").text
-
-    def test_the_emitted_script_url_is_servable(self):
+    def test_asset_cors_does_not_reach_event_action_responses(self):
         c = _citry()
         greeter = _greeter(c)
-        client = _mounted(c)
-        page = type("Page", (Component,), {"citry": c, "template": "<main><c-greeter /></main>"})
-        html = str(page())
-        assert '<script src="/citry/ext/events/runtime.js"></script>' in html
-        assert client.get("/citry/ext/events/runtime.js").status_code == 200
-        del greeter
+        response = _post_call(
+            _mounted(c),
+            greeter,
+            "quiet",
+            {"args": {}, "stateToken": _token(greeter)},
+            headers={"Origin": "https://evil.example"},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["results"][0]["error"]["code"] == "csrf_failed"
+        assert response.headers.get("access-control-allow-origin") is None
 
 
 class TestCompatMode:
@@ -1347,6 +1391,8 @@ class TestCompatMode:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/html")
         assert ">No JS</p>" in response.text
+        assert "citry-vue-" not in response.text
+        assert "startPrepared" not in response.text
 
     def test_redirect_becomes_a_303(self):
         c = _citry()
@@ -1407,6 +1453,11 @@ class TestCompatMode:
         envelope = {
             "protocol": "citry-events/1",
             "requestId": "r1",
+            "capabilities": {
+                "swaps": ["morph"],
+                "actions": ["render", "state"],
+                "renderers": ["vue-prepared/1"],
+            },
             "calls": [{"callerRenderId": "i1", "args": {"text": "Hi"}, "stateToken": _token(greeter)}],
         }
         response = _post_envelope(
@@ -1417,6 +1468,64 @@ class TestCompatMode:
         )
         assert response.status_code == 200
         assert ">Hi</p>" in response.text
+        assert "citry-vue-" not in response.text
+
+    def test_one_engine_selects_compat_then_vue_then_baseline_html_without_leaking_modes(self):
+        c = _citry()
+        greeter = _greeter(c)
+        client = _mounted(c)
+
+        compat = client.post(
+            _event_url(greeter, "save"),
+            data={"text": "Compat", "_citry_state_token": _token(greeter), "_citry_caller_render_id": "i1"},
+        )
+        assert compat.status_code == 200
+        assert ">Compat</p>" in compat.text
+        assert "citry-vue-" not in compat.text
+
+        vue_envelope = {
+            "protocol": "citry-events/1",
+            "requestId": "vue",
+            "capabilities": {
+                "swaps": ["morph"],
+                "actions": ["render", "state"],
+                "renderers": ["vue-prepared/1"],
+            },
+            "calls": [
+                {
+                    "callerRenderId": "c9zk1q00",
+                    "args": {"text": "Vue"},
+                    "stateToken": _token(greeter),
+                }
+            ],
+        }
+        vue = _post_envelope(
+            client,
+            _event_url(greeter, "save"),
+            vue_envelope,
+            headers={
+                "X-Citry-Vue-App": "app1",
+                "X-Citry-Vue-Occurrence": "citryOccurrenceTest1",
+                "X-Citry-Vue-Revision": "0",
+            },
+        )
+        assert vue.status_code == 200
+        [vue_render] = vue.json()["results"][0]["actions"]
+        assert vue_render["renderer"] == "vue-prepared/1"
+        assert "prepared" in vue_render
+        assert "html" not in vue_render
+
+        baseline = _post_call(
+            client,
+            greeter,
+            "save",
+            {"callerRenderId": "i1", "args": {"text": "HTML"}, "stateToken": _token(greeter)},
+        )
+        assert baseline.status_code == 200
+        [html_render] = baseline.json()["results"][0]["actions"]
+        assert html_render.get("renderer", "html-fragment/1") == "html-fragment/1"
+        assert "html" in html_render
+        assert "prepared" not in html_render
 
 
 class TestRouteResponseEscape:

@@ -593,6 +593,35 @@ def test_worker_process_and_json_failures_degrade(tmp_path, monkeypatch):
     assert "status 2" in messages[3]
 
 
+def test_project_worker_uses_utf8_for_the_json_transport(tmp_path, monkeypatch):
+    observed: dict[str, object] = {}
+
+    def run(*_args, **kwargs):
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(
+            [],
+            2,
+            stdout='{"ok": false, "error": "名"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr("citry_lsp.project.subprocess.run", run)
+
+    state = load_project(tmp_path, "app:engine")
+
+    assert observed["encoding"] == "utf-8"
+    assert observed["errors"] == "replace"
+    assert "名" in (state.status.message or "")
+
+
+def test_worker_missing_output_streams_degrade_as_a_structured_failure(tmp_path):
+    state = project_module._project_from_worker_output(tmp_path, "app:engine", 1, None, None)
+
+    assert state.status.mode == "syntax-only"
+    assert state.status.registry_ready is False
+    assert "without a response" in (state.status.message or "")
+
+
 def test_worker_protocol_and_version_mismatches_degrade(tmp_path, monkeypatch):
     engine = Citry(autodiscover=False)
     base = {
@@ -672,6 +701,7 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
             "name": "count",
             "type_display": "int",
             "description": None,
+            "client_writable": True,
             "module": "app",
             "qualname": "Card.State",
             "file": "relative.py",

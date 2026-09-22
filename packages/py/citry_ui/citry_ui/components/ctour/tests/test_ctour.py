@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -14,7 +15,7 @@ from citry_ui import CTour, CTourStep
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(source: str, *, css: bool = False) -> str:
+def _render(source: str, *, css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -22,10 +23,11 @@ def _render(source: str, *, css: bool = False) -> str:
         citry = app
         template = f"<main>{source}</main>{'<c-css />' if css else ''}"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
-def _render_client(source: str) -> str:
+def _render_client(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(
         autodiscover=False,
         extensions_defaults={
@@ -42,7 +44,13 @@ def _render_client(source: str) -> str:
         citry = app
         template = f'<c-i18n tag="main" c-client="True">{source}</c-i18n>'
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
+
+
+def _prepared_manifest(html: str) -> dict[str, object]:
+    payload = html.split("CitryStable.startPrepared(", 1)[1].split(").catch", 1)[0]
+    return json.loads(payload)["manifest"]
 
 
 def _tour(*steps: str, attrs: str = "") -> str:
@@ -106,7 +114,7 @@ def test_public_schema_aliases_dependencies_and_registration_are_exact() -> None
 
 
 def test_default_tour_is_server_rendered_native_dialog_with_guided_anatomy() -> None:
-    html = _render(_tour(_step("welcome")))
+    html = _render(_tour(_step("welcome")), static_fallback=True)
     root = _tag(html, "tour")
     dialog = _tag(html, "dialog")
     panel = _tag(html, "panel")
@@ -152,7 +160,8 @@ def test_initial_open_active_target_and_description_are_exact() -> None:
                 title="Save",
             ),
             attrs='c-open="True" c-active="1" size="lg" scroll="smooth" missing_target="close"',
-        )
+        ),
+        static_fallback=True,
     )
     root = _tag(html, "tour")
     dialog = _tag(html, "dialog")
@@ -177,7 +186,8 @@ def test_slots_receive_stable_step_data_and_custom_close_renders() -> None:
         '<c-CTourStep value="profile"><c-fill name="title" data="{ index, total, value }">'
         '{{ index }}:{{ total }}:{{ value }}</c-fill><c-fill name="media" data="{ value }">'
         'M{{ value }}</c-fill><c-fill name="default" data="{ index }">B{{ index }}</c-fill>'
-        "</c-CTourStep></c-fill></c-CTour>"
+        "</c-CTourStep></c-fill></c-CTour>",
+        static_fallback=True,
     )
     assert "0:1:profile" in html
     assert "Mprofile" in html
@@ -193,7 +203,8 @@ def test_activator_contract_and_root_step_styling_merge() -> None:
         '<c-fill name="activator" data="{ activator_attrs }"><button c-bind="activator_attrs">Begin</button></c-fill>'
         '<c-fill name="default"><c-CTourStep value="one" c-class_="[\'step-extra\']" '
         "c-attrs=\"{'data-test-step':'one'}\"><c-fill name=\"title\">One</c-fill>"
-        '<c-fill name="default">Body</c-fill></c-CTourStep></c-fill></c-CTour>'
+        '<c-fill name="default">Body</c-fill></c-CTourStep></c-fill></c-CTour>',
+        static_fallback=True,
     )
     root = _tag(html, "tour")
     panel = _tag(html, "panel")
@@ -208,24 +219,61 @@ def test_activator_contract_and_root_step_styling_merge() -> None:
 
 
 def test_default_labels_register_catalog_bindings_and_overrides_do_not() -> None:
-    default_html = _render_client(_tour(_step("one")))
+    default_source = _tour(_step("one"))
+    default_html = _render_client(default_source, static_fallback=True)
+    for label in (
+        "Close tour",
+        "Previous",
+        "Next",
+        "Finish",
+        "Skip tour",
+        "Step \u20681\u2069 of \u20681\u2069",
+    ):
+        assert label in default_html
     assert default_html.count("data-citry-i18n-binding=") == 6
-    for key in ("close", "previous", "next", "finish", "skip", "progress"):
-        assert f"citry-ui-tour-{key}" in default_html
 
-    custom_html = _render_client(
-        _tour(
-            _step("one"),
-            attrs=(
-                'close_label="Dismiss" previous_label="Back" next_label="Forward" '
-                'finish_label="Done" skip_label="Later" progress_label="Stage {current}/{total}"'
-            ),
+    default_manifest = _prepared_manifest(_render_client(default_source))
+    default_requirements = default_manifest["extensions"]["i18n"]["payload"]["requirements"]
+    default_messages = [
+        binding["message"] for requirement in default_requirements for binding in requirement["bindings"]
+    ]
+    expected_messages = {
+        "citry-ui-tour-close",
+        "citry-ui-tour-previous",
+        "citry-ui-tour-next",
+        "citry-ui-tour-finish",
+        "citry-ui-tour-skip",
+        "citry-ui-tour-progress",
+    }
+    assert len(default_messages) == 6
+    assert set(default_messages) == expected_messages
+
+    custom_manifest = _prepared_manifest(
+        _render_client(
+            _tour(
+                _step("one"),
+                attrs=(
+                    'close_label="Dismiss" previous_label="Back" next_label="Forward" '
+                    'finish_label="Done" skip_label="Later" progress_label="Stage {current}/{total}"'
+                ),
+            )
         )
     )
-    for text in ("Dismiss", "Back", "Forward", "Done", "Later", "Stage 1/1"):
-        assert text in custom_html
-    for key in ("close", "previous", "next", "finish", "skip", "progress"):
-        assert f"citry-ui-tour-{key}" not in custom_html
+    custom_payload = custom_manifest["extensions"]["i18n"]["payload"]
+    assert custom_payload["requirements"] == []
+    tour_occurrences = [
+        occurrence
+        for occurrence in custom_manifest["occurrences"]
+        if occurrence["typeKey"].startswith("CInternalTour_")
+    ]
+    assert len(tour_occurrences) == 1
+    prepared_data = tour_occurrences[0]["preparedData"]
+    prepared_attrs = [
+        value for key, value in prepared_data.items() if key.startswith("citryAttrs") and isinstance(value, dict)
+    ]
+    assert [attrs["aria-label"] for attrs in prepared_attrs if "aria-label" in attrs] == ["Dismiss"]
+    prepared_text = {value for key, value in prepared_data.items() if key.startswith("citryText")}
+    assert prepared_text == {"Stage 1/1", "Later", "Back", "Forward", "Done"}
 
 
 @pytest.mark.parametrize(

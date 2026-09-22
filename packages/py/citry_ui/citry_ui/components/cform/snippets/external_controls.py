@@ -8,8 +8,6 @@ class ExternalControls(Component):
     template = """
       <section
         class="proposal-form"
-        x-data="{ disabled: false, result: '' }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p>Time allocation</p>
@@ -18,10 +16,10 @@ class ExternalControls(Component):
 
         <c-CForm
           id="proposal-form"
-          $c-props="{ disabled }"
+          :disabled="disabled"
           @submit.prevent="
             result = JSON.stringify(
-              Object.fromEntries(new FormData($el, $event.submitter))
+              Object.fromEntries(new window.FormData($el, $event.submitter))
             )
           "
         >
@@ -63,10 +61,30 @@ class ExternalControls(Component):
 
         <output
           aria-live="polite"
-          x-show="result"
-          x-text="result"
+          v-show="result"
+          v-text="result"
         ></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            disabled: false, result: ''
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

@@ -51,7 +51,7 @@ def _axe_serious_or_critical(page: Any) -> list[dict[str, object]]:
     )
 
 
-def _no_javascript_fallback_html() -> str:
+def _no_javascript_shell_html() -> str:
     app = Citry(autodiscover=False)
     app.register_library(ComponentLibrary("command-palette-no-javascript", (CCommandPalette,)))
 
@@ -77,7 +77,7 @@ def _no_javascript_fallback_html() -> str:
           </main>
         """
 
-    return str(FallbackPage())
+    return FallbackPage().render().serialize(security_javascript="omit")
 
 
 def test_command_palette_quality_search_control_action_form_ime_and_axe(page: Any) -> None:
@@ -123,12 +123,10 @@ def test_command_palette_quality_search_control_action_form_ime_and_axe(page: An
     )
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     assert controlled.evaluate("element => element.open") is True
-    page.evaluate(
-        """() => {
-          const owner = document.querySelector('#quality-command-palette-controlled').closest('article');
-          Alpine.$data(owner).acceptClose = true;
-        }"""
-    )
+    # The open modal makes controls outside the dialog inert; activate the
+    # checkbox through its public DOM control.
+    page.get_by_role("checkbox", name="Accept close").evaluate("element => element.click()")
+    page.wait_for_function("document.querySelector('.command-palette-quality input[type=checkbox]')?.checked")
     controlled.locator('[data-citry-ui-part="command-palette-close"]').click()
     page.wait_for_function("!document.querySelector('#quality-command-palette-controlled').open")
 
@@ -190,6 +188,30 @@ def test_command_palette_signed_retained_changed_replacement_and_two_restore_cyc
     page_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.add_init_script(
+        """(() => {
+          const NativeMutationObserver = globalThis.MutationObserver;
+          const activeObservers = new Set();
+          class TrackedMutationObserver {
+            constructor(callback) {
+              this.observer = new NativeMutationObserver(callback);
+              activeObservers.add(this);
+            }
+            observe(...args) {
+              return this.observer.observe(...args);
+            }
+            disconnect() {
+              this.observer.disconnect();
+              activeObservers.delete(this);
+            }
+            takeRecords() {
+              return this.observer.takeRecords();
+            }
+          }
+          globalThis.MutationObserver = TrackedMutationObserver;
+          globalThis.__commandPaletteActiveMutationObservers = () => activeObservers.size;
+        })();"""
+    )
     rendered = build_scenario(
         "command-palette.states",
         configure_app=lambda app: app.set_mounted_prefix("/citry"),
@@ -205,6 +227,7 @@ def test_command_palette_signed_retained_changed_replacement_and_two_restore_cyc
         }"""
     )
     baseline_modals = page.evaluate("globalThis[Symbol.for('citry-ui:dialog-controller-runtime')].counts().modals")
+    baseline_observers = page.evaluate("window.__commandPaletteActiveMutationObservers()")
 
     page.get_by_role("button", name="Open lifecycle palette").click()
     lifecycle = page.locator("#quality-command-palette-lifecycle")
@@ -291,6 +314,10 @@ def test_command_palette_signed_retained_changed_replacement_and_two_restore_cyc
                 f"console={console_errors}; page={page_errors}; error={error}"
             )
         page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+        page.wait_for_function(
+            "baseline => window.__commandPaletteActiveMutationObservers() === baseline",
+            arg=baseline_observers,
+        )
 
     refresh(1, expected_roots)
     retained = page.evaluate(
@@ -381,12 +408,19 @@ def test_command_palette_no_javascript_keeps_readable_inert_native_fallback(brow
     context = browser.new_context(java_script_enabled=False)
     page = context.new_page()
     try:
-        page.set_content(_no_javascript_fallback_html(), wait_until="load")
+        page.set_content(_no_javascript_shell_html(), wait_until="load")
         closed = page.locator("#quality-command-palette-no-js-closed")
         assert closed.get_attribute("open") is None
+        assert closed.locator('[data-citry-ui-part="command-palette-title"]').text_content().strip() == (
+            "Closed fallback"
+        )
         open_fallback = page.locator("#quality-command-palette-no-js-open")
         assert open_fallback.get_attribute("open") == ""
+        assert open_fallback.locator('[data-citry-ui-part="command-palette-title"]').text_content().strip() == (
+            "Open readable fallback"
+        )
         assert open_fallback.locator('[data-citry-ui-part="command-palette-input"]').is_disabled()
         assert open_fallback.locator('[role="option"]').count() > 0
+        assert open_fallback.locator('[role="option"]').inner_text() == "Inspect readable fallback"
     finally:
         context.close()

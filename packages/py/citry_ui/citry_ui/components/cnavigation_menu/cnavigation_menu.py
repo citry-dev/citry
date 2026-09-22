@@ -305,14 +305,16 @@ class CNavigationMenu(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "value": snapshot["value"],
-            "orientation": snapshot["orientation"],
-            "disabled": snapshot["disabled"],
-            "delay": snapshot["delay"],
-            "closeDelay": snapshot["close_delay"],
-            "loop": snapshot["loop"],
-            "variant": snapshot["variant"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "value": snapshot["value"],
+                "orientation": snapshot["orientation"],
+                "disabled": snapshot["disabled"],
+                "delay": snapshot["delay"],
+                "closeDelay": snapshot["close_delay"],
+                "loop": snapshot["loop"],
+                "variant": snapshot["variant"],
+                "size": snapshot["size"],
+            }
         }
 
     def on_render(self) -> Any:
@@ -335,8 +337,8 @@ class CNavigationMenu(LibraryComponent):
         c-aria-label="label"
         c-data-value="value"
         c-data-orientation="orientation"
-        c-data-disabled="disabled"
-        c-data-loop="loop"
+        c-data-disabled="'' if disabled else None"
+        c-data-loop="'' if loop else None"
         c-data-variant="variant"
         c-data-size="size"
         data-citry-navigation-menu-root
@@ -359,8 +361,11 @@ class CNavigationMenu(LibraryComponent):
           size: {},
           onValueChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const list = root.querySelector(':scope > [data-citry-ui-part="list"]');
           if (!(root instanceof HTMLElement) || !(list instanceof HTMLUListElement)) {
             throw new Error("[citry-ui] CNavigationMenu requires its owned nav/list anatomy.");
@@ -878,8 +883,8 @@ class CNavigationMenuItem(LibraryComponent):
         class="cui-navigation-menu__item"
         c-bind="attrs"
         c-data-value="value"
-        c-data-disabled="disabled"
-        c-data-open="open"
+        c-data-disabled="'' if disabled else None"
+        c-data-open="'' if open else None"
         data-citry-navigation-menu-item
         data-citry-ui-part="item"
       >
@@ -892,8 +897,8 @@ class CNavigationMenuItem(LibraryComponent):
           c-aria-controls="panel_id"
           c-aria-expanded="'true' if open else 'false'"
           c-data-value="value"
-          c-data-disabled="disabled"
-          c-data-open="open"
+          c-data-disabled="'' if disabled else None"
+          c-data-open="'' if open else None"
           data-citry-navigation-menu-trigger
           data-citry-ui-part="trigger"
         >
@@ -905,7 +910,7 @@ class CNavigationMenuItem(LibraryComponent):
           c-bind="panel_attrs"
           c-id="panel_id"
           c-data-value="value"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           c-hidden="not open"
           c-inert="not open"
           data-citry-navigation-menu-panel

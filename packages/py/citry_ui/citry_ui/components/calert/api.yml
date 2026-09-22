@@ -39,7 +39,7 @@ inputs:
       - {id: actions-label, name: actions_label, type: 'non-whitespace str | None', default: {kind: literal, value: null}, effect: 'Names the optional action group and emits its owned `group` role; requires the actions slot.'}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned root attributes. Alert semantics, children, structural Alpine directives, focus ownership, public mirrors, and runtime namespaces are reserved.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned root attributes. Alert semantics, children, structural Vue directives, focus ownership, public mirrors, and runtime namespaces are reserved.'}
       - {id: actions-attrs, name: actions_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned action-wrapper attributes. Group naming, focus, live-region, children, structural or initialization-suppressing directives, and runtime ownership are reserved; a nonempty mapping requires actions.'}
 
   - id: calert-client-inputs

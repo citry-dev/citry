@@ -10,7 +10,6 @@ def sidebar_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack sidebar-quality"
             data-quality-sidebar-ready
-            x-data="{collapsed:false,last:'No request'}"
           >
             <h1>Sidebar states</h1>
             <div class="sidebar-quality__grid">
@@ -21,7 +20,8 @@ def sidebar_states_component(app: Citry) -> type[Component]:
                 variant="floating"
                 c-sticky="True"
                 c-attrs="primary_attrs"
-                $c-props="{collapsed,onCollapsedChange:(next)=>{collapsed=next;last=`Collapsed ${next}`}}"
+                :collapsed="collapsed"
+                :on-collapsed-change="(next)=>{collapsed=next;last=`Collapsed ${next}`}"
               >
                 <c-fill name="header"><strong data-citry-sidebar-expanded-only>Northstar</strong></c-fill>
                 <c-fill name="default">
@@ -61,13 +61,14 @@ def sidebar_states_component(app: Citry) -> type[Component]:
                 </c-CSidebar>
               </div>
             </div>
-            <output x-text="last">No request</output>
+            <output v-text="last">No request</output>
           </section>
         """
         css = """
           :where(.sidebar-quality__grid){display:flex;align-items:flex-start;gap:1rem;min-block-size:24rem}
           :where(.sidebar-quality [dir="rtl"]){background:#172033;color:#f8fafc}
         """
+        js = """$component({data(){return {collapsed:false,last:'No request'}}})"""
 
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
             return {

@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 import citry_ui
 from citry import Component, citry
 
@@ -11,7 +13,7 @@ class VirtualListAccessibility(Component):
           <h2>Complete collection</h2>
           <c-CVirtualList aria_label="All release notes" c-viewport_size="220">
             <c-for each="index in complete_indexes">
-              <c-CVirtualListItem c-item_key="f'complete-{index}'">
+              <c-CVirtualListItem #c-key="f'complete-{index}'" c-item_key="f'complete-{index}'">
                 <a c-href="f'#release-{index + 1}'">Release {{ index + 1 }}</a>
               </c-CVirtualListItem>
             </c-for>
@@ -26,7 +28,7 @@ class VirtualListAccessibility(Component):
             c-viewport_size="220"
           >
             <c-for each="index in window_indexes">
-              <c-CVirtualListItem c-item_key="f'window-{index}'">Release {{ index + 1 }}</c-CVirtualListItem>
+              <c-CVirtualListItem #c-key="f'window-{index}'" c-item_key="f'window-{index}'">Release {{ index + 1 }}</c-CVirtualListItem>
             </c-for>
           </c-CVirtualWindow>
         </section>

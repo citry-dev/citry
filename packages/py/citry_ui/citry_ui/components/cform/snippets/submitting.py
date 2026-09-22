@@ -8,7 +8,6 @@ class SubmittingGuard(Component):
     template = """
       <section
         class="plate-solve"
-        x-data="{ submitting: false, attempts: 0, snapshot: '' }"
       >
         <header>
           <p>Astrometry pipeline</p>
@@ -16,10 +15,10 @@ class SubmittingGuard(Component):
         </header>
 
         <c-CForm
-          $c-props="{ submitting }"
+          :submitting="submitting"
           @submit.prevent="
             attempts += 1;
-            snapshot = JSON.stringify(Object.fromEntries(new FormData($el)));
+            snapshot = JSON.stringify(Object.fromEntries(new window.FormData($el)));
             submitting = true;
           "
         >
@@ -34,7 +33,7 @@ class SubmittingGuard(Component):
           <div class="plate-solve__actions">
             <c-CButton
               type="submit"
-              $c-props="{ loading: submitting }"
+              :loading="submitting"
             >
               Solve frame
             </c-CButton>
@@ -50,10 +49,19 @@ class SubmittingGuard(Component):
         </c-CForm>
 
         <p class="plate-solve__status" aria-live="polite">
-          Accepted submits: <strong x-text="attempts"></strong>
-          <span x-show="snapshot"> · FormData <code x-text="snapshot"></code></span>
+          Accepted submits: <strong v-text="attempts"></strong>
+          <span v-show="snapshot"> · FormData <code v-text="snapshot"></code></span>
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            submitting: false, attempts: 0, snapshot: ''
+          };
+        },
+      });
     """
 
     css = """

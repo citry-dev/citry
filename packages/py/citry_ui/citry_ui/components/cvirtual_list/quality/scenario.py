@@ -1,5 +1,7 @@
 """Shared Virtual List scenario used by repository quality tools."""
 
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from citry import Citry, Component
 
 
@@ -10,7 +12,6 @@ def virtual_list_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack virtual-list-quality"
             data-quality-virtual-list-ready
-            x-data="{itemSize:48,overscan:3,last:'No range request'}"
           >
             <h1>Virtual List states</h1>
             <div class="virtual-list-quality__grid">
@@ -23,7 +24,7 @@ def virtual_list_states_component(app: Citry) -> type[Component]:
                   c-attrs="{'data-quality-states':'complete-dom css-only variable-height keyboard focus print'}"
                 >
                   <c-for each="record in complete_records">
-                    <c-CVirtualListItem c-item_key="record['key']">
+                    <c-CVirtualListItem #c-key="record['key']" c-item_key="record['key']">
                       <article>
                         <strong>{{ record['title'] }}</strong>
                         <p>{{ record['detail'] }}</p>
@@ -42,19 +43,15 @@ def virtual_list_states_component(app: Citry) -> type[Component]:
                   c-initial_index="20"
                   c-viewport_size="320"
                   c-attrs="{'data-quality-states':'window fixed-size positions spacers pending controlled cleanup'}"
-                  $c-props="{
-                    itemSize,
-                    overscan,
-                    onRangeChange:(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`,
-                  }"
+                  :itemSize="itemSize" :overscan="overscan" :onRangeChange="(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`"
                 >
                   <c-for each="record in window_records">
-                    <c-CVirtualListItem c-item_key="record['key']">
+                    <c-CVirtualListItem #c-key="record['key']" c-item_key="record['key']">
                       <span>{{ record['number'] }}</span><strong>{{ record['title'] }}</strong>
                     </c-CVirtualListItem>
                   </c-for>
                 </c-CVirtualWindow>
-                <output x-text="last">No range request</output>
+                <output v-text="last">No range request</output>
               </section>
               <section dir="rtl" style="color-scheme:dark">
                 <h2>RTL dark complete list</h2>
@@ -64,7 +61,7 @@ def virtual_list_states_component(app: Citry) -> type[Component]:
                   c-focusable="False"
                 >
                   <c-for each="record in rtl_records">
-                    <c-CVirtualListItem c-item_key="record['key']">
+                    <c-CVirtualListItem #c-key="record['key']" c-item_key="record['key']">
                       <button type="button">{{ record['title'] }}</button>
                     </c-CVirtualListItem>
                   </c-for>
@@ -72,6 +69,15 @@ def virtual_list_states_component(app: Citry) -> type[Component]:
               </section>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                itemSize:48,overscan:3,last:'No range request'
+              };
+            },
+          });
         """
         css = """
           :where(.virtual-list-quality__grid) { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem; }

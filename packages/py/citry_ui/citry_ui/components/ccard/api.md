@@ -96,7 +96,7 @@ space runs out. The companion content stays in its own flexible column.
 />
 
 Pass `header_actions_attrs` or `actions_attrs` when the control cluster needs
-group semantics, an accessible label, data, or a trusted Alpine binding. A
+group semantics, an accessible label, data, or a trusted Vue binding. A
 nonempty part mapping fails if its destination slot is absent.
 
 ## Put interactive content inside Card
@@ -144,7 +144,7 @@ selected native root and your content own those semantics.
 ## Accessibility, trust, and server rendering
 
 Card renders completely without JavaScript. Slot text uses ordinary Citry
-escaping. Attribute maps accept native, ARIA, data, and trusted Alpine
+escaping. Attribute maps accept native, ARIA, data, and trusted Vue
 attributes, but reserve Card's reflected fields, part markers, and Citry's
 runtime ownership namespace.
 

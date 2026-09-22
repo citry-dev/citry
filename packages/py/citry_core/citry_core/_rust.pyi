@@ -24,8 +24,8 @@
 # - Functions without `self` are treated as module-level functions.
 #   This matches how typeshed defines modules.
 
-from collections.abc import Iterator, Mapping
-from typing import Any
+from collections.abc import Mapping
+from typing import Literal
 
 ########################################################
 # Internationalization
@@ -191,7 +191,9 @@ class i18n:
 
 class html_transform:
     @staticmethod
-    def scan_alpine_html(html_fragments: list[str]) -> list[bool]: ...
+    def validate_html_fragment_boundary(html: str) -> None: ...
+    @staticmethod
+    def scan_output_html(html: str) -> list[dict[str, object]]: ...
     @staticmethod
     def mark_html(
         html: str,
@@ -307,14 +309,6 @@ class html_transform:
 
 ########################################################
 # Client graph
-########################################################
-
-class client_graph:
-    @staticmethod
-    def canonical_json_and_revision(value: object) -> tuple[str, str]: ...
-
-########################################################
-# Safe eval
 ########################################################
 
 class safe_eval:
@@ -442,7 +436,21 @@ class template_formatter:
 # Template parser (V3)
 ########################################################
 
+class vue:
+    @staticmethod
+    def _compile_vue(
+        template: str,
+        local_calls_json: str = "[]",
+        element_bindings_json: str = "[]",
+        local_call_runs_json: str = "[]",
+        dynamic_elements_json: str = "[]",
+    ) -> str: ...
+
 class template_parser:
+    @staticmethod
+    def analyze_browser_binding_pattern(
+        input: str,
+    ) -> tuple[bool, list[tuple[str, int, int]], list[tuple[str, int, int]]]: ...
     @staticmethod
     def analyze_browser_source(
         input: str,
@@ -462,8 +470,21 @@ class template_parser:
     ) -> tuple[
         bool,
         list[tuple[str, int, int]],
-        list[tuple[str, str, int, int, list[tuple[int, int]]]],
-        list[tuple[str, int, int, int, int]],
+        list[
+            tuple[
+                Literal["component", "revision", "onEvent"],
+                str,
+                int,
+                int,
+                list[tuple[int, int]],
+            ]
+        ],
+        list[tuple[int, int, int, int, int, int | None, int | None]],
+        list[
+            tuple[str, str, str, int, int, int | None, int | None, bool | None, bool | None, bool | None, str | None]
+        ],
+        list[tuple[str, str, int | None, int | None, str | None]],
+        list[tuple[str, str, int, int]],
     ]: ...
     # Functions
     @staticmethod
@@ -476,6 +497,11 @@ class template_parser:
     ) -> template_parser.Template: ...
     @staticmethod
     def compile_template(
+        template: template_parser.Template,
+        lang: str | None = None,
+    ) -> str: ...
+    @staticmethod
+    def _compile_prepared_template(
         template: template_parser.Template,
         lang: str | None = None,
     ) -> str: ...
@@ -775,51 +801,3 @@ class template_parser:
 
     STRUCTURAL_TAG_ATTRIBUTE_NAMES: Mapping[str, frozenset[str]]
     """Fixed parser-owned attribute spellings keyed by structural tag name."""
-
-class ownership:
-    """Internal Python record storage for render ownership capture."""
-
-    class UnsupportedRetirement(Exception): ...
-
-    class Journal:
-        def set_tuple_constructor(self, constructor: Any | None) -> None: ...
-        def __init__(
-            self, invocation_factory: Any, queue_factory: Any, active: Any, enqueued: Any, rendered: Any
-        ) -> None: ...
-        def __len__(self) -> int: ...
-        def capture(self, values: tuple[Any, ...], enqueued_order: int) -> int: ...
-        def bind(self, index: int, class_id: str, render_id: str, order: int, selector: bool) -> str: ...
-        def settle(self, index: int, order: int, state: Any) -> None: ...
-        def retire_many(
-            self, indexes: list[int], order: int, retired: Any, queue_retired: Any, queue_failed: Any
-        ) -> int: ...
-        def retire_output(
-            self, tables: tuple[Any, ...], inputs: tuple[Any, ...], order: int, states: tuple[Any, ...]
-        ) -> tuple[Any, ...]: ...
-        def invocation(self, index: int) -> Any: ...
-        def queue(self, index: int) -> Any: ...
-        def invocations(self) -> list[Any]: ...
-        def queues(self) -> list[Any]: ...
-        def set_invocation(self, index: int, value: Any) -> None: ...
-        def set_queue(self, index: int, value: Any) -> None: ...
-
-    class RecordTable:
-        def set_tuple_constructor(self, constructor: Any | None) -> None: ...
-        def __init__(self, factory: Any, width: int) -> None: ...
-        def __len__(self) -> int: ...
-        def __getitem__(self, index: int) -> Any: ...
-        def __setitem__(self, index: int, value: tuple[Any, ...]) -> None: ...
-        def __iter__(self) -> Iterator[Any]: ...
-        def append(self, value: tuple[Any, ...]) -> None: ...
-        def append_values(self, values: tuple[Any, ...]) -> None: ...
-        def patch(self, index: int, fields: tuple[tuple[int, Any], ...]) -> None: ...
-        def begin_slot_region(
-            self,
-            fills: ownership.RecordTable,
-            fill_index: int,
-            parent_index: int | None,
-            ids: tuple[Any, ...],
-            site: tuple[Any, ...] | None,
-            active: Any,
-            captured: Any,
-        ) -> int | None: ...

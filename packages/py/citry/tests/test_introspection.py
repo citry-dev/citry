@@ -2339,8 +2339,11 @@ class TestCatalogQueries:
         assert app._registry._builtins_ready()
         assert app._discovered
         assert core_catalog.components == ()
-        assert len(full_catalog.components) == 9
+        assert len(full_catalog.components) == 10
         assert all(component.builtin for component in full_catalog.components)
+        mark = next(component for component in full_catalog.components if component.name == "mark")
+        assert [(field.name, field.required) for field in mark.schemas.kwargs.fields] == [("name", True)]
+        assert [(field.name, field.required) for field in mark.schemas.slots.fields] == [("default", False)]
 
     def test_builtin_alias_stays_filtered_and_builtin_subclass_is_a_user_component(self):
         app = Citry(autodiscover=False)

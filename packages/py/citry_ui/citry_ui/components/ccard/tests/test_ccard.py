@@ -236,18 +236,27 @@ def test_owned_and_reserved_runtime_attrs_are_rejected(input_name, attribute, sl
         _render(CCard(**{input_name: {attribute: "consumer"}}, slots=slots))
 
 
-def test_hostile_slot_text_is_escaped_and_trusted_part_listeners_are_preserved():
+def test_hostile_slot_text_is_escaped_and_trusted_part_attrs_are_preserved():
     html = _render(
         CCard(
-            body_attrs={"x-data": "{}", "@click": "opened = true"},
+            body_attrs={"data-body-state": "ready"},
             slots={"default": "<script>window.__cardPwned = true</script>"},
         )
     )
 
     assert "&lt;script&gt;window.__cardPwned = true&lt;/script&gt;" in html
     assert "<script>window.__cardPwned" not in html
-    assert 'x-data="{}"' in html
-    assert '@click="opened = true"' in html
+    assert 'data-body-state="ready"' in html
+
+
+def test_python_part_attrs_cannot_introduce_vue_listeners():
+    with pytest.raises(TypeError, match="Python-resolved attributes cannot introduce Vue syntax"):
+        _render(
+            CCard(
+                body_attrs={"@click": "opened = true"},
+                slots={"default": "Card body"},
+            )
+        )
 
 
 def test_card_has_static_css_and_no_javascript_asset():

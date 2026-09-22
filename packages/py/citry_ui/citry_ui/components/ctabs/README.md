@@ -21,6 +21,11 @@ from public exports. Do not replace this queue ordering with a synchronous
 nested `.render()`: fragment ownership adoption requires the internal
 components to remain ordinary logical children of `CTabs`.
 
+A component used only to group declarations must be transparent when those
+declarations are rendered later outside the wrapper's Vue subtree. A
+nontransparent wrapper owns a separate Vue scope, which native slots cannot
+forward upward into `CTabs` and then down into `CInternalTabs`.
+
 The public guide is [`api.md`](api.md), and the structured reference is
 [`api.yml`](api.yml). The docs catalog validates and combines them at the public
 Tabs route; no synchronized copy is required.

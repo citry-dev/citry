@@ -8,21 +8,12 @@ class SplitButtonVariantsAndSizes(Component):
     template = """
       <section
         class="split-button-variants"
-        x-data="{
-          variant:'solid',
-          intent:'primary',
-          size:'md',
-          block:false,
-          placement:'bottom-end',
-          match_width:false
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <div class="split-button-variants__subject">
           <c-CSplitButton
             label="Live collection actions"
             menu_label="More live collection actions"
-            $c-props="{
+            v-bind="{
               variant,
               intent,
               size,
@@ -67,6 +58,30 @@ class SplitButtonVariantsAndSizes(Component):
           </c-CSplitButton>
         </div>
       </section>
+    """
+
+    js = r"""
+      $component({
+        data(){return {
+            variant:'solid',
+            intent:'primary',
+            size:'md',
+            block:false,
+            placement:'bottom-end',
+            match_width:false
+          };},
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

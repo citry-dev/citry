@@ -32,9 +32,9 @@ native button, accessible name, focus behavior, and moving semantics.
 Interactive controls may live in Item content because dragging begins only on
 the handle. Avoid making the handle slot itself interactive.
 
-## Control order from Alpine
+## Control order from Vue
 
-Pass `order` and `onOrderChange` through `$c-props`. Controlled moves are
+Pass `order` and `onOrderChange` with native Vue bindings. Controlled moves are
 requests: the component restores the accepted order until the owner supplies
 the requested permutation.
 

@@ -5,6 +5,8 @@
 # Sources must be unique and vacant, destinations must be published, and chains
 # and cycles are rejected. See docs_site/_internal/redirects.py for validation.
 redirects:
+  - from: /advanced/alpine-runtime/
+    to: /advanced/vue-runtime/
   - from: /advanced/const-optimization/
     to: /advanced/performance/
   - from: /ui-library/components/stack-group/

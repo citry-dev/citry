@@ -29,10 +29,10 @@ def _page_html() -> str:
               <script>window.__sliderEvents=[];window.__sliderSubmits=[];</script>
               <c-css />
             </head>
-            <body x-data="{controlled:'2',accept:false,gap:2}">
+            <body>
               <form
                 id="slider-form"
-                @submit.prevent="window.__sliderSubmits.push(Array.from(new FormData($event.target).entries()))"
+                @submit.prevent="window.__sliderSubmits.push(Array.from(new window.FormData($event.target).entries()))"
               >
                 <c-CSlider
                   id="volume"
@@ -43,10 +43,8 @@ def _page_html() -> str:
                   max="3"
                   step="0.25"
                   c-input_attrs="volume_label"
-                  $c-props="{
-                    onValueChange:(next,detail)=>window.__sliderEvents.push(['value',next,detail.source,detail.phase]),
-                    onValueChangeEnd:(next,detail)=>window.__sliderEvents.push(['end',next,detail.source,detail.phase]),
-                  }"
+                  :onValueChange="(next,detail)=>window.__sliderEvents.push(['value',next,detail.source,detail.phase])"
+                  :onValueChangeEnd="(next,detail)=>window.__sliderEvents.push(['end',next,detail.source,detail.phase])"
                 />
                 <c-CRangeSlider
                   id="price"
@@ -56,7 +54,7 @@ def _page_html() -> str:
                   max="10"
                   step="1"
                   c-min_steps_between_thumbs="2"
-                  $c-props="{minStepsBetweenThumbs:gap}"
+                  :minStepsBetweenThumbs="gap"
                 />
                 <button id="submit" type="submit">Submit</button>
                 <button id="reset" type="reset">Reset</button>
@@ -68,14 +66,12 @@ def _page_html() -> str:
                 max="5"
                 step="0.5"
                 c-input_attrs="controlled_label"
-                $c-props="{
-                  value:controlled,
-                  onValueChange:(next,detail)=>{
+                :value="controlled"
+                :onValueChange="(next,detail)=>{
                     window.__sliderEvents.push(['controlled',next,detail.source,detail.phase]);
                     if(accept) controlled=next;
-                  },
-                  onValueChangeEnd:(next,detail)=>window.__sliderEvents.push(['controlled-end',next,detail.source,detail.phase]),
-                }"
+                  }"
+                :onValueChangeEnd="(next,detail)=>window.__sliderEvents.push(['controlled-end',next,detail.source,detail.phase])"
               />
               <button id="accept" type="button" @click="accept=true">Accept</button>
               <button id="tighten" type="button" @click="gap=4">Tighten range</button>
@@ -86,6 +82,7 @@ def _page_html() -> str:
             </body>
           </html>
         """
+        js = "$component({data(){return {controlled:'2',accept:false,gap:2};}});"
 
         def template_data(self, kwargs, slots):
             return {

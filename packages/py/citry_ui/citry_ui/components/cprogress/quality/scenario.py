@@ -24,7 +24,7 @@ def progress_states_component(app: Citry) -> type[Component]:
               <c-for each="intent in intents">
                 <div>
                   <span>{{ intent }}</span>
-                  <c-CProgress c-label="intent" c-value="62" c-intent="intent" />
+                  <c-CProgress #c-key="intent" c-label="intent" c-value="62" c-intent="intent" />
                 </div>
               </c-for>
             </div>
@@ -38,11 +38,11 @@ def progress_states_component(app: Citry) -> type[Component]:
             />
             <c-CRow>
               <c-for each="size in sizes">
-                <c-CProgress c-label="f'{size} progress'" c-value="48" c-size="size" />
+                  <c-CProgress #c-key="size" c-label="f'{size} progress'" c-value="48" c-size="size" />
               </c-for>
             </c-CRow>
-            <div x-data="{value: 28}" data-quality-state="controlled">
-              <c-CProgress label="Controlled sonar upload" $c-props="{value}" />
+            <div data-quality-state="controlled">
+              <c-CProgress label="Controlled sonar upload" :value="value" />
               <button type="button" @click="value = value === null ? 28 : null">Toggle duration</button>
             </div>
             <section aria-busy="true" aria-describedby="quality-progress-busy">
@@ -62,6 +62,15 @@ def progress_states_component(app: Citry) -> type[Component]:
               <c-CProgress label="Abyss brand" c-value="58" shape="pill" />
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                value: 28
+              };
+            },
+          });
         """
 
         def template_data(

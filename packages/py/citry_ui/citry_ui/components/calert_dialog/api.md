@@ -48,12 +48,10 @@ use `reason="action"`; inspect `detail.returnValue` for `"cancel"` or
 
 ```citry-html
 <c-CAlertDialog
-  $c-props="{
-    open: confirming,
-    onOpenChange: (open, detail) => {
-      if (detail.returnValue === 'action') archiveThenClose()
-      else confirming = open
-    }
+  :open="confirming"
+  :onOpenChange="(open, detail) => {
+    if (detail.returnValue === 'action') archiveThenClose()
+    else confirming = open
   }"
 >
   ...

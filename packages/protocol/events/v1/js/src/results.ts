@@ -3,6 +3,7 @@ import {
 	CAPABILITIES_BASELINE_V1,
 	isSafeRenderId,
 	PROTOCOL,
+	RENDERERS,
 	SWAPS,
 } from "./calls";
 import {
@@ -48,7 +49,16 @@ const OK_RESULT_FIELDS = new Set(["ok", "sendSequence", "actions"]);
 const ERROR_RESULT_FIELDS = new Set(["ok", "sendSequence", "error"]);
 const ERROR_FIELDS = new Set(["status", "code", "message", "fieldErrors"]);
 const ACTION_FIELDS: Record<EventActionKind, ReadonlySet<string>> = {
-	render: new Set(["action", "target", "swap", "html", "delay", "wait"]),
+	render: new Set([
+		"action",
+		"target",
+		"swap",
+		"renderer",
+		"html",
+		"prepared",
+		"delay",
+		"wait",
+	]),
 	data: new Set(["action", "value", "delay"]),
 	state: new Set(["action", "targetRenderId", "stateToken", "delay", "wait"]),
 	event: new Set(["action", "eventName", "detail", "target", "delay", "wait"]),
@@ -56,19 +66,13 @@ const ACTION_FIELDS: Record<EventActionKind, ReadonlySet<string>> = {
 	url: new Set(["action", "url", "mode", "delay", "wait"]),
 };
 const ACTION_REQUIRED: Record<EventActionKind, readonly string[]> = {
-	render: ["action", "target", "swap", "html"],
+	render: ["action", "target", "swap"],
 	data: ["action", "value"],
 	state: ["action", "targetRenderId", "stateToken"],
 	event: ["action", "eventName"],
 	redirect: ["action", "url"],
 	url: ["action", "url", "mode"],
 };
-
-const prefixed = (base: string, issue: ValidationIssue): ValidationIssue => ({
-	path: base + issue.path,
-	category: issue.category,
-	message: issue.message,
-});
 
 const validateNonNegativeInteger = (
 	value: unknown,
@@ -155,12 +159,10 @@ const validateTarget = (
 	return null;
 };
 
-export const validateAction = (
+const validateActionShape = (
 	value: unknown,
 	path = "",
 ): ValidationIssue | null => {
-	const jsonIssue = validateStrictJson(value, path);
-	if (jsonIssue) return jsonIssue;
 	if (!isPlainObject(value)) {
 		return { path, category: "type", message: "An action must be an object." };
 	}
@@ -213,16 +215,56 @@ export const validateAction = (
 				message: "The render swap is not a v1 swap.",
 			};
 		}
-		if (typeof value.html !== "string") {
+		const renderer = hasOwn(value, "renderer")
+			? value.renderer
+			: "html-fragment/1";
+		if (typeof renderer !== "string") {
+			return {
+				path: pointer(path, "renderer"),
+				category: "type",
+				message: "The render renderer must be a string.",
+			};
+		}
+		if (!(RENDERERS as readonly string[]).includes(renderer)) {
+			return {
+				path: pointer(path, "renderer"),
+				category: "enum",
+				message: "The render renderer is not a v1 renderer.",
+			};
+		}
+		const content = renderer === "html-fragment/1" ? "html" : "prepared";
+		const other = content === "html" ? "prepared" : "html";
+		if (!hasOwn(value, content)) {
+			return {
+				path: pointer(path, content),
+				category: "required",
+				message: `The ${renderer} render requires '${content}'.`,
+			};
+		}
+		if (hasOwn(value, other)) {
+			return {
+				path: pointer(path, other),
+				category: "semantic",
+				message:
+					"A render action must carry exactly one content representation.",
+			};
+		}
+		if (content === "html" && typeof value.html !== "string") {
 			return {
 				path: pointer(path, "html"),
 				category: "type",
 				message: "The render HTML must be a string.",
 			};
 		}
+		if (content === "prepared" && !isPlainObject(value.prepared)) {
+			return {
+				path: pointer(path, "prepared"),
+				category: "type",
+				message: "The prepared render content must be a JSON object.",
+			};
+		}
 	} else if (kind === "data") {
-		const issue = validateStrictJson(value.value);
-		if (issue) return prefixed(pointer(path, "value"), issue);
+		// The enclosing public strict-JSON pass already validated the payload.
 	} else if (kind === "state") {
 		if (typeof value.targetRenderId !== "string") {
 			return {
@@ -274,10 +316,6 @@ export const validateAction = (
 				message: "The event name is reserved.",
 			};
 		}
-		if (hasOwn(value, "detail")) {
-			const issue = validateStrictJson(value.detail);
-			if (issue) return prefixed(pointer(path, "detail"), issue);
-		}
 		if (hasOwn(value, "target")) {
 			const issue = validateTarget(value.target, pointer(path, "target"));
 			if (issue) return issue;
@@ -323,12 +361,18 @@ export const validateAction = (
 	return validateTiming(value, path);
 };
 
-export const validateError = (
+export const validateAction = (
 	value: unknown,
 	path = "",
 ): ValidationIssue | null => {
 	const jsonIssue = validateStrictJson(value, path);
-	if (jsonIssue) return jsonIssue;
+	return jsonIssue ?? validateActionShape(value, path);
+};
+
+const validateErrorShape = (
+	value: unknown,
+	path = "",
+): ValidationIssue | null => {
 	if (!isPlainObject(value)) {
 		return {
 			path,
@@ -427,12 +471,18 @@ export const validateError = (
 	return null;
 };
 
-export const validateResult = (
+export const validateError = (
 	value: unknown,
 	path = "",
 ): ValidationIssue | null => {
 	const jsonIssue = validateStrictJson(value, path);
-	if (jsonIssue) return jsonIssue;
+	return jsonIssue ?? validateErrorShape(value, path);
+};
+
+const validateResultShape = (
+	value: unknown,
+	path = "",
+): ValidationIssue | null => {
 	if (!isPlainObject(value)) {
 		return { path, category: "type", message: "A result must be an object." };
 	}
@@ -479,7 +529,7 @@ export const validateResult = (
 		);
 		if (issue) return issue;
 	}
-	if (!value.ok) return validateError(value.error, pointer(path, "error"));
+	if (!value.ok) return validateErrorShape(value.error, pointer(path, "error"));
 	if (!Array.isArray(value.actions)) {
 		return {
 			path: pointer(path, "actions"),
@@ -488,8 +538,11 @@ export const validateResult = (
 		};
 	}
 	for (let index = 0; index < value.actions.length; index += 1) {
-		const issue = validateAction(value.actions[index]);
-		if (issue) return prefixed(pointer(pointer(path, "actions"), index), issue);
+		const issue = validateActionShape(
+			value.actions[index],
+			pointer(pointer(path, "actions"), index),
+		);
+		if (issue) return issue;
 	}
 	if (
 		value.actions.filter(
@@ -505,12 +558,18 @@ export const validateResult = (
 	return null;
 };
 
-export const validateResultEnvelope = (
+export const validateResult = (
 	value: unknown,
 	path = "",
 ): ValidationIssue | null => {
 	const jsonIssue = validateStrictJson(value, path);
-	if (jsonIssue) return jsonIssue;
+	return jsonIssue ?? validateResultShape(value, path);
+};
+
+const validateResultEnvelopeShape = (
+	value: unknown,
+	path = "",
+): ValidationIssue | null => {
 	if (!isPlainObject(value)) {
 		return {
 			path,
@@ -571,8 +630,11 @@ export const validateResultEnvelope = (
 		};
 	}
 	for (let index = 0; index < value.results.length; index += 1) {
-		const issue = validateResult(value.results[index]);
-		if (issue) return prefixed(pointer(pointer(path, "results"), index), issue);
+		const issue = validateResultShape(
+			value.results[index],
+			pointer(pointer(path, "results"), index),
+		);
+		if (issue) return issue;
 	}
 	if (value.requestId === null) {
 		if (value.results.length !== 1) {
@@ -601,13 +663,19 @@ export const validateResultEnvelope = (
 	return null;
 };
 
-export const validateExchange = (
-	callEnvelope: EventsCallEnvelope,
-	resultEnvelope: unknown,
+export const validateResultEnvelope = (
+	value: unknown,
+	path = "",
 ): ValidationIssue | null => {
-	const issue = validateResultEnvelope(resultEnvelope);
-	if (issue) return issue;
-	const result = resultEnvelope as EventsResultEnvelope;
+	const jsonIssue = validateStrictJson(value, path);
+	return jsonIssue ?? validateResultEnvelopeShape(value, path);
+};
+
+const validateExchangeAfterValidatedEnvelope = (
+	callEnvelope: EventsCallEnvelope,
+	resultEnvelope: EventsResultEnvelope,
+): ValidationIssue | null => {
+	const result = resultEnvelope;
 	if (result.requestId !== callEnvelope.requestId) {
 		return {
 			path: "/requestId",
@@ -627,6 +695,9 @@ export const validateExchange = (
 		advertised.actions ?? CAPABILITIES_BASELINE_V1.actions,
 	);
 	const swaps = new Set(advertised.swaps ?? CAPABILITIES_BASELINE_V1.swaps);
+	const renderers = new Set(
+		advertised.renderers ?? CAPABILITIES_BASELINE_V1.renderers,
+	);
 	for (let index = 0; index < result.results.length; index += 1) {
 		const call = callEnvelope.calls[index];
 		const answer = result.results[index];
@@ -661,9 +732,32 @@ export const validateExchange = (
 					message: "The result uses a swap the caller did not advertise.",
 				};
 			}
+			if (action.action === "render") {
+				const renderer =
+					"renderer" in action ? action.renderer : "html-fragment/1";
+				if (!renderers.has(renderer)) {
+					return {
+						path: `/results/${index}/actions/${actionIndex}/renderer`,
+						category: "capability",
+						message: "The result uses a renderer the caller did not advertise.",
+					};
+				}
+			}
 		}
 	}
 	return null;
+};
+
+export const validateExchange = (
+	callEnvelope: EventsCallEnvelope,
+	resultEnvelope: unknown,
+): ValidationIssue | null => {
+	const issue = validateResultEnvelope(resultEnvelope);
+	if (issue) return issue;
+	return validateExchangeAfterValidatedEnvelope(
+		callEnvelope,
+		resultEnvelope as EventsResultEnvelope,
+	);
 };
 
 export const validateActionList = (actions: unknown): ValidationIssue | null =>
@@ -739,7 +833,7 @@ export const preflightResultEnvelope = (
 		const edge = envelope.results[0];
 		return { ok: true, results: sent.calls.map(() => edge) };
 	}
-	const relationship = validateExchange(sent, envelope);
+	const relationship = validateExchangeAfterValidatedEnvelope(sent, envelope);
 	if (relationship) {
 		const index = resultIndex(relationship.path);
 		return {

@@ -212,7 +212,7 @@ class CList(LibraryComponent):
           c-data-marker="marker"
           c-data-density="density"
           c-data-variant="variant"
-          c-data-divided="divided"
+          c-data-divided="'' if divided else None"
           c-start="start"
           c-reversed="reversed"
           c-aria-label="label"
@@ -226,7 +226,7 @@ class CList(LibraryComponent):
           c-data-marker="marker"
           c-data-density="density"
           c-data-variant="variant"
-          c-data-divided="divided"
+          c-data-divided="'' if divided else None"
           c-aria-label="label"
         ><c-slot required /></ul>
       </c-else>
@@ -287,16 +287,16 @@ class CListItem(LibraryComponent):
         class="cui-list-item"
         c-bind="attrs"
         data-citry-ui-part="list-item"
-        c-data-current="current"
-        c-data-disabled="disabled"
-        c-data-interactive="interactive"
+        c-data-current="'' if current else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-interactive="'' if interactive else None"
       >
         <c-if cond="href is not None and not disabled">
           <a
             c-bind="surface_attrs"
             data-citry-ui-part="surface"
-            c-data-cui-list-has-start="has_start"
-            c-data-cui-list-has-end="has_end"
+            c-data-cui-list-has-start="'' if has_start else None"
+            c-data-cui-list-has-end="'' if has_end else None"
             c-href="href"
             c-aria-current="'page' if current else None"
           >
@@ -318,8 +318,8 @@ class CListItem(LibraryComponent):
           <button
             c-bind="surface_attrs"
             data-citry-ui-part="surface"
-            c-data-cui-list-has-start="has_start"
-            c-data-cui-list-has-end="has_end"
+            c-data-cui-list-has-start="'' if has_start else None"
+            c-data-cui-list-has-end="'' if has_end else None"
             type="button"
             c-disabled="disabled"
           >
@@ -341,8 +341,8 @@ class CListItem(LibraryComponent):
           <div
             c-bind="surface_attrs"
             data-citry-ui-part="surface"
-            c-data-cui-list-has-start="has_start"
-            c-data-cui-list-has-end="has_end"
+            c-data-cui-list-has-start="'' if has_start else None"
+            c-data-cui-list-has-end="'' if has_end else None"
           >
             <c-if cond="has_start">
               <span data-citry-ui-part="start"><c-slot name="start" /></span>

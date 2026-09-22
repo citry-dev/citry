@@ -10,7 +10,7 @@ the project cards without reloading the page.
 - A Flask route passes Python `Project` records to a Citry component.
 - Typed inputs pass projects between components. Slots fill the page shell
   with its heading and project list.
-- Alpine opens the help panel without sending a request.
+- Vue opens the help panel without sending a request.
 - A debounced Citry Event sends the search query to Python and replaces the
   project list with the matches.
 - A Flask application factory mounts Citry's browser runtime and Event routes

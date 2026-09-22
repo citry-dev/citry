@@ -44,7 +44,7 @@ readonly inputs remain submitted. `CForm` and `CField` own their shared state.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdate_input/snippets/form.py" title="Submit and reset a date" />
 
-## Control a date in Alpine
+## Control a date in Vue
 
 Client `value` accepts a canonical string or `null`. Native `input` and
 `change` events remain the observation surface; a supplied client value is

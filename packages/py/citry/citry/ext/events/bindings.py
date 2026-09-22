@@ -1,113 +1,22 @@
 r"""
-The template binding rewrite for the ``events`` extension.
+Compile Citry Events template attributes into typed binding metadata.
 
-Templates opt into interactivity with two attribute prefixes: ``@c-*`` names a
-DOM event and the handler it sends (``@c-click="save"``), and ``:c-*`` names a
-State field a control is bound to (``:c-query.debounce.300ms="refresh"``). Both
-are citry-owned and dissolve before the HTML reaches the browser: this module
-rewrites each one into a ``data-cev-*`` attribute carrying a compact,
-base64-encoded JSON spec that the client runtime (WP17) reads at event time.
+Authored ``@c-*`` event/poll bindings and ``:c-*`` State controls are
+validated after template compilation and retained only on typed prepared
+element nodes and travel in the prepared browser configuration. Runtime State
+controls contributed by ``c-bind`` use a private, producer-authenticated Python
+carrier until typed capture consumes them. The ``data-cev-*`` namespace remains
+reserved so authored or extension-forged legacy carriers fail closed.
 
-The rewrite runs in two stages, because bindings can appear two ways:
-
-- **Stage one, after template compilation** (:func:`compile_template_bindings`,
-  structured-node level): attributes the parser proved were authored on real
-  elements. The source template remains unchanged for diagnostics and
-  introspection.
-- **Stage two, at render time** (:func:`rewrite_resolved_attrs`, through the
-  ``on_attrs_resolved`` hook): bindings contributed by a spread, e.g. a parent
-  passing ``attrs="{'@c-click': 'select'}"`` that a child applies with the
-  ``c-bind`` attribute spread. These are validated the moment they resolve,
-  server-side, with the same wording as stage one.
-
-Validation is a hard error (design ``events.md`` 5.1): every element-level
-``@c-*`` value must name a declared handler; every element-level ``:c-*`` key
-must name a public State field (and a writable ``_model`` field when two-way);
-and modifier combinations must parse. On a component boundary, ``@c-*`` is
-left intact for component-tag client binding capture while ``:c-*`` remains invalid.
-``<c-element>`` follows the element path.
-
-Additional boundary rules:
-
-- A binding that reaches a component tag through a render-time spread never
-  enters the element rewrite. A1's source-ordered component-input split
-  captures `@c-*` as a component-tag client binding and keeps `:c-*` as an ordinary
-  invalid component input. Later Alpine batches own client-binding validation and
-  delivery.
-- Control-type validation runs at template load when possible, against final
-  server-rendered attributes after ``c-type`` / ``c-bind`` resolution, and in
-  the browser for Alpine-mutated ``:type`` values. The final two use the same
-  complete input-type matrix and fail closed while the live type is invalid.
-- ``<c-element>`` is classified by the element its ``is`` attribute names. A
-  literal ``is`` permits early target validation; for computed ``is``
-  (``c-is``, or ``is`` through a spread), target-dependent checks are deferred
-  until the selected tag and its final attributes resolve at render time.
-- Binding-shaped text inside ``<c-raw>``, HTML comments, and native
-  ``script``/``style``/``textarea``/``title`` bodies is text, not an
-  attribute, and is therefore never validated or rewritten.
-
-The compiled ``data-cev-*`` contract (WP17 reads this, never the test
-fixtures)
-------------------------------------------------------------------------------
-
-Each emitted attribute's value is base64-encoded UTF-8 JSON (standard base64,
-matching the sibling dependencies manifest's armoring). The decoded value is
-always a JSON array of spec objects, so one element can carry several bindings
-of the same channel (design 5.1: "One element may carry several event bindings
-for different DOM events"). JSON object keys are sorted, so the output is
-deterministic. The three attributes and their per-spec keys:
-
-``data-cev-on`` (DOM-event bindings, from ``@c-<event>``)
-    - ``cid``: owner component class id (which class's handlers this addresses)
-    - ``event``: the DOM event type, e.g. ``"click"``, ``"submit"``, ``"keyup"``
-    - ``handler``: the handler wire name to send
-    - ``args``: the raw Alpine arg expression the author wrote between the
-      parentheses (``rate({stars: 5})`` -> ``"{stars: 5}"``), or ``null`` for a
-      bare handler name. Carried verbatim; citry never parses it.
-    - ``prevent`` / ``stop`` / ``self`` / ``once``: booleans, the event modifiers
-    - ``key``: an ``event.key`` filter (``"enter"`` / ``"escape"``) or ``null``
-    - ``debounce`` / ``throttle``: milliseconds, or ``null`` (the merged value:
-      an ``.debounce`` modifier wins over the handler's configured default)
-
-``data-cev-poll`` (interval bindings, from ``@c-poll.<N>s``)
-    - ``cid``: owner component class id
-    - ``handler``: the handler wire name to send on each tick
-    - ``args``: the raw arg expression, or ``null``
-    - ``interval``: the poll interval in milliseconds (``.30s`` -> ``30000``)
-
-``data-cev-bind`` (state bindings, from ``:c-<field>``)
-    - ``cid``: owner component class id
-    - ``field``: the State field name (case preserved; the rewrite is
-      server-side, so browser attribute-name lowercasing never sees it)
-    - ``binding_mode``: ``"one-way"`` for a State-to-control binding (no
-      value), ``"two-way"`` for a binding whose value names the handler and
-      which also writes control changes back to State
-    - ``handler``: the handler wire name for a two-way binding, or ``null``
-    - ``lazy``: whether ``.lazy`` was set (use the control's committed-value
-      event instead of its active event; the client resolves the concrete
-      event from the live control)
-    - ``on``: an explicit ``.on:<event>`` update-event override, or ``null``
-    - ``key``: an ``event.key`` filter or ``null``
-    - ``debounce`` / ``throttle``: milliseconds, or ``null``
-
-The importable contract mirrors this prose: :data:`DATA_CEV_ATTRS` enumerates
-the attribute names and their payload keys, and :data:`BINDING_SPEC_ENCODING`
-names the encoding. These attributes are compiler-owned: authoring a
-``data-cev-*`` attribute directly is a template-load error.
-
-Design: ``docs/design/events.md`` section 5.1; ``docs/design/events_plan.md``
-WP12.
+Design: ``docs/design/events.md`` section 5.1.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
-import json
 import re
 from dataclasses import dataclass, fields
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final, NoReturn
+from typing import TYPE_CHECKING, Any, Final, NoReturn, cast
 
 from citry._state_binding_targets import (
     _TWO_WAY_INPUT_TYPES,
@@ -127,81 +36,53 @@ if TYPE_CHECKING:
 
     from citry.ext.events.extension import EventsInfo
 
-# ----- The published data-cev-* contract -----
+RUNTIME_CONTROL_ATTR: Final = "data-citry-runtime-control"
+RUNTIME_EVENTS_ATTR: Final = "data-citry-runtime-events"
+_CHANNEL_EVENT: Final = "event"
+_CHANNEL_POLL: Final = "poll"
+_CHANNEL_CONTROL: Final = "control"
 
-DATA_CEV_ON: Final = "data-cev-on"
-DATA_CEV_POLL: Final = "data-cev-poll"
-DATA_CEV_BIND: Final = "data-cev-bind"
-
-BINDING_SPEC_ENCODING: Final = (
-    "Each attribute value is standard base64 of UTF-8 JSON; the decoded value is a JSON array of"
-    " spec objects with sorted keys."
-)
+_RUNTIME_CONTROL_TOKEN = object()
+_RUNTIME_EVENTS_TOKEN = object()
 
 
 @dataclass(frozen=True, slots=True)
-class CevAttr:
-    """
-    One emitted ``data-cev-*`` attribute in the compiled binding contract.
+class _RuntimeControlBindings:
+    specs: tuple[MappingProxyType[str, object], ...]
+    _producer_token: object
 
-    Attributes:
-        name: The emitted attribute name (e.g. ``"data-cev-on"``).
-        payload_keys: The keys every spec object in the attribute's JSON array
-            carries, in a stable order for documentation (the wire uses sorted
-            keys).
-        summary: A one-line description of what the attribute drives.
-
-    """
-
-    name: str
-    payload_keys: tuple[str, ...]
-    summary: str
+    def __str__(self) -> str:
+        raise TypeError("runtime State control metadata cannot be serialized as an HTML attribute")
 
 
-# The compiled contract, frozen so WP17 can read the emitted attribute names
-# and payload shapes from here rather than from the test examples. Keep this in
-# step with the spec builders below.
-DATA_CEV_ATTRS: Final[Mapping[str, CevAttr]] = MappingProxyType(
-    {
-        DATA_CEV_ON: CevAttr(
-            name=DATA_CEV_ON,
-            payload_keys=(
-                "cid",
-                "event",
-                "handler",
-                "args",
-                "prevent",
-                "stop",
-                "self",
-                "once",
-                "key",
-                "debounce",
-                "throttle",
-            ),
-            summary="DOM-event bindings from @c-<event>: send a handler on a DOM event.",
-        ),
-        DATA_CEV_POLL: CevAttr(
-            name=DATA_CEV_POLL,
-            payload_keys=("cid", "handler", "args", "interval"),
-            summary="Interval bindings from @c-poll.<N>s: send a handler on a timer.",
-        ),
-        DATA_CEV_BIND: CevAttr(
-            name=DATA_CEV_BIND,
-            payload_keys=(
-                "cid",
-                "field",
-                "binding_mode",
-                "handler",
-                "lazy",
-                "on",
-                "key",
-                "debounce",
-                "throttle",
-            ),
-            summary="State bindings from :c-<field>: bind a control to a public State field.",
-        ),
-    }
-)
+@dataclass(frozen=True, slots=True)
+class _RuntimeEventBindings:
+    event_specs: tuple[MappingProxyType[str, object], ...]
+    poll_specs: tuple[MappingProxyType[str, object], ...]
+    _producer_token: object
+
+    def __str__(self) -> str:
+        raise TypeError("runtime event metadata cannot be serialized as an HTML attribute")
+
+
+def _runtime_control_bindings(value: object) -> tuple[dict[str, object], ...]:
+    """Consume native control metadata only when this module produced it."""
+    if type(value) is not _RuntimeControlBindings or value._producer_token is not _RUNTIME_CONTROL_TOKEN:
+        raise TypeError("runtime State control metadata lacks Events producer provenance")
+    return tuple(dict(spec) for spec in value.specs)
+
+
+def _runtime_event_bindings(
+    value: object,
+) -> tuple[tuple[dict[str, object], ...], tuple[dict[str, object], ...]]:
+    """Consume runtime event and poll metadata only when this module produced it."""
+    if type(value) is not _RuntimeEventBindings or value._producer_token is not _RUNTIME_EVENTS_TOKEN:
+        raise TypeError("runtime event metadata lacks Events producer provenance")
+    return (
+        tuple(dict(spec) for spec in value.event_specs),
+        tuple(dict(spec) for spec in value.poll_specs),
+    )
+
 
 # ----- Vocabulary constants (design 5.1) -----
 
@@ -375,6 +256,23 @@ class _Location:
         return f" (in {self.comp_name} template, {self.where})"
 
 
+def _input_type_is_browser_dynamic(attr_names: list[str], *, include_python_attrs: bool) -> bool:
+    """Whether Vue/browser attribute syntax may replace an input's static type."""
+    for name in attr_names:
+        folded = name.lower()
+        if include_python_attrs and folded in {"c-type", "c-bind"}:
+            return True
+        if folded == "v-bind" or folded.startswith(("v-bind.", ":[", ".[", "v-bind:[")):
+            return True
+        if folded in {".type", ":type"} or folded.startswith((".type.", ":type.")):
+            return True
+        if folded == "v-bind:type" or folded.startswith("v-bind:type."):
+            return True
+        if folded == "x-bind:type" or folded.startswith("x-bind:type."):
+            return True
+    return False
+
+
 def _fail(location: _Location, message: str) -> NoReturn:
     msg = message + location.suffix()
     raise ValueError(msg)
@@ -406,8 +304,14 @@ def _merged_timing(
     )
 
 
-def _build_event_spec(info: EventsInfo, class_id: str, event: str, attr: _Attr, location: _Location) -> dict[str, Any]:
-    """Validate and build one ``data-cev-on`` spec from an ``@c-<event>`` attribute."""
+def _validate_timing_pair(debounce: int | None, throttle: int | None, attr_name: str, location: _Location) -> None:
+    for name, value in (("debounce", debounce), ("throttle", throttle)):
+        if value is not None and value > 2**53 - 1:
+            _fail(location, f"{attr_name!r}: .{name} timing exceeds the JavaScript safe-integer limit")
+
+
+def _build_event_spec(info: EventsInfo, event: str, attr: _Attr, location: _Location) -> dict[str, Any]:
+    """Validate and build one typed event spec from an ``@c-<event>`` attribute."""
     if not event:
         # `@c-="save"` (or `@c-.prevent=...`): the `@c-` names no DOM event, so
         # there is nothing to listen for. Reject it rather than ship event="".
@@ -444,8 +348,8 @@ def _build_event_spec(info: EventsInfo, class_id: str, event: str, attr: _Attr, 
             _fail(location, f"{attr.name!r} has an unknown modifier '.{token.value}'")
 
     debounce, throttle = _merged_timing(info, handler, debounce, throttle)
+    _validate_timing_pair(debounce, throttle, attr.name, location)
     return {
-        "cid": class_id,
         "event": event,
         "handler": handler,
         "args": args,
@@ -473,8 +377,8 @@ def _throttle_ms(token: _ModToken) -> int:
     return DEFAULT_THROTTLE_MS
 
 
-def _build_poll_spec(info: EventsInfo, class_id: str, attr: _Attr, location: _Location) -> dict[str, Any]:
-    """Validate and build one ``data-cev-poll`` spec from an ``@c-poll.<N>s`` attribute."""
+def _build_poll_spec(info: EventsInfo, attr: _Attr, location: _Location) -> dict[str, Any]:
+    """Validate and build one typed poll spec from an ``@c-poll.<N>s`` attribute."""
     if attr.value is None or not attr.value.strip():
         _fail(location, f'{attr.name!r} needs a handler name as its value, e.g. {attr.name}="refresh"')
     handler, args = _split_handler_args(info, attr.value or "", attr.name, location)
@@ -498,13 +402,17 @@ def _build_poll_spec(info: EventsInfo, class_id: str, attr: _Attr, location: _Lo
             interval = _time_to_ms(segment)
     if interval is None:
         _fail(location, f"{attr.name!r}: @c-poll needs an interval, e.g. @c-poll.30s")
-    return {"cid": class_id, "handler": handler, "args": args, "interval": interval}
+    if interval <= 0:
+        _fail(location, f"{attr.name!r}: @c-poll interval must be positive")
+    if interval > 2**53 - 1:
+        _fail(location, f"{attr.name!r}: @c-poll interval exceeds the JavaScript safe-integer limit")
+    return {"handler": handler, "args": args, "interval": interval}
 
 
 def _build_bind_spec(
-    info: EventsInfo, class_id: str, field: str, attr: _Attr, element: _Element, location: _Location
+    info: EventsInfo, field: str, attr: _Attr, element: _Element, location: _Location
 ) -> dict[str, Any]:
-    """Validate and build one ``data-cev-bind`` spec from a ``:c-<field>`` attribute."""
+    """Validate and build one typed control spec from a ``:c-<field>`` attribute."""
     _resolve_state_field(info, field, attr.name, location)
 
     value = attr.value.strip() if attr.value is not None else ""
@@ -559,7 +467,6 @@ def _build_bind_spec(
                 f" (.lazy, .debounce, .throttle, .on:) or a key filter; give it a handler value to make it two-way",
             )
         return {
-            "cid": class_id,
             "field": field,
             "binding_mode": "one-way",
             "handler": None,
@@ -577,8 +484,8 @@ def _build_bind_spec(
     _validate_two_way_control(element, lazy=lazy, on_event=on_event, attr_name=attr.name, location=location)
 
     debounce, throttle = _merged_timing(info, handler or "", debounce, throttle)
+    _validate_timing_pair(debounce, throttle, attr.name, location)
     return {
-        "cid": class_id,
         "field": field,
         "binding_mode": "two-way",
         "handler": handler,
@@ -690,39 +597,24 @@ def _control_event(element: _Element, tag: str, *, lazy: bool, attr_name: str, l
     return "change" if lazy else "input"
 
 
-# ----- Encoding and merging -----
-
-
-def _encode(specs: list[dict[str, Any]]) -> str:
-    """Encode a channel's spec list as base64 UTF-8 JSON (sorted keys, deterministic)."""
-    payload = json.dumps(specs, separators=(",", ":"), sort_keys=True)
-    return base64.b64encode(payload.encode()).decode("ascii")
-
-
-def _channels() -> dict[str, list[dict[str, Any]]]:
-    return {DATA_CEV_ON: [], DATA_CEV_POLL: [], DATA_CEV_BIND: []}
-
-
 def _classify_binding(attr_name: str) -> str | None:
     """Which channel an attribute name feeds, or ``None`` when it is not a binding."""
     if attr_name.startswith(_PREFIX_EVENT):
         base, _ = _split_name(attr_name, _PREFIX_EVENT)
-        return DATA_CEV_POLL if base == _POLL else DATA_CEV_ON
+        return _CHANNEL_POLL if base == _POLL else _CHANNEL_EVENT
     if attr_name.startswith(_PREFIX_STATE):
-        return DATA_CEV_BIND
+        return _CHANNEL_CONTROL
     return None
 
 
-def _build_spec(
-    channel: str, info: EventsInfo, class_id: str, attr: _Attr, element: _Element, location: _Location
-) -> dict[str, Any]:
-    if channel == DATA_CEV_ON:
+def _build_spec(channel: str, info: EventsInfo, attr: _Attr, element: _Element, location: _Location) -> dict[str, Any]:
+    if channel == _CHANNEL_EVENT:
         event, _ = _split_name(attr.name, _PREFIX_EVENT)
-        return _build_event_spec(info, class_id, event, attr, location)
-    if channel == DATA_CEV_POLL:
-        return _build_poll_spec(info, class_id, attr, location)
+        return _build_event_spec(info, event, attr, location)
+    if channel == _CHANNEL_POLL:
+        return _build_poll_spec(info, attr, location)
     field, _ = _split_name(attr.name, _PREFIX_STATE)
-    return _build_bind_spec(info, class_id, field, attr, element, location)
+    return _build_bind_spec(info, field, attr, element, location)
 
 
 @dataclass(frozen=True, slots=True)
@@ -735,7 +627,6 @@ class CompiledCitryBoundaryBinding:
 
 def compile_citry_boundary_binding(
     info: EventsInfo,
-    class_id: str,
     comp_name: str,
     tag_name: str,
     attr_name: str,
@@ -748,12 +639,11 @@ def compile_citry_boundary_binding(
     Validate and compile a winning ``@c-*`` component-tag client binding in its source parent.
 
     Component bindings use the same name, modifier, handler, timing, and
-    opaque-call-shell parser as element bindings. The only difference is that
-    the compiled spec is retained in the ownership graph instead of becoming a
-    ``data-cev-*`` attribute immediately.
+    opaque-call-shell parser as element bindings. The compiled spec is retained
+    as prepared component-call data for native Vue listener generation.
     """
     channel = _classify_binding(attr_name)
-    if channel not in (DATA_CEV_ON, DATA_CEV_POLL):
+    if channel not in (_CHANNEL_EVENT, _CHANNEL_POLL):
         msg = f"Expected a Citry event binding on <{tag_name}>, got {attr_name!r}."
         raise ValueError(msg)
     location = _Location(
@@ -763,7 +653,6 @@ def compile_citry_boundary_binding(
     spec = _build_spec(
         channel,
         info,
-        class_id,
         _Attr(name=attr_name, value=value, source=attr_name),
         _Element(tag_name=tag_name, input_type=None, type_static_known=False),
         location,
@@ -780,8 +669,8 @@ class CompiledTemplateBindings:
     The result of transforming one compiled template body.
 
     Attributes:
-        nodes: The compiled body with real element bindings replaced by their
-            ``data-cev-*`` form. Literal text is untouched.
+        nodes: The compiled body with real element bindings retained as typed
+            metadata. Literal text is untouched.
         two_way_fields: The State fields bound two-way anywhere in the template.
             Each binding has already been checked against ``_model``; this
             aggregate remains available for diagnostics and introspection.
@@ -794,7 +683,6 @@ class CompiledTemplateBindings:
 
 def compile_template_bindings(
     info: EventsInfo,
-    class_id: str,
     comp_name: str,
     nodes: list[Any],
 ) -> CompiledTemplateBindings:
@@ -802,14 +690,13 @@ def compile_template_bindings(
     Validate and transform parser-proven bindings in a compiled template body.
 
     Ordinary static HTML usually compiles straight to strings. The template
-    compiler deliberately preserves regions containing ``@c-*``, ``:c-*``, or
-    ``data-cev-*`` as :class:`ElementAttrsNode` objects, so this pass can
+    compiler deliberately preserves regions containing ``@c-*`` or ``:c-*``
+    as :class:`ElementAttrsNode` objects, so this pass can
     distinguish real attributes from binding-shaped text. Otherwise-static
     regions collapse back to a string after transformation.
 
     Args:
         info: The owning component's resolved events info (handlers, State).
-        class_id: The owning component's class id (the spec's ``cid``).
         comp_name: The owning component's name, for error messages.
         nodes: The compiled body nodes.
 
@@ -826,7 +713,6 @@ def compile_template_bindings(
     transformed = _transform_compiled_body(
         nodes,
         info=info,
-        class_id=class_id,
         comp_name=comp_name,
         two_way_fields=two_way_fields,
     )
@@ -837,7 +723,6 @@ def _transform_compiled_body(
     body: list[Any],
     *,
     info: EventsInfo,
-    class_id: str,
     comp_name: str,
     two_way_fields: set[str],
 ) -> list[Any]:
@@ -854,8 +739,9 @@ def _transform_compiled_body(
     transformed: list[Any] = []
     for item in body:
         if isinstance(item, ElementAttrsNode):
+            needs_emitted_tag_inference = not hasattr(item, "tag")
             tag_name = item.tag_name
-            if transformed and isinstance(transformed[-1], str):
+            if needs_emitted_tag_inference and transformed and isinstance(transformed[-1], str):
                 # The compiler places the emitted ``<tag`` chunk immediately
                 # before its attribute-region node. This matters for the
                 # zero-cost static `<c-element is="...">` path: its source
@@ -869,7 +755,6 @@ def _transform_compiled_body(
                     item,
                     tag_name=tag_name,
                     info=info,
-                    class_id=class_id,
                     comp_name=comp_name,
                     two_way_fields=two_way_fields,
                 )
@@ -878,27 +763,30 @@ def _transform_compiled_body(
 
         if isinstance(item, ComponentNode):
             if item.name == "element":
-                item.attrs = _transform_element_attrs(
+                transformed_element = _transform_element_attrs(
                     tag_name="c-element",
                     source=item.source,
-                    position=item.position,
                     attrs=item.attrs,
                     info=info,
-                    class_id=class_id,
                     comp_name=comp_name,
                     two_way_fields=two_way_fields,
-                )[0]
+                )
+                item.attrs = transformed_element[0]
+                item._element_event_bindings = transformed_element[1]
+                item._element_poll_bindings = transformed_element[2]
+                item._element_control_bindings = transformed_element[3]
+                item._element_runtime_events_candidate = info.events_cls is not None and any(
+                    attr.key == "c-bind" for attr in item.attrs
+                )
             else:
                 _validate_component_boundary_attrs(
                     item,
                     info=info,
-                    class_id=class_id,
                     comp_name=comp_name,
                 )
             item.body = _transform_compiled_body(
                 item.body,
                 info=info,
-                class_id=class_id,
                 comp_name=comp_name,
                 two_way_fields=two_way_fields,
             )
@@ -910,7 +798,6 @@ def _transform_compiled_body(
             item.body = _transform_compiled_body(
                 item.body,
                 info=info,
-                class_id=class_id,
                 comp_name=comp_name,
                 two_way_fields=two_way_fields,
             )
@@ -933,7 +820,6 @@ def _transform_compiled_body(
                         _transform_compiled_body(
                             branch[2],
                             info=info,
-                            class_id=class_id,
                             comp_name=comp_name,
                             two_way_fields=two_way_fields,
                         ),
@@ -951,54 +837,51 @@ def _transform_element_attrs_node(
     *,
     tag_name: str,
     info: EventsInfo,
-    class_id: str,
     comp_name: str,
     two_way_fields: set[str],
 ) -> Any:
     """Transform one ordinary HTML element's structured attribute region."""
-    attrs, emitted = _transform_element_attrs(
+    if hasattr(node, "_runtime_control_candidate") and node._has_spread and info.state_cls is not None:
+        node._runtime_control_candidate = True
+    if hasattr(node, "_runtime_events_candidate") and node._has_spread and info.events_cls is not None:
+        node._runtime_events_candidate = True
+    attrs, event_bindings, poll_bindings, control_bindings = _transform_element_attrs(
         tag_name=tag_name,
         source=node.source,
-        position=node.position,
         attrs=node.attrs,
         info=info,
-        class_id=class_id,
         comp_name=comp_name,
         two_way_fields=two_way_fields,
     )
-    if not emitted:
+    if not (event_bindings or poll_bindings or control_bindings):
         return node
-
-    from citry.nodes import ElementAttrsNode, StaticHtmlAttr  # noqa: PLC0415
-
-    had_runtime_attr = any(not isinstance(attr, StaticHtmlAttr) for attr in node.attrs)
-    has_later_client_directive = any(isinstance(attr, StaticHtmlAttr) and attr.key.startswith("$c-") for attr in attrs)
-    if had_runtime_attr or has_later_client_directive:
-        return ElementAttrsNode(node.source, node.position, attrs, node.used_vars)
-
-    # This region was preserved only so the extension could see its literal
-    # binding. Collapse it back to the static fast path, preserving the exact
-    # authored spelling of every non-binding attribute.
-    pieces = [
-        _source_slice(attr.source, attr.position)
-        for attr in node.attrs
-        if isinstance(attr, StaticHtmlAttr) and _classify_binding(attr.key) is None
-    ]
-    pieces.extend(f'{name}="{value}"' for name, value in emitted)
-    return (" " + " ".join(pieces)) if pieces else ""
+    if not hasattr(node, "_with_attrs"):
+        _fail(
+            _compiled_location(comp_name, node.source, node.position),
+            "Events bindings are unsupported in non-prepared foreign template regions",
+        )
+    return node._with_attrs(
+        attrs,
+        event_bindings=event_bindings,
+        poll_bindings=poll_bindings,
+        control_bindings=control_bindings,
+    )
 
 
 def _transform_element_attrs(
     *,
     tag_name: str,
     source: Any,
-    position: tuple[int, int],
     attrs: tuple[Any, ...],
     info: EventsInfo,
-    class_id: str,
     comp_name: str,
     two_way_fields: set[str],
-) -> tuple[tuple[Any, ...], list[tuple[str, str]]]:
+) -> tuple[
+    tuple[Any, ...],
+    tuple[dict[str, object], ...],
+    tuple[dict[str, object], ...],
+    tuple[dict[str, object], ...],
+]:
     """Compile literal bindings in one parser-proven element attribute tuple."""
     from citry.nodes import StaticHtmlAttr  # noqa: PLC0415
 
@@ -1013,37 +896,62 @@ def _transform_element_attrs(
 
     bindings = [attr for attr in literal_attrs if _classify_binding(attr.key) is not None]
     if not bindings:
-        return attrs, []
+        return attrs, (), (), ()
+    state_bindings = [attr for attr in bindings if _classify_binding(attr.key) == _CHANNEL_CONTROL]
+    if len(state_bindings) > 1:
+        names = [attr.key for attr in state_bindings]
+        _fail(
+            _compiled_location(comp_name, source, state_bindings[1].position),
+            f"one element supports exactly one :c-* State binding; found {names!r}",
+        )
 
     element_attrs = [_compiled_attr(attr) for attr in attrs]
     element = _element_of(tag_name, element_attrs)
-    channels = _channels()
+    event_bindings: list[dict[str, object]] = []
+    poll_bindings: list[dict[str, object]] = []
+    control_bindings: list[dict[str, object]] = []
     for attr in bindings:
         channel = _classify_binding(attr.key)
         assert channel is not None  # filtered above  # noqa: S101
         spec = _build_spec(
             channel,
             info,
-            class_id,
             _compiled_attr(attr),
             element,
             _compiled_location(comp_name, source, attr.position),
         )
-        channels[channel].append(spec)
-        if channel == DATA_CEV_BIND and spec["binding_mode"] == "two-way":
+        if channel == _CHANNEL_EVENT:
+            event_bindings.append(
+                {
+                    "id": f"citryEvent{attr.position[0]:x}",
+                    **spec,
+                }
+            )
+        if channel == _CHANNEL_POLL:
+            poll_bindings.append(
+                {
+                    "id": f"citryPoll{attr.position[0]:x}",
+                    **spec,
+                }
+            )
+        if channel == _CHANNEL_CONTROL and spec["binding_mode"] == "two-way":
             two_way_fields.add(spec["field"])
+        if channel == _CHANNEL_CONTROL:
+            control_bindings.append(
+                {
+                    "id": f"citryControl{attr.position[0]:x}",
+                    **spec,
+                }
+            )
 
     kept = tuple(attr for attr in attrs if attr not in bindings)
-    emitted = [(name, _encode(specs)) for name, specs in channels.items() if specs]
-    compiled = tuple(StaticHtmlAttr(source, position, name, value, ()) for name, value in emitted)
-    return kept + compiled, emitted
+    return kept, tuple(event_bindings), tuple(poll_bindings), tuple(control_bindings)
 
 
 def _validate_component_boundary_attrs(
     node: Any,
     *,
     info: EventsInfo,
-    class_id: str,
     comp_name: str,
 ) -> None:
     """Validate literal component-boundary bindings without consuming them."""
@@ -1062,17 +970,16 @@ def _validate_component_boundary_attrs(
         channel = _classify_binding(attr.key)
         if channel is None:
             continue
-        if channel == DATA_CEV_BIND:
+        if channel == _CHANNEL_CONTROL:
             _fail(
                 location,
                 f"<{tag_name}> is a component tag, but {attr.key!r} binds State on it."
-                " State bindings go on HTML elements only: a child component binds its own State in its own"
-                " template; pass data down through $c-props or Python kwargs.",
+                " State bindings go on HTML controls: a child component binds its own State in its template."
+                " Pass data down with a native Vue prop binding (`:prop` or `v-bind:prop`) or Python kwargs.",
             )
         line, column = _line_column(node.source, attr.position[0])
         compile_citry_boundary_binding(
             info,
-            class_id,
             comp_name,
             tag_name,
             attr.key,
@@ -1160,27 +1067,36 @@ def _compiled_location(
 
 def _element_of(tag_name: str, attrs: list[_Attr]) -> _Element:
     """Adapt compiled attributes to the shared static target classifier."""
-    return _state_binding_element(tag_name, [(attr.name, attr.value) for attr in attrs])
+    element = _state_binding_element(tag_name, [(attr.name, attr.value) for attr in attrs])
+    # Vue/Alpine browser-side bindings can replace a literal input type after
+    # server compilation; keep that uncertainty in the shared descriptor.
+    names = [attr.name for attr in attrs]
+    if _input_type_is_browser_dynamic(names, include_python_attrs=True):
+        return _Element(
+            tag_name=element.tag_name,
+            input_type=element.input_type,
+            type_static_known=False,
+            tag_static_known=element.tag_static_known,
+        )
+    return element
 
 
 # ----- Stage two: render-time (spread) rewrite -----
 
 
 def rewrite_resolved_attrs(
-    info: EventsInfo, class_id: str, comp_name: str, tag_name: str, attrs: dict[str, Any]
+    info: EventsInfo, comp_name: str, tag_name: str, attrs: dict[str, Any]
 ) -> dict[str, Any] | None:
     """
     Stage two: rewrite bindings that arrive on an element at render time.
 
     Fires through the ``on_attrs_resolved`` hook for every element with dynamic
     attributes. Raw ``@c-*`` / ``:c-*`` keys are compiled exactly like stage
-    one. An existing ``data-cev-bind`` is also decoded and validated against
-    the final resolved input type, closing the literal-binding + dynamic-type
-    gap before HTML reaches the browser.
+    one. Runtime State controls use producer-authenticated metadata and are
+    validated against the final resolved input type before HTML reaches the browser.
 
     Args:
         info: The owning component's resolved events info.
-        class_id: The owning component's class id (the spec's ``cid``).
         comp_name: The owning component's name, for error messages.
         tag_name: The element's tag name.
         attrs: The element's resolved attribute dict.
@@ -1193,23 +1109,29 @@ def rewrite_resolved_attrs(
         ValueError: On any invalid binding, with the render-time location.
 
     """
+    forged_private = next(
+        (key for key in attrs if isinstance(key, str) and key.lower() in {RUNTIME_CONTROL_ATTR, RUNTIME_EVENTS_ATTR}),
+        None,
+    )
+    if forged_private is not None:
+        raise TypeError(f"{forged_private!r} is reserved internal Events metadata")
     binding_keys = [key for key in attrs if isinstance(key, str) and _classify_binding(key) is not None]
-    if not binding_keys and DATA_CEV_BIND not in attrs:
+    if not binding_keys:
         return None
 
-    # This hook fires only for HTML elements; a `<c-*>` component tag never
-    # reaches it (its two callers, the HTML-element attrs node in
-    # nodes/__init__.py and the <c-element> attribute formatter in
-    # components/dynamic.py, both emit plain HTML elements). So there is no
-    # component-tag check here: the literal form is caught at load by stage
-    # one, and a binding that a spread lands on a component tag is a documented
-    # v1 caveat (see the module docstring), silently ignored until a
-    # component-input check lands.
+    # The hook is invoked only for final HTML element attributes. Component
+    # boundary bindings are captured and validated through their typed
+    # relationship path before this stage.
     location = _Location(comp_name=comp_name, where=f"<{tag_name}> after dynamic attributes resolved")
+    state_binding_keys = [key for key in binding_keys if _classify_binding(key) == _CHANNEL_CONTROL]
+    if len(state_binding_keys) > 1:
+        _fail(location, f"one element supports exactly one :c-* State binding; found {state_binding_keys!r}")
     element = _resolved_element(tag_name, attrs, location)
 
     result = {key: value for key, value in attrs.items() if key not in binding_keys}
-    channels = _channels()
+    event_specs: list[dict[str, Any]] = []
+    runtime_poll_specs: list[dict[str, Any]] = []
+    bind_specs: list[dict[str, Any]] = []
     for key in binding_keys:
         channel = _classify_binding(key)
         assert channel is not None  # filtered above  # noqa: S101
@@ -1217,17 +1139,31 @@ def rewrite_resolved_attrs(
         # A spread value is the attribute's value; a bare boolean True means the
         # key was contributed with no value (a one-way :c-* binding).
         value = None if raw is True else _as_str(raw)
-        spec = _build_spec(channel, info, class_id, _Attr(name=key, value=value, source=key), element, location)
-        channels[channel].append(spec)
+        spec = _build_spec(channel, info, _Attr(name=key, value=value, source=key), element, location)
+        if channel == _CHANNEL_EVENT:
+            event_specs.append(spec)
+        elif channel == _CHANNEL_POLL:
+            runtime_poll_specs.append(spec)
+        else:
+            bind_specs.append(spec)
 
-    for name, specs in channels.items():
-        if specs:
-            _merge_encoded(result, name, specs, location)
-    encoded_bind = result.get(DATA_CEV_BIND)
-    if encoded_bind is not None:
-        bind_specs = _decode_compiled_specs(DATA_CEV_BIND, encoded_bind, location)
-        _validate_compiled_bind_specs(bind_specs, element, location)
-        result[DATA_CEV_BIND] = _encode(bind_specs)
+    if event_specs and any(spec["args"] is not None for spec in event_specs):
+        _fail(location, "runtime-resolved @c-* event bindings support handler names without argument expressions")
+    if runtime_poll_specs and any(spec["args"] is not None for spec in runtime_poll_specs):
+        _fail(location, "runtime-resolved @c-poll bindings support handler names without argument expressions")
+    if event_specs or runtime_poll_specs:
+        normalized_events = tuple(MappingProxyType(dict(spec)) for spec in event_specs)
+        normalized_polls = tuple(MappingProxyType(dict(spec)) for spec in runtime_poll_specs)
+        result[RUNTIME_EVENTS_ATTR] = _RuntimeEventBindings(
+            normalized_events,
+            normalized_polls,
+            _RUNTIME_EVENTS_TOKEN,
+        )
+    if bind_specs:
+        if len(bind_specs) != 1:
+            _fail(location, f"one element supports exactly one :c-* State binding; found {len(bind_specs)}")
+        normalized = tuple(MappingProxyType(dict(spec)) for spec in bind_specs)
+        result[RUNTIME_CONTROL_ATTR] = _RuntimeControlBindings(normalized, _RUNTIME_CONTROL_TOKEN)
     return result
 
 
@@ -1240,7 +1176,8 @@ def _resolved_element(tag_name: str, attrs: dict[str, Any], location: _Location)
             "the resolved element contains more than one case-variant of the HTML 'type' attribute;"
             " keep exactly one spelling",
         )
-    client_dynamic = any(isinstance(key, str) and key.lower() in {":type", "x-bind:type"} for key in attrs)
+    attr_names = [key for key in attrs if isinstance(key, str)]
+    client_dynamic = _input_type_is_browser_dynamic(attr_names, include_python_attrs=False)
     raw_type: str | None = None
     if type_keys:
         value = attrs[type_keys[0]]
@@ -1263,104 +1200,33 @@ def _as_str(value: Any) -> str | None:
     return text if text.strip() else None
 
 
-def _decode_compiled_specs(name: str, encoded: Any, location: _Location) -> list[dict[str, Any]]:
-    """Strictly decode one existing internal binding attribute at render time."""
-    if not isinstance(encoded, str) or not encoded:
-        _fail(location, f"{name!r} must contain nonempty base64-encoded binding specs")
-    try:
-        payload = base64.b64decode(encoded, validate=True).decode("utf8")
-        decoded = json.loads(payload)
-    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        _fail(location, f"{name!r} does not contain valid base64-encoded UTF-8 JSON: {exc}")
-    if type(decoded) is not list:
-        _fail(location, f"{name!r} must decode to a JSON array of binding spec objects")
-    specs: list[dict[str, Any]] = []
-    for index, spec in enumerate(decoded):
-        if type(spec) is not dict:
-            _fail(location, f"{name!r} spec {index} must be a JSON object")
-        specs.append(spec)
-    return specs
-
-
-def _validate_compiled_bind_specs(specs: list[dict[str, Any]], element: _Element, location: _Location) -> None:
-    """Validate compiled bind shape plus the final element/type support matrix."""
-    expected_keys = frozenset(DATA_CEV_ATTRS[DATA_CEV_BIND].payload_keys)
-    for index, spec in enumerate(specs):
-        if frozenset(spec) != expected_keys:
-            _fail(
-                location,
-                f"{DATA_CEV_BIND!r} spec {index} must contain exactly: {', '.join(sorted(expected_keys))}",
-            )
-        cid = spec["cid"]
+def _validate_final_control_bindings(
+    tag_name: str,
+    attrs: dict[str, Any],
+    specs: tuple[Mapping[str, object], ...],
+    *,
+    comp_name: str,
+) -> None:
+    """Recheck trusted typed State controls against the final post-hook element shape."""
+    if not specs:
+        return
+    location = _Location(comp_name=comp_name, where=f"<{tag_name}> after all attribute hooks resolved")
+    element = _resolved_element(tag_name, attrs, location)
+    for spec in specs:
         field = spec["field"]
-        binding_mode = spec["binding_mode"]
-        handler = spec["handler"]
-        lazy = spec["lazy"]
-        on_event = spec["on"]
-        key = spec["key"]
-        debounce = spec["debounce"]
-        throttle = spec["throttle"]
-        if not isinstance(cid, str) or not cid or not isinstance(field, str) or not field:
-            _fail(location, f"{DATA_CEV_BIND!r} spec {index} needs nonempty string 'cid' and 'field' values")
-        if not isinstance(binding_mode, str) or binding_mode not in {"one-way", "two-way"}:
-            _fail(
-                location,
-                f"{DATA_CEV_BIND!r} spec {index} has invalid 'binding_mode'; expected 'one-way' or 'two-way'",
-            )
-        if type(lazy) is not bool:
-            _fail(location, f"{DATA_CEV_BIND!r} spec {index} has non-boolean 'lazy'")
-        if on_event is not None and (not isinstance(on_event, str) or not on_event):
-            _fail(location, f"{DATA_CEV_BIND!r} spec {index} has invalid 'on'; expected a nonempty string or null")
-        if key is not None and (not isinstance(key, str) or key not in _KEY_FILTERS):
-            _fail(location, f"{DATA_CEV_BIND!r} spec {index} has invalid event-key filter 'key'")
-        for timing_name, timing in (("debounce", debounce), ("throttle", throttle)):
-            if timing is not None and (type(timing) is not int or timing < 0):
-                _fail(
-                    location,
-                    f"{DATA_CEV_BIND!r} spec {index} has invalid '{timing_name}';"
-                    " expected nonnegative integer or null",
-                )
         attr_name = f":c-{field}"
-        if binding_mode == "one-way":
-            if (
-                handler is not None
-                or lazy
-                or on_event is not None
-                or key is not None
-                or debounce is not None
-                or throttle is not None
-            ):
-                _fail(location, f"{DATA_CEV_BIND!r} spec {index} has update fields on a one-way binding")
+        if spec["binding_mode"] == "one-way":
             _validate_binding_target(
                 element,
                 binding_mode="one-way",
                 attr_name=attr_name,
                 location=location,
             )
-            continue
-        if not isinstance(handler, str) or not handler:
-            _fail(location, f"{DATA_CEV_BIND!r} spec {index} needs a nonempty two-way 'handler'")
-        if lazy and on_event is not None:
-            _fail(location, f"{DATA_CEV_BIND!r} spec {index} cannot combine 'lazy' with an explicit 'on' event")
-        _validate_two_way_control(
-            element,
-            lazy=lazy,
-            on_event=on_event,
-            attr_name=attr_name,
-            location=location,
-        )
-
-
-def _merge_encoded(attrs: dict[str, Any], name: str, specs: list[dict[str, Any]], location: _Location) -> None:
-    """
-    Set (or extend) a ``data-cev-*`` attribute with new specs.
-
-    When stage one already emitted this attribute on the same element (a literal
-    binding alongside a spread), the existing specs are decoded and the new ones
-    appended, so both survive in one attribute.
-    """
-    existing = attrs.get(name)
-    if existing is not None:
-        prior = _decode_compiled_specs(name, existing, location)
-        specs = [*prior, *specs]
-    attrs[name] = _encode(specs)
+        else:
+            _validate_two_way_control(
+                element,
+                lazy=cast("bool", spec["lazy"]),
+                on_event=cast("str | None", spec["on"]),
+                attr_name=attr_name,
+                location=location,
+            )

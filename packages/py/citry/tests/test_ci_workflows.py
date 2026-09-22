@@ -190,3 +190,25 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert "inputs.pytest_target" not in run_step["run"]
     assert run_step["run"] == 'uv run --no-sync python -m pytest -m "not e2e" --durations 30 -- "$PYTEST_TARGET"'
     assert "-n" not in run_step["run"].split()
+
+
+def test_workspace_core_wheel_consumers_reject_ambiguous_cached_outputs() -> None:
+    docs_workflow = _load_workflow("repo--docs-check.yml")
+    docs_steps = {step.get("name", step.get("uses")): step for step in docs_workflow["jobs"]["docs-e2e"]["steps"]}
+    select = docs_steps["Select the workspace browser runtime artifact"]
+    assert select["shell"] == "bash"
+    assert "${#core_wheels[@]} -ne 1" in select["run"]
+    assert "-print -quit" not in select["run"]
+
+    publish_workflow = _load_workflow("py--citry--publish.yml")
+    core_consumers = [
+        step
+        for job in publish_workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if "--core-wheel" in step.get("run", "")
+    ]
+    assert len(core_consumers) == 2
+    for step in core_consumers:
+        assert step["shell"] == "bash"
+        assert "${#core_wheels[@]} -ne 1" in step["run"]
+        assert "-print -quit" not in step["run"]

@@ -6,18 +6,27 @@ citry.register_library(citry_ui)
 
 class TagActions(Component):
     template = """
-      <div x-data="{last: 'None'}" class="citry-ui-demo-stack">
+      <div class="citry-ui-demo-stack">
         <c-CTagGroup
           label="Open view"
           actionable
-          $c-props="{onAction: (value) => last = value}"
+          :onAction="(value) => last = value"
         >
           <c-CTag value="overview">Overview</c-CTag>
           <c-CTag value="activity">Activity</c-CTag>
           <c-CTag value="settings">Settings</c-CTag>
         </c-CTagGroup>
-        <output x-text="`Last action: ${last}`"></output>
+        <output v-text="`Last action: ${last}`"></output>
       </div>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            last: 'None'
+          };
+        },
+      });
     """
 
 

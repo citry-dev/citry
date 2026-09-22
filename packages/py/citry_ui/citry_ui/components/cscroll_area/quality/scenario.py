@@ -52,18 +52,6 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
             @c-quality-morph="refresh"
             @quality-native-scroll="nativeScrolls += 1"
             @quality-native-settled="nativeSettles += 1"
-            x-data="{
-              axis:'both',
-              width:'auto',
-              gutter:'stable',
-              overscroll:'auto',
-              nativeScrolls:0,
-              nativeSettles:0,
-              callbackCount:0,
-              lastInline:0,
-              lastBlock:0,
-              lifecycleCallbacks:0,
-            }"
           >
             <h1 id="scroll-area-states-title">ScrollArea states</h1>
             <output hidden data-quality-morph-step>{{ morph_step }}</output>
@@ -231,12 +219,7 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'configuration controlled release invalid repair smooth-owned disabled-axis reflections'
                 }"
-                $c-props="{
-                  axis,
-                  scrollbarWidth:width,
-                  scrollbarGutter:gutter,
-                  overscroll,
-                }"
+                :axis="axis" :scrollbarWidth="width" :scrollbarGutter="gutter" :overscroll="overscroll"
               >
                 <div class="scroll-area-quality__large-content">
                   Reactive configuration subject
@@ -252,18 +235,15 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
                 aria_label="Callback records"
                 style="max-inline-size:20rem;--cui-scroll-area-max-block-size:10rem"
                 c-attrs="{
-                  '@scroll':'$dispatch(`quality-native-scroll`)',
-                  '@scrollend':'$dispatch(`quality-native-settled`)',
                   'data-quality-states':
                     'callback native-scroll native-scrollend coalesced absolute-content resize-content'
                 }"
-                $c-props="{
-                  onScrollChange:(detail)=>{
+                :onScrollChange="(detail)=>{
                     callbackCount += 1;
+                    nativeScrolls += 1;
                     lastInline = Math.round(detail.inlineOffset);
                     lastBlock = Math.round(detail.blockOffset);
-                  },
-                }"
+                  }"
               >
                 <div class="scroll-area-quality__callback-content">
                   <p>Content changes do not synthesize a callback.</p>
@@ -273,15 +253,15 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
               </c-CScrollArea>
               <output id="scroll-area-quality-log">
                 Native:
-                <span data-quality-native-scrolls x-text="nativeScrolls">0</span>;
+                <span data-quality-native-scrolls v-text="nativeScrolls">0</span>;
                 settled:
-                <span data-quality-native-settles x-text="nativeSettles">0</span>;
+                <span data-quality-native-settles v-text="nativeSettles">0</span>;
                 callbacks:
-                <span data-quality-callbacks x-text="callbackCount">0</span>;
+                <span data-quality-callbacks v-text="callbackCount">0</span>;
                 inline:
-                <span data-quality-inline-offset x-text="lastInline">0</span>;
+                <span data-quality-inline-offset v-text="lastInline">0</span>;
                 block:
-                <span data-quality-block-offset x-text="lastBlock">0</span>
+                <span data-quality-block-offset v-text="lastBlock">0</span>
               </output>
             </article>
 
@@ -370,9 +350,7 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
                   aria_label="Lifecycle records"
                   style="max-inline-size:20rem;--cui-scroll-area-max-block-size:10rem"
                   c-attrs="{'data-quality-states':lifecycle_states}"
-                  $c-props="{
-                    onScrollChange:()=>lifecycleCallbacks += 1,
-                  }"
+                  :onScrollChange="()=>lifecycleCallbacks += 1"
                 >
                   <div class="scroll-area-quality__large-content">
                     Lifecycle generation {{ morph_step }}
@@ -382,9 +360,27 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
             </c-if>
             <output id="scroll-area-quality-lifecycle-log">
               Lifecycle callbacks:
-              <span data-quality-lifecycle-callbacks x-text="lifecycleCallbacks">0</span>
+              <span data-quality-lifecycle-callbacks v-text="lifecycleCallbacks">0</span>
             </output>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                axis:'both',
+                width:'auto',
+                gutter:'stable',
+                overscroll:'auto',
+                nativeScrolls:0,
+                nativeSettles:0,
+                callbackCount:0,
+                lastInline:0,
+                lastBlock:0,
+                lifecycleCallbacks:0,
+              };
+            },
+          });
         """
 
         css = """

@@ -548,6 +548,43 @@ body {
   background: #000;
 }
 
+.youtube-video__facade {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.625rem;
+  padding: 1rem;
+  color: #fff;
+  background: linear-gradient(135deg, #242424, #050505);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.youtube-video__facade:hover {
+  background: linear-gradient(135deg, #353535, #111);
+}
+
+.youtube-video__facade:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 3px;
+}
+
+.youtube-video__play {
+  display: inline-grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #e62117;
+  font-size: 1.1rem;
+}
+
 .youtube-video__caption {
   margin-top: 0.5rem;
   color: var(--c-fg-subtle);

@@ -179,11 +179,15 @@ produces an HTML attribute at render time.
 Treat `__html__()` values as an escape hatch. Only pass one when the producing
 code is trusted and is responsible for its own escaping.
 
-## Keep browser attributes explicit too
+## Keep browser bindings in the template
 
-Alpine directives and browser event handlers are ordinary HTML attributes
-when a component deliberately spreads them onto an HTML element. They do not
-fall through a `<c-Component>` tag automatically.
+Write Vue bindings and browser event listeners directly on the HTML element
+that uses them. A Python mapping applied with `c-bind` supplies HTML attribute
+data; it cannot manufacture executable Vue directives or listeners. Native Vue
+bindings on a `<c-Component>` call follow the component-binding contract and do
+not enter the child's Python attribute mapping. Vue passes declared bindings as
+props or listeners. Undeclared bindings follow Vue's normal attribute
+fallthrough rules, including its single-root and `inheritAttrs` behavior.
 
 Read
 [Client interactivity](/concepts/client-interactivity/#pass-arbitrary-html-attributes-explicitly)

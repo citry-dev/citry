@@ -11,8 +11,9 @@ replace the output, catch a child's error, or raise.
 import pytest
 
 from citry import Citry, CitryRender, Component, Extension
+from citry._vue.capture import render_prepared_direct
+from citry._vue.direct_capture import assemble_typed_render
 from citry.citry_render import DeferredComponent
-from citry.ownership import OwnershipGraph
 
 
 def _has_deferred(render):
@@ -29,30 +30,15 @@ def _has_deferred(render):
     return walk(render.parts)
 
 
+def _assemble_prepared(component):
+    return assemble_typed_render(
+        render_prepared_direct(component),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+
+
 class TestOnRenderPlainForm:
-    def test_default_hooks_do_not_rescan_ownership_regions(self, monkeypatch):
-        selected_region_calls = 0
-        original = OwnershipGraph.selected_region_ids
-
-        def count_selected_regions(self, *, render_object_ids):
-            nonlocal selected_region_calls
-            selected_region_calls += 1
-            return original(self, render_object_ids=render_object_ids)
-
-        monkeypatch.setattr(OwnershipGraph, "selected_region_ids", count_selected_regions)
-        c = Citry()
-
-        class Leaf(Component):
-            citry = c
-            template = "<span>leaf</span>"
-
-        class Root(Component):
-            citry = c
-            template = "<main><c-leaf /></main>"
-
-        assert ">leaf</span>" in str(Root())
-        assert selected_region_calls == 0
-
     def test_default_renders_template(self):
         c = Citry()
 
@@ -335,28 +321,6 @@ class TestOnRenderGeneratorForm:
 
         Comp().render()
         assert order == ["before", "template"]
-
-    def test_noop_after_phase_does_not_rescan_ownership_regions(self, monkeypatch):
-        selected_region_calls = 0
-        original = OwnershipGraph.selected_region_ids
-
-        def count_selected_regions(self, *, render_object_ids):
-            nonlocal selected_region_calls
-            selected_region_calls += 1
-            return original(self, render_object_ids=render_object_ids)
-
-        monkeypatch.setattr(OwnershipGraph, "selected_region_ids", count_selected_regions)
-        c = Citry()
-
-        class Comp(Component):
-            citry = c
-            template = "<p>template</p>"
-
-            def on_render(self):
-                yield
-
-        assert ">template</p>" in str(Comp())
-        assert selected_region_calls == 0
 
     def test_bare_yield_receives_settled_render(self):
         received = []
@@ -751,3 +715,30 @@ class TestOnRenderGeneratorForm:
             "Mid:post",
             "Root:post",
         ]
+
+    def test_prepared_generator_slot_calls_keep_receiver_on_prime_and_resume(self):
+        c = Citry(autodiscover=False)
+        phases = []
+
+        class Boundary(Component):
+            citry = c
+
+            def on_render(self):
+                phases.append("prime")
+                first = self.raw_slots["default"]({"label": "prime"})
+                _result, error = yield first
+                assert error is None
+                phases.append("resume")
+                return self.raw_slots["default"]({"label": "resume"})
+
+        class Page(Component):
+            citry = c
+            template = '<c-Boundary><c-fill name="default" data="d"><b>{{ d.label }}</b></c-fill></c-Boundary>'
+
+        assembly = _assemble_prepared(Page())
+
+        assert phases == ["prime", "resume"]
+        assert len(assembly.view.occurrences) == 2
+        root = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
+        assert root.prepared_data["citryText0"] == "resume"
+        assert "prime" not in root.prepared_data.values()

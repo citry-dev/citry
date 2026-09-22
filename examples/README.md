@@ -5,7 +5,7 @@ separate from the smaller examples embedded in the Citry documentation.
 
 ## Choose a starter
 
-| Project | Use it when | Server Events | Local Alpine |
+| Project | Use it when | Server Events | Local Vue |
 |---|---|---:|---:|
 | [Standalone](starters/standalone/) | You want to render a self-contained HTML file without a web server. | No | Yes |
 | [FastAPI](starters/fastapi/) | Your application uses FastAPI or Starlette-style mounting. | Yes | Yes |
@@ -15,10 +15,10 @@ separate from the smaller examples embedded in the Citry documentation.
 | [Bare WSGI](starters/wsgi/) | You need the synchronous protocol adapter without a framework. | Yes | Yes |
 
 Every web starter implements the same Project Explorer. Its page route sends
-Python `Project` records to Citry components, Alpine opens the help panel in
-the browser, and a Citry Event sends each search query to Python and updates
-the project list. Because the visible behavior stays the same, you can compare
-how each host starts Citry and routes requests under `/citry`.
+Python `Project` records to Citry components, Vue opens the help panel in the
+browser, and a Citry Event sends each search query to Python and updates the
+project list. Because the visible behavior stays the same, you can compare how
+each host starts Citry and routes requests under `/citry`.
 
 The standalone project uses the same visual shell and data but omits the
 server-backed search. It writes one self-contained document that can be opened
@@ -44,7 +44,7 @@ private data or write operations.
 ## Explore a larger demo
 
 - [Project Board](demos/project_board/) lets you search, add, move, and
-  complete tasks while showing how components, Alpine, and Citry Events work
+  complete tasks while showing how components, Vue, and Citry Events work
   together in a larger application.
 - The [HTMX demo](demos/htmx/) lets you search contacts as you type, edit and
   validate a contact in place, and update the team list after choosing a
@@ -60,9 +60,9 @@ Its README shows the same local commands. Citry's monorepo CI copies each
 project to a temporary directory and runs its template checks and tests.
 For web projects, it starts the server and clicks through the interactions in
 a real browser. For the standalone starter, it opens the generated HTML file.
-The web starters cover Alpine and Citry Events; the standalone starter covers
-Alpine without a server. The HTMX demo runs against the same pinned HTMX file
-that it serves to users.
+The web starters cover Vue and Citry Events; the standalone starter covers Vue
+without a server. The HTMX demo runs against the same pinned HTMX file that it
+serves to users.
 
 The complete contract is in
 [`docs/design/example_projects.md`](../docs/design/example_projects.md).

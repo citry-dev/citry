@@ -23,7 +23,7 @@ class ProjectPage(Component):
             <h1>Render an interactive page without a web server.</h1>
             <p class="hero__intro">
               Python renders the project cards and bundles the page's CSS and
-              JavaScript. Alpine opens the help panel after you open the file.
+              JavaScript. Vue opens the help panel after you open the file.
             </p>
           </section>
         </c-fill>

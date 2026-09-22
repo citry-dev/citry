@@ -1,5 +1,66 @@
 # Release notes
 
+## Unreleased
+
+### Added
+
+- Citry now compiles interactive components to native Vue component definitions
+  on the server and ships a pinned production Vue runtime only when rendered
+  output needs it. Applications do not need Node.js or a separate frontend
+  build for ordinary component behavior.
+- Component templates accept the supported native Vue directives, bindings,
+  props, events, slots, and keyed lists. Vue's built-in helper components
+  (`<Teleport>`, `<Transition>`, `<Suspense>`, and `<KeepAlive>`) are not yet
+  accepted in compiled `Component.template` values and produce an
+  unsupported-helper diagnostic. `Component.js_data()` seeds reactive Vue
+  instance members, `$component({...})` accepts supported Vue Options,
+  `Citry.vue` exposes Composition API helpers, and
+  `onServerRender({ component, revision, onEvent })` runs after mount and each
+  accepted server render that updates this component. `onEvent` subscribes to
+  events for that component instance and returns an unsubscribe function.
+- Events renders can address a component occurrence with `render:<id>` or a
+  caller-relative `<c-mark name="...">` with `mark:<name>`. A contiguous group
+  can update several independent targets atomically.
+- The linter, language server, VS Code extension, starters, examples, and Citry
+  UI components understand the Vue authoring model and its component scopes.
+
+### Changed
+
+- **Breaking:** Alpine, its morph plugin, Citry's browser ownership graph, and
+  the public Alpine integration APIs are removed. Replace `x-*` expressions
+  with Vue syntax and migrate `$component` initializers to Vue Options or
+  `onServerRender`; the callback now receives only `component`, `revision`, and
+  `onEvent`.
+- **Breaking:** addressed Events renders no longer accept arbitrary CSS
+  selectors or non-`morph` swap modes. Target a component occurrence or an
+  explicit marker. Several matches for one target are no longer supported.
+- **Breaking:** browser-side provide/inject, reactivity, effects, props, and
+  lifecycle behavior now follow Vue. The former callback fields `els`, `data`,
+  `scope`, `state`, `i18n`, `effect`, `reactive`, `provide`, `inject`, and
+  `unprovide` are removed; use the Vue instance, native Options, and Citry's
+  instance helpers.
+- Prepared Events applications require JavaScript and CSP policy modes to be
+  configured on the `Citry` instance; differing call-local serialization
+  overrides are rejected so later revisions cannot use a weaker policy.
+- Static documents and fragments emit native `<style>`, `<link>`, and `<script>`
+  tags without a dependency manifest. Interactive fragments carry a validated
+  Vue descriptor and load only the assets required by that app.
+- The public dependencies extension hook context includes `selected_render`,
+  the exact render whose assets are being serialized.
+- Whitespace-minified browser assets reduce transfer size while the package
+  retains readable runtime source for debugging.
+
+### Fixed
+
+- Classic form and `Accept: text/html` Events calls return settled server HTML
+  when prepared rendering is enabled.
+- Isolated Events calls use their declared HTTP method, and GET calls reject
+  malformed UTF-16 query names and values instead of silently replacing them.
+- Mounted per-event routes accept each handler's declared HTTP methods,
+  including PUT and DELETE, while retaining handler-specific 405 and CSRF
+  checks.
+
+
 ## v0.5.1
 
 _11 Sep 2026_

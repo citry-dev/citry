@@ -8,8 +8,6 @@ class FormReset(Component):
     template = """
       <section
         class="exposure-reset"
-        x-data="{ cancel_reset: false, status: 'Edit either value, then reset.' }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <header>
           <p>Exposure plan</p>
@@ -23,7 +21,7 @@ class FormReset(Component):
               $event.preventDefault();
               status = 'Reset canceled; edits preserved.';
             } else {
-              setTimeout(() => status = 'Defaults restored.', 0);
+              window.setTimeout(() => status = 'Defaults restored.', 0);
             }
           "
         >
@@ -59,9 +57,29 @@ class FormReset(Component):
         <p
           class="exposure-reset__status"
           aria-live="polite"
-          x-text="status"
+          v-text="status"
         ></p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            cancel_reset: false, status: 'Edit either value, then reset.'
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

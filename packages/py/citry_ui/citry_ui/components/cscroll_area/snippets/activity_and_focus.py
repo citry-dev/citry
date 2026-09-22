@@ -8,7 +8,7 @@ class ScrollAreaActivityAndFocus(Component):
     template = """
       <section
         class="scroll-area-focus"
-        x-data="{last:'Focus the viewport, a link, or an action'}"
+
         @activity-focus="last=$event.detail"
         @activity-blur="last=$event.detail"
       >
@@ -19,14 +19,24 @@ class ScrollAreaActivityAndFocus(Component):
         <c-CScrollArea
           aria_label="Deployment activity"
           style="--cui-scroll-area-max-block-size: 15rem"
-          c-attrs="{
-            '@focus':'$dispatch(`activity-focus`, `Focused ${$event.target.id}`)',
-            '@blur':'$dispatch(`activity-blur`, `Left ${$event.target.id}`)',
-          }"
-          $c-props="{
-            onScrollChange:(detail)=>
-              last=`Block offset ${Math.round(detail.blockOffset)}`,
-          }"
+          @focusin="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'activity-focus',
+                {bubbles:true, detail:`Focused ${$event.target.id}`}
+              )
+            )
+          "
+          @focusout="
+            $event.currentTarget.dispatchEvent(
+              new $event.currentTarget.ownerDocument.defaultView.CustomEvent(
+                'activity-blur',
+                {bubbles:true, detail:`Left ${$event.target.id}`}
+              )
+            )
+          "
+          :onScrollChange="(detail)=>
+              last=`Block offset ${Math.round(detail.blockOffset)}`"
           id="deployment-activity"
         >
           <ol class="scroll-area-focus__timeline">
@@ -57,8 +67,17 @@ class ScrollAreaActivityAndFocus(Component):
             </li>
           </ol>
         </c-CScrollArea>
-        <output x-text="last">Focus the viewport, a link, or an action</output>
+        <output v-text="last">Focus the viewport, a link, or an action</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            last:'Focus the viewport, a link, or an action'
+          };
+        },
+      });
     """
 
     css = """

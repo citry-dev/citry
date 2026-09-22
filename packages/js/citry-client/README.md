@@ -1,94 +1,33 @@
 # citry-client
 
-Source of Citry's Events and i18n browser runtimes.
+Build and verification tooling for Citry's committed browser runtime.
 
-`citry-events.js` and `citry-events-csp.js` contain the same Events client
-code with the pinned standard or CSP Alpine evaluator plus
-`@alpinejs/morph`,
-the component scopes, the magics
-(`$state`, `$loading`, `$error`, `$sendEvent`, `$onEvent`, `$provide`,
-`$inject`, and `$unprovide`), the actions applier (`applyActions`), and the
-wire transport (envelope, fetch, CSRF, timeout). `citry-i18n.js` contains the
-opt-in `$i18n` service and pinned Fluent browser runtime. It loads only for a
-client-enabled `<c-i18n>` boundary. Designs:
-[`docs/design/events.md`](../../../docs/design/events.md) section 5 and
-[`docs/design/component_provide.md`](../../../docs/design/component_provide.md)
-section 10, plus [`docs/design/i18n.md`](../../../docs/design/i18n.md) section
-6.8.
+Citry ships Vue as its sole interactive renderer. The package pins Vue 3.5.42
+and builds the production runtime-only API, the prepared-tree Events bridge,
+and the independent Fluent i18n runtime. Node and pnpm are repository build
+tools; applications serve the committed JavaScript from the Python package and
+do not require Node in production.
 
-This package is private and never published. The runtimes are written in
-TypeScript. Their build outputs are committed at
-[`packages/py/citry/citry/ext/events/client/citry-events.js`](../../py/citry/citry/ext/events/client/citry-events.js),
-[`packages/py/citry/citry/ext/events/client/citry-events-csp.js`](../../py/citry/citry/ext/events/client/citry-events-csp.js),
-and
-[`packages/py/citry/citry/ext/i18n/client/citry-i18n.js`](../../py/citry/citry/ext/i18n/client/citry-i18n.js).
-Python packaging and serving never run Node.
+The maintained TypeScript sources are:
 
-Fixed `citry-events/1` records are not redefined here. The private
-[`@citry/protocol-events-v1`](../../protocol/events/v1/js/) workspace package
-builds outgoing calls and envelopes and validates incoming manifests, result
-envelopes, and public action lists. esbuild includes those helpers in the same
-IIFE, so this creates no browser request, global, or runtime package lookup.
+- `src/citry-vue.ts`, which exposes the pinned Vue runtime-only package;
+- `src/citry-events-vue.ts` and `src/citry-events-shared.ts`, which implement
+  signed Events transport, scheduling, forms, and the prepared-tree host port;
+- `src/citry-i18n-vue.ts`, `src/citry-i18n-runtime.ts`, and
+  `src/citry-i18n-core.ts`, which implement the native Vue Fluent plugin.
 
-## Working on it
+`pnpm run build` writes `_vue/vue.js`, `_vue/events.js`, the ordered combined
+`_vue/runtime.js`, and `ext/i18n/client/vue-plugin.source.js` under the Python package.
+Generated files are committed so installed Citry applications never compile
+browser code at startup.
 
-The package is part of the repo's pnpm workspace; install from the repo root:
+Run the package checks with:
 
-```sh
-pnpm install
+```console
+pnpm --dir packages/js/citry-client run build
+pnpm --dir packages/js/citry-client run check
 ```
 
-Then, from this directory:
-
-```sh
-pnpm run build      # rebuild the three committed bundles from their TypeScript sources
-pnpm run typecheck  # tsc --noEmit (strict; esbuild stays the only emitter)
-pnpm run lint       # biome check (lint + format)
-pnpm test           # the pinned-version canary over the Alpine private APIs
-pnpm run check      # all three in one go; the repo gate's citry-client phase
-```
-
-Commit each rebuilt bundle together with its source change. The standard and
-CSP Events outputs intentionally share one source and differ only in Alpine's
-aliased entry point. The repo-wide gate
-(`python scripts/check.py`) runs `pnpm run
-check` here as its `citry-client` phase, so a stale type error or lint issue
-fails the same command CI runs.
-
-Run `pnpm --dir ../../protocol/events/v1/js run check` when changing a wire
-boundary. It replays the shared Python/JavaScript conformance mutations against
-the actual protocol validators.
-
-## TypeScript and the bundle
-
-`tsconfig.json` is for type-checking only (`noEmit`); esbuild compiles the
-TypeScript directly and is the only emitter. `build.mjs` passes an empty
-`tsconfigRaw` so esbuild ignores `tsconfig.json` when bundling: with
-the config visible, its `strict` (hence `alwaysStrict`) setting would stamp a
-top-level `"use strict"` across the whole iife bundle and flip the vendored
-Alpine out of the non-strict mode the committed bundle has always shipped in.
-The runtime's own iife carries its explicit `"use strict"` either way.
-
-Alpine and morph ship no type declarations; the narrow surface the runtime
-calls is declared locally in `src/alpine.d.ts` (including the pinned-version
-evaluator, attribute-removal, scope, and lifecycle APIs described below).
-
-## Version pins
-
-`alpinejs`, `@alpinejs/morph`, `@alpinejs/csp`, and `@fluent/bundle` are pinned
-exactly, with no version range. The CSP package is built from the same Events
-source by aliasing only `alpinejs/src/index` to `@alpinejs/csp/src/index`.
-Off and warning serialization select `citry-events.js`; strict CSP
-serialization selects `citry-events-csp.js`. A fragment manifest records that
-variant and an existing manager rejects a mismatch before adoption. The Events runtime
-uses Alpine internals for scope isolation, held-fragment release, and exact
-client-context directive cleanup (`addScopeToNode`, `_x_dataStack`,
-`_x_ignore`, `initTree`, and per-directive `utilities.cleanup`), narrowly
-instruments the pinned `getDirectiveHandler` execution path at build time,
-and rides morph's Alpine bridge (`Alpine.cloneNode`). These are version-coupled; the
-pins and the reasoning are recorded in
-[`docs/design/alpinejs/spike-morph-alpine.md`](../../../docs/design/alpinejs/spike-morph-alpine.md).
-When bumping an Alpine-family pin: update all three together, run `pnpm test`
-(the canary trips on any drift in those internals), rebuild, and run the browser e2e suite in
-[`packages/py/citry/tests/e2e/`](../../py/citry/tests/e2e/).
-When bumping Fluent, rebuild and run the i18n browser tests in that same suite.
+The canary tests compare each committed generated artifact with a fresh esbuild
+result and verify that the combined runtime loads Vue before the coordinator
+and Events bridge.

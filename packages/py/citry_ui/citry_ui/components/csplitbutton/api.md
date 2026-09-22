@@ -188,12 +188,12 @@ owner, one horizontal anatomy, and no imperative methods or custom DOM events.
 `attrs`, `primary_attrs`, `trigger_attrs`, and `menu_attrs` are copied and
 validated for their documented roots. They accept ordinary styling, language,
 permitted ARIA, and `data-*` except `data-citry-*`, `data-cev*`, `data-cid*`,
-and owned reflections. `@event` and `x-on:event` Alpine listeners are allowed;
-raw `on*` browser-expression attributes are rejected. The primary also accepts
+and owned reflections. Author native listeners on supplied content with Vue
+`@event` bindings; executable listener strings in mappings are rejected. The primary also accepts
 the documented native Form attributes, but URL-like action destinations remain
 consumer-owned and are not sanitized or trusted by Citry. Component-owned
 identity, semantics, state, focus order, popover targeting, Citry runtime
-fields, and structural Alpine ownership are rejected.
+fields, and structural client-runtime ownership are rejected.
 
 Primary content accepts text and decorative noninteractive content. The final
 Button needs a nonempty accessible name from visible text, `aria-label`, or

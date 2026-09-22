@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator, Mapping
 from dataclasses import fields
+from html.parser import HTMLParser
 from typing import get_args, get_type_hints
 
 import pytest
@@ -15,7 +16,7 @@ from citry import Citry, Component
 from citry_ui import CButton, CPopover, CTooltip
 
 
-def _page_html(value: object) -> str:
+def _page_html(value: object, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -26,7 +27,17 @@ def _page_html(value: object) -> str:
         def template_data(self, kwargs, slots):
             return {"value": value}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
+
+
+class _TagAttributes(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tags: list[tuple[str, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, dict(attrs)))
 
 
 def _popover(**kwargs: object) -> CPopover:
@@ -67,7 +78,7 @@ def test_popover_and_tooltip_emit_one_shared_anchored_runtime_dependency():
     html = str(Page())
 
     assert html.count("cannot replace an incompatible anchored-layer runtime") == 1
-    assert html.count("anchored-layer runtime dependency did not load") == 2
+    assert "anchored-layer runtime dependency did not load" not in html
 
 
 def test_popover_renders_semantic_top_layer_anatomy_and_typed_slot_data():
@@ -97,7 +108,8 @@ def test_popover_renders_semantic_top_layer_anatomy_and_typed_slot_data():
                 "default": "Subsurface ocean",
                 "actions": actions,
             },
-        )
+        ),
+        static_fallback=True,
     )
     surface = re.search(r'<div class="cui-popover(?:\s|\")[^>]*>', html)
 
@@ -177,10 +189,13 @@ def test_popover_rejects_invalid_or_ambiguous_inputs(kwargs, exception, message)
 
 
 def test_popover_detrusts_safe_id_strings_before_rendering():
-    html = _page_html(_popover(id=Markup('moon"data-unsafe="yes')))
+    html = _page_html(_popover(id=Markup('moon"data-unsafe="yes')), static_fallback=True)
 
-    assert 'id="moon&#34;data-unsafe=&#34;yes"' in html
-    assert 'data-unsafe="yes"' not in html
+    parser = _TagAttributes()
+    parser.feed(html)
+    surface = next(attrs for _tag, attrs in parser.tags if "cui-popover" in (attrs.get("class") or "").split())
+    assert surface["id"] == 'moon"data-unsafe="yes'
+    assert "data-unsafe" not in surface
 
 
 def test_popover_requires_every_structural_fill():
@@ -233,7 +248,7 @@ class _SideEffectMapping(Mapping[str, object]):
 
 def test_popover_snapshots_caller_owned_attrs_once_per_render():
     attrs = _SideEffectMapping()
-    html = _page_html(_popover(attrs=attrs))
+    html = _page_html(_popover(attrs=attrs), static_fallback=True)
 
     assert 'data-snapshot="first"' in html
     assert attrs.iterations == 1

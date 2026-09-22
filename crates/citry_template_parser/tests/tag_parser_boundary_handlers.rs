@@ -1,4 +1,4 @@
-// Parser validation for Alpine and Citry handlers authored on component calls.
+// Parser validation for native Vue and Citry handlers authored on component calls.
 
 mod common;
 
@@ -35,14 +35,18 @@ mod tests {
                 title="ok"
                 @click="direct"
                 c-@change="server_handler"
-                x-on:focus="focus"
-                c-x-on:blur="server_longhand"
                 @c-save="save"
                 c-@c-reset="server_citry_handler"
             />
         "#;
 
         assert!(parse_template(template, None, Some(&rules)).is_ok());
+    }
+
+    #[test]
+    fn test_component_boundary_object_events_bypass_python_kwarg_allowlist() {
+        let rules = child_rules();
+        assert!(parse_template(r#"<c-child v-on="listeners" />"#, None, Some(&rules)).is_ok());
     }
 
     #[test]
@@ -59,14 +63,13 @@ mod tests {
         for input in [
             r#"<button @click="first" c-@click="second"></button>"#,
             r#"<button c-@click="second" @click="first"></button>"#,
-            r#"<button x-on:click="first" c-x-on:click="second"></button>"#,
         ] {
             assert_parse_error(input, "provide the same logical attribute");
         }
 
         for input in [
             r#"<c-child @click="first" c-@click="second" />"#,
-            r#"<c-child c-x-on:click="second" x-on:click="first" />"#,
+            r#"<c-child v-on:click="first" @change="second" />"#,
             r#"<c-child @c-save="first" c-@c-save="second" />"#,
         ] {
             assert!(
@@ -77,10 +80,21 @@ mod tests {
     }
 
     #[test]
+    fn test_alpine_handler_aliases_are_not_component_binding_bypasses() {
+        let rules = child_rules();
+        for input in [
+            r#"<c-child x-on:click="first" />"#,
+            r#"<c-child c-x-on:click="second" />"#,
+        ] {
+            assert!(parse_template(input, None, Some(&rules)).is_err());
+        }
+    }
+
+    #[test]
     fn test_distinct_handler_names_and_spreads_can_interlace() {
         for input in [
-            r#"<button @click="first" x-on:click="second" c-bind="attrs"></button>"#,
-            r#"<c-child @click="first" x-on:click="second" c-bind="attrs" />"#,
+            r#"<button @click="first" v-on:focus="second" c-bind="attrs"></button>"#,
+            r#"<c-child @click="first" v-on:focus="second" c-bind="attrs" />"#,
         ] {
             assert!(
                 parse_template(input, None, None).is_ok(),

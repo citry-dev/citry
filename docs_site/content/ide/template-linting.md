@@ -1,6 +1,6 @@
 ---
 title: Template linting
-description: Configure unknown template, Alpine, and component JavaScript variables consistently across Citry tools.
+description: Configure unknown template, Vue, and component JavaScript variables consistently across Citry tools.
 ---
 
 # Template linting
@@ -13,25 +13,28 @@ error.
 Citry applies the same strict default to browser code that it can prove belongs
 to a component:
 
-- `citry.alpine.unknown-variable` checks free roots in Alpine expressions.
+- `citry.vue.unknown-variable` checks free roots in Vue expressions.
 - `citry.component-js.unknown-variable` checks free names inside a
-  `$component` callback or configuration object's `init` function.
+  `$component` callback or configuration object's `onServerRender` callback.
 
-The component JavaScript rule catches a missing context binding such as using
-`scope` after destructuring only `data`:
+The component JavaScript rule catches a missing binding such as using the old
+free `data` name inside an `onServerRender` callback:
 
 ```javascript
-$component(({ data }) => {
-  scope.ready = data.ready;
+$component({
+  onServerRender({ component }) {
+    component.ready = data.ready;
+  },
 });
 ```
 
-Destructure `scope` to use it, or declare a real project global through the
-lint settings when another script supplies that name.
+Use `component.serverDefaults` or an instance value instead of an undeclared
+name, or declare a real project global through the lint settings when another
+script supplies that name.
 
 See the diagnostic reference entries for
 [template variables](/ide/diagnostics/#citry.template.unknown-variable),
-[Alpine variables](/ide/diagnostics/#citry.alpine.unknown-variable), and
+[Vue variables](/ide/diagnostics/#citry.vue.unknown-variable), and
 [component JavaScript variables](/ide/diagnostics/#citry.component-js.unknown-variable)
 for their stable messages and reporting surfaces.
 
@@ -61,11 +64,11 @@ app = Citry(
             ],
             "url_for": Callable[[str], str],
         },
-        rule_unknown_alpine_variable="error",
-        alpine_variables={
+        rule_unknown_vue_variable="error",
+        vue_variables={
             "$analytics": Annotated[
                 "myapp.browser.Analytics",
-                "Analytics available as a custom Alpine magic.",
+                "Analytics available as a custom Vue magic.",
             ],
         },
         rule_unknown_component_js_variable="error",
@@ -93,13 +96,14 @@ another integration. A plain annotation supplies a type. `Annotated[T,
 annotations are resolved by the language server in the selected project
 environment.
 
-`alpine_variables` and `component_js_globals` follow the same annotation
-convention and also supply analysis metadata only. Use `alpine_variables` for
-custom Alpine magics or values supplied to an Alpine scope outside Citry. Use
+`vue_variables` and `component_js_globals` follow the same annotation
+convention and also supply analysis metadata only. Use `vue_variables` for
+custom Vue magics or values supplied to a Vue scope outside Citry. Use
 `component_js_globals` for project scripts that make a real global available
-inside `$component`. Context values such as `data`, `scope`, `props`, and
-`sendEvent` must still be destructured from the `$component` argument; listing
-one as a global would hide a real initializer bug.
+inside `$component`. Citry supplies `component` to `onServerRender`; server
+defaults, props, refs, i18n and event helpers are accessed through that
+instance. Listing one of those names as a global would hide a real initializer
+bug.
 
 ## Override one component
 

@@ -6,20 +6,20 @@ citry.register_library(citry_ui)
 
 class SidebarControlled(Component):
     template = """
-      <section x-data="{
-        collapsed:false,
-        last:'No request yet',
-        change(next){this.last=`Requested ${next ? 'collapse' : 'expand'}`;this.collapsed=next},
-      }">
-        <p><output x-text="last">No request yet</output></p>
+      <section>
+        <p><output v-text="last">No request yet</output></p>
         <c-CSidebar
           label="Controlled navigation"
-          $c-props="{collapsed,onCollapsedChange:change}"
+          :collapsed="collapsed"
+          :on-collapsed-change="change"
         >
           <strong>Controlled Sidebar content</strong>
         </c-CSidebar>
       </section>
     """
+    js = """$component({data(){return {collapsed:false,last:'No request yet'}},methods:{
+      change(next){this.last=`Requested ${next ? 'collapse' : 'expand'}`;this.collapsed=next},
+    }})"""
 
 
 preview = SidebarControlled()

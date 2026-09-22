@@ -18,6 +18,26 @@ def _popover_page() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: false,
+                open: false,
+                accept: false,
+                dismissible: true,
+                placement: 'bottom-start',
+                matchWidth: false,
+              };
+            },
+            mounted() {
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__state;
+            },
+          });
+        """
         css = """
           :where(.space-popover) {
             --cui-popover-background: rgb(15 35 54);
@@ -36,26 +56,16 @@ def _popover_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data="{
-                controlled: false,
-                open: false,
-                accept: false,
-                dismissible: true,
-                placement: 'bottom-start',
-                matchWidth: false,
-              }"
-            >
+            <body>
               <div style="padding: 180px 240px; min-block-size: 900px">
                 <c-CPopover
                   id="europa-popover"
                   class_="space-popover"
-                  $c-props="{
-                    open: controlled ? open : undefined,
-                    dismissible,
-                    placement,
-                    matchWidth,
-                    onOpenChange: (nextOpen, detail) => {
+                  :open="controlled ? open : undefined"
+                  :dismissible="dismissible"
+                  :placement="placement"
+                  :matchWidth="matchWidth"
+                  :onOpenChange="(nextOpen, detail) => {
                       window.__popoverRequest = {
                         nextOpen,
                         reason: detail.reason,
@@ -64,8 +74,7 @@ def _popover_page() -> str:
                       };
                       window.__popoverRequests = (window.__popoverRequests || 0) + 1;
                       if (accept) open = nextOpen;
-                    },
-                  }"
+                    }"
                 >
                   <c-fill
                     name="activator"
@@ -406,7 +415,7 @@ def test_controlled_owner_can_decline_then_accept_requests(page):
     trigger.click()
     page.wait_for_function("document.querySelector('#europa-popover').matches(':popover-open')")
     requests = page.evaluate("window.__popoverRequests")
-    page.evaluate("Alpine.$data(document.body).open = false")
+    page.evaluate("window.__state.open = false")
     page.wait_for_function("!document.querySelector('#europa-popover').matches(':popover-open')")
     assert page.evaluate("window.__popoverRequests") == requests
 
@@ -452,7 +461,7 @@ def test_nested_popover_owns_escape_before_its_parent(page):
     )
 
     assert page.evaluate("window[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length") == 2
-    page.evaluate("Alpine.$data(document.body).placement = 'top-end'")
+    page.evaluate("window.__state.placement = 'top-end'")
     page.wait_for_function("document.querySelector('#europa-popover').dataset.placement === 'top-end'")
     page.keyboard.press("Escape")
     page.wait_for_function("!document.querySelector('#nested-popover').matches(':popover-open')")

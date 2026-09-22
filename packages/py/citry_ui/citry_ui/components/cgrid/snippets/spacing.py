@@ -18,7 +18,7 @@ class GridSpacing(Component):
           <c-for each="gap in gaps">
             <article class="grid-spacing__example">
               <strong>gap={{ gap }}</strong>
-              <c-CGrid cols="3" c-gap="gap">
+              <c-CGrid #c-key="gap" cols="3" c-gap="gap">
                 <span></span><span></span><span></span>
               </c-CGrid>
             </article>

@@ -78,10 +78,7 @@ def _simple_selector_target(component: Component, target: type[Component], kwarg
         )
     if component._component_tag_client_bindings:
         raise TypeError(f"Component {target.__name__} uses simple=True; component bindings are unsupported.")
-    graph = component._ownership_graph
-    if graph.complete_selector_invocation(component):
-        graph.bind_supplied_slots(component)
-    return CitryElement(target, kwargs, component.raw_slots, ownership_graph=graph)
+    return CitryElement(target, kwargs, component.raw_slots)
 
 
 def make_dynamic_component(citry_instance: Citry) -> type[Component]:
@@ -109,6 +106,10 @@ def make_dynamic_component(citry_instance: Citry) -> type[Component]:
             data = cast("_ConstMapping", self.raw_kwargs.copy())
             _restore_const_identities(data, self._kwargs_const._const_values)
             comp_cls = _resolve_component(self, const_value(data.pop("is", None)))
+            if citry_instance._is_builtin_component(comp_cls) and comp_cls.name == "mark":
+                raise TypeError(
+                    'Dynamic component selection cannot select <c-mark>; use a literal <c-mark name="..."> tag.'
+                )
             if comp_cls.simple:
                 return {"target": _simple_selector_target(self, comp_cls, data)}
             # The target renders in this tag's place: remaining kwargs and the
@@ -119,9 +120,7 @@ def make_dynamic_component(citry_instance: Citry) -> type[Component]:
                 data,
                 self.raw_slots,
                 component_tag_client_bindings=self._component_tag_client_bindings,
-                ownership_invocation_id=self._ownership_invocation_id,
-                ownership_graph=self._ownership_graph,
-                forward_ownership_invocation=(getattr(comp_cls, "name", None) or "").lower() == "component",
+                prepared_call_metadata=self._prepared_call_metadata,
             )
             target.contains_fills, target.has_range_directives = getattr(self, "_selector_call_shape", (False, False))
             return {"target": target}
@@ -189,7 +188,96 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
             _validate_tag_name(tag)
             _reject_named_fills(self.raw_slots)
 
-            attr_str = _format_element_attrs(self, tag, attrs)
+            resolved_attrs = _resolve_element_attrs(self, tag, attrs)
+
+            from citry._vue.capture import prepared_render_active  # noqa: PLC0415
+
+            if prepared_render_active():
+                from citry._vue.capture import (  # noqa: PLC0415
+                    PreparedDynamicElementClose,
+                    prepared_dynamic_element_open,
+                )
+
+                is_void = tag.lower() in HTML_VOID_ELEMENTS
+                metadata = self._element_morph_metadata
+                if metadata is not None and metadata.morph_mode is not None:
+                    raise TypeError("prepared dynamic <c-element> does not yet support #c-ignore metadata")
+                authored_bindings = () if metadata is None else metadata.authored_bindings
+                retained_bindings = []
+                for binding in authored_bindings:
+                    if (
+                        binding.key in resolved_attrs
+                        and type(resolved_attrs[binding.key]) is type(binding.value)
+                        and resolved_attrs[binding.key] == binding.value
+                    ):
+                        retained_bindings.append(binding)
+                        resolved_attrs.pop(binding.key)
+                executable = [
+                    name for name in resolved_attrs if isinstance(name, str) and name.startswith(("@", ":", "v-", "#"))
+                ]
+                if executable:
+                    raise TypeError(
+                        "prepared dynamic <c-element> does not support tag-dependent or executable Vue "
+                        f"attributes: {', '.join(executable)}"
+                    )
+                from citry.ext.events.bindings import RUNTIME_CONTROL_ATTR, RUNTIME_EVENTS_ATTR  # noqa: PLC0415
+
+                event_bindings = () if metadata is None else metadata.event_bindings
+                poll_bindings = () if metadata is None else metadata.poll_bindings
+                control_bindings = () if metadata is None else metadata.control_bindings
+                normalized = None
+                if (
+                    event_bindings
+                    or poll_bindings
+                    or control_bindings
+                    or (metadata is not None and metadata.runtime_events_candidate)
+                    or RUNTIME_EVENTS_ATTR in resolved_attrs
+                    or RUNTIME_CONTROL_ATTR in resolved_attrs
+                ):
+                    from citry._vue.capture import PreparedElementOpenNode  # noqa: PLC0415
+                    from citry.citry_context import CitryContext  # noqa: PLC0415
+
+                    call = self._prepared_call_metadata
+                    if call is None or type(call.source) is not str:
+                        raise TypeError("dynamic element Events metadata lost authored source provenance")
+                    normalizer = PreparedElementOpenNode(
+                        call.source,
+                        call.source_span,
+                        tag,
+                        (),
+                        (),
+                        is_void,
+                        False,  # noqa: FBT003
+                        (),
+                        event_bindings,
+                        poll_bindings,
+                        control_bindings,
+                    )
+                    normalizer._runtime_events_candidate = (
+                        metadata is not None and metadata.runtime_events_candidate
+                    ) or RUNTIME_EVENTS_ATTR in resolved_attrs
+                    normalized = normalizer._prepared_from_resolved(
+                        resolved_attrs,
+                        context=CitryContext(component=self),
+                        extension_validated=True,
+                        owner_name=None if metadata is None else metadata.owner_name,
+                    )
+                    resolved_attrs = dict(normalized.data_attrs)
+                if is_void and self.raw_slots:
+                    msg = f"<c-element>: void element '{tag}' cannot have children."
+                    raise ValueError(msg)
+                return {
+                    "open": prepared_dynamic_element_open(
+                        tag,
+                        resolved_attrs,
+                        authored_bindings=tuple(retained_bindings),
+                        key=None if metadata is None else metadata.key,
+                        normalized=normalized,
+                    ),
+                    "close": "" if is_void else PreparedDynamicElementClose(tag),
+                }
+
+            attr_str = _format_resolved_element_attrs(resolved_attrs)
 
             # Void elements cannot have children; the empty open/close pair
             # below otherwise brackets the default slot (the tag's body).
@@ -245,7 +333,7 @@ def _reject_named_fills(raw_slots: dict[str, Slot]) -> None:
         raise ValueError(msg)
 
 
-def _format_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any]) -> Markup:
+def _resolve_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any]) -> dict[str, Any]:
     """
     Format the element's attributes the way a statically written element's
     are: normalize class/style, drop ``False``/``None``, fire the
@@ -306,8 +394,17 @@ def _format_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any]) 
             resolved[_ELEMENT_KEY_ATTR] = f":{metadata.key}"
         if metadata.morph_mode == "ignore":
             resolved[_ELEMENT_MORPH_ATTR] = "ignore"
+    return dict(resolved)
+
+
+def _format_resolved_element_attrs(resolved: dict[str, Any]) -> Markup:
     formatted = format_attrs(resolved)
     return Markup(" {}").format(formatted) if formatted else Markup("")
+
+
+def _format_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any]) -> Markup:
+    """Compatibility wrapper for ordinary serialization and focused tests."""
+    return _format_resolved_element_attrs(_resolve_element_attrs(renderer, tag, attrs))
 
 
 def _reject_element_metadata_conflicts(component: Component, attrs: dict[str, Any]) -> None:

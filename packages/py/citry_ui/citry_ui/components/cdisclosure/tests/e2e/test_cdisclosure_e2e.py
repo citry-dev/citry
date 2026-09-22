@@ -1,5 +1,7 @@
 """Browser contract tests for the Disclosure component family."""
 
+# ruff: noqa: E501 - embedded Vue expressions remain readable in browser fixtures
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,6 +13,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component, ComponentLibrary
+from citry.ext.dependencies import Script
 from citry_ui.components.cdisclosure.cdisclosure import (
     CDisclosure,
     CInternalDisclosureActionsContent,
@@ -46,6 +49,13 @@ def _page_html() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const disclosureTest=Citry.vue.reactive({
+            events:[],nativeClicks:0,controlled:true,controlledDisabled:false,
+            variant:'outline',size:'md',indicator:true,indicatorPosition:'end',
+            mutateGuideCallback:false,
+          }); window.__disclosureTest=disclosureTest; return {state:{disclosureTest}};}});
+        """
         css = """
           :where(.disclosure-brand) {
             --cui-disclosure-radius: 19px;
@@ -65,43 +75,32 @@ def _page_html() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('disclosureTest', {
-                events: [],
-                nativeClicks: 0,
-                controlled: true,
-                controlledDisabled: false,
-                variant: 'outline',
-                size: 'md',
-                indicator: true,
-                indicatorPosition: 'end',
-                mutateGuideCallback: false,
-              })"
-            >
+            <body>
               <button id="before" type="button">Before</button>
               <form id="settings-form">
                 <c-CDisclosure
                   id="guide"
                   class_="disclosure-brand disclosure-fast"
                   actions_label="Guide actions"
-                  c-trigger_attrs="{'@click.stop': '$store.disclosureTest.nativeClicks += 1'}"
-                  $c-props="{
-                    variant: $store.disclosureTest.variant,
-                    size: $store.disclosureTest.size,
-                    indicator: $store.disclosureTest.indicator,
-                    indicatorPosition: $store.disclosureTest.indicatorPosition,
-                    onOpenChange: (next, detail) => {
-                      $store.disclosureTest.events.push({
+                  @click.stop="
+                    $event.target.closest('[data-citry-disclosure-trigger]')?.closest('[data-citry-disclosure-root]')
+                      === $event.currentTarget
+                    && (state.disclosureTest.nativeClicks += 1)
+                  "
+                  :variant="state.disclosureTest.variant"
+                  :size="state.disclosureTest.size"
+                  :indicator="state.disclosureTest.indicator"
+                  :indicatorPosition="state.disclosureTest.indicatorPosition"
+                  :onOpenChange="(next, detail) => {
+                      state.disclosureTest.events.push({
                         next,
                         detail,
                         observed: document.querySelector('#guide button').ariaExpanded,
                       });
-                      if ($store.disclosureTest.mutateGuideCallback) {
+                      if (state.disclosureTest.mutateGuideCallback) {
                         document.querySelector('#guide-title').textContent = '';
                       }
-                    },
-                  }"
+                    }"
                 >
                   <c-fill name="title"><strong id="guide-title">System requirements</strong></c-fill>
                   <c-fill name="actions">
@@ -123,11 +122,9 @@ def _page_html() -> str:
               <c-CDisclosure
                 id="controlled"
                 class_="disclosure-zero"
-                $c-props="{
-                  open: $store.disclosureTest.controlled,
-                  disabled: $store.disclosureTest.controlledDisabled,
-                  onOpenChange: (next, detail) => $store.disclosureTest.events.push({next, detail}),
-                }"
+                :open="state.disclosureTest.controlled"
+                :disabled="state.disclosureTest.controlledDisabled"
+                :onOpenChange="(next, detail) => state.disclosureTest.events.push({next, detail})"
               >
                 <c-fill name="title"><span id="controlled-title">Advanced logging</span></c-fill>
                 <c-fill name="default">
@@ -163,27 +160,31 @@ def _initial_invalid_page_html() -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({
+            data() {
+              const initialInvalid = Citry.vue.reactive({ open: true, events: [] });
+              window.__initialInvalid = initialInvalid;
+              return { state: { initialInvalid } };
+            },
+            mounted() {
+              document.querySelector('#initial-invalid-title').textContent = '';
+            },
+          });
+        """
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body
-              x-data
-              x-init="Alpine.store('initialInvalid', {open: true, events: []})"
-            >
+            <body>
               <c-CDisclosure
                 id="initial-invalid"
-                $c-props="{
-                  open: $store.initialInvalid.open,
-                  onOpenChange: (next, detail) => $store.initialInvalid.events.push({next, detail}),
-                }"
+                :open="state.initialInvalid.open"
+                :onOpenChange="(next, detail) => state.initialInvalid.events.push({next, detail})"
               >
                 <c-fill name="title"><span id="initial-invalid-title">Declared title</span></c-fill>
                 <c-fill name="default">Declared closed content</c-fill>
               </c-CDisclosure>
-              <script>
-                document.querySelector('#initial-invalid-title').textContent = '';
-              </script>
               <c-js />
             </body>
           </html>
@@ -197,19 +198,18 @@ def _local_scope_page_html() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {open:false,controlled:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
             <body>
-              <section x-data="{open:false, controlled:true}">
+              <section>
                 <c-CDisclosure
                   id="local-controlled"
                   style="--cui-disclosure-duration: 0ms"
-                  $c-props="{
-                    open: controlled ? open : null,
-                    onOpenChange: next => { if (controlled) open = next; },
-                  }"
+                  :open="controlled ? open : null"
+                  :onOpenChange="next => { if (controlled) open = next; }"
                 >
                   <c-fill name="title">Local owner</c-fill>
                   <c-fill name="default">Local panel</c-fill>
@@ -223,7 +223,7 @@ def _local_scope_page_html() -> str:
                 <button id="local-release" type="button" @click="controlled=false">
                   Release
                 </button>
-                <output id="local-state" x-text="`${controlled}:${open}`"></output>
+                <output id="local-state" :textContent="String(controlled) + ':' + String(open)"></output>
               </section>
               <c-js />
             </body>
@@ -266,10 +266,8 @@ def _events_page() -> tuple[Citry, str]:
               id="events-disclosure"
               c-open="server_open"
               style="--cui-disclosure-duration: 0ms"
-              $c-props="{
-                open: $store.disclosureMorph.controlled,
-                onOpenChange: (next, detail) => $store.disclosureMorph.events.push({next, detail}),
-              }"
+              :open="window.__disclosureMorph.controlled"
+              :onOpenChange="(next, detail) => window.__disclosureMorph.events.push({next, detail})"
             >
               <c-fill name="title">Morph title {{ step }}</c-fill>
               <c-fill name="default"><input id="morph-input" value="preserved" /></c-fill>
@@ -285,14 +283,12 @@ def _events_page() -> tuple[Citry, str]:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){const disclosureMorph=Citry.vue.reactive({controlled:undefined,events:[]});window.__disclosureMorph=disclosureMorph;return {state:{disclosureMorph}};}});"
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body
-              x-data
-              x-init="Alpine.store('disclosureMorph', {controlled: undefined, events: []})"
-            >
+            <body>
               <c-events-disclosure />
               <c-js />
             </body>
@@ -310,11 +306,9 @@ def _overlay_page_html(kind: str) -> str:
         "popover": """
           <c-CPopover
             id="anchored-surface"
-            $c-props="{
-              onOpenChange: (next, detail) => window.__overlayClose = {
+            :onOpenChange="(next, detail) => window.__overlayClose = {
                 next, reason: detail.reason, forced: detail.forced,
-              },
-            }"
+              }"
           >
             <c-fill name="activator" data="{ activator_attrs }">
               <button id="anchored-trigger" type="button" c-bind="activator_attrs">
@@ -328,11 +322,9 @@ def _overlay_page_html(kind: str) -> str:
         "menu": """
           <c-CMenu
             id="anchored-surface"
-            $c-props="{
-              onOpenChange: (next, detail) => window.__overlayClose = {
+            :onOpenChange="(next, detail) => window.__overlayClose = {
                 next, reason: detail.reason, forced: detail.forced,
-              },
-            }"
+              }"
           >
             <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
               <button
@@ -353,11 +345,9 @@ def _overlay_page_html(kind: str) -> str:
             text="Credential format"
             c-delay="0"
             c-close_delay="0"
-            $c-props="{
-              onOpenChange: (next, detail) => window.__overlayClose = {
+            :onOpenChange="(next, detail) => window.__overlayClose = {
                 next, reason: detail.reason, forced: detail.forced,
-              },
-            }"
+              }"
           >
             <c-fill name="activator" data="{ activator_attrs }">
               <button id="anchored-trigger" type="button" c-bind="activator_attrs">
@@ -376,7 +366,7 @@ def _overlay_page_html(kind: str) -> str:
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body x-data>
+            <body>
               <c-CDisclosure
                 id="overlay-disclosure"
                 open
@@ -403,25 +393,32 @@ def _incompatible_runtime_page_html() -> str:
 
     class Page(Component):
         citry = app
+        js = "$component({});"
+
+        class Dependencies:
+            js = [
+                Script(
+                    content="""
+                      const coordinator = { generation: 'closed-v2-coordinator' };
+                      const runtime = {
+                        version: 2,
+                        stats: { listenerSets: 0, reconciliations: 0 },
+                        layers: [],
+                        coordinatorFor: () => coordinator,
+                      };
+                      window.__closedV2Coordinator = coordinator;
+                      window.__oldAnchoredRuntime = runtime;
+                      globalThis[Symbol.for('citry-ui:anchored-layer-runtime')] = runtime;
+                    """,
+                    wrap=False,
+                )
+            ]
+
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
             <body>
-              <script>
-                (() => {
-                  const coordinator = { generation: 'closed-v2-coordinator' };
-                  const runtime = {
-                    version: 2,
-                    stats: { listenerSets: 0, reconciliations: 0 },
-                    layers: [],
-                    coordinatorFor: () => coordinator,
-                  };
-                  window.__closedV2Coordinator = coordinator;
-                  window.__oldAnchoredRuntime = runtime;
-                  globalThis[Symbol.for('citry-ui:anchored-layer-runtime')] = runtime;
-                })();
-              </script>
               <div id="closed-v2-owner" data-citry-tooltip-initialized hidden></div>
               <c-CDisclosure id="new-disclosure">
                 <c-fill name="title">New fragment title</c-fill>
@@ -474,8 +471,8 @@ def test_uncontrolled_native_activation_callback_actions_and_nested_isolation(di
     assert trigger.get_attribute("aria-expanded") == "true"
     assert not panel.is_hidden()
     assert guide.get_attribute("data-state") == "open"
-    assert page.evaluate("Alpine.store('disclosureTest').nativeClicks") == 1
-    event = page.evaluate("Alpine.store('disclosureTest').events.at(-1)")
+    assert page.evaluate("window.__disclosureTest.nativeClicks") == 1
+    event = page.evaluate("window.__disclosureTest.events.at(-1)")
     assert event == {
         "next": True,
         "observed": "false",
@@ -503,7 +500,7 @@ def test_uncontrolled_native_activation_callback_actions_and_nested_isolation(di
     trigger.press("Space")
     page.wait_for_timeout(100)
     assert trigger.get_attribute("aria-expanded") == "true"
-    assert page.evaluate("Alpine.store('disclosureTest').nativeClicks") == 3
+    assert page.evaluate("window.__disclosureTest.nativeClicks") == 3
     assert errors == []
 
 
@@ -539,31 +536,31 @@ def test_controlled_refusal_acceptance_release_and_invalid_input_episodes(disclo
     assert trigger.get_attribute("aria-expanded") == "true"
     trigger.click()
     assert trigger.get_attribute("aria-expanded") == "true"
-    request = page.evaluate("Alpine.store('disclosureTest').events.at(-1)")
+    request = page.evaluate("window.__disclosureTest.events.at(-1)")
     assert request["next"] is False
     assert request["detail"]["controlled"] is True
 
-    page.evaluate("Alpine.store('disclosureTest').controlled = false")
+    page.evaluate("window.__disclosureTest.controlled = false")
     page.wait_for_function("document.querySelector('#controlled button').ariaExpanded === 'false'")
     assert panel.evaluate("element => element.hidden && element.inert")
-    count = page.evaluate("Alpine.store('disclosureTest').events.length")
+    count = page.evaluate("window.__disclosureTest.events.length")
 
-    page.evaluate("Alpine.store('disclosureTest').controlled = null")
+    page.evaluate("window.__disclosureTest.controlled = null")
     page.wait_for_timeout(20)
     assert trigger.get_attribute("aria-expanded") == "false"
-    assert page.evaluate("Alpine.store('disclosureTest').events.length") == count
+    assert page.evaluate("window.__disclosureTest.events.length") == count
 
-    page.evaluate("Alpine.store('disclosureTest').controlled = 'bad-one'")
+    page.evaluate("window.__disclosureTest.controlled = 'bad-one'")
     page.wait_for_timeout(20)
-    page.evaluate("Alpine.store('disclosureTest').controlled = 'bad-two'")
+    page.evaluate("window.__disclosureTest.controlled = 'bad-two'")
     page.wait_for_timeout(20)
     open_errors = [error for error in errors if "CDisclosure open received invalid" in error]
     assert len(open_errors) == 1
     assert trigger.get_attribute("aria-expanded") == "false"
 
-    page.evaluate("Alpine.store('disclosureTest').controlled = true")
+    page.evaluate("window.__disclosureTest.controlled = true")
     page.wait_for_function("document.querySelector('#controlled button').ariaExpanded === 'true'")
-    page.evaluate("Alpine.store('disclosureTest').controlled = 42")
+    page.evaluate("window.__disclosureTest.controlled = 42")
     page.wait_for_timeout(20)
     open_errors = [error for error in errors if "CDisclosure open received invalid" in error]
     assert len(open_errors) == 2
@@ -576,18 +573,18 @@ def test_callback_runs_precommit_and_post_callback_preflight_rejects_new_invalid
     root = page.locator("#guide")
     trigger = _trigger(page, "guide")
     panel = _panel(page, "guide")
-    page.evaluate("Alpine.store('disclosureTest').mutateGuideCallback = true")
+    page.evaluate("window.__disclosureTest.mutateGuideCallback = true")
 
     trigger.click()
     assert trigger.get_attribute("aria-expanded") == "false"
     assert panel.evaluate("element => element.hidden && element.inert")
     assert root.get_attribute("data-citry-disclosure-initialized") is None
-    event = page.evaluate("Alpine.store('disclosureTest').events.at(-1)")
+    event = page.evaluate("window.__disclosureTest.events.at(-1)")
     assert event["observed"] == "false"
     assert event["next"] is True
     assert len([error for error in errors if "settled structure is invalid" in error]) == 1
 
-    page.evaluate("Alpine.store('disclosureTest').mutateGuideCallback = false")
+    page.evaluate("window.__disclosureTest.mutateGuideCallback = false")
     page.locator("#guide-title").evaluate("element => { element.textContent = 'Repaired title'; }")
     page.wait_for_function("document.querySelector('#guide').hasAttribute('data-citry-disclosure-initialized')")
     assert trigger.get_attribute("aria-expanded") == "false"
@@ -719,7 +716,7 @@ def test_synchronous_structure_preflight_suspension_repair_and_latest_owner_stat
     page.evaluate(
         """() => {
           document.querySelector('#controlled-title').textContent = '';
-          Alpine.store('disclosureTest').controlled = false;
+          window.__disclosureTest.controlled = false;
         }"""
     )
     page.wait_for_function("!document.querySelector('#controlled').hasAttribute('data-citry-disclosure-initialized')")
@@ -810,8 +807,8 @@ def test_disabled_close_uses_body_or_composed_modal_focus_fallback(disclosure_pa
     input_.focus()
     page.evaluate(
         """() => {
-          Alpine.store('disclosureTest').controlledDisabled = true;
-          Alpine.store('disclosureTest').controlled = false;
+          window.__disclosureTest.controlledDisabled = true;
+          window.__disclosureTest.controlled = false;
         }"""
     )
     page.wait_for_function("document.querySelector('#controlled button').matches(':disabled')")
@@ -820,8 +817,8 @@ def test_disabled_close_uses_body_or_composed_modal_focus_fallback(disclosure_pa
 
     page.evaluate(
         """() => {
-          Alpine.store('disclosureTest').controlledDisabled = false;
-          Alpine.store('disclosureTest').controlled = true;
+          window.__disclosureTest.controlledDisabled = false;
+          window.__disclosureTest.controlled = true;
         }"""
     )
     page.wait_for_function("document.querySelector('#controlled button').ariaExpanded === 'true'")
@@ -841,8 +838,8 @@ def test_disabled_close_uses_body_or_composed_modal_focus_fallback(disclosure_pa
     page.evaluate("window.__controlledShadow.querySelector('#controlled-input').focus()")
     page.evaluate(
         """() => {
-          Alpine.store('disclosureTest').controlledDisabled = true;
-          Alpine.store('disclosureTest').controlled = false;
+          window.__disclosureTest.controlledDisabled = true;
+          window.__disclosureTest.controlled = false;
         }"""
     )
     page.wait_for_function("document.activeElement === document.querySelector('#modal-owner')")
@@ -859,7 +856,7 @@ def test_public_css_reflections_rtl_zero_motion_and_print_expansion(disclosure_p
     assert root.evaluate("element => getComputedStyle(element).borderTopLeftRadius") == "19px"
     page.evaluate(
         """() => {
-          const store = Alpine.store('disclosureTest');
+          const store = window.__disclosureTest;
           store.variant = 'plain';
           store.size = 'lg';
           store.indicatorPosition = 'start';
@@ -874,8 +871,8 @@ def test_public_css_reflections_rtl_zero_motion_and_print_expansion(disclosure_p
     zero_panel = _panel(page, "controlled")
     page.evaluate(
         """() => {
-          Alpine.store('disclosureTest').controlledDisabled = false;
-          Alpine.store('disclosureTest').controlled = false;
+          window.__disclosureTest.controlledDisabled = false;
+          window.__disclosureTest.controlled = false;
         }"""
     )
     page.wait_for_function("document.querySelector('#controlled button').ariaExpanded === 'false'")
@@ -899,7 +896,7 @@ def test_initial_invalid_is_validation_only_and_repair_applies_latest_raw_owner_
     root = page.locator("#initial-invalid")
     trigger = _trigger(page, "initial-invalid")
     panel = _panel(page, "initial-invalid")
-    page.wait_for_function("window.Alpine && Alpine.store('initialInvalid')")
+    page.wait_for_function("window.__initialInvalid")
 
     assert root.get_attribute("data-citry-disclosure-initialized") is None
     assert trigger.get_attribute("aria-expanded") == "false"
@@ -907,13 +904,13 @@ def test_initial_invalid_is_validation_only_and_repair_applies_latest_raw_owner_
     trigger.evaluate("element => element.click()")
     assert trigger.get_attribute("aria-expanded") == "false"
 
-    page.evaluate("Alpine.store('initialInvalid').open = 'not-a-boolean'")
+    page.evaluate("window.__initialInvalid.open = 'not-a-boolean'")
     page.wait_for_timeout(20)
     assert not any("CDisclosure open received invalid" in error for error in errors)
     page.evaluate(
         """() => {
-          Alpine.store('initialInvalid').open = false;
-          Alpine.store('initialInvalid').open = true;
+          window.__initialInvalid.open = false;
+          window.__initialInvalid.open = true;
         }"""
     )
     page.wait_for_timeout(20)
@@ -924,11 +921,11 @@ def test_initial_invalid_is_validation_only_and_repair_applies_latest_raw_owner_
     )
     assert trigger.get_attribute("aria-expanded") == "true"
     assert not panel.evaluate("element => element.hidden || element.inert")
-    assert page.evaluate("Alpine.store('initialInvalid').events.length") == 0
+    assert page.evaluate("window.__initialInvalid.events.length") == 0
     assert len([error for error in errors if "settled structure is invalid" in error]) == 1
 
 
-def test_local_alpine_scope_controls_external_and_trigger_requests(page: Any):
+def test_local_vue_scope_controls_external_and_trigger_requests(page: Any):
     errors: list[str] = []
     page.on(
         "console",
@@ -977,12 +974,15 @@ def test_incompatible_runtime_generation_fails_closed_without_replacing_closed_v
             && installed.generation === undefined;
         }"""
     )
+    assert page.evaluate("globalThis[Symbol.for('citry-ui:anchored-layer-runtime-compatible')] === false")
     assert page.locator("#closed-v2-owner").get_attribute("data-citry-tooltip-initialized") == ""
     assert page.locator("#new-disclosure").get_attribute("data-citry-disclosure-initialized") is None
-    assert any("a full page reload is required" in error for error in errors)
+    assert errors == [
+        "[citry-ui] cannot replace an incompatible anchored-layer runtime; a full page reload is required."
+    ]
 
 
-def test_server_fingerprint_morph_handoff_preserves_and_replaces_only_the_release_baseline(
+def test_server_fingerprint_morph_handoff_preserves_data_only_updates_and_unchanged_native_values(
     page: Any,
     serve_citry_ui_live: Any,
 ):
@@ -995,31 +995,34 @@ def test_server_fingerprint_morph_handoff_preserves_and_replaces_only_the_releas
     app, html = _events_page()
     base = serve_citry_ui_live(app, html)
     page.goto(base + "/")
-    page.wait_for_function("window.Citry && Citry.events && Citry.events._internal.alpineStarted")
+    page.wait_for_function("window.Citry && Citry.events")
     trigger = _trigger(page, "events-disclosure")
     page.evaluate("window.__eventsDisclosureRoot = document.querySelector('#events-disclosure')")
 
     trigger.click()
     assert trigger.get_attribute("aria-expanded") == "true"
-    assert page.evaluate("Alpine.store('disclosureMorph').events.length") == 1
+    assert page.evaluate("window.__disclosureMorph.events.length") == 1
     page.locator("#morph-input").fill("browser-owned")
 
     page.evaluate("() => Citry.events.send(document.querySelector('.advance-disclosure'), 'advance', {})")
     page.wait_for_function("document.querySelector('#events-step').textContent.trim() === '1'")
     assert page.evaluate("document.querySelector('#events-disclosure') === window.__eventsDisclosureRoot")
     assert trigger.get_attribute("aria-expanded") == "true"
+    # The server baseline is unchanged, so the retained element keeps its
+    # dirty native value even though the surrounding component received an
+    # event-driven publication.
     assert page.locator("#morph-input").input_value() == "browser-owned"
 
-    page.evaluate("Alpine.store('disclosureMorph').controlled = false")
+    page.evaluate("window.__disclosureMorph.controlled = false")
     page.wait_for_function("document.querySelector('#events-disclosure button').ariaExpanded === 'false'")
     page.evaluate("() => Citry.events.send(document.querySelector('.advance-disclosure'), 'advance', {})")
     page.wait_for_function("document.querySelector('#events-step').textContent.trim() === '2'")
     assert trigger.get_attribute("aria-expanded") == "false"
-    assert page.evaluate("Alpine.store('disclosureMorph').events.length") == 1
+    assert page.evaluate("window.__disclosureMorph.events.length") == 1
 
-    page.evaluate("Alpine.store('disclosureMorph').controlled = null")
+    page.evaluate("window.__disclosureMorph.controlled = null")
     page.wait_for_function("document.querySelector('#events-disclosure button').ariaExpanded === 'true'")
-    assert page.evaluate("Alpine.store('disclosureMorph').events.length") == 1
+    assert page.evaluate("window.__disclosureMorph.events.length") == 1
     assert errors == []
 
 

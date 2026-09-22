@@ -9,7 +9,7 @@ from citry import Citry, Component
 from citry_ui import CButton, CForm
 
 
-def _render(value: object) -> str:
+def _render(value: object, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,7 +20,8 @@ def _render(value: object) -> str:
         def template_data(self, kwargs, slots):
             return {"value": value}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_form_renders_direct_native_inputs_and_private_first_legend() -> None:
@@ -37,7 +38,8 @@ def test_form_renders_direct_native_inputs_and_private_first_legend() -> None:
             style={"--cui-form-gap": "0.5rem"},
             attrs={"data-workflow": "observation"},
             slots={"default": "Fields"},
-        )
+        ),
+        static_fallback=True,
     )
     form = re.search(r'<form[^>]+id="observation-form"[^>]*>', html)
 
@@ -58,7 +60,7 @@ def test_form_renders_direct_native_inputs_and_private_first_legend() -> None:
 
 
 def test_form_preserves_explicit_empty_action_and_target() -> None:
-    html = _render(CForm(action="", target="", slots={"default": "Fields"}))
+    html = _render(CForm(action="", target="", slots={"default": "Fields"}), static_fallback=True)
     form = re.search(r"<form[^>]*>", html)
 
     assert form is not None
@@ -82,6 +84,7 @@ def test_form_preserves_explicit_empty_action_and_target() -> None:
         ({"attrs": {"action": "/other"}}, ValueError, "owned attribute"),
         ({"attrs": {"METHOD": "post"}}, ValueError, "owned attribute"),
         ({"attrs": {"data-submitting": "false"}}, ValueError, "owned attribute"),
+        ({"attrs": {"ref": "other"}}, ValueError, "owned attribute"),
     ],
 )
 def test_form_rejects_invalid_or_ambiguous_server_inputs(kwargs, exception, message) -> None:
@@ -107,7 +110,8 @@ def test_disabled_form_is_reflected_by_descendant_button_without_javascript() ->
                     slots={"default": "Submit observation"},
                 )
             },
-        )
+        ),
+        static_fallback=True,
     )
     button = re.search(r'<button class="cui-button"[^>]*>', html)
 
@@ -120,7 +124,8 @@ def test_disabled_form_is_reflected_by_descendant_button_without_javascript() ->
         CForm(
             disabled=True,
             slots={"default": CButton(href="/help", slots={"default": "Help"})},
-        )
+        ),
+        static_fallback=True,
     )
     link = re.search(r'<a class="cui-button"[^>]*>', link_html)
 

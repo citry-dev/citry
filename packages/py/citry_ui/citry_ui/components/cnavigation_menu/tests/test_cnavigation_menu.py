@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -12,7 +13,7 @@ from citry import Citry, Component
 from citry_ui import CNavigationMenu, CNavigationMenuItem, CNavigationMenuLink
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,7 +21,18 @@ def _render(source: str) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
+
+
+def _manifest(html: str) -> dict[str, object]:
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["manifest"]
+
+
+def _occurrence(manifest: dict[str, object], type_name: str) -> dict[str, object]:
+    return next(item for item in manifest["occurrences"] if item["typeKey"].startswith(f"{type_name}_"))
 
 
 def _source(root: str = "", item: str = "") -> str:
@@ -35,27 +47,43 @@ def _source(root: str = "", item: str = "") -> str:
 
 
 def test_navigation_menu_renders_native_navigation_anatomy() -> None:
-    html = _render(_source('value="products" variant="surface" size="lg"'))
-    assert re.search(r'<nav[^>]+aria-label="Main"', html)
-    assert re.search(r'<nav[^>]+data-value="products"', html)
-    assert '<ul data-citry-ui-part="list">' in html
-    assert re.search(r'<a[^>]+href="/home"[^>]+aria-current="page"', html)
-    assert re.search(r'<button[^>]+type="button"[^>]+aria-expanded="true"', html)
-    assert re.search(r'<div[^>]+data-citry-ui-part="panel"[^>]*>', html)
-    assert 'role="menu"' not in html
-    assert 'role="menubar"' not in html
+    source = _source('value="products" variant="surface" size="lg"')
+    html = _render(source)
+    static_html = _render(source, static_fallback=True)
+    assert re.search(r'<nav[^>]+aria-label="Main"', static_html)
+    assert re.search(r'<nav[^>]+data-value="products"', static_html)
+    assert '<ul data-citry-ui-part="list">' in static_html
+    assert re.search(r'<a[^>]+href="/home"[^>]+aria-current="page"', static_html)
+    assert re.search(r'<button[^>]+type="button"[^>]+aria-expanded="true"', static_html)
+    assert re.search(r'<div[^>]+data-citry-ui-part="panel"[^>]*>', static_html)
+    assert 'role="menu"' not in static_html
+    assert 'role="menubar"' not in static_html
+    manifest = _manifest(html)
+    menu = _occurrence(manifest, "CNavigationMenu")["preparedData"]["citryAttrs0"]
+    assert menu["aria-label"] == "Main"
+    assert menu["data-value"] == "products"
+    item = _occurrence(manifest, "CNavigationMenuItem")["preparedData"]
+    assert item["citryAttrs1"]["aria-expanded"] == "true"
+    assert item["citryAttrs2"]["data-value"] == "products"
 
 
 def test_closed_and_disabled_panels_are_inert_and_form_safe() -> None:
-    html = _render(_source(item='c-disabled="True"'))
-    trigger = re.search(r"<button[^>]+data-citry-navigation-menu-trigger[^>]*>", html)
-    panel = re.search(r"<div[^>]+data-citry-navigation-menu-panel[^>]*>", html)
+    source = _source(item='c-disabled="True"')
+    html = _render(source)
+    static_html = _render(source, static_fallback=True)
+    trigger = re.search(r"<button[^>]+data-citry-navigation-menu-trigger[^>]*>", static_html)
+    panel = re.search(r"<div[^>]+data-citry-navigation-menu-panel[^>]*>", static_html)
     assert trigger is not None
     assert " disabled" in trigger.group(0)
     assert 'type="button"' in trigger.group(0)
     assert panel is not None
     assert " hidden" in panel.group(0)
     assert " inert" in panel.group(0)
+    item = _occurrence(_manifest(html), "CNavigationMenuItem")["preparedData"]
+    assert item["citryAttrs0"]["data-disabled"] == ""
+    assert item["citryAttrs1"]["disabled"] is True
+    assert item["citryAttrs2"]["hidden"] is True
+    assert item["citryAttrs2"]["inert"] is True
 
 
 def test_public_schema_and_registration_are_exact() -> None:

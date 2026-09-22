@@ -34,6 +34,7 @@ from citry.ext.events.dispatcher import (
     TransportContext,
 )
 from citry.ext.events.errors import EventError
+from citry.ext.events.results import HTML_RENDER_ENCODER
 from citry.ext.events.tokens import mint_state_token, verify_state_token
 from citry.extension import Extension
 from citry.util.routing import RouteResponse
@@ -201,10 +202,12 @@ class TestHappyPaths:
         assert action["target"] == "render:c9zk1q00"
         # No capabilities field means the baseline, which excludes morph.
         assert action["swap"] == "replace"
-        assert "Clicked 1 times" in action["html"]
+        assert '"count": 1' in action["html"]
+        assert "eventContext" in action["html"]
+        assert "citry-vue-" in action["html"]
         # The fragment carries its own manifests; the state action is not
         # needed because the fresh manifest carries the new token.
-        assert "data-citry-events" in action["html"]
+        assert "stateToken" in action["html"]
         assert all(a["action"] != "state" for a in item["actions"])
 
     def test_morph_when_the_client_advertises_it(self):
@@ -219,6 +222,78 @@ class TestHappyPaths:
         result = _dispatch(c, call, envelope_extra={"capabilities": {"swaps": ["replace", "morph"]}})
         [action] = result["results"][0]["actions"]
         assert action["swap"] == "morph"
+
+    def test_configured_render_encoder_is_selected_by_negotiated_renderer(self):
+        c = _citry()
+        counter = _counter(c)
+
+        class PreparedEncoder:
+            renderer = "vue-prepared/1"
+
+            def encode(self, action, target, context):
+                assert context.citry is c
+                assert context.handler.name == "increment"
+                assert context.transport == "http"
+                assert context.caller_render_id == "counter_1"
+                return {
+                    "action": "render",
+                    "target": target,
+                    "swap": action.swap,
+                    "renderer": self.renderer,
+                    "prepared": {"count": 1},
+                }
+
+        dispatcher = EventsDispatcher(render_encoders=(PreparedEncoder(),), preferred_renderer="vue-prepared/1")
+        call = {
+            "componentClassId": counter.class_id,
+            "handlerName": "increment",
+            "callerRenderId": "counter_1",
+            "stateToken": _token(counter),
+        }
+        capabilities = {
+            "actions": ["render", "state"],
+            "swaps": ["morph"],
+            "renderers": ["vue-prepared/1", "html-fragment/1"],
+        }
+        [item] = _dispatch(
+            c,
+            call,
+            dispatcher=dispatcher,
+            envelope_extra={"capabilities": capabilities},
+        )["results"]
+        assert item["actions"] == [
+            {
+                "action": "render",
+                "target": "render:counter_1",
+                "swap": "morph",
+                "renderer": "vue-prepared/1",
+                "prepared": {"count": 1},
+            }
+        ]
+
+    def test_configured_render_encoder_requires_client_support(self):
+        class PreparedEncoder:
+            renderer = "vue-prepared/1"
+
+            def encode(self, action, target, context):  # pragma: no cover - rejected before encoding
+                raise AssertionError
+
+        c = _citry()
+        counter = _counter(c)
+        dispatcher = EventsDispatcher(render_encoders=(PreparedEncoder(),), preferred_renderer="vue-prepared/1")
+        call = {"componentClassId": counter.class_id, "handlerName": "increment", "stateToken": _token(counter)}
+        [item] = _dispatch(c, call, dispatcher=dispatcher)["results"]
+        assert item["error"]["code"] == "handler_error"
+
+    def test_render_encoder_registry_rejects_unknown_and_duplicate_names(self):
+        class UnknownEncoder:
+            renderer = "unknown/1"
+
+        with pytest.raises(ValueError, match="Unknown render encoder renderer"):
+            EventsDispatcher(render_encoders=(UnknownEncoder(),), preferred_renderer="unknown/1")
+
+        with pytest.raises(ValueError, match="already registered"):
+            EventsDispatcher(render_encoders=(HTML_RENDER_ENCODER, HTML_RENDER_ENCODER))
 
     def test_rename_emits_state_first_then_event_then_data(self):
         c = _citry()
@@ -344,7 +419,7 @@ class TestStateResign:
                     from citry.ext.events.actions import Render
 
                     state.count += 1
-                    return Render(Badge(), target="#badge")
+                    return Render(Badge(), target="mark:badge")
 
         call = {
             "componentClassId": Mutator.class_id,
@@ -353,8 +428,10 @@ class TestStateResign:
             "stateToken": _token(Mutator),
         }
         result = _dispatch(c, call)
-        kinds = [action["action"] for action in result["results"][0]["actions"]]
+        actions = result["results"][0]["actions"]
+        kinds = [action["action"] for action in actions]
         assert kinds == ["state", "render"]
+        assert actions[1]["target"] == "mark:badge"
 
     def test_unchanged_state_mints_nothing(self):
         c = _citry()

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from citry import LibraryComponent, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_html_attr_bindings
 from citry_ui.components._validation import reject_owned_attrs
 
 CSkeletonKind = Literal["rect", "text", "circle"]
@@ -17,7 +17,25 @@ _KINDS = ("rect", "text", "circle")
 _ANIMATIONS = ("pulse", "wave", "none")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
+    {
+        "x-bind",
+        "x-for",
+        "x-html",
+        "x-if",
+        "x-ignore",
+        "x-model",
+        "x-modelable",
+        "x-teleport",
+        "x-text",
+        "v-bind",
+        "v-for",
+        "v-html",
+        "v-if",
+        "v-model",
+        "v-on",
+        "v-show",
+        "v-text",
+    }
 )
 _OWNED_ATTRS = frozenset(
     {
@@ -76,21 +94,13 @@ def _lines(value: object) -> int:
     return raw
 
 
-def _dynamic_target(attribute: str) -> str | None:
-    normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
-    if normalized.startswith((":", ".")):
-        return normalized[1:].split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
     if attrs is not None and not isinstance(attrs, Mapping):
         msg = f"CSkeleton attrs must be a mapping or None, got {attrs!r}."
         raise TypeError(msg)
     copied = dict(attrs or {})
     reject_owned_attrs(copied, _OWNED_ATTRS, "CSkeleton attrs")
+    reject_html_attr_bindings(copied, _OWNED_ATTRS, "CSkeleton")
     for key in copied:
         normalized = key.casefold()
         if normalized.startswith(_RUNTIME_PREFIXES):
@@ -100,10 +110,6 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
             normalized.startswith(f"{directive}.") for directive in _OWNERSHIP_DIRECTIVES
         ):
             msg = f"CSkeleton attrs cannot use ownership directive {key!r}."
-            raise ValueError(msg)
-        target = _dynamic_target(normalized)
-        if target in _OWNED_ATTRS:
-            msg = f"CSkeleton attrs cannot dynamically bind owned attribute {target!r}."
             raise ValueError(msg)
     return copied
 
@@ -184,7 +190,7 @@ class CSkeleton(LibraryComponent):
             c-for="line in lines"
             class="cui-skeleton__line"
             data-citry-ui-part="line"
-            c-data-last="has_multiple_lines and line == lines[-1]"
+            c-data-last="'' if has_multiple_lines and line == lines[-1] else None"
           ></span>
         </c-if>
       </span>

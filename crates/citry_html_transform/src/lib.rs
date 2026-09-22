@@ -6,8 +6,12 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod marker;
+pub mod output_scanner;
 pub mod transformer;
 
 // Re-export the types and functions that users need
-pub use marker::{mark_html, scan_alpine_html, MarkedHtml, MarkedPlaceholder};
+pub use marker::{mark_html, MarkedHtml, MarkedPlaceholder};
+pub use output_scanner::{
+    scan_output_html, validate_html_fragment_boundary, OutputAttribute, OutputTag,
+};
 pub use transformer::{transform_html, HtmlTransformerConfig};

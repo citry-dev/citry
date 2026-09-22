@@ -26,7 +26,7 @@ citry/
 │   ├── citry_core_py/   # Main Rust crate exposed to Python
 │   ├── citry_html_transform/
 │   ├── citry_i18n/     # Language-neutral Fluent catalog runtime
-│   ├── citry_ownership/ # Internal render relationship calculation
+│   ├── citry_vue_compiler/ # Native browser-template compilation
 │   ├── citry_template_formatter/
 │   ├── python_safe_eval/
 │   └── citry_template_parser/
@@ -186,6 +186,12 @@ pip install uv
    uv run maturin develop
    ```
 
+   In a separate worktree, explicitly select that worktree's virtual environment
+   before invoking maturin. It honors `VIRTUAL_ENV` even when the maturin
+   executable comes from a different environment. An inherited value can install
+   the editable package into another checkout's environment. Check the selected
+   interpreter and imported `citry_core._rust` path after rebuilding.
+
    Note: both `maturin develop` and the `uv sync` build produce a **debug** (unoptimized) extension. That is fine for tests, but it makes the Rust-backed paths ~10x or more slower, so pass `--release` (for example `uv run maturin develop --release`) before running any benchmark.
 
    When switching between a version-specific extension and an ABI3 build, both
@@ -208,7 +214,7 @@ pip install uv
    uv run pytest
 
    # Or run Rust tests first (scoped to our crates, see "Running tests" below)
-   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
    ```
 
 ## Common Development Tasks
@@ -246,10 +252,10 @@ would also run ruff's own test suite. CI scopes the run the same way
 uv run pytest
 
 # Rust tests (our crates only)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
 
 # Both (Rust first, then Python)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_ownership -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
 ```
 
 #### Browser end-to-end tests
@@ -466,16 +472,15 @@ cross-OS, and dedicated browser breadth on top of that single-environment gate.
 
 ### Protocol packages and shipped copies
 
-Citry has two private server/browser wire contracts:
+Citry's language-neutral Events contract lives in
+[`packages/protocol/events/v1/`](../packages/protocol/events/v1/) and owns
+Events calls, results, actions, and browser manifests. The current Vue prepared
+definition/occurrence protocol lives in `citry._vue.protocol` and its browser
+coordinator; [the Vue design](design/vue.md) tracks the cutover and qualification.
 
-- [`packages/protocol/events/v1/`](../packages/protocol/events/v1/) owns
-  Events calls, results, actions, and browser manifests.
-- [`packages/protocol/client_graph/v1/`](../packages/protocol/client_graph/v1/)
-  owns the rendered component graph and its ownership comments.
-
-Each directory contains the prose spec, JSON Schemas, worked examples, a
-standard-library-only Python package, and a TypeScript package. The protocol
-directories are the editable sources. Citry ships byte-identical Python copies
+The Events directory contains the prose spec, JSON Schemas, worked examples, a
+standard-library-only Python package, and a TypeScript package. It is the
+editable source. Citry ships byte-identical Python copies
 under `citry._protocol`; refresh or check them with:
 
 ```bash
@@ -483,14 +488,15 @@ uv run python scripts/sync_protocol_python.py
 uv run python scripts/sync_protocol_python.py --check
 ```
 
-The Events TypeScript package builds into `citry-events.js`. The client-graph
-TypeScript package builds one marked generated block inside `citry.js`.
-Package-local `pnpm run check` commands type-check the sources, replay shared
-cases, and reject stale generated files:
+The Events TypeScript package supplies protocol types and validation used by
+the Vue Events bridge in `packages/js/citry-client`. The client build
+combines the production Vue runtime, prepared coordinator, and Events bridge
+into `citry/_vue/runtime.js`; i18n has a separate generated bundle. Package-local
+`pnpm run check` commands type-check the sources, replay shared cases, and
+reject stale generated files:
 
 ```bash
 pnpm --dir packages/protocol/events/v1/js run check
-pnpm --dir packages/protocol/client_graph/v1/js run check
 pnpm --dir packages/js/citry-client run check
 ```
 
@@ -500,12 +506,11 @@ concrete structural rule at one schema location. The companion
 `tests/constraint-ownership.json` groups every such rule under named Python
 and JavaScript validator functions and supporting test files. Counts and
 content fingerprints make a schema edit fail until its validator assignment
-is reviewed. Run both protocol audits with:
+is reviewed. Run the Events protocol audit with:
 
 ```bash
 uv run python -m packages.protocol._tooling.check \
-  packages/protocol/events/v1 \
-  packages/protocol/client_graph/v1
+  packages/protocol/events/v1
 ```
 
 The report deliberately keeps complete ownership assignment separate from the
@@ -1078,7 +1083,7 @@ only be uploaded through the web interface; there is no API for either.
 The top-level `Cargo.toml` defines a workspace that includes:
 
 - Core crates (`citry_core_py`, `citry_html_transform`, `citry_i18n`,
-  `citry_ownership`,
+  `citry_vue_compiler`,
   `citry_template_formatter`, `python_safe_eval`, `citry_template_parser`)
 - Shared dependencies and toolchain configuration
 - Unified linting, formatting, and testing
@@ -1165,7 +1170,7 @@ dev = ["maturin>=1.10.2", "ruff>=0.10.0", "mypy>=1.0.0"]
 
 The workspace has exactly one dependency lockfile: the root [`uv.lock`](../uv.lock).
 Run `uv lock` from the repository root and commit that file for every workspace
-dependency or package-version change. Package-local `uv.lock` files belong to
+dependency or package-version change. Workspace-member package-local `uv.lock` files belong to
 the pre-workspace layout and are not development, CI, or release inputs; the
 remaining Citry Core copy is tracked for removal in
 [#87](https://github.com/citry-dev/citry/issues/87).

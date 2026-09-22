@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon import CIconName  # noqa: TC001 - runtime type hints
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
-
-if TYPE_CHECKING:
-    from citry_ui.components.cicon.cicon import _RegisteredIconGlyph
 
 CAlertIntent = Literal["info", "success", "warn", "error"]
 CAlertVariant = Literal["soft", "solid", "outline"]
@@ -91,7 +88,8 @@ class CAlertActionsSlotData:
 @dataclass(frozen=True, slots=True)
 class _AlertGlyph:
     intent: str
-    icon: _RegisteredIconGlyph
+    content: Any
+    logical: bool
 
 
 def _plain_optional_string(input_name: str, value: object) -> str | None:
@@ -208,15 +206,18 @@ class CAlert(LibraryComponent):
         validate_boolean("CAlert", "icon", kwargs.icon)
         actions_label = _plain_actions_label(kwargs.actions_label)
 
-        fixed_icon = (
-            None if kwargs.icon_name is None else _resolve_registered_icon(kwargs.icon_name, "CAlert icon_name")
-        )
+        def render_glyph(intent_name: str, icon_name: object, component_name: str) -> _AlertGlyph:
+            registered = _resolve_registered_icon(icon_name, component_name)
+            return _AlertGlyph(
+                intent=intent_name,
+                content=self.citry.render_template(registered.markup),
+                logical=registered.logical,
+            )
+
+        fixed_icon = None if kwargs.icon_name is None else render_glyph("", kwargs.icon_name, "CAlert icon_name")
         automatic_icons = (
             tuple(
-                _AlertGlyph(
-                    intent=automatic_intent,
-                    icon=_resolve_registered_icon(icon_name, "CAlert automatic icon"),
-                )
+                render_glyph(automatic_intent, icon_name, "CAlert automatic icon")
                 for automatic_intent, icon_name in _AUTOMATIC_ICON_NAMES.items()
             )
             if fixed_icon is None
@@ -266,11 +267,13 @@ class CAlert(LibraryComponent):
     ) -> dict[str, object]:
         validate_boolean("CAlert", "icon", kwargs.icon)
         return {
-            "intent": _plain_choice("intent", kwargs.intent, _INTENTS),
-            "variant": _plain_choice("variant", kwargs.variant, _VARIANTS),
-            "size": _plain_choice("size", kwargs.size, _SIZES),
-            "announce": _plain_choice("announce", kwargs.announce, _ANNOUNCEMENTS),
-            "icon": bool(kwargs.icon),
+            "serverDefaults": {
+                "intent": _plain_choice("intent", kwargs.intent, _INTENTS),
+                "variant": _plain_choice("variant", kwargs.variant, _VARIANTS),
+                "size": _plain_choice("size", kwargs.size, _SIZES),
+                "announce": _plain_choice("announce", kwargs.announce, _ANNOUNCEMENTS),
+                "icon": bool(kwargs.icon),
+            }
         }
 
     template = """
@@ -280,7 +283,7 @@ class CAlert(LibraryComponent):
         c-data-variant="variant"
         c-data-size="size"
         c-data-announce="announce"
-        c-data-icon="icon"
+        c-data-icon="'' if icon else None"
         c-bind="attrs"
         data-citry-ui-part="alert"
       >
@@ -308,17 +311,20 @@ class CAlert(LibraryComponent):
                   {'cui-alert__glyph--logical': fixed_icon.logical},
                 ]"
               >
-                {{ fixed_icon.markup }}
+                {{ fixed_icon.content }}
               </g>
             </c-if>
             <c-else>
               <g
                 c-for="glyph in automatic_icons"
-                class="cui-alert__glyph"
+                c-class="[
+                  'cui-alert__glyph',
+                  {'cui-alert__glyph--logical': glyph.logical},
+                ]"
                 c-data-cui-alert-intent="glyph.intent"
-                c-data-cui-alert-hidden="glyph.intent != intent"
+                c-data-cui-alert-hidden="'' if glyph.intent != intent else None"
               >
-                {{ glyph.icon.markup }}
+                {{ glyph.content }}
               </g>
             </c-else>
           </svg>
@@ -368,8 +374,10 @@ class CAlert(LibraryComponent):
           announce: {},
           icon: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
           const indicator = root.querySelector('[data-citry-ui-part="indicator"]');
           const content = root.querySelector('[data-citry-ui-part="content"]');
           const automaticGlyphs = Array.from(
@@ -438,7 +446,7 @@ class CAlert(LibraryComponent):
             }
           };
 
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             const next = {
               intent: resolveChoice("intent"),
               variant: resolveChoice("variant"),

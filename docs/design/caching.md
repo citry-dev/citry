@@ -159,10 +159,7 @@ django-components provides:
 - publication after a successful render;
 - an optional attempt to add slot contents to the key.
 
-The implementation and tests are preserved locally in
-[`_djc_reference/extensions/cache.py`](../../packages/py/citry/_djc_reference/extensions/cache.py)
-and
-the upstream
+The prior-art implementation and tests are available in the upstream
 [`test_component_cache.py`](https://github.com/django-components/django-components/blob/5d4d4f5d13dd06c80ba389f30fc63fdbb71cda75/tests/test_component_cache.py).
 The current user contract is documented in
 [django-components component caching](https://django-components.github.io/django-components/latest/concepts/advanced/component_caching/).
@@ -728,7 +725,8 @@ artifacts suspect, including:
 - template reset;
 - file reset;
 - component hot replacement;
-- final unregistration;
+- removal of any registered component name, including an alias while the class
+  remains reachable through another name;
 - a completed `Citry.clear()` lifecycle.
 
 The revision participates in every key. Incrementing it makes old entries
@@ -889,7 +887,8 @@ context or guess how to merge foreign graphs.
 
 ### 7.3 Replay
 
-Replay is transactional:
+Replay validates and stages the complete typed artifact before it changes the
+current render:
 
 1. Validate the complete artifact, all limits, symbolic references, and
    extension compatibility without mutating the current render.
@@ -900,20 +899,24 @@ Replay is transactional:
 3. Reserve a fresh render ID for every archived descendant occurrence. For
    `<c-cache>`, all archived component occurrences are descendants. The current
    `Citry.id_generator` remains the single source of IDs.
-4. Build an immutable replay plan containing remapped ownership records,
-   frames, physical regions, and resolved external anchors.
+4. Build immutable occurrence frames and typed parts with every local reference
+   rebound to the current call.
 5. Ask each payload extension to validate and stage an immutable contribution.
    Import hooks cannot mutate `CitryContext.extra`, the ownership graph, or
    other live state.
-6. Recheck the engine-local revision, then atomically apply the core replay plan
-   and staged extension contributions. An unexpected apply failure rolls back
-   every ownership and context contribution from this replay.
+6. Recheck the engine-local revision, then apply the replay and staged extension
+   contributions. Backend `get`, `set`, and `delete` calls are independent and
+   do not form a distributed transaction. A failed replay rolls back the fresh
+   Events state key it created and leaves live render state unchanged. An
+   ordinary content-addressed backend repair may remain after a later failure;
+   its key still names immutable validated content and a later read can reuse or
+   replace it.
 7. Return an ordinary settled render contribution that serialization can
    consume without special cache knowledge.
 
 Two replays of one artifact in the same page therefore keep their own current
-boundary IDs and have disjoint descendant IDs and physical ownership regions.
-No staged failure can leave ghost frames, ownership records, or extension data.
+boundary IDs and have disjoint descendant IDs. Local revision checks prevent a
+staged result from committing after this engine invalidates its cache contract.
 
 ### 7.4 Serializer/core prerequisite
 
@@ -1335,7 +1338,8 @@ The public feature is not complete until tests cover:
 - a corrupt value replaced concurrently by a valid writer is never deleted;
 - backend get/set failures follow the strict propagation contract;
 - oversized entries render successfully and skip storage;
-- unregister, hot replacement, reset, and `Citry.clear()` stop local reuse;
+- registered-name removal, hot replacement, reset, and `Citry.clear()` stop
+  local reuse, including alias removal followed by rebinding that tag name;
 - a local revision change during fetch/staging abandons the hit and retries
   under the new revision, while a change before publication skips the old set;
 - cached entries hold no strong reference to component classes, instances,

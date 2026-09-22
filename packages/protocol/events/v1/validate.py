@@ -41,6 +41,7 @@ MANIFESTS_DIR = TESTS_DIR / "manifests"
 ENVELOPE_REJECTION_CODES = {"protocol_mismatch", "payload_too_large"}
 BASELINE_SWAPS = {"replace", "inner", "append", "prepend", "remove", "none"}
 BASELINE_ACTIONS = {"render", "data", "state", "event", "redirect", "url"}
+BASELINE_RENDERERS = {"html-fragment/1"}
 
 # Matches one path segment of the dynamic-field grammar: `.key` or `[n]`.
 _SEGMENT_RE = re.compile(r"\.([A-Za-z0-9_]+)|\[([0-9]+)\]")
@@ -384,15 +385,17 @@ def check_exchange(
 
 
 def capability_errors(call: Any, result: Any) -> list[str]:
-    """Report result actions or render swaps outside the caller's advertised set."""
+    """Report result actions, swaps, or renderers outside the advertised set."""
     if not isinstance(call, dict) or not isinstance(result, dict):
         return []
     advertised = call.get("capabilities")
     capabilities = advertised if isinstance(advertised, dict) else {}
     raw_actions = capabilities.get("actions", BASELINE_ACTIONS)
     raw_swaps = capabilities.get("swaps", BASELINE_SWAPS)
+    raw_renderers = capabilities.get("renderers", BASELINE_RENDERERS)
     allowed_actions = set(raw_actions) if isinstance(raw_actions, list | set) else set()
     allowed_swaps = set(raw_swaps) if isinstance(raw_swaps, list | set) else set()
+    allowed_renderers = set(raw_renderers) if isinstance(raw_renderers, list | set) else set()
 
     problems: list[str] = []
     results = result.get("results")
@@ -411,6 +414,11 @@ def capability_errors(call: Any, result: Any) -> list[str]:
             if kind == "render" and action.get("swap") not in allowed_swaps:
                 problems.append(
                     f"results[{result_index}].actions[{action_index}] uses unadvertised swap {action.get('swap')!r}"
+                )
+            if kind == "render" and action.get("renderer", "html-fragment/1") not in allowed_renderers:
+                problems.append(
+                    f"results[{result_index}].actions[{action_index}] uses unadvertised renderer "
+                    f"{action.get('renderer', 'html-fragment/1')!r}"
                 )
     return problems
 

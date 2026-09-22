@@ -39,15 +39,24 @@ class EditableDataGrid(Component):
         }
 
     template = """
-      <section x-data="{last:'Double-click or press Enter to edit'}">
+      <section >
         <c-CDataGrid
           c-columns="columns"
           c-rows="rows"
           label="Project assignments"
-          $c-props="{onCellEditCommit:(value,detail)=>last=`${detail.rowKey}.${detail.columnKey}: ${value}`}"
+          :onCellEditCommit="(value,detail)=>last=`${detail.rowKey}.${detail.columnKey}: ${value}`"
         />
-        <output x-text="last">Double-click or press Enter to edit</output>
+        <output v-text="last">Double-click or press Enter to edit</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            last:'Double-click or press Enter to edit'
+          };
+        },
+      });
     """
 
 

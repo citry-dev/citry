@@ -137,6 +137,6 @@ and fixed. A custom class can use any media or container query without adding
 another component input.
 
 The family reserves its part/configuration attributes, Citry runtime fields,
-whole-object spreads, and structural Alpine directives. Ordinary native,
+whole-object spreads, and structural Vue directives. Ordinary native,
 ARIA, data, listener, and targeted unrelated binding attributes remain
 available through `attrs`.

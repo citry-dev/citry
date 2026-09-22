@@ -18,11 +18,14 @@ pytestmark = pytest.mark.e2e
 _CITRY_UI_TABS = (
     Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
 )
+_CITRY_UI_BUTTON = (
+    Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/cbutton/snippets/basic_actions.py"
+)
 _RUNTIME_PATH = Path(__file__).parents[2] / "static" / "playground" / "runtime.json"
 _RUNTIME = json.loads(_RUNTIME_PATH.read_text(encoding="utf-8"))
 _CITRY_VERSION = _RUNTIME["citry"]["version"]
-_PUBLISHED_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {_RUNTIME['citry']['ui_version']}"
-_LOCAL_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {version('citry-ui')}"
+_PUBLISHED_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {_RUNTIME['citry']['ui_version']} · published"
+_LOCAL_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {version('citry-ui')} · workspace"
 
 
 def _set_source(page: Any, source: str) -> None:
@@ -188,18 +191,24 @@ def test_published_runtime_runs_citry_ui_twice(page: Any, docs_site_url: str) ->
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
     page.wait_for_function("window.citryPlayground !== undefined")
-    _set_source(page, _CITRY_UI_TABS.read_text(encoding="utf-8"))
+    # Keep this source within the published 0.2.2 API. The tabs example uses
+    # workspace Citry source and belongs to the local tuple test above.
+    _set_source(
+        page,
+        """from citry_ui import CButton
+
+CButton(slots={"default": "Save changes"})
+""",
+    )
 
     _run_and_wait(page)
     _run_and_wait(page)
     expect(page.locator("#citry-playground-runtime")).to_have_text(_PUBLISHED_RUNTIME_LABEL)
 
     preview = page.frame_locator("#citry-playground-preview")
-    tabs = preview.locator('[role="tab"]')
-    expect(tabs).to_have_count(3, timeout=120_000)
-    tabs.nth(1).click()
-    expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
-    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
+    button = preview.locator("button", has_text="Save changes")
+    expect(button).to_be_visible(timeout=120_000)
+    expect(button).to_have_class("cui-button")
     assert console_errors == []
 
 
@@ -231,15 +240,15 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
         if message.type == "error"
         else None,
     )
-    page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="domcontentloaded")
-    root = page.locator("[data-citry-ui-demo]").nth(1)
+    page.goto(docs_site_url + "/ui-library/components/button/", wait_until="domcontentloaded")
+    root = page.locator('[data-citry-ui-demo]:has-text("Create Button actions")')
     built_preview = root.locator("[data-ui-preview-frame]")
 
     expect(built_preview).to_be_visible()
     expect(root.locator("[data-live-activate]")).to_be_visible()
     root.locator("[data-live-activate]").click()
     expect(root.locator(".cm-content")).to_be_attached(timeout=15_000)
-    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_TABS.read_text(encoding="utf-8"))
+    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_BUTTON.read_text(encoding="utf-8"))
     expect(built_preview).to_be_hidden()
     page.wait_for_function(
         """root => {
@@ -261,11 +270,8 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
 
     root.locator('[data-live-tab="result"]').click()
     preview = root.frame_locator(".citry-live-code__preview:not(.citry-playground__preview--candidate)")
-    tabs = preview.locator('[role="tab"]')
-    expect(tabs).to_have_count(3, timeout=120_000)
-    tabs.nth(1).click()
-    expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
-    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
+    expect(preview.locator("button", has_text="Record specimen")).to_be_visible(timeout=120_000)
+    expect(preview.locator("button", has_text="Add observation")).to_have_class("cui-button")
     root.locator("[data-live-close]").click()
     expect(built_preview).to_be_visible()
     expect(root.locator("[data-live-activate]")).to_be_focused()
@@ -274,10 +280,10 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
 
 def test_playground_runs_edits_reports_errors_and_recovers(
     page: Any,
-    docs_site_url: str,
+    local_docs_site_url: str,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
+    page.goto(local_docs_site_url + "/playground/", wait_until="domcontentloaded")
     page.wait_for_function("window.citryPlayground !== undefined")
 
     assert page.locator(".cm-editor").count() == 1
@@ -465,14 +471,14 @@ class DataProbe(Component):
     template = '''
       <div id="data-probe-root" @data-probe:changed="$el.dataset.state = $event.detail.state">
         <input id="state-input" :c-value="changed">
-        <button
-          id="data-probe"
-          @click="$sendEvent('inspect').then(value => {
-            $el.dataset.method = value.method;
-            $el.dataset.state = value.state;
-            $el.dataset.transport = value.transport;
-          })"
-        >
+          <button
+            id="data-probe"
+            @click="$sendEvent('inspect').then(value => {
+              $event.target.dataset.method = value.method;
+              $event.target.dataset.state = value.state;
+              $event.target.dataset.transport = value.transport;
+            })"
+          >
           Inspect transport
         </button>
       </div>
@@ -509,23 +515,18 @@ class NestedEditor(Component):
     template = """
       <div id="nested-editor" @nested:changed="$el.dataset.value = $event.detail.value">
         <input id="nested-input" :c-value="changed" />
-        <output id="nested-output" x-text="$state.value">start</output>
+        <output id="nested-output" v-text="$state.value">start</output>
       </div>
     """
 
 
 class PropChild(Component):
-    template = """
-      <output id="prop-output" x-text="clientProps.label"></output>
-    """
+    template = '<output id="prop-output" v-text="label"></output>'
 
     js = """
       $component({
         props: {
           label: { type: String, required: true },
-        },
-        init: ({ props, scope }) => {
-          scope.clientProps = props;
         },
       });
     """
@@ -580,20 +581,24 @@ class LoadedFragment(Component):
       <section
         id="loaded-fragment"
         class="loaded-fragment"
-        x-data="{ label: 'before' }"
         @fragment:ping="$el.dataset.ping = $event.detail.kind"
       >
         <button id="fragment-ping" type="button" @c-click="ping">Ping</button>
         <button id="prop-update" type="button" @click="label = 'after'">Update prop</button>
-        <c-PropChild $c-props="{ label }" />
+        <c-PropChild :label="label" />
         <c-NestedEditor />
       </section>
     """
 
     js = """
       window.__fragmentAssetLoads = (window.__fragmentAssetLoads || 0) + 1;
-      $component(({ els, data }) => {
-        els[0].setAttribute("data-component-js", data.kind);
+      $component({
+        data() {
+          return { label: "before" };
+        },
+        mounted() {
+          this.$el.setAttribute("data-component-js", this.kind);
+        },
       });
     """
 
@@ -610,24 +615,22 @@ class FragmentLoader(Component):
         def load(self):
             return actions.Render(
                 LoadedFragment(kind="rendered", accent="rgb(45, 67, 89)"),
-                target="#fragment-target",
-                swap="inner",
+                target="mark:fragment-target",
             )
 
         def load_css(self):
-            return actions.Render(CssOnly(), target="#css-target", swap="inner")
+            return actions.Render(CssOnly(), target="mark:css-target")
 
         def load_css_data(self):
             return actions.Render(
                 CssDataProbe(accent="rgb(122, 51, 19)"),
-                target="#css-data-target",
-                swap="inner",
+                target="mark:css-data-target",
             )
 
         def clear_css(self):
             return [
-                actions.Render(Placeholder(), target="#css-initial", swap="inner"),
-                actions.Render(Placeholder(), target="#css-target", swap="inner"),
+                actions.Render(Placeholder(), target="mark:css-initial"),
+                actions.Render(Placeholder(), target="mark:css-target"),
             ]
 
     template = """
@@ -636,14 +639,15 @@ class FragmentLoader(Component):
           <c-LoadedFragment kind="initial" accent="rgb(90, 90, 90)" />
         </div>
         <button id="load-fragment" type="button" @c-click="load">Load</button>
-        <div id="fragment-target"></div>
-        <div id="css-initial"><c-CssOnly /></div>
-        <button id="load-css" type="button" @c-click="load_css">Load CSS probe</button>
-        <button id="clear-css" type="button" @c-click="clear_css">Clear CSS probe</button>
-        <div id="css-target"></div>
-        <div id="css-data-initial"><c-CssDataProbe accent="rgb(122, 51, 19)" /></div>
-        <button id="load-css-data" type="button" @c-click="load_css_data">Load CSS data probe</button>
-        <div id="css-data-target"></div>
+            <div id="fragment-target"><c-mark name="fragment-target" /></div>
+            <div id="css-initial"><c-mark name="css-initial"><c-CssOnly /></c-mark></div>
+            <button id="load-css" type="button" @c-click="load_css">Load CSS probe</button>
+            <button id="clear-css" type="button" @c-click="clear_css">Clear CSS probe</button>
+            <div id="css-target"><c-mark name="css-target" /></div>
+            <div id="css-data-initial"><c-mark name="css-data-initial"><c-CssDataProbe \
+accent="rgb(122, 51, 19)" /></c-mark></div>
+            <button id="load-css-data" type="button" @c-click="load_css_data">Load CSS data probe</button>
+            <div id="css-data-target"><c-mark name="css-data-target" /></div>
       </main>
     """
 
@@ -676,15 +680,37 @@ FragmentLoader()
     render_preview.locator("#load-css").click()
     css_probe = render_preview.locator("#css-target #css-only")
     expect(css_probe).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
-    class_style_sheets = render_preview.locator("[data-citry-css-class]")
-    expect(class_style_sheets).to_have_count(3)
+    class_style_sheets = render_preview.locator("[data-citry-vue-style-app][data-citry-css-url]")
+    expect(class_style_sheets).to_have_count(6)
+    loaded_style_assets = render_preview.locator("body").evaluate(
+        """async body => Promise.all(
+          [...body.ownerDocument.querySelectorAll('link[data-citry-vue-style-app][data-citry-css-url]')]
+            .map(async link => ({href: link.href, css: await fetch(link.href).then(response => response.text())}))
+        )"""
+    )
+    css_only_hrefs = {asset["href"] for asset in loaded_style_assets if ".css-only" in asset["css"]}
+    assert len(css_only_hrefs) == 1
     render_preview.locator("#clear-css").click()
+    page.wait_for_timeout(500)
     expect(render_preview.locator("#css-only")).to_have_count(0, timeout=10_000)
-    expect(class_style_sheets).to_have_count(2, timeout=10_000)
+    expect(class_style_sheets).to_have_count(5, timeout=10_000)
+    remaining_style_hrefs = set(
+        render_preview.locator("body").evaluate(
+            """body => [...body.ownerDocument.querySelectorAll('link[data-citry-vue-style-app][data-citry-css-url]')]
+              .map(link => link.href)"""
+        )
+    )
+    assert not css_only_hrefs & remaining_style_hrefs
+    expect(render_preview.locator("#initial-fragment #loaded-fragment")).to_have_css(
+        "border-top-color", "rgb(90, 90, 90)"
+    )
+    expect(render_preview.locator("#fragment-target #loaded-fragment")).to_have_css(
+        "border-top-color", "rgb(45, 67, 89)"
+    )
     render_preview.locator("#load-css").click()
     css_probe_again = render_preview.locator("#css-target #css-only")
     expect(css_probe_again).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
-    expect(class_style_sheets).to_have_count(3, timeout=10_000)
+    expect(class_style_sheets).to_have_count(6, timeout=10_000)
 
     stylesheet_count = render_preview.locator('style, link[rel~="stylesheet"]').count()
     render_preview.locator("#load-css-data").click()
@@ -724,18 +750,26 @@ class SignupForm(Component):
             return actions.Dispatch("signup:sent", {"email": email})
 
     template = """
-      <section x-data="{ acceptedEmail: '' }" @signup:sent="acceptedEmail = $event.detail.email">
+      <section @signup:sent="acceptedEmail = $event.detail.email">
         <form @c-submit.prevent="submit">
           <input name="email" type="email" required />
           <span
             id="signup-error"
-            x-show="(typeof $error === 'function' ? $error('submit') : $error)?.fieldErrors?.email"
-            x-text="(typeof $error === 'function' ? $error('submit') : $error)?.fieldErrors?.email || ''"
+            v-show="$error('submit')?.fieldErrors?.email"
+            v-text="$error('submit')?.fieldErrors?.email || ''"
           ></span>
           <button type="submit">Send request</button>
         </form>
-        <output id="accepted-email" x-show="acceptedEmail" x-text="acceptedEmail"></output>
+        <output id="accepted-email" v-show="acceptedEmail" v-text="acceptedEmail"></output>
       </section>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { acceptedEmail: "" };
+        },
+      });
     """
 
 

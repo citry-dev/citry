@@ -14,7 +14,7 @@ class AlertIntents(Component):
     template = """
       <section class="alert-intents" aria-label="Alert intents">
         <c-for each="item in alerts">
-          <c-CAlert c-intent="item[0]">
+          <c-CAlert #c-key="item[0]" c-intent="item[0]">
             <c-fill name="title">{{ item[1] }}</c-fill>
             <c-fill name="default">{{ item[2] }}</c-fill>
           </c-CAlert>

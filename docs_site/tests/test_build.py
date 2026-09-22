@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -10,6 +11,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 import yaml
+from lxml import html as lxml_html
 
 from docs_site._internal.build import BuildOutcome, _is_unsafe_output, _replace_output_directory, build_site
 from docs_site._internal.config import DocsConfig
@@ -25,6 +27,25 @@ def _empty_redirects(tmp_path: Path) -> Path:
     redirects = tmp_path / "redirects.yml"
     redirects.write_text("redirects: []\n", encoding="utf-8")
     return redirects
+
+
+def _prepared_configuration(html: str) -> dict[str, object]:
+    document = lxml_html.document_fromstring(html)
+    marker = "CitryStable.startPrepared("
+    bootstraps = [script.text or "" for script in document.xpath("//script") if marker in (script.text or "")]
+    assert len(bootstraps) == 1
+    source = bootstraps[0]
+    start = source.index(marker) + len(marker)
+    configuration, _ = json.JSONDecoder().raw_decode(source[start:])
+    assert type(configuration) is dict
+    return configuration
+
+
+def _built_asset_text(output: Path, url: str) -> str:
+    assert url.startswith("/citry/")
+    asset = output / url.lstrip("/")
+    assert asset.is_file(), f"prepared asset was not written: {url}"
+    return asset.read_text(encoding="utf-8")
 
 
 def _default_declarations(tmp_path: Path) -> dict[str, Path]:
@@ -593,15 +614,30 @@ def test_build_renders_ui_library_source_directly_to_its_catalog_route(tmp_path:
     assert "class BuildPreviewSmoke(Component):" in companion_source
     preview_page = output / "ui-library/components/button/_previews/build-preview/index.html"
     preview_source = preview_page.read_text(encoding="utf-8")
-    assert "Rendered build preview" in preview_source
-    assert "color: green" in preview_source
+    configuration = _prepared_configuration(preview_source)
+    prepared_manifest = configuration["manifest"]
+    assert type(prepared_manifest) is dict
+    definition_sources = [_built_asset_text(output, asset["url"]) for asset in prepared_manifest["definitions"]]
+    script_sources = [
+        _built_asset_text(output, asset["source"]["url"])
+        for asset in prepared_manifest["scripts"]
+        if asset["source"]["kind"] == "owned"
+    ]
+    style_sources = [
+        _built_asset_text(output, asset["source"]["url"])
+        for asset in prepared_manifest["styles"]
+        if asset["source"]["kind"] == "owned"
+    ]
+    assert any("Rendered build preview" in source for source in definition_sources)
+    bridge_sources = [source for source in script_sources if "citry-ui-preview-height" in source]
+    assert len(bridge_sources) == 1
+    assert 'type === "citry-ui-preview-theme"' in bridge_sources[0]
+    assert 'type === "citry-ui-preview-controls"' in bridge_sources[0]
+    assert 'new CustomEvent("citry-ui-preview-controls"' in bridge_sources[0]
+    assert "new ResizeObserver(publish)" in bridge_sources[0]
+    assert any("color: green" in source for source in style_sources)
+    assert any("font-size: 87.5%" in source for source in style_sources)
     assert 'content="noindex,nofollow"' in preview_source
-    assert 'type: "citry-ui-preview-height"' in preview_source
-    assert 'type === "citry-ui-preview-theme"' in preview_source
-    assert 'type === "citry-ui-preview-controls"' in preview_source
-    assert 'new CustomEvent("citry-ui-preview-controls"' in preview_source
-    assert "font-size: 87.5%" in preview_source
-    assert "new ResizeObserver(publish)" in preview_source
     assert not (output / "ui-library/components/button/_previews/build-preview/index.md").exists()
     assert all(record.url != "ui-library/components/button/_previews/build-preview/" for record in outcome.records)
     llms = (output / "llms.txt").read_text(encoding="utf-8")

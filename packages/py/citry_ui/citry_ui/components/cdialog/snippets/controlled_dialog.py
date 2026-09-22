@@ -8,22 +8,18 @@ class ControlledDialog(Component):
     template = """
       <section
         class="controlled-dialog"
-        x-data="{ open: false, accept: false, lastReason: 'none' }"
       >
         <p>Mission control</p>
         <h2>Own every visibility change</h2>
         <label class="controlled-dialog__toggle">
-          <input type="checkbox" x-model="accept" />
+          <input type="checkbox" v-model="accept" />
           Accept Dialog requests
         </label>
         <c-CDialog
-          $c-props="{
-            open,
-            onOpenChange: (nextOpen, detail) => {
+          :open="open" :onOpenChange="(nextOpen, detail) => {
               lastReason = detail.reason;
               if (accept) open = nextOpen;
-            },
-          }"
+            }"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
@@ -43,9 +39,18 @@ class ControlledDialog(Component):
           </c-fill>
         </c-CDialog>
         <p class="controlled-dialog__status" aria-live="polite">
-          Last request: <strong x-text="lastReason">none</strong>
+          Last request: <strong v-text="lastReason">none</strong>
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open: false, accept: false, lastReason: 'none'
+          };
+        },
+      });
     """
 
     css = """

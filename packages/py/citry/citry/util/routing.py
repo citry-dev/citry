@@ -172,6 +172,10 @@ class URLRoute:
 
         URLRoute("cache/{class_id}.{script_type}", handler=serve_script, name="citry_cached_script")
         URLRoute("ext/", children=[URLRoute("my_ext/status", handler=status)])
+
+    ``methods=None`` delegates HTTP-method admission to the handler. This is
+    reserved for handlers whose own dynamic contract is more precise than a
+    route-table allowlist; adapters otherwise enforce the declared tuple.
     """
 
     path: str
@@ -184,7 +188,7 @@ class URLRoute:
     handler_async: Callable[..., Awaitable[RouteResponse]] | None = None
     children: tuple[URLRoute, ...] = ()
     name: str | None = None
-    methods: tuple[str, ...] = ("GET",)
+    methods: tuple[str, ...] | None = ("GET",)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

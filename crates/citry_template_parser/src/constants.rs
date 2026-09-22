@@ -181,8 +181,6 @@ pub const CITRY_DIRECTIVE_NAMES: &[&str] = &[
     C_BIND_ATTR,
     META_ATTR_KEY,
     META_ATTR_IGNORE,
-    CLIENT_PROPS_ATTR,
-    DYNAMIC_CLIENT_PROPS_ATTR,
 ];
 
 /// Fixed attributes whose meaning is owned by one reserved structural tag.
@@ -311,9 +309,9 @@ lazy_static! {
 #[cfg(test)]
 mod tests {
     use super::{
-        CITRY_DIRECTIVE_NAMES, CLIENT_PROPS_ATTR, CONTROL_FLOW_GROUPS, C_BIND_ATTR, C_FILL_TAG,
-        C_SLOT_TAG, DYNAMIC_CLIENT_PROPS_ATTR, META_ATTR_IGNORE, META_ATTR_KEY, RESERVED_TAG_NAMES,
-        STRUCTURAL_TAG_ATTRIBUTE_NAMES, TAG_ATTR_RULES_DATA,
+        CITRY_DIRECTIVE_NAMES, CONTROL_FLOW_GROUPS, C_BIND_ATTR, C_FILL_TAG, C_SLOT_TAG,
+        META_ATTR_IGNORE, META_ATTR_KEY, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES,
+        TAG_ATTR_RULES_DATA,
     };
     use std::collections::{HashMap, HashSet};
 
@@ -345,13 +343,7 @@ mod tests {
         let expected: HashSet<_> = CONTROL_FLOW_GROUPS
             .iter()
             .flat_map(|group| group.iter().copied())
-            .chain([
-                C_BIND_ATTR,
-                META_ATTR_KEY,
-                META_ATTR_IGNORE,
-                CLIENT_PROPS_ATTR,
-                DYNAMIC_CLIENT_PROPS_ATTR,
-            ])
+            .chain([C_BIND_ATTR, META_ATTR_KEY, META_ATTR_IGNORE])
             .collect();
         assert_eq!(
             CITRY_DIRECTIVE_NAMES

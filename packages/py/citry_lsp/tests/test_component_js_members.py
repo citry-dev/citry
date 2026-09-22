@@ -65,16 +65,16 @@ def test_callback_alias_navigation_follows_its_binding_and_excludes_shadowed_nam
         const read = () => payload.a;
     """
     javascript = (
-        f"$component({{ init({{ data: payload }}) {{{body}}} }});"
+        f"$component({{ onServerRender({{ component: payload }}) {{{body}}} }});"
         if configuration
-        else f"$component(({{ data: payload }}) => {{{body}}});"
+        else f"$component(({{ component: payload }}) => {{{body}}});"
     )
     project, document = _project_document(tmp_path, javascript, standalone=standalone)
     source = document.source
     use = _position(source, "payload.b", 3)
     target = types.Location(
         document.uri,
-        types.Range(_position(source, "data: payload", 6), _position(source, "data: payload", 13)),
+        types.Range(_position(source, "component: payload", 11), _position(source, "component: payload", 18)),
     )
 
     assert definition(document, use, project) == target

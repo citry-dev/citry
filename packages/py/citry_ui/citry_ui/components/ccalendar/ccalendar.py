@@ -142,6 +142,7 @@ def _first_day(value: object) -> int | None:
 class CCalendar(LibraryComponent):
     class I18n:
         messages_locale = "en-US"
+        client_messages = ("citry-ui-calendar-unavailable",)
 
     class Dependencies:
         js: ClassVar = (FORM_CONTROL_RUNTIME_DEPENDENCY,)
@@ -334,7 +335,7 @@ class CCalendar(LibraryComponent):
             and catalog["label"],
             "catalog_previous_label": catalog["previous_label"],
             "catalog_next_label": catalog["next_label"],
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "variant": kwargs.variant,
             "size": kwargs.size,
             "attrs": merge_root_attrs(caller_attrs, kwargs.class_, kwargs.style),
@@ -363,7 +364,26 @@ class CCalendar(LibraryComponent):
             "describedby": cast("str | None", external_described_by),
             "errormessage": cast("str | None", external_error_message),
         }
-        self._cui_calendar_data = client_data
+        prop_names = {
+            "value",
+            "visibleDate",
+            "min",
+            "max",
+            "unavailableDates",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "firstDayOfWeek",
+            "showAdjacentDays",
+            "fixedWeeks",
+            "variant",
+            "size",
+        }
+        self._cui_calendar_data = {
+            "serverDefaults": {key: value for key, value in client_data.items() if key in prop_names},
+            **{key: value for key, value in client_data.items() if key not in prop_names},
+        }
         self._cui_calendar_snapshot = snapshot
         return snapshot
 
@@ -385,11 +405,11 @@ class CCalendar(LibraryComponent):
         c-aria-errormessage="error_message"
         c-aria-invalid="'true' if invalid else None"
         c-aria-disabled="'true' if disabled else None"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-empty="not value"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if not value else None"
         c-data-variant="variant"
         c-data-size="size"
         c-$c-tr:citry-ui-calendar-label[aria-label]="True if catalog_label else None"

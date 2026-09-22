@@ -42,14 +42,15 @@ def _toolbar_page() -> str:
               </style>
               <c-css />
             </head>
-            <body x-data="{fieldsetDisabled: false}">
+            <body>
               <button id="before" type="button">Before</button>
               <c-CToolbar
                 label="Editor tools"
                 variant="soft"
                 class_="toolbar-theme"
                 c-attrs="{'id': 'editor'}"
-                $c-props="{orientation: $store.toolbar.orientation, loop: $store.toolbar.loop}"
+                :orientation="toolbar.orientation"
+                :loop="toolbar.loop"
               >
                 <c-CButton c-attrs="{'id': 'bold'}" @keydown.stop="window.__childKeydown = true">
                   Bold
@@ -84,7 +85,7 @@ def _toolbar_page() -> str:
                 <button type="button">South</button>
               </c-CToolbar>
 
-              <fieldset id="fieldset" x-bind:disabled="fieldsetDisabled">
+              <fieldset id="fieldset" :disabled="fieldsetDisabled">
                 <legend>Fieldset tools</legend>
                 <c-CToolbar label="Fieldset tools" c-attrs="{'id': 'fieldset-toolbar'}">
                   <button type="button">First</button>
@@ -100,11 +101,14 @@ def _toolbar_page() -> str:
         def template_data(self, kwargs, slots):
             return {}
 
-        def js_data(self, kwargs, slots):
-            return {}
-
         js = """
-          Alpine.store('toolbar', {orientation: 'horizontal', loop: true});
+          $component({
+            data() { return {
+              fieldsetDisabled: false,
+              toolbar: {orientation: 'horizontal', loop: true},
+            }; },
+            mounted() { window.__toolbarState = this; },
+          });
         """
 
     return str(Page())
@@ -141,7 +145,7 @@ def test_horizontal_roving_focus_capture_and_reactive_configuration(page: Any) -
     page.keyboard.press("ArrowRight")
     assert _focused_text(page) == "Bold"
 
-    page.evaluate("Object.assign(Alpine.store('toolbar'), {orientation: 'vertical', loop: false})")
+    page.evaluate("Object.assign(window.__toolbarState.toolbar, {orientation: 'vertical', loop: false})")
     page.wait_for_function("document.querySelector('#editor').dataset.orientation === 'vertical'")
     assert editor.get_attribute("aria-orientation") == "vertical"
     assert editor.get_attribute("data-loop") is None
@@ -179,10 +183,10 @@ def test_native_fieldset_css_environment_and_axe(page: Any) -> None:
     errors = _load(page)
     toolbar = page.locator("#fieldset-toolbar")
     toolbar.get_by_role("button", name="Second").focus()
-    page.evaluate("Alpine.$data(document.body).fieldsetDisabled = true")
+    page.evaluate("window.__toolbarState.fieldsetDisabled = true")
     page.wait_for_function("document.querySelectorAll('#fieldset-toolbar [tabindex=\"0\"]').length === 0")
     assert toolbar.locator('[tabindex="-1"]').count() == 3
-    page.evaluate("Alpine.$data(document.body).fieldsetDisabled = false")
+    page.evaluate("window.__toolbarState.fieldsetDisabled = false")
     page.wait_for_function("document.querySelectorAll('#fieldset-toolbar [tabindex=\"0\"]').length === 1")
 
     editor = page.locator("#editor")

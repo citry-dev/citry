@@ -4,14 +4,50 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
 
 use citry_html_transform::{
-    HtmlTransformerConfig, mark_html as mark_html_rust, scan_alpine_html as scan_alpine_html_rust,
+    HtmlTransformerConfig, mark_html as mark_html_rust, scan_output_html as scan_output_html_rust,
     transform_html as transform_html_rust,
+    validate_html_fragment_boundary as validate_html_fragment_boundary_rust,
 };
 
-/// Find actual Alpine attributes in a batch of HTML fragments.
 #[pyfunction]
-pub fn scan_alpine_html(html_fragments: Vec<String>) -> Vec<bool> {
-    scan_alpine_html_rust(html_fragments.iter().map(String::as_str))
+pub fn validate_html_fragment_boundary(html: &str) -> PyResult<()> {
+    validate_html_fragment_boundary_rust(html).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+pub fn scan_output_html(py: Python, html: &str) -> PyResult<Py<PyAny>> {
+    let output = scan_output_html_rust(html)
+        .into_iter()
+        .map(|tag| {
+            let item = PyDict::new(py);
+            item.set_item("name", tag.name)?;
+            item.set_item("start", tag.start)?;
+            item.set_item("end", tag.end)?;
+            item.set_item("name_start", tag.name_start)?;
+            item.set_item("name_end", tag.name_end)?;
+            item.set_item("element_end", tag.element_end)?;
+            item.set_item("element_end_start", tag.element_end_start)?;
+            item.set_item(
+                "attributes",
+                tag.attributes
+                    .into_iter()
+                    .map(|attr| {
+                        (
+                            attr.name,
+                            attr.value,
+                            attr.name_start,
+                            attr.name_end,
+                            attr.value_start,
+                            attr.value_end,
+                            attr.has_value,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )?;
+            Ok(item)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(output.into_pyobject(py)?.into_any().unbind())
 }
 
 /// Splice attributes onto root-level tags and split the HTML around child

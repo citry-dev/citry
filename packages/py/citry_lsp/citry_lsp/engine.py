@@ -15,30 +15,33 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from lsprotocol import types
 
 from citry import LspPosition, LspRange
+from citry._browser_expressions import _normalized_dynamic_slot_source
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_PROP,
-    BROWSER_UNKNOWN_COMPONENT_PROP,
     BROWSER_UNKNOWN_SERVER_EVENT,
     BROWSER_UNKNOWN_STATE_FIELD,
     I18N_ARGUMENT_INVALID,
     I18N_CATALOG_INVALID,
     I18N_UNKNOWN_MESSAGE,
+    JS_DATA_PUBLIC_NAME_COLLISION,
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
+    TEMPLATE_MARKER_NAME_INVALID,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
 from citry._i18n_directives import looks_like_i18n_binding
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
-    AlpineLintConsumer,
     BrowserBinding,
     BrowserComponentBinding,
-    BrowserComponentPropsUse,
+    BrowserComponentPropContribution,
+    BrowserComponentPropSite,
     BrowserExpression,
     BrowserObjectProperty,
+    BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
     ShadowPythonDocument,
@@ -46,16 +49,16 @@ from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
     TemplatePythonRoot,
+    VueLintConsumer,
     analyze_browser_component_source,
     analyze_css_data_source,
     analyze_js_data_source,
     analyze_template_data_source,
     browser_bindings,
-    browser_client_prop_accepts,
     browser_completion_at,
-    browser_component_prop_uses,
+    browser_component_prop_findings,
+    browser_component_prop_sites,
     browser_component_props,
-    browser_component_scope_writes,
     browser_declarative_events,
     browser_expression_at,
     browser_expressions,
@@ -79,10 +82,11 @@ from citry.analysis import (
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_csp_compatibility,
-    lint_unknown_alpine_variables,
     lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
+    lint_unknown_vue_variables,
+    mark_literal_findings,
     merge_json_wire_types,
     python_application_lint_variable_range,
     python_class_asset_resolution_signature,
@@ -345,13 +349,9 @@ class _JsDataRoot:
 
 
 @dataclass(frozen=True, slots=True)
-class _ClientProp:
-    """One current static child prop and its exact JavaScript declaration."""
-
-    name: str
-    javascript: str
-    required: bool
-    location: types.Location
+class _JsDataNamespace:
+    roots: tuple[_JsDataRoot, ...]
+    policy: Literal["closed", "open", "unavailable"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1113,13 +1113,15 @@ def browser_diagnostics(
 ) -> tuple[types.Diagnostic, ...]:
     """Report Citry-owned JsData and literal server-event problems."""
     diagnostics = list(_js_data_type_diagnostics(document, project, open_documents))
+    diagnostics.extend(_js_data_public_name_diagnostics(document, project, open_documents))
     parser = project.analysis.parse_template if project.analysis is not None else parse_template
     for region in document.regions:
         parsed = document.parsed.get(region.key)
         if parsed is None:
             continue
-        # Target restrictions depend on markup, so report them even before
-        # an application registry can establish the State field schema.
+        # Target restrictions depend only on authored markup. Keep these
+        # diagnostics available before a project registry can establish the
+        # owning component or State schema.
         for target_error in browser_state_binding_target_errors(parsed.template, parse_nested=parser):
             diagnostics.append(
                 _browser_diagnostic(
@@ -1156,6 +1158,18 @@ def browser_diagnostics(
         expressions = browser_expressions(parsed.template, parse_nested=parser)
         roots = _template_js_data_roots(document, region, project, open_documents)
         diagnostics.extend(
+            _browser_component_prop_diagnostics(
+                region,
+                parsed.template,
+                project,
+                document,
+                open_documents,
+                roots,
+                expressions,
+                parser=parser,
+            )
+        )
+        diagnostics.extend(
             _i18n_binding_diagnostics(
                 region,
                 parsed.template,
@@ -1174,14 +1188,14 @@ def browser_diagnostics(
                     owners=frozenset({"$i18n"}),
                 )
             )
-        alpine_consumers = _alpine_lint_consumers(
+        vue_consumers = _vue_lint_consumers(
             consumers,
             document,
             project,
             open_documents,
         )
-        if alpine_consumers is not None:
-            for finding in lint_unknown_alpine_variables(expressions, alpine_consumers):
+        if vue_consumers is not None:
+            for finding in lint_unknown_vue_variables(expressions, vue_consumers):
                 diagnostics.append(
                     types.Diagnostic(
                         range=_range(region.source_map.map_range(finding.start_index, finding.end_index)),
@@ -1198,7 +1212,7 @@ def browser_diagnostics(
                 )
         for csp_finding in lint_csp_compatibility(
             expressions,
-            alpine_consumers or (),
+            vue_consumers or (),
             project.security_csp,
         ):
             diagnostics.append(
@@ -1258,29 +1272,21 @@ def browser_diagnostics(
                         event.end_index,
                     )
                 )
-        for props_use in browser_component_prop_uses(parsed.template, parse_nested=parser):
-            child = project.catalog.get_tag(props_use.tag_name)
-            if child is None:
-                continue
-            contract = _component_client_props(child, project, document, open_documents)
-            if contract is None:
-                continue
-            diagnostics.extend(
-                _component_props_diagnostics(
-                    region,
-                    props_use,
-                    contract,
-                    roots,
-                    expressions,
-                )
-            )
     for js_region in document.js_regions:
         js_consumers = _js_consumers(document, js_region, project, open_documents)
         data_names = _closed_js_asset_data_names(document, js_region, project, open_documents)
-        for member_finding in lint_unknown_component_js_members(js_region.source_map.template_source, data_names):
+        for member_finding in lint_unknown_component_js_members(
+            js_region.source_map.template_source,
+            data_names,
+        ):
             diagnostics.append(
                 types.Diagnostic(
-                    range=_range(js_region.source_map.map_range(member_finding.start_index, member_finding.end_index)),
+                    range=_range(
+                        js_region.source_map.map_range(
+                            member_finding.start_index,
+                            member_finding.end_index,
+                        )
+                    ),
                     message=member_finding.message,
                     severity=types.DiagnosticSeverity.Error,
                     code=member_finding.code,
@@ -1563,35 +1569,89 @@ def _component_js_global_types(
     return common
 
 
-def _alpine_lint_consumers(
+def _vue_lint_consumers(
     consumers: tuple[ComponentRecord, ...],
     current_document: DocumentState,
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
-) -> tuple[AlpineLintConsumer, ...] | None:
+) -> tuple[VueLintConsumer, ...] | None:
     """Build every source-proven browser namespace for one physical template."""
     if project.analysis is None:
         return None
-    resolved: list[AlpineLintConsumer] = []
+    resolved: list[VueLintConsumer] = []
     for component in consumers:
-        roots = _component_js_data_roots(component, project, current_document, open_documents)
-        scope_roots = _component_scope_roots(component, project, current_document, open_documents)
+        namespace = _component_js_data_roots(component, project, current_document, open_documents)
+        roots = namespace.roots
         lint = project.analysis.component_lint.get(component.definition_id)
-        if roots is None or scope_roots is None or lint is None:
+        if lint is None:
             return None
+        native_names, namespace_policy = _component_vue_namespace(component, project, current_document, open_documents)
+        if namespace.policy != "closed":
+            namespace_policy = "unknown"
         resolved.append(
-            AlpineLintConsumer(
+            VueLintConsumer(
                 known_names=frozenset(
                     (
                         *[root.name for root in roots],
-                        *[root.name for root in scope_roots],
-                        *[variable.name for variable in lint.alpine_variables],
+                        *[variable.name for variable in lint.vue_variables],
+                        *native_names,
                     )
                 ),
-                rule_unknown_alpine_variable=lint.rule_unknown_alpine_variable,
+                rule_unknown_vue_variable=lint.rule_unknown_vue_variable,
+                namespace_policy=namespace_policy,
             )
         )
     return tuple(resolved)
+
+
+def _component_vue_namespace(
+    component: ComponentRecord,
+    project: ProjectState,
+    current_document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[frozenset[str], Literal["closed", "unknown"]]:
+    """Return source-proven native Options names and namespace completeness."""
+    resolved = _component_js_asset_source(component, project, current_document, open_documents)
+    if resolved is False:
+        return frozenset(), "closed"
+    if resolved is None:
+        return frozenset(), "unknown"
+    analysis = analyze_browser_component_source(resolved[0])
+    names = frozenset(item.exposed_name for item in analysis.public_names)
+    unknown = not analysis.valid or any(section.state == "unknown" for section in analysis.sections)
+    return names, "unknown" if unknown else "closed"
+
+
+def _shared_vue_public_names(
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    current_document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[str, ...]:
+    """Intersect native instance names available to every physical owner."""
+    namespaces = [
+        _component_vue_namespace(component, project, current_document, open_documents)[0] for component in consumers
+    ]
+    if not namespaces:
+        return ()
+    common = set(namespaces[0])
+    for names in namespaces[1:]:
+        common.intersection_update(names)
+    return tuple(sorted(common))
+
+
+def _shared_js_data_policy(
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> Literal["closed", "open", "unavailable"]:
+    policies = {
+        _component_js_data_roots(component, project, document, open_documents).policy for component in consumers
+    }
+    if "unavailable" in policies:
+        return "unavailable"
+    return "open" if "open" in policies else "closed"
 
 
 def _browser_event_diagnostic(
@@ -1616,7 +1676,7 @@ def browser_projection(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> BrowserProjection | None:
-    """Build JavaScript-provider input for Alpine or component JS source."""
+    """Build JavaScript-provider input for Vue or component JS source."""
     expression_context = _browser_expression_context(document, position, project)
     if expression_context is not None:
         region, expression, parser_index = expression_context
@@ -1628,35 +1688,48 @@ def browser_projection(
         state_roots = _shared_state_roots(consumers, document, project, open_documents)
         if state_roots is None:
             return None
+        writable_state_names = _shared_writable_state_names(consumers, project)
         binding_types = {
             binding.name: _browser_binding_wire_type(binding, roots) for binding in expression.binding_details
         }
+        native_names = _shared_vue_public_names(consumers, project, document, open_documents)
         preamble = _browser_preamble(
             roots,
-            expression.bindings,
+            (*expression.bindings, *native_names),
             (),
             tuple(events),
             state_roots,
             binding_types=binding_types,
+            writable_state_names=writable_state_names,
             i18n=project.i18n,
+            js_data_policy=_shared_js_data_policy(consumers, project, document, open_documents),
         )
+        projected_expression = expression.source
+        if expression.transform == "dynamic-slot":
+            normalized = _normalized_dynamic_slot_source(expression.source)
+            if normalized is None:
+                return None
+            projected_expression, _ = normalized
         if expression.mode == "statement":
             prefix = f"{preamble}\n(function () {{\n"
             suffix = "\n})();\n"
         elif expression.mode == "loop":
             prefix = f"{preamble}\nfor ("
             suffix = ") {}\n"
+        elif expression.mode == "binding-pattern":
+            prefix = f"{preamble}\nvoid (("
+            suffix = ") => {});\n"
         else:
             prefix = f"{preamble}\nvoid (\n"
             suffix = "\n);\n"
-        source = f"{prefix}{expression.source}{suffix}"
+        source = f"{prefix}{projected_expression}{suffix}"
         relative_byte = parser_index - expression.start_index
         try:
             relative_char = parser_char_index(expression.source, relative_byte)
         except ValueError:
             return None
         virtual_start = len(prefix)
-        virtual_end = virtual_start + len(expression.source)
+        virtual_end = virtual_start + len(projected_expression)
         source_range = _range(region.source_map.map_range(expression.start_index, expression.end_index))
         owned_names = tuple(root.name for root in roots)
         owns_position = _browser_projection_owns_position(
@@ -1703,7 +1776,9 @@ def browser_projection(
     state_roots = _shared_state_roots(consumers, document, project, open_documents)
     if state_roots is None:
         return None
+    writable_state_names = _shared_writable_state_names(consumers, project)
     props = browser_component_props(js_region.source_map.template_source)
+    component_analysis = analyze_browser_component_source(js_region.source_map.template_source)
     component_globals = _component_js_global_types(consumers, project)
     if component_globals is None:
         return None
@@ -1714,10 +1789,12 @@ def browser_projection(
         tuple(events),
         state_roots,
         binding_types=component_globals,
-        scope_roots=scope_roots,
         include_root_variables=False,
         component_js=True,
+        component_analysis=component_analysis,
+        writable_state_names=writable_state_names,
         i18n=project.i18n,
+        js_data_policy=_shared_js_data_policy(consumers, project, document, open_documents),
     )
     prefix = f"{preamble}\n"
     authored = js_region.source_map.template_source
@@ -3086,10 +3163,12 @@ def completion_result(
         )
         dynamic_name = f"c-{schema_field.name}"
         dynamic_text = dynamic_name if attribute_context.preserve_value else f'{dynamic_name}="$1"'
-        for label, new_text, detail in (
-            (schema_field.name, static_text, _field_detail(schema_field)),
-            (dynamic_name, dynamic_text, f"Dynamic Python expression · {_field_detail(schema_field)}"),
-        ):
+        field_forms = [(schema_field.name, static_text, _field_detail(schema_field))]
+        if not (component.builtin and component.name == "mark" and schema_field.name == "name"):
+            field_forms.append(
+                (dynamic_name, dynamic_text, f"Dynamic Python expression · {_field_detail(schema_field)}")
+            )
+        for label, new_text, detail in field_forms:
             items.append(
                 types.CompletionItem(
                     label=label,
@@ -3277,9 +3356,6 @@ def hover(
     browser_api_hover = _browser_api_hover(document, position, project)
     if browser_api_hover is not None:
         return browser_api_hover
-    component_prop_hover = _browser_component_prop_hover(document, position, project, open_documents)
-    if component_prop_hover is not None:
-        return component_prop_hover
     browser_event_hover = _browser_event_hover(document, position, project, open_documents)
     if browser_event_hover is not None:
         return browser_event_hover
@@ -3582,9 +3658,6 @@ def declaration(
     )
     if state_binding_locations:
         return state_binding_locations[0] if len(state_binding_locations) == 1 else list(state_binding_locations)
-    component_prop_location = _browser_component_prop_origin(document, position, project, open_documents)
-    if component_prop_location is not None:
-        return component_prop_location
     browser_binding_location = _browser_binding_origin_location(document, position, project, open_documents)
     if browser_binding_location is not None:
         return browser_binding_location
@@ -3634,9 +3707,6 @@ def definition(
     )
     if state_binding_locations:
         return state_binding_locations[0] if len(state_binding_locations) == 1 else list(state_binding_locations)
-    component_prop_location = _browser_component_prop_origin(document, position, project, open_documents)
-    if component_prop_location is not None:
-        return component_prop_location
     browser_binding_location = _browser_binding_origin_location(document, position, project, open_documents)
     if browser_binding_location is not None:
         return browser_binding_location
@@ -4302,9 +4372,22 @@ def _parse_region(
         ]
 
     parsed = ParsedRegion(region, template)
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    diagnostics = [
+        types.Diagnostic(
+            _range(region.source_map.map_range(finding.start_index, finding.end_index)),
+            render_diagnostic(TEMPLATE_MARKER_NAME_INVALID, variant=finding.reason),
+            severity=types.DiagnosticSeverity.Error,
+            code=TEMPLATE_MARKER_NAME_INVALID,
+            code_description=types.CodeDescription(diagnostic_documentation_url(TEMPLATE_MARKER_NAME_INVALID)),
+            source="citry",
+        )
+        for finding in mark_literal_findings(template, parse_nested=parser)
+    ]
     if project.analysis is None:
-        return parsed, []
-    return parsed, _unknown_component_diagnostics(template, region, project.analysis.component_names)
+        return parsed, diagnostics
+    diagnostics.extend(_unknown_component_diagnostics(template, region, project.analysis.component_names))
+    return parsed, diagnostics
 
 
 def _unknown_component_diagnostics(
@@ -4792,158 +4875,77 @@ _CITRY_TIMING_EXAMPLES = ("100ms", "250ms", "300ms", "500ms", "1s")
 _CITRY_POLL_EXAMPLES = ("1s", "5s", "30s", "60s")
 _CITRY_TIME_SEGMENT = re.compile(r"\d+(?:ms|s)\Z")
 
-_ALPINE_SYNTAX = (
+_VUE_SYNTAX = (
     _SyntaxSpec(
-        "x-data",
-        "attribute",
-        "Declare Alpine state",
-        "Create the reactive Alpine scope available to this element and its descendants.",
-        "https://alpinejs.dev/directives/data",
-        insert_text='x-data="${1:{}}"',
-    ),
-    _SyntaxSpec(
-        "x-init",
-        "attribute",
-        "Initialize an Alpine element",
-        "Run this JavaScript statement when Alpine initializes the element.",
-        "https://alpinejs.dev/directives/init",
-        insert_text='x-init="${1:expression}"',
-    ),
-    _SyntaxSpec(
-        "x-show",
+        "v-show",
         "attribute",
         "Toggle element visibility",
-        "Show the element while this Alpine expression is truthy.",
-        "https://alpinejs.dev/directives/show",
-        insert_text='x-show="${1:expression}"',
+        "Show the element while this Vue expression is truthy.",
+        "https://vuejs.org/api/built-in-directives.html#v-show",
+        insert_text='v-show="${1:expression}"',
     ),
     _SyntaxSpec(
-        "x-bind",
+        "v-bind",
         "attribute",
-        "Bind an HTML attribute",
-        "Keep an HTML attribute synchronized with an Alpine expression.",
-        "https://alpinejs.dev/directives/bind",
-        insert_text='x-bind:${1:attribute}="${2:expression}"',
+        "Bind an HTML attribute or component prop",
+        "Keep an HTML attribute or component prop synchronized with a Vue expression.",
+        "https://vuejs.org/api/built-in-directives.html#v-bind",
+        insert_text='v-bind:${1:attribute}="${2:expression}"',
         repeatable=True,
     ),
     _SyntaxSpec(
-        "x-on",
+        "v-on",
         "attribute",
-        "Listen for a browser event",
-        "Run this Alpine statement when the selected browser event fires.",
-        "https://alpinejs.dev/directives/on",
-        insert_text='x-on:${1:event}="${2:expression}"',
+        "Listen for a browser or component event",
+        "Run this Vue statement when the selected event fires.",
+        "https://vuejs.org/api/built-in-directives.html#v-on",
+        insert_text='v-on:${1:event}="${2:expression}"',
         repeatable=True,
     ),
     _SyntaxSpec(
-        "x-text",
+        "v-text",
         "attribute",
         "Set text content",
-        "Set the element's text content from an Alpine expression.",
-        "https://alpinejs.dev/directives/text",
-        insert_text='x-text="${1:expression}"',
+        "Set the element's text content from a Vue expression.",
+        "https://vuejs.org/api/built-in-directives.html#v-text",
+        insert_text='v-text="${1:expression}"',
     ),
     _SyntaxSpec(
-        "x-html",
+        "v-html",
         "attribute",
         "Set HTML content",
-        "Set the element's inner HTML from an Alpine expression.",
-        "https://alpinejs.dev/directives/html",
-        insert_text='x-html="${1:expression}"',
+        "Set the element's inner HTML from a Vue expression.",
+        "https://vuejs.org/api/built-in-directives.html#v-html",
+        insert_text='v-html="${1:expression}"',
     ),
     _SyntaxSpec(
-        "x-model",
+        "v-model",
         "attribute",
         "Bind a form value",
-        "Synchronize a form control's value with Alpine state.",
-        "https://alpinejs.dev/directives/model",
-        insert_text='x-model="${1:value}"',
+        "Synchronize a form control's value with Vue state.",
+        "https://vuejs.org/api/built-in-directives.html#v-model",
+        insert_text='v-model="${1:value}"',
     ),
     _SyntaxSpec(
-        "x-modelable",
+        "v-for",
         "attribute",
-        "Expose a modelable value",
-        "Expose an Alpine property for a parent `x-model` binding.",
-        "https://alpinejs.dev/directives/modelable",
-        insert_text='x-modelable="${1:value}"',
+        "Repeat an element",
+        "Render this element once for each item in a Vue collection. This cannot create Python component occurrences.",
+        "https://vuejs.org/api/built-in-directives.html#v-for",
+        insert_text='v-for="${1:item} in ${2:items}"',
     ),
     _SyntaxSpec(
-        "x-for",
+        "v-if",
         "attribute",
-        "Repeat a template",
-        "Render this `<template>` once for each item in an Alpine collection.",
-        "https://alpinejs.dev/directives/for",
-        insert_text='x-for="${1:item} in ${2:items}"',
-    ),
-    _SyntaxSpec(
-        "x-transition",
-        "attribute",
-        "Animate visibility changes",
-        "Apply an Alpine transition when an element enters or leaves.",
-        "https://alpinejs.dev/directives/transition",
-        insert_text="x-transition",
-    ),
-    _SyntaxSpec(
-        "x-effect",
-        "attribute",
-        "Run a reactive effect",
-        "Rerun this statement when the Alpine values it reads change.",
-        "https://alpinejs.dev/directives/effect",
-        insert_text='x-effect="${1:expression}"',
-    ),
-    _SyntaxSpec(
-        "x-ignore",
-        "attribute",
-        "Skip Alpine initialization",
-        "Prevent Alpine from initializing this element and its descendants.",
-        "https://alpinejs.dev/directives/ignore",
-        insert_text="x-ignore",
-    ),
-    _SyntaxSpec(
-        "x-ref",
-        "attribute",
-        "Name an element reference",
-        "Expose this element through Alpine's `$refs` magic.",
-        "https://alpinejs.dev/directives/ref",
-        insert_text='x-ref="${1:name}"',
-    ),
-    _SyntaxSpec(
-        "x-cloak",
-        "attribute",
-        "Hide content until Alpine starts",
-        "Keep the element hidden until Alpine has initialized it.",
-        "https://alpinejs.dev/directives/cloak",
-        insert_text="x-cloak",
-    ),
-    _SyntaxSpec(
-        "x-teleport",
-        "attribute",
-        "Move template content",
-        "Render this `<template>` at the element selected by the expression.",
-        "https://alpinejs.dev/directives/teleport",
-        insert_text='x-teleport="${1:selector}"',
-    ),
-    _SyntaxSpec(
-        "x-id",
-        "attribute",
-        "Create scoped IDs",
-        "Declare names that Alpine's `$id` magic resolves uniquely in this scope.",
-        "https://alpinejs.dev/directives/id",
-        insert_text="x-id=\"['${1:name}']\"",
-    ),
-    _SyntaxSpec(
-        "x-if",
-        "attribute",
-        "Conditionally render a template",
-        "Render this `<template>` while the Alpine expression is truthy.",
-        "https://alpinejs.dev/directives/if",
-        insert_text='x-if="${1:expression}"',
+        "Conditionally render an element",
+        "Render this element while the Vue expression is truthy.",
+        "https://vuejs.org/api/built-in-directives.html#v-if",
+        insert_text='v-if="${1:expression}"',
     ),
 )
-_ALPINE_SYNTAX_BY_LABEL = {spec.label: spec for spec in _ALPINE_SYNTAX}
-_ALPINE_TEMPLATE_ONLY = frozenset({"x-for", "x-if", "x-teleport"})
-_ALPINE_COMMON_EVENTS = ("click", "submit", "input", "change", "keydown", "keyup", "focus", "blur")
-_ALPINE_COMMON_BINDINGS = (
+_VUE_SYNTAX_BY_LABEL = {spec.label: spec for spec in _VUE_SYNTAX}
+_VUE_COMMON_EVENTS = ("click", "submit", "input", "change", "keydown", "keyup", "focus", "blur")
+_VUE_COMMON_BINDINGS = (
     "class",
     "style",
     "disabled",
@@ -4956,29 +4958,29 @@ _ALPINE_COMMON_BINDINGS = (
     "aria-current",
     "aria-hidden",
 )
-_ALPINE_EVENT_COMPLETIONS = tuple(
+_VUE_EVENT_COMPLETIONS = tuple(
     _SyntaxSpec(
         f"@{event}",
         "attribute",
-        _ALPINE_SYNTAX_BY_LABEL["x-on"].detail,
-        _ALPINE_SYNTAX_BY_LABEL["x-on"].documentation,
-        _ALPINE_SYNTAX_BY_LABEL["x-on"].documentation_url,
+        _VUE_SYNTAX_BY_LABEL["v-on"].detail,
+        _VUE_SYNTAX_BY_LABEL["v-on"].documentation,
+        _VUE_SYNTAX_BY_LABEL["v-on"].documentation_url,
         insert_text=f'@{event}="${{1:expression}}"',
         repeatable=True,
     )
-    for event in _ALPINE_COMMON_EVENTS
+    for event in _VUE_COMMON_EVENTS
 )
-_ALPINE_BINDING_COMPLETIONS = tuple(
+_VUE_BINDING_COMPLETIONS = tuple(
     _SyntaxSpec(
         f":{attribute}",
         "attribute",
-        _ALPINE_SYNTAX_BY_LABEL["x-bind"].detail,
-        _ALPINE_SYNTAX_BY_LABEL["x-bind"].documentation,
-        _ALPINE_SYNTAX_BY_LABEL["x-bind"].documentation_url,
+        _VUE_SYNTAX_BY_LABEL["v-bind"].detail,
+        _VUE_SYNTAX_BY_LABEL["v-bind"].documentation,
+        _VUE_SYNTAX_BY_LABEL["v-bind"].documentation_url,
         insert_text=f':{attribute}="${{1:expression}}"',
         repeatable=True,
     )
-    for attribute in _ALPINE_COMMON_BINDINGS
+    for attribute in _VUE_COMMON_BINDINGS
 )
 
 # Keeping the authored spellings and their prose together makes a new parser
@@ -5116,24 +5118,6 @@ _CITRY_SYNTAX = (
         f"{_DYNAMIC_ATTRIBUTES_URL}#c-ignore",
         context="general",
         insert_text="#c-ignore",
-    ),
-    _SyntaxSpec(
-        "$c-props",
-        "attribute",
-        "Supply client-side component props",
-        "Pass the result of this Alpine expression to the child component as live props.",
-        f"{_CLIENT_INTERACTIVITY_URL}#pass-client-props-down",
-        context="component",
-        insert_text='\\$c-props="${1:{}}"',
-    ),
-    _SyntaxSpec(
-        "c-$c-props",
-        "attribute",
-        "Compute the complete client props expression in Python",
-        "Evaluate Python to produce the Alpine expression used for the child component's live props.",
-        f"{_CLIENT_INTERACTIVITY_URL}#pass-client-props-down",
-        context="component",
-        insert_text='c-\\$c-props="${1:expression}"',
     ),
     _SyntaxSpec(
         "cond",
@@ -5308,7 +5292,7 @@ _I18N_BINDING_DIRECTIVES = (
         "c-$c-tr:",
         "attribute",
         "Compute a translation values expression in Python",
-        "Evaluate Python to produce the Alpine named-values expression for a browser translation binding.",
+        "Evaluate Python to produce the Vue named-values expression for a browser translation binding.",
         _BROWSER_I18N_URL,
         context="i18n-binding",
         insert_text='c-\\$c-tr:${1:message}="${2:expression}"',
@@ -5325,25 +5309,22 @@ _DYNAMIC_TARGET_ATTRIBUTES = _syntax_specs(kind="attribute", context="dynamic-ta
 
 
 def _is_semantic_component_tag(tag_name: str, registered_component: bool = False) -> bool:
-    """Return whether Alpine syntax must cross a Citry component boundary."""
+    """Return whether Vue syntax must cross a Citry component boundary."""
     normalized = tag_name.lower()
     return registered_component or (tag_name.startswith("c-") and normalized not in {*RESERVED_TAG_NAMES, "c-element"})
 
 
-def _alpine_completion_specs(tag_name: str, *, semantic_component: bool) -> tuple[_SyntaxSpec, ...]:
-    """Select Alpine spellings that are valid on this authored element."""
-    normalized = tag_name.lower()
-    if normalized in RESERVED_TAG_NAMES:
+def _vue_completion_specs(tag_name: str, *, semantic_component: bool) -> tuple[_SyntaxSpec, ...]:
+    """Select Vue spellings that are valid on this authored element."""
+    if tag_name.lower() in RESERVED_TAG_NAMES:
         return ()
-    event_specs = (_ALPINE_SYNTAX_BY_LABEL["x-on"], *_ALPINE_EVENT_COMPLETIONS)
+    event_specs = (_VUE_SYNTAX_BY_LABEL["v-on"], *_VUE_EVENT_COMPLETIONS)
+    binding_specs = (_VUE_SYNTAX_BY_LABEL["v-bind"], *_VUE_BINDING_COMPLETIONS)
     if semantic_component:
-        # Component boundaries relocate only Alpine event listeners. Other
-        # directives belong on the concrete HTML roots inside the component.
-        return event_specs
-    fixed = tuple(
-        spec for spec in _ALPINE_SYNTAX if spec.label not in _ALPINE_TEMPLATE_ONLY or normalized == "template"
-    )
-    return (*fixed, *_ALPINE_EVENT_COMPLETIONS, *_ALPINE_BINDING_COMPLETIONS)
+        # Native Vue listeners and props cross a component boundary. DOM-only
+        # content and visibility directives belong on concrete HTML elements.
+        return (*event_specs, *binding_specs)
+    return (*_VUE_SYNTAX, *_VUE_EVENT_COMPLETIONS, *_VUE_BINDING_COMPLETIONS)
 
 
 def _validate_syntax_metadata() -> None:
@@ -5370,12 +5351,15 @@ def _validate_syntax_metadata() -> None:
     if any(not spec.documentation_url.startswith("https://citry.dev/") for spec in _CITRY_SYNTAX):
         msg = "Citry syntax hover metadata must link to canonical citry.dev documentation."
         raise RuntimeError(msg)
-    alpine_labels = [spec.label for spec in _ALPINE_SYNTAX]
-    if len(alpine_labels) != len(set(alpine_labels)):
-        msg = "Alpine syntax metadata contains a duplicate directive name."
+    vue_labels = [spec.label for spec in _VUE_SYNTAX]
+    if len(vue_labels) != len(set(vue_labels)):
+        msg = "Vue syntax metadata contains a duplicate directive name."
         raise RuntimeError(msg)
-    if any(not spec.documentation_url.startswith("https://alpinejs.dev/directives/") for spec in _ALPINE_SYNTAX):
-        msg = "Alpine syntax hover metadata must link to canonical Alpine.js directive documentation."
+    if any(
+        not spec.documentation_url.startswith("https://vuejs.org/api/built-in-directives.html#")
+        for spec in _VUE_SYNTAX
+    ):
+        msg = "Vue syntax hover metadata must link to canonical Vue directive documentation."
         raise RuntimeError(msg)
 
 
@@ -5569,29 +5553,25 @@ def _syntax_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
         ),
         None,
     )
-    return citry_spec or _alpine_attribute_spec(tag_name, attr_name)
+    return citry_spec or _vue_attribute_spec(tag_name, attr_name)
 
 
-def _alpine_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
-    """Resolve one core Alpine directive without claiming Citry-owned channels."""
+def _vue_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
+    """Resolve one core Vue directive without claiming Citry-owned channels."""
     if attr_name.startswith(("@c-", ":c-")):
         return None
     canonical = attr_name.lower()
     spec: _SyntaxSpec | None
-    if canonical.startswith(("@", "x-on:")):
-        spec = _ALPINE_SYNTAX_BY_LABEL["x-on"]
-    elif canonical.startswith((":", "x-bind:")):
-        spec = _ALPINE_SYNTAX_BY_LABEL["x-bind"]
+    if canonical.startswith(("@", "v-on:")):
+        spec = _VUE_SYNTAX_BY_LABEL["v-on"]
+    elif canonical.startswith((":", "v-bind:")):
+        spec = _VUE_SYNTAX_BY_LABEL["v-bind"]
     else:
         base_name = canonical.split(".", 1)[0]
-        if base_name.startswith("x-transition:"):
-            base_name = "x-transition"
-        spec = _ALPINE_SYNTAX_BY_LABEL.get(base_name)
+        spec = _VUE_SYNTAX_BY_LABEL.get(base_name)
     if spec is None:
         return None
-    if _is_semantic_component_tag(tag_name) and spec.label != "x-on":
-        return None
-    if spec.label in _ALPINE_TEMPLATE_ONLY and tag_name.lower() != "template":
+    if _is_semantic_component_tag(tag_name) and spec.label not in {"v-on", "v-bind"}:
         return None
     return spec
 
@@ -5692,7 +5672,7 @@ def _syntax_attribute_reference_in_tag(
 def _syntax_markdown(spec: _SyntaxSpec, display_label: str | None = None) -> str:
     """Render one concise first-party hover with its canonical guide link."""
     subject = f"<{spec.label}>" if spec.kind == "tag" else display_label or spec.label
-    documentation_owner = "Alpine.js" if spec.documentation_url.startswith("https://alpinejs.dev/") else "Citry"
+    documentation_owner = "Vue" if spec.documentation_url.startswith("https://vuejs.org/") else "Citry"
     return (
         f"### `{subject}`\n\n{spec.documentation}\n\n"
         f"[Read the {documentation_owner} documentation]({spec.documentation_url})"
@@ -5780,7 +5760,7 @@ def _directive_attribute_completions(
     else:
         i18n_specs = () if semantic_component or normalized_tag.startswith("c-") else _I18N_BINDING_DIRECTIVES
         specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if semantic_component else ()), *i18n_specs)
-    specs = (*specs, *_alpine_completion_specs(tag_name, semantic_component=semantic_component))
+    specs = (*specs, *_vue_completion_specs(tag_name, semantic_component=semantic_component))
 
     control_if_present = bool(authored_attrs & {"c-if", "c-elif", "c-else"})
     control_for_present = bool(authored_attrs & {"c-for", "c-empty"})
@@ -6909,6 +6889,7 @@ def _browser_binding_hover(
     if resolved is None:
         return None
     region, binding, wire_type, use_start, use_end = resolved
+    binding_label = "Vue `v-for` binding" if binding.kind == "v-for" else "Vue `v-slot` binding"
     return types.Hover(
         types.MarkupContent(
             types.MarkupKind.Markdown,
@@ -6918,7 +6899,7 @@ def _browser_binding_hover(
                     f"(variable) {binding.name}: {wire_type.javascript}",
                     "```",
                     "",
-                    "Alpine `x-for` binding" if binding.kind == "x-for" else "Alpine `x-data` binding",
+                    binding_label,
                 )
             ),
         ),
@@ -6992,7 +6973,7 @@ def _browser_data_completion_result(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> CompletionResult | None:
-    """Complete JsData roots in parser-proven Alpine expression hosts."""
+    """Complete JsData roots in parser-proven Vue expression hosts."""
     context = _browser_expression_context(document, position, project)
     if context is None:
         return None
@@ -7137,26 +7118,12 @@ def _template_js_data_roots(
         return ()
     resolved: list[tuple[_JsDataRoot, ...] | None] = []
     for component in consumers:
-        data_roots = _component_js_data_roots(component, project, document, open_documents)
-        scope_roots = _component_scope_roots(component, project, document, open_documents)
-        if data_roots is None or scope_roots is None:
+        namespace = _component_js_data_roots(component, project, document, open_documents)
+        data_roots = namespace.roots
+        if namespace.policy == "unavailable":
             resolved.append(None)
             continue
         by_name = {root.name: root for root in data_roots}
-        for scope_root in scope_roots:
-            existing = by_name.get(scope_root.name)
-            by_name[scope_root.name] = (
-                scope_root
-                if existing is None
-                else _JsDataRoot(
-                    scope_root.name,
-                    scope_root.presence,
-                    merge_json_wire_types((existing.wire_type, scope_root.wire_type)),
-                    tuple(dict.fromkeys((*existing.producers, *scope_root.producers))),
-                    _dedupe_fields((*existing.fields, *scope_root.fields)),
-                    _dedupe_locations((*existing.locations, *scope_root.locations)),
-                )
-            )
         resolved.append(tuple(by_name.values()))
     if any(roots is None for roots in resolved):
         return ()
@@ -7185,46 +7152,6 @@ def _template_js_data_roots(
             )
         common = joined
     return tuple(common.values())
-
-
-def _component_scope_roots(
-    component: ComponentRecord,
-    project: ProjectState,
-    current_document: DocumentState,
-    open_documents: Mapping[str, DocumentState] | None,
-) -> tuple[_JsDataRoot, ...] | None:
-    """Resolve exact synchronous `$component` scope writes for one owner."""
-    resolved = _component_js_asset_source(component, project, current_document, open_documents)
-    if resolved is None:
-        return None
-    if resolved is False:
-        return ()
-    source, uri, source_map = resolved
-    data_roots = _component_js_data_roots(component, project, current_document, open_documents)
-    if data_roots is None:
-        return None
-    data_by_name = {root.name: root for root in data_roots}
-    grouped: dict[str, list[Any]] = {}
-    for write in browser_component_scope_writes(source):
-        grouped.setdefault(write.name, []).append(write)
-    roots: list[_JsDataRoot] = []
-    owner_name = component.qualname or component.class_name or component.name
-    for name, writes in grouped.items():
-        wire_types = tuple(_scope_write_wire_type(write.value_source, data_by_name) for write in writes)
-        wire_type = merge_json_wire_types(wire_types)
-        locations = tuple(
-            types.Location(uri, _range(source_map.map_range(write.start_index, write.end_index))) for write in writes
-        )
-        roots.append(
-            _JsDataRoot(
-                name,
-                "conditional",
-                wire_type,
-                (_JsDataProducer(f"{owner_name}.$component scope.{name}", wire_type),),
-                locations=locations,
-            )
-        )
-    return tuple(roots)
 
 
 def _component_js_asset_source(
@@ -7265,159 +7192,62 @@ def _component_js_asset_source(
     return source_map.template_source, asset.owner_file.resolve().as_uri(), source_map
 
 
-def _component_client_props(
-    component: ComponentRecord,
-    project: ProjectState,
-    current_document: DocumentState,
-    open_documents: Mapping[str, DocumentState] | None,
-) -> tuple[_ClientProp, ...] | None:
-    """Resolve a child's static prop contract from its current JavaScript."""
-    resolved = _component_js_asset_source(component, project, current_document, open_documents)
-    if resolved is None or resolved is False:
-        return None
-    source, uri, source_map = resolved
-    props = browser_component_props(source)
-    if props is None:
-        return None
-    return tuple(
-        _ClientProp(
-            prop.name,
-            prop.javascript,
-            prop.required,
-            types.Location(uri, _range(source_map.map_range(prop.start_index, prop.end_index))),
-        )
-        for prop in props
-    )
-
-
-def _browser_component_prop_at(
-    document: DocumentState,
-    position: types.Position,
-    project: ProjectState,
-    open_documents: Mapping[str, DocumentState] | None,
-) -> tuple[TemplateRegion, BrowserObjectProperty, _ClientProp] | None:
-    """Join one authored `$c-props` key to its current child declaration."""
-    if project.catalog is None:
-        return None
-    region = document.region_at(position)
-    if region is None:
-        return None
-    parsed = document.parsed.get(region.key)
-    parser_index = region.source_map.parser_index_at(_citry_position(position))
-    if parsed is None or parser_index is None:
-        return None
-    parser = project.analysis.parse_template if project.analysis is not None else parse_template
-    for use in browser_component_prop_uses(parsed.template, parse_nested=parser):
-        property_ = next(
-            (
-                candidate
-                for candidate in use.properties
-                if candidate.start_index <= parser_index <= candidate.end_index
-            ),
-            None,
-        )
-        if property_ is None:
-            continue
-        child = project.catalog.get_tag(use.tag_name)
-        if child is None:
-            return None
-        contract = _component_client_props(child, project, document, open_documents)
-        if contract is None:
-            return None
-        prop = next((candidate for candidate in contract if candidate.name == property_.name), None)
-        return (region, property_, prop) if prop is not None else None
-    return None
-
-
-def _browser_component_prop_origin(
-    document: DocumentState,
-    position: types.Position,
-    project: ProjectState,
-    open_documents: Mapping[str, DocumentState] | None,
-) -> types.Location | None:
-    resolved = _browser_component_prop_at(document, position, project, open_documents)
-    return resolved[2].location if resolved is not None else None
-
-
-def _browser_component_prop_hover(
-    document: DocumentState,
-    position: types.Position,
-    project: ProjectState,
-    open_documents: Mapping[str, DocumentState] | None,
-) -> types.Hover | None:
-    resolved = _browser_component_prop_at(document, position, project, open_documents)
-    if resolved is None:
-        return None
-    region, property_, prop = resolved
-    return types.Hover(
-        types.MarkupContent(
-            types.MarkupKind.Markdown,
-            "\n".join(
-                (
-                    "```javascript",
-                    f"(property) {prop.name}: {prop.javascript}",
-                    "```",
-                    "",
-                    "Client prop declared by the child component",
-                )
-            ),
-        ),
-        range=_range(region.source_map.map_range(property_.start_index, property_.end_index)),
-    )
-
-
-def _component_props_diagnostics(
+def _browser_component_prop_diagnostics(
     region: TemplateRegion,
-    use: BrowserComponentPropsUse,
-    contract: tuple[_ClientProp, ...],
+    template: Any,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
     roots: tuple[_JsDataRoot, ...],
     expressions: tuple[BrowserExpression, ...],
-) -> tuple[types.Diagnostic, ...]:
-    """Check direct keys while dynamic keys suppress only missing-prop errors."""
-    by_name = {prop.name: prop for prop in contract}
-    explicit = {prop.name for prop in use.properties}
+    *,
+    parser: Any,
+) -> list[types.Diagnostic]:
+    """Check only statically declared Vue props on resolved component calls."""
+    catalog = project.catalog
+    if catalog is None:
+        return []
+    sites = browser_component_prop_sites(template, parse_nested=parser)
+    props_by_tag: dict[str, tuple[BrowserProp, ...] | None] = {}
+
+    def declared_props(site: BrowserComponentPropSite) -> tuple[BrowserProp, ...] | None:
+        if site.tag in props_by_tag:
+            return props_by_tag[site.tag]
+        component = catalog.get_tag(site.tag)
+        if component is None or component.name == "component":
+            props_by_tag[site.tag] = None
+            return None
+        source = _component_js_asset_source(component, project, document, open_documents)
+        if not source:
+            props_by_tag[site.tag] = None
+            return None
+        props_by_tag[site.tag] = browser_component_props(source[0])
+        return props_by_tag[site.tag]
+
+    def value_type(contribution: BrowserComponentPropContribution) -> JsonWireType:
+        return _browser_prop_value_type(
+            BrowserObjectProperty(
+                contribution.name or "",
+                contribution.name_start_index,
+                contribution.name_end_index,
+                contribution.source,
+                contribution.value_start_index,
+                contribution.value_end_index,
+            ),
+            roots,
+            expressions,
+        )
+
     diagnostics: list[types.Diagnostic] = []
-    for property_ in use.properties:
-        expected = by_name.get(property_.name)
-        if expected is None:
-            diagnostics.append(
-                _browser_diagnostic(
-                    region,
-                    property_.start_index,
-                    property_.end_index,
-                    BROWSER_UNKNOWN_COMPONENT_PROP,
-                    name=property_.name,
-                    tag=use.tag_name,
-                )
-            )
-            continue
-        actual = _browser_prop_value_type(property_, roots, expressions)
-        if actual.kind != "unknown" and not browser_client_prop_accepts(expected.javascript, actual):
-            diagnostics.append(
-                _browser_diagnostic(
-                    region,
-                    property_.value_start_index,
-                    property_.value_end_index,
-                    BROWSER_INCOMPATIBLE_COMPONENT_PROP,
-                    name=property_.name,
-                    expected=expected.javascript,
-                    actual=actual.javascript,
-                )
-            )
-    if not use.has_dynamic_keys:
-        for prop in contract:
-            if prop.required and prop.name not in explicit:
-                diagnostics.append(
-                    _browser_diagnostic(
-                        region,
-                        use.start_index,
-                        use.end_index,
-                        BROWSER_MISSING_COMPONENT_PROP,
-                        name=prop.name,
-                        tag=use.tag_name,
-                    )
-                )
-    return tuple(diagnostics)
+    for finding in browser_component_prop_findings(sites, declared_props=declared_props, value_type=value_type):
+        code = BROWSER_MISSING_COMPONENT_PROP if finding.kind == "missing" else BROWSER_INCOMPATIBLE_COMPONENT_PROP
+        parameters = (
+            {"name": finding.name, "tag": finding.tag}
+            if finding.kind == "missing"
+            else {"name": finding.name, "expected": finding.expected, "actual": finding.actual}
+        )
+        diagnostics.append(_browser_diagnostic(region, finding.start_index, finding.end_index, code, **parameters))
+    return diagnostics
 
 
 def _browser_prop_value_type(
@@ -7425,39 +7255,51 @@ def _browser_prop_value_type(
     roots: tuple[_JsDataRoot, ...],
     expressions: tuple[BrowserExpression, ...],
 ) -> JsonWireType:
-    """Infer direct literals, proven roots, and active Alpine loop bindings."""
+    """Infer direct literals, proven roots, and active Vue loop bindings."""
     source = property_.value_source.strip()
     member_match = re.fullmatch(r"([A-Za-z_$][\w$]*)\??\.([A-Za-z_$][\w$]*)", source)
     if member_match is not None:
         owner, member = member_match.groups()
-        root = next((candidate for candidate in roots if candidate.name == owner), None)
-        if root is not None and root.wire_type.kind == "object":
-            field = next((candidate for candidate in root.wire_type.fields if candidate.name == member), None)
+        binding = _browser_active_binding(owner, property_, expressions)
+        owner_type = (
+            _browser_binding_wire_type(binding, roots)
+            if binding is not None
+            else next(
+                (candidate.wire_type for candidate in roots if candidate.name == owner),
+                JsonWireType("unknown"),
+            )
+        )
+        if owner_type.kind == "object":
+            field = next((candidate for candidate in owner_type.fields if candidate.name == member), None)
             if field is not None:
                 return field.value
-            if root.wire_type.additional is not None:
-                return root.wire_type.additional
+            if owner_type.additional is not None:
+                return owner_type.additional
     if re.fullmatch(r"[A-Za-z_$][\w$]*", source):
+        binding = _browser_active_binding(source, property_, expressions)
+        if binding is not None:
+            return _browser_binding_wire_type(binding, roots)
         root = next((candidate for candidate in roots if candidate.name == source), None)
         if root is not None:
             return root.wire_type
-        expression = next(
-            (
-                candidate
-                for candidate in expressions
-                if candidate.start_index <= property_.value_start_index
-                and property_.value_end_index <= candidate.end_index
-            ),
-            None,
-        )
-        if expression is not None:
-            binding = next(
-                (candidate for candidate in reversed(expression.binding_details) if candidate.name == source),
-                None,
-            )
-            if binding is not None:
-                return _browser_binding_wire_type(binding, roots)
     return browser_literal_wire_type(source)
+
+
+def _browser_active_binding(
+    name: str,
+    property_: BrowserObjectProperty,
+    expressions: tuple[BrowserExpression, ...],
+) -> BrowserBinding | None:
+    """Return the innermost active Vue binding that shadows a data root."""
+    enclosing = (
+        candidate
+        for candidate in expressions
+        if candidate.start_index <= property_.value_start_index and property_.value_end_index <= candidate.end_index
+    )
+    expression = min(enclosing, key=lambda candidate: candidate.end_index - candidate.start_index, default=None)
+    if expression is None:
+        return None
+    return next((candidate for candidate in reversed(expression.binding_details) if candidate.name == name), None)
 
 
 def _browser_diagnostic(
@@ -7478,36 +7320,12 @@ def _browser_diagnostic(
     )
 
 
-def _scope_write_wire_type(
-    value_source: str,
-    data_roots: Mapping[str, _JsDataRoot],
-) -> JsonWireType:
-    """Infer only literal and direct JsData-backed scope assignment types."""
-    value = value_source.strip()
-    data_member = re.fullmatch(r"data\.([A-Za-z_$][\w$]*)", value)
-    if data_member is not None and (root := data_roots.get(data_member.group(1))) is not None:
-        return root.wire_type
-    if value in {"true", "false"}:
-        return JsonWireType("boolean")
-    if value == "null":
-        return JsonWireType("null")
-    if re.fullmatch(r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", value):
-        return JsonWireType("number")
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-        return JsonWireType("string")
-    if value.startswith("[") and value.endswith("]"):
-        return JsonWireType("array", (JsonWireType("unknown"),))
-    if value.startswith("{") and value.endswith("}"):
-        return JsonWireType("object", additional=JsonWireType("unknown"))
-    return JsonWireType("unknown")
-
-
 def _browser_binding_wire_type(
     binding: BrowserBinding,
     roots: tuple[_JsDataRoot, ...],
 ) -> JsonWireType:
-    """Infer Alpine x-for positional values from one exact iterable root."""
-    if binding.kind != "x-for":
+    """Infer Vue v-for positional values from one exact iterable root."""
+    if binding.kind != "v-for":
         return JsonWireType("unknown")
     source = binding.source.strip()
     root = next((candidate for candidate in roots if candidate.name == source), None)
@@ -7540,31 +7358,35 @@ def _component_js_data_roots(
     project: ProjectState,
     current_document: DocumentState,
     open_documents: Mapping[str, DocumentState] | None,
-) -> tuple[_JsDataRoot, ...] | None:
+) -> _JsDataNamespace:
     schema = component.schemas.js_data
     owner_name = component.qualname or component.class_name or component.name
     if schema.kind == "opaque":
-        return ()
+        return _JsDataNamespace((), "unavailable")
     if schema.kind == "fields":
-        return _js_schema_roots(component, owner_name, open_documents)
+        schema_roots = _js_schema_roots(component, owner_name, open_documents)
+        return _JsDataNamespace(
+            () if schema_roots is None else schema_roots,
+            "closed" if schema.namespace_policy == "closed" and schema_roots is not None else "open",
+        )
     if project.source_analysis is None:
-        return None
+        return _JsDataNamespace((), "unavailable")
     chain = project.source_analysis.js_data_chain(component)
     if not chain:
-        return None
+        return _JsDataNamespace((), "unavailable")
     for candidate in chain[:-1]:
         source = _python_source(candidate.source_file, current_document, open_documents)
         if source is None or python_class_resolution_signature(source, candidate.qualname) != candidate.resolution:
-            return None
+            return _JsDataNamespace((), "unavailable")
         if python_class_defines_direct_method(source, candidate.qualname, "js_data") is not False:
-            return None
+            return _JsDataNamespace((), "unavailable")
     owner = chain[-1]
     source = _python_source(owner.source_file, current_document, open_documents)
     if source is None or python_class_resolution_signature(source, owner.qualname) != owner.resolution:
-        return None
+        return _JsDataNamespace((), "unavailable")
     shape = analyze_js_data_source(source, owner.qualname)
     if shape is None:
-        return None
+        return _JsDataNamespace((), "unavailable")
     member_types = _js_data_member_types(component, shape)
     roots: list[_JsDataRoot] = []
     for root in shape.roots:
@@ -7586,7 +7408,7 @@ def _component_js_data_roots(
                 ),
             )
         )
-    return tuple(roots)
+    return _JsDataNamespace(tuple(roots), "open" if shape.completeness == "open" else "closed")
 
 
 def _js_data_member_types(
@@ -7848,10 +7670,8 @@ def _js_asset_data_roots(
     consumers = _js_consumers(document, region, project, open_documents)
     if not consumers:
         return None
-    resolved = [_component_js_data_roots(component, project, document, open_documents) for component in consumers]
-    if any(roots is None for roots in resolved):
-        return None
-    root_sets = [roots for roots in resolved if roots is not None]
+    namespaces = [_component_js_data_roots(component, project, document, open_documents) for component in consumers]
+    root_sets = [namespace.roots for namespace in namespaces]
     if not root_sets:
         return ()
     common = {root.name: root for root in root_sets[0]}
@@ -7887,14 +7707,8 @@ def _js_asset_scope_roots(
         return None
     resolved: list[tuple[_JsDataRoot, ...]] = []
     for component in consumers:
-        data_roots = _component_js_data_roots(component, project, document, open_documents)
-        scope_roots = _component_scope_roots(component, project, document, open_documents)
-        if data_roots is None or scope_roots is None:
-            return None
-        by_name = {root.name: root for root in data_roots}
-        for scope_root in scope_roots:
-            by_name[scope_root.name] = scope_root
-        resolved.append(tuple(by_name.values()))
+        namespace = _component_js_data_roots(component, project, document, open_documents)
+        resolved.append(namespace.roots)
     common = {root.name: root for root in resolved[0]}
     for roots in resolved[1:]:
         candidates = {root.name: root for root in roots}
@@ -7991,102 +7805,23 @@ _COMPONENT_API_SPECS = {
     ),
 }
 _COMPONENT_CONTEXT_SPECS = {
-    "i18n": _BrowserApiSpec(
+    "component": _BrowserApiSpec(
         "parameter",
-        "CitryI18nService | null",
-        "The nearest browser i18n service, or null outside a client-enabled i18n subtree.",
-        "https://citry.dev/i18n/browser/",
+        "CitryComponentPublicInstance",
+        "The mounted Vue public component instance.",
+        f"{_BROWSER_APIS_URL}#component",
     ),
-    "id": _BrowserApiSpec("parameter", "string", "The current server render ID.", f"{_BROWSER_APIS_URL}#component"),
-    "els": _BrowserApiSpec(
+    "revision": _BrowserApiSpec(
         "parameter",
-        "Element[]",
-        "The stable array of this instance's current root elements.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "data": _BrowserApiSpec(
-        "parameter",
-        "CitryJsData",
-        "The instance-local JSON returned by `js_data()`.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "graph": _BrowserApiSpec(
-        "parameter",
-        "unknown",
-        "Current ownership route and source metadata, when available.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "props": _BrowserApiSpec(
-        "parameter",
-        "Readonly<CitryClientProps>",
-        "Stable reactive values declared by the `$component` configuration.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "scope": _BrowserApiSpec(
-        "parameter",
-        "CitryJsData & Record<string, unknown>",
-        "The stable reactive object visible to this component's Alpine expressions.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "state": _BrowserApiSpec(
-        "parameter",
-        "CitryEventsState | null",
-        "This component's public reactive Events state.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "effect": _BrowserApiSpec(
-        "function",
-        "(fn: () => void) => CitryCleanup",
-        "Run a managed reactive effect for this component instance.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "reactive": _BrowserApiSpec(
-        "function",
-        "<T>(value: T) => T",
-        "Create an Alpine reactive proxy.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "provide": _BrowserApiSpec(
-        "function",
-        "(key: string | symbol, value: unknown) => void",
-        "Provide a client value to rendered descendants.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "inject": _BrowserApiSpec(
-        "function",
-        "(key: string | symbol, fallback?: unknown) => unknown",
-        "Read the nearest inherited client value.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "unprovide": _BrowserApiSpec(
-        "function",
-        "(key: string | symbol) => void",
-        "Hide an inherited client value for rendered descendants.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "sendEvent": _BrowserApiSpec(
-        "function",
-        "(name: CitryServerEventName, args?: Record<string, unknown>, opts?: unknown) => Promise<unknown>",
-        "Call one of this component's declared server event handlers.",
+        "number",
+        "The committed server-render revision.",
         f"{_BROWSER_APIS_URL}#component",
     ),
     "onEvent": _BrowserApiSpec(
-        "function",
+        "parameter",
         "(name: string, callback: (detail: unknown) => void) => CitryCleanup",
-        "Listen for a browser event targeting this component instance.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "loading": _BrowserApiSpec(
-        "function",
-        "(name?: CitryServerEventName) => boolean",
-        "Check whether any server handler, or one named handler, is running.",
-        f"{_BROWSER_APIS_URL}#component",
-    ),
-    "error": _BrowserApiSpec(
-        "function",
-        "(name?: CitryServerEventName) => CitryEventError | null",
-        "Read the latest retained server-handler error.",
-        f"{_BROWSER_APIS_URL}#component",
+        "Subscribe to a server-dispatched event for this component instance.",
+        f"{_BROWSER_APIS_URL}#on-server-render-on-event",
     ),
 }
 
@@ -8095,14 +7830,13 @@ def _component_js_binding_at(
     document: DocumentState,
     position: types.Position,
 ) -> tuple[JsRegion, BrowserComponentBinding] | None:
-    """Resolve the actual callback binding, including aliases and captured references."""
+    """Resolve the exact Vue component callback binding at a JavaScript position."""
     region = document.js_region_at(position)
     if region is None:
         return None
     parser_index = region.source_map.parser_index_at(_citry_position(position))
     if parser_index is None:
         return None
-    # OXC identity excludes a same-named parameter in a nested or sibling function.
     analysis = analyze_browser_component_source(region.source_map.template_source)
     if not analysis.valid:
         return None
@@ -8114,15 +7848,11 @@ def _component_js_binding_at(
 
 
 def _component_js_binding_origin(document: DocumentState, position: types.Position) -> types.Location | None:
-    """Keep callback navigation in the authored JavaScript parameter list."""
     resolved = _component_js_binding_at(document, position)
     if resolved is None:
         return None
     region, binding = resolved
-    return types.Location(
-        document.uri,
-        _range(region.source_map.map_range(binding.start_index, binding.end_index)),
-    )
+    return types.Location(document.uri, _range(region.source_map.map_range(binding.start_index, binding.end_index)))
 
 
 def _browser_api_hover(
@@ -8195,12 +7925,67 @@ def _browser_api_at(
         spec = _COMPONENT_CONTEXT_SPECS.get(binding.name)
         if spec is None:
             continue
-        if binding.name == "i18n" and (project.i18n is None or not project.i18n.configured):
-            continue
         for start, end in ((binding.start_index, binding.end_index), *binding.references):
             if start <= js_parser_index <= end:
                 return js_region, binding.local_name, spec, start, end
     return None
+
+
+def _component_public_instance_shape(
+    roots: tuple[_JsDataRoot, ...],
+    props: tuple[Any, ...] | None,
+    analysis: Any | None,
+    *,
+    js_data_policy: Literal["closed", "open", "unavailable"] = "closed",
+    i18n: Any | None = None,
+) -> str:
+    """Render the closed, source-proven additions to Vue's public instance."""
+    members: dict[str, tuple[str, bool]] = {root.name: (root.wire_type.javascript, False) for root in roots}
+    public_names = () if analysis is None or not analysis.valid else analysis.public_names
+    by_name: dict[str, list[Any]] = {}
+    for item in public_names:
+        by_name.setdefault(item.exposed_name, []).append(item)
+    prop_types = {} if props is None else {prop.name: prop.javascript for prop in props}
+    for name, items in by_name.items():
+        if name in members:
+            continue
+        origins = {item.origin for item in items}
+        if origins == {"props"}:
+            members[name] = (prop_types.get(name, "unknown"), True)
+        elif origins == {"methods"}:
+            members[name] = ("(...args: unknown[]) => unknown", False)
+        else:
+            # Vue computed setters and injected refs may be writable. The
+            # portable analyzer proves the name but not that finer contract.
+            members[name] = ("unknown", False)
+    presence = {root.name: root.presence for root in roots}
+    writable = _js_object_shape(
+        tuple(
+            (name, type_source, presence.get(name) != "conditional")
+            for name, (type_source, readonly) in members.items()
+            if not readonly
+        )
+    )
+    readonly = _js_object_shape(
+        tuple((name, type_source, True) for name, (type_source, readonly) in members.items() if readonly)
+    )
+    helpers = (
+        "{$state: CitryEventsState, $sendEvent: (name: CitryServerEventName, "
+        "args?: Record<string, unknown>) => Promise<unknown>, "
+        "$loading: (name?: CitryServerEventName) => boolean, "
+        "$error: (name?: CitryServerEventName) => CitryEventError | null}"
+    )
+    if i18n is not None and i18n.configured:
+        helpers = helpers[:-1] + ", $i18n: CitryI18nService | null}"
+    open_namespace = (
+        " & Record<string, unknown>"
+        if js_data_policy != "closed"
+        or analysis is None
+        or not analysis.valid
+        or any(section.state == "unknown" for section in analysis.sections)
+        else ""
+    )
+    return f"{writable} & Readonly<{readonly}> & {helpers}{open_namespace}"
 
 
 def _browser_preamble(
@@ -8211,18 +7996,21 @@ def _browser_preamble(
     state_roots: tuple[_JsDataRoot, ...] = (),
     *,
     binding_types: Mapping[str, JsonWireType] | None = None,
-    scope_roots: tuple[_JsDataRoot, ...] | None = None,
     include_root_variables: bool = True,
     component_js: bool = False,
+    component_analysis: Any | None = None,
+    writable_state_names: frozenset[str] = frozenset(),
     i18n: Any | None = None,
+    js_data_policy: Literal["closed", "open", "unavailable"] = "closed",
 ) -> str:
     """Render collision-tolerant JSDoc facts for VS Code's JS provider."""
     lines = ["// Generated Citry browser-analysis declarations."]
     lines.extend(_i18n_browser_typedefs(i18n))
     names: set[str] = set()
+    binding_names = frozenset(bindings)
     if include_root_variables:
         for root in roots:
-            if root.name in names:
+            if root.name in names or root.name in binding_names:
                 continue
             names.add(root.name)
             lines.extend((f"/** @type {{{root.wire_type.javascript}}} */", f"var {root.name};"))
@@ -8238,22 +8026,78 @@ def _browser_preamble(
             binding_type = (binding_types or {}).get(binding, JsonWireType("unknown")).javascript
         lines.extend((f"/** @type {{{binding_type}}} */", f"var {binding};"))
     data_shape = _js_object_shape(tuple((root.name, root.wire_type.javascript, True) for root in roots))
-    effective_scope_roots = roots if scope_roots is None else scope_roots
-    scope_shape = _js_object_shape(
-        tuple((root.name, root.wire_type.javascript, root.presence == "always") for root in effective_scope_roots)
-    )
     props_shape = (
         "Record<string, unknown>"
         if props is None
         else _js_object_shape(tuple((prop.name, prop.javascript, prop.required or prop.has_default) for prop in props))
     )
-    state_shape = _js_object_shape(tuple((root.name, root.wire_type.javascript, True) for root in state_roots))
+    writable_state_shape = _js_object_shape(
+        tuple(
+            (root.name, f"CitryDeepReadonly<{root.wire_type.javascript}>", True)
+            for root in state_roots
+            if root.name in writable_state_names
+        )
+    )
+    readonly_state_shape = _js_object_shape(
+        tuple(
+            (root.name, f"CitryDeepReadonly<{root.wire_type.javascript}>", True)
+            for root in state_roots
+            if root.name not in writable_state_names
+        )
+    )
+    state_shape = f"{writable_state_shape} & Readonly<{readonly_state_shape}>"
+    vue_types = (Path(__file__).parent / "types" / "node_modules" / "vue").resolve().as_posix()
+    component_shape = _component_public_instance_shape(
+        roots,
+        props,
+        component_analysis,
+        js_data_policy=js_data_policy,
+        i18n=i18n,
+    )
+    option_names: dict[str, set[str]] = {}
+    if component_analysis is not None and component_analysis.valid:
+        for item in component_analysis.public_names:
+            option_names.setdefault(item.origin, set()).add(item.exposed_name)
+    option_shape = lambda origin, value: _js_object_shape(  # noqa: E731
+        tuple((name, value, True) for name in sorted(option_names.get(origin, ())))
+    )
+    setup_shape = option_shape("setup", "unknown")
+    data_options_shape = option_shape("data", "unknown")
+    computed_shape = option_shape(
+        "computed",
+        f"import({_js_string_literal(vue_types)}).ComputedOptions[string]",
+    )
+    methods_shape = option_shape("methods", "(...args: unknown[]) => unknown")
+    inject_unknown = (
+        component_analysis is None
+        or not component_analysis.valid
+        or any(section.name == "inject" and section.state == "unknown" for section in component_analysis.sections)
+    )
+    known_inject_names = " | ".join(_js_string_literal(name) for name in sorted(option_names.get("inject", ())))
+    inject_names = "string" if inject_unknown or not known_inject_names else known_inject_names
+    inject_value = "string | symbol | {from?: string | symbol, default?: unknown}"
+    known_inject_shape = option_shape("inject", inject_value)
+    inject_options_shape = (
+        f"{known_inject_shape} & Record<string | symbol, {inject_value}>"
+        if inject_unknown
+        else known_inject_shape
+        if option_names.get("inject")
+        else f"Record<string | symbol, {inject_value}>"
+    )
     event_type = " | ".join(_js_string_literal(name) for name in event_names) or "string"
     lines.extend(
         (
             f"/** @typedef {{{data_shape}}} CitryJsData */",
             f"/** @typedef {{{props_shape}}} CitryClientProps */",
+            "/** @template T @typedef {T extends (...args: any[]) => any ? T : "
+            "T extends readonly (infer U)[] ? readonly CitryDeepReadonly<U>[] : "
+            "T extends object ? {readonly [K in keyof T]: CitryDeepReadonly<T[K]>} : T} CitryDeepReadonly */",
             f"/** @typedef {{{state_shape}}} CitryEventsState */",
+            f"/** @typedef {{typeof import({_js_string_literal(vue_types)})}} CitryVueNamespace */",
+            "/** @typedef {import("
+            f"{_js_string_literal(vue_types)}).ComponentPublicInstance}} CitryVuePublicInstance */",
+            f"/** @typedef {{CitryVuePublicInstance & {component_shape}}} CitryComponentPublicInstance */",
+            "/** @type {{vue: CitryVueNamespace}} */ var Citry;",
             f"/** @typedef {{{event_type}}} CitryServerEventName */",
             "/** @typedef {Object} CitryEventError",
             " * @property {number} status",
@@ -8268,34 +8112,20 @@ def _browser_preamble(
             " */",
             "/**",
             " * @typedef {Object} CitryComponentContext",
-            " * @property {string} id",
-            " * @property {Element[]} els",
-            " * @property {CitryJsData} data",
-            f" * @property {{{scope_shape} & Record<string, unknown>}} scope",
-            " * @property {Readonly<CitryClientProps>} props",
-            " * @property {CitryEventsState | null} state",
-            " * @property {CitryI18nService | null} i18n",
-            " * @property {unknown} [graph]",
-            " * @property {(key: string | symbol, value: unknown) => void} provide",
-            " * @property {(key: string | symbol, fallback?: unknown) => unknown} inject",
-            " * @property {(key: string | symbol) => void} unprovide",
-            " * @property {<T>(value: T) => T} reactive",
-            " * @property {(fn: () => void) => CitryCleanup} effect",
-            " * @property {(name?: CitryServerEventName) => boolean} loading",
-            " * @property {(name?: CitryServerEventName) => (CitryEventError | null)} error",
-            " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: unknown) => "
-            "Promise<unknown>} sendEvent",
+            " * @property {CitryComponentPublicInstance} component",
+            " * @property {number} revision",
             " * @property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} onEvent",
             " */",
-            "/** @typedef {Object} CitryPropDefinition",
-            " * @property {(Function | Function[])} [type]",
-            " * @property {boolean} [required]",
-            " * @property {*} [default]",
+            "/** @callback CitryComponentSetup",
+            " * @param {Readonly<CitryClientProps>} props",
+            f" * @param {{import({_js_string_literal(vue_types)}).SetupContext}} context",
+            " * @returns {Record<string, unknown> | undefined}",
             " */",
-            "/** @typedef {Object} CitryComponentDefinition",
-            " * @property {Record<string, CitryPropDefinition>} [props]",
-            " * @property {CitryComponentInitializer} init",
-            " */",
+            f"/** @typedef {{import({_js_string_literal(vue_types)}).ComponentOptions<"
+            f"CitryClientProps, {setup_shape}, {data_options_shape}, {computed_shape}, {methods_shape}, "
+            f"never, never, any, string, {{}}, {inject_options_shape}, {inject_names}> & "
+            "{mixins?: never, extends?: never, render?: never, setup?: CitryComponentSetup, "
+            "onServerRender?: CitryComponentInitializer}} CitryComponentDefinition */",
         )
     )
     if component_js:
@@ -8303,6 +8133,7 @@ def _browser_preamble(
             (
                 "/** @overload @param {CitryComponentInitializer} definition @returns {void} */",
                 "/** @overload @param {CitryComponentDefinition} definition @returns {void} */",
+                "/** @param {CitryComponentInitializer | CitryComponentDefinition} definition */",
                 "function $component(definition) {}",
             )
         )
@@ -8467,7 +8298,7 @@ def _citry_state_key_completion_result(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> CompletionResult | None:
-    """Complete public State names while preserving the binding's modifiers and value."""
+    """Complete public State names in a component binding."""
     region = document.region_at(position)
     if region is None:
         return None
@@ -8487,8 +8318,6 @@ def _citry_state_key_completion_result(
     base_name = context.authored_name.split(".", 1)[0]
     if not 3 <= relative_cursor <= len(base_name):
         return None
-    # Replace the whole base even when completion starts midway through a typo,
-    # so the suffix and any existing handler remain exactly as authored.
     edit_range = _mapped_template_range(region, source, context.start_index, context.start_index + len(base_name))
     if edit_range is None:
         return CompletionResult((), is_incomplete=True)
@@ -8934,7 +8763,7 @@ def _current_state_key_roots(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> tuple[_JsDataRoot, ...] | None:
-    """Prove the complete public namespace is current before completing or rejecting keys."""
+    """Prove the public State namespace is current before completing keys."""
     if not consumers or project.source_analysis is None:
         return None
     for component in consumers:
@@ -9004,6 +8833,20 @@ def _shared_state_field_records(
             return ()
         records.append(field)
     return tuple(records)
+
+
+def _shared_writable_state_names(consumers: tuple[ComponentRecord, ...], project: ProjectState) -> frozenset[str]:
+    """Return State fields writable for every possible physical owner."""
+    if not consumers or project.source_analysis is None:
+        return frozenset()
+    names: set[str] | None = None
+    for component in consumers:
+        fields = project.source_analysis.state_fields(component)
+        if fields is None:
+            return frozenset()
+        current = {field.name for field in fields if field.client_writable}
+        names = current if names is None else names.intersection(current)
+    return frozenset(names or ())
 
 
 def _state_field_root(
@@ -9215,10 +9058,8 @@ def _js_data_type_diagnostics(
     canonical = canonical.resolve()
     found: dict[tuple[int, int, int, int, str], types.Diagnostic] = {}
     for component in project.catalog.components:
-        roots = _component_js_data_roots(component, project, document, open_documents)
-        if roots is None:
-            continue
-        for root in roots:
+        namespace = _component_js_data_roots(component, project, document, open_documents)
+        for root in namespace.roots:
             if not root.wire_type.unsupported:
                 continue
             detail = "; ".join(root.wire_type.unsupported)
@@ -9240,6 +9081,77 @@ def _js_data_type_diagnostics(
                     code=JS_DATA_UNSUPPORTED_TYPE,
                     code_description=types.CodeDescription(diagnostic_documentation_url(JS_DATA_UNSUPPORTED_TYPE)),
                     source="citry",
+                )
+    return tuple(found[key] for key in sorted(found))
+
+
+def _js_data_public_name_diagnostics(
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> tuple[types.Diagnostic, ...]:
+    """Report source-proven js_data/Vue public-instance collisions."""
+    if project.catalog is None:
+        return ()
+    canonical = file_uri_path(document.uri)
+    if canonical is None:
+        return ()
+    canonical = canonical.resolve()
+    found: dict[tuple[str, int, int, int, int, str], types.Diagnostic] = {}
+
+    def add(location: types.Location, name: str, variant: Literal["default", "conditional"]) -> None:
+        source_path = file_uri_path(location.uri)
+        if source_path is None or source_path.resolve() != canonical:
+            return
+        source_range = location.range
+        key = (
+            location.uri,
+            source_range.start.line,
+            source_range.start.character,
+            source_range.end.line,
+            source_range.end.character,
+            name,
+        )
+        if key not in found or variant == "default":
+            found[key] = types.Diagnostic(
+                source_range,
+                render_diagnostic(JS_DATA_PUBLIC_NAME_COLLISION, variant=variant, name=name),
+                severity=types.DiagnosticSeverity.Error,
+                code=JS_DATA_PUBLIC_NAME_COLLISION,
+                code_description=types.CodeDescription(diagnostic_documentation_url(JS_DATA_PUBLIC_NAME_COLLISION)),
+                source="citry",
+            )
+
+    for component in project.catalog.components:
+        namespace = _component_js_data_roots(component, project, document, open_documents)
+        resolved = _component_js_asset_source(component, project, document, open_documents)
+        public: dict[str, list[Any]] = {}
+        if resolved is not None and resolved is not False:
+            analysis = analyze_browser_component_source(resolved[0])
+            if analysis.valid:
+                for item in analysis.public_names:
+                    public.setdefault(item.exposed_name, []).append(item)
+        for root in namespace.roots:
+            owners = public.get(root.name, [])
+            reserved_name = root.name.startswith(("$", "_")) or root.name == "preparedData"
+            if not owners and not reserved_name:
+                continue
+            variant: Literal["default", "conditional"] = "conditional" if root.presence == "conditional" else "default"
+            for location in _js_data_root_locations(root, open_documents):
+                add(location, root.name, variant)
+            if resolved is None or resolved is False:
+                continue
+            resolved_path = file_uri_path(resolved[1])
+            if resolved_path is None or resolved_path.resolve() != canonical:
+                continue
+            for owner in owners:
+                add(
+                    types.Location(
+                        resolved[1],
+                        _range(resolved[2].map_range(owner.name_start_index, owner.name_end_index)),
+                    ),
+                    root.name,
+                    variant,
                 )
     return tuple(found[key] for key in sorted(found))
 

@@ -6,7 +6,7 @@ import warnings
 from base64 import b64decode
 from binascii import Error as BinasciiError
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 from urllib.parse import unquote_to_bytes
 
 from citry._csp_validation import (
@@ -17,26 +17,19 @@ from citry._csp_validation import (
     _javascript_url,
     _node_html,
 )
+from citry._output_html import OutputAttr, OutputTemplate, scan_output_html
 from citry._serialization_security import _is_executable
 from citry.ext.dependencies.types import Dependency, Script, Style
-from citry.ownership import (
-    AlpineHandlerClientBindingPayload,
-    CitryDomEventClientBindingPayload,
-    CitryPollClientBindingPayload,
-    OwnershipState,
-    PropsClientBindingPayload,
-)
-from citry_core.template_parser import HtmlAttr, TemplateElement, parse_template
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from citry.citry_render import CitryRender
     from citry.settings import SecurityJavascriptMode
-    from citry_core.template_parser import Template
 
 _EVENTS_ATTRIBUTES = frozenset({"data-cev-bind", "data-cev-on", "data-cev-poll"})
 _LEADING_URL_SPACE = "".join(chr(codepoint) for codepoint in range(0x21))
+_DependencyT = TypeVar("_DependencyT", bound="Dependency")
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,51 +69,20 @@ class _JavascriptPolicy:
         return self._mode
 
     def inspect_reached_bindings(self, root: CitryRender) -> None:
-        """Inventory active component-boundary bindings absent from settled attrs."""
-        graph = root.context.ownership
-        if graph is None:
-            return
-        snapshot = graph.snapshot()
-        locations = {location.id: location for location in snapshot.source_locations}
-        class_names = {instance.render_id: instance.class_name for instance in snapshot.logical_instances}
-        for invocation in snapshot.component_invocations:
-            if invocation.state != OwnershipState.ACTIVE:
-                continue
-            for binding in invocation.client_bindings:
-                payload = binding.payload
-                if not isinstance(
-                    payload,
-                    (
-                        PropsClientBindingPayload,
-                        AlpineHandlerClientBindingPayload,
-                        CitryDomEventClientBindingPayload,
-                        CitryPollClientBindingPayload,
-                    ),
-                ):
-                    continue
-                location = locations.get(binding.source_location_id)
-                component = class_names.get(
-                    invocation.source_render_id,
-                    location.owner_class_id if location is not None else invocation.authored_tag,
-                )
-                detail = (
-                    "an active component props binding requires the Citry browser manager"
-                    if isinstance(payload, PropsClientBindingPayload)
-                    else "an active component browser handler requires JavaScript"
-                )
-                start = None if location is None else location.byte_span[0]
-                end = None if location is None else location.byte_span[1]
-                self._add(
-                    "component-binding",
-                    detail,
-                    component,
-                    attribute=binding.key,
-                    range_kind="source",
-                    start=start,
-                    end=end,
-                    origin=None if location is None else location.origin,
-                    key=("binding", binding.source_location_id, binding.key, type(payload).__name__),
-                )
+        """Component-boundary browser bindings are rejected before serialization."""
+
+    def inspect_selected_requirements(self, requirements: frozenset[str]) -> None:
+        """Record selected typed browser facts before whole-HTML hooks run."""
+        details = {
+            "events": "selected event, poll, or State control bindings require the Citry Events runtime",
+            "vue_binding": "selected browser bindings require the Vue runtime",
+            "js_data": "selected component js_data requires the Vue runtime",
+            "component_js": "selected component JavaScript requires browser execution",
+        }
+        for requirement in sorted(requirements):
+            detail = details.get(requirement)
+            if detail is not None:
+                self.add_requirement(detail, key=("selected-vue-requirement", requirement))
 
     def add_requirement(
         self,
@@ -137,12 +99,14 @@ class _JavascriptPolicy:
 
     def process_dependencies(
         self,
-        dependencies: Iterable[Dependency],
+        dependencies: Iterable[_DependencyT],
         *,
         position: str,
-    ) -> list[Dependency]:
+    ) -> list[_DependencyT]:
         """Inventory and, for restrictive modes, filter structured dependencies."""
-        retained: list[Dependency] = []
+        # The result holds the same kind it was given: a caller passing scripts gets
+        # scripts back, so it can keep rendering them as scripts afterwards.
+        retained: list[_DependencyT] = []
         for dependency in dependencies:
             emitted_dependency = dependency
             exact_style = type(dependency) is Style
@@ -165,7 +129,7 @@ class _JavascriptPolicy:
                     if self._mode == "omit":
                         if sanitized is None:
                             continue
-                        emitted_dependency = sanitized
+                        emitted_dependency = cast("_DependencyT", sanitized)
                 retained.append(emitted_dependency)
                 continue
             exact_script = type(dependency) is Script
@@ -188,7 +152,7 @@ class _JavascriptPolicy:
                     if self._mode == "omit":
                         if sanitized is None:
                             continue
-                        emitted_dependency = sanitized
+                        emitted_dependency = cast("_DependencyT", sanitized)
                         script = cast("Script", emitted_dependency)
             executable, classification_error = (
                 _script_executable_for_policy(script) if script is not None else (False, None)
@@ -238,17 +202,22 @@ class _JavascriptPolicy:
         marker_prefix: str,
         trusted_tag_starts: frozenset[int],
         component_classes: dict[str, str],
-    ) -> None:
+        omit_handler_marker: str | None = None,
+    ) -> str:
         """Inventory active behavior after every string-level extension hook."""
         try:
-            template = parse_template(html)
-        except Exception as error:  # noqa: BLE001 - forbid must fail closed
+            template = scan_output_html(html)
+        except Exception as error:
+            if omit_handler_marker is not None and omit_handler_marker.lower() in html.lower():
+                raise ValueError("Citry omission handler metadata remained in unparseable settled HTML") from error
             self._add(
                 "unparseable-output",
                 f"settled HTML could not be parsed for JavaScript policy validation ({error})",
                 "settled render output",
             )
-            return
+            return html
+        marker_spans: list[tuple[int, int]] = []
+        settled_bytes = html.encode()
         self._walk_template(
             html,
             template,
@@ -258,14 +227,36 @@ class _JavascriptPolicy:
             inherited_component=None,
             inherited_instance=None,
             inherited_inside_form=False,
+            omit_handler_marker=omit_handler_marker,
+            omit_handler_spans=marker_spans,
+            settled_bytes=settled_bytes,
         )
+        if omit_handler_marker is None:
+            return html
+        merged_spans: list[tuple[int, int]] = []
+        for start, end in sorted(marker_spans):
+            if merged_spans and start <= merged_spans[-1][1]:
+                previous_start, previous_end = merged_spans[-1]
+                merged_spans[-1] = (previous_start, max(previous_end, end))
+            else:
+                merged_spans.append((start, end))
+        retained: list[bytes] = []
+        cursor = 0
+        for start, end in merged_spans:
+            retained.append(settled_bytes[cursor:start])
+            cursor = end
+        retained.append(settled_bytes[cursor:])
+        cleaned = b"".join(retained).decode()
+        if omit_handler_marker.lower() in cleaned.lower():
+            raise ValueError("Citry omission handler metadata escaped settled HTML cleanup")
+        return cleaned
 
     def validate_pre_extension_html(self, html: str, *, component_classes: dict[str, str]) -> None:
         """Remember warning-mode raw scripts before identical dependencies are inserted."""
         if self._mode != "warn":
             return
         try:
-            template = parse_template(html)
+            template = scan_output_html(html)
         except Exception:  # noqa: BLE001 - the settled pass reports malformed output
             return
         self._walk_pre_extension_raw(
@@ -294,7 +285,7 @@ class _JavascriptPolicy:
     def _walk_template(
         self,
         html: str,
-        template: Template,
+        template: OutputTemplate,
         marker_prefix: str,
         trusted_tag_starts: frozenset[int],
         component_classes: dict[str, str],
@@ -302,11 +293,12 @@ class _JavascriptPolicy:
         inherited_component: str | None,
         inherited_instance: str | None,
         inherited_inside_form: bool,
+        omit_handler_marker: str | None = None,
+        omit_handler_spans: list[tuple[int, int]] | None = None,
+        settled_bytes: bytes | None = None,
     ) -> None:
         for element in template.elements:
-            if not isinstance(element, TemplateElement.Node):
-                continue
-            node = element._0
+            node = element
             attrs = tuple(node.start_tag.attrs)
             tag = node.start_tag.name.content.translate(_ASCII_LOWER)
             own_instance = next(
@@ -323,6 +315,34 @@ class _JavascriptPolicy:
                 attr.key.content.translate(_ASCII_LOWER).startswith(marker_prefix) for attr in attrs
             )
             attr_map = _attribute_map(attrs)
+            has_managed_handler = False
+            if omit_handler_marker is not None:
+                marker = omit_handler_marker.lower()
+                for attr in attrs:
+                    if attr.key.content.lower() != marker:
+                        continue
+                    has_managed_handler = True
+                    start = attr.key.start_index
+                    assert settled_bytes is not None  # noqa: S101 - omission-marker scans always carry source bytes
+                    raw = settled_bytes
+                    while start > node.start_tag.token.start_index and raw[start - 1] in b" \t\r\n\f":
+                        start -= 1
+                    end = attr.key.end_index
+                    if attr.inner_value is not None:
+                        inner = attr.inner_value
+                        end = inner.end_index
+                        if inner.start_index > 0 and raw[inner.start_index - 1] in b"\"'":
+                            quote = raw[inner.start_index - 1]
+                            if end < len(raw) and raw[end] == quote:
+                                end += 1
+                    if end < node.start_tag.token.end_index and raw[end] not in b" \t\r\n\f/>":
+                        # A hook may place another attribute immediately after
+                        # this one. Retain our leading separator so removing
+                        # the marker cannot merge that neighbor into the tag
+                        # name or previous attribute.
+                        start = attr.key.start_index
+                    assert omit_handler_spans is not None  # noqa: S101 - validate_settled_html owns the collected spans
+                    omit_handler_spans.append((start, end))
             if tag == "script":
                 fingerprint = _node_html(html, node)
                 remembered = self._pre_extension_raw.get(fingerprint, 0)
@@ -388,8 +408,8 @@ class _JavascriptPolicy:
                         key=self._site_key(own_instance, ("native", name, attr.key.start_index)),
                     )
                 if _is_url_attribute(tag, name) and _javascript_url(decoded):
-                    inner = attr.inner_value
-                    start = attr.key.end_index if inner is None else inner.start_index
+                    inner_value = attr.inner_value
+                    start = attr.key.end_index if inner_value is None else inner_value.start_index
                     self._add(
                         "javascript-url",
                         f"a javascript: URL in {attr.key.content!r} remains executable browser code",
@@ -397,12 +417,12 @@ class _JavascriptPolicy:
                         attribute=attr.key.content,
                         range_kind="settled HTML",
                         start=start,
-                        end=start + len(("" if inner is None else inner.content).encode()),
+                        end=start + len(("" if inner_value is None else inner_value.content).encode()),
                         key=self._site_key(own_instance, ("javascript-url", tag, name, start)),
                     )
                 if _embedded_document_requires_javascript(tag, name, decoded):
-                    inner = attr.inner_value
-                    start = attr.key.end_index if inner is None else inner.start_index
+                    inner_value = attr.inner_value
+                    start = attr.key.end_index if inner_value is None else inner_value.start_index
                     self._add(
                         "embedded-document",
                         f"{attr.key.content!r} contains an embedded HTML document with executable browser code",
@@ -410,17 +430,17 @@ class _JavascriptPolicy:
                         attribute=attr.key.content,
                         range_kind="settled HTML",
                         start=start,
-                        end=start + len(("" if inner is None else inner.content).encode()),
+                        end=start + len(("" if inner_value is None else inner_value.content).encode()),
                         key=self._site_key(own_instance, ("embedded-document", tag, name, start)),
                     )
 
             if (
                 self._mode == "omit"
-                and activation_attrs
+                and (activation_attrs or has_managed_handler)
                 and _handler_only_control(
                     tag,
                     attr_map,
-                    activation_attrs,
+                    activation_attrs + (["data-cev-on"] if has_managed_handler else []),
                     inside_form=inherited_inside_form,
                 )
             ):
@@ -444,21 +464,22 @@ class _JavascriptPolicy:
                     inherited_component=component,
                     inherited_instance=own_instance,
                     inherited_inside_form=inherited_inside_form or tag == "form",
+                    omit_handler_marker=omit_handler_marker,
+                    omit_handler_spans=omit_handler_spans,
+                    settled_bytes=settled_bytes,
                 )
 
     def _walk_pre_extension_raw(
         self,
         html: str,
-        template: Template,
+        template: OutputTemplate,
         component_classes: dict[str, str],
         *,
         inherited_component: str | None,
         inherited_instance: str | None,
     ) -> None:
         for element in template.elements:
-            if not isinstance(element, TemplateElement.Node):
-                continue
-            node = element._0
+            node = element
             attrs = tuple(node.start_tag.attrs)
             own_instance = next(
                 (
@@ -530,7 +551,7 @@ class _JavascriptPolicy:
         )
 
 
-def _attribute_map(attrs: tuple[HtmlAttr, ...]) -> dict[str, str]:
+def _attribute_map(attrs: tuple[OutputAttr, ...]) -> dict[str, str]:
     result: dict[str, str] = {}
     for attr in attrs:
         name = attr.key.content.translate(_ASCII_LOWER)
@@ -538,12 +559,12 @@ def _attribute_map(attrs: tuple[HtmlAttr, ...]) -> dict[str, str]:
     return result
 
 
-def _decoded_attr(attr: HtmlAttr) -> str:
+def _decoded_attr(attr: OutputAttr) -> str:
     inner = attr.inner_value
     return _decode_html_attribute("" if inner is None else inner.content)[0]
 
 
-def _raw_script_is_executable(attrs: tuple[HtmlAttr, ...]) -> bool:
+def _raw_script_is_executable(attrs: tuple[OutputAttr, ...]) -> bool:
     type_attrs = [attr for attr in attrs if attr.key.content.translate(_ASCII_LOWER) == "type"]
     if len(type_attrs) > 1:
         return True
@@ -599,24 +620,23 @@ def _script_executable_for_policy(script: Script) -> tuple[bool, str | None]:
 
 
 def _is_activation_attribute(name: str) -> bool:
-    return name.startswith(("x-", "@", ":")) or name in _EVENTS_ATTRIBUTES
+    return name.startswith(("x-", "v-", "@", ":")) or name in _EVENTS_ATTRIBUTES
 
 
 def _is_omit_hazard(name: str, node: Any, html: str, attrs: dict[str, str]) -> bool:
+    del node, html
     base = name.split(".", 1)[0]
-    if base in {"x-cloak", "x-for", "x-if", "x-teleport"}:
+    if base in {"v-for", "v-if", "v-show"}:
         return True
-    if base in {"x-text", "x-html"}:
-        end_tag = getattr(node, "end_tag", None)
-        if end_tag is None:
-            return True
-        raw = html.encode()
-        content = raw[node.start_tag.token.end_index : end_tag.token.start_index].decode()
-        return not content.strip()
-    if base == "x-show":
+    if base in {"v-text", "v-html"}:
+        # The HTML5 scanner deliberately exposes active source tokens rather
+        # than reconstructing DOM parentage. Conservatively warn because a
+        # source token cannot prove that the browser-visible fallback survives.
+        return True
+    if base in {"x-show", "v-show"}:
         style = attrs.get("style", "").replace(" ", "").translate(_ASCII_LOWER)
         return "hidden" in attrs or "display:none" in style
-    bound = base[1:] if base.startswith(":") else base.removeprefix("x-bind:")
+    bound = base[1:] if base.startswith(":") else base.removeprefix("v-bind:")
     if bound == "hidden":
         return "hidden" in attrs
     if bound in {"href", "action", "formaction", "src", "value"}:
@@ -632,7 +652,8 @@ def _handler_only_control(
     inside_form: bool,
 ) -> bool:
     has_handler = any(
-        name.startswith(("@", "x-on:")) or name in {"data-cev-on", "data-cev-poll"} for name in activation_attrs
+        name == "v-on" or name.startswith(("@", "v-on:")) or name in {"data-cev-on", "data-cev-poll"}
+        for name in activation_attrs
     )
     if not has_handler:
         return False
@@ -679,17 +700,14 @@ def _html_document_requires_javascript(html: str, *, depth: int) -> bool:
     if depth >= 4:
         return True
     try:
-        template = parse_template(html)
+        template = scan_output_html(html)
     except Exception:  # noqa: BLE001 - ambiguous embedded markup fails closed
         return True
     return _parsed_document_requires_javascript(template, depth=depth)
 
 
-def _parsed_document_requires_javascript(template: Template, *, depth: int) -> bool:
-    for element in template.elements:
-        if not isinstance(element, TemplateElement.Node):
-            continue
-        node = element._0
+def _parsed_document_requires_javascript(template: OutputTemplate, *, depth: int) -> bool:
+    for node in template.elements:
         attrs = tuple(node.start_tag.attrs)
         tag = node.start_tag.name.content.translate(_ASCII_LOWER)
         if tag == "script" and _raw_script_is_executable(attrs):

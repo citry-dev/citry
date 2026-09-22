@@ -8,8 +8,6 @@ class TabsDensityAndGrowth(Component):
     template = """
       <section
         class="tabs-density"
-        x-data="{ grow: false }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
       >
         <div class="tabs-density__row">
           <h2>Default</h2>
@@ -17,7 +15,7 @@ class TabsDensityAndGrowth(Component):
             default_value="orbit"
             aria_label="Default-density telescope views"
             density="default"
-            $c-props="{ grow }"
+            :grow="grow"
           >
             <c-CTab value="orbit">
               Orbit
@@ -47,7 +45,7 @@ class TabsDensityAndGrowth(Component):
             default_value="orbit"
             aria_label="Comfortable-density telescope views"
             density="comfortable"
-            $c-props="{ grow }"
+            :grow="grow"
           >
             <c-CTab value="orbit">
               Orbit
@@ -77,7 +75,7 @@ class TabsDensityAndGrowth(Component):
             default_value="orbit"
             aria_label="Compact-density telescope views"
             density="compact"
-            $c-props="{ grow }"
+            :grow="grow"
           >
             <c-CTab value="orbit">
               Orbit
@@ -101,6 +99,26 @@ class TabsDensityAndGrowth(Component):
           </c-CTabs>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            grow: false
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

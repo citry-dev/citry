@@ -8,10 +8,6 @@ class TagsInputPasteAndIme(Component):
     template = """
       <section
         class="tags-input-paste"
-        x-data="{
-          last:'Paste or compose in the editor',
-          composing:false,
-        }"
       >
         <c-CField>
           <c-fill name="label">Survey regions</c-fill>
@@ -25,17 +21,12 @@ class TagsInputPasteAndIme(Component):
               c-value="['alpine']"
               c-delimiters="[',', ';']"
               max_tags="5"
-              c-input_attrs="{
-                '@compositionstart':'composing=true;last=`Composition started`',
-                '@compositionend':'composing=false;last=`Composition ended`',
-                '@paste':'last=`Paste received`',
-              }"
-              $c-props="{
-                onValueChange:(next,detail)=>
-                  last=`${detail.source}: ${JSON.stringify(next)}`,
-                onValueInvalid:(reason,detail)=>
-                  last=`Rejected ${reason}: ${detail.candidate || 'batch'}`,
-              }"
+              @compositionstart="composing=true;last='Composition started'"
+              @compositionend="composing=false;last='Composition ended'"
+              @paste="last='Paste received'"
+              :onValueChange="(next,detail)=>
+                  last=`${detail.source}: ${JSON.stringify(next)}`" :onValueInvalid="(reason,detail)=>
+                  last=`Rejected ${reason}: ${detail.candidate || 'batch'}`"
             />
           </c-fill>
         </c-CField>
@@ -46,11 +37,21 @@ class TagsInputPasteAndIme(Component):
 harbor</pre>
         </div>
 
-        <output aria-live="polite" x-text="last">
+        <output aria-live="polite" v-text="last">
           Paste or compose in the editor
         </output>
-        <p x-show="composing">The input method editor owns Enter and delimiters.</p>
+        <p v-show="composing">The input method editor owns Enter and delimiters.</p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            last:'Paste or compose in the editor',
+            composing:false,
+          };
+        },
+      });
     """
 
     css = """

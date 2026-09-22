@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 pytest.importorskip("pytest_playwright")
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 pytestmark = pytest.mark.e2e
 
@@ -39,6 +40,73 @@ def _composer_surface_styles(composer: Any) -> dict[str, str]:
     )
 
 
+def test_docs_readiness_handles_static_and_prepared_event_order(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/", wait_until="domcontentloaded")
+    recorder = page.evaluate(
+        """() => [...document.head.querySelectorAll('script')]
+          .map(script => script.textContent)
+          .find(source => source.includes('__citryDocsReady = new Promise'))"""
+    )
+    assert isinstance(recorder, str)
+
+    def resolved() -> bool:
+        return page.evaluate(
+            """() => Promise.race([
+              globalThis.__citryDocsReady.then(() => true),
+              new Promise(resolve => setTimeout(() => resolve(false), 100)),
+            ])"""
+        )
+
+    page.set_content(f"<html><head><script>{recorder}</script></head><body></body></html>")
+    assert resolved()
+
+    page.set_content(
+        f"<html><head><script>{recorder}</script>"
+        "<script>document.dispatchEvent(new CustomEvent('citry:ready', "
+        "{detail:{appId:'early'}}));</script></head>"
+        '<body><div id="citry-vue-early"></div></body></html>'
+    )
+    assert resolved()
+
+    page.set_content(
+        f'<html><head><script>{recorder}</script></head><body><div id="citry-vue-late"></div></body></html>'
+    )
+    assert not resolved()
+    page.evaluate(
+        """() => document.dispatchEvent(
+          new CustomEvent('citry:ready', {detail: {appId: 'late'}})
+        )"""
+    )
+    assert resolved()
+
+
+def test_deferred_tabs_slots_keep_lexical_vue_data(page: Any, docs_site_url: str) -> None:
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(error.stack or str(error)))
+    page.goto(docs_site_url + "/__tests__/tabs-lexical/", wait_until="networkidle")
+
+    tab = page.locator('[data-citry-ui-part="tab"]').first
+    try:
+        tab.wait_for(timeout=5_000)
+    except PlaywrightTimeoutError:
+        pytest.fail(f"deferred tabs did not mount: {page_errors=}, {page.content()[:500]=}")
+    assert tab.text_content() == "Lexical tab"
+    panel = page.locator('[data-citry-ui-part="tab-panel"]').first
+    assert panel.locator("b").text_content() == "Lexical panel"
+    assert panel.is_visible()
+
+
+def test_deferred_slots_in_call_run_mount_with_one_fill_per_member(page: Any, docs_site_url: str) -> None:
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(error.stack or str(error)))
+    page.goto(docs_site_url + "/__tests__/deferred-run/", wait_until="networkidle")
+
+    receivers = page.locator(".deferred-run-receiver")
+    receivers.first.wait_for()
+    assert receivers.all_text_contents() == ["lexical", "lexical"]
+    assert page_errors == []
+
+
 def test_landing_showcase_is_simple_nestable_and_visibly_draggable(
     page: Any,
     docs_site_url: str,
@@ -49,11 +117,20 @@ def test_landing_showcase_is_simple_nestable_and_visibly_draggable(
         "console",
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
-    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.on("pageerror", lambda error: page_errors.append(error.stack or str(error)))
     page.goto(docs_site_url + "/", wait_until="networkidle")
 
     composer = page.locator("[data-landing-composer]")
-    page.locator("[data-landing-composer][data-composer-ready]").wait_for()
+    try:
+        page.locator("[data-landing-composer][data-composer-ready]").wait_for()
+    except PlaywrightTimeoutError:
+        readiness = page.evaluate(
+            """() => ({
+              host: document.querySelector('body > [id^="citry-vue-"]')?.id,
+              readyPromise: globalThis.__citryDocsReady instanceof Promise,
+            })"""
+        )
+        pytest.fail(f"landing composer did not initialize: {readiness=}, {console_errors=}, {page_errors=}")
 
     assert composer.locator(".landing-composer__layout > *").count() == 2
     assert composer.locator("aside").count() == 1

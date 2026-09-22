@@ -27,16 +27,12 @@ class CommandAdornments(Component):
         }
 
     template = """
-      <section class="command-palette-adornments" x-data="{open:true,last:'none'}">
+      <section class="command-palette-adornments" >
         <h2>Release commands with decoration</h2>
         <c-CCommandPalette
           label="Release commands"
           c-entries="commands"
-          $c-props="{
-            open,
-            onOpenChange:(value)=>open=value,
-            onAction:(value)=>last=value,
-          }"
+          :open="open" :onOpenChange="(value)=>open=value" :onAction="(value)=>last=value"
         >
           <c-fill
             name="item_start"
@@ -51,8 +47,17 @@ class CommandAdornments(Component):
             <span class="command-palette-adornments__badge">Beta</span>
           </c-fill>
         </c-CCommandPalette>
-        <output aria-live="polite">Action: <span x-text="last">none</span></output>
+        <output aria-live="polite">Action: <span v-text="last">none</span></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open:true,last:'none'
+          };
+        },
+      });
     """
 
     css = """

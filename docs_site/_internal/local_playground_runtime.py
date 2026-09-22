@@ -37,13 +37,18 @@ class _Wheel:
     name: str
     version: str
     requirements: tuple[str, ...]
+    tags: tuple[str, ...]
+
+
+_WORKSPACE_PACKAGES = frozenset({"citry-core", "citry", "citry-ui"})
+_LOCAL_WHEEL_PREFIX = "./local/"
 
 
 def _normalized_distribution(name: str) -> str:
     return name.lower().replace("_", "-").replace(".", "-")
 
 
-def _inspect_wheel(path: Path) -> _Wheel:
+def _inspect_wheel(path: Path, *, python_only: bool = True) -> _Wheel:
     try:
         with ZipFile(path) as archive:
             metadata_names = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
@@ -55,7 +60,12 @@ def _inspect_wheel(path: Path) -> _Wheel:
     except (BadZipFile, OSError, UnicodeDecodeError) as error:
         raise LocalPlaygroundRuntimeError(f"could not inspect local wheel {path.name}: {error}") from error
 
-    if "Tag: py3-none-any" not in wheel_metadata.splitlines():
+    tags = tuple(
+        line.partition(":")[2].strip()
+        for line in wheel_metadata.splitlines()
+        if line.startswith("Tag:") and line.partition(":")[2].strip()
+    )
+    if python_only and "py3-none-any" not in tags:
         raise LocalPlaygroundRuntimeError(f"local playground package must be a py3-none-any wheel: {path.name}")
     name = metadata.get("Name")
     version = metadata.get("Version")
@@ -66,6 +76,7 @@ def _inspect_wheel(path: Path) -> _Wheel:
         name=name,
         version=version,
         requirements=tuple(metadata.get_all("Requires-Dist", [])),
+        tags=tags,
     )
 
 
@@ -143,16 +154,56 @@ def _validate_manifest_versions(manifest: Any, *, label: str) -> dict[str, Any]:
     return manifest
 
 
-def build_local_playground_runtime(*, repo_root: Path, output_dir: Path) -> LocalPlaygroundRuntime:
-    """Add the workspace Citry UI wheel to the pinned browser runtime."""
+def _local_wheel_filename(url: object) -> str | None:
+    """Return one safe local wheel basename, or ``None`` for another URL."""
+    if not isinstance(url, str) or not url.startswith(_LOCAL_WHEEL_PREFIX):
+        return None
+    parsed = urlsplit(url)
+    if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment or parsed.path != url:
+        raise LocalPlaygroundRuntimeError(f"invalid local wheel URL: {url}")
+    filename = url.removeprefix(_LOCAL_WHEEL_PREFIX)
+    if (
+        not filename
+        or "/" in filename
+        or "\\" in filename
+        or "%" in filename
+        or filename in {".", ".."}
+        or not filename.endswith(".whl")
+    ):
+        raise LocalPlaygroundRuntimeError(f"invalid local wheel URL: {url}")
+    return filename
+
+
+def _copy_workspace_core_wheel(core_wheel: Path, output_dir: Path) -> _Wheel:
+    """Copy and inspect the one prebuilt PyEmscripten core wheel."""
+    source = core_wheel.resolve()
+    if not source.is_file():
+        raise LocalPlaygroundRuntimeError(f"the workspace citry-core wheel is missing: {source}")
+    destination = output_dir / source.name
+    try:
+        shutil.copy2(source, destination)
+    except OSError as error:
+        raise LocalPlaygroundRuntimeError(f"could not copy the workspace citry-core wheel: {error}") from error
+    return _inspect_wheel(destination, python_only=False)
+
+
+def build_local_playground_runtime(
+    *,
+    repo_root: Path,
+    output_dir: Path,
+    core_wheel: Path,
+) -> LocalPlaygroundRuntime:
+    """
+    Assemble one workspace Citry/Citry Core/Citry UI browser tuple.
+
+    The native core build is intentionally outside this function.  A docs
+    server can be recreated many times by a reload, while the PyEmscripten
+    build is expensive and must be the exact artifact selected by CI.
+    """
     root = repo_root.resolve()
     destination = output_dir.resolve()
     wheels_dir = destination / "local"
     wheels_dir.mkdir(parents=True, exist_ok=True)
-
-    citry_ui = _inspect_wheel(_build_workspace_wheel(root / "packages/py/citry_ui", wheels_dir))
-    if _normalized_distribution(citry_ui.name) != "citry-ui":
-        raise LocalPlaygroundRuntimeError(f"expected a citry-ui wheel, got {citry_ui.name}")
 
     runtime_source = root / "docs_site/static/playground/runtime.json"
     try:
@@ -165,32 +216,91 @@ def build_local_playground_runtime(*, repo_root: Path, output_dir: Path) -> Loca
     citry_config = manifest.get("citry")
     if not isinstance(citry_config, dict):
         raise LocalPlaygroundRuntimeError("the committed playground runtime has no Citry version configuration")
-    citry_version = str(citry_config.get("version", ""))
+    packages = manifest.get("packages")
+    if not isinstance(packages, list):
+        raise LocalPlaygroundRuntimeError("the committed playground runtime has no package list")
+
+    core = _copy_workspace_core_wheel(core_wheel, wheels_dir)
+    if _normalized_distribution(core.name) != "citry-core":
+        raise LocalPlaygroundRuntimeError(f"expected a citry-core wheel, got {core.name}")
+    if not any("pyemscripten" in tag for tag in core.tags):
+        raise LocalPlaygroundRuntimeError(f"workspace citry-core must be a PyEmscripten wheel, got {core.path.name}")
+    published_core = next(
+        (
+            package
+            for package in packages
+            if isinstance(package, dict) and _normalized_distribution(str(package.get("name", ""))) == "citry-core"
+        ),
+        None,
+    )
+    expected_core_filename = published_core.get("filename") if isinstance(published_core, dict) else None
+    if isinstance(expected_core_filename, str) and core.path.name != expected_core_filename:
+        raise LocalPlaygroundRuntimeError(
+            f"workspace citry-core wheel {core.path.name} does not match the pinned Pyodide ABI "
+            f"{expected_core_filename}"
+        )
+
+    citry = _inspect_wheel(_build_workspace_wheel(root / "packages/py/citry", wheels_dir))
+    if _normalized_distribution(citry.name) != "citry":
+        raise LocalPlaygroundRuntimeError(f"expected a citry wheel, got {citry.name}")
+    citry_ui = _inspect_wheel(_build_workspace_wheel(root / "packages/py/citry_ui", wheels_dir))
+    if _normalized_distribution(citry_ui.name) != "citry-ui":
+        raise LocalPlaygroundRuntimeError(f"expected a citry-ui wheel, got {citry_ui.name}")
+
+    citry_version = citry.version
+    core_version = core.version
+    ui_version = citry_ui.version
+    if citry_version != citry_config.get("version"):
+        raise LocalPlaygroundRuntimeError(
+            f"workspace Citry {citry_version} does not match the runtime's Citry {citry_config.get('version')}"
+        )
+    if core_version != citry_config.get("core_version"):
+        raise LocalPlaygroundRuntimeError(
+            f"workspace Citry Core {core_version} does not match the runtime's Citry Core "
+            f"{citry_config.get('core_version')}"
+        )
     ui_requirement = _requirement_for(citry_ui, "citry")
     if ui_requirement is None or Version(citry_version) not in ui_requirement.specifier:
         raise LocalPlaygroundRuntimeError(
             f"local Citry UI {citry_ui.version} does not accept the playground's Citry {citry_version}"
         )
+    core_requirement = _requirement_for(citry, "citry-core")
+    if core_requirement is None or Version(core_version) not in core_requirement.specifier:
+        raise LocalPlaygroundRuntimeError(
+            f"workspace Citry {citry_version} does not accept workspace Citry Core {core_version}"
+        )
 
-    packages = manifest.get("packages")
-    if not isinstance(packages, list):
-        raise LocalPlaygroundRuntimeError("the committed playground runtime has no package list")
-    has_citry = any(
-        isinstance(package, dict)
-        and _normalized_distribution(str(package.get("name", ""))) == "citry"
-        and package.get("version") == citry_version
-        for package in packages
-    )
-    if not has_citry:
-        raise LocalPlaygroundRuntimeError("the committed playground runtime has no Citry package")
-    next_packages = [
-        package
-        for package in packages
-        if not isinstance(package, dict) or _normalized_distribution(str(package.get("name", ""))) != "citry-ui"
-    ]
-    next_packages.append(_local_package(citry_ui))
+    replacements = {
+        "citry-core": _local_package(core),
+        "citry": _local_package(citry),
+        "citry-ui": _local_package(citry_ui),
+    }
+    seen: set[str] = set()
+    next_packages: list[Any] = []
+    for package in packages:
+        if not isinstance(package, dict):
+            next_packages.append(package)
+            continue
+        package_name = _normalized_distribution(str(package.get("name", "")))
+        replacement = replacements.get(package_name)
+        if replacement is None:
+            next_packages.append(package)
+        else:
+            next_packages.append(replacement)
+            seen.add(package_name)
+    missing = sorted(set(replacements) - seen)
+    if missing:
+        raise LocalPlaygroundRuntimeError(
+            "the committed playground runtime is missing package entries: " + ", ".join(missing)
+        )
+    manifest["source"] = "workspace"
     manifest["packages"] = next_packages
-    manifest["citry"] = {**citry_config, "ui_version": citry_ui.version}
+    manifest["citry"] = {
+        **citry_config,
+        "version": citry_version,
+        "core_version": core_version,
+        "ui_version": ui_version,
+    }
 
     destination.mkdir(parents=True, exist_ok=True)
     manifest_path = destination / "runtime.json"
@@ -213,28 +323,50 @@ def load_local_playground_runtime(directory: Path) -> LocalPlaygroundRuntime:
     citry_config = manifest.get("citry")
     if not isinstance(citry_config, dict):
         raise LocalPlaygroundRuntimeError("local playground runtime has no Citry version configuration")
-    expected_versions = {"citry-ui": citry_config.get("ui_version")}
+    if manifest.get("source") != "workspace":
+        raise LocalPlaygroundRuntimeError("local playground runtime must identify itself as a workspace tuple")
+    expected_versions = {
+        "citry-core": citry_config.get("core_version"),
+        "citry": citry_config.get("version"),
+        "citry-ui": citry_config.get("ui_version"),
+    }
     if not all(isinstance(version, str) and version for version in expected_versions.values()):
         raise LocalPlaygroundRuntimeError("local playground runtime has incomplete Citry package versions")
     wheel_names: set[str] = set()
     local_versions: dict[str, str] = {}
+    local_package_names: set[str] = set()
     for package in packages:
-        if not isinstance(package, dict) or not isinstance(package.get("url"), str):
+        if not isinstance(package, dict):
+            raise LocalPlaygroundRuntimeError("local playground runtime contains an invalid package entry")
+        package_name = _normalized_distribution(str(package.get("name", "")))
+        filename = _local_wheel_filename(package.get("url"))
+        if filename is None:
+            if package_name in expected_versions:
+                raise LocalPlaygroundRuntimeError(
+                    f"local playground runtime package {package_name} must use one local wheel URL"
+                )
             continue
-        path = urlsplit(package["url"]).path
-        prefix = "./local/"
-        if not path.startswith(prefix):
-            continue
-        filename = path.removeprefix(prefix)
-        if not filename or "/" in filename or not filename.endswith(".whl"):
-            raise LocalPlaygroundRuntimeError(f"invalid local wheel URL: {package['url']}")
+        if package_name not in expected_versions:
+            raise LocalPlaygroundRuntimeError(
+                f"local playground runtime contains an unexpected local package {package_name!r}"
+            )
+        if package_name in local_package_names:
+            raise LocalPlaygroundRuntimeError(f"local playground runtime contains duplicate {package_name} package")
+        local_package_names.add(package_name)
         if not (root / "local" / filename).is_file():
             raise LocalPlaygroundRuntimeError(f"local wheel is missing: {filename}")
         wheel_names.add(filename)
-        package_name = _normalized_distribution(str(package.get("name", "")))
         package_version = package.get("version")
         if package_name in expected_versions and isinstance(package_version, str):
             local_versions[package_name] = package_version
+    missing_names = sorted(_WORKSPACE_PACKAGES - local_package_names)
+    if missing_names:
+        missing_name = missing_names[0]
+        raise LocalPlaygroundRuntimeError(
+            f"local playground runtime is missing {missing_name} {expected_versions[missing_name]}"
+        )
+    if len(wheel_names) != len(_WORKSPACE_PACKAGES):
+        raise LocalPlaygroundRuntimeError("local playground runtime must reference three distinct local wheels")
     for package_name, expected_version in expected_versions.items():
         if local_versions.get(package_name) != expected_version:
             raise LocalPlaygroundRuntimeError(f"local playground runtime is missing {package_name} {expected_version}")

@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from typing import Any
 
 import citry_ui
@@ -21,7 +23,7 @@ class FormSafePalette(Component):
       <form
         id="command-palette-profile-form"
         class="command-palette-form"
-        x-data="{open:false,submits:0,actions:0,query:''}"
+
         @submit.prevent="submits++"
       >
         <h2>Profile Form</h2>
@@ -29,19 +31,13 @@ class FormSafePalette(Component):
         <c-CCommandPalette
           label="Profile commands"
           c-entries="commands"
-          $c-props="{
-            open,
-            query,
-            onOpenChange:(value)=>open=value,
-            onQueryChange:(value)=>query=value,
-            onAction:(value)=>{
+          :open="open" :query="query" :onOpenChange="(value)=>open=value" :onQueryChange="(value)=>query=value" :onAction="(value)=>{
               actions++;
               if (value==='focus-name') document.getElementById('command-profile-name').focus();
               if (value==='submit-profile') {
                 document.getElementById('command-palette-profile-form').requestSubmit();
               }
-            },
-          }"
+            }"
         >
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
             <c-CButton
@@ -53,14 +49,23 @@ class FormSafePalette(Component):
         </c-CCommandPalette>
         <button type="submit">Save profile</button>
         <output aria-live="polite">
-          Native submits: <span x-text="submits">0</span>;
-          palette actions: <span x-text="actions">0</span>
+          Native submits: <span v-text="submits">0</span>;
+          palette actions: <span v-text="actions">0</span>
         </output>
         <p>
           IME fixture: composition Enter and Escape remain native; ordinary
           palette Enter never submits this Form unless the action callback asks.
         </p>
       </form>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open:false,submits:0,actions:0,query:''
+          };
+        },
+      });
     """
 
     css = """

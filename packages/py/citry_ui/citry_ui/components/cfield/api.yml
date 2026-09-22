@@ -82,7 +82,7 @@ inputs:
         effect: Selects visual height, padding, and text size; use `attrs["size"]` for native character width.
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native Input classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native Input inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native constraints, ARIA, Alpine, and data attributes; prefer the top-level inputs for class and style.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native constraints, ARIA, Vue, and data attributes; prefer the top-level inputs for class and style.'}
 
   - id: cinput-client-inputs
     component: CInput

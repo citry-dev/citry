@@ -17,10 +17,13 @@ from types import SimpleNamespace
 import pytest
 
 from citry import Citry, Component
+from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.events import actions
 from citry.ext.events.errors import EventError, invalid_args_error, wire_error
+from citry.ext.events.renderers import VuePreparedRenderEncoder
 from citry.ext.events.results import (
+    RenderEncodingContext,
     coerce_result,
     encode_actions,
     extract_download_result,
@@ -121,10 +124,15 @@ class TestActionConstructors:
     def test_render_validates_target_and_swap(self):
         c = _mounted_citry()
         element = _badge(c)(count=1)
-        with pytest.raises(ValueError, match="target must be a CSS selector string"):
+        target_error = (
+            r"^actions\.Render: target must be 'render:<id>', 'mark:<name>', or None for the calling instance"
+        )
+        with pytest.raises(ValueError, match=target_error):
             actions.Render(element, target="")
-        with pytest.raises(ValueError, match="target must be a CSS selector string"):
+        with pytest.raises(ValueError, match=target_error):
             actions.Render(element, target=123)
+        with pytest.raises(ValueError, match=target_error):
+            actions.Render(element, target="#badge")
         with pytest.raises(ValueError, match="HTML-case-safe render ID"):
             actions.Render(element, target="render:MixedCase")
         with pytest.raises(ValueError, match="swap must be one of"):
@@ -432,7 +440,7 @@ class TestEncodeActions:
         badge = _badge(c)
         coerced = coerce_result(
             [
-                actions.Render(badge(count=3), target="#cart-badge"),
+                actions.Render(badge(count=3), target="render:cart-badge"),
                 {"count": 3},
             ],
             handler="add_to_cart",
@@ -440,7 +448,7 @@ class TestEncodeActions:
         assert encode_actions(coerced, instance_id="c9zk1q00", handler="add_to_cart") == [
             {
                 "action": "render",
-                "target": "#cart-badge",
+                "target": "render:cart-badge",
                 "swap": "morph",
                 "html": _badge_html(3),
             },
@@ -465,9 +473,35 @@ class TestEncodeActions:
         with pytest.raises(ValueError, match=r"no target.*Pass target=\.\.\."):
             encode_actions([actions.Render(_badge(c)(count=1))], instance_id=None, handler="poll")
 
-    def test_a_render_of_an_events_component_carries_the_events_manifest(self):
-        # The fragment serialize includes the fresh events manifest (WP10),
-        # so a morphed-in component arrives with its state token.
+    def test_compat_targetless_render_is_refused_for_a_non_html_encoder(self):
+        c = _mounted_citry()
+
+        class PreparedEncoder:
+            renderer = "vue-prepared/1"
+
+            def encode(self, action, target, context):
+                raise AssertionError("targetless compatibility render must not reach a prepared encoder")
+
+        context = RenderEncodingContext(
+            citry=c,
+            caller_render_id=None,
+            handler=SimpleNamespace(name="poll"),
+            transport="http",
+            renderer="vue-prepared/1",
+            response_mode="compat",
+        )
+        with pytest.raises(ValueError, match=r"no target.*Pass target=\.\.\."):
+            encode_actions(
+                [actions.Render(_badge(c)(count=1))],
+                instance_id=None,
+                handler="poll",
+                render_encoder=PreparedEncoder(),
+                render_context=context,
+            )
+
+    def test_a_render_of_an_events_component_carries_native_events_metadata(self):
+        # Native initial serialization carries the occurrence's Events state
+        # in its prepared bootstrap manifest rather than legacy DOM markers.
         c = _mounted_citry()
 
         class LiveState:
@@ -486,22 +520,90 @@ class TestEncodeActions:
             """
 
         [encoded] = encode_actions(
-            [actions.Render(Live(n=1), target="#panel")],
+            [actions.Render(Live(n=1), target="render:panel")],
             instance_id=None,
             handler="bump",
         )
-        assert "data-citry-events" in encoded["html"]
-        assert 'data-cid="c1"' in encoded["html"]
+        assert "eventContext" in encoded["html"]
+        assert "stateToken" in encoded["html"]
+        assert "citry-vue-" in encoded["html"]
 
     def test_an_already_rendered_citry_render_is_serialized_as_is(self):
         c = _mounted_citry()
         rendered = _badge(c)(count=7).render()
         [encoded] = encode_actions(
-            [actions.Render(rendered, target="#spot")],
+            [actions.Render(rendered, target="render:spot")],
             instance_id=None,
             handler="refresh",
         )
         assert encoded["html"] == _badge_html(7)
+
+    def test_a_private_render_encoder_receives_the_negotiated_context(self):
+        c = _mounted_citry()
+
+        class PreparedEncoder:
+            renderer = "vue-prepared/1"
+
+            def encode(self, action, target, context):
+                assert context.citry is c
+                assert context.caller_render_id == "caller_1"
+                assert context.transport == "test"
+                assert context.renderer == self.renderer
+                return {
+                    "action": "render",
+                    "target": target,
+                    "swap": action.swap,
+                    "renderer": self.renderer,
+                    "prepared": {"handler": context.handler.name},
+                }
+
+        context = RenderEncodingContext(
+            citry=c,
+            caller_render_id="caller_1",
+            handler=SimpleNamespace(name="refresh"),
+            transport="test",
+            renderer="vue-prepared/1",
+        )
+        [encoded] = encode_actions(
+            [actions.Render(_badge(c)(count=1))],
+            instance_id="caller_1",
+            handler="refresh",
+            render_encoder=PreparedEncoder(),
+            render_context=context,
+        )
+        assert encoded == {
+            "action": "render",
+            "target": "render:caller_1",
+            "swap": "morph",
+            "renderer": "vue-prepared/1",
+            "prepared": {"handler": "refresh"},
+        }
+
+    def test_vue_encoder_uses_retained_provenance_from_an_html_mode_render(self):
+        c = _mounted_citry()
+        rendered = _badge(c)(count=1).render()
+        encoder = VuePreparedRenderEncoder(lambda _element, _context: {"revision": 1})
+        context = RenderEncodingContext(
+            citry=c,
+            caller_render_id="caller_1",
+            handler=SimpleNamespace(name="refresh"),
+            transport="test",
+            renderer="vue-prepared/1",
+        )
+        [encoded] = encode_actions(
+            [actions.Render(rendered)],
+            instance_id="caller_1",
+            handler="refresh",
+            render_encoder=encoder,
+            render_context=context,
+        )
+        assert encoded == {
+            "action": "render",
+            "target": "render:caller_1",
+            "swap": "morph",
+            "renderer": "vue-prepared/1",
+            "prepared": {"revision": 1},
+        }
 
     def test_a_dispatch_is_self_addressed_at_encode_time(self):
         [encoded] = encode_actions(
@@ -591,7 +693,7 @@ class TestRedirectWarnings:
         c = _mounted_citry()
         encoded = encode_actions(
             [
-                actions.Render(_badge(c)(count=1), target="#x"),
+                actions.Render(_badge(c)(count=1), target="render:x"),
                 actions.Redirect("/gone"),
             ],
             instance_id=None,
@@ -621,32 +723,51 @@ class TestRedirectWarnings:
         assert _citry_records(caplog) == []
 
 
-class TestSelectorRenderContinuityWarning:
-    def test_self_addressed_action_after_selector_render_warns_without_reordering(self, caplog):
+class TestMarkerRenderContinuity:
+    def test_self_addressed_actions_after_marker_render_do_not_warn_or_reorder(self, caplog):
         caplog.set_level(logging.DEBUG, logger="citry")
         c = _mounted_citry()
         badge = _badge(c)
+        producer = default_events_producer(c)
+        encoder = VuePreparedRenderEncoder(producer, producer.prepare_marker)
+        context = RenderEncodingContext(
+            citry=c,
+            caller_render_id="c9zk1q00",
+            handler=SimpleNamespace(name="save"),
+            transport="test",
+            renderer=encoder.renderer,
+            headers={
+                "X-Citry-Vue-App": "app",
+                "X-Citry-Vue-Occurrence": "citryOccurrenceTest1",
+                "X-Citry-Vue-Revision": "0",
+            },
+        )
         encoded = encode_actions(
             [
-                actions.Render(badge(count=1), target="#panel"),
+                actions.Render(badge(count=1), target="mark:panel"),
                 actions.Dispatch("saved"),
                 actions.Render(badge(count=2)),
             ],
             instance_id="c9zk1q00",
             handler="save",
+            render_encoder=encoder,
+            render_context=context,
         )
-        assert [entry["target"] for entry in encoded] == ["#panel", "render:c9zk1q00", "render:c9zk1q00"]
-        [record] = [record for record in _citry_records(caplog) if "self-addressed action" in record.message]
-        assert "2 self-addressed action(s) after a selector-targeted render" in record.message
-        assert "retire or replace the calling instance" in record.message
+        assert [entry["action"] for entry in encoded] == ["render", "event", "render"]
+        assert [entry["target"] for entry in encoded] == [
+            "mark:c9zk1q00:panel",
+            "render:c9zk1q00",
+            "render:c9zk1q00",
+        ]
+        assert not any("self-addressed action" in record.message for record in _citry_records(caplog))
 
     def test_non_risky_orderings_do_not_warn(self, caplog):
         caplog.set_level(logging.DEBUG, logger="citry")
         c = _mounted_citry()
         badge = _badge(c)
         orderings = [
-            [actions.Dispatch("saved"), actions.Render(badge(count=1), target="#panel")],
-            [actions.Render(badge(count=2), target="#panel"), actions.Data({"ok": True})],
+            [actions.Dispatch("saved"), actions.Render(badge(count=1), target="render:panel")],
+            [actions.Render(badge(count=2), target="render:panel"), actions.Data({"ok": True})],
             [actions.Render(badge(count=3), target="render:other"), actions.Dispatch("saved")],
         ]
         for ordered_actions in orderings:

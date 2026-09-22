@@ -75,8 +75,8 @@ The activator is optional. A controlled owner may open the Dialog without one.
 ## Configure Dialog
 
 Server inputs are passed in Python through `<c-CDialog ... />` attributes or a
-`CDialog(...)` composition call. Client inputs are passed in the browser
-through `$c-props="{...}"`.
+`CDialog(...)` composition call. Client inputs are passed with native Vue
+bindings such as `:size`, `:open`, and `:onOpenChange`.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/cdialog/snippets/configuration.py"
@@ -92,11 +92,9 @@ diagnostic. Other invalid client values use their server fallback.
 <c-CDialog
   size="md"
   scroll="body"
-  $c-props="{
-    size: preferredSize,
-    scroll: preferredScroll,
-    dismissible: allowPassiveClose,
-  }"
+  :size="preferredSize"
+  :scroll="preferredScroll"
+  :dismissible="allowPassiveClose"
 >
   ...
 </c-CDialog>
@@ -118,11 +116,9 @@ decline it.
 
 ```citry-html
 <c-CDialog
-  $c-props="{
-    open,
-    onOpenChange: (nextOpen, detail) => {
-      if (mayApply(nextOpen, detail)) open = nextOpen;
-    },
+  :open="open"
+  :onOpenChange="(nextOpen, detail) => {
+    if (mayApply(nextOpen, detail)) open = nextOpen;
   }"
 >
   ...
@@ -207,10 +203,8 @@ value to the accepted submitter's value.
 
 ```citry-html
 <c-CDialog
-  $c-props="{
-    onOpenChange: (open, detail) => {
-      if (detail.reason === 'native') result = detail.returnValue;
-    },
+  :onOpenChange="(open, detail) => {
+    if (detail.reason === 'native') result = detail.returnValue;
   }"
 >
   <c-fill name="title">

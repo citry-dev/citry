@@ -215,14 +215,16 @@ class CProgress(LibraryComponent):
     ) -> dict[str, object]:
         normalized = self._normalized(kwargs)
         return {
-            "label": normalized["label"],
-            "value": normalized["value"],
             "max": normalized["max"],
-            "valueText": normalized["value_text"],
-            "intent": normalized["intent"],
-            "size": normalized["size"],
-            "shape": normalized["shape"],
             "catalogFallbackText": self.i18n.configured,
+            "serverDefaults": {
+                "label": normalized["label"],
+                "value": normalized["value"],
+                "valueText": normalized["value_text"],
+                "intent": normalized["intent"],
+                "size": normalized["size"],
+                "shape": normalized["shape"],
+            },
         }
 
     template = """
@@ -251,8 +253,12 @@ class CProgress(LibraryComponent):
           size: {},
           shape: {},
         },
-        init: ({ els, data, props, effect, i18n }) => {
-          const progress = els[0];
+        onServerRender: ({component}) => {
+          const progress = component.$el;
+          const data = component;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const i18n = component.$i18n;
           const allowedValues = {
             intent: ["neutral", "primary", "success", "warn", "danger"],
             size: ["sm", "md", "lg"],
@@ -278,7 +284,7 @@ class CProgress(LibraryComponent):
               progress,
             );
           };
-          const sourceValue = (name) => props[name] === undefined ? data[name] : props[name];
+          const sourceValue = (name) => props[name] === undefined ? defaults[name] : props[name];
           const resolveChoice = (name) => {
             const value = sourceValue(name);
             if (allowedValues[name].includes(value)) {
@@ -286,7 +292,7 @@ class CProgress(LibraryComponent):
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return defaults[name];
           };
           const resolveLabel = () => {
             const value = sourceValue("label");
@@ -295,7 +301,7 @@ class CProgress(LibraryComponent):
               return value;
             }
             reportInvalid("label", value);
-            return data.label;
+            return defaults.label;
           };
           const resolveValueText = () => {
             const value = sourceValue("valueText");
@@ -304,7 +310,7 @@ class CProgress(LibraryComponent):
               return value;
             }
             reportInvalid("valueText", value);
-            return data.valueText;
+            return defaults.valueText;
           };
           const resolveValue = () => {
             const value = sourceValue("value");
@@ -321,7 +327,7 @@ class CProgress(LibraryComponent):
               return value;
             }
             reportInvalid("value", value);
-            return data.value;
+            return defaults.value;
           };
           const setAttribute = (name, value) => {
             if (value === null) {
@@ -353,7 +359,7 @@ class CProgress(LibraryComponent):
               })
             : null;
 
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             const value = resolveValue();
             setAttribute("value", value);
             setAttribute("aria-label", resolveLabel());

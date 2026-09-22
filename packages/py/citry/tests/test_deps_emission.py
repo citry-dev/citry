@@ -1,4 +1,7 @@
-"""Tests for dependency emission: collection during render, ``<c-js>``/``<c-css>``, strategies, placement."""
+"""Tests for dependency emission: collection, native Vue assets, and static placement."""
+
+import json
+import re
 
 import pytest
 
@@ -15,6 +18,20 @@ from citry.ext.dependencies.scripts import (
 PAGE_TEMPLATE = "<html><head><title>t</title></head><body><p>hi</p></body></html>"
 
 
+def _prepared(html):
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["manifest"]
+
+
+def _asset_bodies(citry, html, kind):
+    from citry._vue.events import definition_bundle, style_asset
+
+    values = _prepared(html)[kind]
+    read = style_asset if kind == "styles" else definition_bundle
+    return [read(citry, item["source"]["sha256"]).decode() for item in values if item["source"]["kind"] == "owned"]
+
+
 def _page(c, js=None, css=None, deps=None, template=PAGE_TEMPLATE):
     """Define a Page component with the given assets on the given Citry instance."""
     attrs = {"citry": c, "template": template, "js": js, "css": css}
@@ -24,11 +41,32 @@ def _page(c, js=None, css=None, deps=None, template=PAGE_TEMPLATE):
 
 
 class TestDocumentEmission:
+    def test_same_stylesheet_with_conflicting_media_fails_explicitly(self):
+        c = Citry()
+
+        class First(Component):
+            citry = c
+            template = "<p>first</p>"
+
+            class Dependencies:
+                css = {"print": ["/shared.css"]}
+
+        class Second(Component):
+            citry = c
+            template = "<p>second</p>"
+
+            class Dependencies:
+                css = {"screen": ["/shared.css"]}
+
+        page = _page(c, template="<main><c-First/><c-Second/></main>")
+        with pytest.raises(ValueError, match="conflicting attributes"):
+            page().render().serialize()
+
     def test_js_and_css_land_in_default_locations(self):
         c = Citry()
         page = _page(c, js="console.log(1);", css=".x { color: red; }")
 
-        html = str(page())
+        html = page().render().serialize(deps_strategy="simple")
         # CSS before </head>, JS (wrapped in a self-executing function) before </body>.
         # The Component.css sheet carries its class marker, which is how the
         # client-side manager's cleanup finds the sheet (dependencies.md 8.4).
@@ -85,9 +123,8 @@ class TestDocumentEmission:
 
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         html = str(page())
-        assert f'<style data-citry-css-class="{Widget.class_id}">.w {{}}</style></head>' in html
-        assert "console.log('widget');" in html
-        assert html.index("console.log") < html.index("</body>")
+        assert any(".w {}" in body for body in _asset_bodies(c, html, "styles"))
+        assert any("console.log('widget');" in body for body in _asset_bodies(c, html, "scripts"))
 
     def test_same_component_rendered_twice_emits_once(self):
         c = Citry()
@@ -99,7 +136,7 @@ class TestDocumentEmission:
 
         page = _page(c, template="<html><head></head><body><c-widget /><c-widget /></body></html>")
         html = str(page())
-        assert html.count("console.log('widget');") == 1
+        assert sum("console.log('widget');" in body for body in _asset_bodies(c, html, "scripts")) == 1
 
     def test_resolve_records_dedupes_duplicate_records(self, monkeypatch):
         # A record bubbles up through every ancestor, so on a deeply nested page
@@ -171,14 +208,20 @@ class TestDocumentEmission:
         page = _page(c, template="<html><head></head><body><c-outer /></body></html>")
         html = str(page())
         # Each class-level asset appears once, even though Inner renders twice.
-        assert html.count(".inner {}") == 1
-        assert html.count(".other {}") == 1
-        assert html.count("console.log('inner');") == 1
+        style_bodies = _asset_bodies(c, html, "styles")
+        script_bodies = _asset_bodies(c, html, "scripts")
+        assert sum(".inner {}" in body for body in style_bodies) == 1
+        assert sum(".other {}" in body for body in style_bodies) == 1
+        assert sum("console.log('inner');" in body for body in script_bodies) == 1
         # First-seen document order: Inner is reached before Other.
-        assert html.index(".inner {}") < html.index(".other {}")
-        # `simple` and `document` agree for a tree with no client-side calls.
+        assert next(i for i, body in enumerate(style_bodies) if ".inner {}" in body) < next(
+            i for i, body in enumerate(style_bodies) if ".other {}" in body
+        )
+        # Native document serialization mounts one Vue app; simple keeps the
+        # settled HTML and direct dependency tags.
         rendered = page().render()
-        assert rendered.serialize(deps_strategy="simple") == rendered.serialize(deps_strategy="document")
+        assert "startPrepared" in rendered.serialize(deps_strategy="document")
+        assert "<main" not in rendered.serialize(deps_strategy="simple")
 
     def test_nested_url_dependencies_emit_once_in_first_seen_order(self):
         c = Citry()
@@ -214,7 +257,7 @@ class TestDocumentEmission:
                 css = ["/static/outer.css", "/static/shared.css"]
 
         page = _page(c, template="<html><head></head><body><c-outer /></body></html>")
-        html = str(page())
+        html = page().render().serialize(deps_strategy="simple")
 
         js_urls = ["outer.js", "shared.js", "inner.js", "other.js"]
         css_urls = ["outer.css", "shared.css", "inner.css", "other.css"]
@@ -243,7 +286,7 @@ class TestPlaceholders:
             css=".x {}",
             template="<html><head><c-css /></head><body><p>hi</p><c-js /></body></html>",
         )
-        html = str(page())
+        html = page().render().serialize(deps_strategy="simple")
         assert html == (
             f'<html data-cid-c1=""><head><style data-citry-css-class="{page.class_id}">.x {{}}</style></head>'
             "<body><p>hi</p><script>(function() {\nconsole.log(1);\n})();</script></body></html>"
@@ -261,7 +304,7 @@ class TestPlaceholders:
         c = Citry()
         page = _page(c, js="console.log(1);", css=".x {}", template=template)
 
-        assert str(page()) == (
+        assert page().render().serialize(deps_strategy="simple") == (
             f'<html data-cid-c1=""><head><style data-citry-css-class="{page.class_id}">.x {{}}</style></head>'
             "<body><p>hi</p><script>(function() {\nconsole.log(1);\n})();</script></body></html>"
         )
@@ -273,7 +316,7 @@ class TestPlaceholders:
             css=".x {}",
             template="<html><head><c-css /></head><body><c-css /></body></html>",
         )
-        html = str(page())
+        html = page().render().serialize(deps_strategy="simple")
         style_tag = f'<style data-citry-css-class="{page.class_id}">.x {{}}</style>'
         assert html.count(style_tag) == 1
         assert style_tag + "</head>" in html
@@ -329,7 +372,7 @@ class TestDefaultPlacementFallbacks:
     def test_no_head_or_body_prepends_css_and_appends_js(self):
         c = Citry()
         page = _page(c, js="console.log(1);", css=".x {}", template="<main>fragmentish</main>")
-        html = str(page())
+        html = page().render().serialize(deps_strategy="simple")
         assert html.startswith(f'<style data-citry-css-class="{page.class_id}">.x {{}}</style>')
         assert html.endswith("console.log(1);\n})();</script>")
 
@@ -357,10 +400,10 @@ class TestStrategiesAndPositions:
     def test_prepend_and_append_positions(self):
         c = Citry()
         page = _page(c, js="console.log(1);", css=".x {}", template="<main>m</main>")
-        prepended = page().render().serialize(deps_position="prepend")
+        prepended = page().render().serialize(deps_strategy="simple", deps_position="prepend")
         assert prepended.startswith("<script>")
         assert prepended.endswith("</main>")
-        appended = page().render().serialize(deps_position="append")
+        appended = page().render().serialize(deps_strategy="simple", deps_position="append")
         assert appended.startswith("<main")
         assert appended.endswith("</style>")
 
@@ -479,7 +522,9 @@ class TestDependenciesEntries:
 
         page = _page(c, js="console.log(1);", deps=Deps)
         html = str(page())
-        assert html.index('src="/static/lib.js"') < html.index("console.log(1);")
+        scripts = _prepared(html)["scripts"]
+        assert scripts[0]["source"]["url"] == "/static/lib.js"
+        assert scripts[1]["registersOptions"] is False
 
 
 class TestOnDependenciesHooks:
@@ -501,8 +546,8 @@ class TestOnDependenciesHooks:
 
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         html = str(page())
-        assert "/static/lib.js" not in html
-        assert "console.log('widget');" in html
+        assert all(item["source"]["url"] != "/static/lib.js" for item in _prepared(html)["scripts"])
+        assert any("console.log('widget');" in body for body in _asset_bodies(c, html, "scripts"))
 
     def test_extension_hook_adjusts_the_final_lists(self):
         class Analytics(Extension):
@@ -514,7 +559,7 @@ class TestOnDependenciesHooks:
         c = Citry(extensions=[Analytics])
         page = _page(c, js="console.log(1);")
         html = str(page())
-        assert '<script src="/static/analytics.js"></script>' in html
+        assert any(item["source"]["url"] == "/static/analytics.js" for item in _prepared(html)["scripts"])
 
     def test_returning_none_keeps_the_component_assets(self):
         # The hook returns None (the default) to mean "no change": the
@@ -533,8 +578,8 @@ class TestOnDependenciesHooks:
 
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         html = str(page())
-        assert "console.log('kept');" in html
-        assert f'<style data-citry-css-class="{Widget.class_id}">.kept {{}}</style>' in html
+        assert any("console.log('kept');" in body for body in _asset_bodies(c, html, "scripts"))
+        assert any(".kept {}" in body for body in _asset_bodies(c, html, "styles"))
 
     def test_component_classmethod_can_add_an_extra_entry(self):
         # Returning the lists with an extra ``kind="extra"`` Script/Style adds
@@ -556,13 +601,13 @@ class TestOnDependenciesHooks:
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         html = str(page())
         # The component's own assets survive.
-        assert "console.log('own');" in html
-        assert f'<style data-citry-css-class="{Widget.class_id}">.own {{}}</style>' in html
+        assert any("console.log('own');" in body for body in _asset_bodies(c, html, "scripts"))
+        assert any(".own {}" in body for body in _asset_bodies(c, html, "styles"))
         # The extras are emitted; the wrap=False script is not wrapped. An
         # extra Style added by the hook is not a Component.css sheet, so it
         # carries no class marker.
-        assert "<script>console.log('hook');</script>" in html
-        assert "<style>.hook {}</style>" in html
+        assert any("console.log('hook');" in body for body in _asset_bodies(c, html, "scripts"))
+        assert any(".hook {}" in body for body in _asset_bodies(c, html, "styles"))
 
 
 class TestComponentAssetEndTagGuard:
@@ -665,13 +710,13 @@ class TestScriptCacheLifecycle:
         page.js = None
         page.js_file = "card.js"
 
-        assert "console.log('one');" in str(page())
+        assert "console.log('one');" in page().render().serialize(deps_strategy="simple")
         # The file changes; the cached script (and loaded content) keep the
         # old version until reset.
         (tmp_path / "card.js").write_text("console.log('two');")
-        assert "console.log('one');" in str(page())
+        assert "console.log('one');" in page().render().serialize(deps_strategy="simple")
         page.reset_files()
-        assert "console.log('two');" in str(page())
+        assert "console.log('two');" in page().render().serialize(deps_strategy="simple")
 
     def test_replacement_class_with_same_id_uses_its_own_js_and_css(self):
         c = Citry()
@@ -766,7 +811,7 @@ class TestScriptCacheLifecycle:
         new_card = make_card("new")
         assert new_card.class_id == old_card.class_id
 
-        html = old_render.serialize()
+        html = old_render.serialize(deps_strategy="simple")
 
         assert ">old</p>" in html
         assert old_card.js in html

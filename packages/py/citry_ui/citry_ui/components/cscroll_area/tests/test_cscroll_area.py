@@ -133,7 +133,7 @@ def test_class_style_attrs_merge_before_owned_scroll_behavior() -> None:
         '<c-CScrollArea class_="audit" '
         "c-style=\"[{'color': 'purple'}, {'scroll-behavior': 'smooth !important'}]\" "
         "c-attrs=\"{'class': 'mapped', 'style': 'padding: 3px; scroll-behavior: smooth !important', "
-        "'aria-describedby': 'hint', 'data-app-surface': 'audit', '@scroll.passive': 'seen = true'}\">"
+        "'aria-describedby': 'hint', 'data-app-surface': 'audit'}\">"
         "Content</c-CScrollArea>"
     )
     tag = re.search(r"<div[^>]+data-citry-ui-part=\"scroll-area\"", html)
@@ -147,13 +147,10 @@ def test_class_style_attrs_merge_before_owned_scroll_behavior() -> None:
     assert root.count("scroll-behavior: auto !important") == 1
 
 
-def test_both_safe_native_listener_spellings_are_forwarded() -> None:
-    html = _render(
-        "<c-CScrollArea c-attrs=\"{'@scroll.passive': 'window.seen = $event.type', "
-        "'x-on:wheel.prevent': 'window.wheel = $event.type'}\">Content</c-CScrollArea>"
-    )
-    assert '@scroll.passive="window.seen = $event.type"' in html
-    assert 'x-on:wheel.prevent="window.wheel = $event.type"' in html
+@pytest.mark.parametrize("attribute", ["@scroll", "@scrollend", "v-on:scroll", "x-on:scroll"])
+def test_python_resolved_native_listener_attributes_are_rejected(attribute: str) -> None:
+    with pytest.raises(ValueError, match="executable listener attribute"):
+        _render(f"<c-CScrollArea c-attrs=\"{{{attribute!r}: 'handler($event)'}}\">Content</c-CScrollArea>")
 
 
 @pytest.mark.parametrize(
@@ -198,14 +195,13 @@ def test_owned_or_untrusted_root_attributes_fail(attrs: str) -> None:
 
 
 def test_assets_include_one_shared_geometry_copy_and_environment_rules() -> None:
-    html = _render(
-        '<c-CScrollArea>One</c-CScrollArea><c-CScrollArea axis="inline">Two</c-CScrollArea><c-css /><c-js />',
-        dependencies=True,
-    )
+    source = '<c-CScrollArea>One</c-CScrollArea><c-CScrollArea axis="inline">Two</c-CScrollArea><c-css /><c-js />'
+    html = _render(source, dependencies=True)
+    static_html = _render(source)
     helper = SCROLL_GEOMETRY_RUNTIME_DEPENDENCY.content
     assert helper is not None
     assert html.count(helper.strip()) == 1
-    assert len(re.findall(r'<div[^>]+data-citry-ui-part="scroll-area"', html)) == 2
+    assert len(re.findall(r'<div[^>]+data-citry-ui-part="scroll-area"', static_html)) == 2
     css = (Path(__file__).parents[1] / "runtime.source.css").read_text(encoding="utf8")
     assert "overflow-block" in css
     assert "scrollbar-width" in css
@@ -220,8 +216,9 @@ def test_assets_include_one_shared_geometry_copy_and_environment_rules() -> None
 def test_geometry_dependency_is_deduplicated_for_many_scroll_areas(count: int) -> None:
     source = "".join(f'<c-CScrollArea id="area-{index}">Area</c-CScrollArea>' for index in range(count))
     html = _render(f"{source}<c-js />", dependencies=True)
+    static_html = _render(source)
     assert html.count(SCROLL_GEOMETRY_RUNTIME_DEPENDENCY.content.strip()) == 1
-    assert len(re.findall(r'<div[^>]+data-citry-ui-part="scroll-area"', html)) == count
+    assert len(re.findall(r'<div[^>]+data-citry-ui-part="scroll-area"', static_html)) == count
 
 
 def test_geometry_dependency_is_one_copy_when_carousel_and_scroll_area_coexist() -> None:

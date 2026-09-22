@@ -8,15 +8,10 @@ class TagsInputFieldStates(Component):
     template = """
       <section
         class="tags-input-fields"
-        x-data="{
-          required:true,
-          readonly:false,
-          moveDisabled:true,
-        }"
       >
         <div class="tags-input-fields__controls">
-          <label><input type="checkbox" x-model="required" /> Required</label>
-          <label><input type="checkbox" x-model="readonly" /> Readonly</label>
+          <label><input type="checkbox" v-model="required" /> Required</label>
+          <label><input type="checkbox" v-model="readonly" /> Readonly</label>
           <button
             type="button"
             @click="
@@ -30,7 +25,7 @@ class TagsInputFieldStates(Component):
         </div>
 
         <c-CField
-          $c-props="{required,readonly}"
+          :required="required" :readonly="readonly"
         >
           <c-fill name="label">Publication topics</c-fill>
           <c-fill name="description">
@@ -53,9 +48,9 @@ class TagsInputFieldStates(Component):
         </c-CField>
 
         <div class="tags-input-fields__fieldsets">
-          <fieldset x-ref="enabled">
+          <fieldset ref="enabled">
             <legend>Enabled ancestry</legend>
-            <div x-ref="moving">
+            <div ref="moving">
               <c-CField>
                 <c-fill name="label">Moved labels</c-fill>
                 <c-fill name="default">
@@ -64,11 +59,22 @@ class TagsInputFieldStates(Component):
               </c-CField>
             </div>
           </fieldset>
-          <fieldset x-ref="disabled" disabled>
+          <fieldset ref="disabled" disabled>
             <legend>Disabled ancestry</legend>
           </fieldset>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            required:true,
+            readonly:false,
+            moveDisabled:true,
+          };
+        },
+      });
     """
 
     css = """

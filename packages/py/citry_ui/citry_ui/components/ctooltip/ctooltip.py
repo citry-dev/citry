@@ -267,13 +267,15 @@ class CTooltip(LibraryComponent):
     ) -> dict[str, object]:
         snapshot = self._snapshot(kwargs)
         return {
-            "text": snapshot["tooltip_text"],
             "usesText": snapshot["uses_text"],
-            "open": snapshot["open"],
-            "disabled": snapshot["disabled"],
-            "delay": snapshot["delay"],
-            "closeDelay": snapshot["close_delay"],
-            "placement": snapshot["placement"],
+            "serverDefaults": {
+                "text": snapshot["tooltip_text"],
+                "open": snapshot["open"],
+                "disabled": snapshot["disabled"],
+                "delay": snapshot["delay"],
+                "closeDelay": snapshot["close_delay"],
+                "placement": snapshot["placement"],
+            },
         }
 
     template = """
@@ -290,7 +292,7 @@ class CTooltip(LibraryComponent):
         <div
           class="cui-tooltip"
           c-id="tooltip_id"
-          c-data-open="open and not disabled"
+          c-data-open="'' if open and not disabled else None"
           c-data-placement="placement"
           c-bind="attrs"
           popover="manual"
@@ -324,8 +326,13 @@ class CTooltip(LibraryComponent):
           placement: {},
           onOpenChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const host = els[0];
+        onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
+          const host = component.$el;
+          const data = component;
+          const defaults = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const nearestHost = (element) => (
             element?.closest?.("[data-citry-tooltip-host]") ?? null
           );
@@ -417,7 +424,7 @@ class CTooltip(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
-          let internalOpen = initialHandoff?.open ?? data.open;
+          let internalOpen = initialHandoff?.open ?? defaults.open;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
@@ -430,10 +437,10 @@ class CTooltip(LibraryComponent):
           let suppressedTouchFocus = false;
           let dismissedWhileActive = false;
           let configuration = {
-            disabled: data.disabled,
-            delay: data.delay,
-            closeDelay: data.closeDelay,
-            placement: data.placement,
+            disabled: defaults.disabled,
+            delay: defaults.delay,
+            closeDelay: defaults.closeDelay,
+            placement: defaults.placement,
           };
 
           const describeValue = (value) => {
@@ -455,31 +462,31 @@ class CTooltip(LibraryComponent):
             );
           };
           const resolveBoolean = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = props[name] === undefined ? defaults[name] : props[name];
             if (typeof value === "boolean") {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return defaults[name];
           };
           const resolveMilliseconds = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = props[name] === undefined ? defaults[name] : props[name];
             if (Number.isInteger(value) && value >= 0 && value <= 60000) {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return defaults[name];
           };
           const resolvePlacement = () => {
-            const value = props.placement === undefined ? data.placement : props.placement;
+            const value = props.placement === undefined ? defaults.placement : props.placement;
             if (allowedPlacements.includes(value)) {
               invalidEpisodes.delete("placement");
               return value;
             }
             reportInvalid("placement", value);
-            return data.placement;
+            return defaults.placement;
           };
           const resolveCallback = () => {
             const value = props.onOpenChange;
@@ -499,10 +506,10 @@ class CTooltip(LibraryComponent):
               }
               return;
             }
-            const value = props.text === undefined ? data.text : props.text;
+            const value = props.text === undefined ? defaults.text : props.text;
             if (typeof value !== "string" || !value.trim() || value.includes("\0")) {
               reportInvalid("text", value);
-              surface.querySelector("[data-citry-tooltip-text]").textContent = data.text;
+              surface.querySelector("[data-citry-tooltip-text]").textContent = defaults.text;
               return;
             }
             invalidEpisodes.delete("text");

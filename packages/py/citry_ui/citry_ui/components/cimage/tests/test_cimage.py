@@ -301,7 +301,6 @@ def test_root_and_image_attribute_destinations_are_distinct_and_copied() -> None
         "title": "Long exposure",
         "aria-describedby": "plate-note",
         "class": "archive-pixels",
-        "@load": "$dispatch('plate-ready')",
     }
     html = _render(
         CImage(
@@ -323,7 +322,6 @@ def test_root_and_image_attribute_destinations_are_distinct_and_copied() -> None
         "title": "Long exposure",
         "aria-describedby": "plate-note",
         "class": "archive-pixels",
-        "@load": "$dispatch('plate-ready')",
     }
     root = _tag(html, "image-root")
     image = _tag(html, "image")
@@ -335,7 +333,7 @@ def test_root_and_image_attribute_destinations_are_distinct_and_copied() -> None
     assert 'title="Long exposure"' in image
     assert 'aria-describedby="plate-note"' in image
     assert "archive-pixels" in image
-    assert "@load=" in image
+    assert "@load" not in image
 
 
 @pytest.mark.parametrize(
@@ -448,6 +446,9 @@ def test_lazy_auto_sizes_is_valid_only_across_the_whole_picture() -> None:
         ("img_attrs", "aria-hidden"),
         ("img_attrs", "tabindex"),
         ("img_attrs", "onload"),
+        ("img_attrs", "@load"),
+        ("img_attrs", "@error"),
+        ("img_attrs", "v-on:load"),
         ("img_attrs", "data-has-alpine-state"),
         ("img_attrs", "X-Citry-Fill-Source"),
         ("img_attrs", "x-citry-boundary.modifier"),

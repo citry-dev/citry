@@ -115,13 +115,14 @@ wrapper.
 
 Alert has no close input or callback. The state owner hides or removes it and
 chooses where focus goes when a focused action disappears. The example retains
-the Alert with `x-show`; use a server rerender when dismissal must remove it.
+the Alert with Vue's `v-show`; use a server rerender when dismissal must remove
+it.
 
 ## Configure Alert in the browser
 
 Server inputs are passed in Python through `<c-CAlert ... />` attributes or a
-`CAlert(...)` composition call. Client inputs are passed in the browser through
-`$c-props="{...}"`.
+`CAlert(...)` composition call. Client inputs are passed with native Vue
+bindings such as `:intent`, `:variant`, and `:onStatusChange`.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/calert/snippets/configure.py"

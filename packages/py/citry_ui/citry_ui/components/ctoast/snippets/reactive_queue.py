@@ -6,15 +6,21 @@ citry.register_library(citry_ui)
 
 class ReactiveToastQueue(Component):
     template = """
-      <section class="toast-example" x-data="{notices: [], next: 1}">
+      <section class="toast-example" >
         <c-CButton @click="notices = [...notices, {
           id: `note-${next}`, title: `Observation ${next++} queued`, intent: 'info'
         }]">Add notification</c-CButton>
-        <c-CToastRegion $c-props="{
-          items: notices,
-          onDismiss: id => notices = notices.filter(item => item.id !== id),
-        }" />
+        <c-CToastRegion :items="notices" :onDismiss="id => notices = notices.filter(item => item.id !== id)" />
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            notices: [], next: 1
+          };
+        },
+      });
     """
     css = ":where(.toast-example) { min-block-size:16rem; padding:1rem; }"
 

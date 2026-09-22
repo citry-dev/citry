@@ -127,7 +127,7 @@ interface JsonObject {
 ### Calls
 
 One call envelope contains one or more handler calls. `capabilities` and its
-two properties may be omitted to use the v1 defaults.
+three properties may be omitted to use the v1 defaults.
 
 ```ts
 type EventSwap =
@@ -147,9 +147,12 @@ type EventActionKind =
   | "redirect"
   | "url";
 
+type EventRenderer = "html-fragment/1" | "vue-prepared/1";
+
 interface EventsCapabilities {
   swaps?: EventSwap[];
   actions?: EventActionKind[];
+  renderers?: EventRenderer[];
 }
 
 interface EventCall {
@@ -259,12 +262,30 @@ interface ActionTiming {
   wait?: false;
 }
 
-interface RenderAction extends ActionTiming {
+interface LegacyRenderAction extends ActionTiming {
   action: "render";
   target: string;
   swap: EventSwap;
   html: string;
 }
+
+interface HtmlRenderAction extends ActionTiming {
+  action: "render";
+  target: string;
+  swap: EventSwap;
+  renderer: "html-fragment/1";
+  html: string;
+}
+
+interface PreparedRenderAction extends ActionTiming {
+  action: "render";
+  target: string;
+  swap: EventSwap;
+  renderer: "vue-prepared/1";
+  prepared: JsonObject;
+}
+
+type RenderAction = LegacyRenderAction | HtmlRenderAction | PreparedRenderAction;
 
 interface DataAction {
   action: "data";
@@ -337,7 +358,6 @@ interface EventComponentInstance {
 
 interface EventsManifest {
   protocol: "citry-events/1";
-  clientGraphRevision: string | null;
   componentClasses: EventComponentClass[];
   componentInstances: EventComponentInstance[];
 }
@@ -357,7 +377,6 @@ The IDs are deliberately separate because they answer different questions:
 | `render:<renderId>` | A render or DOM-event action target written in component-address form. |
 | `handlerName` | The Python handler the server runs. |
 | `eventName` | The browser DOM `CustomEvent` an `event` action dispatches. |
-| `clientGraphRevision` | The client graph emitted with the same Events manifest. |
 | `sendSequence` | The order in which one stable browser record sent its calls. |
 
 ## The call envelope
@@ -547,16 +566,17 @@ a wildcard request ID. An unreadable or structurally invalid body answers
 
 ## Capabilities
 
-Clients advertise the swaps and action kinds they can apply:
+Clients advertise the swaps, action kinds, and renderers they can apply:
 
 ```json
 {
   "swaps": ["replace", "morph"],
-  "actions": ["render", "data", "state", "event", "redirect", "url"]
+  "actions": ["render", "data", "state", "event", "redirect", "url"],
+  "renderers": ["html-fragment/1"]
 }
 ```
 
-Both arrays contain unique known values. The object and its arrays are strict.
+All arrays contain unique known values. The object and its arrays are strict.
 Either key may be omitted; an omitted key uses that key's v1 baseline. The
 server never emits outside the advertised set. In particular, it downgrades a
 `morph` render to `replace` for a client that did not advertise morphing.
@@ -567,12 +587,19 @@ When the complete `capabilities` object is absent, both keys use
 ```json
 {
   "swaps": ["replace", "inner", "append", "prepend", "remove", "none"],
-  "actions": ["render", "data", "state", "event", "redirect", "url"]
+  "actions": ["render", "data", "state", "event", "redirect", "url"],
+  "renderers": ["html-fragment/1"]
 }
 ```
 
 The baseline includes every v1 action and every v1 swap except `morph`, which
 needs a morphing runtime.
+
+An omitted Render `renderer` means `html-fragment/1` and requires the legacy
+`html` string. An explicit `html-fragment/1` action also carries only `html`.
+A `vue-prepared/1` action carries only a strict JSON `prepared` object. Unknown
+renderers, mixed content representations, and renderer output absent from the
+caller's advertised set are invalid.
 
 ## State tokens
 
@@ -607,7 +634,6 @@ typical manifest is:
 ```json
 {
   "protocol": "citry-events/1",
-  "clientGraphRevision": null,
   "componentClasses": [
     {
       "componentClassId": "TodoList_a1b2c3",
@@ -642,13 +668,8 @@ validates the full manifest before publishing its class and instance records.
 | Field | Meaning |
 |---|---|
 | `protocol` | Exactly `citry-events/1`. |
-| `clientGraphRevision` | The 64-character lowercase revision of the `data-citry-graph` block emitted for the same render, or `null` when there is no client graph. |
 | `componentClasses` | Class-wide handler and writable-State descriptors. |
 | `componentInstances` | Per-render occurrence tokens and public State values. |
-
-When `clientGraphRevision` is not null, the browser waits for that exact
-client graph and attaches each Events instance to its matching graph instance.
-A rendered fragment cannot point at a different or absent graph revision.
 
 ### Component classes
 
@@ -703,8 +724,6 @@ relationships that are clearer in code:
 - The reference validator checks unique class and render IDs, class
   references, and the stateless `stateToken: null` plus empty `publicState`
   rule.
-- The browser also requires a non-null `clientGraphRevision` to match the
-  graph emitted for the same render.
 - The exchange checker verifies that `results[i]` answers `calls[i]`, request
   IDs match, every `sendSequence` is echoed exactly, results stay within the
   advertised capabilities, and each result contains at most one `data`

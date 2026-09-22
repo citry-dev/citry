@@ -22,7 +22,7 @@ def _root() -> Path:
     raise RuntimeError("Could not locate repository root for Tour browser tests.")
 
 
-def _page() -> str:
+def _page() -> tuple[Citry, str]:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -30,8 +30,8 @@ def _page() -> str:
         citry = app
         template = """
           <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tour evidence</title><c-css /></head>
-          <body x-data>
-            <button id="target" type="button" @click="$store.tour.targetClicks++">Target action</button>
+          <body>
+            <button id="target" type="button" @click="state.tour.targetClicks++">Target action</button>
             <c-CTour id="guide">
               <c-fill name="activator" data="{ activator_attrs }">
                 <button id="start" c-bind="activator_attrs">Start tour</button>
@@ -59,12 +59,10 @@ def _page() -> str:
             <c-CTour
               id="controlled"
               missing_target="close"
-              $c-props="{
-                open:$store.tour.open,
-                active:$store.tour.active,
-                onOpenChange:(next,detail)=>{$store.tour.openEvents.push([next,detail.reason,detail.controlled]);if($store.tour.acceptOpen)$store.tour.open=next},
-                onActiveChange:(next,detail)=>{$store.tour.activeEvents.push([next,detail.reason,detail.controlled]);if($store.tour.acceptActive)$store.tour.active=next},
-              }"
+              :open="state.tour.open"
+              :active="state.tour.active"
+              :onOpenChange="(next,detail)=>{state.tour.openEvents.push([next,detail.reason,detail.controlled]);if(state.tour.acceptOpen)state.tour.open=next}"
+              :onActiveChange="(next,detail)=>{state.tour.activeEvents.push([next,detail.reason,detail.controlled]);if(state.tour.acceptActive)state.tour.active=next}"
             >
               <c-fill name="activator" data="{ activator_attrs }">
                 <button id="controlled-start" c-bind="activator_attrs">Controlled tour</button>
@@ -83,27 +81,28 @@ def _page() -> str:
           </body></html>
         """
         js = """
-          Alpine.store('tour', {
+          $component({data(){const tour=Citry.vue.reactive({
             open:false, active:0, acceptOpen:false, acceptActive:false, openEvents:[], activeEvents:[],
             targetClicks:0,
-          });
+          }); window.__tour=tour; return {state:{tour}};}});
         """
 
-    return str(Page())
+    return app, str(Page())
 
 
-def _load(page: Any) -> list[str]:
+def _load(page: Any, serve_citry_ui_live: Any) -> list[str]:
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.set_content(_page(), wait_until="load")
+    app, html = _page()
+    page.goto(serve_citry_ui_live(app, html) + "/", wait_until="networkidle")
     page.wait_for_selector("#guide[data-citry-tour-initialized]")
     page.wait_for_selector("#controlled[data-citry-tour-initialized]")
     return errors
 
 
-def test_uncontrolled_navigation_target_geometry_skip_and_focus_restore(page: Any) -> None:
-    errors = _load(page)
+def test_uncontrolled_navigation_target_geometry_skip_and_focus_restore(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     start = page.locator("#start")
     guide = page.locator("#guide")
     dialog = guide.locator("dialog")
@@ -147,7 +146,7 @@ def test_uncontrolled_navigation_target_geometry_skip_and_focus_restore(page: An
         and surface_box["y"] + surface_box["height"] > target_box["y"]
     )
     target.click()
-    assert page.evaluate("Alpine.store('tour').targetClicks") == 1
+    assert page.evaluate("window.__tour.targetClicks") == 1
 
     guide.locator('[data-citry-tour-action="next"]:visible').click()
     page.wait_for_function("document.querySelector('#guide').dataset.active === '3'")
@@ -159,27 +158,27 @@ def test_uncontrolled_navigation_target_geometry_skip_and_focus_restore(page: An
     assert errors == []
 
 
-def test_controlled_open_and_active_requests_wait_for_acceptance(page: Any) -> None:
-    errors = _load(page)
+def test_controlled_open_and_active_requests_wait_for_acceptance(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     controlled = page.locator("#controlled")
     page.locator("#controlled-start").click()
 
     assert controlled.locator("dialog").get_attribute("open") is None
-    assert page.evaluate("Alpine.store('tour').openEvents") == [[True, "activator", True]]
-    page.evaluate("Alpine.store('tour').acceptOpen = true; Alpine.store('tour').open = true")
+    assert page.evaluate("window.__tour.openEvents") == [[True, "activator", True]]
+    page.evaluate("window.__tour.acceptOpen = true; window.__tour.open = true")
     page.wait_for_function("document.querySelector('#controlled dialog').open")
 
     controlled.locator('[data-citry-tour-action="next"]:visible').click()
     assert controlled.get_attribute("data-active") == "0"
-    assert page.evaluate("Alpine.store('tour').activeEvents") == [[1, "next", True]]
-    page.evaluate("Alpine.store('tour').acceptActive = true; Alpine.store('tour').active = 1")
+    assert page.evaluate("window.__tour.activeEvents") == [[1, "next", True]]
+    page.evaluate("window.__tour.acceptActive = true; window.__tour.active = 1")
     page.wait_for_function("document.querySelector('#controlled').dataset.active === '1'")
     assert controlled.get_attribute("data-value") == "two"
     assert errors == []
 
 
-def test_narrow_surface_stacks_progress_above_actions(page: Any) -> None:
-    errors = _load(page)
+def test_narrow_surface_stacks_progress_above_actions(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     guide = page.locator("#guide")
     guide.evaluate("element => element.style.setProperty('--cui-tour-width', '20rem')")
     page.locator("#start").click()
@@ -206,8 +205,8 @@ def test_narrow_surface_stacks_progress_above_actions(page: Any) -> None:
     assert errors == []
 
 
-def test_escape_shift_tab_environment_axe_and_cleanup(page: Any) -> None:
-    errors = _load(page)
+def test_escape_shift_tab_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _load(page, serve_citry_ui_live)
     page.locator("#start").click()
     page.wait_for_function("document.querySelector('#guide dialog').open")
     title = page.locator("#guide-title-0")

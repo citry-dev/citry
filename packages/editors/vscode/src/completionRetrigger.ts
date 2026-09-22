@@ -158,28 +158,13 @@ function unfinishedTagHasPythonValue(tagText: string): boolean {
 	const citryHandlerAttribute = current.name.startsWith("@c-") || current.name.startsWith(":c-");
 	const browserBaseName = current.name.split(".", 1)[0] ?? current.name;
 	const browserExpressionAttribute =
-		current.name === "$c-props" ||
 		current.name.startsWith("@") ||
 		(current.name.startsWith(":") && !current.name.startsWith(":c-")) ||
-		browserBaseName === "x-for" ||
-		current.name.startsWith("x-bind:") ||
-		current.name.startsWith("x-on:") ||
-		browserBaseName.startsWith("x-intersect:") ||
-		new Set([
-			"x-bind",
-			"x-data",
-			"x-effect",
-			"x-html",
-			"x-id",
-			"x-if",
-			"x-init",
-			"x-intersect",
-			"x-model",
-			"x-modelable",
-			"x-on",
-			"x-show",
-			"x-text",
-		]).has(browserBaseName);
+		browserBaseName === "v-for" ||
+		current.name.startsWith("v-bind:") ||
+		current.name.startsWith("v-on:") ||
+		browserBaseName.startsWith("v-") ||
+		new Set(["v-bind", "v-for", "v-html", "v-if", "v-model", "v-on", "v-show", "v-text"]).has(browserBaseName);
 	return (
 		(expressionAttribute || citryHandlerAttribute || browserExpressionAttribute) && pythonPrefixIsCode(current.value)
 	);

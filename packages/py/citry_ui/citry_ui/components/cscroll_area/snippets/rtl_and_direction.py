@@ -8,19 +8,13 @@ class ScrollAreaRtlAndDirection(Component):
     template = """
       <section
         class="scroll-area-direction"
-        x-data="{
-          direction:'ltr',
-          ltrOffset:0,
-          rtlOffset:0,
-          flipOffset:0,
-        }"
       >
         <div class="scroll-area-direction__controls">
           <button
             type="button"
             @click="direction=direction === 'ltr' ? 'rtl' : 'ltr'"
           >Flip the third rail</button>
-          <output x-text="`Third rail direction: ${direction}`">
+          <output v-text="`Third rail direction: ${direction}`">
             Third rail direction: ltr
           </output>
         </div>
@@ -31,17 +25,15 @@ class ScrollAreaRtlAndDirection(Component):
             <c-CScrollArea
               axis="inline"
               aria_label="LTR deployment stages"
-              $c-props="{
-                onScrollChange:(detail)=>
-                  ltrOffset=Math.round(detail.inlineOffset),
-              }"
+              :onScrollChange="(detail)=>
+                  ltrOffset=Math.round(detail.inlineOffset)"
             >
               <div class="scroll-area-direction__rail">
                 <span>Plan</span><span>Build</span><span>Review</span>
                 <span>Approve</span><span>Publish</span><span>Archive</span>
               </div>
             </c-CScrollArea>
-            <output x-text="`Logical offset ${ltrOffset}`">
+            <output v-text="`Logical offset ${ltrOffset}`">
               Logical offset 0
             </output>
           </article>
@@ -51,17 +43,15 @@ class ScrollAreaRtlAndDirection(Component):
             <c-CScrollArea
               axis="inline"
               aria_label="مراحل النشر"
-              $c-props="{
-                onScrollChange:(detail)=>
-                  rtlOffset=Math.round(detail.inlineOffset),
-              }"
+              :onScrollChange="(detail)=>
+                  rtlOffset=Math.round(detail.inlineOffset)"
             >
               <div class="scroll-area-direction__rail">
                 <span>تخطيط</span><span>بناء</span><span>مراجعة</span>
                 <span>موافقة</span><span>نشر</span><span>أرشفة</span>
               </div>
             </c-CScrollArea>
-            <output x-text="`Logical offset ${rtlOffset}`">
+            <output v-text="`Logical offset ${rtlOffset}`">
               Logical offset 0
             </output>
           </article>
@@ -71,22 +61,32 @@ class ScrollAreaRtlAndDirection(Component):
             <c-CScrollArea
               axis="inline"
               aria_label="Direction-changing stages"
-              $c-props="{
-                onScrollChange:(detail)=>
-                  flipOffset=Math.round(detail.inlineOffset),
-              }"
+              :onScrollChange="(detail)=>
+                  flipOffset=Math.round(detail.inlineOffset)"
             >
               <div class="scroll-area-direction__rail">
                 <span>North</span><span>South</span><span>East</span>
                 <span>West</span><span>Coast</span><span>Harbor</span>
               </div>
             </c-CScrollArea>
-            <output x-text="`Logical offset ${flipOffset}`">
+            <output v-text="`Logical offset ${flipOffset}`">
               Logical offset 0
             </output>
           </article>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            direction:'ltr',
+            ltrOffset:0,
+            rtlOffset:0,
+            flipOffset:0,
+          };
+        },
+      });
     """
 
     css = """

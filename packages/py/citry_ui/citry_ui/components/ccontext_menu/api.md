@@ -179,16 +179,14 @@ initialization closes the enhanced Menu before removing its point.
 
 ## Distinguish callbacks from native events
 
-`onOpenChange` and `onAction` are component callbacks supplied through
-`$c-props`. `onOpenChange` describes requests and forced closes;
+`onOpenChange` and `onAction` are component callbacks supplied with native Vue
+bindings such as `:onAction="handleAction"`. `onOpenChange` describes requests and forced closes;
 `onAction` uses the existing `CMenuActionDetail`. ContextMenu dispatches no
 custom DOM event.
 
-Native events remain Alpine listeners in allowed `attrs` or target content.
-The ContextMenu root has Citry's isolated expression scope, so an attrs listener
-cannot read ancestor-local `x-data` identifiers directly. Use `$event`,
-`$dispatch`, `$store`, or an explicit global bridge. Use component callbacks
-for owner-local state.
+Author native events in the target fill with Vue `@event` bindings. Attribute
+mappings carry data, ARIA, language, and presentation values; they do not carry
+executable listener strings. Use component callbacks for owner-local state.
 
 The component owns `contextmenu`, ContextMenu/Shift+F10 keydown, and its
 touch/pen pointer sequence. It does not stop propagation on those paths. Only

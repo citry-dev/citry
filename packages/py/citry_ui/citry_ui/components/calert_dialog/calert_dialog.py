@@ -184,13 +184,15 @@ class CAlertDialog(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "open": bool(kwargs.open),
-            "dismissible": True,
-            "closeOnEscape": bool(kwargs.close_on_escape),
-            "closeOnOutside": False,
-            "initialFocus": "auto",
-            "size": kwargs.size,
-            "scroll": kwargs.scroll,
+            "serverDefaults": {
+                "open": bool(kwargs.open),
+                "dismissible": True,
+                "closeOnEscape": bool(kwargs.close_on_escape),
+                "closeOnOutside": False,
+                "initialFocus": "auto",
+                "size": kwargs.size,
+                "scroll": kwargs.scroll,
+            },
         }
 
     template = """
@@ -210,7 +212,7 @@ class CAlertDialog(LibraryComponent):
           aria-modal="true"
           c-aria-labelledby="title_id"
           c-aria-describedby="description_id"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           c-data-size="size"
           c-data-scroll="scroll"
           c-bind="attrs"

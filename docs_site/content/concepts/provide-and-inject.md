@@ -222,7 +222,7 @@ boundary wrap that descendant without accepting unknown named fills.
 ## Keep server and browser values separate
 
 Server provide/inject and browser provide/inject do not share storage. A value
-provided by Python is available while HTML renders; `$inject()` in the browser
+provided by Python is available while HTML renders; Vue's `inject` option
 cannot read it automatically. Likewise, a JavaScript value does not appear in
 `Component.inject()` on a later request.
 
@@ -233,48 +233,45 @@ component's browser setup.
 
 ## Provide and inject in client code
 
-The [`$component` hook][$component] receives `provide`, `inject`, and
-`unprovide` helpers:
+Use native Vue `provide` and `inject` options on component boundaries. A parent
+can provide a reactive object:
 
 ```js
-$component(({ reactive, provide, inject, unprovide }) => {
-  const inherited = inject("theme", null);
-  const theme = reactive({
-    name: inherited?.name ?? "light",
-  });
-
-  provide("theme", theme);
-  unprovide("outerTabs");
+$component({
+  data() {
+    return { theme: { name: "dark" } };
+  },
+  provide() {
+    return { theme: this.theme };
+  },
 });
 ```
 
-Alpine expressions use [`$provide`][$provide], [`$inject`][$inject], and
-[`$unprovide`][$unprovide]:
+The descendant declares the injected member and reads it in its template:
 
-```citry-html
-<section x-init="$provide('theme', { name: 'dark' })">
-  <output x-text="$inject('theme').name"></output>
-
-  <div x-init="$unprovide('theme')">
-    <output
-      x-text="$inject('theme', { name: 'system' }).name"
-    ></output>
-  </div>
-</section>
+```js
+$component({
+  inject: {
+    theme: {
+      default: () => ({ name: "system" }),
+    },
+  },
+});
 ```
 
-The nearest-provider and outgoing-only rules match the server model. JavaScript
-uses only the direct-value form. The server also offers keyword fields as a
-convenient way to build one immutable payload.
+```citry-html
+<output v-text="theme.name"></output>
+```
 
-Establish or remove client providers during synchronous initialization. When
-the shared data must change later, provide one stable `reactive()` object and
-mutate its fields. Descendant expressions and managed effects can then react
-to those changes without replacing the provider.
+Native Vue nearest-provider rules apply. When shared data must change later,
+provide one stable reactive object and mutate its fields. Composition API
+helpers from the page's runtime are available through `Citry.vue` when Options
+alone are not enough.
 
-Client keys may be non-empty strings or symbols. A missing key without a
-default raises a browser error; an explicitly provided `undefined` still
-counts as a provided value.
+The former element-scoped `$provide`, `$inject`, and `$unprovide` browser APIs
+are unsupported by the Vue runtime. Put a provider on a Citry component
+boundary. To hide an inherited value from a subtree, introduce a boundary
+component that provides the replacement value; Vue has no `unprovide` option.
 
 ## Next steps
 
@@ -283,4 +280,4 @@ counts as a provided value.
 - [Client interactivity](/concepts/client-interactivity/) covers component
   ownership, setup, props, and lifecycle helpers.
 - [Browser APIs](/reference/browser-apis/) lists the exact client helper and
-  Alpine magic contracts.
+  Vue runtime contracts.

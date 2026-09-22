@@ -23,9 +23,15 @@ _CHECK_SPEC.loader.exec_module(check_script)
 
 
 def test_fast_and_full_profiles_keep_browser_tests_outside_the_gate() -> None:
-    fast_phases = dict(check_script._phases("fast"))
-    full_phases = dict(check_script._phases("full"))
-    default_phases = dict(check_script._phases())
+    fast_phase_list = check_script._phases("fast")
+    full_phase_list = check_script._phases("full")
+    default_phase_list = check_script._phases()
+    for phases in (fast_phase_list, full_phase_list, default_phase_list):
+        assert all(len(phase) == 2 for phase in phases)
+
+    fast_phases = dict(fast_phase_list)
+    full_phases = dict(full_phase_list)
+    default_phases = dict(default_phase_list)
     fast = fast_phases["pytest"]
     full = full_phases["pytest"]
 

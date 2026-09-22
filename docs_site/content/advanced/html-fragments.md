@@ -12,8 +12,9 @@ in place.
 
 There is one important choice on the receiving page:
 
-- If the page already loaded Citry's runtime, a normal DOM insertion is
-  enough. Citry discovers the new fragment and activates it.
+- If the page already loaded Citry's runtime, insert the complete response.
+  Citry observes its fragment descriptor, validates the matching mount host,
+  loads required assets and mounts a new Vue app.
 - If the page did not load Citry, the insertion method must execute the
   fragment's loader script. Assigning a string to `innerHTML` does not execute
   inserted `<script>` elements.
@@ -45,10 +46,11 @@ A client-active fragment refers to Citry's runtime and generated assets by
 URL. Mount one of Citry's [web framework integrations](/web-frameworks/) so
 those URLs can be served.
 
-Client-active output includes components that use normal Alpine attributes,
-[`$component`][$component], client props, browser or server event handlers, or
-Events state. If such a fragment has no mounted integration or recorded route
-prefix, serialization raises `RuntimeError` instead of returning broken URLs.
+Client-active output includes components that use native Vue bindings,
+[`$component`][$component], browser or server event handlers, Events state or
+per-render browser data. If such a fragment has no mounted integration or
+recorded route prefix, serialization raises `RuntimeError` instead of returning
+broken URLs.
 
 A worker that only renders fragments can record the prefix used by the
 serving process with
@@ -68,13 +70,7 @@ class Notice(Component):
         return {"message": "Ready"}
 
     template = """
-      <p class="notice">Loading...</p>
-    """
-
-    js = """
-      $component(({ els, data }) => {
-        els[0].textContent = data.message;
-      });
+      <p class="notice" v-text="message"></p>
     """
 
 
@@ -102,9 +98,10 @@ Load Citry once in the host document, then insert the response:
 </script>
 ```
 
-The existing runtime notices the fragment manifest, fetches missing assets,
-and activates the complete fragment. It reuses dependencies that are still
-loaded in the page.
+The existing runtime notices the fragment descriptor, validates its one mount
+host, fetches missing assets and mounts the complete fragment. Removing that
+host disposes the fragment's Vue app. Compatible assets already loaded for the
+page are reused.
 
 ## Render a fresh fragment for each insertion
 
@@ -148,11 +145,11 @@ so the `innerHTML` example above only works because Citry was already loaded.
 
 For a runtime-free host, use a swap library that executes response scripts, or
 parse the response and recreate its `<script>` elements as live DOM nodes.
-The loader can then start Citry and adopt the manifests that arrived with the
+The loader can then start Citry and mount the descriptor that arrived with the
 fragment.
 
 Whichever insertion method you choose, insert the fragment as one transaction.
-Do not split its markup, manifests, and ownership markers into separate swaps.
+Do not split its mount host, descriptor and assets into separate swaps.
 
 ## Deliver component dependencies
 
@@ -184,17 +181,17 @@ serving processes.
 
 ## Keep fragments intact in production
 
-HTML optimizers and sanitizers must preserve Citry's ownership comments,
-manifest scripts, and client attributes. See
-[Preserve client-active HTML](/advanced/alpine-runtime/#preserve-client-active-html)
-for the exact list.
+HTML optimizers and sanitizers must preserve the fragment descriptor and the
+document runtime that validates and mounts it. See
+[Preserve interactive HTML](/advanced/vue-runtime/#preserve-interactive-html)
+for the delivery boundary.
 
 ## See also
 
 - [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for a
   component's own browser behavior and styles.
 - [Dependency files](/advanced/dependency-files/) for URLs and local files.
-- [Client interactivity](/concepts/client-interactivity/) for browser scope
+- [Client interactivity](/concepts/client-interactivity/) for browser state
   and component lifecycles.
 - [Event actions](/events/actions/) for returning rendered updates from a
   Python handler.

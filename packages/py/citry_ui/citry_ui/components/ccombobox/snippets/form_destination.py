@@ -14,14 +14,13 @@ class LaunchDestinationForm(Component):
     template = """
       <section
         class="launch-form"
-        x-data="{ result: 'No route submitted.' }"
       >
         <header>
           <p>Flight plan</p>
           <h2>Choose a launch destination</h2>
         </header>
         <c-CForm
-          @submit.prevent="result = `Route: ${new FormData($el).get('destination_id')}`"
+          @submit.prevent="result = `Route: ${new window.FormData($event.target).get('destination_id')}`"
           @reset="result = 'Flight plan reset.'"
         >
           <c-CField required>
@@ -55,11 +54,20 @@ class LaunchDestinationForm(Component):
         <p
           class="launch-form__result"
           aria-live="polite"
-          x-text="result"
+          v-text="result"
         >
           No route submitted.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result: 'No route submitted.'
+          };
+        },
+      });
     """
 
     def template_data(

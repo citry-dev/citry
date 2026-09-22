@@ -153,8 +153,10 @@ class TestCBindSpread:
 
         assert 'title="value"' in str(Page())
         key.reserved = True
-        with pytest.raises(RuntimeError, match="compiler-owned"):
+        with pytest.raises(RuntimeError, match="reserved internal Events namespace") as exc_info:
             str(Page())
+        assert "'data-cev-*'" in str(exc_info.value)
+        assert "@c-*" in str(exc_info.value)
 
     def test_spreads_mapping_onto_element(self):
         tpl = """<div c-bind="{'class': 'btn', 'disabled': True, 'data-id': item['id']}">y</div>"""
@@ -357,7 +359,7 @@ class TestOnAttrsResolvedHook:
         rewrite = events_extension_module.rewrite_resolved_attrs
 
         def spy(*args, **kwargs):
-            calls.append(args[3])
+            calls.append((args[2], args[3]))
             return rewrite(*args, **kwargs)
 
         monkeypatch.setattr(events_extension_module, "rewrite_resolved_attrs", spy)
@@ -370,7 +372,7 @@ class TestOnAttrsResolvedHook:
 
         with pytest.raises(ValueError, match="not a declared handler"):
             _html('<div c-bind="attrs">x</div>', attrs={"@c-click": "missing"})
-        assert calls == ["div"]
+        assert calls == [("div", {"@c-click": "missing"})]
 
     def test_hook_rewrites_resolved_attrs(self):
         class Rewriter(Extension):

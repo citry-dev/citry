@@ -27,12 +27,12 @@
       "id": "events-call-capabilities",
       "schema": "call.schema.json",
       "exactSchemaPointers": [],
-      "schemaPointerPrefixes": ["/$defs/capabilities", "/$defs/actionKind", "/$defs/swap"],
+      "schemaPointerPrefixes": ["/$defs/capabilities", "/$defs/actionKind", "/$defs/swap", "/$defs/renderer"],
       "pythonValidators": ["python/citry_events/calls.py:validate_capabilities"],
       "javascriptValidators": ["js/src/calls.ts:validateCapabilities"],
       "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
-      "constraintCount": 8,
-      "constraintSha256": "f7e00a6d086451c1242533e276d86aa67f68204f0e74977acf730fbebaf83565"
+      "constraintCount": 11,
+      "constraintSha256": "522f326ea79a41ec41ac696bd83571ecb521bc141213a38bcb173971645d962c"
     },
     {
       "id": "events-descriptor",
@@ -64,8 +64,8 @@
       "pythonValidators": ["python/citry_events/manifests.py:validate_manifest"],
       "javascriptValidators": ["js/src/manifests.ts:validateManifest"],
       "tests": ["tests/manifests/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_package.py"],
-      "constraintCount": 11,
-      "constraintSha256": "c673d5e91a9d9e40d289291d2761d2fe01e3467eaba5990ddee1a621c89bc132"
+      "constraintCount": 8,
+      "constraintSha256": "519df033d03d686665978c71f8dce8d3d2df05207e7645cf8aaa02669c219797"
     },
     {
       "id": "events-manifest-component-class",
@@ -126,12 +126,12 @@
       "id": "events-result-actions",
       "schema": "result.schema.json",
       "exactSchemaPointers": [],
-      "schemaPointerPrefixes": ["/$defs/action", "/$defs/renderAction", "/$defs/dataAction", "/$defs/stateAction", "/$defs/eventAction", "/$defs/redirectAction", "/$defs/urlAction", "/$defs/target", "/$defs/swap", "/$defs/delay", "/$defs/wait"],
+      "schemaPointerPrefixes": ["/$defs/action", "/$defs/legacyRenderAction", "/$defs/explicitHtmlRenderAction", "/$defs/preparedRenderAction", "/$defs/renderAction", "/$defs/dataAction", "/$defs/stateAction", "/$defs/eventAction", "/$defs/redirectAction", "/$defs/urlAction", "/$defs/target", "/$defs/swap", "/$defs/delay", "/$defs/wait"],
       "pythonValidators": ["python/citry_events/results.py:validate_action"],
       "javascriptValidators": ["js/src/results.ts:validateAction"],
       "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
-      "constraintCount": 58,
-      "constraintSha256": "1b0fe5bb5f640f6a5ef8b8b11f7c73ee507c879bfa137ff69266ba2e511ee096"
+      "constraintCount": 79,
+      "constraintSha256": "16f37cac05353a37f44609c1390931c04ce8a018691c5e148398a0ba96f68536"
     }
   ]
 }

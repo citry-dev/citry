@@ -1,4 +1,4 @@
-"""Tests for JS/CSS variables delivery: vars scripts, ``data-ccss`` markers, the manifest, the runtime."""
+"""Tests for JavaScript/CSS data delivery through native Vue and static CSS."""
 
 import base64
 import json
@@ -8,13 +8,12 @@ import pytest
 
 from citry import Citry, Component
 from citry.ext.dependencies.scripts import (
-    gen_cache_key,
     transform_component,
     uses_component,
 )
 from citry.util.css import is_css_func, serialize_css_var_value, validate_css_var_name
 
-COMPONENT_JS = "$component(({ els, data }) => { els[0].textContent = data.rows; });"
+COMPONENT_JS = "$component({ onServerRender({ component }) { component.$el.textContent = component.rows; } });"
 
 
 def _page(c, template="<html><head></head><body><c-widget /></body></html>"):
@@ -40,6 +39,12 @@ def _decoded_calls(html):
     ]
 
 
+def _prepared(html):
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["manifest"]
+
+
 class TestJsVars:
     def test_vars_script_registers_the_data(self):
         c = Citry()
@@ -52,10 +57,9 @@ class TestJsVars:
             def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
-        html = str(_page(c)())
-        assert f'Citry.manager.registerComponentData("{Widget.class_id}"' in html
-        encoded = re.search(r'atob\("([^"]+)"\)', html)
-        assert json.loads(_unb64(encoded.group(1))) == {"rows": 3}
+        manifest = _prepared(str(_page(c)()))
+        occurrence = next(item for item in manifest["occurrences"] if item["typeKey"] == Widget.class_id)
+        assert occurrence["serverData"] == {"rows": 3}
 
     @pytest.mark.parametrize("key", [1, True, None])
     def test_js_data_mapping_keys_must_be_exact_strings(self, key):
@@ -69,8 +73,8 @@ class TestJsVars:
             def js_data(self, kwargs, slots):
                 return {key: "value"}
 
-        with pytest.raises(TypeError, match=r"mapping keys must be exact strings; got .* key"):
-            Widget().render()
+        with pytest.raises(TypeError, match=r"prepared Vue data object keys must be strings"):
+            str(_page(c)())
 
     def test_records_carry_the_hashes(self):
         c = Citry()
@@ -89,7 +93,7 @@ class TestJsVars:
 
         rendered = _page(c)().render()
         record = next(r for r in rendered.context.extra["dependencies"] if r.class_id == Widget.class_id)
-        assert re.fullmatch(r"[0-9a-f]{32}", record.js_vars_hash)
+        assert record.js_vars_hash is None
         assert re.fullmatch(r"[0-9a-f]{32}", record.css_vars_hash)
 
     def test_identical_data_shares_one_script(self):
@@ -104,8 +108,8 @@ class TestJsVars:
                 return {"rows": 3}
 
         page = _page(c, template="<main><c-widget /><c-widget /></main>")
-        html = str(page())
-        assert html.count(f'registerComponentData("{Widget.class_id}"') == 1
+        manifest = _prepared(str(page()))
+        assert sum(item["typeKey"] == Widget.class_id for item in manifest["occurrences"]) == 2
 
     def test_distinct_data_gets_distinct_scripts(self):
         c = Citry()
@@ -127,26 +131,13 @@ class TestJsVars:
         page = _page(c, template='<main><c-widget c-rows="1" /><c-widget c-rows="2" /></main>')
         rendered = page().render()
         records = [record for record in rendered.context.extra["dependencies"] if record.class_id == Widget.class_id]
-        hashes = [record.js_vars_hash for record in records]
         html = rendered.serialize()
 
         assert len(records) == 2
-        assert all(hash_ is not None and re.fullmatch(r"[0-9a-f]{32}", hash_) for hash_ in hashes)
-        assert hashes[0] != hashes[1]
-
-        registered = re.findall(
-            rf'Citry\.manager\.registerComponentData\("{re.escape(Widget.class_id)}", "([^"]+)", '
-            r'atob\("([^"]+)"\)\);',
-            html,
-        )
-        payloads_by_hash = {hash_: json.loads(_unb64(encoded)) for hash_, encoded in registered}
-        assert payloads_by_hash == {hashes[0]: {"rows": 1}, hashes[1]: {"rows": 2}}
-
-        calls = _decoded_calls(html)
-        assert calls == [
-            [Widget.class_id, records[0].component_id, hashes[0], "init"],
-            [Widget.class_id, records[1].component_id, hashes[1], "init"],
+        values = [
+            item["serverData"]["rows"] for item in _prepared(html)["occurrences"] if item["typeKey"] == Widget.class_id
         ]
+        assert values == [1, 2]
 
     def test_data_round_trips_through_base64(self):
         c = Citry()
@@ -170,8 +161,8 @@ class TestJsVars:
 
         html = str(_page(c)())
         assert "</script><b>boom</b>" not in html
-        encoded = re.search(r'atob\("([^"]+)"\)', html)
-        assert json.loads(_unb64(encoded.group(1))) == payload
+        occurrence = next(item for item in _prepared(html)["occurrences"] if item["typeKey"] == Widget.class_id)
+        assert occurrence["serverData"] == payload
 
     @pytest.mark.parametrize("asset_kind", ["js", "css"])
     def test_non_json_data_value_raises_naming_its_type(self, asset_kind):
@@ -200,7 +191,7 @@ class TestJsVars:
 
         error_type = TypeError if asset_kind == "js" else ValueError
         error_match = (
-            "Object of type object is not JSON serializable"
+            "prepared Vue data must be strict JSON, got object"
             if asset_kind == "js"
             else r"css_data\(\) entry 'bad'.*object is not supported"
         )
@@ -220,15 +211,11 @@ class TestJsVars:
                 return js_data
 
         rendered = _page(c)().render()
-        record = next(r for r in rendered.context.extra["dependencies"] if r.class_id == Widget.class_id)
         html = rendered.serialize()
-        calls = _decoded_calls(html)
+        occurrence = next(item for item in _prepared(html)["occurrences"] if item["typeKey"] == Widget.class_id)
+        assert occurrence["serverData"] == {}
 
-        assert record.js_vars_hash is None
-        assert f'Citry.manager.registerComponentData("{Widget.class_id}"' not in html
-        assert calls == [[Widget.class_id, record.component_id, None, "init"]]
-
-    def test_js_data_without_component_js_is_not_delivered(self):
+    def test_js_data_without_component_js_is_delivered_to_native_vue(self):
         c = Citry()
 
         class Widget(Component):
@@ -241,12 +228,14 @@ class TestJsVars:
 
         page = _page(c)
         rendered = page().render()
-        record = next(r for r in rendered.context.extra["dependencies"] if r.class_id == Widget.class_id)
-        assert re.fullmatch(r"[0-9a-f]{32}", record.js_vars_hash)
-        assert f'registerComponentData("{Widget.class_id}"' not in rendered.serialize()
+        occurrence = next(
+            item for item in _prepared(rendered.serialize())["occurrences"] if item["typeKey"] == Widget.class_id
+        )
+        assert occurrence["serverData"] == {"rows": 3}
 
-    def test_js_data_with_plain_js_is_not_delivered(self):
+    def test_js_data_with_plain_js_is_delivered(self):
         c = Citry()
+        c.set_mounted_prefix("/citry")
 
         class Widget(Component):
             citry = c
@@ -272,75 +261,14 @@ class TestJsVars:
 
         page = _page(c, template="<html><head></head><body><c-widget /><c-control /></body></html>")
         rendered = page().render()
-        records = {r.class_id: r for r in rendered.context.extra["dependencies"]}
         html = rendered.serialize()
-        vars_hash = records[Control.class_id].js_vars_hash
+        data = {item["typeKey"]: item["serverData"] for item in _prepared(html)["occurrences"]}
+        assert data[Widget.class_id] == {"rows": 3}
+        assert data[Control.class_id] == {"rows": 3}
+        from citry._vue.events import definition_bundle
 
-        # No callback or Alpine expression consumes the data, so no vars
-        # script is emitted even though the render capture is cache-ready.
-        assert records[Widget.class_id].js_vars_hash == vars_hash
-        assert c.cache.has(gen_cache_key(Widget.class_id, "js", vars_hash))
-        assert f'registerComponentData("{Widget.class_id}"' not in html
-        # ...while the control with the same data gets both.
-        assert c.cache.has(gen_cache_key(Control.class_id, "js", vars_hash))
-        assert f'registerComponentData("{Control.class_id}"' in html
-        # The plain JS itself still ships, and the css side is unaffected.
-        assert "console.log(1);" in html
-        css_vars_hash = records[Widget.class_id].css_vars_hash
-        assert c.cache.has(gen_cache_key(Widget.class_id, "css", css_vars_hash))
-        assert f"[data-ccss-{css_vars_hash}] {{\n  --row-color: red;\n}}" in html
-
-    def test_direct_alpine_expression_gets_an_explicit_seed_only_call(self):
-        c = Citry()
-
-        class Widget(Component):
-            citry = c
-            template = '<span class="widget" x-text="label"></span>'
-
-            def js_data(self, kwargs, slots):
-                return {"label": "seeded"}
-
-        rendered = _page(c)().render()
-        record = next(r for r in rendered.context.extra["dependencies"] if r.class_id == Widget.class_id)
-        html = rendered.serialize()
-
-        assert "data-citry-root" in html
-        assert f'Citry.manager.registerComponentData("{Widget.class_id}"' in html
-        assert _decoded_calls(html) == [[Widget.class_id, record.component_id, record.js_vars_hash, "seed"]]
-
-    def test_direct_alpine_with_an_empty_js_data_result_gets_an_empty_seed_call(self):
-        c = Citry()
-
-        class Widget(Component):
-            citry = c
-            template = '<span class="widget" x-data="{ label: \'local\' }" x-text="label"></span>'
-
-            def js_data(self, kwargs, slots):
-                return {}
-
-        rendered = _page(c)().render()
-        html = rendered.serialize()
-
-        assert "dependencies" not in rendered.context.extra
-        assert f'Citry.manager.registerComponentData("{Widget.class_id}"' not in html
-        calls = _decoded_calls(html)
-        assert len(calls) == 1
-        assert calls[0][0] == Widget.class_id
-        assert calls[0][2:] == [None, "seed"]
-
-    def test_direct_alpine_with_the_default_js_data_hook_needs_no_seed_call(self):
-        c = Citry()
-
-        class Widget(Component):
-            citry = c
-            template = '<span class="widget" x-data="{ label: \'local\' }" x-text="label"></span>'
-
-        rendered = _page(c)().render()
-        html = rendered.serialize()
-
-        assert "data-citry-root" in html
-        assert "dependencies" not in rendered.context.extra
-        assert _decoded_calls(html) == []
+        scripts = _prepared(html)["scripts"]
+        assert any("console.log(1);" in definition_bundle(c, item["source"]["sha256"]).decode() for item in scripts)
 
 
 class TestComponentTransform:
@@ -358,7 +286,7 @@ class TestComponentTransform:
 
         script = get_component_script("js", Widget)
         assert "$component" not in script.content
-        assert f'Citry.manager.registerComponent("{Widget.class_id}", ' in script.content
+        assert f'CitryStable.registerTypeOptions.bind(null, "{Widget.class_id}", "' in script.content
 
     @pytest.mark.parametrize(
         "source",
@@ -405,13 +333,14 @@ class TestComponentTransform:
             "const object = { class() {\n  $component(handler)\n  { cleanup(); }\n} };",
             "class Widget { class() {\n  $component(handler)\n  { cleanup(); }\n} }",
             "class Holder {\n  class\n  run() {\n    $component(handler)\n    { cleanup(); }\n  }\n}",
+            "const naïve = true; $component /* λ */ ({ props: { 'display-name': String } });",
         ],
     )
     def test_actual_calls_are_transformed(self, source):
         result = transform_component(source, "example")
 
         assert "$component" not in result
-        assert 'Citry.manager.registerComponent("example", ' in result
+        assert 'CitryStable.registerTypeOptions.bind(null, "example", "' in result
 
     def test_call_followed_by_block_activates_component_runtime(self):
         c = Citry()
@@ -791,7 +720,7 @@ class TestCssVars:
 
 
 class TestManifestAndRuntime:
-    def test_manifest_carries_the_component_calls(self):
+    def test_prepared_manifest_carries_component_occurrences(self):
         c = Citry()
 
         class Widget(Component):
@@ -803,16 +732,13 @@ class TestManifestAndRuntime:
                 return {"rows": 3}
 
         rendered = _page(c, template="<main><c-widget /><c-widget /></main>")().render()
-        record_ids = [r.component_id for r in rendered.context.extra["dependencies"]]
-        manifest = _manifest(rendered.serialize())
-        assert manifest is not None
-        calls = _decoded_calls(rendered.serialize())
-        assert [call[0] for call in calls] == [Widget.class_id, Widget.class_id]
-        assert [call[1] for call in calls] == record_ids
-        assert all(re.fullmatch(r"[0-9a-f]{32}", call[2]) for call in calls)
-        assert [call[3] for call in calls] == ["init", "init"]
+        occurrences = [
+            item for item in _prepared(rendered.serialize())["occurrences"] if item["typeKey"] == Widget.class_id
+        ]
+        assert len(occurrences) == 2
+        assert all(item["serverData"] == {"rows": 3} for item in occurrences)
 
-    def test_manifest_marks_url_dependencies_as_loaded(self):
+    def test_native_manifest_carries_declared_url_dependencies(self):
         c = Citry()
 
         class Widget(Component):
@@ -824,9 +750,9 @@ class TestManifestAndRuntime:
                 js = ["https://cdn.example.com/lib.js"]
                 css = {"all": "/static/theme.css"}
 
-        manifest = _manifest(str(_page(c)()))
-        assert [_unb64(url) for url in manifest["markLoaded"]["js"]] == ["https://cdn.example.com/lib.js"]
-        assert [_unb64(url) for url in manifest["markLoaded"]["css"]] == ["/static/theme.css"]
+        manifest = _prepared(str(_page(c)()))
+        assert any(item["source"]["url"] == "https://cdn.example.com/lib.js" for item in manifest["scripts"])
+        assert any(item["source"]["url"] == "/static/theme.css" for item in manifest["styles"])
 
     def test_runtime_inlined_once_when_callbacks_exist(self):
         c = Citry()
@@ -837,11 +763,14 @@ class TestManifestAndRuntime:
             js = COMPONENT_JS
 
         html = str(_page(c, template="<main><c-widget /><c-widget /></main>")())
-        assert html.count("Citry's client-side dependency manager") == 1
-        # The runtime precedes the component script that calls into it.
-        assert html.index("client-side dependency manager") < html.index("registerComponent(")
+        assert html.count("<script>/* Citry interactive runtime.") == 1
+        assert (
+            html.index("Citry Vue runtime")
+            < html.index("registerTypeOptions")
+            < html.rindex("CitryStable.startPrepared(")
+        )
 
-    def test_no_callbacks_no_runtime_no_manifest(self):
+    def test_plain_component_javascript_uses_native_vue_runtime(self):
         c = Citry()
 
         class Widget(Component):
@@ -850,8 +779,8 @@ class TestManifestAndRuntime:
             js = "console.log(1);"  # plain JS, no $component
 
         html = str(_page(c)())
-        assert "dependency manager" not in html
-        assert _manifest(html) is None
+        assert "Citry Vue runtime" in html
+        assert "startPrepared" in html
 
 
 class TestSimpleStrategy:
@@ -877,7 +806,7 @@ class TestSimpleStrategy:
         assert "registerComponentData" not in html
         # The component's own JS is still emitted (it just has no manager to
         # register with; plain JS components work fine under "simple").
-        assert "registerComponent(" in html
+        assert "registerTypeOptions" in html
         # CSS variables are pure CSS and keep working.
         assert "data-ccss-" in html
         assert "--row-color: red;" in html

@@ -25,8 +25,13 @@ from typing import TYPE_CHECKING, Any, Final
 _tomllib: Any
 try:
     import tomllib as _stdlib_tomllib
-except ModuleNotFoundError:  # Python 3.10 wheel-smoke jobs
-    _tomllib = None
+except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
+    try:
+        import tomli as _stdlib_tomllib  # type: ignore[import-untyped, no-redef]
+    except ModuleNotFoundError:
+        _tomllib = None
+    else:
+        _tomllib = _stdlib_tomllib
 else:
     _tomllib = _stdlib_tomllib
 
@@ -39,6 +44,14 @@ PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry_core"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry_core"
 PYODIDE_CONFIG: Final = PACKAGE_ROOT / "pyodide-build.json"
 SMOKE_SCRIPT: Final = REPO_ROOT / "scripts" / "smoke_citry_core.py"
+VENDORED_VIZE_CRATES: Final = {
+    "vize_atelier_core": "0.420.0+citry.1",
+    "vize_s1_to_s2": "0.420.0+citry.1",
+}
+LICENSE_FILES: Final = {
+    "LICENSE": PACKAGE_ROOT / "LICENSE",
+    "LICENSE-vize": PACKAGE_ROOT / "LICENSE-vize",
+}
 MAX_WHEEL_BYTES: Final = 10 * 1024 * 1024
 LINUX_PLATFORMS: Final = {
     "x86_64": "manylinux_2_17_x86_64.manylinux2014_x86_64",
@@ -82,9 +95,9 @@ class DistributionVerificationError(RuntimeError):
 
 
 def _loads_toml(payload: str) -> dict[str, Any]:
-    """Parse TOML for the inventory/sdist gates, which run on Python 3.11+."""
+    """Parse TOML for the inventory/sdist gates."""
     if _tomllib is None:
-        raise DistributionVerificationError("TOML artifact checks require Python 3.11 or newer")
+        raise DistributionVerificationError("TOML artifact checks require tomllib or tomli")
     return _tomllib.loads(payload)
 
 
@@ -105,6 +118,16 @@ def hex_sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def vendored_vize_inventory() -> dict[str, str]:
+    """Return the complete patched Vize source inventory required in an sdist."""
+    return {
+        path.relative_to(REPO_ROOT).as_posix(): hex_sha256_file(path)
+        for crate in VENDORED_VIZE_CRATES
+        for path in sorted((REPO_ROOT / "third_party" / "rust" / crate).rglob("*"))
+        if path.is_file()
+    }
 
 
 def package_version() -> str:
@@ -179,6 +202,8 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected Requires-Python metadata")
     if metadata.get("Requires-Dist") is not None:
         raise DistributionVerificationError(f"{artifact.name} unexpectedly declares a runtime dependency")
+    if set(metadata.get_all("License-File", [])) != set(LICENSE_FILES):
+        raise DistributionVerificationError(f"{artifact.name} has unexpected License-File metadata")
 
 
 def _wheel_filename_parts(path: Path) -> tuple[str, str, str]:
@@ -301,9 +326,12 @@ def verify_wheel(path: Path, *, version: str) -> dict[str, Any]:
                 expected_bundled_libraries.add(library_name)
             if any("__pycache__" in name or name.endswith((".pyc", ".pyo")) for name in names):
                 raise DistributionVerificationError(f"{path.name} contains Python cache artifacts")
-            licenses = [name for name in names if ".dist-info/licenses/" in name and name.endswith("/LICENSE")]
-            if len(licenses) != 1 or archive.read(licenses[0]) != (PACKAGE_ROOT / "LICENSE").read_bytes():
-                raise DistributionVerificationError(f"{path.name} does not contain the checked MIT license")
+            expected_licenses = {
+                f"{dist_info}licenses/{name}": source.read_bytes() for name, source in LICENSE_FILES.items()
+            }
+            actual_licenses = {name: archive.read(name) for name in names if name.startswith(f"{dist_info}licenses/")}
+            if actual_licenses != expected_licenses:
+                raise DistributionVerificationError(f"{path.name} does not contain the checked license inventory")
             expected_members = (
                 package_members
                 | expected_bundled_libraries
@@ -311,7 +339,7 @@ def verify_wheel(path: Path, *, version: str) -> dict[str, Any]:
                     f"{dist_info}METADATA",
                     f"{dist_info}WHEEL",
                     f"{dist_info}RECORD",
-                    f"{dist_info}licenses/LICENSE",
+                    *expected_licenses,
                     f"{dist_info}sboms/citry_core_py.cyclonedx.json",
                 }
             )
@@ -378,6 +406,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         "PKG-INFO",
         "README.md",
         "LICENSE",
+        "LICENSE-vize",
         "pyproject.toml",
         "Cargo.toml",
         "Cargo.lock",
@@ -386,18 +415,28 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         "crates/citry_html_transform/Cargo.toml",
         "crates/citry_template_formatter/Cargo.toml",
         "crates/citry_template_parser/Cargo.toml",
+        "crates/citry_vue_compiler/Cargo.toml",
         "crates/python_safe_eval/Cargo.toml",
         "crates/python_safe_eval/src/parse.rs",
-        "crates/citry_ownership/Cargo.toml",
-        "crates/citry_ownership/src/lib.rs",
         "third_party/rust/ruff/crates/ruff_python_parser/Cargo.toml",
     }
+    expected_vize_source = vendored_vize_inventory()
+    required.update(expected_vize_source)
     missing = sorted(required - relative.keys())
     if missing:
         raise DistributionVerificationError(f"{path.name} is missing required source files: {', '.join(missing)}")
     _require_metadata(_parse_metadata(relative["PKG-INFO"], artifact=path), artifact=path, version=version)
     if relative["LICENSE"] != (PACKAGE_ROOT / "LICENSE").read_bytes():
         raise DistributionVerificationError(f"{path.name} does not contain the checked MIT license")
+    if relative["LICENSE-vize"] != LICENSE_FILES["LICENSE-vize"].read_bytes():
+        raise DistributionVerificationError(f"{path.name} does not contain the checked Vize license")
+    actual_vize_source = {
+        name: hex_sha256(payload)
+        for name, payload in relative.items()
+        if any(name.startswith(f"third_party/rust/{crate}/") for crate in VENDORED_VIZE_CRATES)
+    }
+    if actual_vize_source != expected_vize_source:
+        raise DistributionVerificationError(f"{path.name} patched Vize source differs from the checkout")
     expected_source = source_inventory()
     actual_source = {
         name: hex_sha256(payload)
@@ -415,7 +454,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
             if _loads_toml(payload.decode("utf-8")) != expected_manifest:
                 raise DistributionVerificationError(f"{path.name} contains an unexpected generated pyproject.toml")
             continue
-        if name in {"LICENSE", "README.md"} or name.startswith("citry_core/"):
+        if name in LICENSE_FILES or name == "README.md" or name.startswith("citry_core/"):
             source_path = PACKAGE_ROOT / name
         else:
             source_path = REPO_ROOT / name
@@ -441,6 +480,18 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
     workspace = _loads_toml(relative["Cargo.toml"].decode("utf-8"))
     if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.96":
         raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.96 minimum")
+    workspace_dependencies = workspace.get("workspace", {}).get("dependencies", {})
+    patches = workspace.get("patch", {}).get("crates-io", {})
+    for crate, vendored_version in VENDORED_VIZE_CRATES.items():
+        crate_path = f"third_party/rust/{crate}"
+        if workspace_dependencies.get(crate, {}).get("path") != crate_path:
+            raise DistributionVerificationError(f"{path.name} does not package {crate} as a path dependency")
+        if patches.get(crate, {}).get("path") != crate_path:
+            raise DistributionVerificationError(f"{path.name} does not resolve the reviewed {crate} patch")
+        manifest = _loads_toml(relative[f"{crate_path}/Cargo.toml"].decode("utf-8"))
+        package = manifest.get("package", {})
+        if package.get("name") != crate or package.get("version") != vendored_version:
+            raise DistributionVerificationError(f"{path.name} contains the wrong patched {crate} manifest")
     for crate in required:
         if not crate.startswith("crates/") or not crate.endswith("/Cargo.toml"):
             continue

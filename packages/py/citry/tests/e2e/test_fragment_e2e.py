@@ -3,7 +3,7 @@ Cross-browser e2e for the ``fragment`` strategy (HTMX-style on-demand loading).
 
 Proves the full live path: an initial page loads the runtime, then fetches a
 fragment and inserts it; the runtime sees the fragment's manifest, fetches the
-component's JS and CSS from citry's ``/citry/cache/...`` routes, runs the JS,
+component's JS and CSS from citry's ``/citry/ext/events/...`` routes, runs the JS,
 and applies the styles. This is what makes citry's fragments "just work" in
 the browser, and it exercises the live-server half of the harness.
 """
@@ -48,7 +48,7 @@ def test_fragment_scripts_load_on_demand(page: Any, serve_live: Any) -> None:
     class Frag(Component):
         citry = c
         template = '<div class="frag">frag</div>'
-        js = "$component(({ els, data }) => { els[0].setAttribute('data-n', String(data.n)); });"
+        js = "$component(({ component }) => { component.$el.setAttribute('data-n', String(component.n)); });"
 
         def js_data(self, kwargs: Any, slots: Any) -> dict[str, int]:
             return {"n": 42}
@@ -72,15 +72,15 @@ def test_fragment_callback_waits_for_component_css(page: Any, serve_live: Any) -
         template = '<div class="css-readiness-probe">probe</div>'
         css = ".css-readiness-probe { color: rgb(31, 41, 55); }"
         js = """
-          $component(({ els }) => {
-            const root = els[0];
+          $component(({ component }) => {
+            const root = component.$el;
             root.dataset.callbackColor = getComputedStyle(root).color;
           });
         """
 
     fragment_html = StyledProbe().render().serialize(deps_strategy="fragment")
     held_routes: list[Any] = []
-    page.route("**/cache/*.css", lambda route: held_routes.append(route))
+    page.route("**/ext/events/assets/*.css", lambda route: held_routes.append(route))
 
     base = serve_live(c, _PAGE, fragment_html)
     page.goto(base + "/")
@@ -89,7 +89,7 @@ def test_fragment_callback_waits_for_component_css(page: Any, serve_live: Any) -
             break
         page.wait_for_timeout(10)
     assert len(held_routes) == 1
-    assert page.locator(".css-readiness-probe").get_attribute("data-callback-color") is None
+    assert page.locator(".css-readiness-probe").count() == 0
 
     held_routes[0].continue_()
     page.wait_for_function(
@@ -147,9 +147,7 @@ def test_fragment_static_and_scoped_css_load_on_demand(page: Any, serve_live: An
 
 
 def test_fragment_local_dependency_assets_load_on_demand(page: Any, serve_live: Any, tmp_path: Any) -> None:
-    (tmp_path / "fragment-dependency.js").write_text(
-        "document.querySelector('#dependency-fragment').dataset.loaded = 'true';"
-    )
+    (tmp_path / "fragment-dependency.js").write_text("globalThis.__fragmentDependencyLoaded = true;")
     (tmp_path / "fragment-dependency.css").write_text(
         "#dependency-fragment { color: rgb(76, 29, 149); background-color: rgb(237, 233, 254); }"
     )
@@ -159,6 +157,11 @@ def test_fragment_local_dependency_assets_load_on_demand(page: Any, serve_live: 
     class Frag(Component):
         citry = c
         template = '<div id="dependency-fragment">fragment dependency</div>'
+        js = """
+          $component(({ component }) => {
+            component.$el.dataset.loaded = String(globalThis.__fragmentDependencyLoaded === true);
+          });
+        """
 
         class Dependencies:
             js = "fragment-dependency.js"
@@ -174,68 +177,64 @@ def test_fragment_local_dependency_assets_load_on_demand(page: Any, serve_live: 
         "el => ({color: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor})",
     )
     assert styles == {"color": "rgb(76, 29, 149)", "background": "rgb(237, 233, 254)"}
-    emitted = page.evaluate(
-        """() => ({
-          scripts: [...document.querySelectorAll('script:not([src])')].map((el) => el.textContent),
-          styles: [...document.querySelectorAll('style')].map((el) => el.textContent),
-        })"""
-    )
-    assert any("dependency-fragment" in content for content in emitted["scripts"])
-    assert any("#dependency-fragment" in content for content in emitted["styles"])
+    assert page.evaluate("() => window.__fragmentDependencyLoaded") is True
+    assert page.locator("link[data-citry-vue-style-app][data-citry-css-url]").count() == 1
 
 
 def test_content_page_dedupes_a_reused_components_css(page: Any, serve_live: Any) -> None:
-    # A content-only mounted page (component CSS, no $component) still ships
-    # the runtime and a markLoaded manifest, so a fragment that reuses the same
-    # component dedups its CSS instead of re-fetching it and duplicating the
-    # <link>. Live regression for the fragment-dedup fix
-    # (docs/design/migration_djc_tests.md, 2026-07-02).
+    # The initial prepared page and a later fragment share the same
+    # content-addressed stylesheet. Each prepared Vue app owns a style node,
+    # while the browser fetches the immutable URL only once.
     c = Citry()
     c.set_mounted_prefix("/citry")
 
     class Card(Component):
         citry = c
         template = '<div class="card">card</div>'
+        js = "$component({});"
         css = ".card { color: rgb(0, 128, 128); }"
 
     class Page(Component):
         citry = c
-        template = "<html><head></head><body><c-card /><div id='target'></div></body></html>"
+        template = "<html><head></head><body><c-card /></body></html>"
 
-    css_url = script_url(Card, "css")
-    # Document strategy on a mounted page with component CSS: ships the runtime
-    # and a markLoaded manifest naming the card's CSS cache URL.
     page_html = Page().render().serialize()
-    # The fragment reuses the same card; its manifest asks to fetch that URL.
+    page_html = page_html.replace("</body>", '<div id="target"></div></body>')
     fragment_html = Card().render().serialize(deps_strategy="fragment")
-
+    requests: list[str] = []
+    page.on("request", lambda request: requests.append(request.url))
     base = serve_live(c, page_html, fragment_html)
     page.goto(base + "/")
 
-    # Signal 1: the runtime registered the card's CSS as already-loaded from the
-    # page's markLoaded manifest (without the fix, no runtime ships and this
-    # never becomes true).
-    page.wait_for_function("([url]) => window.Citry?.manager?.isScriptLoaded('css', url)", arg=[css_url])
+    page.wait_for_selector(".card")
+    page.wait_for_function("() => CitryStable._apps.size === 1")
+    initial_css_requests = [url for url in requests if "/citry/ext/events/assets/" in url and url.endswith(".css")]
+    assert len(initial_css_requests) == 1
 
-    # Insert a fragment that reuses the card.
     page.evaluate(
         "() => fetch('/fragment').then((r) => r.text())"
         ".then((html) => { document.getElementById('target').innerHTML = html; })"
     )
-    page.wait_for_selector("#target .card")  # fragment content inserted
-    # Its manifest was processed (a <script> is never "visible", so match on attach).
-    page.wait_for_selector("#target script[data-citry][data-citry-processed]", state="attached")
+    page.wait_for_selector("#target .card")
+    page.wait_for_function("() => CitryStable._apps.size === 2")
+    page.wait_for_function(
+        "() => getComputedStyle(document.querySelector('#target .card')).color === 'rgb(0, 128, 128)'"
+    )
 
-    # Signal 2: the runtime skipped the fetch, so no duplicate stylesheet <link>
-    # was added for the card's CSS.
-    assert page.locator(f'link[href="{css_url}"]').count() == 0
+    css_requests = [url for url in requests if "/citry/ext/events/assets/" in url and url.endswith(".css")]
+    assert css_requests == initial_css_requests
+    styles = page.evaluate(
+        """() => [...document.querySelectorAll('link[data-citry-vue-style-app][data-citry-css-url]')]
+            .map((node) => ({app: node.dataset.citryVueStyleApp, url: node.dataset.citryCssUrl}))"""
+    )
+    assert len(styles) == 2
+    assert len({item["app"] for item in styles}) == 2
+    assert len({item["url"] for item in styles}) == 1
 
 
 def test_content_page_dedupes_a_reused_components_js(page: Any, serve_live: Any) -> None:
-    # JS counterpart of the CSS dedup test. A content-only mounted page with a
-    # component that has plain JS (no $component) ships the runtime and a
-    # markLoaded manifest, so a fragment reusing the component neither re-fetches
-    # nor re-runs the component's JS.
+    # The initial prepared page and a later fragment share the same immutable
+    # component script, so it is fetched and executed once.
     c = Citry()
     c.set_mounted_prefix("/citry")
 
@@ -246,28 +245,32 @@ def test_content_page_dedupes_a_reused_components_js(page: Any, serve_live: Any)
 
     class Page(Component):
         citry = c
-        template = "<html><head></head><body><c-widget /><div id='target'></div></body></html>"
+        template = "<html><head></head><body><c-widget /></body></html>"
 
-    js_url = script_url(Widget, "js")
     page_html = Page().render().serialize()
+    page_html = page_html.replace("</body>", '<div id="target"></div></body>')
     fragment_html = Widget().render().serialize(deps_strategy="fragment")
-
+    requests: list[str] = []
+    page.on("request", lambda request: requests.append(request.url))
     base = serve_live(c, page_html, fragment_html)
     page.goto(base + "/")
 
-    # The page's inline component JS ran once, and the runtime registered its
-    # cache URL as already-loaded from markLoaded.
     page.wait_for_function("() => window.__widgetRuns === 1")
-    page.wait_for_function("([url]) => window.Citry?.manager?.isScriptLoaded('js', url)", arg=[js_url])
+    page.wait_for_selector(".widget")
+    page.wait_for_function("() => CitryStable._apps.size === 1")
+    initial_script_requests = [url for url in requests if "/citry/ext/events/definitions/" in url]
+    assert initial_script_requests
+    assert len(initial_script_requests) == len(set(initial_script_requests))
 
     page.evaluate(
         "() => fetch('/fragment').then((r) => r.text())"
         ".then((html) => { document.getElementById('target').innerHTML = html; })"
     )
-    page.wait_for_selector("#target .widget")  # fragment content inserted
-    page.wait_for_selector("#target script[data-citry][data-citry-processed]", state="attached")
+    page.wait_for_selector("#target .widget")
+    page.wait_for_function("() => CitryStable._apps.size === 2")
+    page.wait_for_selector("#target script[data-citry-vue-fragment][data-citry-processed]", state="attached")
 
-    # Deduped against markLoaded: no <script src> was added, and the component's
-    # JS did not run a second time.
-    assert page.locator(f'script[src="{js_url}"]').count() == 0
+    script_requests = [url for url in requests if "/citry/ext/events/definitions/" in url]
+    assert script_requests == initial_script_requests
+    assert page.locator(".widget").count() == 2
     assert page.evaluate("() => window.__widgetRuns") == 1

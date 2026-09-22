@@ -1,8 +1,17 @@
 # This same set of tests is also found in django-components, to ensure that
 # this implementation can be replaced with the django-components' pure-python implementation
 
+import pytest
 
-from citry_core.html_transform import mark_html, scan_alpine_html, transform_html
+from citry_core.html_transform import mark_html, transform_html, validate_html_fragment_boundary
+
+
+def test_strict_fragment_boundary():
+    for html in ("", "<div>x</div><br>", "<svg><path/></svg>", "<math><mspace/></math>"):
+        validate_html_fragment_boundary(html)
+    for html in ("<div>", "</div>", "<div/>", "<li>a<li>b", "<!-- unfinished"):
+        with pytest.raises(ValueError, match="self-contained strict fragment"):
+            validate_html_fragment_boundary(html)
 
 
 def test_basic_transformation():
@@ -196,16 +205,3 @@ def test_mark_html_no_attributes_no_placeholders():
     segments, placeholders = mark_html("hello", [], "c-render-id")
     assert segments == ["hello"]
     assert placeholders == []
-
-
-def test_scan_alpine_html_distinguishes_attributes_from_text_and_raw_content():
-    assert scan_alpine_html(
-        [
-            '<button x-data="{}">Open</button>',
-            '<div :class="active"></div>',
-            '<div @click="open = true"></div>',
-            '<p>Example: x-data="{}"</p>',
-            '<script>const sample = `<div x-data="{}">`;</script>',
-            '<DIV X-DATA="{}"></DIV>',
-        ]
-    ) == [True, True, True, False, False, True]

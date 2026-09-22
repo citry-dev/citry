@@ -14,8 +14,8 @@
     // esbuild compiles file-by-file, so every file must stand alone.
     "isolatedModules": true,
 
-    // No @types packages: the vendor surface is declared locally in
-    // src/alpine.d.ts (neither alpinejs nor @alpinejs/morph ships types).
+    // Runtime packages provide their own types; no ambient @types packages
+    // are loaded into this private browser build.
     "types": []
   },
   "include": ["src"]

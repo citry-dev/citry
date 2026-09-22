@@ -286,7 +286,7 @@ def test_checkbox_rejects_inherited_field_readonly_but_allows_explicit_opt_out()
 
     with pytest.raises(ValueError, match="readonly=True is not supported"):
         str(Rejected())
-    assert 'type="checkbox"' in str(Allowed())
+    assert 'type="checkbox"' in Allowed().render().serialize(security_javascript="omit")
 
 
 @pytest.mark.parametrize("omitted_value", [None, False])
@@ -306,7 +306,7 @@ def test_uppercase_omitted_form_attr_keeps_enclosing_form_owner(omitted_value):
           </c-CForm>
         """
 
-    assert 'type="checkbox"' in str(Page())
+    assert 'type="checkbox"' in Page().render().serialize(security_javascript="omit")
 
 
 def test_checkbox_rejects_conflicting_cform_owner_case_insensitively():

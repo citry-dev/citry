@@ -81,7 +81,7 @@ def _is_template_variable_name(name: object) -> bool:
     return isinstance(parsed, ast.Name) and parsed.id == name
 
 
-def _is_alpine_variable_name(name: object) -> bool:
+def _is_vue_variable_name(name: object) -> bool:
     """Return whether OXC parses a string as one exact free JS identifier."""
     if type(name) is not str or not name:
         return False
@@ -106,10 +106,10 @@ class LintSettings:
         template_variables: Extra variables known to template analysis but not
             injected at runtime. Values are annotations. Use
             ``Annotated[T, "description"]`` to attach concise documentation.
-        rule_unknown_alpine_variable: Severity for a free Alpine-expression
+        rule_unknown_vue_variable: Severity for a free Vue-expression
             root absent from the component's proven browser scope. The default
             is ``"error"``.
-        alpine_variables: Extra variables or custom Alpine magics known only to
+        vue_variables: Extra variables or custom Vue magics known only to
             browser analysis. Values use the same annotation convention as
             ``template_variables``.
         rule_unknown_component_js_variable: Severity for a free variable used
@@ -127,8 +127,8 @@ class LintSettings:
     rule_unknown_template_variable: LintSeverity = "error"
     rule_i18n_missing_param_type: LintSeverity = "warning"
     template_variables: Mapping[str, object] = field(default_factory=dict)
-    rule_unknown_alpine_variable: LintSeverity = "error"
-    alpine_variables: Mapping[str, object] = field(default_factory=dict)
+    rule_unknown_vue_variable: LintSeverity = "error"
+    vue_variables: Mapping[str, object] = field(default_factory=dict)
     rule_unknown_component_js_variable: LintSeverity = "error"
     component_js_globals: Mapping[str, object] = field(default_factory=dict)
 
@@ -162,27 +162,27 @@ class LintSettings:
             raise ValueError(msg)
         object.__setattr__(self, "template_variables", variables)
         if (
-            type(self.rule_unknown_alpine_variable) is not str
-            or self.rule_unknown_alpine_variable not in _ALLOWED_LINT_SEVERITIES
+            type(self.rule_unknown_vue_variable) is not str
+            or self.rule_unknown_vue_variable not in _ALLOWED_LINT_SEVERITIES
         ):
             msg = (
-                "rule_unknown_alpine_variable must be one of "
-                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_unknown_alpine_variable!r}"
+                "rule_unknown_vue_variable must be one of "
+                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_unknown_vue_variable!r}"
             )
             raise ValueError(msg)
         try:
-            alpine_variables = dict(self.alpine_variables)
+            vue_variables = dict(self.vue_variables)
         except (TypeError, ValueError) as err:
-            msg = "LintSettings.alpine_variables must be a mapping"
+            msg = "LintSettings.vue_variables must be a mapping"
             raise TypeError(msg) from err
-        invalid_alpine_name = next(
-            (name for name in alpine_variables if not _is_alpine_variable_name(name)),
+        invalid_vue_name = next(
+            (name for name in vue_variables if not _is_vue_variable_name(name)),
             None,
         )
-        if invalid_alpine_name is not None:
-            msg = f"LintSettings.alpine_variables contains invalid Alpine variable name {invalid_alpine_name!r}"
+        if invalid_vue_name is not None:
+            msg = f"LintSettings.vue_variables contains invalid Vue variable name {invalid_vue_name!r}"
             raise ValueError(msg)
-        object.__setattr__(self, "alpine_variables", alpine_variables)
+        object.__setattr__(self, "vue_variables", vue_variables)
         if (
             type(self.rule_unknown_component_js_variable) is not str
             or self.rule_unknown_component_js_variable not in _ALLOWED_LINT_SEVERITIES
@@ -198,7 +198,7 @@ class LintSettings:
             msg = "LintSettings.component_js_globals must be a mapping"
             raise TypeError(msg) from err
         invalid_component_js_name = next(
-            (name for name in component_js_globals if not _is_alpine_variable_name(name)),
+            (name for name in component_js_globals if not _is_vue_variable_name(name)),
             None,
         )
         if invalid_component_js_name is not None:

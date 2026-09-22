@@ -31,7 +31,7 @@ Toggle changes an active tool or view. Switch changes an immediate setting. Butt
 
 ## Control selection in the browser
 
-Client inputs are passed with `$c-props="{...}"`. `onValueChange` reports the next requested value.
+Client inputs are passed with native Vue bindings. `onValueChange` reports the next requested value.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/ctoggle/snippets/controlled.py" title="Control Toggle selection" />
 

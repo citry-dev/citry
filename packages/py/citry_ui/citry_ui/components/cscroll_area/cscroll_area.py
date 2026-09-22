@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, TypedDict
 
 from citry import LibraryComponent, SlotInput, const_value
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._attrs import CClassValue, CStyleValue, is_executable_event_attribute, merge_root_attrs
 from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
 
 CScrollAreaAxis = Literal["block", "inline", "both"]
@@ -38,25 +38,6 @@ _IDREF_SPLIT = re.compile(r"[\t\n\f\r ]+")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _ALLOWED_ARIA = frozenset({"aria-describedby", "aria-details", "aria-keyshortcuts"})
 _ALLOWED_PLAIN = frozenset({"class", "style", "lang", "dir", "title", "translate", "spellcheck"})
-_ALLOWED_EVENTS = frozenset(
-    {
-        "blur",
-        "focus",
-        "pointercancel",
-        "pointerdown",
-        "pointerenter",
-        "pointerleave",
-        "pointermove",
-        "pointerup",
-        "scroll",
-        "scrollend",
-        "touchcancel",
-        "touchend",
-        "touchmove",
-        "touchstart",
-        "wheel",
-    }
-)
 _LIFECYCLE_DIRECTIVES = frozenset(
     {
         "$c-props",
@@ -123,17 +104,6 @@ def _choice(name: str, value: object, allowed: tuple[str, ...]) -> str:
     return raw
 
 
-def _event_name(attribute: str) -> str | None:
-    modifiers = attribute.split(".")[1:]
-    if any(modifier in {"away", "document", "outside", "window"} for modifier in modifiers):
-        return None
-    if attribute.startswith("@"):
-        return attribute[1:].split(".", 1)[0]
-    if attribute.startswith("x-on:"):
-        return attribute.removeprefix("x-on:").split(".", 1)[0]
-    return None
-
-
 def _copy_attrs(value: Mapping[str, object] | None) -> dict[str, object]:
     if value is not None and not isinstance(value, Mapping):
         raise TypeError(f"CScrollArea attrs must be a mapping or None, got {value!r}.")
@@ -142,10 +112,12 @@ def _copy_attrs(value: Mapping[str, object] | None) -> dict[str, object]:
         if not isinstance(key, str):
             raise TypeError(f"CScrollArea attrs require string keys, got {key!r}.")
         name = key.casefold()
-        event = _event_name(name)
+        if is_executable_event_attribute(name):
+            raise ValueError(
+                f"CScrollArea attrs cannot use executable listener attribute {key!r}; "
+                "use onScrollChange or author a Vue listener in the template."
+            )
         if name in _ALLOWED_PLAIN or name in _ALLOWED_ARIA:
-            continue
-        if event in _ALLOWED_EVENTS:
             continue
         if name.startswith("data-") and not name.startswith(_RUNTIME_PREFIXES):
             continue
@@ -216,10 +188,12 @@ class CScrollArea(LibraryComponent):
             "role": snapshot["role"],
             "ariaLabel": snapshot["aria_label"],
             "ariaLabelledby": snapshot["aria_labelledby"],
-            "axis": snapshot["axis"],
-            "scrollbarWidth": snapshot["scrollbar_width"],
-            "scrollbarGutter": snapshot["scrollbar_gutter"],
-            "overscroll": snapshot["overscroll"],
+            "serverDefaults": {
+                "axis": snapshot["axis"],
+                "scrollbarWidth": snapshot["scrollbar_width"],
+                "scrollbarGutter": snapshot["scrollbar_gutter"],
+                "overscroll": snapshot["overscroll"],
+            },
         }
 
     template = """
@@ -240,7 +214,7 @@ class CScrollArea(LibraryComponent):
     """
 
     js = r"""
-      $component({props:{axis:{},scrollbarWidth:{},scrollbarGutter:{},overscroll:{},onScrollChange:{}},init:({els:Y,data:n,props:j,effect:Z})=>{const t=Y[0],
+      $component({props:{axis:{},scrollbarWidth:{},scrollbarGutter:{},overscroll:{},onScrollChange:{}},onServerRender:({component:Y})=>{const t=Y.$el,n={rootId:Y.rootId,role:Y.role,ariaLabel:Y.ariaLabel,ariaLabelledby:Y.ariaLabelledby,...Y.serverDefaults},j=Y.$props,Z=Citry.vue.watchEffect,
       c=globalThis[Symbol.for("citry-ui:scroll-geometry")];
       if(c?.generation!==1)throw new Error("[citry-ui] CScrollArea scroll geometry dependency did not load.");
       const q=Symbol.for("citry-ui:scroll-area-handoff"),z=t[q]??null,h=z?.kind==="scroll-area"&&z.rootId===n.rootId,o=h?z:{kind:"scroll-area",rootId:n.rootId},

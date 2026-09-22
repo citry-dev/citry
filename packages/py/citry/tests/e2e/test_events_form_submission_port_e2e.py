@@ -15,7 +15,7 @@ from citry.ext.events import ViewEvents, actions
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
+READY = "window.CitryStable && CitryStable._apps.size === 1"
 
 
 def _form_port() -> tuple[Citry, str, type[Component]]:
@@ -47,8 +47,7 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
             def post(self, data: ContactIn):  # noqa: F821
                 return actions.Render(
                     ThankYouMessage(name=data.name),
-                    target="#thank-you-container",
-                    swap="inner",
+                    target="mark:thank-you",
                 )
 
         def template_data(self, kwargs, slots):
@@ -66,7 +65,7 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
               <input type="text" name="name" id="name" />
               <button type="submit">Submit through compatibility route</button>
             </form>
-            <div id="thank-you-container"></div>
+            <c-mark name="thank-you" />
           </section>
         """
 
@@ -84,9 +83,9 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
 
 def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: Any, serve_live: Any) -> None:
     """The old HTMX target becomes a Citry Render target and keeps the form page."""
-    engine, html, contact_form = _form_port()
+    engine, html, _ = _form_port()
     requests: list[Any] = []
-    page.on("request", lambda request: requests.append(request) if "/ext/events/e/" in request.url else None)
+    page.on("request", lambda request: requests.append(request) if request.url.endswith("/ext/events/call") else None)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
     page.wait_for_function(READY)
@@ -98,7 +97,7 @@ def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: 
     assert page.locator(".runtime-form").count() == 1
     assert len(requests) == 1
     assert requests[0].method == "POST"
-    assert requests[0].url.endswith(f"/e/{contact_form.class_id}/post")
+    assert json.loads(requests[0].post_data)["calls"][0]["handlerName"] == "post"
     assert json.loads(requests[0].post_data)["calls"][0]["args"] == {"name": "John Doe"}
 
 
@@ -124,8 +123,7 @@ def test_view_events_native_form_reaches_the_verb_compatibility_route(page: Any,
     page.goto(base + "/")
     page.wait_for_function(READY)
     page.fill(".native-form input[name=name]", "John Doe")
-    with page.expect_navigation():
-        page.click(".native-form button[type=submit]")
+    page.click(".native-form button[type=submit]")
     page.wait_for_function("document.querySelector('.thanks')?.innerText.includes('John Doe')")
 
     assert page.locator(".thanks").inner_text() == "Thank you for your submission, John Doe!"

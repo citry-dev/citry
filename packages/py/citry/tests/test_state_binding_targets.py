@@ -11,6 +11,7 @@ from citry_core.template_parser import parse_template
 
 def _render(source):
     app = Citry(secret="test-secret")  # noqa: S106 - isolated test signing key
+    app.set_mounted_prefix("/citry")
 
     class Target(Component):
         citry = app
@@ -65,7 +66,7 @@ def test_portable_target_error_matches_runtime_wording(source):
 )
 def test_supported_target_has_no_error_and_renders(source):
     assert browser_state_binding_target_errors(parse_template(source)) == ()
-    assert "data-cev-bind" in _render(source)
+    assert "v-citry-control" in _render(source)
 
 
 @pytest.mark.parametrize(

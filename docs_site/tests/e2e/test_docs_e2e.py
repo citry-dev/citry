@@ -126,6 +126,24 @@ def test_pages_load_with_no_broken_assets(page: Any, docs_site_url: str) -> None
         assert bad == [], f"{path} loaded with failed requests: {bad}"
 
 
+def test_youtube_player_is_created_only_after_activation(page: Any, docs_site_url: str) -> None:
+    youtube_requests: list[str] = []
+    page.on(
+        "request",
+        lambda request: youtube_requests.append(request.url) if "youtube" in request.url else None,
+    )
+    page.goto(docs_site_url + "/", wait_until="networkidle")
+
+    player = page.locator(".youtube-video")
+    assert player.locator("iframe").count() == 0
+    assert not youtube_requests
+
+    player.locator("[data-youtube-load]").click()
+    iframe = player.locator("iframe")
+    iframe.wait_for(state="attached")
+    assert iframe.get_attribute("src") == "https://www.youtube-nocookie.com/embed/d3nPqvDdNB0"
+
+
 def test_reference_page_has_a_populated_toc(page: Any, docs_site_url: str) -> None:
     # The exact regression: reference-symbol headings are injected as raw HTML, so
     # without toc.py's merge pass the right rail was empty.

@@ -17,7 +17,7 @@ Two steps, in dispatch order (design ``docs/design/events.md`` 3.4, 4.3, 6.2):
 - :func:`encode_actions` turns those action values into the JSON-ready wire
   shapes, in the exact order returned: a render action renders its element
   and serializes it as a fragment (whose manifests carry the fresh state),
-  targets serialize as CSS selectors or the ``render:<render id>`` form, and
+  targets serialize as marker names or the ``render:<render id>`` form, and
   the timing fields ride along when set. Two ``data`` actions in one result
   are an encode-time error; actions trailing a redirect (and a render
   coexisting with one) are debug-logged but never reordered or dropped.
@@ -34,7 +34,8 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from citry._protocol.events import (
     build_data_action,
@@ -60,6 +61,56 @@ from citry.util.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
+
+    from citry.citry import Citry
+    from citry.ext.events.extension import EventHandler
+
+
+@dataclass(frozen=True, slots=True)
+class RenderEncodingContext:
+    """Framework context available to one private render encoder."""
+
+    citry: Citry
+    caller_render_id: str | None
+    handler: EventHandler
+    transport: str
+    renderer: str
+    headers: dict[str, str] = field(default_factory=dict)
+    response_mode: Literal["wire", "compat"] = "wire"
+
+
+class RenderEncoder(Protocol):
+    """Private port from a Render value to its negotiated wire action."""
+
+    renderer: str
+
+    def encode(self, action: Render, target: str, context: RenderEncodingContext) -> dict[str, Any]: ...
+
+
+class HtmlFragmentRenderEncoder:
+    """The existing fragment serializer, kept as the baseline encoder."""
+
+    renderer = "html-fragment/1"
+
+    def encode(self, action: Render, target: str, context: RenderEncodingContext) -> dict[str, Any]:
+        rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
+        return build_render_action(
+            target,
+            action.swap,
+            rendered.serialize(
+                deps_strategy="fragment",
+                security_javascript="omit" if context.response_mode == "compat" else None,
+            ),
+            delay=action.delay,
+            wait=action.wait,
+        )
+
+
+HTML_RENDER_ENCODER = HtmlFragmentRenderEncoder()
+
+# Compatibility responses consume the HTML before it reaches a client, but
+# the intermediate protocol action still requires a non-empty target.
+_COMPAT_HTML_RENDER_TARGET = ":root"
 
 # The attribute on the per-call events instance that holds the constructed
 # actions while debug tracking is active.
@@ -197,6 +248,8 @@ def encode_actions(
     *,
     instance_id: str | None,
     handler: str,
+    render_encoder: RenderEncoder = HTML_RENDER_ENCODER,
+    render_context: RenderEncodingContext | None = None,
 ) -> list[dict[str, Any]]:
     """
     Encode a handler's actions into the wire shapes of the result envelope.
@@ -205,16 +258,27 @@ def encode_actions(
     never filtered (design ``events.md`` 4.3). A render action renders its
     element here and serializes it with ``deps_strategy="fragment"``, so the
     HTML carries its own dependency and events manifests (fresh state tokens
-    included). A render or dispatch without an explicit target is
-    self-addressed to the calling instance as ``render:<render id>``.
+    included). Without an explicit target, a render or dispatch is addressed
+    to the calling instance as ``render:<render id>`` when ``instance_id`` is
+    available. In wire mode, an instance-less render needs an explicit target.
+    The compatibility HTML path has one private exception: with a compatibility
+    ``render_context`` and the default ``HTML_RENDER_ENCODER``, it assigns the
+    internal ``:root`` target to an instance-less render.
 
     Args:
         actions: The coerced actions, in return order.
         instance_id: The calling instance's id (the call envelope's
             ``callerRenderId``), or ``None`` for an instance-less call. With
-            ``None``, a dispatch targets ``document`` (no ``target`` field)
-            and a render must carry an explicit ``target``.
+            ``None``, a dispatch targets ``document`` (no ``target`` field), and
+            an instance-less render in wire mode must carry an explicit
+            ``target``. Only compatibility mode with the default HTML encoder
+            supplies the private ``:root`` target.
         handler: The handler's wire name, for errors and debug warnings.
+        render_encoder: The selected private render encoding backend.
+        render_context: Framework context for that backend. Direct callers
+            encoding a render may omit it only with the default HTML encoder;
+            compatibility mode's private ``:root`` target requires a context
+            marked ``"compat"``.
 
     Returns:
         One JSON-ready object per action, in order.
@@ -222,7 +286,8 @@ def encode_actions(
     Raises:
         ValueError: When the result holds two data actions (which promise
             value would win?), a render has neither a target nor a calling
-            instance, or an action is not one of the v1 kinds.
+            instance outside compatibility HTML mode, a render uses a custom
+            encoder without its context, or an action is not one of the v1 kinds.
 
     """
     data_count = sum(isinstance(action, Data) for action in actions)
@@ -249,31 +314,26 @@ def encode_actions(
             f" navigates away, so the rendered content is never seen."
         )
 
-    selector_render_at = next(
-        (
-            i
-            for i, action in enumerate(actions)
-            if isinstance(action, Render) and action.target is not None and not action.target.startswith("render:")
-        ),
-        None,
-    )
-    if selector_render_at is not None and instance_id is not None:
-        later_self_addressed = sum(
-            isinstance(action, Dispatch) or (isinstance(action, Render) and action.target is None)
-            for action in actions[selector_render_at + 1 :]
+    return [
+        _encode_action(
+            action,
+            instance_id=instance_id,
+            handler=handler,
+            render_encoder=render_encoder,
+            render_context=render_context,
         )
-        if later_self_addressed:
-            logger.debug(
-                f"Event handler {handler!r} returned {later_self_addressed} self-addressed action(s) after"
-                f" a selector-targeted render; that render can retire or replace the calling instance"
-                f" before the later action resolves its render target. Reorder the actions or target the"
-                f" later action explicitly if it must address the rendered region."
-            )
-
-    return [_encode_action(action, instance_id=instance_id, handler=handler) for action in actions]
+        for action in actions
+    ]
 
 
-def _encode_action(action: Action, *, instance_id: str | None, handler: str) -> dict[str, Any]:
+def _encode_action(
+    action: Action,
+    *,
+    instance_id: str | None,
+    handler: str,
+    render_encoder: RenderEncoder,
+    render_context: RenderEncodingContext | None,
+) -> dict[str, Any]:
     """One action's wire object, field order matching the design's envelope examples."""
     encoded: dict[str, Any]
     if isinstance(action, Render):
@@ -281,20 +341,31 @@ def _encode_action(action: Action, *, instance_id: str | None, handler: str) -> 
             target = action.target
         elif instance_id is not None:
             target = f"render:{instance_id}"
+        elif (
+            render_context is not None
+            and render_context.response_mode == "compat"
+            and render_encoder is HTML_RENDER_ENCODER
+        ):
+            target = _COMPAT_HTML_RENDER_TARGET
         else:
             msg = (
                 f"actions.Render from event handler {handler!r} has no target: the call carries no"
-                f" component instance to default to. Pass target=... (a CSS selector string)."
+                f" component instance to default to. Pass target=... with a marker name."
             )
             raise ValueError(msg)
-        rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
-        encoded = build_render_action(
-            target,
-            action.swap,
-            rendered.serialize(deps_strategy="fragment"),
-            delay=action.delay,
-            wait=action.wait,
-        )
+        if render_context is None:
+            if render_encoder is not HTML_RENDER_ENCODER:
+                raise ValueError("A non-default render encoder requires a RenderEncodingContext.")
+            rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
+            encoded = build_render_action(
+                target,
+                action.swap,
+                rendered.serialize(deps_strategy="fragment"),
+                delay=action.delay,
+                wait=action.wait,
+            )
+        else:
+            encoded = render_encoder.encode(action, target, render_context)
     elif isinstance(action, Data):
         encoded = build_data_action(action.value, delay=action.delay)
     elif isinstance(action, Dispatch):

@@ -93,6 +93,24 @@ def test_results_stay_within_the_callers_advertised_capabilities():
     assert any("unadvertised swap 'morph'" in problem for problem in problems)
 
 
+def test_render_actions_discriminate_legacy_html_and_prepared_content():
+    legacy = {"action": "render", "target": "#out", "swap": "replace", "html": "<p>ok</p>"}
+    explicit = {**legacy, "renderer": "html-fragment/1"}
+    prepared = {
+        "action": "render",
+        "target": "render:counter_1",
+        "swap": "none",
+        "renderer": "vue-prepared/1",
+        "prepared": {"revision": "r1"},
+    }
+    for action in (legacy, explicit, prepared):
+        envelope = {"protocol": "citry-events/1", "requestId": "r1", "results": [{"ok": True, "actions": [action]}]}
+        assert checker.schema_errors(envelope, RESULT_SCHEMA) == []
+    for action in ({**prepared, "html": "mixed"}, {**prepared, "prepared": []}, {**prepared, "renderer": "unknown/1"}):
+        envelope = {"protocol": "citry-events/1", "requestId": "r1", "results": [{"ok": True, "actions": [action]}]}
+        assert checker.schema_errors(envelope, RESULT_SCHEMA)
+
+
 def test_render_ids_are_case_safe_in_calls_actions_and_manifests():
     call = json.loads((checker.TESTS_DIR / "happy_render.call.json").read_text(encoding="utf-8"))
     call["calls"][0]["callerRenderId"] = "MixedCase"

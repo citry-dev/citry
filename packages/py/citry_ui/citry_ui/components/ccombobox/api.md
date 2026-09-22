@@ -64,8 +64,7 @@ shared Form state. Do not use `placeholder` as the only label.
 ## Configure Combobox
 
 Server inputs are passed in Python through `<c-CCombobox ... />` attributes or
-a `CCombobox(...)` composition call. Client inputs are passed in the browser
-through `$c-props="{...}"`.
+a `CCombobox(...)` composition call. Client inputs use native Vue bindings.
 
 <c-ui-demo
   path="packages/py/citry_ui/citry_ui/components/ccombobox/snippets/configuration.py"
@@ -98,13 +97,11 @@ AbortSignal, and a request ID. Return one complete valid item array.
 <c-CCombobox
   c-min_chars="2"
   c-debounce_ms="250"
-  $c-props="{
-    loadOptions: async ({ query, signal, requestId }) => {
-      const response = await fetch(`/stars?q=${encodeURIComponent(query)}`, {
-        signal,
-      });
-      return await response.json();
-    },
+  :loadOptions="async ({ query, signal, requestId }) => {
+    const response = await fetch(`/stars?q=${encodeURIComponent(query)}`, {
+      signal,
+    });
+    return await response.json();
   }"
 />
 ```
@@ -136,14 +133,12 @@ affected axis, reason, ownership, and browser source.
 
 ```citry-html
 <c-CCombobox
-  $c-props="{
-    value: targetId,
-    inputValue: targetQuery,
-    open: targetOpen,
-    onValueChange: (value, detail) => targetId = value,
-    onInputValueChange: (query, detail) => targetQuery = query,
-    onOpenChange: (open, detail) => targetOpen = open,
-  }"
+  :value="targetId"
+  :inputValue="targetQuery"
+  :open="targetOpen"
+  :onValueChange="(value, detail) => targetId = value"
+  :onInputValueChange="(query, detail) => targetQuery = query"
+  :onOpenChange="(open, detail) => targetOpen = open"
 />
 ```
 

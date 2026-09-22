@@ -3,8 +3,11 @@ $component({
     open: {}, active: {}, dismissible: {}, closeOnEscape: {}, closeOnOutside: {},
     skippable: {}, scroll: {}, missingTarget: {}, size: {}, onOpenChange: {}, onActiveChange: {},
   },
-  init: ({els, data, props, effect}) => {
-    const host = els[0];
+  onServerRender: ({component}) => {
+    const host = component.$refs.root.$el;
+    const data = component.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
     const dialog = host?.querySelector(':scope > [data-citry-tour-dialog]');
     const surface = dialog?.querySelector(':scope > [data-citry-ui-part="surface"]');
     const spotlight = dialog?.querySelector(':scope > [data-citry-ui-part="spotlight"]');

@@ -28,7 +28,11 @@ except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
     import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 
-from scripts.verify_playground_release import PlaygroundReleaseError, verify_runtime_pin
+from scripts.verify_playground_release import (
+    PlaygroundReleaseError,
+    validate_published_runtime,
+    verify_runtime_pin,
+)
 
 PACKAGES = {"citry-core": "citry_core", "citry": "citry", "citry-ui": "citry_ui"}
 FIELDS = {"citry-core": "core_version", "citry": "version", "citry-ui": "ui_version"}
@@ -138,6 +142,7 @@ def verify_dependencies(runtime: dict[str, Any], wheels: dict[str, bytes]) -> No
 
 def update_runtime(runtime: dict[str, Any], versions: dict[str, str]) -> dict[str, Any]:
     """Return verified pins, preserving Pyodide and every unrelated package."""
+    validate_published_runtime(runtime)
     result = copy.deepcopy(runtime)
     packages = result["packages"]
     names = [canonicalize_name(item["name"]) for item in packages]
@@ -171,6 +176,7 @@ def update_runtime(runtime: dict[str, Any], versions: dict[str, str]) -> dict[st
         result["citry"][FIELDS[name]] = version
         verify_runtime_pin(runtime=result, inventory=inventory, package_name=name, wheel_pattern=artifact["name"])
     verify_dependencies(result, wheels)
+    validate_published_runtime(result)
     return result
 
 

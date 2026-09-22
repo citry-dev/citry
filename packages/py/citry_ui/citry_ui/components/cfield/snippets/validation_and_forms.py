@@ -8,11 +8,6 @@ class ValidationAndForms(Component):
     template = """
       <section
         class="shore-form-card"
-        x-data
-        x-init="Alpine.store('shoreValidation', {
-          submitted: '',
-          serverInvalid: true,
-        })"
       >
         <header>
           <p>Tide alert</p>
@@ -20,10 +15,10 @@ class ValidationAndForms(Component):
         </header>
 
         <c-CForm
-          @submit.prevent="$store.shoreValidation.submitted = new FormData($el).get('email')"
+          @submit.prevent="submitted = new window.FormData($el).get('email')"
           @reset="
-            $store.shoreValidation.submitted = '';
-            $store.shoreValidation.serverInvalid = false;
+            submitted = '';
+            serverInvalid = false;
           "
         >
           <c-CField required>
@@ -43,7 +38,7 @@ class ValidationAndForms(Component):
             </c-fill>
           </c-CField>
 
-          <c-CField $c-props="{ invalid: $store.shoreValidation.serverInvalid }">
+          <c-CField :invalid="serverInvalid">
             <c-fill name="label">
               Permit code
             </c-fill>
@@ -51,7 +46,7 @@ class ValidationAndForms(Component):
               <c-CInput
                 name="permit"
                 value="OLD-14"
-                @input="$store.shoreValidation.serverInvalid = false"
+                @input="serverInvalid = false"
               />
             </c-fill>
             <c-fill name="error">
@@ -65,10 +60,20 @@ class ValidationAndForms(Component):
           </div>
         </c-CForm>
 
-        <p aria-live="polite" x-show="$store.shoreValidation.submitted">
-          Registered <strong x-text="$store.shoreValidation.submitted"></strong>
+        <p aria-live="polite" v-show="submitted">
+          Registered <strong v-text="submitted"></strong>
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            submitted: '',
+            serverInvalid: true,
+          };
+        },
+      });
     """
 
     css = """

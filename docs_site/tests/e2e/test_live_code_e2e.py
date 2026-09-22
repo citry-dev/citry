@@ -22,11 +22,11 @@ _CITRY_VERSION = _RUNTIME["citry"]["version"]
 
 def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
     page: Any,
-    docs_site_url: str,
+    local_docs_site_url: str,
 ) -> None:
     requests: list[str] = []
     page.on("request", lambda request: requests.append(request.url))
-    page.goto(docs_site_url + "/examples/", wait_until="networkidle")
+    page.goto(local_docs_site_url + "/examples/", wait_until="networkidle")
 
     root = page.locator("[data-citry-live-code]")
     static_source = root.locator("[data-live-static] .highlight")
@@ -212,9 +212,9 @@ def test_incomplete_inline_example_can_be_edited_into_a_renderable_module(
 
 def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     page: Any,
-    docs_site_url: str,
+    local_docs_site_url: str,
 ) -> None:
-    page.goto(docs_site_url + "/getting-started/browser-interactivity/", wait_until="domcontentloaded")
+    page.goto(local_docs_site_url + "/getting-started/browser-interactivity/", wait_until="domcontentloaded")
     runtime_version = page.evaluate(
         "async () => (await (await fetch('/static/playground/runtime.json')).json()).citry.version"
     )
@@ -237,7 +237,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     expect(ada).to_contain_text("clicked 1 times")
     expect(grace).to_contain_text("clicked 0 times")
 
-    page.goto(docs_site_url + "/getting-started/client-props-and-handlers/", wait_until="domcontentloaded")
+    page.goto(local_docs_site_url + "/getting-started/client-props-and-handlers/", wait_until="domcontentloaded")
     connected = page.locator("[data-citry-live-code]")
     connected.locator("[data-live-activate]").click()
     expect(connected.locator(".cm-content")).to_be_attached(timeout=15_000)

@@ -4,8 +4,6 @@ cache key built from marked values, the precomputing step that pre-computes the
 constant parts of a template, and the cache that stores the results.
 """
 
-# ruff: noqa: ANN
-
 import gc
 import json
 import re
@@ -21,6 +19,8 @@ from weakref import ref
 import pytest
 
 from citry import Citry, Component, Const, Extension, const_value, constness, is_const
+from citry._vue.capture import PreparedConstantNode, PreparedExprNode, PreparedTextValue
+from citry._vue.leaf_program import LeafProgramNode
 from citry.constness import (
     _MAX_UNROLL_ITERATIONS,
     _UNFREEZABLE,
@@ -31,7 +31,79 @@ from citry.constness import (
     freeze_const,
     precompute_const_parts,
 )
-from citry.nodes import ComponentNode, ExprHtmlAttr, ExprNode, FillNode, ForNode, IfNode, SlotNode, StaticHtmlAttr
+from citry.nodes import ComponentNode, ExprHtmlAttr, ExprNode, FillNode, ForNode, IfNode, StaticHtmlAttr
+
+
+def _track_prepared_expression(monkeypatch, expression):
+    original = PreparedExprNode.evaluate
+    calls = []
+
+    def evaluate(self, variables, *, sandboxed=True):
+        if self.expr.strip() == expression:
+            calls.append(tuple(const_value(variables[name]) for name in self.used_vars))
+        return original(self, variables, sandboxed=sandboxed)
+
+    monkeypatch.setattr(PreparedExprNode, "evaluate", evaluate)
+    return calls
+
+
+def _cache_has_prepared_text(cache, expected):
+    """Return whether the prepared cache contains one constant text value."""
+    return any(
+        any(
+            isinstance(item, PreparedConstantNode)
+            and isinstance(item.value, PreparedTextValue)
+            and item.value.value == expected
+            for item in body
+        )
+        for body in cache.values()
+    )
+
+
+def _cache_has_leaf_program(cache):
+    """Return whether the prepared cache retains a live leaf program."""
+    return any(any(isinstance(item, LeafProgramNode) for item in body) for body in cache.values())
+
+
+def _track_if_selection(monkeypatch, condition):
+    original = IfNode.active_branch_body
+    calls = []
+
+    def active_branch_body(self, context):
+        matches = any(
+            isinstance(attr, ExprHtmlAttr)
+            and attr.key == "cond"
+            and isinstance(attr.expr, str)
+            and attr.expr.strip() == condition
+            for branch in self.branches
+            for attr in branch[1]
+        )
+        if matches:
+            calls.append(tuple(const_value(context.variables[name]) for name in self.used_vars))
+        return original(self, context)
+
+    monkeypatch.setattr(IfNode, "active_branch_body", active_branch_body)
+    return calls
+
+
+def _track_loop_iterations(monkeypatch, clause):
+    original = ForNode.iter_bodies
+    calls = []
+
+    def iter_bodies(self, context):
+        each_attrs = [attr for attr in self.branches[0][1] if isinstance(attr, ExprHtmlAttr) and attr.key == "each"]
+        matches = len(each_attrs) == 1 and each_attrs[0].expr.strip() == clause
+        for body, body_context in original(self, context):
+            if matches:
+                calls.append(
+                    tuple(
+                        body_context.variables[name] for name in self.branches[0][3] if name in body_context.variables
+                    )
+                )
+            yield body, body_context
+
+    monkeypatch.setattr(ForNode, "iter_bodies", iter_bodies)
+    return calls
 
 
 class _Unhashable:
@@ -180,7 +252,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Card(value=Const(source["value"])).render().serialize() == "same"
-        assert ["same"] in c._const_body_cache.values()
+        assert _cache_has_prepared_text(c._const_body_cache, "same")
 
     def test_callback_renaming_an_original_input_does_not_restore_constness(self):
         c = Citry()
@@ -196,8 +268,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Card(value=Const("same")).render().serialize() == "same"
-        (body,) = c._const_body_cache.values()
-        assert any(isinstance(item, ExprNode) for item in body)
+        assert _cache_has_leaf_program(c._const_body_cache)
 
     def test_callback_returning_equal_distinct_value_does_not_restore_constness(self):
         c = Citry()
@@ -213,8 +284,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Card(value=Const([1, 2])).render().serialize() == "[1, 2]"
-        (body,) = c._const_body_cache.values()
-        assert any(isinstance(item, ExprNode) for item in body)
+        assert _cache_has_leaf_program(c._const_body_cache)
 
     def test_nested_marker_added_to_ordinary_container_remains_for_next_data_callback(self):
         seen = []
@@ -252,7 +322,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Card(value=Const("same")).render().serialize() == "same"
-        assert ["same"] in c._const_body_cache.values()
+        assert _cache_has_prepared_text(c._const_body_cache, "same")
         source["value"] = "changed"
         assert Card(value=Const("same")).render().serialize() == "changed"
 
@@ -270,7 +340,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Card(value=Const("same")).render().serialize() == "same"
-        assert ["same"] in c._const_body_cache.values()
+        assert _cache_has_prepared_text(c._const_body_cache, "same")
 
     def test_explicit_const_added_to_returned_kwargs_preserves_precomputation(self):
         c = Citry()
@@ -287,7 +357,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Card().render().serialize() == "constant"
-        assert ["constant"] in c._const_body_cache.values()
+        assert _cache_has_prepared_text(c._const_body_cache, "constant")
 
     def test_expression_evaluate_unwraps_direct_marked_mapping(self):
         sentinel = object()
@@ -562,6 +632,8 @@ class TestConstUserBoundaries:
             """
 
         assert Probe().render().serialize().strip() == "True:False"
+        # Generated Vue declarations consume the marker in the prepared input
+        # path before template evaluation; post-init observes plain values.
         assert seen == [(True, True)]
 
     def test_default_factory_mutation_keeps_supplied_alias_and_nested_marker(self):
@@ -865,7 +937,7 @@ class TestConstUserBoundaries:
 
         assert Probe(flag=Const(True)).render().serialize() == "fixed"  # noqa: FBT003
         assert seen == [True, True]
-        assert ["fixed"] in app._const_body_cache.values()
+        assert _cache_has_prepared_text(app._const_body_cache, "fixed")
 
     def test_nested_marker_inserted_by_input_hook_remains_for_next_hook(self):
         seen = []
@@ -979,7 +1051,7 @@ class TestConstUserBoundaries:
 
         assert Probe().render().serialize() == "fixed"
         assert seen == [True]
-        assert ["fixed"] in app._const_body_cache.values()
+        assert _cache_has_prepared_text(app._const_body_cache, "fixed")
 
     def test_marked_data_and_global_roots_are_plain_before_data_hooks(self):
         seen = []
@@ -1024,7 +1096,16 @@ class TestConstUserBoundaries:
                 {{ template[0] }}:{{ global_items[0] }}
             """.strip()
 
-        assert Probe().render().serialize() == "template:global"
+        rendered = Probe().render()
+        assert rendered.render_target == "prepared"
+        assert [part.value if hasattr(part, "value") else part.html for part in rendered.parts] == [
+            "template",
+            ":",
+            "global",
+        ]
+        serialized = rendered.serialize()
+        assert serialized.startswith('<div id="citry-vue-')
+        assert '"serverData":{"js":["js"]}' in serialized
         assert seen == [((True, True), (True, True), (True, True), (True, True))]
 
     def test_ordinary_data_hook_write_clears_const_metadata(self):
@@ -1069,7 +1150,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Probe(label=Const(original)).render().serialize() == original
-        assert [original] in app._const_body_cache.values()
+        assert _cache_has_prepared_text(app._const_body_cache, original)
 
     def test_custom_schema_transformation_discards_input_metadata(self):
         seen = []
@@ -1091,8 +1172,7 @@ class TestConstUserBoundaries:
 
         assert Probe(label=Const("value")).render().serialize() == "VALUE"
         assert seen == [True]
-        (body,) = c._const_body_cache.values()
-        assert any(isinstance(item, ExprNode) for item in body)
+        assert _cache_has_leaf_program(c._const_body_cache)
 
     def test_original_input_returned_after_schema_transformation_restores_constness(self):
         c = Citry()
@@ -1114,7 +1194,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Probe(label=Const("original value")).render().serialize() == "original value"
-        assert ["original value"] in c._const_body_cache.values()
+        assert _cache_has_prepared_text(c._const_body_cache, "original value")
 
     def test_const_global_overridden_by_dynamic_data_stays_dynamic(self):
         calls = []
@@ -1159,7 +1239,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Page(value=Const("fixed")).render().serialize() == "fixed"
-        assert ["fixed"] in app._const_body_cache.values()
+        assert _cache_has_prepared_text(app._const_body_cache, "fixed")
 
     def test_dynamic_selector_preserves_known_literal_input_metadata(self):
         app = Citry()
@@ -1177,7 +1257,7 @@ class TestConstUserBoundaries:
             """.strip()
 
         assert Page().render().serialize() == "fixed"
-        assert ["fixed"] in app._const_body_cache.values()
+        assert _cache_has_prepared_text(app._const_body_cache, "fixed")
 
     def test_simple_callback_receives_recursively_plain_marked_root_and_restores_same_input(self):
         seen = []
@@ -1381,34 +1461,39 @@ class TestConstFlow:
 
 
 class TestConstPrecompute:
-    def test_const_expr_precomputes_to_static_text(self):
+    def test_const_expr_is_evaluated_once_for_a_reused_signature(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "cols")
 
         class Card(Component):
             citry = c
             template = "<p>{{ cols }}</p>"
 
-        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
-        (body,) = c._const_body_cache.values()
-        assert body == ["<p>3</p>"]
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
 
-    def test_dynamic_expr_stays_dynamic_in_shared_body(self):
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c2="">3</p>'
+        assert calls == [(3,)]
+
+    def test_dynamic_expr_stays_dynamic_in_shared_body(self, monkeypatch):
         c = Citry()
+        const_calls = _track_prepared_expression(monkeypatch, "cols")
+        dynamic_calls = _track_prepared_expression(monkeypatch, "other")
 
         class Card(Component):
             citry = c
             template = "<p>{{ cols }} and {{ other }}</p>"
 
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
         # Two renders share the const signature but differ in the dynamic input.
         assert Card(cols=Const(3), other="x").render().serialize() == '<p data-cid-c1="">3 and x</p>'
         assert Card(cols=Const(3), other="y").render().serialize() == '<p data-cid-c2="">3 and y</p>'
         assert len(c._const_body_cache) == 1
-
-        (body,) = c._const_body_cache.values()
-        first, node, last = body
-        assert first == "<p>3 and "
-        assert isinstance(node, ExprNode)
-        assert last == "</p>"
+        assert const_calls == [(3,)]
+        assert dynamic_calls == [("x",), ("y",)]
 
     def test_precomputed_value_is_escaped(self):
         c = Citry()
@@ -1429,58 +1514,72 @@ class TestConstPrecompute:
         assert Card(v=Const(None)).render().serialize() == '<p data-cid-c1=""></p>'
         assert Card(v=None).render().serialize() == '<p data-cid-c2=""></p>'
 
-    def test_const_if_branch_is_pruned(self):
+    def test_const_if_branch_is_pruned(self, monkeypatch):
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "cols > 2")
 
         class Card(Component):
             citry = c
             template = '<c-if cond="cols > 2">big</c-if><c-else>small</c-else>'
 
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
+        assert Card(cols=Const(3)).render().serialize() == "big"
         assert Card(cols=Const(3)).render().serialize() == "big"
         assert Card(cols=Const(1)).render().serialize() == "small"
-        big_body, small_body = c._const_body_cache.values()
-        assert big_body == ["big"]
-        assert small_body == ["small"]
+        assert calls == [(3,), (1,)]
 
-    def test_const_if_with_no_match_precomputes_to_nothing(self):
+    def test_const_if_with_no_match_precomputes_to_nothing(self, monkeypatch):
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "cols > 2")
 
         class Card(Component):
             citry = c
             template = '<c-if cond="cols > 2">big</c-if>'
 
-        assert Card(cols=Const(1)).render().serialize() == ""
-        (body,) = c._const_body_cache.values()
-        assert body == []
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
 
-    def test_dynamic_if_keeps_the_node(self):
+        assert Card(cols=Const(1)).render().serialize() == ""
+        assert Card(cols=Const(1)).render().serialize() == ""
+        assert calls == [(1,)]
+
+    def test_dynamic_if_uses_each_render_input(self, monkeypatch):
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "cols > 2")
 
         class Card(Component):
             citry = c
             template = '<c-if cond="cols > 2">big</c-if><c-else>small</c-else>'
 
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
         assert Card(cols=3).render().serialize() == "big"
         assert Card(cols=1).render().serialize() == "small"
-        (body,) = c._const_body_cache.values()
-        (node,) = body
-        assert isinstance(node, IfNode)
+        assert calls == [(3,), (1,)]
 
-    def test_pruned_branch_is_precomputed_recursively(self):
+    def test_pruned_branch_is_precomputed_recursively(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "label")
 
         class Card(Component):
             citry = c
             template = '<c-if cond="show">{{ label }}: {{ count }}</c-if>'
 
-        out = Card(show=Const(True), label=Const("n"), count=7).render().serialize()  # noqa: FBT003
-        assert out == "n: 7"
-        (body,) = c._const_body_cache.values()
-        first, node = body
-        assert first == "n: "
-        assert isinstance(node, ExprNode)
+            def template_data(self, kwargs, slots):
+                return {
+                    "show": kwargs["show"],
+                    "label": kwargs["label"],
+                    "count": kwargs["count"],
+                }
 
-    def test_zero_variable_expr_precomputes_without_const_inputs(self):
+        assert Card(show=Const(True), label=Const("n"), count=7).render().serialize() == "n: 7"  # noqa: FBT003
+        assert Card(show=Const(True), label=Const("n"), count=8).render().serialize() == "n: 8"  # noqa: FBT003
+        assert calls == [("n",)]
+
+    def test_zero_variable_expr_renders_without_const_inputs(self):
         c = Citry()
 
         class Card(Component):
@@ -1488,10 +1587,9 @@ class TestConstPrecompute:
             template = "<p>{{ 1 + 1 }}</p>"
 
         assert Card().render().serialize() == '<p data-cid-c1="">2</p>'
-        (body,) = c._const_body_cache.values()
-        assert body == ["<p>2</p>"]
+        assert Card().render().serialize() == '<p data-cid-c2="">2</p>'
 
-    def test_slot_node_never_precomputes(self):
+    def test_fill_content_updates_across_const_renders(self):
         c = Citry()
 
         class Box(Component):
@@ -1502,19 +1600,17 @@ class TestConstPrecompute:
             citry = c
             template = '<c-Box><c-fill name="s">{{ msg }}</c-fill></c-Box>'
 
-        # Same const signature, different fills: the cached Box body must keep
-        # the SlotNode so each render picks up its own fill.
-        assert "one" in Page(msg="one", k=Const(1)).render().serialize()
-        assert "two" in Page(msg="two", k=Const(1)).render().serialize()
+            def template_data(self, kwargs, slots):
+                return {"msg": kwargs["msg"], "k": kwargs["k"]}
 
-        box_bodies = [
-            body
-            for body in c._const_body_cache.values()
-            if any(isinstance(item, SlotNode) for item in body if not isinstance(item, str))
-        ]
-        assert len(box_bodies) == 1
+        # Same const signature, different fills: both renders use their own fill.
+        first = Page(msg="one", k=Const(1)).render().serialize()
+        second = Page(msg="two", k=Const(1)).render().serialize()
+        assert "one" in first
+        assert "two" in second
+        assert first != second
 
-    def test_const_element_value_is_not_precomputed(self):
+    def test_const_element_value_renders_fresh_each_time(self):
         c = Citry()
 
         class Inner(Component):
@@ -1532,13 +1628,7 @@ class TestConstPrecompute:
         second = Holder(content=Const(element)).render().serialize()
         assert "inner" in first
         assert "inner" in second
-
-        # Two entries: Inner's own body, and Holder's body for the const
-        # signature. Holder's must have kept the expression dynamic.
-        holder_bodies = [
-            body for body in c._const_body_cache.values() if any(isinstance(item, ExprNode) for item in body)
-        ]
-        assert len(holder_bodies) == 1
+        assert first != second
 
 
 class TestTemplateLiteralConst:
@@ -1547,8 +1637,9 @@ class TestTemplateLiteralConst:
     the template, so it cannot change between renders of that template.
     """
 
-    def test_static_attr_is_const_in_the_child(self):
+    def test_static_attr_is_const_in_the_child(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "age")
 
         class Card(Component):
             citry = c
@@ -1559,11 +1650,12 @@ class TestTemplateLiteralConst:
             template = '<c-Card age="30" />'
 
         assert Page().render().serialize() == '<p data-cid-c2="" data-cid-c1="">30</p>'
-        card_bodies = [b for b in c._const_body_cache.values() if b == ["<p>30</p>"]]
-        assert len(card_bodies) == 1
+        assert Page().render().serialize() == '<p data-cid-c4="" data-cid-c3="">30</p>'
+        assert calls == [("30",)]
 
-    def test_unquoted_static_attr_is_const(self):
+    def test_unquoted_static_attr_is_const(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "age")
 
         class Card(Component):
             citry = c
@@ -1573,11 +1665,13 @@ class TestTemplateLiteralConst:
             citry = c
             template = "<c-Card age=30 />"
 
-        Page().render()
-        assert ["<p>30</p>"] in c._const_body_cache.values()
+        assert "30" in Page().render().serialize()
+        assert "30" in Page().render().serialize()
+        assert calls == [("30",)]
 
-    def test_boolean_attr_is_const_true(self):
+    def test_boolean_attr_is_const_true(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "compact")
 
         class Card(Component):
             citry = c
@@ -1587,13 +1681,15 @@ class TestTemplateLiteralConst:
             citry = c
             template = '<c-Card compact="" />'
 
-        Page().render()
-        assert ["<p>True</p>"] in c._const_body_cache.values()
+        assert "True" in Page().render().serialize()
+        assert "True" in Page().render().serialize()
+        assert calls == [(True,)]
 
-    def test_zero_variable_expression_attr_is_typed_const(self):
+    def test_zero_variable_expression_attr_is_typed_const(self, monkeypatch):
         # c-age="30" evaluates to the int 30 (not the string "30") and is a
         # template literal, so it is marked const and the child precomputes on it.
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "age > 18")
 
         class Card(Component):
             citry = c
@@ -1604,7 +1700,8 @@ class TestTemplateLiteralConst:
             template = '<c-Card c-age="30" />'
 
         assert Page().render().serialize() == "adult"
-        assert ["adult"] in c._const_body_cache.values()
+        assert Page().render().serialize() == "adult"
+        assert calls == [(30,)]
 
     def test_template_expression_wraps_only_its_result_after_plain_arguments_are_evaluated(self):
         seen = []
@@ -1641,8 +1738,9 @@ class TestTemplateLiteralConst:
         assert Page().render().serialize() == "[1, 2]:3"
         assert seen == [(True, True), (True, True, True)]
 
-    def test_zero_variable_container_literal_unrolls_child_loop(self):
+    def test_zero_variable_container_literal_unrolls_child_loop(self, monkeypatch):
         c = Citry()
+        calls = _track_loop_iterations(monkeypatch, "i in items")
 
         class Items(Component):
             citry = c
@@ -1653,16 +1751,14 @@ class TestTemplateLiteralConst:
             template = '<c-Items c-items="[1, 2, 3]" c-mult="10" />'
 
         assert Page().render().serialize() == "[10][20][30]"
-        assert any(
-            len(body) == 1 and isinstance(body[0], ForNode) and body[0]._precomputed_text == "[10][20][30]"
-            for body in c._const_body_cache.values()
-        )
+        assert calls == [(1,), (2,), (3,)]
 
         # Repeated renders hit the same signature: the per-render marker wraps
         # a fresh equal list, and the canonical key makes it the same entry.
         Page().render()
         Page().render()
         assert len(c._const_body_cache) == 2  # Page's body + Items' precomputed body
+        assert calls == [(1,), (2,), (3,)]
 
     def test_dynamic_expression_attr_is_not_marked(self):
         c = Citry()
@@ -1680,10 +1776,6 @@ class TestTemplateLiteralConst:
 
         assert Page(n=1).render().serialize() == '<p data-cid-c2="" data-cid-c1="">1</p>'
         assert Page(n=2).render().serialize() == '<p data-cid-c4="" data-cid-c3="">2</p>'
-        # The child renders dynamic: one shared (empty-signature) entry whose
-        # body keeps the expression node.
-        card_bodies = [b for b in c._const_body_cache.values() if any(isinstance(item, ExprNode) for item in b)]
-        assert len(card_bodies) == 1
 
 
 class TestExpressionConstPropagation:
@@ -1695,11 +1787,11 @@ class TestExpressionConstPropagation:
     attribute.
     """
 
-    def test_all_const_expression_attr_is_const_in_the_child(self):
-        # base is const, so base + 1 (= 30) is const, so the child's c-if
-        # precomputes on `age`. If propagation failed, `age` would be plain and the
-        # IfNode would stay live.
+    def test_all_const_expression_attr_is_const_in_the_child(self, monkeypatch):
+        # base is const, so base + 1 (= 30) is const, so the child can resolve
+        # its condition once for this input.
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "age > 18")
 
         class Card(Component):
             citry = c
@@ -1713,12 +1805,14 @@ class TestExpressionConstPropagation:
                 return {"base": Const(29)}
 
         assert Page().render().serialize() == "adult"
-        assert ["adult"] in c._const_body_cache.values()
+        assert Page().render().serialize() == "adult"
+        assert calls == [(30,)]
 
-    def test_expression_mixing_const_and_dynamic_is_not_marked(self):
+    def test_expression_mixing_const_and_dynamic_is_not_marked(self, monkeypatch):
         # base is const but n is not, so base + n is not const: the child must
-        # stay dynamic (one shared empty-signature entry keeping the IfNode).
+        # reevaluate the condition as n changes.
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "age > 18")
 
         class Card(Component):
             citry = c
@@ -1733,15 +1827,14 @@ class TestExpressionConstPropagation:
 
         assert Page(n=1).render().serialize() == "adult"
         assert Page(n=-100).render().serialize() == "minor"
-        assert ["adult"] not in c._const_body_cache.values()
-        live = [b for b in c._const_body_cache.values() if any(isinstance(item, IfNode) for item in b)]
-        assert len(live) == 1
+        assert calls == [(30,), (-71,)]
 
-    def test_propagated_const_dedups_across_a_loop(self):
+    def test_propagated_const_dedups_across_a_loop(self, monkeypatch):
         # The win: a loop hands every child an all-const computed label, so all
         # the children share ONE precomputed cache entry (the loop var `i` is not in
         # the kwarg, so the kwarg is const every iteration and equal-valued).
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "label")
 
         class Card(Component):
             citry = c
@@ -1757,13 +1850,18 @@ class TestExpressionConstPropagation:
         out = Page().render().serialize()
         assert out.count("<span") == 3
         assert "hi!" in out
-        card_bodies = [b for b in c._const_body_cache.values() if b == ["<span>hi!</span>"]]
-        assert len(card_bodies) == 1
+        assert calls == [("hi!",)]
 
 
 class TestConstThroughTypedKwargs:
-    def test_default_typed_kwargs_mapping_preserves_const_metadata(self):
+    def test_marker_survives_the_typed_kwargs_view(self, monkeypatch):
+        # The auto-converted dataclass Kwargs stores values as-is, so the
+        # marker flows whether template_data reads the typed view or the raw
+        # dict. (A typed-Kwargs implementation that copies or coerces values,
+        # for example a user-supplied Pydantic model, may strip the marker;
+        # the value then safely renders as dynamic.)
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "cols")
 
         class Card(Component):
             citry = c
@@ -1772,16 +1870,20 @@ class TestConstThroughTypedKwargs:
             class Kwargs:
                 cols: int
 
-        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
-        (body,) = c._const_body_cache.values()
-        assert body == ["<p>3</p>"]
+            def template_data(self, kwargs, slots):
+                return {"cols": kwargs.cols}
 
-    def test_const_default_on_typed_kwargs_field(self):
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c2="">3</p>'
+        assert calls == [(3,)]
+
+    def test_const_default_on_typed_kwargs_field(self, monkeypatch):
         # A `Const(...)` default is the explicit way to mark a default value
         # constant: when the kwarg is omitted, the marked default flows
         # through template_data and precomputes; when it is passed, the live value
         # renders as usual (dynamic unless the caller marked it).
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "cols")
 
         class Card(Component):
             citry = c
@@ -1790,13 +1892,14 @@ class TestConstThroughTypedKwargs:
             class Kwargs:
                 cols: int = Const(3)
 
+            def template_data(self, kwargs, slots):
+                return {"cols": kwargs.cols}
+
         assert Card().render().serialize() == '<p data-cid-c1="">3</p>'
         assert Card(cols=5).render().serialize() == '<p data-cid-c2="">5</p>'
-
-        precomputed = [body for body in c._const_body_cache.values() if body == ["<p>3</p>"]]
-        dynamic = [body for body in c._const_body_cache.values() if any(isinstance(i, ExprNode) for i in body)]
-        assert len(precomputed) == 1
-        assert len(dynamic) == 1
+        assert Card().render().serialize() == '<p data-cid-c3="">3</p>'
+        assert Card(cols=6).render().serialize() == '<p data-cid-c4="">6</p>'
+        assert calls == [(3,), (5,), (6,)]
 
 
 class TestConstPrecomputeInsideKeptNodes:
@@ -1820,46 +1923,46 @@ class TestConstPrecomputeInsideKeptNodes:
         assert precomputed.body == ["fixed"]
         assert precomputed.metadata is metadata
 
-    def test_precomputes_inside_dynamic_if_branches(self):
+    def test_precomputes_inside_dynamic_if_branches(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "label")
 
         class Card(Component):
             citry = c
             template = '<c-if cond="show">{{ label }}: {{ n }}</c-if><c-else>{{ label }} off</c-else>'
 
-        # `show` and `n` are dynamic, `label` is const: the IfNode stays, but
-        # the const expression inside each branch precomputes to text.
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
+        # Both branches retain their dynamic values, while the const label is
+        # evaluated once per branch when the body is prepared.
         assert Card(show=True, label=Const("x"), n=7).render().serialize() == "x: 7"
         assert Card(show=False, label=Const("x"), n=7).render().serialize() == "x off"
+        assert Card(show=True, label=Const("x"), n=8).render().serialize() == "x: 8"
         assert len(c._const_body_cache) == 1
+        assert calls == [("x",), ("x",)]
 
-        (body,) = c._const_body_cache.values()
-        (node,) = body
-        assert isinstance(node, IfNode)
-        if_body = node.branches[0][2]
-        assert if_body[0] == "x: "
-        assert isinstance(if_body[1], ExprNode)
-        else_body = node.branches[1][2]
-        assert else_body == ["x off"]
-
-    def test_const_if_nested_in_dynamic_branch_is_pruned(self):
+    def test_const_if_nested_in_dynamic_branch_is_pruned(self, monkeypatch):
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "big")
 
         class Card(Component):
             citry = c
             template = '<c-if cond="show"><c-if cond="big">L</c-if><c-else>S</c-else>{{ n }}</c-if>'
 
-        # The outer condition is dynamic; the inner one is const, so inside
-        # the rebuilt outer branch the inner if is decided and inlined.
-        assert Card(show=True, big=Const(True), n=1).render().serialize() == "L1"  # noqa: FBT003
-        (body,) = c._const_body_cache.values()
-        (node,) = body
-        branch_body = node.branches[0][2]
-        assert branch_body[0] == "L"
-        assert isinstance(branch_body[1], ExprNode)
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
 
-    def test_precomputes_inside_kept_for_body(self):
+        # The outer condition remains dynamic; the inner condition is decided
+        # once per constant value while the neighboring value stays live.
+        assert Card(show=True, big=Const(True), n=1).render().serialize() == "L1"  # noqa: FBT003
+        assert Card(show=True, big=Const(True), n=2).render().serialize() == "L2"  # noqa: FBT003
+        assert Card(show=True, big=Const(False), n=3).render().serialize() == "S3"  # noqa: FBT003
+        assert calls == [(True,), (False,)]
+
+    def test_precomputes_inside_kept_for_body(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "prefix")
 
         class Card(Component):
             citry = c
@@ -1869,55 +1972,38 @@ class TestConstPrecomputeInsideKeptNodes:
         # body precomputes (it is the same on every iteration), while the loop
         # variable expression stays dynamic.
         assert Card(items=[1, 2], prefix=Const("p")).render().serialize() == "[p1][p2]"
-        (body,) = c._const_body_cache.values()
-        (node,) = body
-        loop_body = node.branches[0][2]
-        assert loop_body[0] == "[p"
-        assert isinstance(loop_body[1], ExprNode)
-        assert loop_body[1].used_vars == ("i",)
-        assert loop_body[2] == "]"
+        assert Card(items=[3], prefix=Const("p")).render().serialize() == "[p3]"
+        assert calls == [("p",)]
 
-    def test_kept_for_masks_target_but_empty_branch_keeps_outer_scope(self):
-        each_attr = ExprHtmlAttr(None, (0, 0), "each", "i in items", ("items",))
-        loop_expr = ExprNode(None, (0, 0), "i", ("i",))
-        empty_expr = ExprNode(None, (0, 0), "i", ("i",))
-        node = ForNode(
-            None,
-            (
-                ((0, 0), (each_attr,), [loop_expr], ("i",)),
-                ((0, 0), (), [empty_expr], ()),
-            ),
-            ("items",),
-        )
+    def test_kept_for_and_empty_branch_use_their_live_scopes(self):
+        c = Citry()
 
-        (precomputed,) = precompute_const_parts([node], {"i": Const("outer")})
+        class Card(Component):
+            citry = c
+            template = '<c-for each="item in items">{{ outer }}:{{ item }}</c-for><c-empty>{{ outer }}</c-empty>'
 
-        assert isinstance(precomputed.branches[0][2][0], ExprNode)
-        assert precomputed.branches[1][2] == ["outer"]
+            def template_data(self, kwargs, slots):
+                return {"items": kwargs["items"], "outer": Const("outer")}
+
+        assert Card(items=[1, 2]).render().serialize() == "outer:1outer:2"
+        assert Card(items=[]).render().serialize() == "outer"
 
     def test_nested_loop_cannot_unroll_over_enclosing_loop_binding(self):
-        inner_each = ExprHtmlAttr(None, (0, 0), "each", "i in inner_items", ("inner_items",))
-        inner = ForNode(
-            None,
-            (((0, 0), (inner_each,), [ExprNode(None, (0, 0), "i", ("i",))], ("i",)),),
-            ("inner_items",),
-        )
-        outer_each = ExprHtmlAttr(None, (0, 0), "each", "i in outer_items", ("outer_items",))
-        outer = ForNode(
-            None,
-            (((0, 0), (outer_each,), [inner], ("i",)),),
-            ("outer_items", "inner_items"),
-        )
+        c = Citry()
 
-        (precomputed,) = precompute_const_parts(
-            [outer],
-            {"inner_items": Const([1])},
-            visible_names={"outer_items", "inner_items"},
-        )
+        class Card(Component):
+            citry = c
+            template = (
+                '<c-for each="outer in outer_items">'
+                '<c-for each="inner in inner_items">{{ outer }}{{ inner }}</c-for>'
+                "</c-for>"
+            )
 
-        nested = precomputed.branches[0][2][0]
-        assert isinstance(nested, ForNode)
-        assert isinstance(nested.branches[0][2][0], ExprNode)
+            def template_data(self, kwargs, slots):
+                return {"outer_items": kwargs["outer_items"], "inner_items": Const(["a", "b"])}
+
+        assert Card(outer_items=[1, 2]).render().serialize() == "1a1b2a2b"
+        assert Card(outer_items=[3]).render().serialize() == "3a3b"
 
 
 class TestConstPrecomputeInsideSlotContent:
@@ -1928,8 +2014,9 @@ class TestConstPrecomputeInsideSlotContent:
     them precompute like any other.
     """
 
-    def test_const_expr_in_fill_body_precomputes(self):
+    def test_const_expr_in_fill_body_precomputes(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "heading")
 
         class Card(Component):
             citry = c
@@ -1949,18 +2036,11 @@ class TestConstPrecomputeInsideSlotContent:
         assert "<p>hi</p>" in out1
         assert "<p>yo</p>" in out2
         assert "Dash!" in out1
+        assert calls == [("Dash",)]
 
-        # In Page's cached body, the title fill precomputed to text while the
-        # body fill kept its dynamic expression.
-        (page_body,) = [b for b in c._const_body_cache.values() if not isinstance(b[0], str)]
-        (component_node,) = page_body
-        title_fill, body_fill = component_node.body
-        assert title_fill.body == ["Dash!"]
-        assert body_fill.body[0] == "<p>"
-        assert isinstance(body_fill.body[1], ExprNode)
-
-    def test_const_if_inside_fill_body_prunes(self):
+    def test_const_if_inside_fill_body_prunes(self, monkeypatch):
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "wide")
 
         class Card(Component):
             citry = c
@@ -1971,29 +2051,27 @@ class TestConstPrecomputeInsideSlotContent:
             template = '<c-Card><c-fill name="body">x<c-if cond="wide">WIDE</c-if></c-fill></c-Card>'
 
         assert Page(wide=Const(True)).render().serialize() == "xWIDE"  # noqa: FBT003
-        (page_body,) = [b for b in c._const_body_cache.values() if isinstance(b[0], ComponentNode)]
-        (fill,) = page_body[0].body
-        assert fill.body == ["xWIDE"]
+        assert Page(wide=Const(True)).render().serialize() == "xWIDE"  # noqa: FBT003
+        assert calls == [(True,)]
 
     def test_fill_data_var_stays_dynamic(self):
         c = Citry()
 
         class Box(Component):
             citry = c
-            template = '<c-slot name="s" c-x="1" />'
+            template = '<c-slot name="s" c-x="x" />'
 
         class Page(Component):
             citry = c
-            template = '<c-Box><c-fill name="s" data="d">{{ d.x }}-{{ k }}</c-fill></c-Box>'
+            template = '<c-Box c-x="n"><c-fill name="s" data="d">{{ d.x }}-{{ k }}</c-fill></c-Box>'
 
-        # The fill's own `d` variable is per-invocation slot data, so the
-        # expression using it stays live; the const `k` precomputes and merges.
-        assert Page(k=Const("K")).render().serialize() == "1-K"
-        (page_body,) = [b for b in c._const_body_cache.values() if isinstance(b[0], ComponentNode)]
-        (fill,) = page_body[0].body
-        assert isinstance(fill.body[0], ExprNode)
-        assert fill.body[0].used_vars == ("d",)
-        assert fill.body[1] == "-K"
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
+        # Slot data follows each fill invocation while the const suffix stays
+        # the same.
+        assert Page(n=1, k=Const("K")).render().serialize() == "1-K"
+        assert Page(n=2, k=Const("K")).render().serialize() == "2-K"
 
     def test_dynamic_fill_binding_allows_only_variable_free_precomputation(self):
         attrs = (
@@ -2041,8 +2119,9 @@ class TestConstPrecomputeInsideSlotContent:
 
         assert isinstance(precomputed.body[0], ExprNode)
 
-    def test_default_slot_body_precomputes(self):
+    def test_default_slot_body_precomputes(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "k")
 
         class Box(Component):
             citry = c
@@ -2053,43 +2132,47 @@ class TestConstPrecomputeInsideSlotContent:
             template = "<c-Box>{{ k }}</c-Box>"
 
         assert Page(k=Const("K")).render().serialize() == '<b data-cid-c2="" data-cid-c1="">K</b>'
-        (page_body,) = [b for b in c._const_body_cache.values() if not isinstance(b[0], str)]
-        assert page_body[0].body == ["K"]
+        assert Page(k=Const("K")).render().serialize() == '<b data-cid-c4="" data-cid-c3="">K</b>'
+        assert calls == [("K",)]
 
-    def test_slot_fallback_body_precomputes(self):
+    def test_slot_fallback_body_precomputes(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "label")
 
         class Card(Component):
             citry = c
             template = '<c-slot name="title">{{ label }}</c-slot>'
 
-        # Unfilled: the fallback renders, and with `label` const its
-        # expression precomputed inside the kept SlotNode.
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
+        # Unfilled: the fallback renders and its const expression is evaluated
+        # once for the shared signature.
         assert Card(label=Const("untitled")).render().serialize() == "untitled"
-        (body,) = c._const_body_cache.values()
-        (slot_node,) = body
-        assert isinstance(slot_node, SlotNode)
-        assert slot_node.body == ["untitled"]
+        assert Card(label=Const("untitled")).render().serialize() == "untitled"
+        assert calls == [("untitled",)]
 
         # Filled: the fill wins over the precomputed fallback, same as ever.
         assert Card(label=Const("untitled"), slots={"title": "Hello"}).render().serialize() == "Hello"
+        assert calls == [("untitled",)]
 
 
 class TestConstPrecomputeUnroll:
-    def test_const_loop_unrolls_to_text(self):
+    def test_const_loop_unrolls_to_text(self, monkeypatch):
         c = Citry()
+        calls = _track_prepared_expression(monkeypatch, "i")
+        items = Const([1, 2, 3])
 
         class Card(Component):
             citry = c
             template = '<ul><c-for each="i in items">{{ i }},</c-for></ul>'
 
-        assert Card(items=Const([1, 2, 3])).render().serialize() == '<ul data-cid-c1="">1,2,3,</ul>'
-        (body,) = c._const_body_cache.values()
-        assert len(body) == 3
-        assert body[0] == "<ul>"
-        assert isinstance(body[1], ForNode)
-        assert body[1]._precomputed_text == "1,2,3,"
-        assert body[2] == "</ul>"
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
+        assert Card(items=items).render().serialize() == '<ul data-cid-c1="">1,2,3,</ul>'
+        assert Card(items=items).render().serialize() == '<ul data-cid-c2="">1,2,3,</ul>'
+        assert calls == [(1,), (2,), (3,)]
 
     def test_unrolled_loop_cache_does_not_hide_later_context_collision(self):
         c = Citry()
@@ -2124,13 +2207,9 @@ class TestConstPrecomputeUnroll:
         with pytest.raises(RuntimeError, match=r"Cannot define variable 'i'.*Variable shadowing is not allowed"):
             Card(items=Const([1, 2])).render().serialize()
 
-        (body,) = c._const_body_cache.values()
-        assert isinstance(body[0], ExprNode)
-        assert isinstance(body[1], ForNode)
-        assert body[1]._precomputed_text == "12"
-
-    def test_unroll_precomputes_ifs_and_uses_empty_branch(self):
+    def test_unroll_precomputes_ifs_and_uses_empty_branch(self, monkeypatch):
         c = Citry()
+        calls = _track_if_selection(monkeypatch, "i > 1")
 
         class Card(Component):
             citry = c
@@ -2138,10 +2217,9 @@ class TestConstPrecomputeUnroll:
 
         assert Card(items=Const([1, 2, 3])).render().serialize() == "2!3!"
         assert Card(items=Const([])).render().serialize() == "none"
-        bodies = c._const_body_cache.values()
-        assert sorted(node._precomputed_text for (node,) in bodies) == ["2!3!", "none"]
+        assert calls == [(1,), (2,), (3,)]
 
-    def test_unroll_backs_out_past_the_iteration_cap(self):
+    def test_long_const_loop_renders_all_items(self):
         c = Citry()
 
         class Card(Component):
@@ -2151,11 +2229,8 @@ class TestConstPrecomputeUnroll:
         n = _MAX_UNROLL_ITERATIONS + 1
         out = Card(items=Const(range(n))).render().serialize()
         assert out == "." * n
-        (body,) = c._const_body_cache.values()
-        (node,) = body
-        assert not isinstance(node, str)  # the loop stayed dynamic
 
-    def test_unroll_backs_out_on_element_value(self):
+    def test_const_loop_renders_element_values_fresh_each_time(self):
         c = Citry()
 
         class Inner(Component):
@@ -2174,10 +2249,9 @@ class TestConstPrecomputeUnroll:
         second = Card(items=Const([element])).render().serialize()
         assert "<i" in first
         assert "<i" in second
-        card_body = next(b for b in c._const_body_cache.values() if b and not isinstance(b[0], str))
-        assert len(card_body) == 1
+        assert first != second
 
-    def test_dynamic_loop_does_not_unroll(self):
+    def test_dynamic_loop_uses_new_items_each_render(self):
         c = Citry()
 
         class Card(Component):
@@ -2185,8 +2259,7 @@ class TestConstPrecomputeUnroll:
             template = '<c-for each="i in items">{{ i }}</c-for>'
 
         assert Card(items=[1, 2]).render().serialize() == "12"
-        (body,) = c._const_body_cache.values()
-        assert not isinstance(body[0], str)
+        assert Card(items=[3, 4]).render().serialize() == "34"
 
 
 class TestConstPrecomputeErrors:
@@ -2197,12 +2270,13 @@ class TestConstPrecomputeErrors:
             citry = c
             template = '<p>{{ cfg["missing"] }}</p>'
 
-        # Precomputing must not raise: the failing expression stays a dynamic node
-        # and the error surfaces through the normal render path, every render.
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
+        # A failed const evaluation is deferred so the error surfaces through
+        # the normal render path on every render.
         with pytest.raises(KeyError):
             Card(cfg=Const({"a": 1})).render().serialize()
-        (body,) = c._const_body_cache.values()
-        assert any(isinstance(item, ExprNode) for item in body)
         with pytest.raises(KeyError):
             Card(cfg=Const({"a": 1})).render().serialize()
 
@@ -2215,9 +2289,8 @@ class TestConstPrecomputeErrors:
 
         with pytest.raises(KeyError):
             Card(cfg=Const({"a": 1})).render().serialize()
-        (body,) = c._const_body_cache.values()
-        (node,) = body
-        assert isinstance(node, IfNode)
+        with pytest.raises(KeyError):
+            Card(cfg=Const({"a": 1})).render().serialize()
 
 
 class TestConstBodyCache:

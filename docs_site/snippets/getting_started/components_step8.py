@@ -14,11 +14,11 @@ class ChoiceButton(Component):
         pass
 
     template = """
-      <button class="choice-button" type="button">
+      <button class="choice-button" type="button" @click="$emit('select')">
         Choose
         <span
           class="choice-button__label"
-          x-text="clientProps.label"
+          v-text="label"
         ></span>
       </button>
     """
@@ -28,9 +28,7 @@ class ChoiceButton(Component):
         props: {
           label: { type: String, required: true },
         },
-        init: ({ props, scope }) => {
-          scope.clientProps = props;
-        },
+        emits: ['select'],
       });
     """
 
@@ -45,20 +43,33 @@ class ChoicePicker(Component):
         pass
 
     template = """
-      <section class="choice-picker" x-data="{ choice: 'Ocean' }">
+      <section class="choice-picker">
         <p>
           Current choice:
           <output
             class="choice-picker__value"
-            x-text="choice"
+            v-text="choice"
           ></output>
         </p>
 
         <c-ChoiceButton
-          $c-props="{ label: choice }"
-          @click="choice = choice === 'Ocean' ? 'Forest' : 'Ocean'"
+          :label="choice"
+          @select="toggleChoice"
         />
       </section>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { choice: 'Ocean' };
+        },
+        methods: {
+          toggleChoice() {
+            this.choice = this.choice === 'Ocean' ? 'Forest' : 'Ocean';
+          },
+        },
+      });
     """
 
 

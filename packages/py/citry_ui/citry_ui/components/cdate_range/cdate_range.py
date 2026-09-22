@@ -466,7 +466,23 @@ class CDateRange(LibraryComponent):
             "describedby": cast("str | None", external_described_by),
             "errormessage": cast("str | None", external_error_message),
         }
-        self._cui_date_range_data = client_data
+        prop_names = {
+            "value",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "clearable",
+            "dismissible",
+            "placement",
+            "matchWidth",
+            "variant",
+            "size",
+        }
+        self._cui_date_range_data = {
+            "serverDefaults": {key: value for key, value in client_data.items() if key in prop_names},
+            **{key: value for key, value in client_data.items() if key not in prop_names},
+        }
         self._cui_date_range_snapshot = snapshot
         return snapshot
 
@@ -488,11 +504,11 @@ class CDateRange(LibraryComponent):
         c-aria-errormessage="error_message"
         c-aria-invalid="'true' if invalid else None"
         c-aria-disabled="'true' if disabled else None"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-empty="not start"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-empty="'' if not start else None"
         c-data-variant="variant"
         c-data-size="size"
         c-$c-tr:citry-ui-date-range-label[aria-label]="True if catalog_range_label else None"
@@ -546,7 +562,11 @@ class CDateRange(LibraryComponent):
             c-placement="placement"
             c-match_width="match_width"
             class_="cui-date-range__popover"
-            $c-props="{open:dateRangeOpen,dismissible:dateRangeDismissible,placement:dateRangePlacement,matchWidth:dateRangeMatchWidth,onOpenChange:dateRangeOnPopoverOpenChange}"
+            :open="dateRangeOpen"
+            :dismissible="dateRangeDismissible"
+            :placement="dateRangePlacement"
+            :matchWidth="dateRangeMatchWidth"
+            :onOpenChange="dateRangeOnPopoverOpenChange"
           >
             <c-fill name="activator" data="{ activator_attrs }">
               <button
@@ -581,7 +601,16 @@ class CDateRange(LibraryComponent):
                 c-label="range_label"
                 variant="plain"
                 class_="cui-date-range__calendar"
-                $c-props="{value:dateRangeCalendarValue,disabled:dateRangeCalendarDisabled,readonly:dateRangeCalendarReadonly,rangeStart:dateRangeRangeStart,rangeEnd:dateRangeRangeEnd,rangePreview:dateRangeRangePreview,rangeStartLabel:dateRangeStartLabel,rangeEndLabel:dateRangeEndLabel,accessibleLabel:dateRangeAccessibleLabel,onValueChange:dateRangeOnCalendarValueChange}"
+                :value="dateRangeCalendarValue"
+                :disabled="dateRangeCalendarDisabled"
+                :readonly="dateRangeCalendarReadonly"
+                :rangeStart="dateRangeRangeStart"
+                :rangeEnd="dateRangeRangeEnd"
+                :rangePreview="dateRangeRangePreview"
+                :rangeStartLabel="dateRangeStartLabel"
+                :rangeEndLabel="dateRangeEndLabel"
+                :accessibleLabel="dateRangeAccessibleLabel"
+                :onValueChange="dateRangeOnCalendarValueChange"
               />
             </c-fill>
           </c-CPopover>
@@ -604,8 +633,26 @@ class CDateRange(LibraryComponent):
           value: {}, open: {}, required: {}, disabled: {}, readonly: {}, invalid: {}, clearable: {},
           dismissible: {}, placement: {}, matchWidth: {}, variant: {}, size: {}, onValueChange: {}, onOpenChange: {},
         },
-        init: ({ els, data, props, scope, effect, inject, i18n }) => {
-          const root = els[0];
+        inject: {formService: {from: Symbol.for('citry-ui:form'), default: null}},
+        provide() { return {[Symbol.for('citry-ui:form')]: null}; },
+        data() {
+          return {
+            dateRangeOpen: false, dateRangeCalendarValue: null, dateRangeCalendarDisabled: false,
+            dateRangeCalendarReadonly: false, dateRangeRangeStart: null, dateRangeRangeEnd: null,
+            dateRangeRangePreview: false, dateRangeStartLabel: null, dateRangeEndLabel: null,
+            dateRangeAccessibleLabel: null, dateRangeDismissible: true,
+            dateRangePlacement: 'bottom-start', dateRangeMatchWidth: true,
+            dateRangeOnPopoverOpenChange: null, dateRangeOnCalendarValueChange: null,
+          };
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const defaults = data.serverDefaults;
+          const props = component.$props;
+          const scope = component;
+          const effect = Citry.vue.watchEffect;
+          const i18n = component.$i18n;
           const fallback = root.querySelector(':scope > [data-citry-ui-part="fallback-group"]');
           const startInput = fallback?.querySelector('[data-citry-ui-part="start-input"]');
           const endInput = fallback?.querySelector('[data-citry-ui-part="end-input"]');
@@ -616,7 +663,7 @@ class CDateRange(LibraryComponent):
           const calendar = root.querySelector('.cui-date-range__calendar[data-citry-ui-part="calendar"]');
           if (!(root instanceof HTMLElement) || !(fallback instanceof HTMLElement) || !(startInput instanceof HTMLInputElement) || startInput.type !== 'date' || !(endInput instanceof HTMLInputElement) || endInput.type !== 'date' || !(enhanced instanceof HTMLElement) || !(trigger instanceof HTMLButtonElement) || !(valueText instanceof HTMLElement) || !(clear instanceof HTMLButtonElement) || !(calendar instanceof HTMLElement)) throw new Error('[citry-ui] CDateRange settled anatomy is invalid.');
 
-          const form = inject(Symbol.for('citry-ui:form'), null);
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CDateRange form-control runtime is unavailable.');
           const resolver = runtime.resolver(root, props, 'CDateRange');
@@ -625,8 +672,8 @@ class CDateRange(LibraryComponent):
           const owned = mutations.owned;
           const unavailable = new Set(data.unavailableDates);
           const allowedPlacements = ['top-start','top','top-end','bottom-start','bottom','bottom-end'];
-          let current = data.value ? { ...data.value } : null;
-          const initialValue = data.value ? { ...data.value } : null;
+          let current = defaults.value ? { ...defaults.value } : null;
+          const initialValue = defaults.value ? { ...defaults.value } : null;
           let draftStart = null;
           let previewEnd = null;
           let internalOpen = false;
@@ -665,16 +712,16 @@ class CDateRange(LibraryComponent):
           const validPair = value => value !== null && canonicalDate(value.start) !== null && canonicalDate(value.end) !== null && value.start <= value.end && (data.min === null || value.start >= data.min) && (data.max === null || value.end <= data.max) && !rangeCrossesUnavailable(value);
           const samePair = (left, right) => left === right || (left !== null && right !== null && left.start === right.start && left.end === right.end);
           const resolveConfiguration = () => ({
-            required: resolver.boolean('required', data.required),
-            disabled: Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(startInput) || runtime.fieldsetDisabled(endInput),
-            readonly: resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-            invalid: resolver.boolean('invalid', data.invalid),
-            clearable: resolver.boolean('clearable', data.clearable),
-            dismissible: resolver.boolean('dismissible', data.dismissible),
-            placement: resolver.choice('placement', data.placement, allowedPlacements),
-            matchWidth: resolver.boolean('matchWidth', data.matchWidth),
-            variant: resolver.choice('variant', data.variant, ['outline','filled','plain']),
-            size: resolver.choice('size', data.size, ['sm','md','lg']),
+            required: resolver.boolean('required', defaults.required),
+            disabled: Boolean(form?.disabled) || resolver.boolean('disabled', defaults.disabled) || runtime.fieldsetDisabled(startInput) || runtime.fieldsetDisabled(endInput),
+            readonly: resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : defaults.readonly),
+            invalid: resolver.boolean('invalid', defaults.invalid),
+            clearable: resolver.boolean('clearable', defaults.clearable),
+            dismissible: resolver.boolean('dismissible', defaults.dismissible),
+            placement: resolver.choice('placement', defaults.placement, allowedPlacements),
+            matchWidth: resolver.boolean('matchWidth', defaults.matchWidth),
+            variant: resolver.choice('variant', defaults.variant, ['outline','filled','plain']),
+            size: resolver.choice('size', defaults.size, ['sm','md','lg']),
           });
           const valueDetail = (value, previousValue, source, sourceEvent) => ({ value, previousValue, controlled:controlledValue, source, sourceEvent });
           const openDetail = (reason, source, forced = false) => ({ reason, controlled:controlledOpen, forced, source });

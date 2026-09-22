@@ -253,7 +253,7 @@ class CContainer(LibraryComponent):
         c-bind="attrs"
         data-citry-ui-part="container"
         c-data-size="size"
-        c-data-fluid="fluid"
+        c-data-fluid="'' if fluid else None"
         c-data-gutter="gutter"
       >
         <c-slot />
@@ -330,7 +330,7 @@ class CGrid(LibraryComponent):
         c-data-cols-lg="lg"
         c-data-cols-xl="xl"
         c-data-cols-xxl="xxl"
-        c-data-intrinsic="intrinsic"
+        c-data-intrinsic="'' if intrinsic else None"
         c-data-gap="gap"
       >
         <c-slot />

@@ -32,8 +32,8 @@ def _page_html() -> str:
               <c-css />
               <style>.rating-brand { --cui-rating-fill-color: rgb(5 150 105); }</style>
             </head>
-            <body x-data="{controlled:'2',accept:false}">
-              <form id="review" @submit.prevent="window.__ratingSubmits.push(Array.from(new FormData($event.target).entries()))">
+            <body>
+              <form id="review" @submit.prevent="window.__ratingSubmits.push(Array.from(new window.FormData($event.target).entries()))">
                 <c-CRating
                   id="rating"
                   name="rating"
@@ -44,10 +44,8 @@ def _page_html() -> str:
                   required
                   allow_clear
                   class_="rating-brand"
-                  $c-props="{
-                    onValueChange:(next,detail)=>window.__ratingEvents.push(['value',next,detail.source]),
-                    onHoverChange:(next,detail)=>window.__ratingEvents.push(['hover',next]),
-                  }"
+                  :onValueChange="(next,detail)=>window.__ratingEvents.push(['value',next,detail.source])"
+                  :onHoverChange="(next,detail)=>window.__ratingEvents.push(['hover',next])"
                 />
                 <button id="submit" type="submit">Submit</button>
                 <button id="reset" type="reset">Reset</button>
@@ -56,13 +54,11 @@ def _page_html() -> str:
                 id="controlled"
                 label="Controlled rating"
                 value="2"
-                $c-props="{
-                  value:controlled,
-                  onValueChange:(next,detail)=>{
+                :value="controlled"
+                :onValueChange="(next,detail)=>{
                     window.__ratingEvents.push(['controlled',next,detail.source]);
                     if(accept) controlled=next;
-                  },
-                }"
+                  }"
               />
               <button id="accept" type="button" @click="accept=true">Accept</button>
               <form id="readonly-form">
@@ -73,6 +69,7 @@ def _page_html() -> str:
             </body>
           </html>
         """
+        js = "$component({data(){return {controlled:'2',accept:false};}});"
 
     return str(Page())
 

@@ -12,6 +12,7 @@ from typing import Any, Literal, TypedDict
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
+from citry_ui.components._direct_output import feed_typed_direct_output
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
 
@@ -473,23 +474,13 @@ def _feed_item_output(
     part: object,
     expected_render_ids: frozenset[str],
 ) -> None:
-    while hasattr(part, "region_id") and hasattr(part, "part"):
-        part = part.part
-    if isinstance(part, str):
-        parser.feed_text(part)
-        return
-    if not isinstance(part, CitryRender):
-        parser.invalid = True
-        return
-
-    render_id = part.frame.render_id
-    is_item_root = part.is_component_root and render_id is not None and render_id in expected_render_ids
-    if is_item_root and render_id is not None:
-        parser.enter_item(render_id)
-    for child in part.parts:
-        _feed_item_output(parser, child, expected_render_ids)
-    if is_item_root and render_id is not None:
-        parser.exit_item(render_id)
+    feed_typed_direct_output(
+        parser,
+        part,
+        expected_render_ids,
+        parser.enter_item,
+        parser.exit_item,
+    )
 
 
 def _validate_direct_item_output(result: CitryRender, registry: _AccordionRegistry) -> None:
@@ -601,7 +592,7 @@ class CAccordion(LibraryComponent):
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
         open_values = self._accordion_open_values
-        return {
+        data = {
             "value": list(open_values) if kwargs.multiple else open_values[0] if open_values else None,
             "serverFingerprint": _server_value_fingerprint(
                 open_values,
@@ -620,18 +611,25 @@ class CAccordion(LibraryComponent):
                 _INDICATOR_POSITIONS,
             ),
         }
+        return {
+            "serverFingerprint": data["serverFingerprint"],
+            "multiple": data["multiple"],
+            "serverDefaults": {
+                key: value for key, value in data.items() if key not in {"serverFingerprint", "multiple"}
+            },
+        }
 
     template = """
       <div
         class="cui-accordion"
         c-id="group_id"
-        c-data-multiple="multiple"
-        c-data-collapsible="collapsible"
-        c-data-disabled="disabled"
-        c-data-loop="loop"
+        c-data-multiple="'' if multiple else None"
+        c-data-collapsible="'' if collapsible else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-loop="'' if loop else None"
         c-data-variant="variant"
         c-data-size="size"
-        c-data-indicator="indicator"
+        c-data-indicator="'' if indicator else None"
         c-data-indicator-pos="indicator_pos"
         c-bind="attrs"
         data-citry-accordion-root
@@ -659,9 +657,45 @@ class CAccordion(LibraryComponent):
           indicator: {},
           indicatorPosition: {},
         },
-        init: ({ els, data, props, effect, inject, provide }) => {
-          const root = els[0];
-          const form = inject(Symbol.for("citry-ui:form"), null);
+        inject: {
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        setup() {
+          const registrations = new Map();
+          const service = Citry.vue.markRaw({
+            registrations,
+            schedule: null,
+            registerItem(item) {
+              registrations.set(item.root, item);
+              service.schedule?.();
+              return () => {
+                if (registrations.get(item.root) !== item) {
+                  return;
+                }
+                registrations.delete(item.root);
+                service.schedule?.();
+              };
+            },
+            updateItem(item, disabled) {
+              if (registrations.get(item.root) !== item) {
+                return;
+              }
+              item.ownDisabled = disabled;
+              service.schedule?.();
+            },
+          });
+          return {accordionService: service};
+        },
+        provide() {
+          return {[Symbol.for("citry-ui:accordion")]: this.accordionService};
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const defaults = data.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const form = component.formService;
           const rootSelector = "[data-citry-accordion-root]";
           const itemSelector = "[data-citry-accordion-item]";
           const triggerSelector = "[data-citry-accordion-trigger]";
@@ -672,7 +706,6 @@ class CAccordion(LibraryComponent):
             indicatorPosition: ["start", "end"],
           };
           const invalidEpisodes = new Set();
-          const registrations = new Map();
           const animations = new Map();
           let reconciliationTimer = null;
           const runtimeState = root.__citryUiAccordionRuntime ?? {
@@ -685,7 +718,7 @@ class CAccordion(LibraryComponent):
           root.__citryUiAccordionRuntime = runtimeState;
           const initialPublicValue = runtimeState.serverFingerprint === data.serverFingerprint
             ? runtimeState.value
-            : data.value;
+            : defaults.value;
           let currentValue = data.multiple
             ? Array.isArray(initialPublicValue) ? [...initialPublicValue] : []
             : typeof initialPublicValue === "string" ? [initialPublicValue] : [];
@@ -696,13 +729,13 @@ class CAccordion(LibraryComponent):
           let controlled = false;
           let onValueChange = null;
           let configuration = {
-            collapsible: data.collapsible,
-            disabled: data.disabled,
-            loop: data.loop,
-            variant: data.variant,
-            size: data.size,
-            indicator: data.indicator,
-            indicatorPosition: data.indicatorPosition,
+            collapsible: defaults.collapsible,
+            disabled: defaults.disabled,
+            loop: defaults.loop,
+            variant: defaults.variant,
+            size: defaults.size,
+            indicator: defaults.indicator,
+            indicatorPosition: defaults.indicatorPosition,
           };
 
           const isOwned = (element) => element?.closest(rootSelector) === root;
@@ -750,7 +783,7 @@ class CAccordion(LibraryComponent):
               root,
             );
           };
-          const resolveBoolean = (name, fallback = data[name]) => {
+          const resolveBoolean = (name, fallback = defaults[name]) => {
             const value = props[name] === undefined ? fallback : props[name];
             if (typeof value === "boolean") {
               invalidEpisodes.delete(name);
@@ -759,7 +792,7 @@ class CAccordion(LibraryComponent):
             reportInvalid(name, value, "using the server-rendered fallback");
             return fallback;
           };
-          const resolveChoice = (name, fallback = data[name]) => {
+          const resolveChoice = (name, fallback = defaults[name]) => {
             const value = props[name] === undefined ? fallback : props[name];
             if (allowedValues[name].includes(value)) {
               invalidEpisodes.delete(name);
@@ -1131,27 +1164,10 @@ class CAccordion(LibraryComponent):
               reconcileStructure();
             }, 0);
           };
-          const context = {
-            registerItem(item) {
-              registrations.set(item.root, item);
-              scheduleReconcile();
-              return () => {
-                if (registrations.get(item.root) !== item) {
-                  return;
-                }
-                registrations.delete(item.root);
-                scheduleReconcile();
-              };
-            },
-            updateItem(item, disabled) {
-              if (registrations.get(item.root) !== item) {
-                return;
-              }
-              item.ownDisabled = disabled;
-              scheduleReconcile();
-            },
-          };
-          provide(Symbol.for("citry-ui:accordion"), context);
+          const service = component.accordionService;
+          const registrations = service.registrations;
+          service.schedule = scheduleReconcile;
+          scheduleReconcile();
 
           const onClick = (event) => {
             const trigger = event.target.closest?.(triggerSelector);
@@ -1259,6 +1275,7 @@ class CAccordion(LibraryComponent):
               reconciliationTimer = null;
             }
             registrations.clear();
+            service.schedule = null;
             root.removeAttribute("data-citry-accordion-initialized");
           };
         },
@@ -1362,7 +1379,7 @@ class CAccordionItem(LibraryComponent):
     ) -> dict[str, object]:
         return {
             "value": _plain_required_string("CAccordionItem", "value", kwargs.value),
-            "disabled": bool(kwargs.disabled),
+            "serverDefaults": {"disabled": bool(kwargs.disabled)},
         }
 
     template = """
@@ -1371,7 +1388,7 @@ class CAccordionItem(LibraryComponent):
         #c-key="value"
         c-data-value="value"
         c-data-state="'open' if expanded else 'closed'"
-        c-data-disabled="disabled"
+        c-data-disabled="'' if disabled else None"
         c-bind="attrs"
         data-citry-accordion-item
         data-citry-ui-part="accordion-item"
@@ -1394,7 +1411,7 @@ class CAccordionItem(LibraryComponent):
               c-aria-expanded="'true' if expanded else 'false'"
               c-aria-controls="panel_id"
               c-data-state="'open' if expanded else 'closed'"
-              c-data-disabled="disabled"
+              c-data-disabled="'' if disabled else None"
               c-bind="trigger_attrs"
               data-citry-accordion-trigger
               data-citry-ui-part="accordion-trigger"
@@ -1468,9 +1485,16 @@ class CAccordionItem(LibraryComponent):
         props: {
           disabled: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
-          const context = inject(Symbol.for("citry-ui:accordion"), null);
+        inject: {
+          accordionService: {from: Symbol.for("citry-ui:accordion"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const defaults = data.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
+          const context = component.accordionService;
           if (!context) {
             console.error(
               "[citry-ui] CAccordionItem requires the nearest CAccordion client context.",
@@ -1497,7 +1521,7 @@ class CAccordionItem(LibraryComponent):
             panel,
             indicator,
             value: data.value,
-            ownDisabled: data.disabled,
+            ownDisabled: defaults.disabled,
             effectiveDisabled: trigger.matches(":disabled"),
           };
           const unregister = context.registerItem(item);
@@ -1509,7 +1533,7 @@ class CAccordionItem(LibraryComponent):
             }
           };
           effect(() => {
-            const value = props.disabled === undefined ? data.disabled : props.disabled;
+            const value = props.disabled === undefined ? defaults.disabled : props.disabled;
             if (typeof value === "boolean") {
               invalidEpisodes.delete("disabled");
               context.updateItem(item, value);
@@ -1523,7 +1547,7 @@ class CAccordionItem(LibraryComponent):
                 root,
               );
             }
-            context.updateItem(item, data.disabled);
+            context.updateItem(item, defaults.disabled);
           });
           root.setAttribute("data-citry-accordion-item-initialized", "");
           return () => {

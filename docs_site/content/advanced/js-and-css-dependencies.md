@@ -48,13 +48,37 @@ class Chart(Component):
         return self.CssData(chart_height=kwargs.height)
 
     template = """
-      <div class="chart"></div>
+      <canvas ref="chart" class="chart" width="480" height="240"></canvas>
     """
 
     js = """
-      $component(({ els, data }) => {
-        const chartPoints = data.chart_points;
-        drawChart(els[0], chartPoints);
+      $component({
+        onServerRender({ component }) {
+          const canvas = component.$refs.chart;
+          if (!(canvas instanceof HTMLCanvasElement)) return;
+          const context = canvas.getContext("2d");
+          if (context === null) return;
+
+          const width = canvas.width;
+          const height = canvas.height;
+          const points = component.chart_points;
+          context.clearRect(0, 0, width, height);
+          if (points.length !== 0) {
+            const maximum = Math.max(1, ...points.map(Math.abs));
+            context.beginPath();
+            points.forEach((point, index) => {
+              const x = points.length === 1
+                ? width / 2
+                : index * width / (points.length - 1);
+              const y = height / 2 - point * (height / 2) / maximum;
+              if (index === 0) context.moveTo(x, y);
+              else context.lineTo(x, y);
+            });
+            context.stroke();
+          }
+
+          return () => context.clearRect(0, 0, width, height);
+        },
       });
     """
 
@@ -65,19 +89,30 @@ class Chart(Component):
     """
 ```
 
-[`$component()`][$component] registers a callback for each rendered `Chart`.
-Its `els` value contains the component's root elements. Its `data` value is
-what that render returned from [`js_data()`][citry.Component.js_data].
+[`$component()`][$component] configures each rendered `Chart` as a Vue
+component. `onServerRender` receives its public `component` instance after the
+first mount and after each accepted server revision. Template refs such as
+`component.$refs.chart` identify authored elements, and values returned by
+[`js_data()`][citry.Component.js_data] are available directly on the instance.
+The optional cleanup runs before the next callback and when the instance is
+removed.
 
 Code outside `$component()` runs once when the component script loads. Keep
 page-wide setup there. Put code that reads one rendered component's elements
-or data inside the callback:
+or data inside `onServerRender`:
 
 ```javascript
 console.log("The chart script loaded");
 
-$component(({ els, data }) => {
-  console.log("One chart is ready", els, data);
+$component({
+  onServerRender({ component, revision }) {
+    console.log(
+      "One chart is ready",
+      component.$refs,
+      component.chart_points,
+      revision,
+    );
+  },
 });
 ```
 
@@ -87,9 +122,9 @@ top-level variables therefore stay private to that script.
 ## Send data to JavaScript
 
 [`js_data()`][citry.Component.js_data] returns the data for one render. Citry
-serializes it as strict JSON, seeds its top-level keys into that render's
-Alpine scope, and gives a fresh instance-local graph to that render's
-`$component()` callback when one exists.
+serializes it as strict JSON and seeds its top-level keys into that render's
+Vue component instance. Template expressions resolve those keys on the same
+instance, and each rendered component receives its own data graph.
 
 The returned mapping must follow these rules:
 
@@ -97,17 +132,16 @@ The returned mapping must follow these rules:
 - every value is JSON-serializable;
 - numbers are finite, so `NaN` and infinity are rejected.
 
-An Alpine expression can read those keys directly, so `$component()` is not
-required only to copy server data into scope. A render with neither Alpine
-expressions nor a live `$component()` call does not send the data. Identical
-payloads are transported once, but nested arrays and objects are not shared
-between instances.
+A Vue expression can read those keys directly, so `onServerRender` should be
+used for DOM setup or other imperative integration rather than copying server
+data into a second scope. Nested arrays and objects are not shared between
+component instances.
 
 Python names normally use `snake_case`. Assign them to `camelCase` names when
 browser code keeps using them:
 
 ```javascript
-const chartPoints = data.chart_points;
+const chartPoints = component.chart_points;
 ```
 
 That small distinction makes it easier to see which language owns a name.

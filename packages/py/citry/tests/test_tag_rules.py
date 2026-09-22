@@ -190,8 +190,8 @@ class TestBuildTagRules:
     def test_cache_invalidated_on_register(self):
         c = Citry()
         # A fresh instance carries only the built-ins' rules (the
-        # <c-cache>, <c-error-fallback>, and <c-i18n> declare typed inputs).
-        assert set(c._tag_rules()) == {"c-cache", "c-error-fallback", "c-i18n"}
+        # <c-cache>, <c-error-fallback>, <c-i18n>, and <c-mark> declare typed inputs).
+        assert set(c._tag_rules()) == {"c-cache", "c-error-fallback", "c-i18n", "c-mark"}
 
         _declared_card(c)
         assert "c-card" in c._tag_rules()

@@ -13,7 +13,21 @@ from citry import Citry, Component
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
+READY = """() => {
+  const form = document.querySelector('#escalation-team-form');
+  const emails = [...document.querySelectorAll('[data-contact-email]')];
+  const roles = [...document.querySelectorAll('[data-contact-role]')];
+  return Boolean(
+    window.Citry?.events
+    && form?.hasAttribute('data-citry-form-initialized')
+    && emails.length === 2
+    && emails.every((input) => input.hasAttribute('data-citry-input-initialized'))
+    && roles.length === 2
+    && roles.every((input) => (
+      input.closest('[data-citry-combobox-root]')?.hasAttribute('data-citry-combobox-initialized')
+    ))
+  );
+}"""
 
 
 def _workflow_page() -> tuple[Citry, str]:
@@ -146,9 +160,11 @@ def _workflow_page() -> tuple[Citry, str]:
                         #c-key="row['id'] + '-email-input'"
                         c-name="'contacts[' + row['id'] + '][email]'"
                         type="email"
-                        c-value="row['email']"
                         autocomplete="email"
-                        c-attrs="{'data-contact-email': row['id']}"
+                        c-attrs="{
+                          'data-contact-email': row['id'],
+                          'defaultValue': row['email'],
+                        }"
                       />
                     </c-fill>
                     <c-fill name="description">
@@ -221,19 +237,20 @@ def _workflow_page() -> tuple[Citry, str]:
 
         js = """
           $component({
-            init: ({ els, data }) => {
-              const root = els[0];
-              if (!data.focusId) {
+            onServerRender: ({ component }) => {
+              const root = component.$el;
+              const focusId = component.focusId;
+              if (!focusId) {
                 return;
               }
               // A replacement component initializes before its new root is
               // necessarily connected. Wait for the browser commit before
               // focusing a newly added descendant.
               requestAnimationFrame(() => {
-                const target = data.focusId === "__add__"
+                const target = focusId === "__add__"
                   ? root.querySelector("[data-add-contact]")
                   : [...root.querySelectorAll("[data-contact-email]")]
-                    .find((input) => input.dataset.contactEmail === data.focusId);
+                    .find((input) => input.dataset.contactEmail === focusId);
                 target?.focus({ preventScroll: true });
               });
             },
@@ -242,6 +259,7 @@ def _workflow_page() -> tuple[Citry, str]:
 
     class Page(Component):
         citry = app
+        js = "$component({data(){return {showTeam:true};}});"
         template = """
           <!doctype html>
           <html lang="en">
@@ -250,7 +268,12 @@ def _workflow_page() -> tuple[Citry, str]:
               <c-css />
             </head>
             <body>
-              <c-escalation-team />
+              <div id="team-mount" v-if="showTeam">
+                <c-escalation-team />
+              </div>
+              <button id="remove-team" type="button" @click="showTeam = false">
+                Remove team
+              </button>
               <c-js />
             </body>
           </html>
@@ -349,11 +372,13 @@ def test_repeatable_workflow_preserves_edits_identity_validation_and_submission(
     page.evaluate(
         """() => {
           window.__removedTeam = document.querySelector('[data-escalation-team]');
-          window.__removedTeam.remove();
+          document.querySelector('#remove-team').click();
         }"""
     )
     page.wait_for_function(
         """() => (
+          !document.querySelector('[data-escalation-team]')
+          &&
           !window.__removedTeam.querySelector('[data-citry-form-initialized]')
           && !window.__removedTeam.querySelector('[data-citry-input-initialized]')
           && !window.__removedTeam.querySelector('[data-citry-combobox-initialized]')

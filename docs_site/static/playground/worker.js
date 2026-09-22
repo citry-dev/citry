@@ -1,4 +1,4 @@
-import { resolvePackageUrls } from "./runtime_packages.js";
+import { resolvePackageUrls, validatePyodideManifest } from "./runtime_packages.js";
 
 // The Worker keeps Pyodide and the rendered module's Citry instance off the UI
 // thread. The parent identifies every message by Worker generation and run ID.
@@ -36,16 +36,22 @@ async function initialize(data) {
       fetchText("./executor.py"),
     ]);
     const runtime = JSON.parse(runtimeText);
-    if (runtime.schema_version !== 1 || runtime.protocol_version !== 1 || !Array.isArray(runtime.packages)) {
+    if (
+      runtime.schema_version !== 1
+      || runtime.protocol_version !== 1
+      || !["published", "workspace"].includes(runtime.source)
+      || !Array.isArray(runtime.packages)
+    ) {
       throw new Error("The playground runtime configuration is invalid.");
     }
+    validatePyodideManifest(runtime.pyodide);
 
     send({ type: "phase", phase: "Starting Python" });
     const { loadPyodide } = await import(runtime.pyodide.module_url);
     pyodide = await loadPyodide({ indexURL: runtime.pyodide.index_url });
 
     send({ type: "phase", phase: `Installing Citry ${runtime.citry.version}` });
-    await pyodide.loadPackage(await resolvePackageUrls(runtime.packages));
+    await pyodide.loadPackage(await resolvePackageUrls(runtime.packages, { pyodide: runtime.pyodide }));
     // executor.py installs the stable functions used by later run and event messages.
     pyodide.runPython(executorSource);
     send({ type: "phase", phase: "Verifying installed versions" });
@@ -82,6 +88,7 @@ json.dumps(versions)
         `Citry ${runtime.citry.version}`,
         runtime.citry.ui_version ? `Citry UI ${runtime.citry.ui_version}` : "",
       ].filter(Boolean).join(", "),
+      source: runtime.source,
     });
   } catch (error) {
     send({

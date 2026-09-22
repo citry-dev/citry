@@ -4,6 +4,7 @@
 
 import gc
 import importlib
+import json
 import re
 import sys
 import threading
@@ -885,14 +886,38 @@ class TestConcurrentLoading:
         assert not any(thread.is_alive() for thread in threads)
         assert errors == []
         assert len(results) == thread_count
-        # Only the per-render id may differ between the outputs; a partially
-        # resolved template would show up as a wrong or truncated body in the
-        # renders that raced the first one.
-        normalized = {re.sub(r"data-cid-\w+", "data-cid-x", html) for html in results}
-        assert len(normalized) == 1
-        html = normalized.pop()
-        assert "Concurrent" in html
-        assert "console.log('conc')" in html
+        # Each prepared shell owns fresh application/render ids. Compare its
+        # parsed graph and compiled-definition reference instead of pinning
+        # those ids or requiring byte-identical shell state.
+        definition_ids = []
+        render_ids = []
+        for html in results:
+            payload_match = re.search(
+                r"CitryStable\.startPrepared\((\{.*?\})\)\.catch",
+                html,
+                re.DOTALL,
+            )
+            assert payload_match is not None
+            prepared = json.loads(payload_match.group(1))
+            manifest = prepared["manifest"]
+
+            assert manifest["protocol"] == "citry-vue-prepared/1"
+            assert prepared["host"] == f"#citry-vue-{manifest['appId']}"
+            assert re.fullmatch(r"[0-9a-f]{32}", manifest["appId"])
+            [definition] = manifest["definitions"]
+            [occurrence] = manifest["occurrences"]
+            assert manifest["rootId"] == occurrence["id"]
+            assert occurrence["definitionId"] == definition["id"]
+            assert occurrence["typeKey"] == Racer.class_id
+            assert definition["target"] == "ordinary-vnodes/1"
+            assert any(script["owner"]["typeKey"] == Racer.class_id for script in manifest["scripts"])
+            assert "Concurrent" in html
+            assert "console.log('conc')" in html
+            definition_ids.append(definition["id"])
+            render_ids.append(occurrence["renderId"])
+
+        assert len(set(definition_ids)) == 1
+        assert len(set(render_ids)) == thread_count
         # The race left the class with one fully compiled cached template.
         template = Racer.get_template()
         assert template is not None

@@ -8,16 +8,13 @@ class DialogForm(Component):
     template = """
       <section
         class="dialog-form-demo"
-        x-data="{ result: 'No constellation selected' }"
       >
         <p>Star chart</p>
         <h2>Use a native Dialog Form</h2>
         <c-CDialog
-          $c-props="{
-            onOpenChange: (open, detail) => {
+          :onOpenChange="(open, detail) => {
               if (!open && detail.returnValue) result = detail.returnValue;
-            },
-          }"
+            }"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
@@ -39,9 +36,18 @@ class DialogForm(Component):
           </c-fill>
         </c-CDialog>
         <p class="dialog-form-demo__result" aria-live="polite">
-          Selected: <strong x-text="result">No constellation selected</strong>
+          Selected: <strong v-text="result">No constellation selected</strong>
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result: 'No constellation selected'
+          };
+        },
+      });
     """
 
     css = """

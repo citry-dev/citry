@@ -30,7 +30,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "LICENSE-vize"]
 dependencies = []
 
 [dependency-groups]
@@ -77,4 +77,8 @@ cache-keys = [
     { file = "../../../crates/**/*.rs" },
     { file = "../../../crates/**/*.pest" },
     { file = "../../../crates/**/Cargo.toml" },
+    { file = "../../../third_party/rust/vize_atelier_core/**/*.rs" },
+    { file = "../../../third_party/rust/vize_atelier_core/Cargo.toml" },
+    { file = "../../../third_party/rust/vize_s1_to_s2/**/*.rs" },
+    { file = "../../../third_party/rust/vize_s1_to_s2/Cargo.toml" },
 ]

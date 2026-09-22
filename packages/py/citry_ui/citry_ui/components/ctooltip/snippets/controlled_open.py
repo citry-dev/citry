@@ -6,27 +6,33 @@ citry.register_library(citry_ui)
 
 class ControlledTooltip(Component):
     template = """
-      <section class="controlled-tooltip" x-data="{ open: false, locked: false, reason: 'none' }">
+      <section class="controlled-tooltip" >
         <c-CTooltip
           text="Controlled description for the Europa archive"
-          $c-props="{
-            open,
-            onOpenChange: (nextOpen, detail) => {
+          :open="open" :onOpenChange="(nextOpen, detail) => {
               reason = detail.reason;
               if (!locked) open = nextOpen;
-            },
-          }"
+            }"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Europa archive</c-CButton>
           </c-fill>
         </c-CTooltip>
         <label>
-          <input type="checkbox" x-model="locked" />
+          <input type="checkbox" v-model="locked" />
           Decline requests
         </label>
-        <output x-text="`Last request: ${reason}`"></output>
+        <output v-text="`Last request: ${reason}`"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open: false, locked: false, reason: 'none'
+          };
+        },
+      });
     """
 
     css = """

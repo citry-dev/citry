@@ -481,6 +481,7 @@ class TestBuiltinLifecycle:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }
@@ -575,6 +576,7 @@ class TestBuiltinLifecycle:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }
@@ -623,6 +625,7 @@ class TestBuiltinLifecycle:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }
@@ -702,6 +705,7 @@ class TestBuiltinLifecycle:
             "error-fallback",
             "js",
             "css",
+            "mark",
             "i18n",
             "trans",
         }

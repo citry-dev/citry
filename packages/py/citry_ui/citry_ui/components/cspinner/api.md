@@ -47,7 +47,7 @@ focus stop or changes surrounding controls.
 
 ## Control presentation in the browser
 
-Client inputs are passed through `$c-props="{...}"`. They can update `label`,
+Client inputs are passed with native Vue `:` bindings and callback props. They can update `label`,
 `intent`, and `size`; omission returns to the server fallback.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cspinner/snippets/controlled.py" title="Control Spinner in the browser" />

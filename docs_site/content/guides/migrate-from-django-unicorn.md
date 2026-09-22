@@ -78,7 +78,7 @@ django-unicorn accepts Python-like call strings and direct property setters:
 <button unicorn:click="rating=0">Clear</button>
 ```
 
-Citry uses one Alpine object expression as event data, then validates it
+Citry uses one Vue object expression as event data, then validates it
 against the handler's declared input:
 
 ```citry
@@ -99,7 +99,7 @@ failed-call behavior explicit: raise `EventError` and do not render.
 ```
 
 The response carries status 422 and the field map. `$error("save")` exposes
-that handler's map to Alpine, while the existing form stays in the DOM with
+that handler's map to Vue, while the existing form stays in the DOM with
 everything the user typed. A later successful `save` call clears that error
 without clearing errors retained for other handlers.
 
@@ -134,11 +134,11 @@ then let page JavaScript decide how it appears:
 --8<-- "docs_site/snippets/migrate_unicorn.py:browser-event"
 ```
 
-Listen with `$onEvent("Preferences:saved", callback)` in Alpine or
+Listen with `$onEvent("Preferences:saved", callback)` in Vue or
 Component.js, or with ordinary `addEventListener`. This keeps Python from
 selecting and invoking arbitrary client functions.
 
-Local-only interactions stay in Alpine. For example,
+Local-only interactions stay in Vue. For example,
 `@click="$state.expanded = !$state.expanded"` changes writable State locally,
 and the next server call carries the queued update.
 
@@ -176,7 +176,7 @@ attributes. Keep `{{ expression }}` for element text.
 | Method on `UnicornView` | Public method inside `class Events` |
 | Automatic re-render | Return a fresh component or `state.render()` helper you define |
 | `ValidationError` / `unicorn.errors` | `EventError(..., fields=...)` / `$error("save").fieldErrors` |
-| Loading attributes | `$loading()` or `$loading("save")` in an Alpine expression |
+| Loading attributes | `$loading()` or `$loading("save")` in a Vue expression |
 | `unicorn:poll` | `@c-poll.2s="refresh"` |
 | `self.call("fn", ...)` | `actions.Dispatch(name, detail)` plus a browser listener |
 | `Unicorn.call(...)` | `$sendEvent(name, args)` or `Citry.events.send(...)` |
@@ -190,7 +190,7 @@ Those features blur data, routing, and authorization into one input language.
 The replacement is a short explicit list: State fields, named Events methods,
 typed data, and record loading inside the handler.
 
-Dirty-input styling can be built from Alpine state and lifecycle events when a
+Dirty-input styling can be built from Vue state and lifecycle events when a
 form needs it. Offline call queues are left to application-specific code
 because replaying a mutation across a deployment is rarely safe. Multipart
 uploads are not part of Events v1. A file-producing handler can use

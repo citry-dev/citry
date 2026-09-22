@@ -73,11 +73,11 @@ an oversized requested extent.
 
 Every server configuration input has a matching client input except identity,
 text, class, style, and attrs. Use `initialFocus`, `placement`, `size`, and
-`scroll` through `$c-props` for live changes.
+`scroll` with native Vue bindings for live changes.
 
 ## Control visibility
 
-Pass Boolean `open` and `onOpenChange` through `$c-props`. Controlled requests
+Pass Boolean `open` and `onOpenChange` with native Vue bindings. Controlled requests
 wait for the owner; retaining `open` declines an ordinary request. Forced
 ancestor/native safety closure happens first and reports `forced: true`.
 

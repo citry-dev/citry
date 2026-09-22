@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput
+from citry.constness import const_value
 from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import (
     CClassValue,
@@ -140,7 +141,7 @@ class CField(LibraryComponent):
         readonly = (
             kwargs.readonly if kwargs.readonly is not None else bool(form.readonly) if form is not None else False
         )
-        control_id = kwargs.control_id or f"cui-field-{self.id}-control"
+        control_id = str(const_value(kwargs.control_id)) if kwargs.control_id else f"cui-field-{self.id}-control"
         field_id = f"{control_id}-field"
         label_id = f"{control_id}-label"
         description_id = f"{control_id}-description"
@@ -163,7 +164,7 @@ class CField(LibraryComponent):
             "aria-invalid": "true" if kwargs.invalid else None,
             "aria-describedby": described_by,
             "aria-errormessage": error_id if kwargs.invalid and has_error else None,
-            FIELD_CONTROL_MARKER: True,
+            FIELD_CONTROL_MARKER: "",
         }
         self.provide(
             FIELD_CONTEXT_KEY,
@@ -222,19 +223,19 @@ class CField(LibraryComponent):
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
         form = self.inject(FORM_CONTEXT_KEY, None)
-        control_id = kwargs.control_id or f"cui-field-{self.id}-control"
+        control_id = str(const_value(kwargs.control_id)) if kwargs.control_id else f"cui-field-{self.id}-control"
         return {
-            "required": kwargs.required,
-            "disabled": kwargs.disabled if kwargs.disabled is not None else False,
-            "readonly": kwargs.readonly
+            "serverRequired": kwargs.required,
+            "serverDisabled": kwargs.disabled if kwargs.disabled is not None else False,
+            "serverReadonly": kwargs.readonly
             if kwargs.readonly is not None
             else bool(form.readonly)
             if form is not None
             else False,
             "inheritsReadonly": kwargs.readonly is None,
-            "invalid": kwargs.invalid,
-            "orientation": kwargs.orientation,
-            "density": kwargs.density,
+            "serverInvalid": kwargs.invalid,
+            "serverOrientation": kwargs.orientation,
+            "serverDensity": kwargs.density,
             "controlId": control_id,
             "descriptionId": f"{control_id}-description",
             "errorId": f"{control_id}-error",
@@ -246,10 +247,10 @@ class CField(LibraryComponent):
       <div
         class="cui-field"
         c-id="field_id"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-orientation="orientation"
         c-data-density="density"
         data-citry-field-root
@@ -316,8 +317,49 @@ class CField(LibraryComponent):
           orientation: {},
           density: {},
         },
-        init: ({ els, data, props, effect, reactive, provide, inject }) => {
-          const root = els[0];
+        inject: {
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        data() {
+          const component = this;
+          const service = Citry.vue.reactive({
+            get controlId() { return component.controlId; },
+            get descriptionId() { return component.descriptionId; },
+            get errorId() { return component.errorId; },
+            get hasDescription() { return component.hasDescription; },
+            get hasError() { return component.hasError; },
+            required: this.serverRequired,
+            disabled: this.serverDisabled,
+            readonly: this.serverReadonly,
+            invalid: this.serverInvalid,
+            nativeInvalid: false,
+            supportsRequired: true,
+            supportsReadonly: true,
+            capabilityGeneration: 0,
+            activeCapabilityGeneration: null,
+            registerCapabilities(capabilities) {
+              const generation = ++service.capabilityGeneration;
+              service.activeCapabilityGeneration = generation;
+              service.supportsRequired = capabilities.required !== false;
+              service.supportsReadonly = capabilities.readonly !== false;
+              return () => {
+                if (service.activeCapabilityGeneration !== generation) return;
+                service.activeCapabilityGeneration = null;
+                service.supportsRequired = true;
+                service.supportsReadonly = true;
+              };
+            },
+            setNativeInvalid(value) { service.nativeInvalid = Boolean(value); },
+          });
+          return {fieldService: service};
+        },
+        provide() { return {[Symbol.for("citry-ui:field")]: this.fieldService}; },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          if (!(root instanceof HTMLDivElement) || !root.hasAttribute("data-citry-field-root"))
+            throw new Error("[citry-ui] CField settled anatomy is invalid.");
+          const data = component;
+          const props = component.$props;
           const requiredIndicator = root.querySelector(
             ':scope > [data-citry-ui-part="label"] > [data-citry-ui-part="required-indicator"]',
           );
@@ -338,15 +380,13 @@ class CField(LibraryComponent):
           const initialSupportsReadonly = control.getAttribute(
             "data-citry-field-supports-readonly",
           ) !== "false";
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const form = component.formService;
           const allowedValues = {
             orientation: ["vertical", "horizontal"],
             density: ["default", "comfortable", "compact"],
           };
           const invalidEpisodes = new Map();
-          let externalInvalid = data.invalid;
-          let capabilityGeneration = 0;
-          let activeCapabilityGeneration = null;
+          let externalInvalid = data.serverInvalid;
 
           const describeValue = (value) => {
             try {
@@ -390,47 +430,18 @@ class CField(LibraryComponent):
             return fallback;
           };
           const resolveChoice = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const fallback = data[`server${name[0].toUpperCase()}${name.slice(1)}`];
+            const value = props[name] === undefined ? fallback : props[name];
             if (allowedValues[name].includes(value)) {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return data[`server${name[0].toUpperCase()}${name.slice(1)}`];
           };
-          const context = reactive({
-            controlId: data.controlId,
-            descriptionId: data.descriptionId,
-            errorId: data.errorId,
-            hasDescription: data.hasDescription,
-            hasError: data.hasError,
-            required: data.required,
-            disabled: data.disabled,
-            readonly: data.readonly,
-            invalid: data.invalid,
-            nativeInvalid: false,
-            supportsRequired: initialSupportsRequired,
-            supportsReadonly: initialSupportsReadonly,
-            registerCapabilities(capabilities) {
-              const generation = ++capabilityGeneration;
-              activeCapabilityGeneration = generation;
-              context.supportsRequired = capabilities.required !== false;
-              context.supportsReadonly = capabilities.readonly !== false;
-              return () => {
-                if (activeCapabilityGeneration !== generation) {
-                  return;
-                }
-                activeCapabilityGeneration = null;
-                context.supportsRequired = true;
-                context.supportsReadonly = true;
-              };
-            },
-            setNativeInvalid(value) {
-              context.nativeInvalid = Boolean(value);
-              applyInvalid();
-            },
-          });
-          provide(Symbol.for("citry-ui:field"), context);
+          const context = component.fieldService;
+          context.supportsRequired = initialSupportsRequired;
+          context.supportsReadonly = initialSupportsReadonly;
 
           const applyInvalid = () => {
             const invalid = externalInvalid || context.nativeInvalid;
@@ -438,12 +449,12 @@ class CField(LibraryComponent):
             root.toggleAttribute("data-invalid", invalid);
             error.hidden = !(invalid && context.hasError);
           };
-          effect(() => {
-            const requestedRequired = resolveBoolean("required", data.required);
-            const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+          Citry.vue.watchEffect(() => {
+            const requestedRequired = resolveBoolean("required", data.serverRequired);
+            const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.serverReadonly;
             // CForm uses a native disabled fieldset, so its disabled state
             // must win over a descendant's local configuration.
-            const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+            const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
             const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
             const required = requestedRequired && context.supportsRequired;
             const readonly = requestedReadonly && context.supportsReadonly;
@@ -457,7 +468,7 @@ class CField(LibraryComponent):
             } else {
               invalidEpisodes.delete("capability:readonly");
             }
-            externalInvalid = resolveBoolean("invalid", data.invalid);
+            externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             const orientation = resolveChoice("orientation");
             const density = resolveChoice("density");
 
@@ -648,7 +659,7 @@ class CInput(LibraryComponent):
             "placeholder": kwargs.placeholder,
             "variant": kwargs.variant,
             "size": kwargs.size,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "attrs": caller_attrs,
         }
 
@@ -660,32 +671,32 @@ class CInput(LibraryComponent):
         field = self.inject(FIELD_CONTEXT_KEY, None)
         form = self.inject(FORM_CONTEXT_KEY, None)
         return {
-            "value": kwargs.value,
-            "required": bool(field.required)
+            "serverValue": const_value(kwargs.value),
+            "serverRequired": bool(field.required)
             if field is not None
             else kwargs.required
             if kwargs.required is not None
             else False,
-            "disabled": bool(field.disabled)
+            "serverDisabled": bool(field.disabled)
             if field is not None
             else kwargs.disabled
             if kwargs.disabled is not None
             else False,
-            "readonly": bool(field.readonly)
+            "serverReadonly": bool(field.readonly)
             if field is not None
             else kwargs.readonly
             if kwargs.readonly is not None
             else bool(form.readonly)
             if form is not None
             else False,
-            "invalid": bool(field.invalid)
+            "serverInvalid": bool(field.invalid)
             if field is not None
             else kwargs.invalid
             if kwargs.invalid is not None
             else False,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
+            "serverVariant": const_value(kwargs.variant),
+            "serverSize": const_value(kwargs.size),
             "externalDescribedBy": self._input_external_described_by,
             "externalErrorMessage": self._input_external_error_message,
         }
@@ -706,10 +717,10 @@ class CInput(LibraryComponent):
         c-autocomplete="autocomplete"
         c-inputmode="inputmode"
         c-placeholder="placeholder"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-citry-field-control="field_control"
@@ -729,10 +740,17 @@ class CInput(LibraryComponent):
           variant: {},
           size: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const input = els[0];
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const input = component.$el;
+          if (!(input instanceof HTMLInputElement)) throw new Error("[citry-ui] CInput settled anatomy is invalid.");
+          const data = component;
+          const props = component.$props;
+          const field = component.fieldService;
+          const form = component.formService;
           const allowedValues = {
             variant: ["outline", "filled", "plain"],
             size: ["sm", "md", "lg"],
@@ -774,13 +792,14 @@ class CInput(LibraryComponent):
             return fallback;
           };
           const resolveChoice = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const fallback = data[`server${name[0].toUpperCase()}${name.slice(1)}`];
+            const value = props[name] === undefined ? fallback : props[name];
             if (allowedValues[name].includes(value)) {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return data[`server${name[0].toUpperCase()}${name.slice(1)}`];
           };
           const reportFieldOwned = (name, value) => {
             const describedValue = describeValue(value);
@@ -847,12 +866,12 @@ class CInput(LibraryComponent):
               readonly = field.readonly;
               externalInvalid = field.invalid;
             } else {
-              required = resolveBoolean("required", data.required);
+              required = resolveBoolean("required", data.serverRequired);
               // A native disabled CForm fieldset always wins.
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
+              const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.serverReadonly;
               readonly = resolveBoolean("readonly", readonlyFallback);
-              externalInvalid = resolveBoolean("invalid", data.invalid);
+              externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             }
             const invalid = externalInvalid || nativeInvalid;
             const variant = resolveChoice("variant");
@@ -936,11 +955,12 @@ class CInput(LibraryComponent):
           input.addEventListener("compositionstart", onCompositionStart);
           input.addEventListener("compositionend", onCompositionEnd);
           nativeForm?.addEventListener("reset", onReset);
-          effect(() => {
+          const unregisterCapabilities = field?.registerCapabilities({required: true, readonly: true});
+          Citry.vue.watchEffect(() => {
             applyState();
             clearNativeInvalidWhenValid();
           });
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             const value = props.value;
             if (value === undefined) {
               controlled = false;
@@ -961,6 +981,7 @@ class CInput(LibraryComponent):
           input.setAttribute("data-citry-input-initialized", "");
 
           return () => {
+            unregisterCapabilities?.();
             input.removeEventListener("invalid", onInvalid);
             input.removeEventListener("input", onInput);
             input.removeEventListener("change", onChange);

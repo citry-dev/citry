@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal, get_args
 
-from citry import LibraryComponent, Markup, const_value
+from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_choice
 from citry_ui.components.cicon._catalog import ICON_GLYPHS
@@ -122,7 +122,7 @@ _OWNED_ATTRS = frozenset(
 @dataclass(frozen=True, slots=True)
 class _RegisteredIconGlyph:
     name: str
-    markup: Markup
+    markup: str
     logical: bool
 
 
@@ -142,7 +142,7 @@ def _resolve_registered_icon(name: object, component_name: str) -> _RegisteredIc
     glyph_name = _SEMANTIC_ALIASES.get(plain_name, plain_name)
     return _RegisteredIconGlyph(
         name=plain_name,
-        markup=Markup(ICON_GLYPHS[glyph_name]),  # noqa: S704 - generated package-owned allowlist
+        markup=ICON_GLYPHS[glyph_name],
         logical=plain_name in _LOGICAL_DIRECTION_NAMES,
     )
 
@@ -231,7 +231,10 @@ class CIcon(LibraryComponent):
 
         return {
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
-            "glyph": resolved_icon.markup,
+            # The generated allowlist is parsed through Citry's ordinary
+            # authenticated source pipeline; it never becomes a trusted-HTML
+            # data value in the surrounding Vue expression.
+            "glyph": self.citry.render_template(resolved_icon.markup),
             "label": kwargs.label,
             "role": "img" if kwargs.label is not None else None,
             "aria_hidden": "true" if kwargs.label is None else None,

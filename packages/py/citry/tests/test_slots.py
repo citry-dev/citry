@@ -12,6 +12,7 @@ from typing import get_args, get_origin, get_type_hints
 import pytest
 
 from citry import Citry, CitryRender, Component, Extension, Markup, Slot, SlotContext, SlotData, SlotInput
+from citry._vue.direct import bind_template_fill, direct_fill_source, direct_render_scope
 from citry.slots import normalize_slot_fills
 
 
@@ -54,6 +55,48 @@ class TestSlotConstruction:
 
 
 class TestSlotCall:
+    def test_direct_python_plain_values_keep_public_escaped_string_semantics(self):
+        values = ("<>&", "&amp;", "{{ literal }}", True, None, 10**30)
+        with direct_render_scope():
+            rendered = [Slot(value)() for value in values]
+            callable_none = Slot(lambda _ctx: None)()
+            duplicate = [Slot("same")(), Slot("same")()]
+            trusted = Slot(Markup("<b>trusted</b>"))()
+
+        assert all(isinstance(value, Markup) for value in rendered)
+        assert rendered == ["&lt;&gt;&amp;", "&amp;amp;", "{{ literal }}", "True", "None", str(10**30)]
+        assert isinstance(callable_none, Markup)
+        assert callable_none == ""
+        assert duplicate == ["same", "same"]
+        assert trusted == "<b>trusted</b>"
+
+    def test_normalized_direct_plain_slot_copy_keeps_public_string_semantics(self):
+        original = Slot("Invoices")
+        with direct_render_scope():
+            bind_template_fill(
+                original,
+                lexical_render_id="c1",
+                kind="implicit",
+                public_name="default",
+                source="Invoices",
+                span=(0, 8),
+                origin=None,
+            )
+            copied = normalize_slot_fills({"default": original}, component_name="Menu")["default"]
+            assert direct_fill_source(copied) is direct_fill_source(original)
+            assert copied.extra == {}
+        callable_slot = normalize_slot_fills({"default": Slot(lambda _ctx: "Rename")}, component_name="Menu")[
+            "default"
+        ]
+        with direct_render_scope():
+            fixed = copied()
+            dynamic = callable_slot()
+
+        assert isinstance(fixed, Markup)
+        assert fixed == "Invoices"
+        assert isinstance(dynamic, Markup)
+        assert dynamic == "Rename"
+
     def test_function_receives_data(self):
         slot = Slot(lambda ctx: f"Hello, {ctx.data.name}!")
         assert slot({"name": "John"}) == "Hello, John!"

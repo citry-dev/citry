@@ -1,288 +1,277 @@
 ---
 title: Client interactivity
-description: Understand which component owns browser data, handlers, props, slot content, and lifecycle work.
+description: Understand Vue state, props, events, slots, and server-render lifecycle work in a Citry component.
 ---
 
 # Client interactivity
 
-When a page becomes interactive, Citry keeps browser behavior attached to the
-component that authored it. This matters whenever components are nested: DOM
-elements may sit inside one another, but a child's private Alpine variables do
-not automatically become part of the parent's scope.
+Each interactive Citry component is a Vue component. The component's template
+can read its Python-seeded data, local Vue state, props, setup bindings,
+methods, computed values, and injections.
 
-Use this ownership map when deciding where code belongs:
+Use [Vue in templates](/syntax/vue/) for directive syntax. This page explains
+how data and behavior cross Citry component boundaries.
 
-- Markup inside a component's own template uses that component's scope.
-- A handler written on a `<c-child>` tag belongs to the parent that wrote it.
-- A fill keeps the scope of the template that supplied it.
-- A slot fallback uses the scope of the component that defined the slot.
-
-This page explains the component boundary. For Alpine directives and magics,
-see [Alpine in components](/syntax/alpine/). For runtime loading, plugins, CSP,
-and deployment, see [Alpine runtime](/advanced/alpine-runtime/).
-
-## Seed the component scope from Python
+## Seed browser data from Python
 
 Return initial browser data from
-[`Component.js_data()`][citry.Component.js_data]. Citry makes every top-level
-key available directly to Alpine expressions in that component:
+[`Component.js_data()`][citry.Component.js_data]. Citry exposes every top-level
+key as a reactive member of that component's Vue instance:
 
 ```citry
-from citry import Citry, Component
-
-c = Citry()
+from citry import Component
 
 
 class Counter(Component):
-    citry = c
-
     class Kwargs:
         start: int = 0
 
-    def js_data(
-        self,
-        kwargs: Kwargs,
-        slots,
-    ) -> dict[str, int]:
+    def js_data(self, kwargs: Kwargs, slots) -> dict[str, int]:
         return {"count": kwargs.start}
 
     template = """
-      <button
-        type="button"
-        @click="increment()"
-        x-text="count"
-      ></button>
+      <button type="button" @click="increment">
+        Add one
+      </button>
+      <output v-text="count"></output>
     """
 
+    js = """
+      $component({
+        methods: {
+          increment() {
+            this.count += 1;
+          },
+        },
+      });
+    """
 ```
 
-The value returned by `js_data()` must be JSON-serializable. Use strings,
-numbers, booleans, `null`-equivalent `None`, lists, and dictionaries with
-serializable contents. Convert dates, model instances, and other Python
-objects before returning them. Identical JSON stays deduplicated in transport,
-but each component instance gets a fresh nested graph.
+The returned value must be JSON-serializable. When an accepted server render
+updates this component, Citry updates these keys on its live Vue instance.
+Member assignment such as `this.count += 1` remains available for local
+browser changes.
 
-## Initialize component JavaScript
+Choose distinct names for Python-seeded data and native Vue `data()`,
+`setup()`, props, injections, methods, and computed values. Citry reports a
+collision rather than silently overwriting a member.
 
-Add [`$component`][$component] when the component needs setup code. Citry
-seeds `scope` first, then calls the initializer once per live render:
+## Define local Vue state and behavior
+
+`$component({...})` accepts native Vue Options. Use `data()` for local mutable
+state, `methods` and `computed` for behavior derived from that state, and
+normal Vue lifecycle hooks when the work follows the component lifetime:
 
 ```js
-$component(({ data, scope }) => {
-  console.log(data.count, scope.count);
-  scope.increment = () => {
-    scope.count += 1;
-  };
+$component({
+  data() {
+    return { open: false };
+  },
+  computed: {
+    buttonLabel() {
+      return this.open ? "Close" : "Open";
+    },
+  },
+  methods: {
+    toggle() {
+      this.open = !this.open;
+    },
+  },
 });
 ```
 
-The callback can replace seeded values or add client-only fields. On a
-compatible rerender, Citry refreshes the keys owned by the new server payload,
-removes formerly seeded keys that are now absent, and preserves other fields
-the callback added. Treat `data` as the current snapshot and make ongoing
-reactive changes through `scope`.
-
-The setup callback receives:
-
-- `data`: the fresh instance-local value returned by `js_data()`, or `null`;
-- `scope`: the stable component-local Alpine scope, already seeded from `data`;
-- `props`: reactive read-only values accepted from the parent;
-- `els`: the component's current root elements;
-- `state`: the Events State facade, or `null`;
-- `reactive` and `effect`: Alpine reactivity managed by Citry;
-- `provide`, `inject`, and `unprovide`: descendant context helpers;
-- `sendEvent` and `onEvent`: instance-scoped Events helpers;
-- `loading` and `error`: read-only accessors for the instance's handler calls;
-- `id` and `graph`: render and ownership information.
-
-`reactive(object)` returns a reactive proxy. An `effect(callback)` runs its
-callback immediately, tracks reactive values read during that run, and runs it
-again when those values change. Citry stops managed effects when that live
-render is replaced or removed.
-
-Setup must finish synchronously. Return a cleanup function for resources you
-create outside Citry's managed helpers:
+Citry also accepts Vue's synchronous `setup()` form. Composition API helpers
+come from the exact runtime used by the page:
 
 ```js
-$component(({ els }) => {
-  const chart = makeChart(els[0]);
-  return () => chart.destroy();
+$component({
+  setup() {
+    const selected = Citry.vue.ref(null);
+    return { selected };
+  },
 });
 ```
 
-On a compatible rerender, Citry stops effects, runs the cleanup, and calls the
-setup again with fresh server data. The logical component scope and the `els`
-array keep their identity.
+## React after a server render
 
-## Pass client props down
+Use `onServerRender` when an integration must inspect the updated DOM or start
+work again after an accepted server render that updates this component:
 
-Use [`$c-props`][$c-props] on a component tag when the parent should pass live
-browser values or callbacks to the child:
+```js
+$component({
+  onServerRender({ component, revision }) {
+    const canvas = component.$refs.chart;
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+
+    const chart = createChart(canvas, component.points);
+    console.log("rendered revision", revision);
+    return () => chart.destroy();
+  },
+});
+```
+
+Add the matching Vue ref to the template:
 
 ```citry-html
-<c-chart
-  $c-props="{
-    theme: selectedTheme,
-    onSelect: (value) => choose(value),
-  }"
-/>
+<canvas ref="chart"></canvas>
 ```
 
-The expression runs in the parent's scope and must synchronously return a
-plain object. The child declares what it accepts in its `$component` setup:
+Citry calls the callback after this component mounts and after an accepted
+server render updates it. An unrelated reactive update does not call it.
+`component` is the live Vue public instance, and `revision` is the accepted
+server revision. Citry runs the optional cleanup before the callback runs
+again and when the component unmounts.
+
+Reactive effects created synchronously during the callback share that cleanup
+lifetime. Use `Citry.vue.watchEffect()` or another Composition API helper when
+you need one. Work started later by a timer or Promise must arrange its own
+cleanup.
+
+The callback shorthand has the same arguments and cleanup behavior:
+
+```js
+$component(({ component }) => {
+  component.$refs.input?.focus();
+});
+```
+
+## Pass props to a child
+
+Declare native Vue props in the child's `$component` options:
 
 ```js
 $component({
   props: {
-    theme: {
+    status: {
       type: String,
-      default: "light",
-    },
-    onSelect: {
-      type: Function,
       required: true,
     },
-  },
-  init: ({ props, scope, effect }) => {
-    scope.select = props.onSelect;
-    effect(() => updateTheme(props.theme));
   },
 });
 ```
 
-The child must contain a `$component(...)` registration whenever `$c-props`
-remains on the resolved component call. Citry checks the actual selected target
-for dynamic `<c-component>` calls and raises during rendering if that target
-has no registration. A final `None` or `False` from `c-$c-props` or `c-bind`
-removes the binding, so no registration is required.
-
-Props are reactive and read-only at the top level. Copy a callback or derived
-operation onto `scope` when the child's own template needs to call it.
-
-Citry reports missing required props, type mismatches, thrown expressions,
-Promises, arrays, and other non-plain results in the browser. A later valid
-value can recover normally.
-
-With the Citry language server, a direct `$c-props="{...}"` object on a
-statically named child is checked while you type. Unknown keys, omitted
-required props, and incompatible proven value types point back to the child's
-static `props` declaration. A spread can supply any required key, so it
-suppresses only the omitted-key check. The Python-dynamic form below remains a
-runtime contract because its JavaScript source is not known until rendering.
-
-The Python-dynamic form is also valid:
+The parent passes a reactive value with `:` or `v-bind`:
 
 ```citry-html
-<c-chart c-$c-props="props_expression" />
+<c-StatusBadge :status="currentStatus" />
 ```
 
-Here the Python expression returns a string containing the Alpine expression.
-A `c-bind` mapping may contain a `$c-props` key too. If several forms provide
-the same client binding, the last one in source order wins.
+A plain component attribute remains a Python component input. The Vue binding
+prefix is what makes `:status` a browser prop.
 
-## Send events up from a component tag
+## Listen to child events
 
-Alpine and Citry handlers written on a child component tag belong to the
-parent's scope:
+Use Vue event bindings on the child component tag:
 
 ```citry-html
-<section x-data="{ selected: false }">
-  <c-action-button
-    x-on:click="selected = true"
-    @c-save="saveSelection({ selected })"
-  />
-</section>
+<c-ColorPicker @select="chooseColor" />
 ```
 
-`x-on:click` and its `@click` shorthand are equivalent. Both run an ordinary
-Alpine expression. The `@c-*` form calls a declared Python event handler; its
-optional value is an Alpine expression that returns the handler arguments.
-Both forms above can read the parent's `selected` value.
+Declare and emit the event in the child's native Vue definition. This works
+the same way when the child renders several roots:
 
-Physical event values still point at the child root that received the event.
-That includes `$el`, `$event`, `$dispatch`, and `event.currentTarget`.
+```js
+$component({
+  emits: ["select"],
+  methods: {
+    choose(color) {
+      this.$emit("select", color);
+    },
+  },
+});
+```
 
-If the child's own markup needs to call parent behavior, pass a callback with
-`$c-props`, declare it as a `Function`, and expose it from the child's setup. A
-handler on the component tag does not grant the parent access to private child
-scope.
+```citry-html
+<button type="button" @click="choose('#7f56d9')">Purple</button>
+<button type="button" @click="choose('#12b76a')">Green</button>
+```
+
+The handler belongs to the parent that wrote the component call. The child
+emits the event through Vue's normal component event API. Citry's `@c-*`
+bindings are separate: they call declared Python event handlers on the server.
+See [Event bindings](/events/bindings/) for that contract.
 
 ## Pass arbitrary HTML attributes explicitly
 
-`$c-props`, Alpine event handlers, and `@c-*` handlers have special
-component-boundary behavior. Other attributes, including `x-show`, `x-model`,
-`:class`, `x-transition`, and `class`, are ordinary Python component kwargs.
-Citry does not guess which child element should receive them.
-
-Accept a dictionary when your component should expose an HTML-attribute API,
-then apply it at the intended element:
+An ordinary attribute on a Citry component tag is a Python component input.
+When a component should expose an HTML-attribute API, accept a mapping and
+apply it to the intended element:
 
 ```citry-html
-<c-card
-  c-attrs="{
-    'x-show': 'visible',
-    ':class': '{ selected: selected }',
-  }"
-/>
+<c-Card c-attrs="{'class': 'featured', 'aria-label': label}" />
 ```
 
 ```citry-html
+{# Inside Card #}
 <article c-bind="attrs">
   <c-slot />
 </article>
 ```
 
-This stays unambiguous for multi-root components and components whose public
-attributes belong on a nested element.
+This is explicit for components with one root, several roots, or a nested
+interactive element.
+
+## Forward fallthrough attributes to a chosen child
+
+Use Vue's `$attrs` when a wrapper receives attributes or listeners that it does
+not declare. Set `inheritAttrs: false` and place the values on the child that
+should receive them:
+
+```js
+$component({
+  inheritAttrs: false,
+  // props, emits, and other options
+});
+```
+
+```citry-html
+<header>Wrapper content</header>
+<c-Child v-bind="$attrs" />
+```
+
+Undeclared attributes and listeners remain in `$attrs` until this explicit
+forwarding point. A declared prop is consumed as a prop, and a listener for a
+declared emitted event is consumed by Vue, so neither appears in `$attrs`.
+When the wrapper has several roots, choose the one child or root that receives
+the forwarding expression. A `v-if` on the component call controls that call;
+it does not become a fallthrough attribute.
+
+An object of Vue listeners can also be attached with the object form:
+
+```citry-html
+<c-Child v-on="listeners" />
+```
+
+The listener object is Vue expression data. Python `c-bind` spreads component
+data into Python inputs and cannot create executable `v-on` syntax. Plain
+attributes on a `<c-Child>` tag remain Python kwargs.
 
 ## Understand slot scope
 
-Template-authored fill content keeps the browser scope of its call site. A
-slot's fallback content uses the receiving component's scope:
+Template-authored fill content keeps the Vue expression context of its call
+site. A slot fallback uses the receiving component's context:
 
 ```citry-html
-<section x-data="{ pageTitle: 'Reports' }">
-  <c-panel>
-    <c-fill name="title">
-      <span x-text="pageTitle"></span>
-    </c-fill>
-  </c-panel>
-</section>
+<c-Panel>
+  <c-fill name="title">
+    <span v-text="pageTitle"></span>
+  </c-fill>
+</c-Panel>
 ```
 
-The fill can read `pageTitle` even though `<c-panel>` has its own component
-scope. It keeps that access when Citry updates the component later.
-
-Slot content passed from Python cannot read private Alpine values from a
-surrounding component. On an interactive page, it starts with an empty Alpine
-scope, so pass in any values it needs. Rendering that content by itself does
-not load Citry's browser runtime.
-
+The fill can read `pageTitle` from the caller. The panel's fallback cannot.
 See [Slots](/concepts/slots/) for the server-rendered composition rules.
 
-## Single, multi-root, and rootless components
+## Work with one or several roots
 
-For a component with several root elements, `els` lists every root in document
-order. A handler written on the component tag listens on all of them. Citry
-still treats it as one handler: `.once` runs only once across the roots, and
-timing modifiers share one timer.
-
-A component may also render no HTML elements. Its `els` array is then empty,
-but setup, props, effects, cleanup, Events State, and polling still work.
-When optimizing production HTML, follow the
-[client-active HTML checklist](/advanced/alpine-runtime/#preserve-client-active-html).
-
-An Alpine handler or DOM-event `@c-*` handler on a component tag needs a real
-child element to receive the event. If that component renders no elements,
-Citry reports the problem and leaves the handler inactive. It does not add a
-wrapper. `$c-props`, setup, effects, cleanup, State, and `@c-poll` continue to
-work.
+Vue components may render one root, several roots, text, or no HTML element.
+Do not assume `component.$el` is an `Element`. Add a template ref to the exact
+element your JavaScript needs, then check its type before using it.
 
 ## See also
 
-- [Event bindings](/events/bindings/) for `@c-*`, State bindings, loading, and
-  errors.
-- [Event actions](/events/actions/) for server responses and browser actions.
-- [Browser APIs](/reference/browser-apis/) for the exact helper contracts.
-- [HTML fragments](/advanced/html-fragments/) for live HTML updates.
-- [Troubleshooting](/guides/troubleshooting/) for browser diagnostic fixes.
+- [Vue in templates](/syntax/vue/) for directives and expressions.
+- [Browser APIs](/reference/browser-apis/) for `$component`, `Citry.vue`, and
+  the component Events helpers.
+- [Event actions](/events/actions/) for server responses and page updates.
+- [HTML fragments](/advanced/html-fragments/) for interactive fragments.

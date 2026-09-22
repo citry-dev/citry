@@ -55,7 +55,7 @@ Sizes set track thickness. Shape selects square, rounded, or pill geometry.
 
 ## Control progress in the browser
 
-Client inputs are passed through `$c-props="{...}"`. A number controls
+Client inputs are passed with native Vue `:` bindings and callback props. A number controls
 determinate completion; `null` switches to indeterminate; omission returns to
 the server fallback.
 

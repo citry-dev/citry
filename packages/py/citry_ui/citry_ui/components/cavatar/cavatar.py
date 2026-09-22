@@ -234,9 +234,13 @@ class CAvatar(LibraryComponent):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
-        data = self._normalized(kwargs)
-        data["imgAttrs"] = _client_image_attrs(kwargs.img_attrs)
-        return data
+        # Keep server fallbacks together under one non-prop name.  The Vue
+        # migration exposes the reactive inputs below as props; publishing the
+        # same names as top-level ``js_data`` keys makes Vue reject the
+        # instance before it mounts (``js_data/public instance collision``).
+        defaults = self._normalized(kwargs)
+        defaults["imgAttrs"] = _client_image_attrs(kwargs.img_attrs)
+        return {"serverDefaults": defaults}
 
     template = """
       <span
@@ -297,8 +301,10 @@ class CAvatar(LibraryComponent):
           shape: {},
           onStatusChange: {},
         },
-        init: ({ els, data, props, effect }) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
           let image = root.querySelector('[data-citry-ui-part="image"]');
           if (!(image instanceof HTMLImageElement)) {
             image = document.createElement("img");
@@ -422,7 +428,7 @@ class CAvatar(LibraryComponent):
           image.addEventListener("load", onLoad);
           image.addEventListener("error", onError);
 
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             const source = resolveSource();
             const alt = resolveText("alt");
             const variant = resolveChoice("variant");

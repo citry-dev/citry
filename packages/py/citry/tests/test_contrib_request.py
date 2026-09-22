@@ -372,6 +372,21 @@ class TestWsgiAdapter:
         assert status == "200 OK"
         assert json.loads(body) == {"echo": {"n": 1, "s": "x"}, "content_type": "application/json"}
 
+    def test_none_methods_delegates_admission_to_the_handler(self):
+        seen = []
+
+        def handler(request):
+            seen.append(request.method)
+            return RouteResponse(content="delegated")
+
+        engine = _engine(URLRoute("delegated", handler=handler, methods=None))
+        status, _headers, body = self._call(
+            engine,
+            {"REQUEST_METHOD": "PATCH", "PATH_INFO": "/ext/probe/delegated", "wsgi.input": io.BytesIO()},
+        )
+
+        assert (status, body, seen) == ("200 OK", b"delegated", ["PATCH"])
+
     def test_response_headers_reach_the_client(self):
         engine = _engine(URLRoute("headers", handler=_with_headers))
         _status, headers, _body = self._call(engine, {"REQUEST_METHOD": "GET", "PATH_INFO": "/ext/probe/headers"})

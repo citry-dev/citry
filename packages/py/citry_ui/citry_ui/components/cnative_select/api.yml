@@ -31,7 +31,7 @@ inputs:
         effect: Selects visual padding and text size; this is not native Select `size`.
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native-root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native-root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native Form ownership, ARIA, data, and trusted Alpine attributes not owned by explicit inputs.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native Form ownership, ARIA, data, and trusted Vue attributes not owned by explicit inputs.'}
 
   - id: cnative-select-client-inputs
     component: CNativeSelect

@@ -8,11 +8,6 @@ class ControlledValues(Component):
     template = """
       <section
         class="shore-values"
-        x-data
-        x-init="Alpine.store('shoreValues', {
-          controlled: true,
-          value: 'Ochre sea star',
-        })"
       >
         <c-CField>
           <c-fill name="label">
@@ -33,12 +28,10 @@ class ControlledValues(Component):
           <c-fill name="default">
             <c-CInput
               name="controlled"
-              $c-props="{
-                value: $store.shoreValues.controlled
-                  ? $store.shoreValues.value
-                  : undefined,
-              }"
-              @input="$store.shoreValues.value = $event.target.value"
+              :value="controlled
+                  ? value
+                  : undefined"
+              @input="value = $event.target.value"
             />
           </c-fill>
           <c-fill name="description">
@@ -49,21 +42,31 @@ class ControlledValues(Component):
         <div class="shore-values__actions">
           <button
             type="button"
-            @click="$store.shoreValues.controlled = false"
+            @click="controlled = false"
           >
             Release control
           </button>
           <button
             type="button"
             @click="
-              $store.shoreValues.value = 'Giant green anemone';
-              $store.shoreValues.controlled = true;
+              value = 'Giant green anemone';
+              controlled = true;
             "
           >
             Set controlled value
           </button>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            controlled: true,
+            value: 'Ochre sea star',
+          };
+        },
+      });
     """
 
     css = """

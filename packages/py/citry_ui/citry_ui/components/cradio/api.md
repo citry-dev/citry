@@ -39,7 +39,7 @@ without disabling its siblings.
 
 ## Control selection in the browser
 
-Pass `value` through `$c-props="{...}"`. A known string controls one option;
+Pass `value` with native Vue `:` bindings and callback props. A known string controls one option;
 `null` clears selection; omission releases control. Handle native `input` or
 `change` with `$event.target.value`.
 

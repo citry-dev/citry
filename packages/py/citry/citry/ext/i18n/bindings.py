@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from html import unescape
 from typing import TYPE_CHECKING, Any, Literal, cast
 from weakref import ref
 
@@ -15,6 +16,13 @@ from citry._i18n_directives import (
     looks_like_i18n_binding,
     parse_i18n_binding_name,
 )
+from citry._vue.capture import (
+    PreparedBrowserBinding,
+    PreparedElementOpen,
+    PreparedTextValue,
+    prepared_browser_binding,
+    prepared_render_active,
+)
 from citry.attrs import merge_attrs, validate_html_attr_name
 from citry.citry_render import _render_value
 from citry.client_directives import (
@@ -23,7 +31,8 @@ from citry.client_directives import (
     has_client_props_key,
 )
 from citry.constness import const_value
-from citry.nodes import ElementAttrsNode, ExprNode, Node, _reject_dynamic_events_compiler_attr
+from citry.nodes import ElementAttrsNode, ExprNode, Node, _reject_reserved_events_attr
+from citry.util.html import Markup
 
 from .usage import CLIENT_CONTEXT_KEY
 
@@ -158,7 +167,7 @@ class I18nBindingCollector:
         self._pending_text[ordinal] = _PendingText(declaration, binding_id, owner)
         return binding_id
 
-    def finish_text(self, ordinal: int, capture: _CapturedTranslation) -> None:
+    def finish_text(self, ordinal: int, capture: _CapturedTranslation) -> _PendingText:
         try:
             pending = self._pending_text.pop(ordinal)
         except KeyError as error:
@@ -167,6 +176,7 @@ class I18nBindingCollector:
         if pending.binding_id is not None:
             assert pending.owner is not None  # noqa: S101 - allocated IDs always have an owner
             self.records.append(_binding_record(pending.binding_id, pending.owner, pending.declaration, capture))
+        return pending
 
     def has_pending_text(self, ordinal: int) -> bool:
         """Whether the resolved start tag declared a text binding for this expression."""
@@ -251,7 +261,7 @@ class I18nBindingElementAttrsNode(Node):
                         dynamic=True,
                     ):
                         continue
-                    _reject_dynamic_events_compiler_attr(
+                    _reject_reserved_events_attr(
                         resolved_key,
                         tag_name=self.original.tag_name,
                     )
@@ -273,7 +283,7 @@ class I18nBindingElementAttrsNode(Node):
                     raise RuntimeError("A $c-tr values expression cannot itself call server tr().")
                 continue
             if attr.key.startswith("c-"):
-                _reject_dynamic_events_compiler_attr(
+                _reject_reserved_events_attr(
                     resolved_key,
                     tag_name=self.original.tag_name,
                 )
@@ -321,6 +331,7 @@ class I18nBindingElementAttrsNode(Node):
         if owner is not None and (type(owner) is not str or not owner):
             raise TypeError(f"The internal {CLIENT_CONTEXT_KEY!r} render provide must be a render ID.")
         marker_ids: list[str] = []
+        browser_bindings: list[PreparedBrowserBinding] = []
 
         for declaration in declarations.values():
             if declaration.target.kind == "text":
@@ -349,13 +360,34 @@ class I18nBindingElementAttrsNode(Node):
             binding_id = collector.add_attribute(declaration, capture, owner=cast("str | None", owner))
             if binding_id is not None:
                 marker_ids.append(binding_id)
+                browser_bindings.append(
+                    prepared_browser_binding(
+                        helper="$citryI18nBinding",
+                        operand=binding_id,
+                        target="attribute",
+                        name=target_name,
+                        values_expression=declaration.values_expression,
+                    )
+                )
 
         if marker_ids:
             if MARKER_ATTRIBUTE in resolved:
                 raise RuntimeError(f"{MARKER_ATTRIBUTE!r} is compiler-owned and cannot be authored.")
             resolved[MARKER_ATTRIBUTE] = " ".join(marker_ids)
             collector.add_marker(marker_ids)
-        return self.original._format(resolved, context, validate_keys=validate_extension_output)
+        normalized = resolved
+        for key, value in resolved.items():
+            if type(value) is not CapturedTranslationText:
+                continue
+            if normalized is resolved:
+                normalized = dict(resolved)
+            normalized[key] = str(value)
+        rendered = self.original._format(normalized, context, validate_keys=validate_extension_output)
+        if browser_bindings:
+            if not isinstance(rendered, PreparedElementOpen):
+                raise RuntimeError("prepared i18n attribute binding lost its typed element opening")
+            rendered = replace(rendered, browser_bindings=tuple(browser_bindings))
+        return rendered
 
 
 class I18nBoundExprNode(Node):
@@ -373,14 +405,27 @@ class I18nBoundExprNode(Node):
         collector = cast("Any", component).i18n._bindings
         if not collector.has_pending_text(self.ordinal):
             value = self.original.evaluate(context.variables, sandboxed=context.sandboxed)
-            return _render_value(value, provides=context.provides, citry=component.citry, context=context)
+            rendered = _render_value(value, provides=context.provides, citry=component.citry, context=context)
+            if prepared_render_active() and isinstance(rendered, Markup) and "<" not in str(rendered):
+                return PreparedTextValue(self.original.source, self.original.position, unescape(str(rendered)))
+            return rendered
         with collector.capture() as captures:
             value = self.original.evaluate(context.variables, sandboxed=context.sandboxed)
         if len(captures) != 1 or value is not captures[0].text:
             raise RuntimeError(
                 "$c-tr textContent must contain exactly one complete {{ tr(...) }} expression, with no composition."
             )
-        collector.finish_text(self.ordinal, captures[0])
+        pending = collector.finish_text(self.ordinal, captures[0])
+        if prepared_render_active():
+            binding = None
+            if pending.binding_id is not None:
+                binding = prepared_browser_binding(
+                    helper="$citryI18nBinding",
+                    operand=pending.binding_id,
+                    target="text",
+                    values_expression=pending.declaration.values_expression,
+                )
+            return PreparedTextValue(self.original.source, self.original.position, str(value), browser_binding=binding)
         return _render_value(value, provides=context.provides, citry=component.citry, context=context)
 
 
@@ -443,7 +488,10 @@ def _transform_body(nodes: list[Any], *, component_name: str, ordinal: list[int]
                     )
         result[index] = I18nBindingElementAttrsNode(item, ordinal=current_ordinal, text_eligible=text_eligible)
         if text_eligible:
-            result[index + 2] = I18nBoundExprNode(cast("ExprNode", result[index + 2]), ordinal=current_ordinal)
+            expression_index = index + 1 if isinstance(result[index + 1], ExprNode) else index + 2
+            result[expression_index] = I18nBoundExprNode(
+                cast("ExprNode", result[expression_index]), ordinal=current_ordinal
+            )
         index += 1
     return result
 
@@ -458,12 +506,21 @@ def _may_bind(node: ElementAttrsNode) -> bool:
 
 
 def _complete_text_expression(body: list[Any], index: int, tag_name: str) -> bool:
+    from citry._vue.capture import PreparedElementCloseNode, PreparedSourceTextNode  # noqa: PLC0415
+
+    opening = body[index + 1] if index + 1 < len(body) else None
+    if isinstance(opening, ExprNode):
+        closing = body[index + 2] if index + 2 < len(body) else None
+        return isinstance(closing, PreparedElementCloseNode) and closing.tag == tag_name
+    closing = body[index + 3] if index + 3 < len(body) else None
     return (
         index + 3 < len(body)
-        and body[index + 1] == ">"
+        and (opening == ">" or (isinstance(opening, PreparedSourceTextNode) and opening.text == ">"))
         and isinstance(body[index + 2], ExprNode)
-        and isinstance(body[index + 3], str)
-        and body[index + 3].startswith(f"</{tag_name}>")
+        and (
+            (isinstance(closing, str) and closing.startswith(f"</{tag_name}>"))
+            or (isinstance(closing, PreparedElementCloseNode) and closing.tag == tag_name)
+        )
     )
 
 
@@ -522,7 +579,7 @@ def _validate_values_expression(expression: str, *, key: str) -> None:
 
     checked = analyze_browser_expression(BrowserExpression(expression, 0, len(expression.encode()), "expression", key))
     if not checked.valid:
-        raise ValueError(f"{key} has an invalid Alpine named-values expression.")
+        raise ValueError(f"{key} has an invalid browser named-values expression.")
 
 
 def _capture_for_value(captures: list[_CapturedTranslation], value: object) -> _CapturedTranslation | None:

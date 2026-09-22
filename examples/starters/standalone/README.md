@@ -2,7 +2,7 @@
 
 This project renders an interactive HTML file without running a web server.
 Python builds the project cards and bundles the page's CSS and JavaScript.
-After you open the file, Alpine keeps the help button working entirely in the
+After you open the file, Vue keeps the help button working entirely in the
 browser.
 
 ## What this starter shows
@@ -10,7 +10,7 @@ browser.
 - Python `Project` records pass through typed Citry component inputs.
 - Slots fill the page shell with its heading and project list.
 - `template_data()` gives each template the values it renders.
-- `js_data()` gives Alpine the browser-only `tipsOpen` value.
+- `js_data()` provides Vue with the browser-only `tipsOpen` value.
 - Citry places the component CSS, JavaScript, and browser runtime into one HTML
   document.
 - Running the render command twice with unchanged inputs produces the same
@@ -102,7 +102,7 @@ Remove-Item -Recurse -Force `
 
 ## Choose a web starter when Python must respond
 
-The generated page can keep running browser-side Alpine interactions, but it
+The generated page can keep running browser-side Vue interactions, but it
 cannot call Python after the file opens. Choose the FastAPI, Django, Flask,
 ASGI, or WSGI starter when a click or form submission needs a Python response.
 Those projects mount Citry's HTTP routes and show the same project list with
@@ -117,5 +117,5 @@ server-backed search.
 - Render a fresh file whenever the source data or components change.
 
 Read the [installation guide](https://citry.dev/getting-started/installation/)
-and [Alpine syntax guide](https://citry.dev/syntax/alpine/) before extending
+and [template syntax guide](https://citry.dev/template-syntax/) before extending
 the starter.

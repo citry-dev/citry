@@ -63,7 +63,7 @@ Variants style the fallback. Sizes and shapes control the fixed visual frame.
 
 ## Update the image in the browser
 
-Client inputs are passed through `$c-props="{...}"`. `src` accepts a URL or
+Client inputs are passed with native Vue `:` bindings and callback props. `src` accepts a URL or
 `null`; `onStatusChange` reports fallback, loading, loaded, and error states.
 
 <c-ui-demo

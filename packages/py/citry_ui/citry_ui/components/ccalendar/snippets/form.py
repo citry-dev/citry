@@ -9,8 +9,8 @@ class CalendarForm(Component):
         pass
 
     template = """
-      <section x-data="{submitted:'Submit to inspect FormData'}">
-        <form @submit.prevent="submitted=JSON.stringify(Object.fromEntries(new FormData($event.target)))">
+      <section >
+        <form @submit.prevent="submitted=JSON.stringify(Object.fromEntries(new window.FormData($event.target)))">
           <c-CField control_id="trip-date" required>
             <c-fill name="label">Trip date</c-fill>
             <c-fill name="description">The native Form value remains YYYY-MM-DD.</c-fill>
@@ -19,8 +19,17 @@ class CalendarForm(Component):
           </c-CField>
           <div><button type="submit">Submit</button> <button type="reset">Reset</button></div>
         </form>
-        <output x-text="submitted">Submit to inspect FormData</output>
+        <output v-text="submitted">Submit to inspect FormData</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            submitted:'Submit to inspect FormData'
+          };
+        },
+      });
     """
     css = ":where(form,section){display:grid;justify-items:start;gap:.75rem}"
 

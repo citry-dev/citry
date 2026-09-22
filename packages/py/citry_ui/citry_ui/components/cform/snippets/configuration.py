@@ -8,13 +8,7 @@ class FormConfiguration(Component):
     template = """
       <section
         class="form-configurator"
-        x-data="{
-          disabled: false,
-          readonly: false,
-          submitting: false,
-          gap: '1rem',
-        }"
-        @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
+
         :style="{'--cui-form-gap': gap}"
       >
         <header>
@@ -24,11 +18,7 @@ class FormConfiguration(Component):
 
         <c-CForm
           class_="form-configurator__form"
-          $c-props="{
-            disabled,
-            readonly,
-            submitting,
-          }"
+          :disabled="disabled" :readonly="readonly" :submitting="submitting"
           @submit.prevent="void 0"
         >
           <c-CField>
@@ -51,7 +41,7 @@ class FormConfiguration(Component):
 
         <p class="form-configurator__status" aria-live="polite">
           <span
-            x-text="
+            v-text="
               disabled
                 ? 'disabled'
                 : readonly
@@ -63,6 +53,29 @@ class FormConfiguration(Component):
           ></span>
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            disabled: false,
+            readonly: false,
+            submitting: false,
+            gap: '1rem',
+          };
+        },
+        methods: {
+          applyPreviewControls(event) {
+            Object.assign(this, event.detail);
+          },
+        },
+        mounted() {
+          window.addEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+        beforeUnmount() {
+          window.removeEventListener("citry-ui-preview-controls", this.applyPreviewControls);
+        },
+      });
     """
 
     css = """

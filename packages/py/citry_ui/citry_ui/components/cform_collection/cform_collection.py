@@ -33,6 +33,7 @@ _ROOT_OWNED = frozenset(
         "hidden",
         "id",
         "inert",
+        "ref",
         "role",
         "tabindex",
     }
@@ -202,6 +203,11 @@ class CFormCollection(LibraryComponent):
     class Slots:
         default: SlotInput[CFormCollectionDefaultSlotData] | None = None
 
+    @dataclass(slots=True)
+    class JsData:
+        # Keep this camelCase spelling in sync with the JavaScript data key.
+        serverDefaults: dict[str, bool]  # noqa: N815
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_form_collection_snapshot", None)
         if cached is not None:
@@ -266,7 +272,7 @@ class CFormCollection(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
-        return {"disabled": snapshot["disabled"]}
+        return {"serverDefaults": {"disabled": cast("bool", snapshot["disabled"])}}
 
     template = """
       <c-CInternalFormCollectionDeclarations><c-slot /></c-CInternalFormCollectionDeclarations>
@@ -432,12 +438,13 @@ class CInternalFormCollection(LibraryComponent):
             )
         self.unprovide(_CONTEXT)
         add_disabled = kwargs.disabled or (kwargs.max_items is not None and count >= kwargs.max_items)
+        add_structural_disabled = kwargs.max_items is not None and count >= kwargs.max_items
         return {
             "attrs": {
                 **kwargs.attrs,
                 "aria-describedby": kwargs.description_id if kwargs.description is not None else None,
                 "data-count": count,
-                "data-disabled": True if kwargs.disabled else None,
+                "data-disabled": "" if kwargs.disabled else None,
                 "data-size": kwargs.size,
             },
             **{
@@ -463,12 +470,16 @@ class CInternalFormCollection(LibraryComponent):
             "count": count,
             "button_type": "submit" if kwargs.action_name is not None else "button",
             "add_disabled": add_disabled,
+            "add_structural_disabled": add_structural_disabled,
             "catalog_add": kwargs.catalog["add"],
         }
 
-    template = """
-      <fieldset class="cui-form-collection" c-bind="attrs" c-id="root_id" data-citry-ui-part="form-collection">
-        <legend c-id="legend_id" data-citry-ui-part="legend">{{ label }}</legend>
+    template = (
+        """
+"""
+        '      <fieldset ref="root" class="cui-form-collection" c-bind="attrs" c-id="root_id" d'
+        'ata-citry-ui-part="form-collection">\n'
+        """        <legend c-id="legend_id" data-citry-ui-part="legend">{{ label }}</legend>
         <p c-if="description is not None" c-id="description_id" data-citry-ui-part="description">{{ description }}</p>
         <ol data-citry-ui-part="items">
           <c-for each="item in items">
@@ -482,11 +493,13 @@ class CInternalFormCollection(LibraryComponent):
         <button
           c-if="allow_add" c-type="button_type" c-name="action_name" c-value="add_value"
           c-disabled="add_disabled" c-formnovalidate="True if action_name is not None else None"
+          c-data-citry-form-collection-action-disabled="'true' if add_structural_disabled else None"
           data-citry-form-collection-action="add" data-citry-ui-part="add"
           c-$c-tr:citry-ui-form-collection-add="True if catalog_add else None"
         >{{ tr('citry-ui-form-collection-add') if catalog_add else labels['add'] }}</button>
       </fieldset>
     """
+    )
 
 
 class CInternalFormCollectionItem(LibraryComponent):
@@ -520,10 +533,10 @@ class CInternalFormCollectionItem(LibraryComponent):
             **item,
             "attrs": {
                 **declaration.attrs,
-                "data-disabled": True if disabled else None,
-                "data-citry-form-collection-item-disabled": True if declaration.disabled else None,
-                "data-first": True if index == 0 else None,
-                "data-last": True if index == count - 1 else None,
+                "data-disabled": "" if disabled else None,
+                "data-citry-form-collection-item-disabled": "" if declaration.disabled else None,
+                "data-first": "" if index == 0 else None,
+                "data-last": "" if index == count - 1 else None,
                 "data-value": declaration.value,
             },
             "value": declaration.value,
@@ -537,6 +550,9 @@ class CInternalFormCollectionItem(LibraryComponent):
             "remove_disabled": remove_disabled,
             "up_disabled": disabled or index == 0,
             "down_disabled": disabled or index == count - 1,
+            "remove_structural_disabled": declaration.disabled or count <= kwargs.min_items,
+            "up_structural_disabled": declaration.disabled or index == 0,
+            "down_structural_disabled": declaration.disabled or index == count - 1,
             "remove_value": declaration.remove_value or f"remove:{declaration.value}",
             "move_up_value": declaration.move_up_value or f"move-up:{declaration.value}",
             "move_down_value": declaration.move_down_value or f"move-down:{declaration.value}",
@@ -560,16 +576,19 @@ class CInternalFormCollectionItem(LibraryComponent):
             <div data-citry-ui-part="item-actions">
             <button c-if="show_reorder" c-type="button_type" c-name="action_name" c-value="move_up_value"
               c-disabled="up_disabled" c-formnovalidate="formnovalidate"
+              c-data-citry-form-collection-action-disabled="'true' if up_structural_disabled else None"
               c-aria-label="tr('citry-ui-form-collection-move-up', item=label) if catalog_up else move_up_label"
               c-$c-tr:citry-ui-form-collection-move-up[aria-label]="up_binding"
               data-citry-form-collection-action="move-up">↑</button>
             <button c-if="show_reorder" c-type="button_type" c-name="action_name" c-value="move_down_value"
               c-disabled="down_disabled" c-formnovalidate="formnovalidate"
+              c-data-citry-form-collection-action-disabled="'true' if down_structural_disabled else None"
               c-aria-label="tr('citry-ui-form-collection-move-down', item=label) if catalog_down else move_down_label"
               c-$c-tr:citry-ui-form-collection-move-down[aria-label]="down_binding"
               data-citry-form-collection-action="move-down">↓</button>
             <button c-if="show_remove" c-type="button_type" c-name="action_name" c-value="remove_value"
               c-disabled="remove_disabled" c-formnovalidate="formnovalidate"
+              c-data-citry-form-collection-action-disabled="'true' if remove_structural_disabled else None"
               c-aria-label="tr('citry-ui-form-collection-remove', item=label) if catalog_remove else remove_label"
               c-$c-tr:citry-ui-form-collection-remove[aria-label]="remove_binding"
               data-citry-form-collection-action="remove">&#215;</button>

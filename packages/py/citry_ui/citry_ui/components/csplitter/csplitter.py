@@ -247,11 +247,12 @@ class CSplitter(LibraryComponent):
         }
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        return self._splitter_data
+        return {"serverDefaults": self._splitter_data}
 
     template = """
       <c-CInternalSplitterDeclarations><c-slot required /></c-CInternalSplitterDeclarations>
       <c-CInternalSplitter
+        ref="splitterRoot"
         c-group_id="group_id"
         c-sizes="sizes"
         c-orientation="orientation"
@@ -270,8 +271,11 @@ class CSplitter(LibraryComponent):
           sizes: {}, orientation: {}, disabled: {}, keyboardStep: {}, variant: {}, size: {},
           onResizeStart: {}, onResize: {}, onResizeEnd: {},
         },
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$refs.splitterRoot.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const invalidEpisodes = new Set();
           const panels = () => [...root.querySelectorAll(':scope > [data-citry-ui-part="panel"]')];
           const handles = () => [...root.querySelectorAll(':scope > [data-citry-ui-part="handle"]')];
@@ -634,7 +638,8 @@ class CInternalSplitterDeclarations(LibraryComponent):
 
 
 class CInternalSplitter(LibraryComponent):
-    transparent = True
+    # This component owns the physical splitter root and is the runtime ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -693,7 +698,7 @@ class CInternalSplitter(LibraryComponent):
             "attrs": {
                 **kwargs.attrs,
                 "data-orientation": kwargs.orientation,
-                "data-disabled": kwargs.disabled,
+                "data-disabled": "" if kwargs.disabled else None,
                 "data-variant": kwargs.variant,
                 "data-size": kwargs.size,
             },
@@ -706,6 +711,7 @@ class CInternalSplitter(LibraryComponent):
         <c-for each="item in items">
           <c-if cond="item['kind'] == 'panel'">
             <c-CInternalSplitterPanel
+              #c-key="item['panel'].id"
               c-group_id="group_id"
               c-declaration="item['panel']"
               c-index="item['index']"
@@ -715,6 +721,7 @@ class CInternalSplitter(LibraryComponent):
           </c-if>
           <c-else>
             <c-CInternalSplitterHandle
+              #c-key="item['before'].id + ':' + item['after'].id"
               c-group_id="group_id"
               c-index="item['index']"
               c-before="item['before']"

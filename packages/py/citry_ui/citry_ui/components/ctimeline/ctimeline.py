@@ -313,7 +313,7 @@ class CInternalTimeline(LibraryComponent):
                 "data-side": kwargs.side,
                 "data-line-style": kwargs.line_style,
                 "data-density": kwargs.density,
-                "data-has-opposite": any(item.opposite is not None for item in kwargs.registry.items),
+                "data-has-opposite": "" if any(item.opposite is not None for item in kwargs.registry.items) else None,
                 "data-size": kwargs.size,
             },
             "items": [
@@ -337,6 +337,7 @@ class CInternalTimeline(LibraryComponent):
       <ol class="cui-timeline" c-bind="attrs" data-citry-ui-part="timeline">
         <c-for each="item in items">
           <c-CInternalTimelineItem
+            #c-key="item['index']"
             c-declaration="item['declaration']"
             c-index="item['index']"
             c-count="count"
@@ -378,7 +379,7 @@ class CInternalTimelineItem(LibraryComponent):
                 "data-index": kwargs.index,
                 "data-state": declaration.state,
                 "data-side": kwargs.side,
-                "data-has-opposite": declaration.opposite is not None,
+                "data-has-opposite": "" if declaration.opposite is not None else None,
             },
             "morph_key": f"timeline-item-{kwargs.index}",
             "content": Slot(lambda ctx: declaration.content(slot_data, provides=dict(ctx.provides or {}))),

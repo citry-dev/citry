@@ -1,7 +1,10 @@
 import { BrowserIdeSession } from "./browser_ide.js";
 import { createCitryEditor } from "./citry_editor.js";
 import { PreviewBridge } from "./preview_bridge.js";
+import { formatRuntimeLabel } from "./runtime_label.js";
 import { CitryBrowserSession } from "./worker_session.js";
+
+await (globalThis.__citryDocsReady || Promise.resolve());
 
 // This module coordinates the full-page UI. Python execution and iframe
 // delivery stay in shared classes also used by inline live-code examples.
@@ -293,11 +296,9 @@ function handleFailure(runId, message, details) {
 const session = new CitryBrowserSession({
   workerUrl: new URL("./worker.js", import.meta.url),
   onPhase: setStatus,
-  onReady(runtime) {
-    elements.runtime.textContent = runtime
-      .split(", ")
-      .filter((part) => part.startsWith("Citry "))
-      .join(" · ");
+  onReady(runtime, source) {
+    elements.runtime.textContent = formatRuntimeLabel(runtime, source);
+    if (source) elements.runtime.dataset.source = source;
     setStatus("Python runtime ready");
   },
   onResult: (runId, result, durationMs) => void handleResult(runId, result, durationMs),

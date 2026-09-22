@@ -21,20 +21,17 @@ def alert_dialog_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack"
             aria-labelledby="alert-dialog-states-title"
-            x-data="{controlledOpen: false}"
           >
             <h1 id="alert-dialog-states-title">AlertDialog states</h1>
             <c-CAlertDialog
               id="quality-delete-project"
-              $c-props="{
-                onOpenChange: (open, detail) => {
+              :onOpenChange="(open, detail) => {
                   window.__qualityAlertDialogChange = {
                     open,
                     reason: detail.reason,
                     returnValue: detail.returnValue
                   };
-                }
-              }"
+                }"
             >
               <c-fill name="activator" data="{activator_attrs}">
                 <c-CButton c-attrs="activator_attrs" intent="danger">
@@ -65,10 +62,7 @@ def alert_dialog_states_component(app: Citry) -> type[Component]:
                 '--cui-alert-dialog-radius': '1.25rem',
                 '--cui-alert-dialog-border-color': '#8b5cf6'
               }"
-              $c-props="{
-                open: controlledOpen,
-                onOpenChange: (open) => controlledOpen = open
-              }"
+              :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
             >
               <c-fill name="activator" data="{activator_attrs}">
                 <c-CButton c-attrs="activator_attrs" variant="outline">
@@ -92,6 +86,15 @@ def alert_dialog_states_component(app: Citry) -> type[Component]:
               </c-fill>
             </c-CAlertDialog>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlledOpen: false
+              };
+            },
+          });
         """
 
     return CitryUiAlertDialogStates

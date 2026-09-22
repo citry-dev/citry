@@ -16,8 +16,8 @@ on a particular record.
 
 ## Choose a CSP compatibility mode
 
-Citry can validate its rendered component subtree against the expression
-language in its pinned Alpine CSP runtime:
+Citry can validate final rendered HTML and structured dependencies against
+its strict CSP delivery contract:
 
 ```citry
 from secrets import token_urlsafe
@@ -30,33 +30,23 @@ html = Page().render().serialize(csp_nonce=nonce)
 
 The modes have distinct rollout purposes:
 
-- `"off"` keeps the standard Alpine runtime and existing output.
-- `"warn"` keeps that same runtime and HTML, but emits one `RuntimeWarning`
-  containing incompatible reached expressions or rendered markup. Findings
-  stay separate per rendered instance when a late string hook prevents Citry
-  from proving that two occurrences came from one authored source site.
-- `"strict"` selects Citry's version-matched Alpine CSP runtime and rejects
-  incompatible output before returning HTML.
+- `"off"` performs no strict-CSP validation.
+- `"warn"` keeps the same output and emits one `RuntimeWarning` containing
+  incompatible rendered markup or dependency metadata.
+- `"strict"` rejects incompatible output before returning HTML.
 
-Strict validation covers component-boundary expressions that may disappear
-during rendering and the final HTML after extension hooks. It rejects Alpine
-syntax the pinned CSP evaluator cannot interpret, raw `<script>` and `<style>`
-elements, any ASCII-case-insensitive `on*` attribute, and `javascript:` URLs.
-Put complex browser logic in `Component.js` and call a scope method from the
-template. Put trusted
-scripts and styles in `Component.js`, `Component.css`, or structured
+Strict validation scans final HTML after extension hooks. It rejects raw
+`<script>` and `<style>` elements, ASCII-case-insensitive native `on*`
+attributes, and `javascript:` URLs. Vue templates are compiled into
+Citry-managed definition scripts rather than evaluated from directive strings
+in delivered HTML. Put browser logic in `Component.js` and call a method from
+the template. Put trusted scripts and styles in `Component.js`,
+`Component.css`, or structured
 [`Dependencies`][citry.ext.dependencies.Dependencies].
 
-Citry UI's production component definitions are checked in CI against the
-pinned Alpine CSP expression subset. That guarantee covers the public library
-components and its registered internal renderers. Documentation snippets are
-teaching material and are not a compatibility allowlist; run `citry check`
-before copying an example's browser expressions into a strict application.
-
-Run `citry check` or use the Citry editor extension to get the same pinned
-expression findings at source locations. Per-render mode overrides are
-enforced during serialization; project tooling reports the configured engine
-default.
+Per-render mode overrides are enforced during serialization. The Citry editor
+and `citry check` report template and dependency problems at authored source
+locations where static evidence is available.
 
 Citry owns runtime selection and its rendered subtree. Your application still
 owns the response header, nonce generation, layouts, third-party resources,
@@ -80,16 +70,16 @@ The four modes answer different questions:
 - `"allow"` preserves normal interactive output.
 - `"warn"` preserves those exact bytes and emits one `RuntimeWarning` that
   inventories reached browser behavior.
-- `"omit"` removes Citry-managed executable scripts, Alpine and Events
+- `"omit"` removes Citry-managed executable scripts, Vue and Events
   runtimes, preloaders, and browser manifests. Server-rendered HTML and CSS
-  remain. Authored Alpine attributes remain inert.
+  remain. Authored Vue directives remain inert.
 - `"forbid"` rejects a rendered subtree that needs executable client
   behavior, even when `deps_strategy="simple"` or `"ignore"` would otherwise
   hide the corresponding runtime or dependency tag.
 
 The inventory covers active component-boundary bindings, final structured
 dependencies after hooks, and settled HTML after string-level extensions. It
-recognizes Alpine and Events attributes, executable script types, native
+recognizes Vue and Events bindings, executable script types, native
 `on*` handlers, `javascript:` URLs, and executable HTML embedded through
 `iframe srcdoc` or HTML data documents. A declared but unused Events method
 is not by itself an active requirement.
@@ -97,8 +87,8 @@ is not by itself an active requirement.
 `"omit"` is a static-export tool, not an HTML sanitizer. Raw executable
 scripts, native handlers, and JavaScript URLs are left unchanged and reported;
 use `"forbid"` when they must make serialization fail. Omit also warns about
-high-confidence fallback hazards such as `x-cloak`, structural Alpine
-templates, and handler-only controls. Check the resulting page without
+high-confidence fallback hazards such as browser-only structural directives
+and handler-only controls. Check the resulting page without
 JavaScript and provide native links or forms for essential actions.
 
 CSS remains allowed in every mode. An omit fragment emits its CSS directly,
@@ -109,10 +99,8 @@ executable attribute, omit removes that attribute while retaining the CSS or
 data. Opaque dependency renderers are removed because Citry cannot prove what
 tag they create.
 
-With `security_csp="strict"`, omit and forbid do not validate inert Alpine
-expressions because no Alpine runtime is emitted. Strict CSP still validates
-raw executable markup and applies the response nonce to retained structured
-inline styles.
+With `security_csp="strict"`, omit and forbid still validate raw executable
+markup and apply the response nonce to retained structured inline styles.
 
 ## Pin Citry-managed scripts with SRI
 
@@ -496,15 +484,15 @@ vectors, but it is not a formally proven-complete jail.
 The rule of thumb: only put objects and functions into your render context that
 you are comfortable exposing to template authors.
 
-### Browser CSP and Alpine expressions
+### Browser CSP and Vue expressions
 
 The Python sandbox described above does not govern browser expressions. Citry
-ships both Alpine's standard evaluator and a version-matched CSP evaluator.
-The standard `security_csp="off"` and `"warn"` modes require `unsafe-eval` when
-they evaluate Alpine attributes. `security_csp="strict"` selects the CSP
-runtime and enforces its smaller expression language before serialization.
+compiles Vue templates into managed definition scripts before the browser
+mounts the component. The browser does not evaluate authored directive strings
+from delivered HTML. `security_csp` controls final-output and dependency
+validation; it does not select a second expression evaluator.
 
-See [Alpine runtime](/advanced/alpine-runtime/#use-content-security-policy) for
+See [Vue runtime](/advanced/vue-runtime/#use-content-security-policy) for
 the client-side loading and fragment contract.
 
 ### Turning the sandbox off

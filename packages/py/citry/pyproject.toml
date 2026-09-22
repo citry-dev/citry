@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 name = "citry"
 version = "0.5.1"
 requires-python = ">=3.10, <4.0"
-description = "Fully typed frontend framework for Python with server events and Alpine.js, inspired by Vue and Livewire"
+description = "Fully typed frontend framework for Python with server events and compiled Vue interactivity"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
 # package dir, so the link makes the root README local to this package.
 readme = "README.md"
@@ -132,6 +132,6 @@ Issues = "https://github.com/citry-dev/citry/issues"
 
 [tool.setuptools.package-data]
 # Non-Python files shipped inside the package: the type-checking marker and
-# the client-side dependency manager and Events runtime (inlined into rendered
-# pages, later also served over HTTP by the web integrations).
-citry = ["py.typed", "ext/dependencies/client/*.js", "ext/events/client/*.js", "ext/i18n/client/*.js"]
+# the readable dependency-manager source, its generated delivery companion,
+# and the extension runtimes served or inlined by the web integrations.
+citry = ["py.typed", "_vue/*.js", "ext/i18n/client/*.js"]

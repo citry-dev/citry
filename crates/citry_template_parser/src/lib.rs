@@ -40,10 +40,10 @@ pub use crate::ast::{
     HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
 };
 pub use crate::browser::{
-    analyze_browser_source, analyze_component_members, analyze_component_scope_writes,
-    analyze_component_source, BrowserAnalysis, BrowserAnalysisMode, BrowserComponentAnalysis,
-    BrowserComponentBinding, BrowserComponentMember, BrowserComponentMemberAnalysis,
-    BrowserReference, BrowserScopeWrite,
+    analyze_browser_binding_pattern, analyze_browser_source, analyze_component_members,
+    analyze_component_scope_writes, analyze_component_source, BrowserAnalysis, BrowserAnalysisMode,
+    BrowserBindingPatternAnalysis, BrowserComponentAnalysis, BrowserComponentBinding,
+    BrowserComponentMember, BrowserComponentMemberAnalysis, BrowserReference, BrowserScopeWrite,
 };
 pub use crate::error::{ParseDiagnostic, ParseError};
 pub use crate::foreign::{ForeignSpan, ParseOptions};

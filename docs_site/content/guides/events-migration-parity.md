@@ -81,13 +81,13 @@ method-only compatibility URL has no dedicated public builder;
 Signed State is tamper-evident, not secret. State held on the server is the v1
 choice when a value must not appear in the page token.
 
-## Bindings, Alpine, and DOM updates
+## Bindings, Vue, and DOM updates
 
 | Capability | Component.View | django-unicorn | Tetra | livecomponents | Citry answer | Delivery |
 |---|---|---|---|---|---|---|
 | Server event in markup | Handwritten JS/htmx | `unicorn:<event>` | Alpine listener calling method | `hx-post` command | `@c-<dom-event>` | **v1** |
-| Local browser event | Handwritten | Handwritten | Ordinary Alpine | Alpine/htmx | Ordinary `@click` / `x-on:*` stays Alpine | **v1** |
-| Event arguments | Request fields | Python-like call string | JS arguments | `hx-vals` | One Alpine object expression validated as `data` | **v1** |
+| Local browser event | Handwritten | Handwritten | Ordinary Alpine | Alpine/htmx | Native Vue `@click` / `v-on:click` | **v1** |
+| Event arguments | Request fields | Python-like call string | JS arguments | `hx-vals` | One Vue object expression validated as `data` | **v1** |
 | Python call expression on wire | - | Supported | - | - | Named handler plus object data | **Dropped** |
 | Property-setter expression | - | Supported | Public Alpine write | - | Named handler or local `$state` write | **Dropped** |
 | State/model binding | Handwritten | `unicorn:model` | Public Alpine attrs | Form/htmx | `:c-field` or `:c-field="handler"` | **v1** |
@@ -100,34 +100,34 @@ choice when a value must not appear in the page token.
 | Discard pending writes | Handwritten | `.discard` | - | - | Application decides which value to send | **Dropped** |
 | Loading UI | Handwritten | Loading directives | Lifecycle/Alpine | htmx indicator | `$loading()` / `$loading(name)` and lifecycle events | **v1** |
 | Error UI | Host response | Error context/attrs | Method-error event | HTTP error | `$error()` / `$error(name)`, field map, and error lifecycle event | **v1** |
-| Dirty-input indicator | Handwritten | `unicorn:dirty` | Alpine | htmx | Build from Alpine and lifecycle events when needed | **Dropped** |
+| Dirty-input indicator | Handwritten | `unicorn:dirty` | Alpine | htmx | Build from Vue state and lifecycle events when needed | **Dropped** |
 | Polling | Handwritten | Rich poll object | Application code | htmx | `@c-poll.<time>="handler"`, hidden-tab pause | **v1** |
 | Dynamic poll retiming | Handwritten | `PollUpdate` | Application code | htmx | Re-render a different binding or use app code | **Dropped** |
-| Viewport trigger | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or Alpine integration | **Dropped** |
-| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | Bare `#c-ignore` on an inner plain element | **v1** |
-| Stable item identity | Manual ids | Component key | Component id | Path id | `#c-key` within its sibling and depth window | **v1** |
+| Viewport trigger | Handwritten | `unicorn:visible` | Alpine/plugin | htmx trigger | IntersectionObserver or Vue integration | **Dropped** |
+| Morph opt-out | Manual | `unicorn:ignore` | Alpine morph controls | `no_morph` helper | Explicitly unsupported by the current Vue renderer | **Dropped** |
+| Stable item identity | Manual ids | Component key | Component id | Path id | `#c-key` gives Vue sibling identity at its authored position | **v1** |
 | Single element root | Not required by core | Required | Required | Root attrs required | Supported | **v1** |
 | Multi-root component | Supported by core | - | - | - | Logical root group | **v1** |
-| Text-only or empty component | Supported by core | - | - | - | Logical rootless range with lifecycle support | **v1** |
-| Focus/value/caret preservation | Handwritten | Morph-dependent | Alpine morph rules | Alpine morph | Compatible morph plus keyed identity and pending-write rules | **v1** |
+| Text-only or empty component | Supported by core | - | - | - | Vue component lifecycle without an element root | **v1** |
+| Focus/value/caret preservation | Handwritten | Morph-dependent | Alpine morph rules | Alpine morph | Vue preserves compatible keyed updates; directive-shape replacement may lose focus or selection | **v1** |
 | Self render | Manual response | Automatic full component | Automatic | Dirty component | Return component or `Render(target=None)` | **v1** |
-| Target another region | Manual fragment | Partial/parent controls | Client callback | Dirty result | Ordered `Render(target=selector)` actions | **v1** |
-| Several target matches | Manual | Partials | - | OOB fragments | One logical mirrored instance with shared State | **v1** |
-| Independent target instances | Manual | Component instances | Component instances | Component ids | One Render action per target | **v1** |
+| Target another region | Manual fragment | Partial/parent controls | Client callback | Dirty result | Render a component occurrence or explicit marker | **v1** |
+| Several target matches | Manual | Partials | - | OOB fragments | Targets are singular component occurrences or explicit markers | **Dropped** |
+| Independent target instances | Manual | Component instances | Component instances | Component ids | One contiguous group of immediate blocking Render actions, one per target | **v1** |
 | Parent/ancestor command API | Request code | Parent controls | Child-state graph | `CallContext.parent/find_one` | Explicit target Render or Dispatch plus listener | **Dropped** |
 | Server-dispatched browser event | Handwritten | Queued JS call | `_dispatch` | `TriggerEvents` | `actions.Dispatch` and DOM/onEvent listener | **v1** |
 | Arbitrary server-selected JS call | Handwritten | Allowed call list | Callback path | htmx events | Dispatch data; client-owned code chooses behavior | **Dropped** |
 | Browser call outside markup | Fetch | `Unicorn.call` | Generated method | htmx request | `Citry.events.send`, `sendEvent`, `$sendEvent` | **v1** |
 | Python lifecycle matrix | View hooks | Hydrate/update/call/render hooks | Component lifecycle | Command lifecycle | Events extension hooks, not per-field callback parity | **Dropped** |
 | Browser lifecycle events | Handwritten | Framework events | Tetra events | htmx events | before, after, error, swapped, and stale Events lifecycle | **v1** |
-| Fragment assets activate | Manual dependency strategy | Framework runtime | Response bundle list | Manual five-part client setup | Fragment carries dependency, graph, and Events manifests | **v1** |
-| Client prerequisite | Application choice | Unicorn JS | Tetra plus Alpine | htmx, json-enc, Alpine, morph, config | Citry-managed runtimes with pinned stock Alpine and morph | **v1** |
+| Fragment assets activate | Manual dependency strategy | Framework runtime | Response bundle list | Manual five-part client setup | Fragment descriptor validates, loads and mounts a Vue app | **v1** |
+| Client prerequisite | Application choice | Unicorn JS | Tetra plus Alpine | htmx, json-enc, Alpine, morph, config | Citry-managed runtime with pinned Vue | **v1** |
 | Template-load validation | Limited | Mostly runtime | Mostly runtime | Mostly runtime | Literal event, State, and modifier mistakes fail early | **v1** |
 | Slot/fill scope after update | Application-owned | Template re-render | Saved component | Saved template | New fills in the returned tree; Citry graph owns client scope | **v1** |
 
-Citry still uses Alpine. The difference is automatic bundling and a Citry-owned
-logical component graph for scope, slots, multi-root groups, and rootless
-ranges. State remains under `$state`; it is not flattened into user `x-data`.
+Citry uses Vue with a Citry-owned logical component graph for scope, slots,
+multi-root groups and rootless components. State remains under `$state`; it is
+not flattened into user component data.
 
 ## Queueing, transport, and stale responses
 
@@ -184,7 +184,7 @@ The migration target is considered v1-complete when all of these remain true:
 - the counter, debounced live search, and validated form pass through the real
   browser runtime;
 - the Component.View form and fragments ports pass through native and runtime
-  paths, including fragment JavaScript, CSS, and Alpine activation;
+  paths, including fragment JavaScript, CSS, and Vue activation;
 - State visibility, client-input, guard, and CSRF guidance is public; and
 - all four migration guides point to this maintained matrix.
 

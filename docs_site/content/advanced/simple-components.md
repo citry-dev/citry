@@ -116,18 +116,19 @@ to those children. Those children keep their own instances and hooks.
 
 ## Understand the ownership change
 
-A simple invocation gets no separate Python component instance, render ID,
-component hooks, slot hooks of its own, or automatic Alpine isolation boundary.
-HTML it produces belongs to its surrounding ordinary component. Component
-tags authored inside its template use that ordinary component as their
-parent; supplied content retains its caller's scope.
+A simple invocation gets no separate Python or Vue component instance, render
+ID, component hooks, or slot hooks of its own. Its HTML is rendered into the
+surrounding ordinary component instance. Component tags authored inside its
+template use that ordinary component as their parent; supplied content keeps
+the caller's Vue scope.
 
 Ordinary HTML attributes, `c-bind` spreads, expressions, branches, loops and
-Alpine attributes remain available in the template. The simple class cannot
-declare its own JavaScript, CSS or translation messages. Its ordinary child
-components can still bring those features.
+native Vue bindings remain available in the template. Those Vue expressions
+run in the surrounding ordinary component's instance scope. The simple class cannot
+declare its own JavaScript, `js_data`, CSS or translation messages. Its
+ordinary child components can still bring those features.
 
-Direct tags execute their data callbacks at the normal deferred stage.
+Direct tags execute their `template_data` callbacks at the normal deferred stage.
 Python values execute when their expression inserts them. A direct root
 render uses a framework owner, so rendering one simple component as an
 entire page still has root setup cost. `<c-component>` can select a simple

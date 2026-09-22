@@ -37,37 +37,37 @@ inputs:
         name: attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds native, ARIA, data, and trusted Alpine root attributes. It cannot replace the public part, variant, size, or Citry runtime ownership fields.
+        effect: Adds native, ARIA, data, and trusted Vue root attributes. It cannot replace the public part, variant, size, or Citry runtime ownership fields.
       - id: media-attrs
         name: media_attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds native, ARIA, data, and trusted Alpine attributes to the media wrapper. A nonempty mapping requires the media slot.
+        effect: Adds native, ARIA, data, and trusted Vue attributes to the media wrapper. A nonempty mapping requires the media slot.
       - id: header-attrs
         name: header_attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds native, ARIA, data, and trusted Alpine attributes to the header row. A nonempty mapping requires header or header_actions.
+        effect: Adds native, ARIA, data, and trusted Vue attributes to the header row. A nonempty mapping requires header or header_actions.
       - id: header-actions-attrs
         name: header_actions_attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds native, ARIA, data, and trusted Alpine attributes to the header action group. A nonempty mapping requires header_actions.
+        effect: Adds native, ARIA, data, and trusted Vue attributes to the header action group. A nonempty mapping requires header_actions.
       - id: body-attrs
         name: body_attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds native, ARIA, data, and trusted Alpine attributes to the body wrapper. A nonempty mapping requires the default slot.
+        effect: Adds native, ARIA, data, and trusted Vue attributes to the body wrapper. A nonempty mapping requires the default slot.
       - id: footer-attrs
         name: footer_attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds native, ARIA, data, and trusted Alpine attributes to the footer row. A nonempty mapping requires footer or actions.
+        effect: Adds native, ARIA, data, and trusted Vue attributes to the footer row. A nonempty mapping requires footer or actions.
       - id: actions-attrs
         name: actions_attrs
         type: Mapping[str, object] | None
         default: {kind: literal, value: null}
-        effect: Adds native, ARIA, data, and trusted Alpine attributes to the footer action group. A nonempty mapping requires actions.
+        effect: Adds native, ARIA, data, and trusted Vue attributes to the footer action group. A nonempty mapping requires actions.
 
 slots:
   - id: ccard-slots

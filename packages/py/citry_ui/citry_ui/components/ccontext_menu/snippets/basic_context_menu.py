@@ -45,13 +45,12 @@ class BasicContextMenu(Component):
     template = """
       <section
         class="context-menu-basic"
-        x-data
       >
         <article>
           <h3>Template file</h3>
           <c-CContextMenu
             aria_label="Document actions"
-            $c-props="{onAction: onAction}"
+            v-bind="{onAction: onAction}"
           >
             <c-fill name="target" data="{ target_attrs }">
               <div
@@ -77,18 +76,18 @@ class BasicContextMenu(Component):
           {{ python_menu }}
         </article>
 
-        <output aria-live="polite" x-text="lastActionLabel">
+        <output aria-live="polite" v-text="lastActionLabel">
           Last action: No action yet
         </output>
       </section>
     """
 
     js = """
-      $component(({ scope }) => {
-        scope.lastActionLabel = "Last action: No action yet";
-        scope.onAction = (value) => {
-          scope.lastActionLabel = `Last action: ${value}`;
-        };
+      $component({
+        data() { return {lastActionLabel: "Last action: No action yet"}; },
+        methods: {
+          onAction(value) { this.lastActionLabel = `Last action: ${value}`; },
+        },
       });
     """
 

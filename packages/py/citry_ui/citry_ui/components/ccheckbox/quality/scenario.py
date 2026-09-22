@@ -21,12 +21,6 @@ def checkbox_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack checkbox-quality"
             aria-labelledby="checkbox-states-title"
-            x-data
-            x-init="Alpine.store('checkboxQuality', {
-              controlled: true,
-              checked: false,
-              mixed: true,
-            })"
           >
             <h1 id="checkbox-states-title">Checkbox states</h1>
             <c-CForm id="checkbox-quality-form">
@@ -37,16 +31,13 @@ def checkbox_states_component(app: Citry) -> type[Component]:
                     id="checkbox-quality-controlled"
                     name="verified"
                     value="yes"
-                    $c-props="{
-                      checked: $store.checkboxQuality.controlled
-                        ? $store.checkboxQuality.checked
-                        : undefined,
-                      indeterminate: $store.checkboxQuality.controlled
-                        ? $store.checkboxQuality.mixed
-                        : undefined,
-                    }"
-                    @input="$store.checkboxQuality.checked = $event.target.checked;
-                      $store.checkboxQuality.mixed = false"
+                    :checked="controlled
+                        ? checked
+                        : undefined" :indeterminate="controlled
+                        ? mixed
+                        : undefined"
+                    @input="checked = $event.target.checked;
+                      mixed = false"
                   />
                 </c-fill>
                 <c-fill name="description">Required Field-owned description.</c-fill>
@@ -55,12 +46,12 @@ def checkbox_states_component(app: Citry) -> type[Component]:
 
               <div class="citry-ui-quality-grid">
                 <c-for each="variant in variants">
-                  <c-CCheckbox c-variant="variant" checked>
+                  <c-CCheckbox #c-key="variant" c-variant="variant" checked>
                     {{ variant }} Checkbox
                   </c-CCheckbox>
                 </c-for>
                 <c-for each="size in sizes">
-                  <c-CCheckbox c-size="size" indeterminate>
+                  <c-CCheckbox #c-key="size" c-size="size" indeterminate>
                     {{ size }} mixed Checkbox
                   </c-CCheckbox>
                 </c-for>
@@ -86,7 +77,7 @@ def checkbox_states_component(app: Citry) -> type[Component]:
               <div class="checkbox-quality__actions">
                 <c-CButton
                   type="button"
-                  @click="$store.checkboxQuality.controlled = false"
+                  @click="controlled = false"
                 >
                   Release controlled state
                 </c-CButton>
@@ -96,6 +87,17 @@ def checkbox_states_component(app: Citry) -> type[Component]:
               </div>
             </c-CForm>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: true,
+                checked: false,
+                mixed: true,
+              };
+            },
+          });
         """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

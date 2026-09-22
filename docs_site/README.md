@@ -205,11 +205,14 @@ the browser runtime:
 
 This keeps the canonical source beside the component and uses the same
 highlighting and text projection without offering a broken activation control.
-The live authoring server builds the workspace `citry` and `citry-ui` wheels
-and automatically enables these component snippets in the browser. Keep
-`static` in committed content until `citry-ui` is part of the published
-playground runtime. Static builds and `build-check` intentionally use that
-published package set.
+The live authoring server builds workspace `citry` and `citry-ui` wheels and
+adds one prebuilt PyEmscripten `citry-core` wheel when
+`CITRY_PLAYGROUND_CORE_WHEEL` is configured. With that complete three-wheel
+tuple, these component snippets can run in the browser. If the Core wheel is
+missing or does not match the workspace versions, the server explains the
+reason and falls back to the committed published runtime. Keep `static` for a
+snippet that depends on a workspace-only package when that fallback is active.
+Static builds and `build-check` intentionally use the published package set.
 
 The path may name any Python file in the repository, including after resolving
 symlinks. The module must be UTF-8 with LF line endings and no larger than 64
@@ -409,7 +412,7 @@ Older committed snapshots keep their historical header unchanged.
 
 The docs require Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), the
 repository's pinned nightly Rust toolchain, and the recursive Git submodules.
-CI currently uses Python 3.13.
+CI currently uses Python 3.14.
 
 ```bash
 git submodule update --init --recursive
@@ -431,12 +434,14 @@ uv run --no-sync python -m docs_site serve
 Open <http://127.0.0.1:8000/>. The server reads content and navigation on each
 request, renders through Citry, and serves component assets and examples.
 Refresh the browser after changing Markdown. Uvicorn reloads when Python or
-YAML docs configuration changes. Each server start or reload builds a universal
-wheel from the workspace `citry-ui` package and combines it with the browser
-playground's pinned Citry release. This local-only runtime lets interactive
-snippets import `citry_ui` before that package is published, when its Citry
-requirement accepts the pinned release. `serve-built`, static builds, CI, and
-deployed docs use the committed pinned runtime unchanged.
+YAML docs configuration changes. Each server start or reload builds temporary
+universal wheels from the workspace `citry` and `citry-ui` packages and combines
+them with the prebuilt PyEmscripten Core wheel named by
+`CITRY_PLAYGROUND_CORE_WHEEL`. If that complete tuple is unavailable or
+incompatible, the server prints the reason and uses the committed published
+runtime. The workspace-only runtime lets interactive snippets exercise current
+source before release; `serve-built`, static builds, CI, and deployed docs use
+the committed published runtime unchanged.
 
 Example recipes live at `/examples/<slug>/`. Their bare runnable pages live at
 `/examples/<slug>/demo/`, so opening a recipe and opening its iframe directly

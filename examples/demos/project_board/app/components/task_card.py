@@ -61,16 +61,17 @@ class TaskCard(Component):
               c-aria-label="'Move ' + title + ' to column'"
               @change="
                 if ($event.target.value !== laneKey) {
-                  $dispatch('board:move', {
+                  $el.dispatchEvent(new window.CustomEvent('board:move', { bubbles: true, detail: {
                     taskId,
                     lane: $event.target.value,
                     focusControl: true,
-                  });
+                  }}));
                 }
               "
             >
               <c-for each="lane_key, lane_title in lane_options">
                 <option
+                  #c-key="lane_key"
                   c-value="lane_key"
                   c-selected="lane_key == current_lane"
                 >
@@ -83,10 +84,10 @@ class TaskCard(Component):
             class="task-card__toggle"
             type="button"
             @click="
-              $dispatch('board:set-completed', {
+              $el.dispatchEvent(new window.CustomEvent('board:set-completed', { bubbles: true, detail: {
                 taskId,
                 completed: !taskCompleted,
-              })
+              }}))
             "
           >
             {{ toggle_label }}

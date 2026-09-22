@@ -26,11 +26,6 @@ class ControlledNativeSelect(Component):
     template = """
       <section
         class="ocean-controlled"
-        x-data
-        x-init="Alpine.store('nativeSelectFleet', {
-          controlled: true,
-          vessel: 'nautilus',
-        })"
       >
         <c-CField>
           <c-fill name="label">Survey vessel</c-fill>
@@ -39,17 +34,15 @@ class ControlledNativeSelect(Component):
               name="vessel"
               c-options="vessels"
               placeholder="Unassigned"
-              $c-props="{
-                value: $store.nativeSelectFleet.controlled
-                  ? $store.nativeSelectFleet.vessel
-                  : undefined,
-              }"
-              @input="$store.nativeSelectFleet.vessel = $event.target.value"
+              :value="controlled
+                  ? vessel
+                  : undefined"
+              @input="vessel = $event.target.value"
             />
           </c-fill>
           <c-fill name="description">
             <span
-              x-text="$store.nativeSelectFleet.controlled
+              v-text="controlled
                 ? 'Application controlled'
                 : 'Browser controlled'"
             ></span>
@@ -60,7 +53,7 @@ class ControlledNativeSelect(Component):
           <c-CButton
             type="button"
             size="sm"
-            @click="$store.nativeSelectFleet.controlled = false"
+            @click="controlled = false"
           >
             Release
           </c-CButton>
@@ -69,8 +62,8 @@ class ControlledNativeSelect(Component):
             size="sm"
             variant="outline"
             @click="
-              $store.nativeSelectFleet.vessel = 'calypso';
-              $store.nativeSelectFleet.controlled = true;
+              vessel = 'calypso';
+              controlled = true;
             "
           >
             Assign Calypso
@@ -80,14 +73,24 @@ class ControlledNativeSelect(Component):
             size="sm"
             variant="ghost"
             @click="
-              $store.nativeSelectFleet.vessel = null;
-              $store.nativeSelectFleet.controlled = true;
+              vessel = null;
+              controlled = true;
             "
           >
             Clear
           </c-CButton>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            controlled: true,
+            vessel: 'nautilus',
+          };
+        },
+      });
     """
 
     css = """

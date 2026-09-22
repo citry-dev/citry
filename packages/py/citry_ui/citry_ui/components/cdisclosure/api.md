@@ -88,8 +88,8 @@ still contain non-whitespace text outside decorative content. Links, controls,
 custom elements, and other HTML do not belong inside the trigger. Every title
 descendant rejects `role`, `tabindex`, `contenteditable`, `autofocus`, `href`,
 `xlink:href`, `controls`, `usemap`, `form`, `popover`, `is`, `hidden`, `inert`,
-ARIA naming or description attributes, inline or Alpine event listeners, and
-Alpine structural or ownership directives.
+ARIA naming or description attributes, inline or Vue event listeners, and
+Vue structural or ownership directives.
 
 The default panel accepts normal flow content and nested Disclosure or
 Accordion roots within the overlay boundary above. Actions follow the same

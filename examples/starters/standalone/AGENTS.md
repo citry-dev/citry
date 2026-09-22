@@ -11,7 +11,7 @@
   Keep explicit `Kwargs` and `Slots` schemas and typed component inputs.
 - Start with `app/render.py` for the render command, `app/citry_app.py`
   for Citry setup, `app/components/` for components, and `app/data.py` for data.
-- Keep the generated document self-contained. Alpine interactions run locally;
+- Keep the generated document self-contained. Vue interactions run locally;
   Python finishes when the render command exits.
 - Keep secrets and private data out of rendered HTML and browser data.
 - After changes, follow the README environment setup, run

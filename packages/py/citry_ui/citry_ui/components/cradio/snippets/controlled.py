@@ -6,10 +6,10 @@ citry.register_library(citry_ui)
 
 class ControlledRadios(Component):
     template = """
-      <section class="radio-controlled" x-data="{value: 'moss'}">
+      <section class="radio-controlled" >
         <c-CRadioGroup
           name="groundcover"
-          $c-props="{value}"
+          :value="value"
           @input="value = $event.target.value"
           orientation="horizontal"
         >
@@ -20,8 +20,17 @@ class ControlledRadios(Component):
             <c-CRadio value="clover">Microclover</c-CRadio>
           </c-fill>
         </c-CRadioGroup>
-        <output x-text="`Selected: ${value}`"></output>
+        <output v-text="`Selected: ${value}`"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            value: 'moss'
+          };
+        },
+      });
     """
     css = """
       :where(.radio-controlled) {

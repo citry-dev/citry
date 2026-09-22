@@ -6,8 +6,8 @@ citry.register_library(citry_ui)
 
 class TextareaValidation(Component):
     template = """
-      <section class="forest-report" x-data="{submitted: ''}">
-        <c-CForm @submit.prevent="submitted = new FormData($event.target).get('habitat')">
+      <section class="forest-report" >
+        <c-CForm @submit.prevent="submitted = new window.FormData($event.target).get('habitat')">
           <c-CField required>
             <c-fill name="label">Habitat report</c-fill>
             <c-fill name="default">
@@ -24,9 +24,18 @@ class TextareaValidation(Component):
             <c-CButton type="submit">Save report</c-CButton>
             <c-CButton type="reset" variant="outline">Reset</c-CButton>
           </div>
-          <output x-show="submitted" x-text="submitted"></output>
+          <output v-show="submitted" v-text="submitted"></output>
         </c-CForm>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            submitted: ''
+          };
+        },
+      });
     """
 
     css = """

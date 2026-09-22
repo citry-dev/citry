@@ -4,37 +4,30 @@ from citry import Component, citry
 citry.register_library(citry_ui)
 
 
-class DynamicFields(Component):
+class FilterSequence(Component):
     template = """
       <section
         class="filter-sequence"
-        x-data="{
-          rows: [
-            { id: 1, value: 'Luminance' },
-            { id: 2, value: 'Hydrogen-alpha' },
-            { id: 3, value: 'Oxygen III' },
-          ],
-          nextId: 4,
-          result: '',
-        }"
       >
         <header>
           <p>Filter wheel</p>
           <h2>Build an exposure sequence</h2>
         </header>
 
-        <c-CForm @submit.prevent="result = JSON.stringify(new FormData($el).getAll('filter'))">
+        <c-CForm
+          @submit.prevent="result = JSON.stringify(new window.FormData($el).getAll('filter'))"
+        >
           <div class="filter-sequence__rows">
-            <template x-for="(row, index) in rows" :key="row.id">
+            <template v-for="(row, index) in rows" :key="row.id">
               <div class="filter-sequence__row">
                 <label
                   :for="`filter-${row.id}`"
-                  x-text="`Exposure ${index + 1}`"
+                  v-text="`Exposure ${index + 1}`"
                 ></label>
                 <input
                   :id="`filter-${row.id}`"
                   name="filter"
-                  x-model="row.value"
+                  v-model="row.value"
                 />
                 <button type="button" @click="rows.splice(index, 1)">Remove</button>
               </div>
@@ -65,10 +58,25 @@ class DynamicFields(Component):
 
         <output
           aria-live="polite"
-          x-show="result"
-          x-text="result"
+          v-show="result"
+          v-text="result"
         ></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            rows: [
+              { id: 1, value: 'Luminance' },
+              { id: 2, value: 'Hydrogen-alpha' },
+              { id: 3, value: 'Oxygen III' },
+            ],
+            nextId: 4,
+            result: '',
+          };
+        },
+      });
     """
 
     css = """
@@ -151,6 +159,6 @@ class DynamicFields(Component):
     """
 
 
-preview = DynamicFields()
+preview = FilterSequence()
 
 preview  # noqa: B018

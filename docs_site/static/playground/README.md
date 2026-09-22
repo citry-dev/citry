@@ -48,6 +48,7 @@ beside the error.
 | `worker.js` | Owns Pyodide, installs the runtime, runs Python, and dispatches Python event handlers. | This file. |
 | `executor.py` | Executes one module, normalizes its final value, reports Python diagnostics, adapts Events requests, and projects an exact-version component catalog. | This file. |
 | `analysis_adapter.py` | Converts parser diagnostics, structural and registered-component results, and catalog-backed findings into validated browser records. | This file. |
+| `runtime_label.js` | Formats the visible published/workspace runtime provenance label. | [`../../_internal/frontend/src/runtime_label.js`](../../_internal/frontend/src/runtime_label.js). |
 | `portable_ide.py` | Generated parser and component-name rules shared with the desktop LSP. | [`../../../packages/py/citry/citry/_portable_ide.py`](../../../packages/py/citry/citry/_portable_ide.py). |
 | `preview.html` | Provides the sandboxed result document, ordered script activation, diagnostics, and the Events transport. | This file. |
 | `playground.css` | Styles the full-page editor and result workspace. | This file. |
@@ -98,27 +99,60 @@ Open `/playground/` for the full workspace. Open any docs page containing
 inline consumer. Python source changes restart the server. Browser bundle
 changes require another frontend build and page refresh.
 
-The live server builds a temporary wheel from the workspace `citry-ui` source
-and replaces the published Citry UI entry in its generated copy of
-`runtime.json`. It serves that local wheel without changing this committed
-directory or installing two UI copies. Static builds, CI, and deployed docs use
-only the exact published versions in the committed `runtime.json`. The pinned
-Citry wheel owns the Events client in both cases.
+The live authoring server builds temporary wheels from the workspace `citry`
+and `citry-ui` sources and adds one prebuilt PyEmscripten `citry-core` wheel to
+its generated copy of `runtime.json`. Build that Core wheel from this checkout
+with the repository's pinned Pyodide toolchain, then point
+`CITRY_PLAYGROUND_CORE_WHEEL` at the resulting file:
 
-The workspace `citry-ui` usually requires a Citry that is newer than the pinned
-release, for the whole stretch between releases. The server then prints which
-pair it rejected and serves this committed runtime unchanged, so every page
-still renders and Citry UI examples show their code without a live preview.
-Pinning a Citry release that the workspace `citry-ui` accepts brings the local
-wheel back.
+```bash
+export CITRY_XBUILDENV=/tmp/citry-pyodide-xbuildenv
+uvx --python 3.14.2 --from pyodide-cli==0.5.0 --with pyodide-build==0.37.0 \
+  pyodide xbuildenv install 314.0.3 --path "$CITRY_XBUILDENV"
+uvx --python 3.14.2 --from pyodide-cli==0.5.0 --with pyodide-build==0.37.0 \
+  pyodide xbuildenv install-emscripten --path "$CITRY_XBUILDENV"
+uv run --no-sync python scripts/build_citry_core_pyodide_wheel.py \
+  --source packages/py/citry_core \
+  --out-dir /tmp/citry-playground-core \
+  --xbuildenv-path "$CITRY_XBUILDENV" \
+  --cargo-target-dir /tmp/citry-playground-cargo \
+  --cargo-home "$HOME/.cargo" \
+  --source-date-epoch "$(git show -s --format=%ct HEAD)"
+core_wheels=(/tmp/citry-playground-core/citry_core-*.whl)
+if [[ ${#core_wheels[@]} -ne 1 || ! -f ${core_wheels[0]} ]]; then
+  echo "Expected exactly one workspace Core wheel." >&2
+  exit 1
+fi
+export CITRY_PLAYGROUND_CORE_WHEEL="${core_wheels[0]}"
+uv run --no-sync python -m docs_site serve
+```
+
+The build script and the matching toolchain versions in
+[`repo--docs-check.yml`](https://github.com/citry-dev/citry/blob/main/.github/workflows/repo--docs-check.yml)
+are the provenance boundary. A filename, version, and ABI match only prove
+compatibility; they cannot prove that an arbitrary wheel came from this
+checkout. Do not use a downloaded or published wheel as the workspace Core
+artifact. The Core build is deliberately outside the server factory: reloads
+can recreate the app and the two pure-Python wheels without recompiling Rust.
+
+The generated manifest labels this complete three-package tuple as
+`source: "workspace"`. If the core artifact is missing or does not match the
+workspace package versions, the server prints the reason and serves the
+committed `source: "published"` runtime. A local-runtime E2E fixture treats
+that fallback as a setup failure, so a published browser run cannot be
+mistaken for workspace coverage. Static builds, CI's published-runtime tests,
+and deployed docs use only the exact published versions in the committed
+`runtime.json`.
 
 ## Update the pinned Python runtime
 
 Treat `runtime.json` as one compatible tuple. When any runtime package changes:
 
 1. Pin the full Pyodide and Python versions.
-2. Pin PyPI packages by version, filename, and SHA-256. Pin CDN packages by
-   their direct URL.
+2. Pin PyPI packages by version, filename, and lowercase SHA-256. Pin CDN
+   packages by their direct URL; published direct URLs must use the pinned
+   Pyodide CDN `/pyodide/v<version>/full/` tree, while workspace manifests may
+   use their generated `./local/` wheel paths.
 3. Confirm compiled wheels match the Pyodide Python and PyEmscripten ABI.
 4. Keep `citry.version`, `citry.core_version`, and `citry.ui_version` equal to
    their package entries.
@@ -129,8 +163,10 @@ The Worker verifies installed Python, Citry, Citry Core, and Citry UI versions
 before it accepts a run. For a PyPI package, it resolves the registry-assigned
 storage URL at startup and rejects any artifact whose filename or SHA-256 does
 not match `runtime.json`. This means the release candidate can contain the
-complete runtime entry before publication. A local runtime retains
-`citry.ui_version` while replacing the public UI wheel with the workspace build.
+complete runtime entry before publication. A local runtime updates all three
+`citry.version`, `citry.core_version`, and `citry.ui_version` fields while
+replacing the published Citry Core, Citry, and Citry UI entries with the
+compatible workspace builds.
 
 ## Keep the protocols synchronized
 

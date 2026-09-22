@@ -7,7 +7,7 @@ description: Compute HTML attributes and component inputs with Python, including
 
 ## `c-` Dynamic attributes
 
-An ordinary attribute contains a fixed value. Add `c-` to  turn the value into a Python expression that *generates*
+An ordinary attribute contains a fixed value. Add `c-` to turn the value into a Python expression that *generates*
 the value:
 
 ```citry-html
@@ -101,22 +101,28 @@ How to read the above:
 
 `False` and `None` are still passed to the component; they are not omitted.
 
-### Alpine
+### Vue
 
-Use the same rule to dynamically generate Alpine expressions. Here Python
-provides the attribute's JavaScript source as a string:
+Vue expressions must remain statically authored template source. Pass their
+values through strict-JSON `js_data`, then write the binding directly:
 
-```citry-html
-<!-- binding = "{ open: isOpen }" -->
-<div c-:class="binding"></div>
-<!-- Result: <div :class="{ open: isOpen }"></div> -->
+```citry
+class Panel(Component):
+    class JsData:
+        open: bool
+
+    def js_data(self, kwargs, slots):
+        return {"open": True}
+
+    template = '<div :class="{ open: open }"></div>'
 ```
 
-When the JavaScript can be written directly, prefer a normal Alpine attribute
-such as `:class="{ open: isOpen }"`.
+`c-:class` cannot turn a Python-rendered string into executable Vue source.
+This keeps browser code reviewable and prevents runtime data from becoming
+code.
 
 Read
-[Alpine in templates](/syntax/alpine/) for browser-side attributes and
+[Vue in templates](/syntax/vue/) for browser-side attributes and
 [Client interactivity](/concepts/client-interactivity/) for values that cross
 component boundaries.
 
@@ -141,42 +147,46 @@ Or apply the attribute through [`c-bind`](#c-bind-spread), which preserves the k
 
 ## Props and events
 
-Some attributes on a component tag never become Python inputs nor HTML attributes. Following serve to pass data across components:
+Vue bindings on a component tag pass reactive data and browser events across
+the component boundary:
 
 ```citry-html
 <c-ActionButton
-  $c-props="{ theme: selectedTheme }"
+  :theme="selectedTheme"
   @click="selected = true"
   @c-save="saveSelection({ selected })"
 />
 ```
 
-### `$c-props`
+### `:prop`
 
-Define Alpine runtime variables that will be passed from the parent component to the child.
+Declare native Vue props in the child component's JavaScript:
 
-The value of `$c-props` is an Alpine expression (similar to `x-init`). Inside the value you can reference other Alpine variables define in the scope:
-
-```citry-html
-<div x-data="{ open: false }">
-  <c-ActionButton $c-props="{ open, dense: true }" />
-</div>
+```js
+$component({
+  props: {
+    open: Boolean,
+    dense: Boolean,
+  },
+});
 ```
 
-The Alpine expression in `$c-props` must return a JavaScript object. This object must match child's `props` declaration. See [Client interactivity](/concepts/client-interactivity#pass-client-props-down).
+Pass each reactive value from the parent with `:` or `v-bind`:
 
-Only component tags can have `$c-props`. `$c-props` on non-component tags
-raises an error. After dynamic attributes and spreads resolve, the actual
-target component must also register `$component(...)`; this includes the
-selected target of `<c-component>`. A final `None` or `False` removes
-`$c-props` and does not require a registration.
+```citry-html
+<c-ActionButton :open="open" :dense="true" />
+```
+
+The expression runs in the parent's Vue context. The child receives the value
+through Vue's normal prop validation and reactivity. See
+[Client interactivity](/concepts/client-interactivity/#pass-props-to-a-child).
 
 ### `@event`
 
-Alpine's [event bindings](https://alpinejs.dev/directives/on){: target="_blank" rel="noopener"} allow you to listen for browser events that originate from the child component.
+Vue's event bindings listen for browser or component events:
 
 ```citry-html
-<div x-data="{ open: bool }">
+<div>
   <c-ActionButton @click="open = !open" />
 </div>
 
@@ -186,7 +196,7 @@ Alpine's [event bindings](https://alpinejs.dev/directives/on){: target="_blank" 
 </button>
 ```
 
-Just like with regular Alpine, you can access `$event` inside the expression:
+You can access `$event` inside the expression:
 
 ```citry-html
 <c-ActionButton
@@ -194,13 +204,35 @@ Just like with regular Alpine, you can access `$event` inside the expression:
 />
 ```
 
-Read more on [Alpine events in Citry](/concepts/client-interactivity/#send-events-up-from-a-component-tag).
+Read more about [child events](/concepts/client-interactivity/#listen-to-child-events).
+
+### `v-on` object form
+
+Pass an object of Vue listeners when several event names come from one Vue
+expression:
+
+```citry-html
+<c-ActionButton v-on="listeners" />
+```
+
+Vue expands the object into component listeners. Write the exact `v-on`
+attribute directly in the template. A Python hook or runtime mapping cannot
+turn data into browser code. `c-bind` remains a Python data spread:
+
+```citry-html
+<c-ActionButton c-bind="attrs" />
+```
+
+Keys such as `v-on` supplied by `attrs`, a `c-v-on` expression, or a `v-on`
+value containing `{{ ... }}` are rejected. Use an authored Vue expression for
+the listener object.
 
 ### `@c-event`
 
-Alpine's event handlers run in the browser. You can instead trigger [server event handlers](/events/) by prefixing the event name with `c-`, eg `@c-click`. So:
+Vue event handlers run in the browser. Prefix the event name with `c-`, as in
+`@c-click`, to trigger a [server event handler](/events/):
 
-- `@click` - Regular Alpine `click` event handler
+- `@click` - Regular Vue `click` event handler
 - `@c-click` - Send event to the server
 
 The value of `@c-click` attributes is strict:
@@ -211,7 +243,7 @@ The value of `@c-click` attributes is strict:
 Read more about [Binding events in templates](/events/bindings/).
 
 ```citry-html
-<div x-data="{ title: 'Title' }">
+<div>
   {# No arguments #}
   <c-ActionButton @c-click="submit" />
 
@@ -364,9 +396,11 @@ itself is always an expression.
 When `c-bind` evaluates to `None`, it does
 nothing. Any other non-mapping value raises `TypeError`. 
 
-Keys are used exactly as
-written: a key named `c-title` stays `c-title`. Only a directly authored
-dynamic attribute loses one `c-` prefix:
+Accepted keys are used exactly as written: a key named `c-title` stays
+`c-title`. Only a directly authored dynamic attribute loses one `c-` prefix.
+In a prepared Vue template, generated `v-*`, `@*`, and `:*` keys are rejected:
+Python-rendered strings do not become authenticated Vue source. Author those
+bindings directly in the template instead.
 
 ```citry-html
 <button c-bind="{ 'c-title': title }">
@@ -375,9 +409,6 @@ dynamic attribute loses one `c-` prefix:
 <button c-title="title">
 <!-- Result: <button title="My Title"> -->
 ```
-
-The [template flags](#c-template-flags) `#c-key` and `#c-ignore` cannot arrive
-through `c-bind`. Write them on the tag instead.
 
 Most structural built-in tags, including [`<c-if>`][c-if] and
 [`<c-for>`][c-for], do not accept an attribute spread. Put `c-bind` on the
@@ -424,22 +455,8 @@ The same principle applies to component inputs:
 ></c-Card>
 ```
 
-[Props and events](#props-and-events) can be also passed through `c-bind`:
-
-```citry-html
-<c-Card
-  c-bind="{
-    '$c-props': '{ jsVar: 1 + 1 }',
-    '@click': '() => ...',
-  }"
-></c-Card>
-
-<!-- Same as: -->
-<c-Card
-  $c-props="{ jsVar: 1 + 1 }"
-  @click="() => ..."
-></c-Card>
-```
+Write Vue props and event bindings directly on the component call. `c-bind`
+contains Python values and does not turn those values into JavaScript source.
 
 ### Order and duplicates
 
@@ -503,7 +520,7 @@ class Card(Component):
 # Render as `<c-Card class="btn" id="3" data-id="3" />`
 ```
 
-When your component does have a `Kwargs` class, you can't pass extra attributes directly. Instead, define an explicit kwarg like `attrs` to collect the attributes as a dictionary:
+When your component has a `Kwargs` class, you can't pass extra attributes directly. Instead, define an explicit kwarg like `attrs` to collect the attributes as a dictionary:
 
 ```citry
 class Card(Component):
@@ -521,11 +538,11 @@ class Card(Component):
 # Render as
 # <c-Card
 #   title="My Card"
-#   attrs="{'class': 'btn', 'id': 3, 'data-id': 3}"
+#   c-attrs="{'class': 'btn', 'id': 3, 'data-id': 3}"
 # />
 ```
 
-For more details see  [Forward HTML attributes](/advanced/html-attributes/).
+For more details, see [Forward HTML attributes](/advanced/html-attributes/).
 
 ## `:c-*` State bind
 
@@ -558,7 +575,7 @@ What happens when you use `:c-query`:
 2. Still one-way binding - you have to react to user input yourself.
 
 Notice we didn't need to explicitly set a `value` attribute on `<input>`.
-Different inputs use different ways to set/select the value. Citry is smart enough that it sees 
+Different inputs use different ways to set or select the value. Citry detects that
 you used `:c-*` on an `<input>` element, and automatically chooses the correct approach. For a list of all supported elements, see [Bind controls to State](/events/bindings/#bind-controls-to-state).
 
 For this to work, your State class needs a `query` field:
@@ -600,7 +617,7 @@ matching option values. This also works when `multiple` or the binding arrives
 through `c-bind`.
 
 Input `type` follows the same phase rule. A type produced by `c-type` or
-`c-bind` is checked against the final rendered attributes; an Alpine-only
+`c-bind` is checked against the final rendered attributes. A Vue
 `:type` is checked whenever it changes in the browser. Unsupported or unknown
 types do not leave a half-active binding. See the complete direction matrix in
 [Bind controls to State](/events/bindings/#which-elements-you-can-bind).
@@ -618,11 +635,11 @@ types do not leave a half-active binding. See the complete direction matrix in
 
 !!! note
 
-    **DO NOT** pass `:c-` attributes to child components, they belong on the HTML elements inside the components that owns the State.
-    A child component binds its own State in its own template, so pass data down
-    as an ordinary input or through [`$c-props`](#c-props).
+    **DO NOT** pass `:c-` attributes to child components. They belong on the HTML elements inside the component that owns the State.
+    A child component binds its own State in its own template, so pass reactive
+    browser data down through a native [Vue prop](#prop).
 
-After you have set up the two way, binding, check your event handler, `refresh`. The value of `State.query` will be already updated to the latest value every time `refresh` is triggered:
+After you have set up the two-way binding, check your event handler, `refresh`. The value of `State.query` is already updated to the latest value every time `refresh` is triggered:
 
 ```citry
 class Card(Component):
@@ -633,152 +650,3 @@ class Card(Component):
 
 Read [Bind controls to State](/events/bindings/#bind-controls-to-state) for the
 full element list and more. See [Keep State between calls](/events/state/) for declaring the State fields.
-
-## `#c-*` Template flags
-
-A `#c-*` attribute is a flag for Citry itself rather than data for the page.
-It never becomes an HTML attribute under that name, and it never becomes a
-component input. Citry reads the flags while compiling the template.
-
-There are currently two flags, and both relate to [how the DOM updates](/events/actions/#preserve-identity-when-lists-or-parents-re-render) when an event handler re-renders a page:
-
-- `#c-key` gives a node a stable identity across updates
-- `#c-ignore` keeps a subtree out of updates
-
-```citry-html
-<c-for each="task in tasks">
-  <article #c-key="task.id">
-    <div class="chart" #c-ignore>
-      <canvas></canvas>
-    </div>
-  </article>
-</c-for>
-```
-
-Any other `#c-*` name is an error when the template loads.
-
-A flag cannot arrive through [`c-bind`](#c-bind-spread), and no
-expression can produce one:
-
-```citry-html
-{# ❌ Citry rejects this flag when the page renders #}
-<article c-bind="{'#c-key': task.id}"></article>
-
-{# ✅ Write the flag on the tag #}
-<article #c-key="task.id"></article>
-```
-
-When a caller should influence the key, accept it as an ordinary input and
-write the flag yourself:
-
-```citry-html
-{# Inside TaskRow, with row_key coming from an input #}
-<article #c-key="row_key">
-  {{ task.title }}
-</article>
-```
-
-When `row_key` is `None`, Citry emits no key, the same as omitting `#c-key`.
-This gives a component an optional key input while keeping the flag explicit
-in the template that owns the markup.
-
-### `#c-key`
-
-`#c-key` helps to preserve DOM state across re-renders. It addresses following problem:
-
-1. Imagine you have a list of items, rendered on the server.
-2. In the browser, your end user may interact with the items, mutating the DOM state,
-   toggling a checkbox, filling in forms, etc.
-3. All the changes the end user did are purely browser state - none of it is saved on the server.
-4. End user then hits "refresh" button, the new list has different order of items than the old one.
-
-`#c-key` is critical to preserve the browser state already done by the end user, by linking the old and new HTML with matching `#c-key`. Without it, the end user would lose the local progress.
-
-`#c-key` takes a non-empty Python expression and tells Citry which node is
-which, so an update can match a node to the one it rendered last time.
-Without a key, Citry matches ordinary elements by position and resets an
-uncorrelated child component under a parent render.
-
-The expression itself must be present, but its result may be `None`. A `None`
-result opts out for that render and emits no key. Other falsy values are real
-keys: `False`, `0`, and `""` do not opt out. For component tags, an unkeyed
-same-class child may still keep positional continuity; `None` opts out of
-key-based movement, not all matching.
-
-Matching by position can lead to errors - reordering a list can
-leave a focused input or a browser-owned widget behind on the wrong item.
-
-Write `#c-key` on a plain HTML element or on a component tag:
-
-```citry-html
-<c-for each="task in tasks">
-  <c-TaskRow
-    #c-key="task.id"
-    c-task="task"
-  />
-</c-for>
-```
-
-Keys must be unique among the siblings they compete with. For the full
-rules, including how nesting depth affects matching, read
-[Preserve identity when lists or parents re-render](/events/actions/#preserve-identity-when-lists-or-parents-re-render).
-
-On a plain HTML element, the key becomes that element's `data-citry-key`
-attribute. On a component tag, it belongs to Citry's comment-bounded virtual
-component range and is never stamped onto the child's root elements. The two
-identities are independent, so this is valid and preserves both levels:
-
-```citry-html
-{# Parent template: component identity #}
-<c-TaskRow #c-key="task.id" c-task="task" />
-
-{# TaskRow template: ordinary root-element identity #}
-<article #c-key="layout_variant">
-  {{ task.title }}
-</article>
-```
-
-Component keys match direct logical children top-down by component class and
-key, even across ordinary wrapper changes. After keyed matches are reserved,
-Citry pairs remaining unkeyed component positions and preserves only
-same-class pairs; it never scans ahead. Element keys remain limited to one
-sibling window. Structural built-in tags such as `<c-if>` and `<c-for>` are
-not identity nodes and reject `#c-key`; put it on the HTML element or component
-tag whose identity should survive.
-
-### `#c-ignore`
-
-While `#c-key` tells Citry how to match the old and the new HTML,
-`#c-ignore` tells Citry "keep this HTML here, don't try to match it on update":
-
-```citry-html
-<div class="chart" #c-ignore>
-  <canvas></canvas>
-</div>
-```
-
-`#c-ignore` is a bare marker with no value.
-
-Use it for third-party libraries such as a charting or
-map libraries, not for content Citry should keep up to date.
-
-On an HTML element it keeps that element and its descendants. On a component
-tag it keeps the complete logical component range, including multi-root,
-text-only, and empty output:
-
-```citry-html
-<c-BrowserOwnedChart #c-ignore />
-```
-
-The marker belongs to the caller-authored component range; it is never copied
-onto one of the child's root elements. A `#c-ignore` written on a root element
-inside the child's own template is therefore still an ordinary element flag
-and keeps only that physical subtree. Runtime `<c-element>` also keeps ordinary
-element semantics because it produces an HTML element, not a logical child
-component.
-
-Citry reads the old rendered side when deciding whether to keep a matched
-range. Adding the marker takes effect on the next morph; an already-kept old
-range remains kept until it is removed, replaced, or no longer corresponds.
-[Leave a browser-owned subtree alone](/events/actions/#leave-a-browser-owned-subtree-alone)
-covers the update behavior in more detail.

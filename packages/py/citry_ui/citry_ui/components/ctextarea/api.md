@@ -98,7 +98,7 @@ user-edit rules: initial or script-controlled text is not guaranteed to set
 
 ## Control the browser value
 
-Supply client `value` through `$c-props` to control current text. Mirror the
+Supply client `value` with native Vue bindings to control current text. Mirror the
 native `input` event to accept edits. Omit the prop to release control without
 rewriting the current value.
 
@@ -161,4 +161,4 @@ Keep a visible label even when placeholder text is present. Textarea adds no
 role, focus proxy, or keyboard handler. `value`, name, ID, placeholder,
 autocomplete, and inputmode are always rendered as plain text, including
 trusted-string subclasses. `attrs`, `class_`, and `style` remain trusted code
-surfaces for native, ARIA, data, and Alpine attributes.
+surfaces for native, ARIA, data, and Vue attributes.

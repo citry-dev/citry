@@ -6,10 +6,10 @@ citry.register_library(citry_ui)
 
 class DrawerForm(Component):
     template = """
-      <section x-data="{result:'No chart selected'}">
-        <c-CDrawer $c-props="{onOpenChange:(open, detail) => {
+      <section >
+        <c-CDrawer :onOpenChange="(open, detail) => {
           if (!open && detail.returnValue) result = `Selected: ${detail.returnValue}`;
-        }}">
+        }">
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Choose a chart</c-CButton>
           </c-fill>
@@ -21,8 +21,17 @@ class DrawerForm(Component):
             </form>
           </c-fill>
         </c-CDrawer>
-        <output x-text="result"></output>
+        <output v-text="result"></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            result:'No chart selected'
+          };
+        },
+      });
     """
     css = """
       :where(.drawer-chart-form) { display:grid; gap:.75rem; }

@@ -144,10 +144,12 @@ class CToolbar(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "orientation": _choice("orientation", kwargs.orientation, _ORIENTATIONS),
-            "loop": bool(kwargs.loop),
-            "variant": _choice("variant", kwargs.variant, _VARIANTS),
-            "size": _choice("size", kwargs.size, _SIZES),
+            "serverDefaults": {
+                "orientation": _choice("orientation", kwargs.orientation, _ORIENTATIONS),
+                "loop": bool(kwargs.loop),
+                "variant": _choice("variant", kwargs.variant, _VARIANTS),
+                "size": _choice("size", kwargs.size, _SIZES),
+            }
         }
 
     template = """
@@ -159,7 +161,7 @@ class CToolbar(LibraryComponent):
         c-aria-label="label"
         c-aria-orientation="orientation"
         c-data-orientation="orientation"
-        c-data-loop="loop"
+        c-data-loop="'' if loop else None"
         c-data-variant="variant"
         c-data-size="size"
       ><c-slot required /></div>
@@ -168,8 +170,11 @@ class CToolbar(LibraryComponent):
     js = r"""
       $component({
         props: {orientation: {}, loop: {}, variant: {}, size: {}},
-        init: ({els, data, props, effect}) => {
-          const root = els[0];
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component.serverDefaults;
+          const props = component.$props;
+          const effect = Citry.vue.watchEffect;
           const invalidEpisodes = new Set();
           const originalTabindex = new Map();
           const excludedComposite = '[role="menu"], [role="listbox"], [role="tree"], '

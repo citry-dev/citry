@@ -42,10 +42,10 @@ class FragmentWidget(Component):
     """
 
     js = """
-      $component(({ els }) => {
+      $component(({ component }) => {
         // Proof the fragment's own JS ran after it was inserted.
-        els[0].dataset.ready = "1";
-        els[0].querySelector(".frag-widget__title").textContent += " (JS ran)";
+        component.$el.dataset.ready = "1";
+        component.$el.querySelector(".frag-widget__title").textContent += " (JS ran)";
       });
     """
 

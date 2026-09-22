@@ -45,15 +45,25 @@
           "items": {
             "$ref": "#/$defs/actionKind"
           }
+        },
+        "renderers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/renderer"
+          }
         }
       },
-      "description": "Exactly the swaps and actions this client can apply. An absent object or key uses the v1 baseline."
+      "description": "Exactly the swaps, actions, and renderers this client can apply. An absent object or key uses the v1 baseline."
     },
     "swap": {
       "enum": ["morph", "replace", "inner", "append", "prepend", "remove", "none"]
     },
     "actionKind": {
       "enum": ["render", "data", "state", "event", "redirect", "url"]
+    },
+    "renderer": {
+      "enum": ["html-fragment/1", "vue-prepared/1"]
     },
     "call": {
       "type": "object",

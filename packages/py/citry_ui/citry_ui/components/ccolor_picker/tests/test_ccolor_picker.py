@@ -10,7 +10,7 @@ from citry import Citry, Component
 from citry_ui import CColorPicker, CColorSwatch
 
 
-def _render(attrs: str = "", *, swatches: object = ()) -> str:
+def _render(attrs: str = "", *, swatches: object = (), static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -22,7 +22,8 @@ def _render(attrs: str = "", *, swatches: object = ()) -> str:
 
         template = f'<c-CColorPicker label="Brand color" {attrs} c-swatches="swatches" />'
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def test_schema_registration_normalization_native_fallback_and_swatches() -> None:
@@ -36,7 +37,11 @@ def test_schema_registration_normalization_native_fallback_and_swatches() -> Non
         "swatches",
     ]
     assert CColorPicker in citry_ui.COMPONENTS
-    html = _render('value="#AbC" name="brand" form="profile" c-open="True"', swatches=[CColorSwatch("#fff", "White")])
+    html = _render(
+        'value="#AbC" name="brand" form="profile" c-open="True"',
+        swatches=[CColorSwatch("#fff", "White")],
+        static_fallback=True,
+    )
     assert 'type="color"' in html
     assert 'value="#aabbcc"' in html
     assert 'name="brand"' in html

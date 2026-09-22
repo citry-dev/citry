@@ -118,7 +118,8 @@ def _page(app: Citry) -> str:
                   label="Processed"
                   c-value="25"
                   c-attrs="{'id': 'progress'}"
-                  $c-props="{label: progressLabel, value: progressValue}"
+                  :label="progressLabel"
+                  :value="progressValue"
                 />
                 <c-CNumberInput
                   id="number-input"
@@ -140,20 +141,20 @@ def _page(app: Citry) -> str:
                   c-pages="5"
                   c-page="2"
                   c-attrs="{'id': 'pagination'}"
-                  $c-props="{page: currentPage}"
+                  :page="currentPage"
                 />
                 <c-CCombobox id="combobox" c-options="options" c-input_attrs="combo_input_attrs" />
                 <c-CTagsInput
                   id="tags"
                   c-value="initial_tags"
                   c-input_attrs="tags_input_attrs"
-                  $c-props="{value: tags}"
+                  :value="tags"
                 />
                 <c-CToastRegion
                   id="toasts"
                   c-items="initial_notices"
                   c-duration_ms="0"
-                  $c-props="{items: notices}"
+                  :items="notices"
                 />
                 <button id="change-values" type="button" @click="
                   progressLabel = 'Reviewed';

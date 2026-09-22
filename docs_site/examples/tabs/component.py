@@ -100,8 +100,8 @@ class Tabs(Component):
     """
 
     js = """
-      $component(({ els }) => {
-        const root = els[0];
+      $component(({ component }) => {
+        const root = component.$el;
         const tabs = root.querySelectorAll(".demo-tabs__tab");
         const panels = root.querySelectorAll(".demo-tabs__panel");
 

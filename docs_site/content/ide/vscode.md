@@ -116,9 +116,9 @@ With no app configured, the status bar reports **syntax only**. Definite
 inline templates and files explicitly using the Citry Template language are
 still checked, but unknown components and their contracts are not inferred.
 
-## Complete Alpine and component JavaScript
+## Complete Vue expressions and component JavaScript
 
-In a registry-owned component template, Citry connects Alpine expressions to
+In a registry-owned component template, Citry connects Vue expressions to
 the component's browser data:
 
 ```citry
@@ -131,12 +131,12 @@ class Search(Component):
         page: int
 
     template = """
-      <p x-text="query.toUpperCase()"></p>
+      <p v-text="query.toUpperCase()"></p>
       <button @click="$state.page += 1">Next</button>
     """
 ```
 
-Top-level `JsData` names complete in `x-*`, `@*`, and `:*` values. Hover shows
+Top-level `JsData` names complete in native Vue directives and bindings. Hover shows
 their JSON-derived JavaScript type, and **Go to Definition**, **Go to
 Declaration**, and **Find All References** connect them to the exact Python
 field or a conservatively inferred `js_data()` dict key. Public Events
@@ -144,18 +144,18 @@ field or a conservatively inferred `js_data()` dict key. Public Events
 
 The component's direct `js` or resolved `js_file` receives matching types for
 the complete `$component` callback context. Direct synchronous writes to
-`scope` become typed Alpine names, and `x-for` bindings receive
-iterable-derived types and exact navigation. A static
-`$component({ props, init })` declaration also types its read-only `props`.
+the callback's `component` value use the generated public-instance type, and
+`v-for` and `v-slot` bindings receive lexical scope and exact navigation. A static
+`$component({ props, onServerRender })` declaration also types its read-only props.
 VS Code's installed JavaScript service supplies ordinary JavaScript member
 completion, hover, and definitions; Citry keeps the Python-backed origins
-authoritative. Unknown Alpine roots are errors by default through the shared
+authoritative. Unknown Vue expression roots are errors by default through the shared
 Citry lint policy. Free names inside a `$component` initializer are also
-errors by default, which catches a context value such as `scope` when it was
+errors by default, which catches an undeclared context value when it was
 used but not destructured. Configure the severity or real host-provided
 globals through `LintSettings`; see [Template linting](/ide/template-linting/).
 
-Hovering `$component`, a destructured callback value, or a Citry Alpine magic
+Hovering `$component`, a destructured callback value, or a Citry Vue helper
 such as `$sendEvent`, `$loading`, or `$error` shows its Citry contract and a
 link to the matching browser API reference. Handler-name completion opens
 inside the literal arguments to `sendEvent`, `$sendEvent`, `$loading`, and
@@ -166,19 +166,19 @@ and a handler passed to `$loading()` or `$error()` must match an effective
 Python event handler and navigate to that method. Dynamic names are left open,
 as are all `onEvent()` and `$onEvent()` names.
 
-Direct `$c-props` objects on statically resolved child components validate
+Native props on statically resolved child components validate
 unknown keys, required props, and proven value types against the child's
 static `$component({props})` declaration. A prop key hovers and navigates to
 that declaration. A spread keeps explicit keys checkable but suppresses a
-missing-required conclusion; dynamic targets and `c-$c-props` remain
-unproven. When a `JsData` annotation or known literal value cannot cross
+missing-required conclusion; dynamic component targets remain unproven. When a
+`JsData` annotation or known literal value cannot cross
 Citry's strict JSON wire, Citry reports `citry.js-data.unsupported-type` as a
 warning and lets JavaScript tooling treat that value as `unknown`.
 
 ## Navigate i18n messages and profiles
 
 When the selected application configures i18n, Citry uses its checked catalog
-index across Python, templates, Fluent, Alpine, and component JavaScript.
+index across Python, templates, Fluent, Vue expressions, and component JavaScript.
 Literal message IDs complete and navigate from `tr()`,
 `<c-trans message="...">`, `self.i18n.tr()`,
 `Component.I18n.client_messages`, `$i18n.tr()`, and the injected component
@@ -194,7 +194,7 @@ in another component, another Python file, or a configured catalog package.
 Hover an argument name such as `count` in
 `tr("account-unread", count=value)` to see its `@param` type and description.
 Go to definition on that argument to open the exact `@param` declaration.
-The same rule works in template and Python `tr()` calls, Alpine `$i18n.tr()`,
+The same rule works in template and Python `tr()` calls, Vue `$i18n.tr()`,
 the injected component JavaScript `i18n.tr()`, and literal `<c-trans>` values
 and fills.
 

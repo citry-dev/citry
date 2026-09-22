@@ -334,20 +334,23 @@ class CTour(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         snapshot = self._snapshot(kwargs)
         return {
-            "open": snapshot["open"],
-            "active": snapshot["active"],
-            "dismissible": snapshot["dismissible"],
-            "closeOnEscape": snapshot["close_on_escape"],
-            "closeOnOutside": snapshot["close_on_outside"],
-            "skippable": snapshot["skippable"],
-            "scroll": snapshot["scroll"],
-            "missingTarget": snapshot["missing_target"],
-            "size": snapshot["size"],
+            "serverDefaults": {
+                "open": snapshot["open"],
+                "active": snapshot["active"],
+                "dismissible": snapshot["dismissible"],
+                "closeOnEscape": snapshot["close_on_escape"],
+                "closeOnOutside": snapshot["close_on_outside"],
+                "skippable": snapshot["skippable"],
+                "scroll": snapshot["scroll"],
+                "missingTarget": snapshot["missing_target"],
+                "size": snapshot["size"],
+            }
         }
 
     template = """
       <c-CInternalTourDeclarations><c-slot required /></c-CInternalTourDeclarations>
       <c-CInternalTour
+        ref="root"
         c-root_id="root_id"
         c-dialog_id="dialog_id"
         c-open="open"
@@ -453,7 +456,8 @@ class CInternalTourDeclarations(LibraryComponent):
 
 
 class CInternalTour(LibraryComponent):
-    transparent = True
+    # The outer runtime uses this component as its stable DOM ref anchor.
+    transparent = False
 
     @dataclass(slots=True)
     class Kwargs:
@@ -546,7 +550,7 @@ class CInternalTour(LibraryComponent):
         class="cui-tour"
         c-id="root_id"
         c-bind="attrs"
-        c-data-open="open"
+        c-data-open="'' if open else None"
         c-data-active="active"
         c-data-value="active_value"
         c-data-size="size"
@@ -561,7 +565,7 @@ class CInternalTour(LibraryComponent):
           c-aria-labelledby="active_title_id"
           c-aria-describedby="active_description_id"
           aria-modal="false"
-          c-data-open="open"
+          c-data-open="'' if open else None"
           data-citry-tour-dialog
           data-citry-ui-part="dialog"
         >
@@ -580,6 +584,7 @@ class CInternalTour(LibraryComponent):
             </button>
             <c-for each="item in items">
               <c-CInternalTourStep
+                #c-key="item['declaration'].value"
                 c-item="item"
                 c-skippable="skippable"
                 c-labels="labels"
@@ -620,7 +625,7 @@ class CInternalTourStep(LibraryComponent):
                 "data-target-id": declaration.target_id,
                 "data-placement": declaration.placement,
                 "data-describe": "true" if declaration.describe else "false",
-                "data-current": bool(item["active"]),
+                "data-current": "" if item["active"] else None,
             },
             "target_id": declaration.target_id,
             "placement": declaration.placement,
@@ -661,7 +666,7 @@ class CInternalTourStep(LibraryComponent):
             <c-else><span aria-live="polite" data-citry-ui-part="progress">{{ progress }}</span></c-else>
             <span aria-hidden="true" data-citry-ui-part="steps">
               <c-for each="step_position in step_positions">
-                <span c-data-current="step_position == index" data-citry-ui-part="step-dot"></span>
+                <span c-data-current="'' if step_position == index else None" data-citry-ui-part="step-dot"></span>
               </c-for>
             </span>
           </div>

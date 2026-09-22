@@ -8,7 +8,6 @@ class NativeValidation(Component):
     template = """
       <section
         class="instrument-booking"
-        x-data="{ accepted: false }"
       >
         <header>
           <p>Instrument desk</p>
@@ -55,11 +54,20 @@ class NativeValidation(Component):
         <p
           class="instrument-booking__success"
           aria-live="polite"
-          x-show="accepted"
+          v-show="accepted"
         >
           The request is ready to send.
         </p>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            accepted: false
+          };
+        },
+      });
     """
 
     css = """

@@ -10,6 +10,7 @@ behind two separate suites.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import types
 from collections.abc import Callable, Iterator, Mapping
@@ -48,6 +49,7 @@ FIXED_NOW = 1_700_000_000.0
 RUNTIME_HEADERS = {"X-Citry-Events": "1"}
 ENVELOPE_CONTENT_TYPE = "application/citry-events+json"
 FIXED_RENDER_ID = "wp18_parity"
+FIXED_VUE_APP_ID = "wp18-host-parity-app"
 
 _urlconf_serial = 0
 
@@ -67,6 +69,7 @@ def _pinned_token_clock(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _fixture_component(c: Citry) -> type[Component]:
     """Build the one component shared by every host-parity scenario."""
+    method_calls: list[str] = []
 
     class ParityState:
         text: str = ""
@@ -94,6 +97,11 @@ def _fixture_component(c: Citry) -> type[Component]:
             def echo(self, data: _TextIn) -> dict[str, str]:
                 return {"echo": data.text}
 
+            @event(methods=("PUT", "DELETE"))
+            def replace(self, data: _TextIn) -> dict[str, str]:
+                method_calls.append(data.text)
+                return {"replaced": data.text}
+
             def add(self, data: _CountIn) -> dict[str, int]:
                 return {"total": data.count + 1}
 
@@ -104,6 +112,7 @@ def _fixture_component(c: Citry) -> type[Component]:
             <p>{{ text }}</p>
         """
 
+    HostParity.method_calls = method_calls
     return HostParity
 
 
@@ -200,6 +209,31 @@ class _MountedHost:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
+    def request_json(
+        self,
+        method: str,
+        event_name: str,
+        value: dict[str, Any],
+        *,
+        runtime: bool = True,
+    ) -> _Response:
+        body = json.dumps(value)
+        runtime_headers = RUNTIME_HEADERS if runtime else {}
+        if self.name == "django":
+            return self.client.generic(
+                method,
+                self.event_url(event_name),
+                data=body,
+                content_type="application/json",
+                headers=runtime_headers,
+            )
+        return self.client.request(
+            method,
+            self.event_url(event_name),
+            content=body,
+            headers={"Content-Type": "application/json", **runtime_headers},
+        )
+
 
 def _response_text(response: _Response) -> str:
     return response.content.decode()
@@ -214,12 +248,35 @@ def _json_snapshot(response: _Response) -> _Snapshot:
     )
 
 
-def _checked_fragment(html: str, expected_text: str) -> str:
-    """Check the fixture's identity facts, then retain every response byte."""
+def _checked_prepared_fragment(html: str, expected_text: str) -> str:
+    """Check native Vue identity and Events data, then retain every response byte."""
     assert expected_text in html
-    assert f'data-cid="{FIXED_RENDER_ID}"' in html
-    assert "data-citry-graph" in html
-    assert "data-citry-events" in html
+    match = re.search(r"<script\b[^>]*data-citry-vue-fragment[^>]*>(.*?)</script>", html, re.DOTALL)
+    assert match is not None, "prepared render is missing its native Vue bootstrap"
+    envelope = json.loads(match.group(1))
+    vue = envelope["vue"]
+    assert vue["protocol"] == "citry-vue-fragment/1"
+    manifest = vue["prepared"]["manifest"]
+    root_id = manifest["rootId"]
+    roots = [occurrence for occurrence in manifest["occurrences"] if occurrence["id"] == root_id]
+    assert len(roots) == 1
+    event_context = roots[0]["eventContext"]
+    assert event_context["serverRenderId"] == FIXED_RENDER_ID
+    assert event_context["componentClassId"] == roots[0]["typeKey"]
+    assert event_context["publicState"] == {"text": expected_text}
+    assert event_context["stateToken"]
+    assert "data-citry-graph" not in html
+    assert "data-citry-events" not in html
+    return html
+
+
+def _checked_compat_fragment(html: str, expected_text: str) -> str:
+    """Check the compatibility HTML's scoped instance marker and retain its body."""
+    assert expected_text in html
+    assert f'data-cid-{FIXED_RENDER_ID}=""' in html
+    assert "data-citry-vue-fragment" not in html
+    assert "data-citry-graph" not in html
+    assert "data-citry-events" not in html
     return html
 
 
@@ -228,7 +285,7 @@ def _checked_render_html(snapshot: _Snapshot, expected_text: str) -> _Snapshot:
     body = json.loads(json.dumps(snapshot.body))
     action = body["results"][0]["actions"][0]
     assert action["action"] == "render"
-    action["html"] = _checked_fragment(action["html"], expected_text)
+    action["html"] = _checked_prepared_fragment(action["html"], expected_text)
     return _Snapshot(snapshot.status, snapshot.content_type, body, snapshot.cache_control)
 
 
@@ -331,7 +388,7 @@ def _compatibility_form(host: _MountedHost) -> _Snapshot:
     return _Snapshot(
         status=response.status_code,
         content_type=response.headers["content-type"].split(";", 1)[0],
-        body=_checked_fragment(text, "No-JS parity"),
+        body=_checked_compat_fragment(text, "No-JS parity"),
     )
 
 
@@ -350,6 +407,27 @@ def _invalid_utf8_compatibility_form(host: _MountedHost) -> _Snapshot:
     return snapshot
 
 
+def _handler_owned_http_methods(host: _MountedHost) -> tuple[_Snapshot, _Snapshot, _Snapshot, _Snapshot]:
+    csrf_rejected = host.request_json("PUT", "replace", {"text": "must-not-run"}, runtime=False)
+    assert csrf_rejected.status_code == 403
+    assert host.component.method_calls == []
+    accepted_put = host.request_json("PUT", "replace", {"text": "updated"})
+    accepted_delete = host.request_json("DELETE", "replace", {"text": "deleted"})
+    rejected = host.request_json("PATCH", "replace", {"text": "must-not-run"})
+    assert host.component.method_calls == ["updated", "deleted"]
+    return (
+        _json_snapshot(csrf_rejected),
+        _json_snapshot(accepted_put),
+        _json_snapshot(accepted_delete),
+        _Snapshot(
+            rejected.status_code,
+            rejected.headers["content-type"].split(";", 1)[0],
+            _response_text(rejected),
+            rejected.headers.get("allow"),
+        ),
+    )
+
+
 _Scenario = Callable[[_MountedHost], Any]
 
 SCENARIOS: tuple[Any, ...] = (
@@ -360,6 +438,7 @@ SCENARIOS: tuple[Any, ...] = (
     pytest.param(_mixed_batch, id="mixed-batch-always-200"),
     pytest.param(_compatibility_form, id="compatibility-form"),
     pytest.param(_invalid_utf8_compatibility_form, id="invalid-utf8-compatibility-form"),
+    pytest.param(_handler_owned_http_methods, id="handler-owned-http-methods"),
 )
 
 
@@ -407,10 +486,41 @@ def _mounted_django_host() -> Iterator[_MountedHost]:
 def test_django_and_fastapi_have_the_same_events_http_contract(scenario: _Scenario) -> None:
     snapshots: dict[str, Any] = {}
     for mounted_host in (_mounted_django_host, _mounted_fastapi_host):
-        with mounted_host() as host, patch("citry.component.gen_render_id", return_value=FIXED_RENDER_ID):
+        with (
+            mounted_host() as host,
+            patch("citry.component.gen_render_id", return_value=FIXED_RENDER_ID),
+            patch("citry._vue.serialization.token_hex", return_value=FIXED_VUE_APP_ID),
+        ):
             snapshots[host.name] = scenario(host)
 
     assert snapshots["django"] == snapshots["fastapi"]
+
+
+def test_mounted_fastapi_route_delegates_methods_for_a_later_registered_handler() -> None:
+    engine = Citry(secret=SIGNING_KEY)
+    app = fastapi.FastAPI()
+    mount_fastapi(app, engine)
+
+    class Late(Component):
+        citry = engine
+
+        class Events:
+            @event(methods=("PUT",))
+            def refresh(self) -> dict[str, bool]:
+                return {"late": True}
+
+        template = "<p>late</p>"
+
+    with TestClient(app) as client:
+        response = client.request(
+            "PUT",
+            f"/citry/ext/events/e/{Late.class_id}/refresh",
+            content="{}",
+            headers={"Content-Type": "application/json", **RUNTIME_HEADERS},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["actions"][0]["value"] == {"late": True}
 
 
 class _ExactSaveMiddleware:

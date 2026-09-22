@@ -35,6 +35,12 @@ component with [`get_event_url()`][citry.ext.events.get_event_url]. GET handlers
 must not mutate server state. Their flat query format accepts scalar strings,
 booleans, finite numbers, and non-empty arrays of those values.
 
+Server adapters can dispatch every valid method declared by a handler. The
+native browser bridge currently cannot call handlers whose primary method is
+`HEAD`, `OPTIONS`, `CONNECT`, `TRACE`, or `TRACK`; call those routes through a
+server-side HTTP client or another transport. It rejects these methods before
+sending a request or consuming pending State edits.
+
 ## Keep a form working without JavaScript
 
 The same per-event route accepts a native form post. Use the component's URL

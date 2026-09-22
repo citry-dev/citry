@@ -21,7 +21,6 @@ def drawer_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack drawer-quality"
             aria-labelledby="drawer-states-title"
-            x-data="{ controlledOpen: false }"
           >
             <h1 id="drawer-states-title">Drawer states</h1>
             <div class="drawer-quality__grid">
@@ -64,10 +63,7 @@ def drawer_states_component(app: Citry) -> type[Component]:
                 size="lg"
                 scroll="drawer"
                 c-dismissible="False"
-                $c-props="{
-                  open: controlledOpen,
-                  onOpenChange: (open) => controlledOpen = open,
-                }"
+                :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
                 c-attrs="{
                   'data-quality-states':
                     'controlled persistent block-end lg drawer-scroll long-content'
@@ -108,6 +104,15 @@ def drawer_states_component(app: Citry) -> type[Component]:
               </div>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlledOpen: false
+              };
+            },
+          });
         """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

@@ -219,7 +219,7 @@ A client-enabled provider exposes the registry through `$i18n.format`:
 
 ```citry-html
 <output
-  x-text="$i18n.format.currency(
+  v-text="$i18n.format.currency(
     '1234.50',
     'EUR',
     { format: 'account-balance' },

@@ -12,6 +12,47 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 
+def _vue_switch_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <main>
+            <c-CForm id="vue-switch-form" :disabled="formDisabled">
+              <c-CSwitch
+                id="vue-switch"
+                :checked="checked"
+                @input="acceptChecked"
+                c-input_attrs="{'aria-label': 'Notifications'}"
+              />
+            </c-CForm>
+            <button id="switch-disabled" @click="formDisabled = !formDisabled">disabled</button>
+          </main>
+        """
+        js = """$component({data(){return {checked:false,fixed:false,size:'md',formDisabled:false};},
+          methods:{acceptChecked(event){this.checked=event.target.checked;}}});"""
+
+    return Page().render().serialize()
+
+
+def test_vue_switch_keyboard_activation_and_form_provider(page: Any) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_vue_switch_page(), wait_until="load")
+    root = page.locator(".cui-switch")
+    control = page.locator("#vue-switch")
+    page.wait_for_selector(".cui-switch[data-citry-switch-initialized]")
+    control.focus()
+    control.press("Space")
+    page.wait_for_function("document.querySelector('#vue-switch').checked")
+    assert root.get_attribute("data-checked") == ""
+    page.locator("#switch-disabled").click()
+    assert control.is_disabled()
+    assert errors == []
+
+
 def _switch_page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
@@ -24,24 +65,38 @@ def _switch_page() -> str:
             --cui-switch-width: 48px;
           }
         """
+        js = """
+          $component({
+            data() {
+              return { checked: true, fixed: false, size: 'md' };
+            },
+            mounted() {
+              window.__state = this;
+            },
+            beforeUnmount() {
+              delete window.__state;
+            },
+          });
+        """
         template = """
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8" /><c-css /></head>
-            <body x-data="{checked: true, fixed: false, size: 'md'}">
+            <body>
               <form id="switch-form">
                 <c-CSwitch
                   name="night"
                   value="enabled"
                   checked
                   class_="switch-brand"
-                  $c-props="{checked, size}"
+                  :checked="checked"
+                  :size="size"
                   @input="checked = $event.target.checked"
                 >Night lighting</c-CSwitch>
                 <c-CSwitch
                   name="fixed"
                   value="yes"
-                  $c-props="{checked: fixed}"
+                  :checked="fixed"
                 >Immutable setting</c-CSwitch>
                 <button type="reset">Reset</button>
               </form>
@@ -82,7 +137,7 @@ def test_switch_exposes_native_role_keyboard_form_and_controlled_state(switch_pa
     page.keyboard.press("Space")
     assert switch.is_checked() is False
     assert page.evaluate("Array.from(new FormData(document.querySelector('#switch-form')).entries())") == []
-    page.evaluate("Alpine.$data(document.body).checked = true")
+    page.evaluate("window.__state.checked = true")
     page.wait_for_function("document.querySelector('input[name=night]').checked")
     assert switch.is_checked()
     assert switch.evaluate("element => element.getAttribute('aria-checked')") is None

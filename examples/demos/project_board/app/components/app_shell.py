@@ -99,7 +99,7 @@ class AppShell(Component):
         scroll-padding-top: 5rem;
       }
 
-      [x-cloak] {
+      [v-cloak] {
         display: none !important;
       }
 

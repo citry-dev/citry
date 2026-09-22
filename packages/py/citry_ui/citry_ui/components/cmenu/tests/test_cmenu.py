@@ -166,7 +166,10 @@ def test_menu_renders_complete_native_anatomy_and_typed_activator_data():
     assert 'aria-haspopup="menu"' in html
     assert 'aria-controls="archive-menu"' in html
     assert 'aria-expanded="true"' in html
-    surface = re.search(r'<div class="cui-menu archive" id="archive-menu"[^>]*>', html)
+    surface = re.search(
+        r'<div(?=[^>]*class="cui-menu archive")(?=[^>]*id="archive-menu")[^>]*>',
+        html,
+    )
     assert surface is not None
     assert 'role="menu"' in surface.group(0)
     assert 'popover="manual"' in surface.group(0)

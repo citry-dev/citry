@@ -22,33 +22,6 @@ def combobox_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack"
             aria-labelledby="combobox-states-title"
-            x-data
-            x-init="Alpine.store('qualityCombobox', {
-              controlledValue: 'vega',
-              controlledQuery: 'Vega',
-              remoteFailure: false,
-              objects: [
-                { value: 'vega', label: 'Vega', disabled: false },
-                { value: 'rigel', label: 'Rigel', disabled: false },
-                { value: 'sirius', label: 'Sirius', disabled: false },
-              ],
-              async loadOptions({ query, signal }) {
-                await new Promise((resolve, reject) => {
-                  const timer = setTimeout(resolve, 20);
-                  signal.addEventListener('abort', () => {
-                    clearTimeout(timer);
-                    reject(new DOMException('Aborted', 'AbortError'));
-                  });
-                });
-                const store = Alpine.store('qualityCombobox');
-                if (store.remoteFailure) {
-                  throw new Error('Representative failure');
-                }
-                return store.objects.filter((object) =>
-                  object.label.toLowerCase().includes(query.toLowerCase())
-                );
-              },
-            })"
           >
             <h1 id="combobox-states-title">
               Combobox states
@@ -75,17 +48,10 @@ def combobox_states_component(app: Citry) -> type[Component]:
                   id="quality-controlled-combobox"
                   name="controlled_destination"
                   c-options="objects"
-                  $c-props="{
-                    value: $store.qualityCombobox.controlledValue,
-                    inputValue: $store.qualityCombobox.controlledQuery,
-                    onValueChange: (value, detail) => {
-                      $store.qualityCombobox.controlledValue = value;
-                      $store.qualityCombobox.controlledQuery = detail.option?.label || '';
-                    },
-                    onInputValueChange: (value) => {
-                      $store.qualityCombobox.controlledQuery = value;
-                    },
-                  }"
+                  :value="controlledValue"
+                  :inputValue="controlledQuery"
+                  :onValueChange="handleValueChange"
+                  :onInputValueChange="handleInputValueChange"
                 />
               </c-fill>
             </c-CField>
@@ -99,10 +65,8 @@ def combobox_states_component(app: Citry) -> type[Component]:
                   name="remote_destination"
                   c-min_chars="1"
                   c-debounce_ms="0"
-                  $c-props="{
-                    loadOptions: $store.qualityCombobox.loadOptions,
-                    onLoadError: () => window.__qualityComboboxFailed = true,
-                  }"
+                  :loadOptions="loadOptions"
+                  :onLoadError="handleLoadError"
                 >
                   <c-fill name="loading">
                     Reading the catalog...
@@ -151,6 +115,49 @@ def combobox_states_component(app: Citry) -> type[Component]:
               c-input_attrs="{'aria-label': 'Invalid destination'}"
             />
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlledValue: 'vega',
+                controlledQuery: 'Vega',
+                remoteFailure: false,
+                objects: [
+                  { value: 'vega', label: 'Vega', disabled: false },
+                  { value: 'rigel', label: 'Rigel', disabled: false },
+                  { value: 'sirius', label: 'Sirius', disabled: false },
+                ],
+                async loadOptions({ query, signal }) {
+                  await new Promise((resolve, reject) => {
+                    const timer = setTimeout(resolve, 20);
+                    signal.addEventListener('abort', () => {
+                      clearTimeout(timer);
+                      reject(new DOMException('Aborted', 'AbortError'));
+                    });
+                  });
+                  if (this.remoteFailure) {
+                    throw new Error('Representative failure');
+                  }
+                  return this.objects.filter((object) =>
+                    object.label.toLowerCase().includes(query.toLowerCase())
+                  );
+                },
+              };
+            },
+            methods: {
+              handleValueChange(value, detail) {
+                this.controlledValue = value;
+                this.controlledQuery = detail.option?.label || '';
+              },
+              handleInputValueChange(value) {
+                this.controlledQuery = value;
+              },
+              handleLoadError() {
+                window.__qualityComboboxFailed = true;
+              },
+            },
+          });
         """
 
         def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002

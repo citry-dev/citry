@@ -4,8 +4,12 @@ $component({
     onSortChange: {}, onSelectionChange: {}, onRangeChange: {}, onCellActivate: {},
     onCellEditStart: {}, onCellEditCommit: {}, onCellEditCancel: {},
   },
-  init: ({els, data, props, effect, i18n}) => {
-    const root = els[0];
+  onServerRender: ({component}) => {
+    const root = component.$el;
+    const data = component.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
+    const i18n = component.$i18n;
     const viewport = root?.querySelector(':scope > [data-citry-ui-part="viewport"]');
     const table = viewport?.querySelector(':scope > [data-citry-ui-part="table"]');
     const status = root?.querySelector(':scope > [data-citry-ui-part="status"]');

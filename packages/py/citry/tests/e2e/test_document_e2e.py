@@ -29,7 +29,7 @@ def _build_page() -> type[Component]:
     class Widget(Component):
         citry = c
         template = '<div class="widget">hi</div>'
-        js = "$component(({ els, data }) => { els[0].setAttribute('data-label', data.label); });"
+        js = "$component(({ component }) => { component.$el.setAttribute('data-label', component.label); });"
         css = ".widget { color: var(--accent); }"
 
         def js_data(self, kwargs: Any, slots: Any) -> dict[str, str]:
@@ -178,10 +178,11 @@ def _build_no_data_js_page() -> type[Component]:
         """
         js = """
           var citryE2eNoGlobalLeak = 123;
-          document.querySelector('#immediate-marker').textContent = 'immediate';
-          $component(({ els, data }) => {
-            const root = els[0];
-            root.dataset.nullData = String(data === null);
+          var citryE2eImmediateMarker = 'immediate';
+          $component(({ component }) => {
+            const root = component.$el;
+            root.querySelector('#immediate-marker').textContent = citryE2eImmediateMarker;
+            root.dataset.nullData = String(Object.keys(component.$data).length === 0);
             root.querySelector('button').addEventListener('click', () => {
               root.querySelector('output').textContent = 'clicked';
             });
@@ -207,13 +208,13 @@ def _build_distinct_js_data_page() -> type[Component]:
           </section>
         """
         js = """
-          $component(({ els, data }) => {
-            const root = els[0];
-            root.dataset.name = data.name;
-            root.dataset.payload = JSON.stringify(data.meta);
+          $component(({ component }) => {
+            const root = component.$el;
+            root.dataset.name = component.name;
+            root.dataset.payload = JSON.stringify(component.meta);
             root.querySelector('button').addEventListener('click', () => {
               root.querySelector('output').textContent =
-                `${data.message}|${data.meta.count}|${data.meta.points[1][0]}`;
+                `${component.message}|${component.meta.count}|${component.meta.points[1][0]}`;
             });
           });
         """
@@ -399,15 +400,23 @@ def test_component_and_dependency_assets_execute_in_bucket_order(
     assert styles == {"color": "rgb(12, 34, 56)", "background": "rgb(210, 220, 230)"}
 
 
-def test_component_and_dependency_css_apply_without_javascript(browser: Any, serve_document: Any) -> None:
-    html = _build_dependency_order_page("component", probe_first=False)().render().serialize(deps_strategy="document")
+def test_component_and_dependency_css_applies_without_javascript(browser: Any, serve_document: Any) -> None:
+    html = (
+        _build_dependency_order_page("component", probe_first=False)()
+        .render()
+        .serialize(
+            deps_strategy="document",
+            security_javascript="omit",
+        )
+    )
     context = browser.new_context(java_script_enabled=False)
     page = context.new_page()
     try:
         page.goto(serve_document(html))
-        styles = page.eval_on_selector(
-            "#alpha",
-            "el => ({color: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor})",
+        styles = page.locator("#alpha").evaluate(
+            "element => ({"
+            "color: getComputedStyle(element).color, "
+            "background: getComputedStyle(element).backgroundColor})"
         )
         assert styles == {"color": "rgb(12, 34, 56)", "background": "rgb(210, 220, 230)"}
         assert page.evaluate("() => window.__assetOrder") is None

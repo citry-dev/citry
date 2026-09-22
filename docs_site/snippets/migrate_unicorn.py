@@ -115,7 +115,7 @@ class ContactForm(Component):
     template = """
       <form @c-submit.prevent="submit">
         <input name="email">
-        <span x-text="$error('save')?.fieldErrors.email"></span>
+        <span v-text="$error('save')?.fieldErrors.email"></span>
         <button type="submit">Send</button>
       </form>
     """

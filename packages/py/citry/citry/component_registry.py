@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from citry.component import Component
 
 BUILTIN_COMPONENT_NAMES: Final = frozenset(
-    {"provide", "cache", "component", "element", "error-fallback", "js", "css", "i18n", "trans"}
+    {"provide", "cache", "component", "element", "error-fallback", "js", "css", "i18n", "trans", "mark"}
 )
 """Component names reserved for built-in tags.
 

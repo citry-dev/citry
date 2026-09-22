@@ -22,9 +22,12 @@ export type EventActionKind =
 	| "redirect"
 	| "url";
 
+export type EventRenderer = "html-fragment/1" | "vue-prepared/1";
+
 export interface EventsCapabilities {
 	swaps?: EventSwap[];
 	actions?: EventActionKind[];
+	renderers?: EventRenderer[];
 }
 
 export interface EventCall {
@@ -71,12 +74,33 @@ export interface ActionTiming {
 	wait?: false;
 }
 
-export interface RenderAction extends ActionTiming {
+export interface LegacyRenderAction extends ActionTiming {
 	action: "render";
 	target: string;
 	swap: EventSwap;
 	html: string;
 }
+
+export interface HtmlRenderAction extends ActionTiming {
+	action: "render";
+	target: string;
+	swap: EventSwap;
+	renderer: "html-fragment/1";
+	html: string;
+}
+
+export interface PreparedRenderAction extends ActionTiming {
+	action: "render";
+	target: string;
+	swap: EventSwap;
+	renderer: "vue-prepared/1";
+	prepared: JsonObject;
+}
+
+export type RenderAction =
+	| LegacyRenderAction
+	| HtmlRenderAction
+	| PreparedRenderAction;
 
 export interface DataAction {
 	action: "data";
@@ -179,7 +203,6 @@ export interface EventComponentInstance {
 
 export interface EventsManifest {
 	protocol: "citry-events/1";
-	clientGraphRevision: string | null;
 	componentClasses: EventComponentClass[];
 	componentInstances: EventComponentInstance[];
 }

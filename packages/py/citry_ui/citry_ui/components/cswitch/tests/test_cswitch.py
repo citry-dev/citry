@@ -10,7 +10,7 @@ from citry import Citry, Component
 from citry_ui import CSwitch
 
 
-def _render(template: str, *, include_css: bool = False) -> str:
+def _render(template: str, *, include_css: bool = False, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     template_source = template
@@ -19,7 +19,8 @@ def _render(template: str, *, include_css: bool = False) -> str:
         citry = app
         template = template_source
 
-    html = str(Page())
+    page = Page()
+    html = page.render().serialize(security_javascript="omit") if static_fallback else str(page)
     return html + (str(app.get("css")()) if include_css else "")
 
 
@@ -49,7 +50,8 @@ def test_switch_renders_native_checkbox_switch_semantics_and_parts():
             <c-fill name="default">Night lighting</c-fill>
             <c-fill name="description">Use warm path lights after sunset.</c-fill>
           </c-CSwitch>
-        """
+        """,
+        static_fallback=True,
     )
 
     input_tag = re.search(r"<input[^>]+>", html)
@@ -70,7 +72,7 @@ def test_switch_requires_one_accessible_name_and_protects_visible_label():
         _render("<c-CSwitch />")
     with pytest.raises(ValueError, match="cannot replace its visible"):
         _render("<c-CSwitch c-input_attrs=\"{'aria-label': 'Hidden'}\">Visible</c-CSwitch>")
-    html = _render("<c-CSwitch c-input_attrs=\"{'aria-label': 'Night lighting'}\" />")
+    html = _render("<c-CSwitch c-input_attrs=\"{'aria-label': 'Night lighting'}\" />", static_fallback=True)
     assert 'aria-label="Night lighting"' in html
 
 
@@ -83,7 +85,8 @@ def test_switch_merges_root_styling_and_routes_input_attrs():
             c-attrs="{'data-owner': 'garden'}"
             c-input_attrs="{'data-native': 'switch'}"
           >Irrigation</c-CSwitch>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert 'class="cui-switch garden-switch"' in html
@@ -99,12 +102,15 @@ def test_switch_merges_root_styling_and_routes_input_attrs():
         ("tabindex", "attrs"),
         ("aria-hidden", "attrs"),
         ("x-if", "attrs"),
+        ("v-if", "attrs"),
         ("data-citry-morph", "attrs"),
         ("type", "input_attrs"),
         ("role", "input_attrs"),
         ("aria-checked", "input_attrs"),
         (":checked", "input_attrs"),
+        ("v-bind:checked", "input_attrs"),
         ("x-model", "input_attrs"),
+        ("v-model", "input_attrs"),
     ],
 )
 def test_switch_rejects_competing_semantics_and_ownership(attribute, destination):
@@ -131,7 +137,8 @@ def test_switch_field_composition_uses_field_ownership():
             <c-fill name="default"><c-CSwitch name="lights" /></c-fill>
             <c-fill name="description">Use after dusk.</c-fill>
           </c-CField>
-        """
+        """,
+        static_fallback=True,
     )
 
     assert 'id="garden-lights"' in html

@@ -1,0 +1,23 @@
+[package]
+name = "citry_vue_compiler"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+oxc_allocator = { workspace = true }
+oxc_ast = { workspace = true }
+oxc_parser = { workspace = true }
+oxc_span = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+vize_atelier_core = { workspace = true }
+vize_atelier_dom = { workspace = true }
+# Keep Maturin's sdist path-dependency discovery connected to the patched S2
+# emitter that vize_atelier_dom uses transitively.
+vize_s1_to_s2 = { workspace = true }
+
+[lints]
+workspace = true

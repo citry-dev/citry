@@ -11,6 +11,8 @@ phase 3 (they resolve to component kwargs).
 
 # ruff: noqa: ANN
 
+from html.parser import HTMLParser
+
 from citry import Citry, CitryContext, Component, Const, Markup
 from citry import nodes as nodes_module
 from citry.constness import is_const
@@ -46,6 +48,19 @@ def _count_compiles(monkeypatch):
 
     monkeypatch.setattr(nodes_module, "compile_expr", counting_compile)
     return compiled
+
+
+def _body_attribute(rendered: str) -> str | None:
+    class BodyAttributeParser(HTMLParser):
+        value: str | None = None
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "div":
+                self.value = dict(attrs).get("body")
+
+    parser = BodyAttributeParser(convert_charrefs=True)
+    parser.feed(rendered)
+    return parser.value
 
 
 class TestExprNodeEval:
@@ -199,14 +214,15 @@ class TestExprNodeEmbedding:
 
 class TestTemplateNode:
     def test_renders_nested_template(self):
-        # c-body holds a nested template; it renders against the same context.
-        assert (
-            _html('<div c-body="<span>{{ x }}</span>">end</div>', x="hi")
-            == '<div body="<span>hi</span>" data-cid-c1="">end</div>'
-        )
+        # The nested template renders in the same context. Its HTML is escaped
+        # at the outer attribute boundary and decodes to the original value.
+        rendered = _html('<div c-body="<span>{{ x }}</span>">end</div>', x="hi")
+
+        assert rendered == '<div body="&lt;span&gt;hi&lt;/span&gt;" data-cid-c1="">end</div>'
+        assert _body_attribute(rendered) == "<span>hi</span>"
 
     def test_nested_template_escapes_inner_expression(self):
-        assert (
-            _html('<div c-body="<span>{{ x }}</span>">end</div>', x="<i>")
-            == '<div body="<span>&lt;i&gt;</span>" data-cid-c1="">end</div>'
-        )
+        rendered = _html('<div c-body="<span>{{ x }}</span>">end</div>', x="<i>")
+
+        assert rendered == '<div body="&lt;span&gt;&amp;lt;i&amp;gt;&lt;/span&gt;" data-cid-c1="">end</div>'
+        assert _body_attribute(rendered) == "<span>&lt;i&gt;</span>"

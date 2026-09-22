@@ -1,6 +1,5 @@
 """End-to-end tests of the web integration: FastAPI + TestClient over citry's mounted routes."""
 
-import base64
 import json
 import re
 
@@ -25,7 +24,7 @@ def _widget(c):
     class Widget(Component):
         citry = c
         template = "<span>w</span>"
-        js = "$component(({ els, data }) => { els[0].textContent = data.rows; });"
+        js = "$component({ onServerRender({ component }) { console.log(component.rows); } });"
         css = ".w {}"
 
         def js_data(self, kwargs, slots):
@@ -56,7 +55,7 @@ class TestServedEndpoints:
         response = client.get("/citry/citry.js")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/javascript")
-        assert "client-side dependency manager" in response.text
+        assert "Citry interactive runtime." in response.text
 
     def test_serves_class_scripts(self):
         c = Citry()
@@ -64,8 +63,8 @@ class TestServedEndpoints:
         client = _build_app(c)
         js = client.get(f"/citry/cache/{widget.class_id}.js")
         assert js.status_code == 200
-        # The served form carries the $component expansion.
-        assert f'registerComponent("{widget.class_id}"' in js.text
+        # The served Vue Options source is associated with its type and source digest.
+        assert f'CitryStable.registerTypeOptions.bind(null, "{widget.class_id}", "' in js.text
         css = client.get(f"/citry/cache/{widget.class_id}.css")
         assert css.status_code == 200
         assert css.text == ".w {}"
@@ -86,24 +85,25 @@ class TestFragmentRoundTrip:
         app = fastapi.FastAPI()
         mount(app, c)
         client = TestClient(app)
-        widget = _widget(c)
+        _widget(c)
 
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-widget /></main>"})
         fragment = page().render().serialize(deps_strategy="fragment")
 
-        match = re.search(r'<script type="application/json" data-citry>(.*?)</script>', fragment, re.DOTALL)
-        manifest = json.loads(match.group(1))
-        descriptors = [
-            json.loads(base64.b64decode(item[0]).decode())
-            for item in [*manifest["fetch"]["js"], *manifest["fetch"]["css"]]
-        ]
-        urls = [d["attrs"].get("src") or d["attrs"].get("href") for d in descriptors]
+        match = re.search(
+            r'<script type="application/json" data-citry-vue-fragment>(.*?)</script>', fragment, re.DOTALL
+        )
+        assert match is not None
+        manifest = json.loads(match.group(1))["vue"]["prepared"]["manifest"]
+        descriptors = [*manifest["scripts"], *manifest["styles"]]
+        urls = [descriptor["source"]["url"] for descriptor in descriptors if "url" in descriptor["source"]]
         assert urls, "fragment references no URLs"
         for url in urls:
             response = client.get(url)
             assert response.status_code == 200, url
 
         # The preloader's runtime URL is servable too.
-        preloader_url = re.search(r's\.src = "([^"]+)"', fragment).group(1)
+        preloader = re.search(r's\.src = "([^"]+)"', fragment)
+        assert preloader is not None
+        preloader_url = preloader.group(1)
         assert client.get(preloader_url).status_code == 200
-        del widget

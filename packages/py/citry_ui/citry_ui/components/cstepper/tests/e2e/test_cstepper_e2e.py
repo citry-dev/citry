@@ -35,24 +35,22 @@ def _page() -> str:
           <!doctype html>
           <html lang="en">
             <head><meta charset="utf-8"><title>Stepper evidence</title><c-css /></head>
-            <body x-data>
-              <form id="workflow-form" @submit.prevent="$store.stepper.submits += 1">
+            <body>
+              <form id="workflow-form" @submit.prevent="state.stepper.submits += 1">
                 <c-CStepper
                   label="Controlled workflow"
                   c-active="1"
                   interactive
                   class_="brand-stepper"
-                  $c-props="{
-                    active: $store.stepper.active,
-                    linear: $store.stepper.linear,
-                    orientation: $store.stepper.orientation,
-                    variant: $store.stepper.variant,
-                    size: $store.stepper.size,
-                    onActiveChange: (next, detail) => {
-                      $store.stepper.events.push([next, detail.previousActive, detail.controlled]);
-                      if ($store.stepper.accept) $store.stepper.active = next;
-                    },
-                  }"
+                  :active="state.stepper.active"
+                  :linear="state.stepper.linear"
+                  :orientation="state.stepper.orientation"
+                  :variant="state.stepper.variant"
+                  :size="state.stepper.size"
+                  :onActiveChange="(next, detail) => {
+                      state.stepper.events.push([next, detail.previousActive, detail.controlled]);
+                      if (state.stepper.accept) state.stepper.active = next;
+                    }"
                 >
                   <c-CStep>Profile</c-CStep>
                   <c-CStep>
@@ -80,10 +78,10 @@ def _page() -> str:
           </html>
         """
         js = """
-          Alpine.store('stepper', {
+          $component({data(){const stepper=Citry.vue.reactive({
             active: 1, linear: true, orientation: 'horizontal', variant: 'plain', size: 'md',
             accept: false, events: [], submits: 0,
-          });
+          }); window.__stepper=stepper; return {state:{stepper}};}});
         """
 
     return str(Page())
@@ -105,10 +103,10 @@ def test_controlled_linear_navigation_form_safety_and_acceptance(page: Any) -> N
     assert triggers.nth(2).is_disabled()
     triggers.nth(0).click()
     assert root.get_attribute("data-active") == "1"
-    assert page.evaluate("Alpine.store('stepper').events") == [[0, 1, True]]
-    assert page.evaluate("Alpine.store('stepper').submits") == 0
+    assert page.evaluate("window.__stepper.events") == [[0, 1, True]]
+    assert page.evaluate("window.__stepper.submits") == 0
 
-    page.evaluate("Object.assign(Alpine.store('stepper'), {accept: true, linear: false})")
+    page.evaluate("Object.assign(window.__stepper, {accept: true, linear: false})")
     page.wait_for_function(
         """!document.querySelector(
           '[aria-label="Controlled workflow"] [data-citry-ui-part="step"]:last-child button'
@@ -117,14 +115,14 @@ def test_controlled_linear_navigation_form_safety_and_acceptance(page: Any) -> N
     triggers.nth(2).click()
     page.wait_for_function("document.querySelector('[aria-label=\"Controlled workflow\"]').dataset.active === '2'")
     assert triggers.nth(2).get_attribute("aria-current") == "step"
-    assert page.evaluate("Alpine.store('stepper').submits") == 0
+    assert page.evaluate("window.__stepper.submits") == 0
     assert errors == []
 
 
 def test_reactive_configuration_fieldset_and_public_css(page: Any) -> None:
     errors = _load(page)
     root = page.locator('[aria-label="Controlled workflow"]')
-    page.evaluate("Object.assign(Alpine.store('stepper'), {orientation:'vertical', variant:'outline', size:'lg'})")
+    page.evaluate("Object.assign(window.__stepper, {orientation:'vertical', variant:'outline', size:'lg'})")
     page.wait_for_function("document.querySelector('[aria-label=\"Controlled workflow\"]').dataset.size === 'lg'")
     assert root.get_attribute("data-orientation") == "vertical"
     assert root.get_attribute("data-variant") == "outline"

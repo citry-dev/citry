@@ -8,7 +8,6 @@ class ButtonLoadingStates(Component):
     template = """
       <section
         class="button-loading"
-        x-data="{ scanning: false }"
       >
         <article class="button-loading__interactive">
           <div>
@@ -16,12 +15,12 @@ class ButtonLoadingStates(Component):
             <h2>Listen for woodland birds</h2>
           </div>
           <c-CButton
-            $c-props="{ loading: scanning }"
-            @click="scanning = true; setTimeout(() => { scanning = false }, 2400)"
+            :loading="scanning"
+            @click="scanning = true; window.setTimeout(() => { scanning = false }, 2400)"
           >
             Begin listening
           </c-CButton>
-          <span aria-live="polite" x-text="scanning ? 'Listening…' : 'Ready'"></span>
+          <span aria-live="polite" v-text="scanning ? 'Listening…' : 'Ready'"></span>
         </article>
 
         <div class="button-loading__positions">
@@ -57,6 +56,15 @@ class ButtonLoadingStates(Component):
           </c-CButton>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            scanning: false
+          };
+        },
+      });
     """
 
     css = """

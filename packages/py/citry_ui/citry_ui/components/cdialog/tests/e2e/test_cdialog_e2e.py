@@ -18,6 +18,24 @@ def _dialog_page(*, controlled: bool = False) -> str:
 
     class Page(Component):
         citry = app
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: __CONTROLLED__,
+                open: false,
+                showDialog: true,
+                acceptRequests: false,
+                dialogDismissible: true,
+                dialogCloseOnEscape: true,
+                dialogCloseOnOutside: true,
+                dialogInitialFocus: 'auto',
+                dialogSize: 'md',
+                dialogScroll: 'body',
+              };
+            },
+          });
+        """.replace("__CONTROLLED__", str(controlled).lower())
         css = """
           :where(.dialog-brand) {
             --cui-dialog-background: rgb(21 43 65);
@@ -36,36 +54,35 @@ def _dialog_page(*, controlled: bool = False) -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body c-bind="body_attrs">
+            <body>
               <section
                 class="dialog-brand"
                 style="color-scheme: dark"
               >
-                <c-CDialog
-                  id="profile-dialog"
-                  c-attrs="dialog_attrs"
-                  $c-props="{
-                    open: controlled ? open : undefined,
-                    dismissible: dialogDismissible,
-                    closeOnEscape: dialogCloseOnEscape,
-                    closeOnOutside: dialogCloseOnOutside,
-                    initialFocus: dialogInitialFocus,
-                    size: dialogSize,
-                    scroll: dialogScroll,
-                    onOpenChange: (nextOpen, detail) => {
-                      window.__dialogRequest = {
-                        nextOpen,
-                        reason: detail.reason,
-                        controlled: detail.controlled,
-                        returnValue: detail.returnValue,
-                      };
-                      window.__dialogRequests = (window.__dialogRequests || 0) + 1;
-                      if (acceptRequests) {
-                        open = nextOpen;
-                      }
-                    },
-                  }"
-                >
+                <template v-if="showDialog">
+                  <c-CDialog
+                    id="profile-dialog"
+                    c-attrs="dialog_attrs"
+                    :open="controlled ? open : undefined"
+                    :dismissible="dialogDismissible"
+                    :closeOnEscape="dialogCloseOnEscape"
+                    :closeOnOutside="dialogCloseOnOutside"
+                    :initialFocus="dialogInitialFocus"
+                    :size="dialogSize"
+                    :scroll="dialogScroll"
+                    :onOpenChange="(nextOpen, detail) => {
+                        window.__dialogRequest = {
+                          nextOpen,
+                          reason: detail.reason,
+                          controlled: detail.controlled,
+                          returnValue: detail.returnValue,
+                        };
+                        window.__dialogRequests = (window.__dialogRequests || 0) + 1;
+                        if (acceptRequests) {
+                          open = nextOpen;
+                        }
+                      }"
+                  >
                   <c-fill
                     name="activator"
                     data="{ activator_attrs }"
@@ -85,6 +102,9 @@ def _dialog_page(*, controlled: bool = False) -> str:
                       Display name
                     </label>
                     <input id="profile-name" value="Ada" autofocus />
+                    <button id="remove-open-dialog" type="button" @click="showDialog = false">
+                      Remove dialog
+                    </button>
                     <c-CDialog id="nested-dialog">
                       <c-fill
                         name="activator"
@@ -133,7 +153,8 @@ def _dialog_page(*, controlled: bool = False) -> str:
                       Save
                     </c-CButton>
                   </c-fill>
-                </c-CDialog>
+                  </c-CDialog>
+                </template>
               </section>
               <button id="accept-requests" type="button" @click="acceptRequests = true">
                 Accept requests
@@ -168,15 +189,6 @@ def _dialog_page(*, controlled: bool = False) -> str:
 
         def template_data(self, kwargs, slots):
             return {
-                "body_attrs": {
-                    "x-data": (
-                        "{ controlled: "
-                        + str(controlled).lower()
-                        + ", open: false, acceptRequests: false, dialogDismissible: true, "
-                        + "dialogCloseOnEscape: true, dialogCloseOnOutside: true, "
-                        + "dialogInitialFocus: 'auto', dialogSize: 'md', dialogScroll: 'body' }"
-                    ),
-                },
                 "dialog_attrs": {"data-workflow": "profile"},
                 "save_attrs": {"id": "save-profile"},
             }
@@ -540,27 +552,9 @@ def test_removal_while_open_releases_document_state_and_component_resources(page
     _load(page)
     _outer_trigger(page).click()
     page.wait_for_function("document.querySelector('#profile-dialog').open")
-    page.evaluate(
-        """() => {
-          const host = document.querySelector('#profile-dialog').closest('[data-citry-dialog-host]');
-          let start = host.previousSibling;
-          while (start && !(start.nodeType === Node.COMMENT_NODE && start.data.endsWith(':s'))) {
-            start = start.previousSibling;
-          }
-          let end = host.nextSibling;
-          while (end && !(end.nodeType === Node.COMMENT_NODE && end.data.endsWith(':e'))) {
-            end = end.nextSibling;
-          }
-          if (!start || !end) {
-            throw new Error('Could not locate the dialog invocation range.');
-          }
-          const range = document.createRange();
-          range.setStartBefore(start);
-          range.setEndAfter(end);
-          range.deleteContents();
-        }"""
-    )
+    page.locator("#remove-open-dialog").click()
     page.wait_for_function("window[Symbol.for('citry-ui:dialog-runtime')].dialogs.length === 0")
+    page.wait_for_function("document.documentElement.style.overflow === ''", timeout=2_500)
 
     assert page.evaluate("document.documentElement.style.overflow") == ""
     assert page.locator("#profile-dialog").count() == 0

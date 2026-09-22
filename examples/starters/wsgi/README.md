@@ -2,7 +2,7 @@
 
 This project shows how Citry runs directly on WSGI without a web framework.
 The root application serves the page and sends requests under `/citry` to
-Citry's WSGI application. The page still includes Alpine in the browser and a
+Citry's WSGI application. The page uses Vue in the browser and a
 synchronous Citry Event that calls Python.
 
 ## What this starter shows
@@ -11,7 +11,7 @@ synchronous Citry Event that calls Python.
   component.
 - Typed inputs pass projects between components. Slots fill the page shell
   with its heading and project list.
-- Alpine opens the help panel without sending a request.
+- Vue opens the help panel without sending a request.
 - A debounced Citry Event sends the search query to Python and replaces the
   project list with the matches.
 - The root WSGI application delegates `/citry` and initializes Citry before

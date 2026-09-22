@@ -100,7 +100,7 @@ def wsgi_app(citry_instance: Citry) -> WSGIApp:
         if matched is None:
             return respond(RouteResponse(content="Not Found", status=404))
         method = environ.get("REQUEST_METHOD", "GET")
-        if method not in matched.route.methods and method != "HEAD":
+        if matched.route.methods is not None and method not in matched.route.methods and method != "HEAD":
             return respond(RouteResponse(content="Method Not Allowed", status=405))
 
         handler = matched.route.handler

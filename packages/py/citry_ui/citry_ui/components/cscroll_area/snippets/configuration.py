@@ -8,18 +8,11 @@ class ScrollAreaConfiguration(Component):
     template = """
       <section
         class="scroll-area-configuration"
-        x-data="{
-          axis:'block',
-          width:'auto',
-          gutter:'auto',
-          overscroll:'auto',
-          show:(value)=>value ?? 'server fallback',
-        }"
       >
         <div class="scroll-area-configuration__controls">
           <label>
             Axis
-            <select x-model="axis">
+            <select v-model="axis">
               <option value="block">Block</option>
               <option value="inline">Inline</option>
               <option value="both">Both</option>
@@ -27,14 +20,14 @@ class ScrollAreaConfiguration(Component):
           </label>
           <label>
             Scrollbar width
-            <select x-model="width">
+            <select v-model="width">
               <option value="auto">Auto</option>
               <option value="thin">Thin</option>
             </select>
           </label>
           <label>
             Scrollbar gutter
-            <select x-model="gutter">
+            <select v-model="gutter">
               <option value="auto">Auto</option>
               <option value="stable">Stable</option>
               <option value="stable-both-edges">Both edges</option>
@@ -42,7 +35,7 @@ class ScrollAreaConfiguration(Component):
           </label>
           <label>
             Overscroll
-            <select x-model="overscroll">
+            <select v-model="overscroll">
               <option value="auto">Auto</option>
               <option value="contain">Contain</option>
               <option value="none">None</option>
@@ -55,12 +48,7 @@ class ScrollAreaConfiguration(Component):
           axis="block"
           aria_label="Configurable audit records"
           style="--cui-scroll-area-max-block-size: 12rem"
-          $c-props="{
-            axis,
-            scrollbarWidth:width,
-            scrollbarGutter:gutter,
-            overscroll,
-          }"
+          :axis="axis" :scrollbarWidth="width" :scrollbarGutter="gutter" :overscroll="overscroll"
         >
           <div class="scroll-area-configuration__content">
             <span>Record 01</span><span>Identity review</span><span>Approved</span>
@@ -82,9 +70,22 @@ class ScrollAreaConfiguration(Component):
           </button>
         </div>
         <output
-          x-text="`Requested: ${show(axis)}, ${show(width)}, ${show(gutter)}, ${show(overscroll)}`"
+          v-text="`Requested: ${show(axis)}, ${show(width)}, ${show(gutter)}, ${show(overscroll)}`"
         >Requested: block, auto, auto, auto</output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            axis:'block',
+            width:'auto',
+            gutter:'auto',
+            overscroll:'auto',
+            show:(value)=>value ?? 'server fallback',
+          };
+        },
+      });
     """
 
     css = """

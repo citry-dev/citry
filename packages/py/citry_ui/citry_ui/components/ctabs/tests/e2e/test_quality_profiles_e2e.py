@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ pytest.importorskip("pytest_playwright")
 from citry_ui.quality.routes import render_scenario
 
 pytestmark = pytest.mark.e2e
+_CITRY_STYLESHEET_TAG_RE = re.compile(r"<(?:style|link)\b[^>]*\bdata-citry-css-url=", re.IGNORECASE)
 
 
 def _repository_root() -> Path:
@@ -33,10 +35,11 @@ def _with_external_css(html: str, css: str, *, after_citry: bool) -> str:
     stylesheet = f'<style data-quality-external-css="">{css}</style>'
     if after_citry:
         return html.replace("</head>", stylesheet + "</head>", 1)
-    first_citry_style = html.find('<style data-citry-css-class="')
-    if first_citry_style < 0:
+    first_citry_style_match = _CITRY_STYLESHEET_TAG_RE.search(html)
+    if first_citry_style_match is None:
         msg = "Rendered scenario did not contain a Citry stylesheet."
         raise RuntimeError(msg)
+    first_citry_style = first_citry_style_match.start()
     return html[:first_citry_style] + stylesheet + html[first_citry_style:]
 
 

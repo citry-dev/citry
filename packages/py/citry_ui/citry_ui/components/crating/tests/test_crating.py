@@ -119,7 +119,7 @@ def test_readonly_submits_hidden_value_and_disabled_submits_nothing() -> None:
     readonly = _render('<c-CRating id="score" name="score" label="Score" value="2.5" precision="0.5" readonly />')
     root = _tag(readonly, r'<div class="cui-rating"[^>]*>')
     radios = re.findall(r'<input[^>]+type="radio"[^>]*>', readonly)
-    transport = _tag(readonly, r'<input id="score-transport"[^>]*>')
+    transport = _tag(readonly, r'<input(?=[^>]*\bid="score-transport")[^>]*>')
     assert 'aria-readonly="true"' in root
     assert 'tabindex="0"' in root
     assert all(" disabled" in radio for radio in radios)
@@ -129,7 +129,7 @@ def test_readonly_submits_hidden_value_and_disabled_submits_nothing() -> None:
     assert 'data-citry-ui-part="readonly-value"' in readonly
 
     disabled = _render('<c-CRating id="score" name="score" label="Score" value="2" disabled />')
-    transport = _tag(disabled, r'<input id="score-transport"[^>]*>')
+    transport = _tag(disabled, r'<input(?=[^>]*\bid="score-transport")[^>]*>')
     assert "disabled" in transport
     assert all(" disabled" in radio for radio in re.findall(r'<input[^>]+type="radio"[^>]*>', disabled))
 

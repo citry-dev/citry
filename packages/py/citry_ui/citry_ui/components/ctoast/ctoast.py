@@ -359,18 +359,21 @@ class CToastRegion(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         messages = self._toast_messages
         return {
-            "items": messages,
-            "placement": _plain_choice("placement", kwargs.placement, _PLACEMENTS),
-            "limit": kwargs.limit,
-            "durationMs": kwargs.duration_ms,
-            "pauseOnHover": kwargs.pause_on_hover,
-            "pauseOnFocus": kwargs.pause_on_focus,
-            "pauseOnHidden": kwargs.pause_on_hidden,
+            "serverDefaults": {
+                "items": messages,
+                "placement": _plain_choice("placement", kwargs.placement, _PLACEMENTS),
+                "limit": kwargs.limit,
+                "durationMs": kwargs.duration_ms,
+                "pauseOnHover": kwargs.pause_on_hover,
+                "pauseOnFocus": kwargs.pause_on_focus,
+                "pauseOnHidden": kwargs.pause_on_hidden,
+            },
             **self._toast_i18n_data,
         }
 
     template = """
       <section
+        ref="root"
         class="cui-toast-region"
         c-id="region_id"
         c-bind="attrs"

@@ -52,17 +52,17 @@ class ProjectExplorer(Component):
             class="help-button"
             type="button"
             @click="tipsOpen = !tipsOpen"
-            :aria-expanded="tipsOpen.toString()"
+            :aria-expanded="String(tipsOpen)"
             aria-controls="explorer-help"
           >
             <span aria-hidden="true">?</span>
-            <span x-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
+            <span v-text="tipsOpen ? 'Hide explanation' : 'How this page works'">
               How this page works
             </span>
           </button>
         </div>
 
-        <aside id="explorer-help" class="explorer__help" x-cloak x-show="tipsOpen">
+        <aside id="explorer-help" class="explorer__help" v-cloak v-show="tipsOpen">
           <strong>The help button and search take different paths.</strong>
           This panel opens entirely in your browser. After you pause typing, a
           Citry Event sends the query to Python and updates the project list.
@@ -70,22 +70,22 @@ class ProjectExplorer(Component):
 
         <div class="result-summary" aria-live="polite" aria-atomic="true">
           <h2 id="project-list-heading">Current projects</h2>
-          <span x-cloak x-show="$loading('refresh')">Searching…</span>
-          <span x-show="!$loading('refresh')">
+          <span v-cloak v-show="$loading('refresh')">Searching…</span>
+          <span v-show="!$loading('refresh')">
             {{ result_count }} matching {{ project_label }}
           </span>
         </div>
         <p
           class="event-error"
           role="alert"
-          x-show="$error('refresh')"
-          x-text="$error('refresh')?.message || ''"
+          v-show="$error('refresh')"
+          v-text="$error('refresh')?.message || ''"
         ></p>
 
         <c-if cond="projects">
           <div class="project-grid">
             <c-for each="project in projects">
-              <c-ProjectCard c-project="project" />
+              <c-ProjectCard #c-key="project.name" c-project="project" />
             </c-for>
           </div>
         </c-if>

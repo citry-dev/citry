@@ -120,21 +120,25 @@ class Render(Action):
     """
     Render a component element server-side and morph it into the page.
 
-    The element renders as a citry fragment (markup plus its dependency and
-    events manifests), and the client swaps it into ``target``. A handler
-    builds a fresh tree to render; nothing of the instance's original render
-    is replayed (design ``events.md`` 7.5).
+    The element becomes a validated prepared Vue revision for ``target``. A
+    handler builds a fresh tree to render; nothing of the instance's original
+    render is replayed (design ``events.md`` 7.5).
+
+    Several independent targets may be updated by one contiguous run of
+    immediate, blocking Render actions. Every Render in that run must omit
+    ``delay`` or use ``0`` and must keep ``wait=True``. Deferred or interleaved
+    multi-target runs, duplicate targets, and overlapping ancestor and
+    descendant targets are rejected before the response changes State.
 
     Attributes:
         element: What to render: a component element (``MyComponent(...)``)
             or an already-rendered
             [`CitryRender`][citry.CitryRender].
-        target: Where the rendered HTML goes: a CSS selector string (applied
-            to every match), or ``None`` (the default) for the component
-            instance whose event was called.
-        swap: How the HTML is applied: ``"morph"`` (the default, a minimal
-            in-place diff), ``"replace"``, ``"inner"``, ``"append"``,
-            ``"prepend"``, ``"remove"``, or ``"none"``.
+        target: The component address ``render:<id>``, the caller-relative
+            marker address ``mark:<name>``, or ``None`` for the calling
+            component instance.
+        swap: How the prepared component is applied. Addressed component and
+            marker updates support ``"morph"``.
         delay: Seconds the client waits before applying the action.
         wait: Whether later actions hold until this one has applied.
 
@@ -144,7 +148,7 @@ class Render(Action):
             cart = add_item(context.user, data.product_id)
             return actions.Render(
                 CartBadge(count=cart.count),
-                target="#cart-badge",
+                target="mark:cart-badge",
             )
         ```
 
@@ -172,8 +176,8 @@ class Render(Action):
             raise ValueError(msg)  # noqa: TRY004
         if self.target is not None and (not isinstance(self.target, str) or not self.target):
             msg = (
-                f"actions.Render: target must be a CSS selector string, or None for the calling"
-                f" instance; got {self.target!r}."
+                "actions.Render: target must be 'render:<id>', 'mark:<name>', or None for the"
+                f" calling instance; got {self.target!r}."
             )
             raise ValueError(msg)
         if self.target is not None and self.target.startswith("render:"):
@@ -185,9 +189,23 @@ class Render(Action):
                     f" render ID; got {self.target!r}."
                 )
                 raise ValueError(msg) from error
+        elif self.target is not None and self.target.startswith("mark:"):
+            from citry.components.mark import validate_mark_name  # noqa: PLC0415
+
+            try:
+                validate_mark_name(self.target[5:])
+            except (TypeError, ValueError) as error:
+                msg = f"actions.Render: a marker target must be 'mark:<name>'; got {self.target!r}."
+                raise ValueError(msg) from error
+        elif self.target is not None:
+            raise ValueError(
+                "actions.Render: target must be 'render:<id>', 'mark:<name>', or None for the calling instance."
+            )
         if self.swap not in SWAPS:
             msg = f"actions.Render: swap must be one of {', '.join(repr(s) for s in SWAPS)}; got {self.swap!r}."
             raise ValueError(msg)
+        if self.target is not None and self.swap != "morph":
+            raise ValueError("actions.Render: addressed component and marker targets support only swap='morph'.")
         super().__post_init__()
 
 
@@ -231,10 +249,11 @@ class Dispatch(Action):
     Dispatch a named browser event (a DOM ``CustomEvent``).
 
     The event fires under the exact given name on the calling instance's first
-    live root (or on ``document`` when the call carries no instance), bubbles,
-    and reaches ``onEvent`` listeners and plain ``addEventListener`` alike. A
-    multi-root or mirrored instance deliberately uses one canonical root so a
-    logical dispatch reaches document-level listeners only once.
+    connected element in its current Vue subtree. If that subtree has no
+    element, its connected Vue root node carries the event instead. The event
+    bubbles to DOM ancestors. A multi-root instance deliberately uses one
+    canonical carrier so a logical dispatch reaches document-level listeners
+    only once.
     Names starting with ``citry:`` are reserved for the runtime's own events;
     the documented convention is prefixing with the component name
     (``"MyCard:submit"``).

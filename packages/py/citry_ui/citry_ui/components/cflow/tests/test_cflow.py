@@ -160,22 +160,12 @@ def test_stack_rejects_owned_runtime_and_structural_attributes(attribute):
         _render(CCol(attrs={attribute: "consumer"}))
 
 
-def test_group_also_owns_wrap_but_allows_unrelated_bindings_and_listeners():
+def test_group_owns_wrap_and_python_attrs_reject_vue_directives():
     with pytest.raises(ValueError, match="owned attribute"):
         _render(CRow(attrs={"data-wrap": False}))
 
-    html = _render(
-        CRow(
-            attrs={
-                "x-data": "{active: false}",
-                ":class": "{active}",
-                "@click": "active = true",
-            }
-        )
-    )
-    assert 'x-data="{active: false}"' in html
-    assert ':class="{active}"' in html
-    assert '@click="active = true"' in html
+    with pytest.raises(RuntimeError, match="cannot come from"):
+        _render(CRow(attrs={"@click": "active = true"}))
 
 
 def test_css_uses_public_gap_inputs_and_no_component_javascript():

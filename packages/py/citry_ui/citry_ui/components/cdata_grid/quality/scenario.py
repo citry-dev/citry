@@ -16,8 +16,8 @@ def data_grid_states_component(app: Citry) -> type[Component]:
             data-quality-states="ready sort selection controlled editing window loading empty error rtl narrow cleanup"
           >
             <h1>Data Grid states</h1>
-            <div x-data="{sort:[{key:'name',direction:'asc'}],selected:['grace'],notice:'Ready'}">
-              <output x-text="notice">Ready</output>
+            <div >
+              <output v-text="notice">Ready</output>
               <c-CDataGrid
                 id="quality-data-grid"
                 c-columns="columns"
@@ -28,19 +28,12 @@ def data_grid_states_component(app: Citry) -> type[Component]:
                 c-selected="['grace']"
                 striped
                 column_borders
-                $c-props="{
-                  sort,
-                  selected,
-                  onSortChange:(next)=>{sort=next;notice='Sort accepted'},
-                  onSelectionChange:(next)=>{selected=next;notice='Selection accepted'},
-                  onCellActivate:(detail)=>notice=`Activated ${detail.rowKey}/${detail.columnKey}`,
-                  onCellEditCommit:(value,detail)=>notice=`Edit requested ${detail.rowKey}/${detail.columnKey}: ${value}`,
-                }"
+                :sort="sort" :selected="selected" :onSortChange="(next)=>{sort=next;notice='Sort accepted'}" :onSelectionChange="(next)=>{selected=next;notice='Selection accepted'}" :onCellActivate="(detail)=>notice=`Activated ${detail.rowKey}/${detail.columnKey}`" :onCellEditCommit="(value,detail)=>notice=`Edit requested ${detail.rowKey}/${detail.columnKey}: ${value}`"
               >
                 <c-fill name="caption">Keyboard-navigable project members</c-fill>
               </c-CDataGrid>
             </div>
-            <div dir="rtl" x-data="{lastRange:null}">
+            <div dir="rtl" >
               <c-CDataGrid
                 c-columns="columns"
                 c-rows="window_rows"
@@ -50,7 +43,7 @@ def data_grid_states_component(app: Citry) -> type[Component]:
                 c-row_height="44"
                 c-viewport_size="240"
                 c-initial_index="20"
-                $c-props="{onRangeChange:(detail)=>lastRange=detail}"
+                :onRangeChange="(detail)=>lastRange=detail"
               />
             </div>
             <div class="citry-ui-quality-grid">
@@ -59,6 +52,16 @@ def data_grid_states_component(app: Citry) -> type[Component]:
               <c-CDataGrid c-columns="columns" c-rows="rows" label="Failed members" state="error" />
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                sort:[{key:'name',direction:'asc'}],selected:['grace'],notice:'Ready',
+                lastRange:null
+              };
+            },
+          });
         """
 
         def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:

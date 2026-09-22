@@ -511,19 +511,37 @@ class CMultiSelect(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         self._snapshot(kwargs)
-        return self._cui_multi_select_data
+        prop_names = {
+            "value",
+            "open",
+            "required",
+            "disabled",
+            "readonly",
+            "invalid",
+            "loop",
+            "closeOnSelect",
+            "placement",
+            "matchWidth",
+            "variant",
+            "size",
+        }
+        return {
+            "serverDefaults": {key: value for key, value in self._cui_multi_select_data.items() if key in prop_names},
+            **{key: value for key, value in self._cui_multi_select_data.items() if key not in prop_names},
+        }
 
     template = """
       <div
+        ref="root"
         class="cui-multi-select"
-        c-data-open="open"
-        c-data-empty="empty"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-close-on-select="closeOnSelect"
-        c-data-match-width="matchWidth"
+        c-data-open="'' if open else None"
+        c-data-empty="'' if empty else None"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-close-on-select="'' if closeOnSelect else None"
+        c-data-match-width="'' if matchWidth else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="attrs"
@@ -625,8 +643,8 @@ class CMultiSelect(LibraryComponent):
                   c-aria-selected="'true' if option.selected else 'false'"
                   c-aria-disabled="'true' if option.disabled else 'false'"
                   c-data-value="option.value"
-                  c-data-selected="option.selected"
-                  c-data-disabled="option.disabled"
+                  c-data-selected="'' if option.selected else None"
+                  c-data-disabled="'' if option.disabled else None"
                   data-citry-ui-part="option"
                 >
                   <span class="cui-multi-select__check" aria-hidden="true"></span>
@@ -649,8 +667,8 @@ class CMultiSelect(LibraryComponent):
                     c-aria-selected="'true' if option.selected else 'false'"
                     c-aria-disabled="'true' if option.disabled else 'false'"
                     c-data-value="option.value"
-                    c-data-selected="option.selected"
-                    c-data-disabled="option.disabled"
+                    c-data-selected="'' if option.selected else None"
+                    c-data-disabled="'' if option.disabled else None"
                     data-citry-ui-part="option"
                   >
                     <span class="cui-multi-select__check" aria-hidden="true"></span>
@@ -677,8 +695,15 @@ class CMultiSelect(LibraryComponent):
           closeOnSelect:{}, placement:{}, matchWidth:{}, variant:{}, size:{},
           onValueChange:{}, onOpenChange:{},
         },
-        init: ({els, data, props, effect, inject}) => {
-          const root=els[0];
+        inject: {
+          fieldService:{from:Symbol.for('citry-ui:field'),default:null},
+          formService:{from:Symbol.for('citry-ui:form'),default:null},
+        },
+        onServerRender: ({component}) => {
+          if (!anchoredLayerRuntimeCompatible) return;
+          const root=component.$refs.root;
+          const data=new Proxy(component.serverDefaults,{get(target,key){return key in target?target[key]:component[key];}});
+          const props=component.$props;
           const trigger=root.querySelector(':scope > [data-citry-ui-part="control"]');
           const nativeSelect=root.querySelector(':scope > [data-cui-multi-select-native]');
           const readonlyValues=root.querySelector(':scope > [data-cui-multi-select-readonly-values]');
@@ -690,8 +715,8 @@ class CMultiSelect(LibraryComponent):
             || !(listbox instanceof HTMLElement) || !(valuesSurface instanceof HTMLElement)) {
             throw new Error('[citry-ui] CMultiSelect settled anatomy is invalid.');
           }
-          const field=inject(Symbol.for('citry-ui:field'),null);
-          const form=inject(Symbol.for('citry-ui:form'),null);
+          const field=component.fieldService;
+          const form=component.formService;
           const formRuntime=globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if(formRuntime?.generation!==1)throw new Error('[citry-ui] CMultiSelect form-control runtime dependency did not load.');
           const listeners=formRuntime.listeners();
@@ -764,7 +789,7 @@ class CMultiSelect(LibraryComponent):
           listeners.add(root,'click',onClick,true);listeners.add(root,'pointerover',onPointer,true);listeners.add(trigger,'keydown',onKey,true);listeners.add(popup,'toggle',onToggle);listeners.add(nativeSelect,'invalid',onInvalid);listeners.add(nativeSelect,'focus',onProxyFocus);
           const unregisterReset=formRuntime.registerReset(root,nativeSelect,{invalidate:()=>generation+=1,reset:onReset});
           const stopFieldsets=formRuntime.watchFieldset(root,trigger,reconcile);
-          const stop=effect(()=>{clientValue=props.value;clientOpen=props.open;onValueChange=typeof props.onValueChange==='function'?props.onValueChange:null;onOpenChange=typeof props.onOpenChange==='function'?props.onOpenChange:null;if(props.onValueChange!=null&&onValueChange===null)report('onValueChange',props.onValueChange);else invalidEpisodes.delete('onValueChange');if(props.onOpenChange!=null&&onOpenChange===null)report('onOpenChange',props.onOpenChange);else invalidEpisodes.delete('onOpenChange');configuration={required:field?field.required:boolean('required',data.required),disabled:field?field.disabled:(form?.disabled||boolean('disabled',data.disabled)),readonly:field?field.readonly:(form?.readonly||boolean('readonly',data.readonly)),invalid:field?field.invalid:boolean('invalid',data.invalid),loop:boolean('loop',data.loop),closeOnSelect:boolean('closeOnSelect',data.closeOnSelect),placement:choice('placement',data.placement,['bottom-start','bottom-end','top-start','top-end']),matchWidth:boolean('matchWidth',data.matchWidth),variant:choice('variant',data.variant,['outline','filled','plain']),size:choice('size',data.size,['sm','md','lg'])};reconcile();});
+          const stop=Citry.vue.watchEffect(()=>{clientValue=props.value;clientOpen=props.open;onValueChange=typeof props.onValueChange==='function'?props.onValueChange:null;onOpenChange=typeof props.onOpenChange==='function'?props.onOpenChange:null;if(props.onValueChange!=null&&onValueChange===null)report('onValueChange',props.onValueChange);else invalidEpisodes.delete('onValueChange');if(props.onOpenChange!=null&&onOpenChange===null)report('onOpenChange',props.onOpenChange);else invalidEpisodes.delete('onOpenChange');configuration={required:field?field.required:boolean('required',data.required),disabled:field?field.disabled:(form?.disabled||boolean('disabled',data.disabled)),readonly:field?field.readonly:(form?.readonly||boolean('readonly',data.readonly)),invalid:field?field.invalid:boolean('invalid',data.invalid),loop:boolean('loop',data.loop),closeOnSelect:boolean('closeOnSelect',data.closeOnSelect),placement:choice('placement',data.placement,['bottom-start','bottom-end','top-start','top-end']),matchWidth:boolean('matchWidth',data.matchWidth),variant:choice('variant',data.variant,['outline','filled','plain']),size:choice('size',data.size,['sm','md','lg'])};reconcile();});
           const nativeMode={className:'cui-form-control__native--enhanced'};
           root.setAttribute('data-citry-multi-select-initialized','');formRuntime.enhanceNative(nativeSelect,trigger,nativeMode);reconcile();
           return()=>{active=false;generation+=1;if(typeTimer!==null)clearTimeout(typeTimer);root[multiSelectHandoffKey]={serverFingerprint,committed:[...committed],internalOpen,highlightedValue};stop?.();stopFieldsets();unregisterReset();listeners.stop();coordinator.unregister(layer,{reason:'ancestor',source:root,cascade:true});field?.setNativeInvalid(false);root.removeAttribute('data-citry-multi-select-initialized');formRuntime.enhanceNative(nativeSelect,trigger,nativeMode,false);};

@@ -1,6 +1,10 @@
 # Component ranges: component identity above DOM roots
 
-**Status (2026-08-04): implemented.** Component identity, keyed and unkeyed
+**Historical design for the Alpine release.** Current component identity,
+slot scope and browser revisions follow [`vue.md`](vue.md). Keep the details
+below as background for the earlier implementation and benchmark results.
+
+**Historical status (2026-08-04): implemented.** Component identity, keyed and unkeyed
 correspondence, range-level morph policy, ancestor-ordered ignore planning,
 and transactional graph/DOM adoption follow this design. Component-tag keys
 and ignore markers are range-owned metadata and are never projected onto a
@@ -12,8 +16,7 @@ This document owns Citry's component-range model: what the browser treats as
 the component node after a `<c-*>` tag renders away, how that node matches
 across updates, where parent-authored morph metadata lives, and how range and
 element ignore barriers affect DOM and client-graph adoption. The exact JSON
-shape remains owned by the
-[`citry-client-graph/1` specification](../../packages/protocol/client_graph/v1/spec.md).
+shape was owned by the now-removed `citry-client-graph/1` specification.
 Alpine scopes and root projections remain owned by
 [`alpinejs.md`](alpinejs.md), Events and State by
 [`events.md`](events.md), and cached render artifacts by
@@ -289,6 +292,58 @@ placement and incoming in another. Retention therefore expands to every
 physical projection of that record. Section 10.3 specifies the observable
 mirror consequence.
 
+Within one synchronous physical-placement plan, the sets and match histories
+that feed this closure only grow. The runtime always computes the first closure
+for a placement, then checkpoints those input sizes and skips a repeated closure
+while they remain unchanged. The checkpoint records closure-produced growth so
+it does not immediately repeat derived work. When recomputation discovers a
+historical correspondence, the checkpoint remains dirty for one more pass
+because that closure's old-to-new lookup was built before the discovery. The
+checkpoint is local to one placement and never crosses a placement or await.
+
+Each ownership-cap scan walks the comment nodes under its selected root once
+and groups them by their actual parent before parsing. Parent groups are parsed in
+DOM order, so ancestor corruption is still reported before descendant
+corruption and caps under one parent keep sibling order. A same-parent boundary
+starts the comment walk at its validated opening cap and stops at its closing
+cap, so unrelated sibling subtrees do not need an order check. The walk still
+enters element descendants within that interval and applies the established
+realm filter. A boundary below that root keeps the full-root scan and final
+containment filter.
+
+The live Events morph identifies its exact `data-citry-key` lookup to the
+ownership runtime. When an ordinary element still uses the host document's
+native attribute methods and has no DOM key or temporary range marker, it
+cannot enter Alpine's keyed map. The runtime therefore accepts that element
+without testing it against every protected range. Elements with authored keys,
+temporary range adapters, custom attribute methods, foreign-realm prototypes,
+or a custom key callback keep the live containment filter. This decision is
+made for each element, so an updating hook can change a deeper element before
+Alpine recursively maps its children. Runtime-owned ownership-cap comments are
+expected to retain their native DOM ordering methods.
+
+For one pinned Alpine keyed-map call, the runtime can replace those per-element
+range tests with one sibling sweep when the complete input is either the native
+same-realm `HTMLCollection` supplied by an element or the dense Array supplied
+by Alpine's internal Block. The proof snapshots members through captured native
+collection operations, validates every member and range endpoint, builds the
+strict union of protected same-parent windows, and discards it when that keyed
+map returns. Custom collections, callbacks, accessors, iterator methods,
+ordering methods, mixed parents, detached endpoints, malformed markers, and
+foreign realms keep the live predicate for the complete call. The original
+Alpine iteration and key-callback order remain unchanged.
+
+The planner may omit its inert ordinary-element simulation for one placement
+when every real cap has already been validated, every matched component and slot
+region has one unambiguous physical projection, and no retention, ignore,
+custom-key, or teleport constraint is present. It decides this again for each
+stabilization iteration and still runs the live morph, landed-cap validation,
+graph adoption, and lifecycle work. A live Citry fill root may carry an
+`_x_teleportBack` link to its scope carrier; the shortcut accepts that link only
+when the active fill descriptor, root, route, and token registries all agree.
+Authored Alpine teleports, reciprocal Alpine teleport links, stale fill links,
+and unclassified backlinks use the general planner.
+
 ### 6.3 Keyed direct children
 
 Among one matched component's active direct logical children, a keyed child
@@ -355,6 +410,38 @@ path only when its complete chain of intermediate component and slot ranges is
 equivalent; an unmatched intermediate range makes it a real move. Only a range
 whose planned position actually changes enters a portable holder for
 transplantation.
+
+When one unmatched-range pass must classify many stationary ranges, it records
+the current comment order for that pass and answers containment from those
+ordinals. Old and incoming sides receive separate snapshots, and each snapshot
+is released before collapse can mutate its tree. Cross-document nodes,
+malformed ranges, and supported `compareDocumentPosition` overrides retain the
+live DOM-order checks for the complete pass. Separate or overlapping stationary
+ranges are never treated as one enclosing interval.
+
+Ordinary-element planning copies each boundary into an inert document, replaces
+nested ranges with planning placeholders, and gives those disposable trees to
+the morph planner. The planner mutates these copies directly. Original source
+links and parent links remain available while simulated moves change the copied
+DOM, so ancestor matching still uses the tree before simulation. The internal
+consume option rejects connected roots or roots owned by an active document;
+the default planner entry point preserves its inputs by copying them.
+
+A root with one live placement can skip ordinary-element simulation when the
+matched root has no old or incoming child components, neither involved graph has
+slot regions, and the placement has same-parent topology. Its actual boundary
+contents must have no nested ownership ranges, ignore barriers, or teleports. The
+runtime inspects the real DOM before choosing this path; graph metadata alone
+cannot establish that it is safe. Root matching, ownership validation, retention,
+and the live Alpine morph still run.
+
+Each placement can retain the incoming DOM parsed during planning for its later
+morph. Reuse requires the same HTML, boundary caps, topology, and HTML parsing
+context. Changed inputs use the normal parsing and validation path, including
+slot processing that rewrites incoming HTML. Trees containing custom elements,
+including elements inside template contents, retain application-time parsing to
+preserve constructor timing when dependencies load. Saved trees are consumed
+once and released when the transaction commits, aborts, or is discarded.
 
 ## 7. The morph transaction
 

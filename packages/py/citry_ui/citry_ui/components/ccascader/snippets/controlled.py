@@ -6,15 +6,24 @@ citry.register_library(citry_ui)
 
 class CascaderControlled(Component):
     template = """
-      <div x-data="{place:['earth','north'], last:''}">
-        <c-CCascader $c-props="{value:place,onValueChange:(value)=>{place=value;last=value.join(' / ')}}">
+      <div >
+        <c-CCascader :value="place" :onValueChange="(value)=>{place=value;last=value.join(' / ')}">
           <c-CCascaderOption value="earth" label="Earth">
             <c-CCascaderOption value="north" label="Northern hemisphere" />
             <c-CCascaderOption value="south" label="Southern hemisphere" />
           </c-CCascaderOption>
         </c-CCascader>
-        <output x-text="last"></output>
+        <output v-text="last"></output>
       </div>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            place:['earth','north'], last:''
+          };
+        },
+      });
     """
 
 

@@ -85,13 +85,13 @@ Example:
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from contextvars import ContextVar
 from dataclasses import MISSING, fields, is_dataclass
 from functools import lru_cache
 from inspect import signature
 from threading import RLock
-from typing import TYPE_CHECKING, Any, Final, TypeAlias, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Final, Protocol, TypeAlias, TypeVar, cast
 from weakref import ref
 
 import wrapt
@@ -103,7 +103,7 @@ from citry.slots import Slot
 from citry.util.html import escape
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection
+    from collections.abc import Callable, Collection, Hashable, Iterable
     from weakref import ReferenceType
 
     from citry.citry_context import CitryContext
@@ -114,6 +114,55 @@ _T = TypeVar("_T")
 _schema_factory_consts: ContextVar[dict[str, Any] | None] = ContextVar(
     "citry_schema_factory_consts",
     default=None,
+)
+
+
+class ConstPrecomputeAdapter(Protocol):
+    """Representation hooks for the shared Const specialization visitor."""
+
+    def expression(self, node: ExprNode, context: CitryContext) -> BodyItem: ...
+    def element_attrs(self, node: ElementAttrsNode, context: CitryContext) -> BodyItem: ...
+    def element_metadata(
+        self,
+        node: ElementAttrsNode,
+        const_names: frozenset[str],
+        context: CitryContext,
+    ) -> ElementAttrsNode: ...
+    def element_key(self, node: ElementKeyNode, context: CitryContext) -> BodyItem: ...
+    def static_parts(self, item: BodyItem) -> tuple[object, ...] | None: ...
+    def unrolled_for(self, node: ForNode, parts: tuple[object, ...]) -> BodyItem: ...
+
+
+class _HtmlPrecomputeAdapter:
+    def expression(self, node: ExprNode, context: CitryContext) -> BodyItem:
+        return _precompute_html_expr(node, context)
+
+    def element_attrs(self, node: ElementAttrsNode, context: CitryContext) -> BodyItem:
+        return _precompute_html_attrs(node, context)
+
+    def element_metadata(
+        self,
+        node: ElementAttrsNode,
+        const_names: frozenset[str],  # noqa: ARG002
+        context: CitryContext,  # noqa: ARG002
+    ) -> ElementAttrsNode:
+        return node
+
+    def element_key(self, node: ElementKeyNode, context: CitryContext) -> BodyItem:
+        return _precompute_html_key(node, context)
+
+    def static_parts(self, item: BodyItem) -> tuple[object, ...] | None:
+        return (item,) if isinstance(item, str) else None
+
+    def unrolled_for(self, node: ForNode, parts: tuple[object, ...]) -> BodyItem:
+        # This adapter's static_parts method is the only source of this tuple,
+        # and it yields the text pieces to join.
+        return node._with_precomputed_text("".join(cast("tuple[str, ...]", parts)))
+
+
+_HTML_PRECOMPUTE_ADAPTER = _HtmlPrecomputeAdapter()
+_ACTIVE_PRECOMPUTE_ADAPTER: ContextVar[ConstPrecomputeAdapter] = ContextVar(
+    "citry_const_precompute_adapter", default=_HTML_PRECOMPUTE_ADAPTER
 )
 
 
@@ -1012,7 +1061,7 @@ leaves ample headroom while still capping misuse (see the ``ConstBodyCache``
 docstring).
 """
 
-_CacheKey: TypeAlias = "tuple[ReferenceType[type[Component]], ConstSignature, frozenset[str]]"
+_CacheKey: TypeAlias = "tuple[ReferenceType[type[Component]], ConstSignature, frozenset[str], Hashable | None]"
 
 
 class ConstBodyCache:
@@ -1025,7 +1074,7 @@ class ConstBodyCache:
     already computed; the entry for a render with no ``Const`` inputs is the
     plain compiled body that all such renders share. Keys are
     ``(weak component-class reference, ConstSignature, visible variable
-    names)``. The weak reference lets an unregistered component class be
+    names, private output format)``. The weak reference lets an unregistered component class be
     collected without waiting for this cache's LRU limit. Variable names
     participate because Citry binders reject an already-visible name; two
     otherwise equal renders with different context shapes may therefore need
@@ -1067,6 +1116,7 @@ class ConstBodyCache:
         build: Callable[[], list[BodyItem]],
         *,
         visible_names: Collection[str] = (),
+        format_key: Hashable | None = None,
     ) -> list[BodyItem]:
         """
         Return the cached body for this const signature and visible-name set.
@@ -1075,7 +1125,7 @@ class ConstBodyCache:
         runs under the lock and the result is stored; if it raises, nothing is
         cached and the error propagates (so the next render retries).
         """
-        key = (ref(comp_cls), signature, frozenset(visible_names))
+        key = (ref(comp_cls), signature, frozenset(visible_names), format_key)
         with self._lock:
             self._prune_collected_components()
             body = self._entries.get(key)
@@ -1083,7 +1133,7 @@ class ConstBodyCache:
                 self._entries.move_to_end(key)
                 return body
             body = build()
-            stored_key = (ref(comp_cls, self._component_collected), signature, key[2])
+            stored_key = (ref(comp_cls, self._component_collected), signature, key[2], format_key)
             self._entries[stored_key] = body
             while len(self._entries) > self._max_entries:
                 self._entries.popitem(last=False)
@@ -1158,6 +1208,7 @@ def precompute_const_parts(
     precompute_attrs: bool = True,
     sandboxed: bool = True,
     visible_names: Collection[str] | None = None,
+    adapter: ConstPrecomputeAdapter | None = None,
 ) -> list[BodyItem]:
     """
     Pre-compute the parts of ``body`` that depend only on ``const_vars``.
@@ -1267,13 +1318,17 @@ def precompute_const_parts(
         variables=_ConstMapping(const_vars, const_values=const_vars),
         sandboxed=sandboxed,
     )
-    return _precompute_into(
-        body,
-        const_names,
-        precompute_context,
-        visible_names=root_visible_names,
-        precompute_attrs=precompute_attrs,
-    )
+    token = _ACTIVE_PRECOMPUTE_ADAPTER.set(adapter or _HTML_PRECOMPUTE_ADAPTER)
+    try:
+        return _precompute_into(
+            body,
+            const_names,
+            precompute_context,
+            visible_names=root_visible_names,
+            precompute_attrs=precompute_attrs,
+        )
+    finally:
+        _ACTIVE_PRECOMPUTE_ADAPTER.reset(token)
 
 
 def _precompute_into(
@@ -1325,19 +1380,20 @@ def _precompute_item(
         return
 
     if isinstance(item, ExprNode) and set(item.used_vars) <= const_names:
-        out.append(_precompute_expr(item, precompute_context))
+        out.append(_ACTIVE_PRECOMPUTE_ADAPTER.get().expression(item, precompute_context))
         return
 
     if isinstance(item, ElementAttrsNode):
+        item = _ACTIVE_PRECOMPUTE_ADAPTER.get().element_metadata(item, const_names, precompute_context)
         if precompute_attrs and set(item.used_vars) <= const_names:
-            out.append(_precompute_element_attrs(item, precompute_context))
+            out.append(_ACTIVE_PRECOMPUTE_ADAPTER.get().element_attrs(item, precompute_context))
         else:
             out.append(item)
         return
 
     if isinstance(item, ElementKeyNode):
         if set(item.used_vars) <= const_names:
-            out.append(_precompute_element_key(item, precompute_context))
+            out.append(_ACTIVE_PRECOMPUTE_ADAPTER.get().element_key(item, precompute_context))
         else:
             out.append(item)
         return
@@ -1357,6 +1413,7 @@ def _precompute_item(
             precompute_attrs=precompute_attrs,
         )
         if _body_changed(item.body, precomputed):
+            original = item
             item = ComponentNode(
                 item.source,
                 item.position,
@@ -1367,6 +1424,10 @@ def _precompute_item(
                 item.contains_fills,
                 item.metadata,
             )
+            item._element_event_bindings = original._element_event_bindings
+            item._element_poll_bindings = original._element_poll_bindings
+            item._element_control_bindings = original._element_control_bindings
+            item._element_runtime_events_candidate = original._element_runtime_events_candidate
         out.append(item)
         return
 
@@ -1461,7 +1522,7 @@ def _precompute_item(
     out.append(item)
 
 
-def _precompute_expr(node: ExprNode, precompute_context: CitryContext) -> BodyItem:
+def _precompute_html_expr(node: ExprNode, precompute_context: CitryContext) -> BodyItem:
     """
     Evaluate an all-const expression; replace it with text when possible.
 
@@ -1490,7 +1551,7 @@ def _precompute_expr(node: ExprNode, precompute_context: CitryContext) -> BodyIt
         return node
 
 
-def _precompute_element_attrs(node: ElementAttrsNode, precompute_context: CitryContext) -> BodyItem:
+def _precompute_html_attrs(node: ElementAttrsNode, precompute_context: CitryContext) -> BodyItem:
     """
     Render an all-const attribute region once; replace it with text when possible.
 
@@ -1511,7 +1572,7 @@ def _precompute_element_attrs(node: ElementAttrsNode, precompute_context: CitryC
     return node
 
 
-def _precompute_element_key(node: ElementKeyNode, precompute_context: CitryContext) -> BodyItem:
+def _precompute_html_key(node: ElementKeyNode, precompute_context: CitryContext) -> BodyItem:
     """Render an all-const element key once, deferring any evaluation error."""
     try:
         return str(node.render(precompute_context))
@@ -1597,7 +1658,7 @@ def _try_unroll_for(
     *,
     visible_names: frozenset[str] | None,
     precompute_attrs: bool,
-) -> ForNode | None:
+) -> BodyItem | None:
     """
     Run an all-const loop once, ahead of time; retain a guarded node, or ``None``.
 
@@ -1639,7 +1700,7 @@ def _try_unroll_for(
     ):
         return None
 
-    parts: list[str] = []
+    parts: list[object] = []
     try:
         for count, (body, body_context) in enumerate(node.iter_bodies(precompute_context), start=1):
             if count > _MAX_UNROLL_ITERATIONS:
@@ -1652,15 +1713,16 @@ def _try_unroll_for(
                 precompute_attrs=precompute_attrs,
             )
             for part in precomputed:
-                if not isinstance(part, str):
+                certified = _ACTIVE_PRECOMPUTE_ADAPTER.get().static_parts(part)
+                if certified is None:
                     # A value turned out to need per-render rendering (a Slot
                     # or element in a const variable); the static check cannot
                     # see values, so this is found here.
                     return None
-                parts.append(part)
+                parts.extend(certified)
     except Exception:  # noqa: BLE001 (deliberate: defer the error to render, see precompute_const_parts)
         return None
-    return node._with_precomputed_text("".join(parts))
+    return _ACTIVE_PRECOMPUTE_ADAPTER.get().unrolled_for(node, tuple(parts))
 
 
 def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, precompute_attrs: bool) -> bool:
@@ -1678,7 +1740,7 @@ def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, pr
     from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprNode, IfNode  # noqa: PLC0415
 
     for item in body:
-        if isinstance(item, str):
+        if _ACTIVE_PRECOMPUTE_ADAPTER.get().static_parts(item) is not None:
             continue
         if isinstance(item, ExprNode) and set(item.used_vars) <= names:
             continue

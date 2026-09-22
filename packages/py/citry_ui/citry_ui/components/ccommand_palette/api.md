@@ -181,7 +181,7 @@ ancestor Form or promise unavailable interaction.
 ## Distinguish callbacks from native events
 
 `onOpenChange`, `onQueryChange`, and `onAction` are component callbacks passed
-through `$c-props`. Native input, composition, keyboard, pointer, click,
+with native Vue bindings. Native input, composition, keyboard, pointer, click,
 Dialog cancel, and close events remain browser events. The family dispatches no
 custom DOM event.
 

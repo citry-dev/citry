@@ -362,6 +362,7 @@ class SourceStateFieldRecord:
     name: str
     type_display: str | None
     description: str | None
+    client_writable: bool
     module: str
     qualname: str
     source_file: Path
@@ -592,6 +593,7 @@ def _source_event_info(
             "name",
             "type_display",
             "description",
+            "client_writable",
             "module",
             "qualname",
             "file",
@@ -600,6 +602,7 @@ def _source_event_info(
         field_name = raw_field.get("name")
         type_display = raw_field.get("type_display")
         description = raw_field.get("description")
+        client_writable = raw_field.get("client_writable")
         field_module = raw_field.get("module")
         field_qualname = raw_field.get("qualname")
         field_file = raw_field.get("file")
@@ -608,6 +611,7 @@ def _source_event_info(
             or not field_name
             or (type_display is not None and type(type_display) is not str)
             or (description is not None and type(description) is not str)
+            or type(client_writable) is not bool
             or type(field_module) is not str
             or not field_module
             or type(field_qualname) is not str
@@ -627,6 +631,7 @@ def _source_event_info(
                 field_name,
                 type_display,
                 description,
+                client_writable,
                 field_module,
                 field_qualname,
                 path.resolve(),
@@ -785,6 +790,11 @@ def load_project(
             check=False,
             env=environment,
             text=True,
+            # app_worker writes its JSON envelope as UTF-8 explicitly.  Do
+            # not let Windows' active code page reinterpret non-ASCII catalog
+            # and source-analysis values before the protocol parser sees them.
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -869,12 +879,14 @@ def _project_from_worker_output(
     workspace: Path,
     app: str,
     returncode: int | None,
-    stdout: str,
-    stderr: str,
+    stdout: str | None,
+    stderr: str | None,
     *,
     environment_file: Path | None = None,
 ) -> ProjectState:
     """Validate one completed worker response for sync and async callers."""
+    stdout = stdout or ""
+    stderr = stderr or ""
     if not stdout.strip():
         detail = stderr.strip()
         message = f"App worker exited with status {returncode} without a response."

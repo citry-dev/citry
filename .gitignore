@@ -82,6 +82,8 @@ site
 
 # JS, NPM Dependency directories
 node_modules/
+!/packages/py/citry_lsp/citry_lsp/types/node_modules/
+!/packages/py/citry_lsp/citry_lsp/types/node_modules/**
 jspm_packages/
 
 # Mr Developer
@@ -108,3 +110,8 @@ link-check-site/
 # Local scratch archives of pre-fork reference codebases (kept out of git
 # because they are hundreds of MB and are not needed to build anything).
 old-*.zip
+
+# Local benchmark installations and measurement evidence.
+.benchmarks/
+
+# Reflex initialization writes its own app-local ignore file.

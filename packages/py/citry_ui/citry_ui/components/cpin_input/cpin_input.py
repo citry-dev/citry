@@ -379,14 +379,14 @@ class CPinInput(LibraryComponent):
             "aria_labelledby": aria_labelledby,
             "aria_describedby": described_by,
             "aria_errormessage": error_message,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
         }
         self._cui_pin_input_data = {
             "id": public_id,
             "rootId": f"{public_id}-root",
             "name": name,
             "form": form_owner,
-            "value": value,
+            "serverValue": value,
             "initialValue": value,
             "length": raw_length,
             "kind": kind,
@@ -394,15 +394,15 @@ class CPinInput(LibraryComponent):
             "inputmode": "numeric" if kind == "numeric" else "text",
             "autocomplete": autocomplete,
             "placeholder": placeholder,
-            "disabled": disabled,
-            "readonly": readonly,
+            "serverDisabled": disabled,
+            "serverReadonly": readonly,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "required": required,
-            "invalid": invalid,
-            "mask": kwargs.mask,
+            "serverRequired": required,
+            "serverInvalid": invalid,
+            "serverMask": kwargs.mask,
             "attached": kwargs.attached,
-            "variant": variant,
-            "size": size,
+            "serverVariant": variant,
+            "serverSize": size,
             "label": cast("str | None", authored_label) or label,
             "labelledby": aria_labelledby,
             "describedby": described_by,
@@ -422,13 +422,13 @@ class CPinInput(LibraryComponent):
       <div
         class="cui-pin-input"
         c-id="root_id"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
-        c-data-filled="filled"
-        c-data-complete="complete"
-        c-data-attached="attached"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
+        c-data-filled="'' if filled else None"
+        c-data-complete="'' if complete else None"
+        c-data-attached="'' if attached else None"
         c-data-variant="variant"
         c-data-size="size"
         c-bind="root_attrs"
@@ -462,7 +462,7 @@ class CPinInput(LibraryComponent):
           data-citry-ui-part="input"
         />
         <span aria-hidden="true" data-citry-ui-part="cells">
-          <span c-for="cell in cells" c-data-index="cell['index']" c-data-filled="cell['filled']" c-data-masked="cell['filled'] and mask" data-citry-ui-part="cell">
+          <span c-for="cell in cells" c-data-index="cell['index']" c-data-filled="'' if cell['filled'] else None" c-data-masked="'' if cell['filled'] and mask else None" data-citry-ui-part="cell">
             <span data-citry-ui-part="character">{{ cell['character'] }}</span>
             <span data-citry-ui-part="caret"></span>
             <span c-if="cell['separator']" data-citry-ui-part="separator">
@@ -479,8 +479,14 @@ class CPinInput(LibraryComponent):
           value: {}, required: {}, disabled: {}, readonly: {}, invalid: {}, mask: {},
           variant: {}, size: {}, onValueChange: {}, onComplete: {}, onValueInvalid: {}, onFocusChange: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for('citry-ui:field'), default: null},
+          formService: {from: Symbol.for('citry-ui:form'), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
           const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
           const cellsHost = root.querySelector(':scope > [data-citry-ui-part="cells"]');
           const cells = Array.from(cellsHost?.querySelectorAll(':scope > [data-citry-ui-part="cell"]') ?? []);
@@ -488,8 +494,8 @@ class CPinInput(LibraryComponent):
           if (!(input instanceof HTMLInputElement && cellsHost instanceof HTMLElement) || cells.length !== data.length || characters.some(node => !(node instanceof HTMLElement))) {
             throw new Error('[citry-ui] CPinInput settled anatomy is invalid.');
           }
-          const field = inject(Symbol.for('citry-ui:field'), null);
-          const form = inject(Symbol.for('citry-ui:form'), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const runtime = globalThis[Symbol.for('citry-ui:form-control-runtime')];
           if (runtime?.generation !== 1) throw new Error('[citry-ui] CPinInput form-control runtime is unavailable.');
           const resolver = runtime.resolver(root, props, 'CPinInput');
@@ -497,8 +503,8 @@ class CPinInput(LibraryComponent):
           const mutations = runtime.mutations(root);
           const owned = mutations.owned;
           const accepted = data.kind === 'numeric' ? /[0-9]/ : data.kind === 'alphabetic' ? /[A-Za-z]/ : /[A-Za-z0-9]/;
-          let current = data.value;
-          let committed = data.value;
+          let current = data.serverValue;
+          let committed = data.serverValue;
           const initialValue = data.initialValue;
           let controlled = false;
           let composing = false;
@@ -526,13 +532,13 @@ class CPinInput(LibraryComponent):
             return 'input';
           };
           const resolveConfiguration = () => ({
-            required: field ? field.required : resolver.boolean('required', data.required),
-            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.disabled) || runtime.fieldsetDisabled(input),
-            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.readonly),
-            invalid: field ? field.invalid : resolver.boolean('invalid', data.invalid),
-            mask: resolver.boolean('mask', data.mask),
-            variant: resolver.choice('variant', data.variant, ['outline', 'subtle']),
-            size: resolver.choice('size', data.size, ['sm', 'md', 'lg']),
+            required: field ? field.required : resolver.boolean('required', data.serverRequired),
+            disabled: field ? field.disabled : Boolean(form?.disabled) || resolver.boolean('disabled', data.serverDisabled) || runtime.fieldsetDisabled(input),
+            readonly: field ? field.readonly : resolver.boolean('readonly', data.inheritsReadonly && form ? form.readonly : data.serverReadonly),
+            invalid: field ? field.invalid : resolver.boolean('invalid', data.serverInvalid),
+            mask: resolver.boolean('mask', data.serverMask),
+            variant: resolver.choice('variant', data.serverVariant, ['outline', 'subtle']),
+            size: resolver.choice('size', data.serverSize, ['sm', 'md', 'lg']),
           });
           const selectionIndex = () => {
             const start = input.selectionStart ?? current.length;
@@ -678,7 +684,7 @@ class CPinInput(LibraryComponent):
             runtime.invalidFocus(root, input, () => token === invalidGeneration);
           }, true);
 
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             configuration = resolveConfiguration();
             const requested = props.value;
             if (requested === undefined) {

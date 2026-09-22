@@ -8,8 +8,6 @@ class MenuChoices(Component):
     template = """
       <section
         class="archive-choice-demo"
-        x-data
-        x-init="Alpine.store('archiveMenuChoices', {glow: 'mixed', script: 'elvish'})"
       >
         <c-CMenu c-close_on_select="False">
           <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
@@ -19,9 +17,9 @@ class MenuChoices(Component):
             <c-CMenuCheckboxItem
               value="glow"
               checked="mixed"
-              $c-props="{
-                checked: $store.archiveMenuChoices.glow,
-                onCheckedChange: (value) => $store.archiveMenuChoices.glow = value,
+              v-bind="{
+                checked: glow,
+                onCheckedChange: (value) => glow = value,
               }"
             >
               Glow around enchanted passages
@@ -29,9 +27,9 @@ class MenuChoices(Component):
             <c-CMenuSeparator />
             <c-CMenuRadioGroup
               value="elvish"
-              $c-props="{
-                value: $store.archiveMenuChoices.script,
-                onValueChange: (value) => $store.archiveMenuChoices.script = value,
+              v-bind="{
+                value: script,
+                onValueChange: (value) => script = value,
               }"
             >
               <c-fill name="label">Translation script</c-fill>
@@ -44,10 +42,12 @@ class MenuChoices(Component):
           </c-fill>
         </c-CMenu>
         <output
-          x-text="`Glow: ${$store.archiveMenuChoices.glow}; script: ${$store.archiveMenuChoices.script}`"
+          v-text="`Glow: ${glow}; script: ${script}`"
         ></output>
       </section>
     """
+
+    js = "$component({data(){return {glow:'mixed',script:'elvish'};}});"
 
     css = """
       :where(.archive-choice-demo) {

@@ -21,7 +21,6 @@ def disclosure_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack disclosure-quality"
             aria-labelledby="disclosure-states-title"
-            x-data="{open:true}"
           >
             <h1 id="disclosure-states-title">Disclosure states</h1>
 
@@ -30,7 +29,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
               region
               heading_level="2"
               actions_label="System requirement actions"
-              $c-props="{open,onOpenChange:(next)=>open=next}"
+              :open="open" :onOpenChange="(next)=>open=next"
               c-attrs="{'data-quality-states':'controlled open actions region outline md indicator-end ltr'}"
             >
               <c-fill name="title">System requirements</c-fill>
@@ -41,6 +40,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
             <div class="citry-ui-quality-grid">
               <c-for each="variant in variants">
                 <c-CDisclosure
+                  #c-key="variant"
                   c-variant="variant"
                   open
                   heading_level="2"
@@ -52,6 +52,7 @@ def disclosure_states_component(app: Citry) -> type[Component]:
               </c-for>
               <c-for each="size in sizes">
                 <c-CDisclosure
+                  #c-key="size"
                   c-size="size"
                   indicator_pos="start"
                   heading_level="2"
@@ -136,6 +137,15 @@ def disclosure_states_component(app: Citry) -> type[Component]:
               </c-CDisclosure>
             </div>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                open:true
+              };
+            },
+          });
         """
 
         def template_data(

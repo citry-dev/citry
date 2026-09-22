@@ -53,7 +53,7 @@ inputs:
         effect: Selects control geometry.
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, ARIA, Alpine, and data attributes to the root. Prefer the top-level class and style inputs.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, ARIA, Vue, and data attributes to the root. Prefer the top-level class and style inputs.'}
       - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed attributes to the visible input. `form` is rejected so validation and submitted value cannot have different owners.'}
 
   - id: ccombobox-client-inputs

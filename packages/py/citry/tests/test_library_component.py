@@ -32,6 +32,8 @@ from citry import (
     LibraryManifestChanged,
     LibraryNotInstalled,
 )
+from citry._vue.capture import render_prepared
+from citry._vue.direct_capture import assemble_typed_render
 
 
 def test_definition_is_inert_and_call_defensively_copies_inputs():
@@ -253,7 +255,18 @@ def test_primary_files_resolve_beside_the_inert_definition_module():
 
     concrete = app.register_library(ComponentLibrary("file-notices", (CFileNotice,)))[CFileNotice]
 
-    assert '<p data-cid-c1="">From file</p>' in str(CFileNotice(label="From file").render(citry=app))
+    rendered = render_prepared(concrete(label="From file"))
+    assembly = assemble_typed_render(
+        rendered,
+        revision=0,
+        tag_for_type=lambda type_key: f"x-{type_key.lower().replace('_', '-')}",
+        expected_citry=app,
+    )
+    [occurrence] = assembly.view.occurrences
+    template = assembly.compile_inputs[occurrence.definition_id].template
+    assert concrete.get_template().source == "<p>{{ label }}</p>\n"
+    assert template.startswith("<p>{{ preparedData.")
+    assert "From file" in occurrence.prepared_data.values()
     assert concrete.get_js() == 'console.log("library component");\n'
     assert concrete.get_css() == ".library-component { color: blue; }\n"
     info = app.inspect_component(concrete, resolve_assets=True)

@@ -40,7 +40,7 @@ inputs:
       - {id: novalidate, name: novalidate, type: bool, default: {kind: literal, value: false}, effect: Maps to native `novalidate`.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native Form classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native Form inline styles from CSS text, a property mapping, or nested sequence and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed less-common native Form, ARIA, Alpine, and data attributes; direct native inputs, public parts, and reflected attributes cannot also be supplied here. Class and style values merge with the top-level inputs.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed less-common native Form, ARIA, Vue, and data attributes; direct native inputs, public parts, and reflected attributes cannot also be supplied here. Class and style values merge with the top-level inputs.'}
   - id: cform-client-inputs
     component: CForm
     channel: client

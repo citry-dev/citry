@@ -65,6 +65,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from difflib import get_close_matches
+from enum import Enum
 from keyword import iskeyword
 from threading import RLock
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
@@ -87,16 +88,17 @@ from citry.citry_element import CitryElement, _ElementMorphMetadata
 from citry.citry_render import (
     CitryRender,
     DeferredComponent,
-    _PhysicalRegion,
     _render_slot_value,
     _render_value,
-    unwrap_physical_region,
 )
 from citry.client_directives import (
     CLIENT_PROPS_ATTR,
+    ComponentTagClientBinding,
     ComponentTagClientBindingKind,
     ComponentTagClientBindingSource,
+    RuntimeComponentEventBinding,
     apply_client_props_contribution,
+    authenticated_runtime_component_event_binding,
     classify_component_tag_client_binding_key,
     has_client_props_key,
     is_client_props_key,
@@ -110,18 +112,6 @@ from citry.constness import (
     _overlay_const_mapping,
     const_value,
 )
-from citry.ownership import (
-    AlpineHandlerClientBindingPayload,
-    CitryDomEventClientBindingPayload,
-    CitryPollClientBindingPayload,
-    ComponentTagClientBindingPayload,
-    ComponentTagClientBindingRecord,
-    LogicalFillKind,
-    PropsClientBindingPayload,
-    SourceLocationKind,
-    current_ownership_graph,
-    resume_ownership_graph,
-)
 from citry.slots import Slot, SlotData, normalize_slot_fills
 from citry.util.exception import add_slot_to_error_message
 from citry.util.html import escape
@@ -132,19 +122,23 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from citry.citry_render import RenderPart
-    from citry.ext.events.extension import EventsExtension
     from citry.extension import ForeignClaim
 
 
 _EVENTS_COMPILER_ATTR_PREFIX = "data-cev-"
 
 
-def _reject_dynamic_events_compiler_attr(name: str, *, tag_name: str) -> None:
-    """Keep render-time attributes out of the Events compiler-owned namespace."""
-    if name.lower().startswith(_EVENTS_COMPILER_ATTR_PREFIX):
+def _reject_reserved_events_attr(name: str, *, tag_name: str) -> None:
+    """Keep authored and render-time attributes out of the Events-reserved namespace."""
+    folded = name.lower()
+    if folded.startswith(_EVENTS_COMPILER_ATTR_PREFIX) or folded in {
+        "data-citry-runtime-control",
+        "data-citry-runtime-events",
+    }:
+        namespace = "'data-cev-*'" if folded.startswith(_EVENTS_COMPILER_ATTR_PREFIX) else repr(name)
         msg = (
-            f"{name!r} arrived on <{tag_name}> through an attribute spread or a dynamic attribute. "
-            "'data-cev-*' attributes are compiler-owned; author State bindings with ':c-*' "
+            f"{name!r} on <{tag_name}> is in the {namespace} reserved internal Events namespace; "
+            "author State bindings with ':c-*' "
             "and event bindings with '@c-*' instead."
         )
         raise RuntimeError(msg)
@@ -293,6 +287,12 @@ class ForeignHtmlAttr(HtmlAttr):
         raise RuntimeError(f"Unresolved foreign component input claims reached rendering: {claims!r}.")
 
 
+class LogicalFillKind(str, Enum):
+    IMPLICIT = "implicit"
+    NAMED = "named"
+    FALLBACK = "fallback"
+
+
 @dataclass(frozen=True, slots=True)
 class FillDataBinding:
     """Compiled one-level destructuring plan for a fill's slot data."""
@@ -439,13 +439,6 @@ class _TemplateSlotContent:
         def render_content() -> CitryRender:
             return self._render(ctx)
 
-        # A stored template Slot may be invoked after its root render has
-        # returned. Resume capture into its original graph without putting a
-        # logical fill ID on the reusable Slot object itself.
-        graph = self._context.ownership
-        if graph is not None and current_ownership_graph() is None:
-            with resume_ownership_graph(graph):
-                return graph.capture_slot_call(slot, render_content)
         return render_content()
 
     def _render(self, ctx: Any) -> CitryRender:
@@ -473,7 +466,6 @@ class _TemplateSlotContent:
                 component=context.component,
                 provides=provides,
                 sandboxed=context.sandboxed,
-                ownership=context.ownership,
                 template_record=context.template_record,
                 _simple_scope=context._simple_scope,
             )
@@ -493,7 +485,7 @@ def _make_body_slot(
     *,
     source: object,
     kind: LogicalFillKind,
-    fallback_slot_site_location_id: Any = None,
+    fallback_slot_site_location_id: Any = None,  # noqa: ARG001
 ) -> Slot:
     """
     Wrap a fill body (or a component's implicit default body) as a ``Slot``.
@@ -515,24 +507,71 @@ def _make_body_slot(
     """
     content_func = _TemplateSlotContent(body, context, component_name, slot_name, data_binding, fallback_var)
     slot = Slot(
-        body,
+        _public_slot_contents(body),
         content_func=content_func,
         component_name=component_name,
         slot_name=slot_name,
         source_position=position,
     )
     content_func.bind_slot(slot)
-    if context.ownership is not None and position is not None:
-        context.ownership.record_template_fill(
+    if position is not None and context.component is not None:
+        from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+        if not direct_prepared_render_active():
+            return slot
+        from citry._vue.direct import bind_template_fill  # noqa: PLC0415
+
+        bind_template_fill(
             slot,
-            context,
-            kind=kind,
-            slot_name=slot_name,
+            lexical_render_id=context.component.id,
+            kind=kind.value,
+            public_name=slot_name,
             source=source,
-            position=position,
-            fallback_slot_site_location_id=fallback_slot_site_location_id,
+            span=position,
+            origin=context.template_record.origin if context.template_record is not None else None,
         )
     return slot
+
+
+def _public_slot_contents(body: list[BodyItem]) -> list[BodyItem]:
+    """Expose authored text while retaining every non-text runtime body object."""
+    # Imported locally because capture imports this node module while defining
+    # the prepared subclasses.
+    from citry._vue.capture import PreparedSourceTextNode  # noqa: PLC0415
+
+    converted: list[BodyItem] | None = None
+    for index, item in enumerate(body):
+        if type(item) is not PreparedSourceTextNode:
+            if converted is not None:
+                converted.append(item)
+            continue
+        if converted is None:
+            converted = body[:index]
+        converted.append(item.text)
+    return body if converted is None else converted
+
+
+def _body_is_whitespace_only(body: list[BodyItem]) -> bool:
+    """Return whether a component body contains only authored whitespace text."""
+    # Imported locally because capture imports this node module while defining
+    # the prepared subclasses.
+    from citry._vue.capture import PreparedSourceTextNode  # noqa: PLC0415
+
+    return all(
+        (isinstance(item, str) and not item.strip())
+        or (type(item) is PreparedSourceTextNode and not item.text.strip())
+        for item in body
+    )
+
+
+def _missing_required_slot_message(component: Any, name: str) -> str:
+    """Build the required-slot diagnostic, including a nearby supplied fill name."""
+    close = get_close_matches(name, sorted(component.raw_slots), n=1, cutoff=0.7)
+    hint = f" Did you mean {close[0]!r}?" if close else ""
+    return (
+        f"Slot {name!r} of component {type(component).__name__!r} is marked as required, "
+        f"but no fill was provided.{hint}"
+    )
 
 
 def _bind_fill_data(
@@ -567,7 +606,6 @@ def _bind_fill_data(
 
 def _render_part_ids(part: RenderPart) -> set[str]:
     """Collect component render IDs reachable through one selected part."""
-    part = unwrap_physical_region(part)
     if not isinstance(part, CitryRender):
         return set()
     render_ids: set[str] = set()
@@ -583,7 +621,7 @@ def _render_part_ids(part: RenderPart) -> set[str]:
         if render_id is not None:
             render_ids.add(render_id)
         for child in current.parts:
-            nested_child = unwrap_physical_region(child)
+            nested_child = child
             if isinstance(nested_child, CitryRender):
                 pending.append(nested_child)
     return render_ids
@@ -601,14 +639,11 @@ def _render_part_object_ids(part: RenderPart) -> set[int]:
         if object_id in object_ids:
             continue
         object_ids.add(object_id)
-        if isinstance(current, _PhysicalRegion):
-            pending.append(current.part)
-        elif isinstance(current, CitryRender):
+        if isinstance(current, CitryRender):
             pending.extend(current.parts)
     return object_ids
 
 
-@final
 class ExprNode(Node):
     """
     A ``{{ expr }}`` expression node.
@@ -704,9 +739,8 @@ class TemplateNode(Node):
         # "<span>{{ x }}</span>"), not a Python expression.
         self.expr = expr
         self.used_vars = used_vars
-        # The body-generating function for the nested template, compiled lazily
-        # on first render and reused afterwards (compile once per node).
-        self._generator: Callable[[], list[Any]] | None = None
+        # Compiled lazily on first use in each render mode and then reused in that mode.
+        self._generators: dict[bool, Callable[[], list[Any]]] = {}
         self._compile_lock = RLock()
 
     @override
@@ -717,21 +751,26 @@ class TemplateNode(Node):
         #
         # Imported lazily because component_render imports the node classes:
         # importing the body pipeline at module load would be circular.
+        from citry._vue.capture import prepared_render_active  # noqa: PLC0415
         from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
 
-        if self._generator is None:
+        prepared = prepared_render_active()
+        generator = self._generators.get(prepared)
+        if generator is None:
             with self._compile_lock:
-                if self._generator is None:
+                generator = self._generators.get(prepared)
+                if generator is None:
                     # The nested template is validated like any other: the parse gets
                     # the rules derived from the registered components' declarations.
                     component = context.component
                     user_rules = component.citry._tag_rules() if component is not None else None
-                    self._generator = _compile_nested_template(
+                    generator = _compile_nested_template(
                         self.expr,
                         user_rules,
                         type(component) if component is not None else None,
                     )
-        parts = _render_body(self._generator(), context)
+                    self._generators[prepared] = generator
+        parts = _render_body(generator(), context)
         return CitryRender(parts=parts, context=context)
 
     def __repr__(self) -> str:
@@ -755,6 +794,7 @@ class StaticHtmlAttr(HtmlAttr):
     def __init__(
         self, source: Any, position: tuple[int, int], key: str, value: Any, used_vars: tuple[str, ...]
     ) -> None:
+        _reject_reserved_events_attr(key, tag_name="HTML element")
         self.source = source
         self.position = position
         self.key = key
@@ -864,9 +904,8 @@ class TemplateHtmlAttr(HtmlAttr):
         self.used_vars = used_vars
         self.foreign_spans = foreign_spans
         self.source_offset = source_offset
-        # The body-generating function for the nested template, compiled lazily
-        # on first resolve and reused afterwards (compile once per node).
-        self._generator: Callable[[], list[Any]] | None = None
+        # Compiled lazily on first use in each render mode and then reused in that mode.
+        self._generators: dict[bool, Callable[[], list[Any]]] = {}
         self._compile_lock = RLock()
 
     @override
@@ -877,17 +916,21 @@ class TemplateHtmlAttr(HtmlAttr):
         The template is defined in the parent's scope, so it renders against the
         surrounding component's context (the same rule as ``TemplateNode``).
         """
+        from citry._vue.capture import prepared_render_active  # noqa: PLC0415
         from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
 
-        if self._generator is None:
+        prepared = prepared_render_active()
+        generator = self._generators.get(prepared)
+        if generator is None:
             with self._compile_lock:
-                if self._generator is None:
+                generator = self._generators.get(prepared)
+                if generator is None:
                     # The nested template is validated like any other: the parse gets
                     # the rules derived from the registered components' declarations.
                     component = context.component
                     user_rules = component.citry._tag_rules() if component is not None else None
                     active_template = context.template_record
-                    self._generator = _compile_nested_template(
+                    generator = _compile_nested_template(
                         self.template,
                         user_rules,
                         type(component) if component is not None else None,
@@ -900,8 +943,24 @@ class TemplateHtmlAttr(HtmlAttr):
                         template_id=(active_template.template_id if active_template is not None else None),
                         origin=(active_template.origin if active_template is not None else None),
                     )
-        parts = _render_body(self._generator(), context)
-        return CitryRender(parts=parts, context=context)
+                    self._generators[prepared] = generator
+        parts = _render_body(generator(), context)
+        selected = CitryRender(parts=parts, context=context)
+        if prepared:
+            from citry._vue.direct import wrap_nested_template  # noqa: PLC0415
+
+            component = context.component
+            if component is not None and component.id is not None:
+                active_template = context.template_record
+                return wrap_nested_template(
+                    selected,
+                    lexical_render_id=component.id,
+                    public_name=self.key,
+                    source=self.source,
+                    span=self.position,
+                    origin=active_template.origin if active_template is not None else None,
+                )
+        return selected
 
     def __repr__(self) -> str:
         return f"TemplateHtmlAttr(key={self.key!r})"
@@ -912,7 +971,6 @@ _attrs_output_cache: dict[_AttrsOutputKey, str] = {}
 _attrs_output_cache_lock = RLock()
 
 
-@final
 class ElementAttrsNode(Node):
     """
     The attribute region of a plain HTML start tag with dynamic attributes.
@@ -920,7 +978,7 @@ class ElementAttrsNode(Node):
     Generated as: ``ElementAttrsNode(source, (start, end), (attrs...), ("var1", ...))``
 
     Emitted when an HTML element (not a component) has at least one dynamic
-    attribute—a ``c-*`` value or a ``c-bind`` spread—or a literal extension
+    attribute (a ``c-*`` value or a ``c-bind`` spread), or a literal extension
     binding/output name that must remain structurally visible. The node covers
     ALL of the tag's attributes, static ones included, because the set resolves
     as one unit:
@@ -958,7 +1016,10 @@ class ElementAttrsNode(Node):
         self._has_spread = any(attr.key == "c-bind" for attr in attrs)
         self._validated_spread_keys: set[str] = set()
         self._has_runtime_events_candidate = self._has_spread or any(
-            attr.key.startswith(("@c-", ":c-")) or attr.key.removeprefix("c-") == "data-cev-bind" for attr in attrs
+            attr.key.startswith(("@c-", ":c-"))
+            or attr.key.lower().startswith("data-cev-")
+            or attr.key.lower() in {"data-citry-runtime-control", "data-citry-runtime-events"}
+            for attr in attrs
         )
         # The tag name, read lazily from the template source on first use
         # (the compiler emits the tag name as a separate static chunk, so the
@@ -983,6 +1044,11 @@ class ElementAttrsNode(Node):
 
     @override
     def render(self, context: CitryContext) -> RenderPart:
+        resolved, validate_keys = self._resolve_for_output(context)
+        return self._format(resolved, context, validate_keys=validate_keys)
+
+    def _resolve_for_output(self, context: CitryContext) -> tuple[dict[str, Any], bool]:
+        """Resolve and run attribute hooks once, before target-specific formatting."""
         resolved = self._resolve(context)
         runtime_candidate = self._runtime_extension_candidate(resolved)
 
@@ -1011,14 +1077,23 @@ class ElementAttrsNode(Node):
                         component_boundary=False,
                     )
 
-        return self._format(resolved, context, validate_keys=validate_extension_output)
+        if validate_extension_output:
+            for key in resolved:
+                validate_html_attr_name(key, where=f"attributes resolved for <{self.tag_name}>")
+        return resolved, validate_extension_output
 
     def _runtime_extension_candidate(self, resolved: Mapping[str, Any]) -> bool:
         """Whether final attrs can still contain one render-time Events binding."""
         if not self._has_spread:
             return self._has_runtime_events_candidate
         return any(
-            isinstance(key, str) and (key.startswith(("@c-", ":c-")) or key == "data-cev-bind") for key in resolved
+            isinstance(key, str)
+            and (
+                key.startswith(("@c-", ":c-"))
+                or key.lower().startswith("data-cev-")
+                or key.lower() in {"data-citry-runtime-control", "data-citry-runtime-events"}
+            )
+            for key in resolved
         )
 
     def _resolve(self, context: CitryContext) -> dict[str, Any]:
@@ -1034,7 +1109,7 @@ class ElementAttrsNode(Node):
             items: list[tuple[str, Any]] = []
             for attr, resolved_key in zip(self.attrs, self._resolved_keys, strict=True):
                 if attr.key.startswith("c-"):
-                    _reject_dynamic_events_compiler_attr(resolved_key, tag_name=self.tag_name)
+                    _reject_reserved_events_attr(resolved_key, tag_name=self.tag_name)
                 items.append((resolved_key, const_value(attr.resolve(context))))
             merged = _merge_resolved_attrs(items)
         else:
@@ -1099,13 +1174,13 @@ class ElementAttrsNode(Node):
                             "i18n catalog consumed it. Configure i18n or declare component messages before "
                             "rendering a dynamic $c-tr binding."
                         )
-                    _reject_dynamic_events_compiler_attr(resolved_key, tag_name=self.tag_name)
+                    _reject_reserved_events_attr(resolved_key, tag_name=self.tag_name)
                     if cacheable_key and len(self._validated_spread_keys) < 64:
                         self._validated_spread_keys.add(resolved_key)
                     items.append((resolved_key, const_value(item)))
             else:
                 if attr.key.startswith("c-"):
-                    _reject_dynamic_events_compiler_attr(compiled_key, tag_name=self.tag_name)
+                    _reject_reserved_events_attr(compiled_key, tag_name=self.tag_name)
                 items.append((compiled_key, const_value(attr.resolve(context))))
         return _merge_resolved_attrs(items)
 
@@ -1284,7 +1359,7 @@ def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
 
 def _is_special_component_input_key(key: str) -> bool:
     """Whether a fixed component attr needs the general binding pipeline."""
-    return key.startswith(("@", ":", "#c-", "$c-", "x-on:"))
+    return key in {"ref", "v-on"} or key.startswith(("@", ":", "#c-", "$c-", "x-on:", "v-bind", "v-on:"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1305,7 +1380,10 @@ class _ResolvedComponentInputs:
     """The two independent channels resolved from a component start tag."""
 
     kwargs: dict[str, Any]
-    client_bindings: tuple[ComponentTagClientBindingRecord, ...]
+    # A spread-authored handler becomes a runtime event binding; everything else
+    # on a component tag stays an ordinary client binding.
+    client_bindings: tuple[ComponentTagClientBinding | RuntimeComponentEventBinding, ...]
+    element_bindings: tuple[ComponentTagClientBinding, ...] = ()
 
 
 ComponentNodeMetadataEntry: TypeAlias = (
@@ -1365,12 +1443,20 @@ class ComponentNode(Node):
         self.name = name
         self.contains_fills = contains_fills
         self.metadata = metadata
+        if name == "mark" and (len(attrs) != 1 or type(attrs[0]) is not StaticHtmlAttr or attrs[0].key != "name"):
+            raise ValueError("<c-mark> requires one directly authored literal 'name' attribute.")
         self._has_plain_component_inputs = name != "element" and all(
             attr.key != "c-bind" and not _is_special_component_input_key(attr.key.removeprefix("c-")) for attr in attrs
         )
         self._metadata_locus: Literal["range", "element"] | None = None
         self.key: ExprHtmlAttr | None = None
         self.morph_mode: Literal["ignore"] | None = None
+        # Filled by the Events extension from `_transform_element_attrs`, which
+        # compiles each literal binding into a plain JSON-shaped mapping.
+        self._element_event_bindings: tuple[dict[str, object], ...] = ()
+        self._element_poll_bindings: tuple[dict[str, object], ...] = ()
+        self._element_control_bindings: tuple[dict[str, object], ...] = ()
+        self._element_runtime_events_candidate = False
 
         if metadata is None:
             return
@@ -1444,6 +1530,11 @@ class ComponentNode(Node):
                 context,
                 body=self.body,
             )
+        if self._metadata_locus == "range" and self.morph_mode == "ignore":
+            from citry._vue.capture import vue_render_active  # noqa: PLC0415
+
+            if vue_render_active():
+                raise TypeError("component #c-ignore is unsupported in prepared Vue")
         slots = self._collect_slots(context)
         # The key expression evaluates once in the parent's scope. Exactly
         # None opts out; every other value, including falsey values, is a key.
@@ -1451,47 +1542,60 @@ class ComponentNode(Node):
         if self.key is not None:
             key_value = const_value(self.key.resolve(context))
             evaluated_key = None if key_value is None else str(key_value)
-        range_morph_key = evaluated_key if self._metadata_locus == "range" else None
-        range_morph_mode = self.morph_mode if self._metadata_locus == "range" else None
-        element_morph_metadata = (
-            _ElementMorphMetadata(key=evaluated_key, morph_mode=self.morph_mode)
-            if self._metadata_locus == "element"
-            else None
-        )
-        ownership = context.ownership
-        if ownership is None:
-            msg = "ComponentNode.render requires an active ownership graph."
-            raise RuntimeError(msg)
-        invocation_id = ownership.record_component_invocation(
-            context,
-            authored_tag=self.name,
-            target_class_id=child_cls.class_id,
-            morph_key=range_morph_key,
-            morph_mode=range_morph_mode,
-            source=self.source,
-            position=self.position,
-            client_bindings=resolved.client_bindings,
-        )
-        ownership.bind_template_fill_sources(slots, invocation_id)
+        element_key_target = self._metadata_locus == "element" or self.name == "element"
+        element_morph_metadata = None
+        if element_key_target and (
+            evaluated_key is not None
+            or self.morph_mode is not None
+            or resolved.element_bindings
+            or self._element_event_bindings
+            or self._element_poll_bindings
+            or self._element_control_bindings
+            or self._element_runtime_events_candidate
+        ):
+            element_morph_metadata = _ElementMorphMetadata(
+                key=evaluated_key,
+                morph_mode=self.morph_mode,
+                authored_bindings=resolved.element_bindings,
+                event_bindings=self._element_event_bindings,
+                poll_bindings=self._element_poll_bindings,
+                control_bindings=self._element_control_bindings,
+                owner_name=type(context.component).__name__,
+                runtime_events_candidate=self._element_runtime_events_candidate,
+            )
         element_type = CitryElement
         if child_cls._citry_dynamic_selector:
             from citry.components.dynamic import _DynamicSelectorElement  # noqa: PLC0415
 
             element_type = _DynamicSelectorElement
+        from citry.citry_element import _PreparedCallMetadata  # noqa: PLC0415
+
+        # Element-locus keys travel through _ElementMorphMetadata to the
+        # selected native root. They are not also keys for a transparent
+        # component-call range.
+        call_key = None if element_key_target else evaluated_key
         element = element_type(
             child_cls,
             resolved.kwargs,
             slots,
             component_tag_client_bindings=resolved.client_bindings,
-            ownership_invocation_id=invocation_id,
-            ownership_graph=ownership,
             element_morph_metadata=element_morph_metadata,
-            forward_ownership_invocation=self.name == "component",
+            prepared_call_metadata=_PreparedCallMetadata(
+                self.source,
+                self.position,
+                call_key,
+                context.template_record.origin if context.template_record is not None else None,
+                slot_free_body=not self.body,
+            ),
         )
         if child_cls._citry_dynamic_selector:
             selector = cast("_DynamicSelectorElement", element)
             selector.contains_fills = self.contains_fills
             selector.has_range_directives = self.metadata is not None
+        direct_parent_execution = None
+        from citry._vue.direct import active_execution  # noqa: PLC0415
+
+        direct_parent_execution = active_execution()
         # The active provide/inject entries are captured now, like the kwargs:
         # the child renders later (through the queue), when this context is
         # gone, but must still inherit what was provided around its tag.
@@ -1499,7 +1603,7 @@ class ComponentNode(Node):
             element,
             component,
             context.provides,
-            physical_parent_region_id=ownership.current_region_id(),
+            direct_parent_execution=direct_parent_execution,
         )
 
     def _resolve_inputs(self, context: CitryContext) -> _ResolvedComponentInputs:
@@ -1539,6 +1643,7 @@ class ComponentNode(Node):
         kwargs: dict[str, Any] = {}
         element_attr_contributions: list[Mapping[str, Any]] = []
         pending_client_bindings: dict[str, _PendingComponentTagClientBinding] = {}
+        pending_element_bindings: dict[str, _PendingComponentTagClientBinding] = {}
         tag_name = f"c-{self.name}"
         component_boundary = self.name != "element"
         component = context.component
@@ -1557,10 +1662,15 @@ class ComponentNode(Node):
                 kwargs[resolved_key] = value
 
         def reject_component_state_binding(resolved_key: Any) -> None:
+            if component_boundary and isinstance(resolved_key, str) and resolved_key.startswith("x-on:"):
+                raise RuntimeError(
+                    f"Alpine binding {resolved_key!r} was removed; use native Vue v-on or @event syntax."
+                )
             if component_boundary and isinstance(resolved_key, str) and resolved_key.startswith(":c-"):
                 msg = (
                     f"State binding {resolved_key!r} is not valid on the <{tag_name}> component boundary. "
-                    "State bindings target HTML elements; pass data down through $c-props or Python kwargs."
+                    "State bindings go on HTML controls; a child binds its own State in its template. "
+                    "Pass data down with a native Vue prop binding (`:prop` or `v-bind:prop`) or Python kwargs."
                 )
                 raise RuntimeError(msg)
 
@@ -1573,11 +1683,67 @@ class ComponentNode(Node):
             mapping_key: str | None = None,
             mapping_index: int | None = None,
         ) -> bool:
-            if not component_boundary:
+            if (
+                not component_boundary
+                and source is not ComponentTagClientBindingSource.DIRECT
+                and resolved_key.startswith(("@c-", ":c-"))
+            ):
+                # Dynamic Events/State spread keys remain ordinary Python
+                # attributes until the final-tag attrs hook authenticates and
+                # validates them against the selected HTML element.
                 return False
             client_binding_kind = classify_component_tag_client_binding_key(resolved_key, tag_name=tag_name)
             if client_binding_kind is None:
                 return False
+            if not component_boundary:
+                if client_binding_kind not in {
+                    ComponentTagClientBindingKind.EVENT,
+                    ComponentTagClientBindingKind.PROP,
+                    ComponentTagClientBindingKind.PROPS_OBJECT,
+                }:
+                    return False
+                if source is not ComponentTagClientBindingSource.DIRECT or type(attr) is not StaticHtmlAttr:
+                    raise RuntimeError(
+                        f"Executable Vue binding {resolved_key!r} on <c-element> must be authored directly "
+                        "with a static template value; it cannot come from c-bind or c-* evaluation."
+                    )
+                if "{{" in str(raw_value):
+                    raise RuntimeError(
+                        f"Executable Vue binding {resolved_key!r} on <c-element> cannot use template interpolation."
+                    )
+                pending_element_bindings.pop(resolved_key, None)
+                pending_element_bindings[resolved_key] = _PendingComponentTagClientBinding(
+                    kind=client_binding_kind,
+                    key=resolved_key,
+                    value=resolve_component_tag_client_binding_value(
+                        resolved_key,
+                        raw_value,
+                        tag_name="c-element",
+                        kind=client_binding_kind,
+                    )
+                    or "",
+                    source=source,
+                    attr=attr,
+                    mapping_key=mapping_key,
+                    mapping_index=mapping_index,
+                )
+                element_attr_contributions.append({resolved_key: raw_value})
+                return True
+            if client_binding_kind is not ComponentTagClientBindingKind.CITRY_HANDLER and (
+                source is not ComponentTagClientBindingSource.DIRECT or type(attr) is not StaticHtmlAttr
+            ):
+                raise RuntimeError(
+                    f"Executable Vue binding {resolved_key!r} on <{tag_name}> must be authored directly "
+                    "with a static template value; it cannot come from c-bind, c-* evaluation, or templates."
+                )
+            if client_binding_kind is not ComponentTagClientBindingKind.CITRY_HANDLER and "{{" in str(raw_value):
+                raise RuntimeError(
+                    f"Executable Vue binding {resolved_key!r} on <{tag_name}> cannot use template interpolation."
+                )
+            if resolved_key in {":key", "v-bind:key", ":citry-id", "v-bind:citry-id"}:
+                raise RuntimeError(
+                    f"Vue binding {resolved_key!r} on <{tag_name}> targets Citry-owned component identity."
+                )
             client_binding_value = resolve_component_tag_client_binding_value(
                 resolved_key,
                 raw_value,
@@ -1617,7 +1783,7 @@ class ComponentNode(Node):
                 for mapping_index, (bound_key, bound_value) in enumerate(bound.items()):
                     if self.name == "element":
                         resolved_bound_key = validate_html_attr_name(bound_key, where="c-bind on <c-element>")
-                        _reject_dynamic_events_compiler_attr(resolved_bound_key, tag_name="c-element")
+                        _reject_reserved_events_attr(resolved_bound_key, tag_name="c-element")
                     elif not isinstance(bound_key, str):
                         msg = (
                             f"c-bind on <c-{self.name}> must use string kwarg names, "
@@ -1657,7 +1823,7 @@ class ComponentNode(Node):
                 else ComponentTagClientBindingSource.DIRECT
             )
             if not component_boundary and client_binding_source == ComponentTagClientBindingSource.SERVER_DYNAMIC:
-                _reject_dynamic_events_compiler_attr(resolved_key, tag_name="c-element")
+                _reject_reserved_events_attr(resolved_key, tag_name="c-element")
             if apply_client_binding(resolved_key, value, attr, source=client_binding_source):
                 continue
             if _kwarg_is_const(attr, context):
@@ -1687,78 +1853,37 @@ class ComponentNode(Node):
                     "write the attribute directly on the component tag in the template."
                 )
                 raise RuntimeError(msg)
-        ownership = context.ownership
-        if ownership is None:
-            msg = "Component input resolution requires an active ownership graph."
-            raise RuntimeError(msg)
-        client_bindings: list[ComponentTagClientBindingRecord] = []
-        for pending in pending_client_bindings.values():
-            source_location_id = ownership.record_source_location(
-                context,
-                kind=SourceLocationKind.COMPONENT_TAG_CLIENT_BINDING,
-                source=pending.attr.source,
-                position=pending.attr.position,
-                mapping_key=pending.mapping_key,
-                mapping_index=pending.mapping_index,
-            )
-            location = ownership.source_location(source_location_id)
-            payload: ComponentTagClientBindingPayload
-            if pending.kind == ComponentTagClientBindingKind.PROPS:
-                payload = PropsClientBindingPayload(type="props", expression=pending.value)
-            elif pending.kind == ComponentTagClientBindingKind.ALPINE_HANDLER:
-                payload = AlpineHandlerClientBindingPayload(type="alpine-handler", expression=pending.value)
-            else:
-                # Import lazily: the core node model does not import the Events
-                # extension while built-ins are still being constructed.
-                from citry.ext.events.bindings import (  # noqa: PLC0415
-                    DATA_CEV_ON,
-                    compile_citry_boundary_binding,
-                )
+        from citry.client_directives import authenticated_component_tag_client_binding  # noqa: PLC0415
 
-                events = cast("EventsExtension", component.citry.extensions.get_extension("events"))
-                compiled = compile_citry_boundary_binding(
-                    events.resolve(type(component)),
-                    component._citry_class_id,
-                    type(component).__name__,
-                    tag_name,
-                    pending.key,
-                    pending.value,
-                    line=location.line,
-                    column=location.column,
-                )
-                spec = compiled.spec
-                if compiled.channel == DATA_CEV_ON:
-                    payload = CitryDomEventClientBindingPayload(
-                        type="citry-dom-event",
-                        class_id=str(spec["cid"]),
-                        event=str(spec["event"]),
-                        handler=str(spec["handler"]),
-                        args=spec["args"] if isinstance(spec["args"], str) else None,
-                        prevent=bool(spec["prevent"]),
-                        stop=bool(spec["stop"]),
-                        self_=bool(spec["self"]),
-                        once=bool(spec["once"]),
-                        key=spec["key"] if isinstance(spec["key"], str) else None,
-                        debounce=spec["debounce"] if isinstance(spec["debounce"], int) else None,
-                        throttle=spec["throttle"] if isinstance(spec["throttle"], int) else None,
-                    )
-                else:
-                    payload = CitryPollClientBindingPayload(
-                        type="citry-poll",
-                        class_id=str(spec["cid"]),
-                        handler=str(spec["handler"]),
-                        args=spec["args"] if isinstance(spec["args"], str) else None,
-                        interval=int(spec["interval"]),
-                    )
-            client_bindings.append(
-                ComponentTagClientBindingRecord(
-                    key=pending.key,
-                    payload=payload,
-                    source=pending.source,
-                    source_location_id=source_location_id,
-                )
+        client_bindings = tuple(
+            authenticated_runtime_component_event_binding(
+                key=value.key,
+                value=value.value,
+                spread_attr=value.attr,
             )
-        return _ResolvedComponentInputs(kwargs=kwargs, client_bindings=tuple(client_bindings))
+            if value.source is ComponentTagClientBindingSource.SPREAD
+            else authenticated_component_tag_client_binding(
+                kind=value.kind,
+                key=value.key,
+                value=value.value,
+                authored_attr=value.attr,
+            )
+            for value in pending_client_bindings.values()
+        )
+        element_bindings = tuple(
+            authenticated_component_tag_client_binding(
+                kind=value.kind,
+                key=value.key,
+                value=value.value,
+                authored_attr=value.attr,
+            )
+            for value in pending_element_bindings.values()
+        )
+        return _ResolvedComponentInputs(
+            kwargs=kwargs,
+            client_bindings=client_bindings,
+            element_bindings=element_bindings,
+        )
 
     def _collect_slots(self, context: CitryContext) -> dict[str, Slot]:
         """
@@ -1778,7 +1903,7 @@ class ComponentNode(Node):
             return {}
 
         if not self.contains_fills:
-            if all(isinstance(item, str) and not item.strip() for item in self.body):
+            if _body_is_whitespace_only(self.body):
                 return {}
             return {
                 "default": _make_body_slot(
@@ -1906,7 +2031,7 @@ class ForNode(Node):
         # binding check runs against the live context immediately before that
         # text is emitted (an earlier expression may have mutated the mapping
         # since the cache entry was built).
-        self._precomputed_text: str | None = None
+        self._precomputed_parts: tuple[RenderPart, ...] | None = None
         # The generator-expression evaluator for the `each` clause, compiled
         # lazily on first render and reused afterwards (the node is cached across
         # renders, so this compiles once).
@@ -1914,8 +2039,12 @@ class ForNode(Node):
 
     def _with_precomputed_text(self, text: str) -> ForNode:
         """Return a fresh runtime guard for text produced by const unrolling."""
+        return self._with_precomputed_parts((text,))
+
+    def _with_precomputed_parts(self, parts: tuple[RenderPart, ...]) -> ForNode:
+        """Return a fresh runtime guard for certified immutable render parts."""
         node = ForNode(self.source, self.branches, self.used_vars)
-        node._precomputed_text = text
+        node._precomputed_parts = parts
         return node
 
     def iter_bodies(self, context: CitryContext) -> Iterator[tuple[list[BodyItem], CitryContext]]:
@@ -1967,7 +2096,6 @@ class ForNode(Node):
                 component=context.component,
                 provides=context.provides,
                 sandboxed=context.sandboxed,
-                ownership=context.ownership,
                 template_record=context.template_record,
                 _simple_scope=context._simple_scope,
             )
@@ -1986,15 +2114,49 @@ class ForNode(Node):
         """
         from citry.component_render import _render_body  # noqa: PLC0415
 
-        if self._precomputed_text is not None:
+        if self._precomputed_parts is not None:
             targets: tuple[str, ...] = self.branches[0][3]
             _validate_introduced_variables("c-for", targets, context)
-            return CitryRender(parts=[self._precomputed_text], context=context)
+            return CitryRender(parts=list(self._precomputed_parts), context=context)
 
         parts: list[RenderPart] = []
         for body, body_context in self.iter_bodies(context):
             parts.extend(_render_body(body, body_context))
-        return CitryRender(parts=parts, context=context)
+        selected = CitryRender(parts=parts, context=context)
+        from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+        if not direct_prepared_render_active() or len(self.branches) != 1:
+            return selected
+        body = self.branches[0][2]
+        if len(body) != 1 or type(body[0]) is not ComponentNode:
+            return selected
+        call_node = body[0]
+        from citry.client_directives import classify_component_tag_client_binding_key  # noqa: PLC0415
+
+        has_browser_binding = any(
+            attr.key == "c-bind"
+            or classify_component_tag_client_binding_key(attr.key.removeprefix("c-"), tag_name=call_node.name)
+            is not None
+            for attr in call_node.attrs
+        )
+        if (
+            call_node.body
+            or call_node.key is None
+            or call_node.name == "element"
+            or has_browser_binding
+            or context.component is None
+            or any(_is_special_component_input_key(attr.key) for attr in call_node.attrs)
+        ):
+            return selected
+        registry = context.component.citry
+        if not registry._registry_ready():
+            return selected
+        child_cls = registry._registry._name_to_cls.get(call_node.name)
+        if child_cls is None or child_cls.simple or child_cls.transparent or child_cls._citry_dynamic_selector:
+            return selected
+        from citry._vue.direct import DirectCallRunRender  # noqa: PLC0415
+
+        return DirectCallRunRender(selected, call_node=call_node, child_type_key=child_cls.class_id)
 
     @override
     def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
@@ -2101,97 +2263,121 @@ class SlotNode(Node):
             slot_fills=fills,
         )
 
-        ownership = context.ownership
-        if ownership is None:
-            msg = "SlotNode.render requires an active ownership graph."
-            raise RuntimeError(msg)
-        has_rendered_hook = component.citry.extensions.has_hook("on_slot_rendered")
-        selection_checkpoint = ownership.checkpoint()
+        from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
 
-        with ownership.slot_site(context, source=self.source, position=self.position) as slot_site_location_id:
-            # The slot's own body, as a Slot: the fallback handle when a fill
-            # exists, the rendered content when none does.
-            body_slot = _make_body_slot(
-                self.body,
-                context,
-                type(component).__name__,
-                name,
-                None,
-                None,
-                self.position,
-                source=self.source,
-                kind=LogicalFillKind.FALLBACK,
-                fallback_slot_site_location_id=slot_site_location_id,
-            )
+        if direct_prepared_render_active():
+            return self._render_direct(context, component, name, required, data, fill)
+        return self._render_plain(context, component, name, required, data, fill)
 
-            if fill is not None:
-                slot_used = fill
-                fill_id = ownership.supplied_fill_id(component, name)
-                if fill_id is None:
-                    fill_id = ownership.bind_typed_default(component, name)
-                # The provides active at this slot site travel into the fill, so
-                # components inside the fill body can inject what this component
-                # provides around the slot (docs/design/component_provide.md section 4.3).
-                # An error raised by the slot content gets this slot as a path
-                # frame ("Card(slot:body)") in its message.
-                with ownership.select_supply(fill, fill_id):
-                    with add_slot_to_error_message(type(component).__name__, name):
-                        part = _render_slot_value(fill, data, body_slot, context)
-            else:
-                if required:
-                    msg = (
-                        f"Slot {name!r} of component {type(component).__name__!r} is marked as "
-                        "required, but no fill was provided."
-                    )
-                    close = get_close_matches(name, list(fills), n=1, cutoff=0.7)
-                    if close:
-                        msg += f" Did you mean {close[0]!r}?"
-                    raise RuntimeError(msg)
-                slot_used = body_slot
-                with add_slot_to_error_message(type(component).__name__, name):
-                    part = _render_slot_value(body_slot, data, None, context)
-
-        if not has_rendered_hook:
+    def _render_plain(
+        self,
+        context: CitryContext,
+        component: Any,
+        name: str,
+        required: bool,
+        data: dict[str, Any],
+        fill: Slot | None,
+    ) -> RenderPart:
+        """Render an ordinary HTML slot without client ownership bookkeeping."""
+        body_slot = _make_body_slot(
+            self.body,
+            context,
+            type(component).__name__,
+            name,
+            None,
+            None,
+            self.position,
+            source=self.source,
+            kind=LogicalFillKind.FALLBACK,
+        )
+        if fill is None and required:
+            raise RuntimeError(_missing_required_slot_message(component, name))
+        slot_used = fill if fill is not None else body_slot
+        with add_slot_to_error_message(type(component).__name__, name):
+            part = _render_slot_value(slot_used, data, body_slot if fill is not None else None, context)
+        if not component.citry.extensions.has_hook("on_slot_rendered"):
             return part
+        return component.citry.extensions.on_slot_rendered(
+            component=component,
+            slot=slot_used,
+            slot_name=name,
+            slot_node=self,
+            slot_is_required=required,
+            result=part,
+        )
 
-        result_checkpoint = ownership.checkpoint()
-        outlet_region_id = ownership.resolve_slot_region(slot_site_location_id)
-        try:
-            with ownership.active_region(outlet_region_id):
-                selected_part = component.citry.extensions.on_slot_rendered(
-                    component=component,
-                    slot=slot_used,
-                    slot_name=name,
-                    slot_node=self,
-                    slot_is_required=required,
-                    result=unwrap_physical_region(part),
-                )
-        except Exception:
-            ownership.retire_unselected_after(
-                result_checkpoint,
-                through_order=ownership.checkpoint(),
-                preserved_render_ids=set(),
+    def _render_direct(
+        self,
+        context: CitryContext,
+        component: Any,
+        name: str,
+        required: bool,
+        data: dict[str, Any],
+        fill: Slot | None,
+    ) -> RenderPart:
+        """Render one prepared outlet and retain only its selected direct relation."""
+        from citry._vue.direct import (  # noqa: PLC0415
+            DirectSlotRender,
+            begin_slot_execution,
+            direct_execution_scope,
+            direct_fill_source,
+            wrap_slot_result,
+        )
+
+        body_slot = _make_body_slot(
+            self.body,
+            context,
+            type(component).__name__,
+            name,
+            None,
+            None,
+            self.position,
+            source=self.source,
+            kind=LogicalFillKind.FALLBACK,
+        )
+        if fill is None and required:
+            raise RuntimeError(_missing_required_slot_message(component, name))
+        slot_used = fill if fill is not None else body_slot
+        source = direct_fill_source(slot_used)
+        if source is None:
+            # A Python-provided Slot has no authored fill relation of its own,
+            # but components rendered by that Slot can contain authenticated
+            # template fills. Keep direct capture active for those descendants;
+            # _render_plain does not manufacture a relation for this outlet.
+            return self._render_plain(context, component, name, required, data, fill)
+        execution = begin_slot_execution(
+            source,
+            public_name=name,
+            receiver_render_id=component.id,
+            source=self.source,
+            span=self.position,
+        )
+        with direct_execution_scope(execution), add_slot_to_error_message(type(component).__name__, name):
+            part = _render_slot_value(slot_used, data, body_slot if fill is not None else None, context)
+            if not component.citry.extensions.has_hook("on_slot_rendered"):
+                return part
+            hook_result = part.selected if isinstance(part, DirectSlotRender) else part
+            selected = component.citry.extensions.on_slot_rendered(
+                component=component,
+                slot=slot_used,
+                slot_name=name,
+                slot_node=self,
+                slot_is_required=required,
+                result=hook_result,
             )
-            raise
-        hook_checkpoint = ownership.checkpoint()
-        selected_part = ownership.rebind_slot_region(outlet_region_id, selected_part)
-        selected_render_ids = _render_part_ids(selected_part)
-        selected_region_ids = ownership.selected_region_ids(
-            render_object_ids=_render_part_object_ids(selected_part),
-        )
-        ownership.retire_unselected_after(
-            result_checkpoint,
-            through_order=hook_checkpoint,
-            preserved_render_ids=selected_render_ids,
-            preserved_region_ids=selected_region_ids,
-        )
-        ownership.retire_unselected_after(
-            selection_checkpoint,
-            through_order=result_checkpoint,
-            preserved_render_ids={component.id, *selected_render_ids},
-            preserved_region_ids={outlet_region_id, *selected_region_ids},
-        )
-        return selected_part
+            selected_source = source
+            if isinstance(selected, DirectSlotRender):
+                selected_source = selected.fill_source
+                selected = selected.selected
+            return wrap_slot_result(
+                selected,
+                fill_source=selected_source,
+                public_name=name,
+                receiver_render_id=component.id,
+                source=self.source,
+                span=self.position,
+                execution=execution,
+            )
 
     def _resolve_props(self, context: CitryContext) -> tuple[str, bool, dict[str, Any]]:
         """

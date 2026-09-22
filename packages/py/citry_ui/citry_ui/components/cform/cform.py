@@ -97,6 +97,7 @@ class CForm(LibraryComponent):
                 "id",
                 "method",
                 "novalidate",
+                "ref",
                 "target",
             },
             "CForm",
@@ -129,14 +130,15 @@ class CForm(LibraryComponent):
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
         return {
-            "disabled": kwargs.disabled,
-            "readonly": kwargs.readonly,
-            "submitting": kwargs.submitting,
+            "serverDisabled": kwargs.disabled,
+            "serverReadonly": kwargs.readonly,
+            "serverSubmitting": kwargs.submitting,
             "colors": ["red", "green", "blue"],
         }
 
     template = """
       <form
+        ref="root"
         class="cui-form"
         c-id="form_id"
         c-action="action"
@@ -146,9 +148,9 @@ class CForm(LibraryComponent):
         c-autocomplete="autocomplete"
         c-novalidate="novalidate"
         c-aria-busy="aria_busy"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-submitting="submitting"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-submitting="'' if submitting else None"
         c-bind="attrs"
         data-citry-ui-part="form"
       >
@@ -163,23 +165,42 @@ class CForm(LibraryComponent):
       </form>
     """
 
-    js = """
+    js = (
+        """
       $component({
         props: {
-          disabled: {},
-          readonly: {},
-          submitting: {},
+          disabled: {default: undefined},
+          readonly: {default: undefined},
+          submitting: {default: undefined},
         },
-        init: ({ els, data, scope, props, effect, reactive, provide }) => {
-          const form = els[0];
+        data() {
+          const component = this;
+          return {formService: {
+            form: null,
+            get disabled() { return component.resolvedDisabled; },
+            get readonly() { return component.resolvedReadonly; },
+          }};
+        },
+        computed: {
+          resolvedDisabled() { return typeof this.disabled === 'boolean' ? this.disabled : this.serverDisabled; },
+          resolvedReadonly() { return typeof this.readonly === 'boolean' ? this.readonly : this.serverReadonly; },
+"""
+        "          resolvedSubmitting() { return typeof this.submitting === 'boolean' ? this.su"
+        "bmitting : this.serverSubmitting; },\n"
+        """        },
+        provide() { return {[Symbol.for('citry-ui:form')]: this.formService}; },
+        onServerRender: ({component}) => {
+          const form = component.$refs.root;
+          if (!(form instanceof HTMLFormElement)) throw new Error('[citry-ui] CForm settled anatomy is invalid.');
           const fieldset = form.querySelector('[data-citry-ui-part="fieldset"]');
+          if (!(fieldset instanceof HTMLFieldSetElement)) throw new Error('[citry-ui] CForm fieldset is missing.');
           const invalidEpisodes = new Set();
           const resetTimers = new Set();
           let invalidGeneration = 0;
           let configuration = {
-            disabled: data.disabled,
-            readonly: data.readonly,
-            submitting: data.submitting,
+            disabled: component.resolvedDisabled,
+            readonly: component.resolvedReadonly,
+            submitting: component.resolvedSubmitting,
           };
 
           const describeValue = (value) => {
@@ -202,25 +223,20 @@ class CForm(LibraryComponent):
             );
           };
           const resolveBoolean = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const value = component[name];
+            const fallback = component[`server${name[0].toUpperCase()}${name.slice(1)}`];
+            if (value === undefined) return fallback;
             if (typeof value === "boolean") {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return fallback;
           };
-          const context = reactive({
-            form,
-            disabled: configuration.disabled,
-            readonly: configuration.readonly,
-          });
-          provide(Symbol.for("citry-ui:form"), context);
+          component.formService.form = form;
 
           const applyConfiguration = (next) => {
             configuration = next;
-            context.disabled = next.disabled;
-            context.readonly = next.readonly;
             fieldset.disabled = next.disabled;
             form.toggleAttribute("data-disabled", next.disabled);
             form.toggleAttribute("data-readonly", next.readonly);
@@ -261,7 +277,7 @@ class CForm(LibraryComponent):
           form.addEventListener("invalid", onInvalid, true);
           form.addEventListener("reset", onReset);
           form.addEventListener("submit", onSubmit, true);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyConfiguration({
               disabled: resolveBoolean("disabled"),
               readonly: resolveBoolean("readonly"),
@@ -278,11 +294,13 @@ class CForm(LibraryComponent):
               clearTimeout(timer);
             }
             resetTimers.clear();
+            component.formService.form = null;
             form.removeAttribute("data-citry-form-initialized");
           };
         },
       });
     """
+    )
 
     css_file = "runtime.min.css"
 

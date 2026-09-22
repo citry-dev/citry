@@ -17,7 +17,7 @@ test("routes only browser-valued template attributes", () => {
 	assert.equal(browserProjectionCandidateAt(source, "python", source.indexOf("refresh") + 2), false);
 });
 
-test("finds Alpine expressions inside nested templates", () => {
+test("finds Vue expressions inside nested templates", () => {
 	const source = "<c-card c-body=\"<><button :disabled='busy'>Save</button></>\" />";
 
 	assert.equal(browserProjectionCandidateAt(source, "citry-html", source.indexOf("busy") + 2), true);
@@ -43,4 +43,12 @@ test("routes registry-owned standalone HTML and unquoted browser values", () => 
 
 	assert.equal(browserProjectionCandidateAt(source, "html", source.indexOf("busy") + 2), true);
 	assert.equal(browserProjectionCandidateAt(source, "html", source.indexOf("Save") + 2), false);
+});
+
+test("routes native Vue slot shorthands but keeps Citry metadata in Python", () => {
+	const source = '<c-List #default="{ item }" #named="slotProps" #c-key="python_key"></c-List>';
+
+	assert.equal(browserProjectionCandidateAt(source, "citry-html", source.indexOf("item") + 2), true);
+	assert.equal(browserProjectionCandidateAt(source, "citry-html", source.indexOf("slotProps") + 2), true);
+	assert.equal(browserProjectionCandidateAt(source, "citry-html", source.indexOf("python_key") + 2), false);
 });

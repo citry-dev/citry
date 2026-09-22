@@ -15,20 +15,13 @@ def field_input_states_component(app: Citry) -> type[Component]:
           <section
             class="citry-ui-quality-stack"
             aria-labelledby="field-input-states-title"
-            x-data
-            x-init="Alpine.store('fieldInputQuality', {
-              controlled: true,
-              value: 'Ochre sea star',
-              invalid: false,
-              formDisabled: false,
-            })"
           >
             <h1 id="field-input-states-title">
               Field and Input states
             </h1>
             <c-CForm
               id="quality-field-form"
-              $c-props="{ disabled: $store.fieldInputQuality.formDisabled }"
+              :disabled="formDisabled"
             >
               <c-CField required control_id="quality-required">
                 <c-fill name="label">
@@ -48,7 +41,7 @@ def field_input_states_component(app: Citry) -> type[Component]:
               </c-CField>
               <c-CField
                 control_id="quality-controlled"
-                $c-props="{ invalid: $store.fieldInputQuality.invalid }"
+                :invalid="invalid"
               >
                 <c-fill name="label">
                   Controlled species note
@@ -60,14 +53,12 @@ def field_input_states_component(app: Citry) -> type[Component]:
                   <c-CInput
                     id="quality-controlled"
                     name="species"
-                    $c-props="{
-                      value: $store.fieldInputQuality.controlled
-                        ? $store.fieldInputQuality.value
-                        : undefined,
-                    }"
+                    :value="controlled
+                        ? value
+                        : undefined"
                     @input="
-                      $store.fieldInputQuality.value = $event.target.value;
-                      $store.fieldInputQuality.invalid = $event.target.value.length < 3;
+                      value = $event.target.value;
+                      invalid = $event.target.value.length < 3;
                     "
                   />
                 </c-fill>
@@ -99,7 +90,7 @@ def field_input_states_component(app: Citry) -> type[Component]:
               <button
                 id="quality-release-control"
                 type="button"
-                @click="$store.fieldInputQuality.controlled = false"
+                @click="controlled = false"
               >
                 Release controlled value
               </button>
@@ -107,9 +98,9 @@ def field_input_states_component(app: Citry) -> type[Component]:
                 id="quality-restore-control"
                 type="button"
                 @click="
-                  $store.fieldInputQuality.value = 'Giant green anemone';
-                  $store.fieldInputQuality.invalid = false;
-                  $store.fieldInputQuality.controlled = true;
+                  value = 'Giant green anemone';
+                  invalid = false;
+                  controlled = true;
                 "
               >
                 Restore controlled value
@@ -121,11 +112,23 @@ def field_input_states_component(app: Citry) -> type[Component]:
             <button
               id="quality-toggle-form-disabled"
               type="button"
-              @click="$store.fieldInputQuality.formDisabled = !$store.fieldInputQuality.formDisabled"
+              @click="formDisabled = !formDisabled"
             >
               Toggle form disabled
             </button>
           </section>
+        """
+        js = """
+          $component({
+            data() {
+              return {
+                controlled: true,
+                value: 'Ochre sea star',
+                invalid: false,
+                formDisabled: false,
+              };
+            },
+          });
         """
 
     return CitryUiFieldInputStates

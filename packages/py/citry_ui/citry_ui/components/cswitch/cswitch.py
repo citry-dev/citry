@@ -19,7 +19,25 @@ _SIZES = ("sm", "md", "lg")
 _LABEL_POSITIONS = ("start", "end")
 _RUNTIME_PREFIXES = ("data-citry-", "data-cev", "data-cid")
 _OWNERSHIP_DIRECTIVES = frozenset(
-    {"x-bind", "x-for", "x-html", "x-if", "x-ignore", "x-model", "x-modelable", "x-teleport", "x-text"}
+    {
+        "v-bind",
+        "v-for",
+        "v-html",
+        "v-if",
+        "v-model",
+        "v-on",
+        "v-show",
+        "v-text",
+        "x-bind",
+        "x-for",
+        "x-html",
+        "x-if",
+        "x-ignore",
+        "x-model",
+        "x-modelable",
+        "x-teleport",
+        "x-text",
+    }
 )
 _ROOT_OWNED_ATTRS = frozenset(
     {
@@ -126,8 +144,8 @@ def _copy_attrs(input_name: str, attrs: Mapping[str, object] | None) -> dict[str
 
 def _dynamic_target(attribute: str) -> str | None:
     normalized = attribute.casefold()
-    if normalized.startswith("x-bind:"):
-        return normalized.removeprefix("x-bind:").split(".", 1)[0]
+    if normalized.startswith(("x-bind:", "v-bind:")):
+        return normalized.split(":", 1)[1].split(".", 1)[0]
     if normalized.startswith((":", ".")):
         return normalized[1:].split(".", 1)[0]
     return None
@@ -304,7 +322,7 @@ class CSwitch(LibraryComponent):
             "has_body": has_label or has_description,
             "label_attrs": {"for": input_id},
             "description_id": description_id,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "field_supports_required": "true" if field is not None else None,
             "field_supports_readonly": "false" if field is not None else None,
             "attrs": merge_root_attrs(attrs, kwargs.class_, kwargs.style),
@@ -314,13 +332,13 @@ class CSwitch(LibraryComponent):
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         field = self.inject(FIELD_CONTEXT_KEY, None)
         return {
-            "value": self._switch_value,
-            "checked": kwargs.checked,
-            "required": bool(field.required) if field is not None else bool(kwargs.required),
-            "disabled": bool(field.disabled) if field is not None else bool(kwargs.disabled),
-            "invalid": bool(field.invalid) if field is not None else bool(kwargs.invalid),
-            "size": _plain_choice("size", kwargs.size, _SIZES),
-            "labelPos": _plain_choice("label_pos", kwargs.label_pos, _LABEL_POSITIONS),
+            "serverValue": self._switch_value,
+            "serverChecked": kwargs.checked,
+            "serverRequired": bool(field.required) if field is not None else bool(kwargs.required),
+            "serverDisabled": bool(field.disabled) if field is not None else bool(kwargs.disabled),
+            "serverInvalid": bool(field.invalid) if field is not None else bool(kwargs.invalid),
+            "serverSize": _plain_choice("size", kwargs.size, _SIZES),
+            "serverLabelPos": _plain_choice("label_pos", kwargs.label_pos, _LABEL_POSITIONS),
             "descriptionId": self._switch_description_id,
             "hasDescription": self._switch_has_description,
             "externalDescribedBy": self._switch_external_described_by,
@@ -330,9 +348,9 @@ class CSwitch(LibraryComponent):
     template = """
       <span
         class="cui-switch"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-invalid="'' if invalid else None"
         c-data-size="size"
         c-data-label-pos="label_pos"
         c-bind="attrs"
@@ -391,14 +409,21 @@ class CSwitch(LibraryComponent):
           size: {},
           label_pos: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const root = els[0];
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          if (!(root instanceof HTMLElement)) throw new Error("[citry-ui] CSwitch settled anatomy is invalid.");
+          const data = component;
+          const props = component.$props;
           const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
           if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
             throw new Error("[citry-ui] CSwitch requires one direct native checkbox input.");
           }
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const field = component.fieldService;
+          const form = component.formService;
           const handoffKey = Symbol.for("citry-ui:switch-handoff");
           const invalidEpisodes = new Set();
           const resetTimers = new Set();
@@ -439,10 +464,10 @@ class CSwitch(LibraryComponent):
             return fallback;
           };
           const canonicalValue = () => {
-            if (props.value === undefined) return data.value;
+            if (props.value === undefined) return data.serverValue;
             if (typeof props.value !== "string" || props.value.includes("\0")) {
               reportInvalid("value", props.value);
-              return data.value;
+              return data.serverValue;
             }
             invalidEpisodes.delete("value");
             return props.value.replace(/\r\n?/g, "\n");
@@ -478,9 +503,9 @@ class CSwitch(LibraryComponent):
               disabled = field.disabled;
               externalInvalid = field.invalid;
             } else {
-              required = resolveBoolean("required", data.required);
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              externalInvalid = resolveBoolean("invalid", data.invalid);
+              required = resolveBoolean("required", data.serverRequired);
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
+              externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             }
             const invalid = externalInvalid || nativeInvalid;
             input.required = required;
@@ -491,8 +516,8 @@ class CSwitch(LibraryComponent):
             root.toggleAttribute("data-disabled", input.matches(":disabled"));
             root.toggleAttribute("data-invalid", invalid);
             root.toggleAttribute("data-checked", input.checked);
-            root.dataset.size = resolveChoice("size", data.size, ["sm", "md", "lg"]);
-            root.dataset.labelPos = resolveChoice("label_pos", data.labelPos, ["start", "end"]);
+            root.dataset.size = resolveChoice("size", data.serverSize, ["sm", "md", "lg"]);
+            root.dataset.labelPos = resolveChoice("label_pos", data.serverLabelPos, ["start", "end"]);
             invalid ? input.setAttribute("aria-invalid", "true") : input.removeAttribute("aria-invalid");
             syncRelationships(invalid);
           };
@@ -555,11 +580,11 @@ class CSwitch(LibraryComponent):
           input.addEventListener("change", onChange);
           input.addEventListener("invalid", onInvalid);
           nativeForm?.addEventListener("reset", onReset);
-          const unregisterCapability = field?.registerControlCapabilities?.({
-            supportsRequired: true,
-            supportsReadonly: false,
+          const unregisterCapability = field?.registerCapabilities({
+            required: true,
+            readonly: false,
           });
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyControlled();
             applyState();
           });

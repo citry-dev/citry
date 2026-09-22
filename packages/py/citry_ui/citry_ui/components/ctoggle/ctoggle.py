@@ -240,13 +240,13 @@ class CToggleGroup(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "value": list(self._toggle_value) if isinstance(self._toggle_value, tuple) else self._toggle_value,
+            "serverValue": list(self._toggle_value) if isinstance(self._toggle_value, tuple) else self._toggle_value,
             "multiple": bool(kwargs.multiple),
             "mandatory": bool(kwargs.mandatory),
-            "disabled": bool(kwargs.disabled),
-            "orientation": _choice("CToggleGroup", "orientation", kwargs.orientation, _ORIENTATIONS),
-            "variant": _choice("CToggleGroup", "variant", kwargs.variant, _VARIANTS),
-            "size": _choice("CToggleGroup", "size", kwargs.size, _SIZES),
+            "serverDisabled": bool(kwargs.disabled),
+            "serverOrientation": _choice("CToggleGroup", "orientation", kwargs.orientation, _ORIENTATIONS),
+            "serverVariant": _choice("CToggleGroup", "variant", kwargs.variant, _VARIANTS),
+            "serverSize": _choice("CToggleGroup", "size", kwargs.size, _SIZES),
         }
 
     template = """
@@ -254,13 +254,13 @@ class CToggleGroup(LibraryComponent):
         class="cui-toggle-group"
         c-bind="attrs"
         data-citry-ui-part="toggle-group"
-        c-data-multiple="multiple"
-        c-data-mandatory="mandatory"
-        c-data-disabled="disabled"
+        c-data-multiple="'' if multiple else None"
+        c-data-mandatory="'' if mandatory else None"
+        c-data-disabled="'' if disabled else None"
         c-data-orientation="orientation"
         c-data-variant="variant"
         c-data-size="size"
-        c-data-grow="grow"
+        c-data-grow="'' if grow else None"
         role="group"
         c-aria-label="label"
       >
@@ -268,17 +268,21 @@ class CToggleGroup(LibraryComponent):
       </div>
     """
 
-    js = r"""
+    js = (
+        r"""
       $component({
         props: {value: {}, disabled: {}, orientation: {}, variant: {}, size: {}, onValueChange: {}},
-        init: ({els, data, props, effect, inject}) => {
-          const root = els[0];
-          const form = inject(Symbol.for("citry-ui:form"), null);
+        inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
+          const form = component.formService;
           const owned = () => [...root.querySelectorAll('[data-citry-ui-part="toggle"]')]
             .filter((item) => item.closest('[data-citry-ui-part="toggle-group"]') === root);
           const known = () => new Set(owned().map((item) => item.dataset.value));
           const invalid = new Set();
-          let current = data.multiple ? new Set(data.value ?? []) : data.value;
+          let current = data.multiple ? new Set(data.serverValue ?? []) : data.serverValue;
           let callback = null;
           const report = (name, value) => {
             if (invalid.has(name)) return;
@@ -318,15 +322,17 @@ class CToggleGroup(LibraryComponent):
           };
           const reconcile = () => {
             callback = typeof props.onValueChange === "function" ? props.onValueChange : null;
-            const disabled = props.disabled === undefined ? data.disabled : props.disabled;
+            const disabled = props.disabled === undefined ? data.serverDisabled : props.disabled;
             if (typeof disabled !== "boolean") report("disabled", disabled);
             else invalid.delete("disabled");
-            const localDisabled = typeof disabled === "boolean" ? disabled : data.disabled;
+            const localDisabled = typeof disabled === "boolean" ? disabled : data.serverDisabled;
             const effectiveDisabled = Boolean(form?.disabled) || localDisabled;
             root.toggleAttribute("data-disabled", effectiveDisabled);
-            root.dataset.orientation = resolveChoice("orientation", data.orientation, ["horizontal", "vertical"]);
-            const variant = resolveChoice("variant", data.variant, ["soft", "outline", "plain"]);
-            const size = resolveChoice("size", data.size, ["sm", "md", "lg"]);
+"""
+        '            root.dataset.orientation = resolveChoice("orientation", data.serverOrienta'
+        'tion, ["horizontal", "vertical"]);\n'
+        r"""            const variant = resolveChoice("variant", data.serverVariant, ["soft", "outline", "plain"]);
+            const size = resolveChoice("size", data.serverSize, ["sm", "md", "lg"]);
             root.dataset.variant = variant;
             root.dataset.size = size;
             owned().forEach((item) => {
@@ -361,7 +367,7 @@ class CToggleGroup(LibraryComponent):
             else setTimeout(reconcile, 0);
           };
           root.addEventListener("click", onClick, true);
-          const stop = effect(reconcile);
+          const stop = Citry.vue.watchEffect(reconcile);
           root.setAttribute("data-citry-toggle-group-initialized", "");
           return () => {
             stop?.();
@@ -371,6 +377,7 @@ class CToggleGroup(LibraryComponent):
         },
       })
     """
+    )
 
 
 class CToggle(LibraryComponent):
@@ -437,10 +444,10 @@ class CToggle(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "pressed": bool(kwargs.pressed),
-            "disabled": bool(kwargs.disabled),
-            "variant": self._toggle_variant,
-            "size": self._toggle_size,
+            "serverPressed": bool(kwargs.pressed),
+            "serverDisabled": bool(kwargs.disabled),
+            "serverVariant": self._toggle_variant,
+            "serverSize": self._toggle_size,
         }
 
     template = """
@@ -449,12 +456,12 @@ class CToggle(LibraryComponent):
         c-bind="attrs"
         data-citry-ui-part="toggle"
         c-data-value="value"
-        c-data-pressed="pressed"
-        c-data-disabled="disabled"
-        c-data-item-disabled="item_disabled"
+        c-data-pressed="'' if pressed else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-item-disabled="'' if item_disabled else None"
         c-data-variant="variant"
         c-data-size="size"
-        c-data-grouped="grouped"
+        c-data-grouped="'' if grouped else None"
         type="button"
         c-disabled="disabled"
         c-aria-pressed="'true' if pressed else 'false'"
@@ -466,15 +473,18 @@ class CToggle(LibraryComponent):
     js = r"""
       $component({
         props: {pressed: {}, disabled: {}, variant: {}, size: {}, onPressedChange: {}},
-        init: ({els, data, props, effect, inject}) => {
-          const root = els[0];
+        inject: {formService: {from: Symbol.for("citry-ui:form"), default: null}},
+        onServerRender: ({component}) => {
+          const root = component.$el;
+          const data = component;
+          const props = component.$props;
           const groupRoot = root.closest('[data-citry-ui-part="toggle-group"]');
-          const form = inject(Symbol.for("citry-ui:form"), null);
+          const form = component.formService;
           const grouped = groupRoot !== null;
-          let pressed = data.pressed;
-          let localDisabled = data.disabled;
-          let localVariant = data.variant;
-          let localSize = data.size;
+          let pressed = data.serverPressed;
+          let localDisabled = data.serverDisabled;
+          let localVariant = data.serverVariant;
+          let localSize = data.serverSize;
           let callback = null;
           const invalid = new Set();
           const report = (name, value) => {
@@ -485,7 +495,7 @@ class CToggle(LibraryComponent):
           const apply = () => {
             if (props.disabled === undefined) {
               invalid.delete("disabled");
-              localDisabled = data.disabled;
+              localDisabled = data.serverDisabled;
             } else if (typeof props.disabled === "boolean") {
               invalid.delete("disabled");
               localDisabled = props.disabled;
@@ -509,8 +519,8 @@ class CToggle(LibraryComponent):
               for (const [name, allowed] of Object.entries(choices)) {
                 if (props[name] === undefined) {
                   invalid.delete(name);
-                  if (name === "variant") localVariant = data.variant;
-                  else localSize = data.size;
+                  if (name === "variant") localVariant = data.serverVariant;
+                  else localSize = data.serverSize;
                 } else if (allowed.includes(props[name])) {
                   invalid.delete(name);
                   if (name === "variant") localVariant = props[name];
@@ -541,7 +551,7 @@ class CToggle(LibraryComponent):
             } else setTimeout(apply, 0);
           };
           root.addEventListener("click", onClick);
-          const stop = effect(apply);
+          const stop = Citry.vue.watchEffect(apply);
           root.setAttribute("data-citry-toggle-initialized", "");
           return () => {
             stop?.();

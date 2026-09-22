@@ -23,14 +23,14 @@ class NestedFlowLayouts(Component):
     template = """
       <c-CCol class_="flow-nested" gap="lg">
         <c-for each="batch in batches">
-          <c-CRow justify="between" class_="flow-nested__row">
-            <c-CCol gap="0">
+          <c-CRow #c-key="batch.name" justify="between" class_="flow-nested__row">
+            <c-CCol #c-key="f'{batch.name}:details'" gap="0">
               <strong>{{ batch.name }}</strong>
               <span>{{ batch.clay }}</span>
             </c-CCol>
-            <c-CRow gap="xs">
+            <c-CRow #c-key="f'{batch.name}:actions'" gap="xs">
               <span class="flow-nested__cone">{{ batch.cone }}</span>
-              <c-CButton size="sm" variant="outline">Open log</c-CButton>
+              <c-CButton #c-key="f'{batch.name}:open-log'" size="sm" variant="outline">Open log</c-CButton>
             </c-CRow>
           </c-CRow>
         </c-for>

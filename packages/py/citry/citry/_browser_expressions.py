@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -24,13 +25,13 @@ from citry_core.template_parser import (
     parse_template,
 )
 from citry_core.template_parser import (
+    analyze_browser_binding_pattern as analyze_browser_binding_pattern_rust,
+)
+from citry_core.template_parser import (
     analyze_browser_source as analyze_browser_source_rust,
 )
 from citry_core.template_parser import (
     analyze_component_members as analyze_component_members_rust,
-)
-from citry_core.template_parser import (
-    analyze_component_scope_writes as analyze_component_scope_writes_rust,
 )
 from citry_core.template_parser import (
     analyze_component_source as analyze_component_source_rust,
@@ -42,16 +43,17 @@ if TYPE_CHECKING:
     from citry_core.template_parser import Template
 
 
-BrowserExpressionMode = Literal["expression", "statement", "loop"]
+BrowserExpressionMode = Literal["expression", "statement", "loop", "binding-pattern"]
 BrowserExpressionEvaluator = Literal["normal", "raw"]
-BrowserExpressionTransform = Literal["identity", "citry-args", "x-model", "x-for"]
-BrowserExpressionHost = Literal["alpine", "citry-event-args", "citry-i18n-values", "citry-props"]
+BrowserExpressionTransform = Literal["identity", "citry-args", "v-model", "v-for", "dynamic-slot"]
+BrowserExpressionHost = Literal["vue", "citry-event-args", "citry-i18n-values"]
+BrowserComponentContextName = Literal["component", "revision", "onEvent"]
 SERVER_EVENT_CALL_NAMES = frozenset({"$error", "$loading", "$sendEvent", "error", "loading", "sendEvent"})
 
 
 @dataclass(frozen=True, slots=True)
 class BrowserExpression:
-    """One exact Alpine/Citry browser-expression host in template source."""
+    """One exact Vue/Citry browser-expression host in template source."""
 
     source: str
     start_index: int
@@ -61,7 +63,7 @@ class BrowserExpression:
     bindings: tuple[str, ...] = ()
     binding_details: tuple[BrowserBinding, ...] = ()
     element: str | None = None
-    host: BrowserExpressionHost = "alpine"
+    host: BrowserExpressionHost = "vue"
     evaluator: BrowserExpressionEvaluator = "normal"
     transform: BrowserExpressionTransform = "identity"
     attribute_start_index: int | None = None
@@ -75,12 +77,12 @@ class BrowserExpression:
 
 @dataclass(frozen=True, slots=True)
 class BrowserBinding:
-    """One parser-scoped Alpine binding and its source expression."""
+    """One parser-scoped Vue binding and its source expression."""
 
     name: str
     start_index: int
     end_index: int
-    kind: Literal["x-data", "x-for"]
+    kind: Literal["v-for", "v-slot"]
     position: int
     source: str
     source_start_index: int
@@ -226,6 +228,17 @@ class BrowserDeclarativeEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class BrowserComponentBinding:
+    """One local name destructured from the `$component` context."""
+
+    name: BrowserComponentContextName
+    local_name: str
+    start_index: int
+    end_index: int
+    references: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class BrowserStateBinding:
     """One ``:c-*`` State field with UTF-8 offsets excluding modifiers and prefix."""
 
@@ -244,26 +257,54 @@ class BrowserStateBindingTargetError:
 
 
 @dataclass(frozen=True, slots=True)
-class BrowserScopeWrite:
-    """One direct synchronous `$component` scope-property assignment."""
+class BrowserComponentCall:
+    """One root-unresolved `$component` call authenticated by OXC."""
 
-    name: str
-    start_index: int
-    end_index: int
-    value_start_index: int
-    value_end_index: int
-    value_source: str
+    call_start_index: int
+    call_end_index: int
+    callee_start_index: int
+    callee_end_index: int
+    open_paren_end_index: int
+    argument_start_index: int | None
+    argument_end_index: int | None
 
 
 @dataclass(frozen=True, slots=True)
-class BrowserComponentBinding:
-    """One local name destructured from the `$component` context."""
+class BrowserComponentPublicName:
+    """One statically proven public Vue Options name."""
+
+    authored_name: str
+    exposed_name: str
+    origin: str
+    name_start_index: int
+    name_end_index: int
+    value_start_index: int | None
+    value_end_index: int | None
+    required: bool | None
+    has_default: bool | None
+    default_is_null: bool | None
+    type_source: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserComponentSection:
+    """Conservative knowledge for one Vue Options namespace."""
 
     name: str
-    local_name: str
+    state: Literal["absent", "complete", "unknown"]
+    start_index: int | None
+    end_index: int | None
+    unknown_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserComponentMemberReference:
+    """One component-instance member reference with an authenticated receiver."""
+
+    receiver: str
+    name: str
     start_index: int
     end_index: int
-    references: tuple[tuple[int, int], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,7 +314,10 @@ class BrowserComponentSourceAnalysis:
     valid: bool
     references: tuple[BrowserFreeReference, ...]
     bindings: tuple[BrowserComponentBinding, ...]
-    scope_writes: tuple[BrowserScopeWrite, ...]
+    component_calls: tuple[BrowserComponentCall, ...]
+    public_names: tuple[BrowserComponentPublicName, ...]
+    sections: tuple[BrowserComponentSection, ...]
+    member_references: tuple[BrowserComponentMemberReference, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +330,7 @@ class BrowserProp:
     has_default: bool
     start_index: int
     end_index: int
+    accepted_javascript: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,14 +346,128 @@ class BrowserObjectProperty:
 
 
 @dataclass(frozen=True, slots=True)
-class BrowserComponentPropsUse:
-    """One direct `$c-props` object passed to a statically named child tag."""
+class BrowserComponentPropContribution:
+    """One source-ordered, statically named component prop contribution."""
 
-    tag_name: str
+    name: str | None
+    source: str
+    name_start_index: int
+    name_end_index: int
+    value_start_index: int
+    value_end_index: int
+    dynamic: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserComponentPropSite:
+    """One static component call and its native Vue prop contributions."""
+
+    tag: str
+    tag_start_index: int
+    tag_end_index: int
+    contributions: tuple[BrowserComponentPropContribution, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserComponentPropFinding:
+    """One host-neutral declared component-prop issue at byte offsets."""
+
+    kind: Literal["missing", "incompatible"]
+    tag: str
+    name: str
+    expected: str
+    actual: str
     start_index: int
     end_index: int
-    properties: tuple[BrowserObjectProperty, ...]
-    has_dynamic_keys: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MarkLiteralFinding:
+    """One violation of the literal marker authoring contract."""
+
+    start_index: int
+    end_index: int
+    reason: Literal["dynamic", "invalid", "missing", "extra", "named_fill"]
+
+
+def mark_literal_findings(
+    template: Template,
+    *,
+    parse_nested: Callable[[str], Template] = parse_template,
+) -> tuple[MarkLiteralFinding, ...]:
+    """Find violations of the static marker-name contract at byte offsets."""
+    found: list[MarkLiteralFinding] = []
+    _collect_mark_literal_findings(template, found, parse_nested=parse_nested, base_index=0)
+    return tuple(found)
+
+
+def browser_component_prop_findings(
+    sites: tuple[BrowserComponentPropSite, ...] | list[BrowserComponentPropSite],
+    *,
+    declared_props: Callable[[BrowserComponentPropSite], tuple[BrowserProp, ...] | None],
+    value_type: Callable[[BrowserComponentPropContribution], JsonWireType],
+) -> tuple[BrowserComponentPropFinding, ...]:
+    """Evaluate Vue declared props without resolving components or source maps."""
+    findings: list[BrowserComponentPropFinding] = []
+    for site in sites:
+        props = declared_props(site)
+        if props is None:
+            continue
+        contributions = list(site.contributions)
+        dynamic_indices = [index for index, item in enumerate(contributions) if item.dynamic]
+        last_dynamic = dynamic_indices[-1] if dynamic_indices else -1
+        for prop in props:
+            matches = [
+                (index, item)
+                for index, item in enumerate(contributions)
+                if item.name is not None and _vue_prop_name(item.name) == prop.name
+            ]
+            if not matches:
+                if prop.required and not dynamic_indices:
+                    findings.append(
+                        BrowserComponentPropFinding(
+                            "missing",
+                            site.tag,
+                            prop.name,
+                            prop.accepted_javascript,
+                            "",
+                            site.tag_start_index,
+                            site.tag_end_index,
+                        )
+                    )
+                continue
+            index, contribution = matches[-1]
+            if index < last_dynamic:
+                continue
+            actual = value_type(contribution)
+            if _component_prop_accepts(prop.accepted_javascript, prop.required, actual):
+                continue
+            findings.append(
+                BrowserComponentPropFinding(
+                    "incompatible",
+                    site.tag,
+                    contribution.name or prop.name,
+                    prop.accepted_javascript,
+                    actual.javascript,
+                    contribution.value_start_index,
+                    contribution.value_end_index,
+                )
+            )
+    return tuple(findings)
+
+
+def _vue_prop_name(name: str) -> str:
+    return re.sub(r"-([A-Za-z0-9])", lambda match: match.group(1).upper(), name)
+
+
+def _component_prop_accepts(expected: str, required: bool, actual: JsonWireType) -> bool:
+    if actual.kind == "union":
+        return all(_component_prop_accepts(expected, required, item) for item in actual.items)
+    if actual.kind == "null" and not required:
+        return True
+    if actual.kind == "string" and "boolean" in {item.strip() for item in expected.split("|")}:
+        return True
+    return browser_client_prop_accepts(expected, actual)
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,20 +489,17 @@ class BrowserSourceAnalysis:
 
 _EXPRESSION_ATTRIBUTES = frozenset(
     {
-        "$c-props",
-        "x-bind",
-        "x-data",
-        "x-html",
-        "x-id",
-        "x-if",
-        "x-model",
-        "x-modelable",
-        "x-on",
-        "x-show",
-        "x-text",
+        "v-bind",
+        "v-html",
+        "v-if",
+        "v-else-if",
+        "v-model",
+        "v-on",
+        "v-show",
+        "v-text",
     }
 )
-_STATEMENT_ATTRIBUTES = frozenset({"x-effect", "x-init", "x-intersect"})
+_STATEMENT_ATTRIBUTES: frozenset[str] = frozenset()
 _JS_KEYWORDS = frozenset(
     {
         "await",
@@ -405,7 +561,7 @@ def browser_expressions(
     *,
     parse_nested: Callable[[str], Template] = parse_template,
 ) -> tuple[BrowserExpression, ...]:
-    """Extract supported Alpine/Citry browser hosts, including nested templates."""
+    """Extract supported Vue/Citry browser hosts, including nested templates."""
     found: list[BrowserExpression] = []
     _collect_browser_expressions(
         template,
@@ -553,7 +709,7 @@ def browser_bindings(
     *,
     parse_nested: Callable[[str], Template] = parse_template,
 ) -> tuple[BrowserBinding, ...]:
-    """Return every exact Alpine binding declaration, including nested templates."""
+    """Return every exact Vue binding declaration, including nested templates."""
     found: list[BrowserBinding] = []
     _collect_browser_bindings(
         template,
@@ -564,21 +720,29 @@ def browser_bindings(
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
-def browser_component_scope_writes(source: str) -> tuple[BrowserScopeWrite, ...]:
-    """Return OXC-proven synchronous scope writes from component JavaScript."""
-    encoded = source.encode("utf-8")
-    return tuple(
-        BrowserScopeWrite(
-            name,
-            name_start,
-            name_end,
-            value_start,
-            value_end,
-            encoded[value_start:value_end].decode("utf-8"),
-        )
-        for name, name_start, name_end, value_start, value_end in analyze_component_scope_writes_rust(source)
-        if 0 <= name_start < name_end <= len(encoded) and 0 <= value_start <= value_end <= len(encoded)
-    )
+def browser_component_prop_sites(
+    template: Template,
+    *,
+    parse_nested: Callable[[str], Template] = parse_template,
+) -> tuple[BrowserComponentPropSite, ...]:
+    """Return byte-mapped native Vue prop supplies on static component calls."""
+    found: list[BrowserComponentPropSite] = []
+    _collect_component_prop_sites(template, found, parse_nested=parse_nested, base_index=0)
+    return tuple(sorted(found, key=lambda item: (item.tag_start_index, item.tag_end_index)))
+
+
+def _component_section_state(value: str) -> Literal["absent", "complete", "unknown"]:
+    """Narrow one section state reported by the native component analyzer."""
+    # The analyzer crosses the Rust boundary as plain text, so each accepted state
+    # is returned by name. An unrecognized one would otherwise reach the prop
+    # checks below, where "unknown" is what makes them conservative.
+    if value == "absent":
+        return "absent"
+    if value == "complete":
+        return "complete"
+    if value == "unknown":
+        return "unknown"
+    raise ValueError(f"native component analysis reported an unknown section state {value!r}")
 
 
 def browser_component_members(source: str) -> tuple[BrowserComponentMember, ...]:
@@ -595,8 +759,10 @@ def browser_component_members(source: str) -> tuple[BrowserComponentMember, ...]
 
 
 def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnalysis:
-    """Return source-proven bindings, free names, and scope writes for `$component`."""
-    valid, references, bindings, writes = analyze_component_source_rust(source)
+    """Return source-proven Vue Options facts for `$component`."""
+    valid, references, bindings, calls, public_names, sections, member_references = analyze_component_source_rust(
+        source
+    )
     encoded = source.encode("utf-8")
     return BrowserComponentSourceAnalysis(
         valid=valid,
@@ -620,18 +786,17 @@ def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnaly
             for name, local_name, start, end, references in bindings
             if 0 <= start < end <= len(encoded)
         ),
-        scope_writes=tuple(
-            BrowserScopeWrite(
-                name,
-                name_start,
-                name_end,
-                value_start,
-                value_end,
-                encoded[value_start:value_end].decode("utf-8"),
-            )
-            for name, name_start, name_end, value_start, value_end in writes
-            if 0 <= name_start < name_end <= len(encoded) and 0 <= value_start <= value_end <= len(encoded)
+        component_calls=tuple(
+            BrowserComponentCall(*call)
+            for call in calls
+            if 0 <= call[0] < call[1] <= len(encoded) and 0 <= call[2] < call[3] <= call[4] <= len(encoded)
         ),
+        public_names=tuple(BrowserComponentPublicName(*name) for name in public_names),
+        sections=tuple(
+            BrowserComponentSection(name, _component_section_state(state), start, end, unknown_reason)
+            for name, state, start, end, unknown_reason in sections
+        ),
+        member_references=tuple(BrowserComponentMemberReference(*reference) for reference in member_references),
     )
 
 
@@ -663,26 +828,10 @@ def browser_client_prop_accepts(expected: str, actual: JsonWireType) -> bool:
     if actual.kind in {"string", "number", "boolean", "null"}:
         return actual.kind in alternatives
     if actual.kind == "array":
-        return any(item.startswith("Array<") for item in alternatives)
+        return any(item.startswith("Array<") or item.endswith("[]") for item in alternatives)
     if actual.kind == "object":
         return any(item == "Record<string, unknown>" or item.startswith("{") for item in alternatives)
     return True
-
-
-def browser_component_prop_uses(
-    template: Template,
-    *,
-    parse_nested: Callable[[str], Template] = parse_template,
-) -> tuple[BrowserComponentPropsUse, ...]:
-    """Return direct object literals passed through `$c-props`."""
-    found: list[BrowserComponentPropsUse] = []
-    _collect_component_prop_uses(
-        template,
-        found,
-        parse_nested=parse_nested,
-        base_index=0,
-    )
-    return tuple(found)
 
 
 def browser_i18n_binding_directives(
@@ -706,6 +855,20 @@ def analyze_browser_expression(expression: BrowserExpression) -> BrowserSourceAn
     source = expression.source
     relative_start = 0
     mode = expression.mode
+    if expression.transform == "dynamic-slot":
+        normalized = _normalized_dynamic_slot_source(source)
+        if normalized is None:
+            return BrowserSourceAnalysis(valid=False, references=())
+        source, _ = normalized
+    if mode == "binding-pattern":
+        valid, _bindings, raw_references = analyze_browser_binding_pattern_rust(source)
+        if not valid:
+            return BrowserSourceAnalysis(valid=False, references=())
+        references = tuple(
+            BrowserFreeReference(name, expression.start_index + start, expression.start_index + end)
+            for name, start, end in raw_references
+        )
+        return BrowserSourceAnalysis(valid=True, references=references)
     if mode == "loop":
         split = _loop_separator(source)
         if split is None:
@@ -719,7 +882,14 @@ def analyze_browser_expression(expression: BrowserExpression) -> BrowserSourceAn
     if not valid:
         return BrowserSourceAnalysis(valid=False, references=())
     base = expression.start_index + len(expression.source[:relative_start].encode("utf-8"))
-    references = tuple(BrowserFreeReference(name, base + start, base + end) for name, start, end in raw_references)
+    references = tuple(
+        BrowserFreeReference(
+            name,
+            base + start,
+            base + end,
+        )
+        for name, start, end in raw_references
+    )
     return BrowserSourceAnalysis(valid=True, references=references)
 
 
@@ -879,6 +1049,8 @@ def browser_member_literal_calls(
     expression: BrowserExpression,
     owners: frozenset[str],
     names: frozenset[str],
+    *,
+    authenticated_owner_spans: frozenset[tuple[int, int]] = frozenset(),
 ) -> tuple[BrowserMemberLiteralCall, ...]:
     """Return literal first arguments for direct calls on named owners."""
     tokens = _tokens(expression.source)
@@ -887,7 +1059,12 @@ def browser_member_literal_calls(
     for index, owner in enumerate(tokens):
         if owner.kind != "identifier" or owner.source not in owners:
             continue
-        if index > 0 and tokens[index - 1].source in {".", "?."}:
+        owner_span = (
+            expression.start_index + boundaries[owner.start],
+            expression.start_index + boundaries[owner.end],
+        )
+        authenticated = owner_span in authenticated_owner_spans
+        if index > 0 and tokens[index - 1].source in {".", "?."} and not authenticated:
             continue
         if index + 4 >= len(tokens):
             continue
@@ -908,8 +1085,8 @@ def browser_member_literal_calls(
                 owner=owner.source,
                 function=member.source,
                 value=argument.value,
-                owner_start_index=expression.start_index + boundaries[owner.start],
-                owner_end_index=expression.start_index + boundaries[owner.end],
+                owner_start_index=owner_span[0],
+                owner_end_index=owner_span[1],
                 start_index=expression.start_index + boundaries[content_start],
                 end_index=expression.start_index + boundaries[content_end],
             )
@@ -1022,6 +1199,8 @@ def browser_i18n_message_calls(
 def browser_i18n_bind_calls(
     expression: BrowserExpression,
     owners: frozenset[str] = frozenset({"i18n"}),
+    *,
+    authenticated_owner_spans: frozenset[tuple[int, int]] = frozenset(),
 ) -> tuple[BrowserI18nBindCall, ...]:
     """Return bounded object-literal ``i18n.bind()`` preload roots."""
     tokens = _tokens(expression.source)
@@ -1030,7 +1209,12 @@ def browser_i18n_bind_calls(
     for index, owner in enumerate(tokens):
         if owner.kind != "identifier" or owner.source not in owners or index + 3 >= len(tokens):
             continue
-        if index > 0 and tokens[index - 1].source in {".", "?."}:
+        owner_span = (
+            expression.start_index + boundaries[owner.start],
+            expression.start_index + boundaries[owner.end],
+        )
+        authenticated = owner_span in authenticated_owner_spans
+        if index > 0 and tokens[index - 1].source in {".", "?."} and not authenticated:
             continue
         separator, member, opening = tokens[index + 1 : index + 4]
         if separator.source not in {".", "?."} or member.source != "bind" or opening.source != "(":
@@ -1086,8 +1270,8 @@ def browser_i18n_bind_calls(
                 owner=owner.source,
                 message=message,
                 output=output,
-                owner_start_index=expression.start_index + boundaries[owner.start],
-                owner_end_index=expression.start_index + boundaries[owner.end],
+                owner_start_index=owner_span[0],
+                owner_end_index=owner_span[1],
                 message_start_index=message_start,
                 message_end_index=message_end,
                 output_start_index=output_start,
@@ -1233,30 +1417,66 @@ def python_event_handler_coordinates(
 
 
 def browser_component_props(source: str) -> tuple[BrowserProp, ...] | None:
-    """Parse the supported `$component({props, init})` declaration subset."""
-    tokens = _tokens(source)
-    for index, token in enumerate(tokens):
-        if token.kind != "identifier" or token.source != "$component":
-            continue
-        opening = _next_token(tokens, index)
-        config = _next_token(tokens, index + 1)
-        if opening is None or opening.source != "(" or config is None:
-            continue
-        if config.source != "{":
-            return ()
-        config_end = _matching_token(tokens, index + 2, "{", "}")
-        if config_end is None:
-            return None
-        props_value = _object_property_value(tokens, index + 2, config_end, "props")
-        if props_value is None:
-            return ()
-        if tokens[props_value].source != "{":
-            return None
-        props_end = _matching_token(tokens, props_value, "{", "}")
-        if props_end is None:
-            return None
-        return _prop_definitions(source, tokens, props_value + 1, props_end)
-    return ()
+    """Return OXC-authenticated, statically complete Vue prop declarations."""
+    analysis = analyze_browser_component_source(source)
+    if not analysis.valid:
+        return None
+    props_sections = [section for section in analysis.sections if section.name == "props"]
+    if any(section.state == "unknown" for section in props_sections):
+        return None
+    return tuple(
+        BrowserProp(
+            name=record.exposed_name,
+            javascript=_native_prop_javascript(
+                record.type_source,
+                record.required,
+                record.has_default,
+                record.default_is_null,
+            ),
+            required=record.required is True,
+            has_default=record.has_default is True,
+            start_index=record.name_start_index,
+            end_index=record.name_end_index,
+            accepted_javascript=_native_prop_accepted_javascript(record.type_source),
+        )
+        for record in analysis.public_names
+        if record.origin == "props"
+    )
+
+
+def _native_prop_javascript(
+    type_source: str | None,
+    required: bool | None,
+    has_default: bool | None,
+    default_is_null: bool | None,
+) -> str:
+    javascript = _native_prop_accepted_javascript(type_source)
+    if default_is_null is True:
+        javascript = f"{javascript} | null"
+    elif required is not True and has_default is not True:
+        javascript = f"{javascript} | undefined"
+    return javascript
+
+
+def _native_prop_accepted_javascript(type_source: str | None) -> str:
+    """Return constructor-backed values Vue accepts from a parent binding."""
+    constructors = {
+        "String": "string",
+        "Number": "number",
+        "Boolean": "boolean",
+        "Array": "unknown[]",
+        "Object": "Record<string, unknown>",
+        "Function": "Function",
+    }
+    if type_source is None:
+        return "unknown"
+    stripped = type_source.strip()
+    names = (
+        [item.strip() for item in stripped[1:-1].split(",")]
+        if stripped.startswith("[") and stripped.endswith("]")
+        else [stripped]
+    )
+    return " | ".join(dict.fromkeys(constructors.get(name, "unknown") for name in names if name)) or "unknown"
 
 
 def _prop_definitions(
@@ -1298,6 +1518,7 @@ def _prop_definitions(
                 has_default,
                 len(source[: token.start].encode("utf-8")),
                 len(source[: token.end].encode("utf-8")),
+                _prop_javascript(constructors),
             )
         )
         index = definition_end + 1
@@ -1474,6 +1695,7 @@ def _collect_browser_expressions(
             continue
         node = element._0
         introduced = _node_browser_bindings(node, base_index)
+        loop_bindings = tuple(binding for binding in introduced if binding.kind == "v-for")
         descendant_ambient = _i18n_descendant_ambient(node, ambient_names)
         authored_tag = node.start_tag.name.content
         tag_name = _browser_element_name(node)
@@ -1484,6 +1706,27 @@ def _collect_browser_expressions(
         )
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
+            dynamic_slot_name = _dynamic_slot_name(attr.key.content)
+            if dynamic_slot_name is not None:
+                name_source, relative_start, relative_end = dynamic_slot_name
+                name_start = base_index + attr.key.start_index + len(attr.key.content[:relative_start].encode("utf-8"))
+                active = (*bindings, *loop_bindings)
+                found.append(
+                    BrowserExpression(
+                        name_source,
+                        name_start,
+                        base_index + attr.key.start_index + len(attr.key.content[:relative_end].encode("utf-8")),
+                        "expression",
+                        attr.key.content,
+                        (*ambient_names, *(binding.name for binding in active)),
+                        active,
+                        tag_name,
+                        "vue",
+                        transform="dynamic-slot",
+                        attribute_start_index=base_index + attr.key.start_index,
+                        attribute_end_index=base_index + attr.key.end_index,
+                    )
+                )
             if attr.kind == HtmlAttrKind.Template:
                 if inner is None:
                     continue
@@ -1495,7 +1738,7 @@ def _collect_browser_expressions(
                         found,
                         parse_nested=parse_nested,
                         base_index=base_index + inner.start_index + nested_start,
-                        bindings=(*bindings, *introduced),
+                        bindings=(*bindings, *loop_bindings),
                         ambient_names=descendant_ambient,
                     )
                 continue
@@ -1509,24 +1752,24 @@ def _collect_browser_expressions(
             start = base_index + value_start + len(source[:relative_start].encode("utf-8"))
             end = base_index + value_start + len(source[:relative_end].encode("utf-8"))
             base_name = canonical_attribute.split(".", 1)[0]
-            active = bindings if mode == "loop" or base_name == "x-data" else (*bindings, *introduced)
+            active = bindings if mode == "loop" or base_name in {"v-if", "v-else-if"} else (*bindings, *loop_bindings)
             if attr.key.content.startswith("@c-"):
                 transform: BrowserExpressionTransform = "citry-args"
                 host: BrowserExpressionHost = "citry-event-args"
-            elif base_name in {"x-model", "x-modelable"}:
-                transform = "x-model"
-                host = "alpine"
-            elif base_name == "x-for":
-                transform = "x-for"
-                host = "alpine"
+            elif base_name == "v-model":
+                transform = "v-model"
+                host = "vue"
+            elif base_name == "v-for":
+                transform = "v-for"
+                host = "vue"
             else:
                 transform = "identity"
                 if looks_like_i18n_binding(canonical_attribute):
                     host = "citry-i18n-values"
                 else:
-                    host = "citry-props" if base_name == "$c-props" else "alpine"
+                    host = "vue"
             raw_boundary_expression = component_boundary and (
-                base_name == "$c-props" or canonical_attribute.startswith(("@", "x-on:"))
+                canonical_attribute == "v-on" or canonical_attribute.startswith(("@", "v-on:", ":", "v-bind:"))
             )
             found.append(
                 BrowserExpression(
@@ -1684,9 +1927,9 @@ def _collect_browser_bindings(
             )
 
 
-def _collect_component_prop_uses(
+def _collect_component_prop_sites(
     template: Template,
-    found: list[BrowserComponentPropsUse],
+    found: list[BrowserComponentPropSite],
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
@@ -1695,58 +1938,279 @@ def _collect_component_prop_uses(
         if not isinstance(element, TemplateElement.Node):
             continue
         node = element._0
+        authored_tag = node.start_tag.name.content
+        canonical_tag = _ascii_lower(authored_tag)
+        component_boundary = (
+            canonical_tag.startswith("c-") and canonical_tag != "c-element" and canonical_tag not in RESERVED_TAG_NAMES
+        )
+        contributions: list[BrowserComponentPropContribution] = []
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
-            if inner is None:
-                continue
             if attr.kind == HtmlAttrKind.Template:
-                nested = _nested_template(inner.content, parse_nested)
-                if nested is not None:
-                    parsed, nested_start = nested
-                    _collect_component_prop_uses(
-                        parsed,
-                        found,
-                        parse_nested=parse_nested,
-                        base_index=base_index + inner.start_index + nested_start,
-                    )
+                if inner is not None:
+                    nested = _nested_template(inner.content, parse_nested)
+                    if nested is not None:
+                        nested_template, nested_start = nested
+                        _collect_component_prop_sites(
+                            nested_template,
+                            found,
+                            parse_nested=parse_nested,
+                            base_index=base_index + inner.start_index + nested_start,
+                        )
                 continue
-            if attr.key.content != "$c-props":
+            if not component_boundary:
                 continue
-            expression_start = base_index + inner.start_index
-            parsed_object = _browser_object_literal(inner.content, base_index=expression_start)
-            if parsed_object is None:
-                continue
-            properties, has_dynamic_keys = parsed_object
-            target_name = node.start_tag.name.content
-            if target_name == "c-component":
-                target = next(
-                    (
-                        candidate.inner_value.content.strip()
-                        for candidate in node.start_tag.attrs
-                        if candidate.key.content == "is" and candidate.inner_value is not None
-                    ),
-                    "",
+            authored = attr.key.content
+            canonical = _ascii_lower(authored)
+            value_source = "" if inner is None else inner.content
+            value_start = base_index + (attr.key.end_index if inner is None else inner.start_index)
+            value_end = value_start + len(value_source.encode("utf-8"))
+            if canonical == "v-bind":
+                parsed_object_literal = (
+                    None if inner is None else _browser_object_literal(value_source, base_index=value_start)
                 )
-                if not target or any(char.isspace() for char in target):
-                    continue
-                target_name = target if target.startswith("c-") else f"c-{target}"
+                if parsed_object_literal is None:
+                    contributions.append(
+                        BrowserComponentPropContribution(
+                            None,
+                            value_source,
+                            base_index + attr.key.start_index,
+                            base_index + attr.key.end_index,
+                            value_start,
+                            value_end,
+                            dynamic=True,
+                        )
+                    )
+                else:
+                    properties, dynamic = parsed_object_literal
+                    contributions.extend(
+                        BrowserComponentPropContribution(
+                            item.name,
+                            item.value_source,
+                            item.start_index,
+                            item.end_index,
+                            item.value_start_index,
+                            item.value_end_index,
+                        )
+                        for item in properties
+                    )
+                    if dynamic:
+                        contributions.append(
+                            BrowserComponentPropContribution(
+                                None,
+                                value_source,
+                                base_index + attr.key.start_index,
+                                base_index + attr.key.end_index,
+                                value_start,
+                                value_end,
+                                dynamic=True,
+                            )
+                        )
+                continue
+            prefix = ":" if canonical.startswith(":") else "v-bind:" if canonical.startswith("v-bind:") else None
+            if prefix is None:
+                continue
+            target = authored[len(prefix) :]
+            parts = target.split(".")
+            raw_name, modifiers = parts[0], parts[1:]
+            if any(modifier in {"prop", "attr"} for modifier in modifiers):
+                continue
+            if any(modifier != "camel" for modifier in modifiers):
+                contributions.append(
+                    BrowserComponentPropContribution(
+                        None,
+                        value_source,
+                        base_index + attr.key.start_index,
+                        base_index + attr.key.end_index,
+                        value_start,
+                        value_end,
+                        dynamic=True,
+                    )
+                )
+                continue
+            dynamic = not raw_name or raw_name.startswith("[")
+            contributions.append(
+                BrowserComponentPropContribution(
+                    None if dynamic else raw_name,
+                    value_source,
+                    base_index + attr.key.start_index + len(prefix.encode("utf-8")),
+                    base_index + attr.key.start_index + len(prefix.encode("utf-8")) + len(raw_name.encode("utf-8")),
+                    value_start,
+                    value_end,
+                    dynamic,
+                )
+            )
+        if component_boundary:
+            tag_start = base_index + node.start_tag.name.start_index
             found.append(
-                BrowserComponentPropsUse(
-                    target_name,
-                    expression_start,
-                    expression_start + len(inner.content.encode("utf-8")),
-                    properties,
-                    has_dynamic_keys,
+                BrowserComponentPropSite(
+                    authored_tag,
+                    tag_start,
+                    base_index + node.start_tag.name.end_index,
+                    tuple(contributions),
                 )
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_component_prop_uses(
+            _collect_component_prop_sites(
                 body,
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index,
             )
+
+
+def _collect_mark_literal_findings(
+    template: Template,
+    found: list[MarkLiteralFinding],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        canonical_tag = _ascii_lower(node.start_tag.name.content)
+        attrs = list(node.start_tag.attrs)
+        selected_mark = canonical_tag == "c-mark"
+        if canonical_tag == "c-component":
+            selector = next((attr for attr in attrs if _ascii_lower(attr.key.content) == "is"), None)
+            selected_mark = (
+                selector is not None
+                and selector.inner_value is not None
+                and _ascii_lower(selector.inner_value.content) == "mark"
+            )
+        if selected_mark:
+            logical_static_names = [attr for attr in attrs if _ascii_lower(attr.key.content) == "name"]
+            static_names = [attr for attr in logical_static_names if attr.key.content == "name"]
+            dynamic_names = [
+                attr
+                for attr in attrs
+                if _ascii_lower(attr.key.content) in {"c-name", ":name", "v-bind:name", "c-bind"}
+            ]
+            if dynamic_names:
+                for attr in dynamic_names:
+                    found.append(
+                        MarkLiteralFinding(
+                            base_index + attr.key.start_index,
+                            base_index
+                            + (attr.inner_value.end_index if attr.inner_value is not None else attr.key.end_index),
+                            "dynamic",
+                        )
+                    )
+            elif canonical_tag == "c-component" and not logical_static_names:
+                found.append(
+                    MarkLiteralFinding(
+                        base_index + node.start_tag.name.start_index,
+                        base_index + node.start_tag.name.end_index,
+                        "missing",
+                    )
+                )
+            for attr in static_names:
+                value = attr.inner_value
+                if value is None or re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", value.content) is None:
+                    found.append(
+                        MarkLiteralFinding(
+                            base_index + (value.start_index if value is not None else attr.key.start_index),
+                            base_index + (value.end_index if value is not None else attr.key.end_index),
+                            "invalid",
+                        )
+                    )
+            for attr in logical_static_names:
+                if attr.key.content != "name":
+                    found.append(
+                        MarkLiteralFinding(
+                            base_index + attr.key.start_index,
+                            base_index + attr.key.end_index,
+                            "extra",
+                        )
+                    )
+            if canonical_tag == "c-component":
+                allowed_attrs = {
+                    "is",
+                    "name",
+                    "c-name",
+                    ":name",
+                    "v-bind:name",
+                    "c-bind",
+                    "c-if",
+                    "c-elif",
+                    "c-else",
+                    "c-for",
+                    "c-empty",
+                }
+                for attr in attrs:
+                    if _ascii_lower(attr.key.content) not in allowed_attrs:
+                        found.append(
+                            MarkLiteralFinding(
+                                base_index + attr.key.start_index,
+                                base_index + attr.key.end_index,
+                                "extra",
+                            )
+                        )
+                body = getattr(node, "body", None)
+                if body is not None:
+                    for child in body.elements:
+                        if not isinstance(child, TemplateElement.Node):
+                            continue
+                        fill = child._0
+                        if _ascii_lower(fill.start_tag.name.content) != "c-fill":
+                            continue
+                        fill_name = next(
+                            (attr for attr in fill.start_tag.attrs if _ascii_lower(attr.key.content) == "name"),
+                            None,
+                        )
+                        dynamic_fill_name = next(
+                            (
+                                attr
+                                for attr in fill.start_tag.attrs
+                                if _ascii_lower(attr.key.content) in {"c-name", ":name", "v-bind:name", "c-bind"}
+                            ),
+                            None,
+                        )
+                        invalid_fill_name = (
+                            fill_name is not None
+                            and fill_name.inner_value is not None
+                            and fill_name.inner_value.content != "default"
+                        )
+                        if invalid_fill_name or dynamic_fill_name is not None:
+                            bad_fill_name = dynamic_fill_name if dynamic_fill_name is not None else fill_name
+                            if bad_fill_name is None:
+                                raise AssertionError("A rejected marker fill must identify its source attribute.")
+                            found.append(
+                                MarkLiteralFinding(
+                                    base_index
+                                    + (
+                                        bad_fill_name.inner_value.start_index
+                                        if bad_fill_name.inner_value is not None
+                                        else bad_fill_name.key.start_index
+                                    ),
+                                    base_index
+                                    + (
+                                        bad_fill_name.inner_value.end_index
+                                        if bad_fill_name.inner_value is not None
+                                        else bad_fill_name.key.end_index
+                                    ),
+                                    "named_fill",
+                                )
+                            )
+        for attr in attrs:
+            inner = attr.inner_value
+            if inner is None or attr.kind != HtmlAttrKind.Template:
+                continue
+            nested = _nested_template(inner.content, parse_nested)
+            if nested is not None:
+                parsed, nested_start = nested
+                _collect_mark_literal_findings(
+                    parsed,
+                    found,
+                    parse_nested=parse_nested,
+                    base_index=base_index + inner.start_index + nested_start,
+                )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_mark_literal_findings(body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def _collect_i18n_binding_directives(
@@ -1880,7 +2344,7 @@ def _node_browser_bindings(node: object, base_index: int) -> tuple[BrowserBindin
         if attr.inner_value is None:
             continue
         attribute = _ascii_lower(attr.key.content)
-        if attribute == "x-for":
+        if attribute == "v-for":
             split = _loop_separator(attr.inner_value.content)
             if split is None:
                 continue
@@ -1902,35 +2366,26 @@ def _node_browser_bindings(node: object, base_index: int) -> tuple[BrowserBindin
                         binding_token.source,
                         base_index + attr.inner_value.start_index + len(source[: binding_token.start].encode("utf-8")),
                         base_index + attr.inner_value.start_index + len(source[: binding_token.end].encode("utf-8")),
-                        "x-for",
+                        "v-for",
                         position,
                         iterable,
                         base_index + attr.inner_value.start_index + len(source[:source_start].encode("utf-8")),
                         base_index + attr.inner_value.start_index + len(source[:source_end].encode("utf-8")),
                     )
                 )
-        elif attribute.split(".", 1)[0] == "x-data":
-            source = attr.inner_value.content
-            tokens = _tokens(source)
-            for name in _object_literal_names(source):
-                name_token = next(
-                    (
-                        candidate
-                        for candidate in tokens
-                        if (candidate.source if candidate.kind == "identifier" else candidate.value) == name
-                    ),
-                    None,
-                )
-                if name_token is None:
-                    continue
+        elif _slot_directive(attr.key.content):
+            valid, bindings, _references = analyze_browser_binding_pattern_rust(attr.inner_value.content)
+            if not valid:
+                continue
+            for position, (name, start, end) in enumerate(bindings):
                 introduced.append(
                     BrowserBinding(
                         name,
-                        base_index + attr.inner_value.start_index + len(source[: name_token.start].encode("utf-8")),
-                        base_index + attr.inner_value.start_index + len(source[: name_token.end].encode("utf-8")),
-                        "x-data",
-                        0,
-                        source,
+                        base_index + attr.inner_value.start_index + start,
+                        base_index + attr.inner_value.start_index + end,
+                        "v-slot",
+                        position,
+                        attr.inner_value.content,
                         base_index + attr.inner_value.start_index,
                         base_index + attr.inner_value.end_index,
                     )
@@ -1939,7 +2394,7 @@ def _node_browser_bindings(node: object, base_index: int) -> tuple[BrowserBindin
 
 
 def _simple_loop_binding_tokens(source: str) -> tuple[_Token, ...] | None:
-    """Accept direct and positional Alpine bindings without guessing object keys."""
+    """Accept direct and positional Vue bindings without guessing object keys."""
     tokens = _tokens(source)
     identifiers = tuple(token for token in tokens if token.kind == "identifier")
     if not identifiers or any(
@@ -1986,7 +2441,7 @@ def _object_literal_names(source: str) -> tuple[str, ...]:
 
 
 def _loop_separator(source: str) -> tuple[int, int] | None:
-    """Find Alpine's top-level ``in``/``of`` separator outside strings."""
+    """Find Vue's top-level ``in``/``of`` separator outside strings."""
     depth = 0
     for token in _tokens(source):
         if token.kind == "punctuation":
@@ -2011,7 +2466,7 @@ def _browser_attribute(
 ) -> tuple[BrowserExpressionMode, int, int] | None:
     authored_name = citry_attribute or name
     # Citry compiles only its exact lowercase spelling; an uppercase browser
-    # spelling remains an ordinary Alpine event attribute after HTML folding.
+    # spelling remains an ordinary Vue event attribute after HTML folding.
     if authored_name.startswith("@c-"):
         opening = source.find("(")
         closing = source.rfind(")")
@@ -2019,23 +2474,77 @@ def _browser_attribute(
             return "expression", opening + 1, closing
         return None
     # Events consumes the exact lowercase State-binding channel before the
-    # browser sees it, so its handler name is never an Alpine bind expression.
+    # browser sees it, so its handler name is never an Vue bind expression.
     if authored_name.startswith(":c-"):
         return None
+    if _slot_directive(name) and source.strip():
+        return "binding-pattern", 0, len(source)
     if looks_like_i18n_binding(name):
         return ("expression", 0, len(source)) if source.strip() else None
     base_name = name.split(".", 1)[0]
-    if name.startswith(("@", "x-on:")):
-        return "statement", 0, len(source)
-    if name.startswith((":", "x-bind:")):
+    if name == "v-on":
         return "expression", 0, len(source)
-    if base_name == "x-for":
+    if name.startswith(("@", "v-on:")):
+        return "statement", 0, len(source)
+    if name.startswith((":", "v-bind:")):
+        return "expression", 0, len(source)
+    if base_name == "v-for":
         return "loop", 0, len(source)
     if base_name in _EXPRESSION_ATTRIBUTES:
         return "expression", 0, len(source)
-    if base_name in _STATEMENT_ATTRIBUTES or base_name.startswith("x-intersect:"):
+    if base_name in _STATEMENT_ATTRIBUTES:
         return "statement", 0, len(source)
     return None
+
+
+def _slot_directive(name: str) -> bool:
+    """Recognize native Vue slot directives without consuming Citry metadata."""
+    canonical = _ascii_lower(name)
+    return (
+        canonical == "v-slot"
+        or canonical.startswith(("v-slot:", "v-slot."))
+        or (canonical.startswith("#") and not canonical.startswith("#c-"))
+    )
+
+
+def _dynamic_slot_name(name: str) -> tuple[str, int, int] | None:
+    """Return one native dynamic slot-name expression inside its authored brackets."""
+    if not _slot_directive(name):
+        return None
+    canonical = _ascii_lower(name)
+    argument_start = 1 if canonical.startswith("#") else len("v-slot:")
+    if len(name) <= argument_start or name[argument_start] != "[":
+        return None
+    expression_start = argument_start + 1
+    closing = _dynamic_slot_closing(name[expression_start:])
+    if closing is None or closing == 0:
+        return None
+    return name[expression_start:], expression_start, len(name)
+
+
+def _normalized_dynamic_slot_source(source: str) -> tuple[str, int] | None:
+    """Replace Vue's outer argument delimiter with offset-preserving whitespace."""
+    closing = _dynamic_slot_closing(source)
+    if closing is not None:
+        return source[:closing] + " " + source[closing + 1 :], closing
+    return None
+
+
+def _dynamic_slot_closing(source: str) -> int | None:
+    """Match Vue's dynamic-argument state and its subsequent slot-modifier split."""
+    dynamic = True
+    argument_end = len(source)
+    for index, char in enumerate(source):
+        if dynamic:
+            if char == "]":
+                dynamic = False
+        elif char == "[":
+            dynamic = True
+        elif char == ".":
+            argument_end = index
+            break
+    closing = argument_end - 1
+    return closing if closing >= 0 and source[closing] == "]" else None
 
 
 def _ascii_lower(value: str) -> str:
@@ -2226,8 +2735,15 @@ __all__ = [
     "BrowserBinding",
     "BrowserCompletion",
     "BrowserComponentBinding",
+    "BrowserComponentCall",
+    "BrowserComponentContextName",
     "BrowserComponentMember",
-    "BrowserComponentPropsUse",
+    "BrowserComponentMemberReference",
+    "BrowserComponentPropContribution",
+    "BrowserComponentPropFinding",
+    "BrowserComponentPropSite",
+    "BrowserComponentPublicName",
+    "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
     "BrowserExpression",
@@ -2244,18 +2760,19 @@ __all__ = [
     "BrowserMemberLiteralCall",
     "BrowserObjectProperty",
     "BrowserProp",
-    "BrowserScopeWrite",
     "BrowserSourceAnalysis",
     "BrowserStateBinding",
+    "BrowserStateBindingTargetError",
+    "MarkLiteralFinding",
     "analyze_browser_component_source",
     "analyze_browser_expression",
     "browser_bindings",
     "browser_client_prop_accepts",
     "browser_completion_at",
     "browser_component_members",
-    "browser_component_prop_uses",
+    "browser_component_prop_findings",
+    "browser_component_prop_sites",
     "browser_component_props",
-    "browser_component_scope_writes",
     "browser_declarative_events",
     "browser_expression_at",
     "browser_expressions",
@@ -2270,5 +2787,6 @@ __all__ = [
     "browser_member_at",
     "browser_member_literal_calls",
     "browser_state_bindings",
+    "mark_literal_findings",
     "python_event_handler_coordinates",
 ]

@@ -15,7 +15,7 @@ inputs:
       - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CSpinnerSize]}, default: {kind: literal, value: md}, effect: Sets ring diameter and default thickness.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted nonconflicting metadata, description relationships, visibility, and targeted Alpine attributes to the Spinner root.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted nonconflicting metadata, description relationships, visibility, and targeted Vue attributes to the Spinner root.'}
   - id: cspinner-client-inputs
     component: CSpinner
     channel: client

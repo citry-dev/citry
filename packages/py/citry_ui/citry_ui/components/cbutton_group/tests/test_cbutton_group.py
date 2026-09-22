@@ -11,7 +11,13 @@ from citry_ui import CButtonGroup
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(template: str, *, include_css: bool = False, data: dict[str, object] | None = None) -> str:
+def _render(
+    template: str,
+    *,
+    include_css: bool = False,
+    data: dict[str, object] | None = None,
+    static_fallback: bool = False,
+) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
     source = template + ("{{ css }}" if include_css else "")
@@ -23,7 +29,8 @@ def _render(template: str, *, include_css: bool = False, data: dict[str, object]
         def template_data(self, kwargs, slots):
             return {"css": app.get("css")(), **(data or {})}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 def _root(html: str) -> str:
@@ -42,7 +49,10 @@ def test_schema_and_default_group_are_exact():
         "style",
         "attrs",
     ]
-    html = _render('<c-CButtonGroup label="Map"><c-CButton>Open</c-CButton></c-CButtonGroup>')
+    html = _render(
+        '<c-CButtonGroup label="Map"><c-CButton>Open</c-CButton></c-CButtonGroup>',
+        static_fallback=True,
+    )
     root = _root(html)
     assert 'role="group"' in root
     assert 'aria-label="Map"' in root
@@ -55,7 +65,8 @@ def test_vertical_growing_group_reflects_layout():
     root = _root(
         _render(
             '<c-CButtonGroup label="Tools" orientation="vertical" c-grow="True">'
-            "<c-CButton>One</c-CButton></c-CButtonGroup>"
+            "<c-CButton>One</c-CButton></c-CButtonGroup>",
+            static_fallback=True,
         )
     )
     assert "aria-orientation" not in root

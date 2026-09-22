@@ -10,12 +10,16 @@ use pyo3::exceptions::{PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 
 use citry_template_parser::browser::{
-    BrowserAnalysisMode, analyze_browser_source as analyze_browser_source_rust,
+    BrowserAnalysisMode, analyze_browser_binding_pattern as analyze_browser_binding_pattern_rust,
+    analyze_browser_source as analyze_browser_source_rust,
     analyze_component_members as analyze_component_members_rust,
     analyze_component_scope_writes as analyze_component_scope_writes_rust,
     analyze_component_source as analyze_component_source_rust,
 };
-use citry_template_parser::compiler::compile_template as compile_template_rust;
+use citry_template_parser::compiler::{
+    compile_prepared_template as compile_prepared_template_rust,
+    compile_template as compile_template_rust,
+};
 use citry_template_parser::error::CompileError;
 use citry_template_parser::lang::lang::Lang;
 use citry_template_parser::parser::{
@@ -123,7 +127,15 @@ pub fn compile_template(template: Template, lang: Option<&str>) -> PyResult<Stri
     compile_template_rust(template, lang_enum).map_err(compile_error_to_py)
 }
 
-/// Parse one Alpine expression/statement and return exact free identifier ranges.
+/// Compile a parsed template into the private Python prepared-render node form.
+#[pyfunction(name = "_compile_prepared_template")]
+#[pyo3(signature = (template, lang=None))]
+pub fn compile_prepared_template(template: Template, lang: Option<&str>) -> PyResult<String> {
+    let lang_enum = lang_from_str(lang)?;
+    compile_prepared_template_rust(template, lang_enum).map_err(compile_error_to_py)
+}
+
+/// Parse one browser expression/statement and return exact free identifier ranges.
 #[pyfunction]
 pub fn analyze_browser_source(
     input: &str,
@@ -143,6 +155,31 @@ pub fn analyze_browser_source(
     ))
 }
 
+/// Parse one Vue slot-props binding pattern and return bindings plus free references.
+#[pyfunction]
+pub fn analyze_browser_binding_pattern(
+    input: &str,
+) -> (
+    bool,
+    Vec<(String, usize, usize)>,
+    Vec<(String, usize, usize)>,
+) {
+    let analysis = analyze_browser_binding_pattern_rust(input);
+    (
+        analysis.valid,
+        analysis
+            .bindings
+            .into_iter()
+            .map(|item| (item.name, item.start, item.end))
+            .collect(),
+        analysis
+            .references
+            .into_iter()
+            .map(|item| (item.name, item.start, item.end))
+            .collect(),
+    )
+}
+
 /// Return direct synchronous `$component` scope writes and their source ranges.
 #[pyfunction]
 pub fn analyze_component_scope_writes(input: &str) -> Vec<(String, usize, usize, usize, usize)> {
@@ -160,11 +197,60 @@ pub fn analyze_component_scope_writes(input: &str) -> Vec<(String, usize, usize,
         .collect()
 }
 
+type ComponentMemberAnalysis = (bool, Vec<(String, String, usize, usize, usize, usize)>);
+
+/// Return proven context members and their exact authored UTF-8 byte ranges.
+#[pyfunction]
+pub fn analyze_component_members(input: &str) -> ComponentMemberAnalysis {
+    let analysis = analyze_component_members_rust(input);
+    (
+        analysis.valid,
+        analysis
+            .members
+            .into_iter()
+            .map(|member| {
+                (
+                    member.context_name,
+                    member.member_name,
+                    member.owner_start,
+                    member.owner_end,
+                    member.member_start,
+                    member.member_end,
+                )
+            })
+            .collect(),
+    )
+}
+
+/// Return direct synchronous `$component` scope writes and their source ranges.
 type ComponentSourceAnalysis = (
     bool,
     Vec<(String, usize, usize)>,
     Vec<(String, String, usize, usize, Vec<(usize, usize)>)>,
-    Vec<(String, usize, usize, usize, usize)>,
+    Vec<(
+        usize,
+        usize,
+        usize,
+        usize,
+        usize,
+        Option<usize>,
+        Option<usize>,
+    )>,
+    Vec<(
+        String,
+        String,
+        String,
+        usize,
+        usize,
+        Option<usize>,
+        Option<usize>,
+        Option<bool>,
+        Option<bool>,
+        Option<bool>,
+        Option<String>,
+    )>,
+    Vec<(String, String, Option<usize>, Option<usize>, Option<String>)>,
+    Vec<(String, String, usize, usize)>,
 );
 
 /// Return detached source facts for runtime `$component` initializers.
@@ -192,40 +278,61 @@ pub fn analyze_component_source(input: &str) -> ComponentSourceAnalysis {
             })
             .collect(),
         analysis
-            .scope_writes
+            .component_calls
             .into_iter()
-            .map(|write| {
+            .map(|call| {
                 (
-                    write.name,
-                    write.name_start,
-                    write.name_end,
-                    write.value_start,
-                    write.value_end,
+                    call.call_start,
+                    call.call_end,
+                    call.callee_start,
+                    call.callee_end,
+                    call.open_paren_end,
+                    call.argument_start,
+                    call.argument_end,
                 )
             })
             .collect(),
-    )
-}
-
-type ComponentMemberAnalysis = (bool, Vec<(String, String, usize, usize, usize, usize)>);
-
-/// Return proven context members and their exact authored UTF-8 byte ranges.
-#[pyfunction]
-pub fn analyze_component_members(input: &str) -> ComponentMemberAnalysis {
-    let analysis = analyze_component_members_rust(input);
-    (
-        analysis.valid,
         analysis
-            .members
+            .public_names
             .into_iter()
-            .map(|member| {
+            .map(|name| {
                 (
-                    member.context_name,
-                    member.member_name,
-                    member.owner_start,
-                    member.owner_end,
-                    member.member_start,
-                    member.member_end,
+                    name.authored_name,
+                    name.exposed_name,
+                    name.origin,
+                    name.name_start,
+                    name.name_end,
+                    name.value_start,
+                    name.value_end,
+                    name.required,
+                    name.has_default,
+                    name.default_is_null,
+                    name.type_source,
+                )
+            })
+            .collect(),
+        analysis
+            .sections
+            .into_iter()
+            .map(|section| {
+                (
+                    section.name,
+                    section.state,
+                    section.start,
+                    section.end,
+                    section.unknown_reason,
+                )
+            })
+            .collect(),
+        analysis
+            .member_references
+            .into_iter()
+            .map(|reference| {
+                (
+                    reference.receiver,
+                    reference.name,
+                    reference.start,
+                    reference.end,
                 )
             })
             .collect(),

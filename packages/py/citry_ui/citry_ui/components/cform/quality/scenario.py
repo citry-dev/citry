@@ -38,7 +38,7 @@ def form_states_component(app: Citry) -> type[Component]:
                   />
                 </c-fill>
               </c-CField>
-              <div x-ref="optionalField">
+              <div ref="optionalField">
                 <c-CField control_id="quality-form-note">
                   <c-fill name="label">
                     Note

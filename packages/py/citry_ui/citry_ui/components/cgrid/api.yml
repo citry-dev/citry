@@ -18,7 +18,7 @@ inputs:
       - {id: gutter, name: gutter, type: {display: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', interfaces: [CLayoutGap]}, default: {kind: literal, value: lg}, effect: Selects logical inline padding from `0` through `1.5rem`.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Vue attributes without replacing owned layout or Citry runtime fields.'}
   - id: cgrid-server-inputs
     component: CGrid
     channel: server
@@ -35,7 +35,7 @@ inputs:
       - {id: gap, name: gap, type: {display: '"0" | "xs" | "sm" | "md" | "lg" | "xl"', interfaces: [CLayoutGap]}, default: {kind: literal, value: md}, effect: Selects row and column gap from `0` through `1.5rem`.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Vue attributes without replacing owned layout or Citry runtime fields.'}
   - id: cgriditem-server-inputs
     component: CGridItem
     channel: server
@@ -50,7 +50,7 @@ inputs:
       - {id: xxl, name: xxl, type: 'int | ASCII decimal str | None', default: {kind: literal, value: null}, effect: Overrides the span at `96rem` and wider.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Alpine attributes without replacing owned layout or Citry runtime fields.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native, ARIA, data, and trusted targeted Vue attributes without replacing owned layout or Citry runtime fields.'}
 
 slots:
   - id: ccontainer-slots

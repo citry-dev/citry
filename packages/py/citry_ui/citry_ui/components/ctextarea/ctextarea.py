@@ -121,8 +121,13 @@ def _encode_initial_value(value: str | None) -> Markup:
     normalized = _normalize_newlines(value or "")
     encoded = escape(normalized)
     if normalized.startswith("\n"):
-        # HTML strips one newline immediately after a textarea start tag, so
-        # this extra newline preserves the caller's actual first character.
+        # citry_ui is a first-party companion package. This branch exists
+        # solely to compensate for the HTML parser's initial textarea LF when
+        # serializing HTML; Vue creates the text VNode directly.
+        from citry._vue.capture import prepared_render_active, vue_render_active  # noqa: PLC0415
+
+        if prepared_render_active() or vue_render_active():
+            return encoded
         return Markup("\n") + encoded
     return encoded
 
@@ -284,7 +289,7 @@ class CTextarea(LibraryComponent):
             "variant": variant,
             "size": size,
             "resize": resize,
-            "field_control": field is not None,
+            "field_control": "" if field is not None else None,
             "attrs": caller_attrs,
         }
 
@@ -297,34 +302,34 @@ class CTextarea(LibraryComponent):
         form = self.inject(FORM_CONTEXT_KEY, None)
         value = _plain_optional_string("value", kwargs.value)
         return {
-            "value": _normalize_newlines(value) if value is not None else None,
-            "rows": _positive_integer("rows", kwargs.rows),
-            "required": bool(field.required)
+            "serverValue": _normalize_newlines(value) if value is not None else None,
+            "serverRows": _positive_integer("rows", kwargs.rows),
+            "serverRequired": bool(field.required)
             if field is not None
             else kwargs.required
             if kwargs.required is not None
             else False,
-            "disabled": bool(field.disabled)
+            "serverDisabled": bool(field.disabled)
             if field is not None
             else kwargs.disabled
             if kwargs.disabled is not None
             else False,
-            "readonly": bool(field.readonly)
+            "serverReadonly": bool(field.readonly)
             if field is not None
             else kwargs.readonly
             if kwargs.readonly is not None
             else bool(form.readonly)
             if form is not None
             else False,
-            "invalid": bool(field.invalid)
+            "serverInvalid": bool(field.invalid)
             if field is not None
             else kwargs.invalid
             if kwargs.invalid is not None
             else False,
             "inheritsReadonly": field is None and kwargs.readonly is None,
-            "variant": _plain_choice("variant", kwargs.variant, _VARIANTS),
-            "size": _plain_choice("size", kwargs.size, _SIZES),
-            "resize": _plain_choice("resize", kwargs.resize, _RESIZE_VALUES),
+            "serverVariant": _plain_choice("variant", kwargs.variant, _VARIANTS),
+            "serverSize": _plain_choice("size", kwargs.size, _SIZES),
+            "serverResize": _plain_choice("resize", kwargs.resize, _RESIZE_VALUES),
             "externalDescribedBy": self._textarea_external_described_by,
             "externalErrorMessage": self._textarea_external_error_message,
         }
@@ -346,10 +351,10 @@ class CTextarea(LibraryComponent):
         c-autocomplete="autocomplete"
         c-inputmode="inputmode"
         c-placeholder="placeholder"
-        c-data-required="required"
-        c-data-disabled="disabled"
-        c-data-readonly="readonly"
-        c-data-invalid="invalid"
+        c-data-required="'' if required else None"
+        c-data-disabled="'' if disabled else None"
+        c-data-readonly="'' if readonly else None"
+        c-data-invalid="'' if invalid else None"
         c-data-variant="variant"
         c-data-size="size"
         c-data-resize="resize"
@@ -372,10 +377,19 @@ class CTextarea(LibraryComponent):
           size: {},
           resize: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
-          const textarea = els[0];
-          const field = inject(Symbol.for("citry-ui:field"), null);
-          const form = inject(Symbol.for("citry-ui:form"), null);
+        inject: {
+          fieldService: {from: Symbol.for("citry-ui:field"), default: null},
+          formService: {from: Symbol.for("citry-ui:form"), default: null},
+        },
+        onServerRender: ({component}) => {
+          const textarea = component.$el;
+          if (!(textarea instanceof HTMLTextAreaElement)) {
+            throw new Error("[citry-ui] CTextarea settled anatomy is invalid.");
+          }
+          const data = component;
+          const props = component.$props;
+          const field = component.fieldService;
+          const form = component.formService;
           const allowedValues = {
             variant: ["outline", "filled", "plain"],
             size: ["sm", "md", "lg"],
@@ -420,22 +434,23 @@ class CTextarea(LibraryComponent):
             return fallback;
           };
           const resolveRows = () => {
-            const value = props.rows === undefined ? data.rows : props.rows;
+            const value = props.rows === undefined ? data.serverRows : props.rows;
             if (Number.isInteger(value) && value > 0) {
               invalidEpisodes.delete("rows");
               return value;
             }
             reportInvalid("rows", value);
-            return data.rows;
+            return data.serverRows;
           };
           const resolveChoice = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
+            const serverName = `server${name[0].toUpperCase()}${name.slice(1)}`;
+            const value = props[name] === undefined ? data[serverName] : props[name];
             if (allowedValues[name].includes(value)) {
               invalidEpisodes.delete(name);
               return value;
             }
             reportInvalid(name, value);
-            return data[name];
+            return data[serverName];
           };
           const reportFieldOwned = (name, value) => {
             const describedValue = describeValue(value);
@@ -502,12 +517,12 @@ class CTextarea(LibraryComponent):
               readonly = field.readonly;
               externalInvalid = field.invalid;
             } else {
-              required = resolveBoolean("required", data.required);
+              required = resolveBoolean("required", data.serverRequired);
               // A disabled native CForm fieldset always wins.
-              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-              const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+              disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.serverDisabled);
+              const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.serverReadonly;
               readonly = resolveBoolean("readonly", readonlyFallback);
-              externalInvalid = resolveBoolean("invalid", data.invalid);
+              externalInvalid = resolveBoolean("invalid", data.serverInvalid);
             }
             const invalid = externalInvalid || nativeInvalid;
 
@@ -613,11 +628,11 @@ class CTextarea(LibraryComponent):
           textarea.addEventListener("compositionstart", onCompositionStart);
           textarea.addEventListener("compositionend", onCompositionEnd);
           nativeForm?.addEventListener("reset", onReset);
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyState();
             clearNativeInvalidWhenValid();
           });
-          effect(() => {
+          Citry.vue.watchEffect(() => {
             applyLatestValueProp();
           });
           textarea.setAttribute("data-citry-textarea-initialized", "");

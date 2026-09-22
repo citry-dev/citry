@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -13,7 +14,7 @@ from citry_ui import CCarousel, CCarouselSlide
 from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -21,7 +22,18 @@ def _render(source: str) -> str:
         citry = app
         template = source
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
+
+
+def _manifest(html: str) -> dict[str, object]:
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["manifest"]
+
+
+def _occurrences(manifest: dict[str, object], type_name: str) -> list[dict[str, object]]:
+    return [item for item in manifest["occurrences"] if item["typeKey"].startswith(f"{type_name}_")]
 
 
 def _source(root: str = "", slide: str = "") -> str:
@@ -34,17 +46,28 @@ def _source(root: str = "", slide: str = "") -> str:
 
 
 def test_carousel_renders_apg_semantics_and_form_safe_controls() -> None:
-    html = _render(_source('c-index="1" variant="surface" size="lg"'))
-    assert re.search(r'<section[^>]+role="region"[^>]+aria-label="Featured stories"', html)
-    assert 'aria-roledescription="carousel"' in html
-    assert html.count('aria-roledescription="slide"') == 2
-    assert html.count('role="group"') >= 3
-    assert re.search(r'<button[^>]+type="button"[^>]+aria-label="Previous slide"', html)
-    assert re.search(r'<button[^>]+type="button"[^>]+aria-label="Next slide"', html)
-    assert re.search(r'<div[^>]+tabindex="0"[^>]+data-citry-carousel-viewport', html)
-    assert re.search(r'<div[^>]+data-value="tide"[^>]+data-active', html)
-    assert "Aurora" in html
-    assert "Tide" in html
+    source = _source('c-index="1" variant="surface" size="lg"')
+    html = _render(source)
+    static_html = _render(source, static_fallback=True)
+    assert re.search(r'<section[^>]+role="region"[^>]+aria-label="Featured stories"', static_html)
+    assert 'aria-roledescription="carousel"' in static_html
+    assert static_html.count('aria-roledescription="slide"') == 2
+    assert static_html.count('role="group"') >= 3
+    assert re.search(r'<button[^>]+type="button"[^>]+aria-label="Previous slide"', static_html)
+    assert re.search(r'<button[^>]+type="button"[^>]+aria-label="Next slide"', static_html)
+    assert re.search(r'<div[^>]+tabindex="0"[^>]+data-citry-carousel-viewport', static_html)
+    assert re.search(r'<div[^>]+data-value="tide"[^>]+data-active', static_html)
+    assert "Aurora" in static_html
+    assert "Tide" in static_html
+    manifest = _manifest(html)
+    carousel = _occurrences(manifest, "CCarousel")[0]["preparedData"]
+    assert carousel["citryAttrs0"]["aria-label"] == "Featured stories"
+    assert carousel["citryAttrs0"]["data-index"] == 1
+    assert carousel["citryAttrs1"]["aria-label"] == "Previous slide"
+    assert carousel["citryAttrs2"]["aria-label"] == "Next slide"
+    slides = _occurrences(manifest, "CCarouselSlide")
+    assert [slide["preparedData"]["citryAttrs0"]["data-value"] for slide in slides] == ["aurora", "tide"]
+    assert slides[1]["preparedData"]["citryAttrs0"]["data-active"] == ""
 
 
 def test_schema_registration_and_types_are_public() -> None:
@@ -130,14 +153,19 @@ def test_invalid_collections_and_slide_inputs_fail() -> None:
 
 
 def test_nested_independent_carousel_is_allowed_inside_slide_content() -> None:
-    html = _render(
+    source = (
         '<c-CCarousel label="Outer"><c-CCarouselSlide value="outer" label="Outer">'
         '<c-CCarousel label="Inner"><c-CCarouselSlide value="inner" label="Inner">'
         "Inner slide</c-CCarouselSlide></c-CCarousel>"
         "</c-CCarouselSlide></c-CCarousel>"
     )
-    assert html.count('aria-roledescription="carousel"') == 2
-    assert html.count('aria-roledescription="slide"') == 2
+    html = _render(source)
+    static_html = _render(source, static_fallback=True)
+    assert static_html.count('aria-roledescription="carousel"') == 2
+    assert static_html.count('aria-roledescription="slide"') == 2
+    manifest = _manifest(html)
+    assert len(_occurrences(manifest, "CCarousel")) == 2
+    assert len(_occurrences(manifest, "CCarouselSlide")) == 2
 
 
 def test_owned_slide_attrs_fail() -> None:

@@ -68,7 +68,15 @@ _ROOT_OWNED = frozenset(
         "id",
         "inert",
         "role",
+        "ref",
         "tabindex",
+        "v-for",
+        "v-html",
+        "v-if",
+        "v-model",
+        "v-on",
+        "v-show",
+        "v-text",
         "x-for",
         "x-html",
         "x-if",
@@ -96,6 +104,7 @@ _BOUND_OWNED = frozenset(
         "id",
         "inert",
         "role",
+        "ref",
         "tabindex",
     }
 )
@@ -181,28 +190,31 @@ class CSidebar(LibraryComponent):
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
         return {
-            "collapsed": kwargs.collapsed,
-            "collapsible": kwargs.collapsible,
-            "side": kwargs.side,
-            "variant": kwargs.variant,
-            "size": kwargs.size,
-            "sticky": kwargs.sticky,
+            "serverDefaults": {
+                "collapsed": kwargs.collapsed,
+                "collapsible": kwargs.collapsible,
+                "side": kwargs.side,
+                "variant": kwargs.variant,
+                "size": kwargs.size,
+                "sticky": kwargs.sticky,
+            },
         }
 
     template = """
       <c-element
         c-is="tag"
+        ref="root"
         class="cui-sidebar"
         c-id="root_id"
         c-aria-label="label"
         c-bind="attrs"
-        c-data-collapsed="collapsed"
+        c-data-collapsed="'' if collapsed else None"
         c-data-collapsible="collapsible"
-        c-data-has-header="has_header"
+        c-data-has-header="'' if has_header else None"
         c-data-side="side"
         c-data-variant="variant"
         c-data-size="size"
-        c-data-sticky="sticky"
+        c-data-sticky="'' if sticky else None"
         data-citry-ui-part="sidebar"
       >
         <button

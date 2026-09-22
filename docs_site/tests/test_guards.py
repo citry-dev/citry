@@ -384,6 +384,16 @@ def test_authored_reference_guard_reports_a_missing_entry(
     assert any("#state" in result.message for result in results)
 
 
+def test_authored_reference_guard_reports_an_unexpected_anchor(tmp_path: Path) -> None:
+    _write_browser_api_page(tmp_path)
+    page = tmp_path / "reference" / "browser-apis.md"
+    page.write_text(page.read_text(encoding="utf-8") + '\n<h4 id="unlisted">Unlisted</h4>\n', encoding="utf-8")
+
+    results = list(authored_reference.check(_content_ctx(tmp_path)))
+
+    assert any("Unexpected authored Reference anchor: #unlisted" in result.message for result in results)
+
+
 def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:
     build = tmp_path / "site"
     build.mkdir()

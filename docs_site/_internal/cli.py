@@ -531,11 +531,13 @@ def _run_serve_built(host: str, port: int) -> int:
     # Stdlib HTTP server, so a built-site preview needs no extra dependency.
     import contextlib  # noqa: PLC0415
     import functools  # noqa: PLC0415
-    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer  # noqa: PLC0415
+    from http.server import ThreadingHTTPServer  # noqa: PLC0415
+
+    from docs_site._internal.static_server import StaticSiteHandler  # noqa: PLC0415
 
     outcome = build_site()
     print(f"Built {outcome.built} page(s) to {outcome.output_dir}.")
-    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(outcome.output_dir))
+    handler = functools.partial(StaticSiteHandler, directory=str(outcome.output_dir))
     server = ThreadingHTTPServer((host, port), handler)
     print(f"Serving {outcome.output_dir} at http://{host}:{port}/ (Ctrl+C to stop)")
     with contextlib.suppress(KeyboardInterrupt):

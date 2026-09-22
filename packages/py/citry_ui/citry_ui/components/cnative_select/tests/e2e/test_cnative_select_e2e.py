@@ -15,12 +15,87 @@ from citry_ui import CNativeSelectGroup, CNativeSelectOption
 pytestmark = pytest.mark.e2e
 
 
+def _vue_native_select_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        js = """
+          $component({data(){const nativeSelectDemo=Citry.vue.reactive({
+            value:'reef',immutable:'reef',nullValue:null,standaloneRequired:true,
+            standaloneVariant:'outline',unsupportedRequired:false,variant:'outline',size:'md',
+          }); window.__nativeSelectDemo=nativeSelectDemo; return {
+            state:{nativeSelectDemo}, value:'reef', required:false, invalid:false,
+            formDisabled:false,
+          };}});
+        """
+        template = """
+          <main>
+            <c-CForm id="vue-native-select-form" :disabled="formDisabled">
+              <c-CField control_id="vue-native-select" :required="required" :invalid="invalid">
+                <c-fill name="label">Habitat</c-fill>
+                <c-fill name="default">
+                  <c-CNativeSelect
+                    c-options="options"
+                    placeholder="Choose"
+                    :value="value"
+                    @input="value = $event.target.value"
+                  />
+                </c-fill>
+                <c-fill name="error">Choose a habitat.</c-fill>
+              </c-CField>
+            </c-CForm>
+            <button id="native-select-required" @click="required = !required">required</button>
+            <button id="native-select-invalid" @click="invalid = !invalid">invalid</button>
+            <button id="native-select-disabled" @click="formDisabled = !formDisabled">disabled</button>
+          </main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {
+                "options": [
+                    CNativeSelectOption("reef", "{{ 1 + 1 }} <b>Reef</b>"),
+                    CNativeSelectOption("kelp", "Kelp"),
+                ]
+            }
+
+    return Page().render().serialize()
+
+
+def test_vue_native_select_provider_input_focus_and_validation(page: Any) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(_vue_native_select_page(), wait_until="load")
+    select = page.locator("#vue-native-select")
+    page.wait_for_selector("#vue-native-select[data-citry-native-select-initialized]")
+    assert select.locator('option[value="reef"]').text_content() == "{{ 1 + 1 }} <b>Reef</b>"
+    assert select.locator("option b").count() == 0
+    select.focus()
+    select.select_option("kelp")
+    assert select.input_value() == "kelp"
+    assert select.evaluate("element => document.activeElement === element") is True
+    page.locator("#native-select-required").click()
+    assert select.evaluate("element => element.required") is True
+    page.locator("#native-select-invalid").click()
+    assert select.get_attribute("aria-invalid") == "true"
+    page.locator("#native-select-disabled").click()
+    assert select.is_disabled()
+    assert errors == []
+
+
 def _native_select_page() -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
     class Page(Component):
         citry = app
+        js = """
+          $component({data(){const nativeSelectDemo=Citry.vue.reactive({
+            value:'reef',immutable:'reef',nullValue:null,standaloneRequired:true,
+            standaloneVariant:'outline',unsupportedRequired:false,variant:'outline',size:'md',
+          }); window.__nativeSelectDemo=nativeSelectDemo; return {state:{nativeSelectDemo}};}});
+        """
         css = """
           :where(.select-brand) {
             --cui-native-select-background: rgb(232 248 248);
@@ -39,19 +114,7 @@ def _native_select_page() -> str:
               <meta charset="utf-8" />
               <c-css />
             </head>
-            <body
-              x-data
-              x-init="Alpine.store('nativeSelectDemo', {
-                value: 'reef',
-                immutable: 'reef',
-                nullValue: null,
-                standaloneRequired: true,
-                standaloneVariant: 'outline',
-                unsupportedRequired: false,
-                variant: 'outline',
-                size: 'md',
-              })"
-            >
+            <body>
               <c-CForm id="survey-form">
                 <c-CField
                   control_id="habitat-select"
@@ -69,12 +132,10 @@ def _native_select_page() -> str:
                         'ARIA-DESCRIBEDBY': 'external-help',
                         'FORM': 'survey-form',
                       }"
-                      $c-props="{
-                        value: $store.nativeSelectDemo.value,
-                        variant: $store.nativeSelectDemo.variant,
-                        size: $store.nativeSelectDemo.size,
-                      }"
-                      @input="$store.nativeSelectDemo.value = $event.target.value"
+                      :value="state.nativeSelectDemo.value"
+                      :variant="state.nativeSelectDemo.variant"
+                      :size="state.nativeSelectDemo.size"
+                      @input="state.nativeSelectDemo.value = $event.target.value"
                     />
                   </c-fill>
                   <c-fill name="description">Choose one marine habitat.</c-fill>
@@ -89,14 +150,14 @@ def _native_select_page() -> str:
                     <c-CNativeSelect
                       c-options="options"
                       placeholder="Choose"
-                      $c-props="{value: $store.nativeSelectDemo.immutable}"
+                      :value="state.nativeSelectDemo.immutable"
                     />
                   </c-fill>
                   <c-fill name="error">Required.</c-fill>
                 </c-CField>
                 <c-CField
                   control_id="unsupported-required"
-                  $c-props="{required: $store.nativeSelectDemo.unsupportedRequired}"
+                  :required="state.nativeSelectDemo.unsupportedRequired"
                 >
                   <c-fill name="label">Optional research zone</c-fill>
                   <c-fill name="default">
@@ -106,11 +167,9 @@ def _native_select_page() -> str:
                 <c-CNativeSelect
                   id="null-controlled"
                   c-options="flat_options"
-                  $c-props="{
-                    value: $store.nativeSelectDemo.nullValue,
-                    required: $store.nativeSelectDemo.standaloneRequired,
-                    variant: $store.nativeSelectDemo.standaloneVariant,
-                  }"
+                  :value="state.nativeSelectDemo.nullValue"
+                  :required="state.nativeSelectDemo.standaloneRequired"
+                  :variant="state.nativeSelectDemo.standaloneVariant"
                   c-attrs="{'aria-label': 'Nullable zone'}"
                 />
                 <button id="reset-survey" type="reset">Reset</button>
@@ -254,13 +313,13 @@ def test_native_event_mirror_handles_placeholder_empty_string_and_controlled_cha
     select = page.locator("#habitat-select")
 
     select.select_option("")
-    page.wait_for_function("Alpine.store('nativeSelectDemo').value === ''")
+    page.wait_for_function("window.__nativeSelectDemo.value === ''")
     assert select.input_value() == ""
     assert select.get_attribute("data-empty") == ""
     assert select.evaluate("element => element.validity.valueMissing") is True
 
     select.select_option("pelagic")
-    page.wait_for_function("Alpine.store('nativeSelectDemo').value === 'pelagic'")
+    page.wait_for_function("window.__nativeSelectDemo.value === 'pelagic'")
     assert select.input_value() == "pelagic"
     assert select.get_attribute("data-empty") is None
 
@@ -290,7 +349,7 @@ def test_unsupported_dynamic_required_keeps_field_and_native_state_coherent(page
     field = page.locator("#unsupported-required-field")
     select = page.locator("#unsupported-required")
 
-    page.evaluate("Alpine.store('nativeSelectDemo').unsupportedRequired = true")
+    page.evaluate("window.__nativeSelectDemo.unsupportedRequired = true")
     page.wait_for_timeout(0)
 
     assert select.evaluate("element => element.required") is False
@@ -305,9 +364,9 @@ def test_unsupported_standalone_required_reports_once_across_unrelated_updates(p
     select = page.locator("#null-controlled")
 
     assert select.evaluate("element => element.required") is False
-    page.evaluate("Alpine.store('nativeSelectDemo').standaloneVariant = 'filled'")
+    page.evaluate("window.__nativeSelectDemo.standaloneVariant = 'filled'")
     page.wait_for_function("document.querySelector('#null-controlled').dataset.variant === 'filled'")
-    page.evaluate("Alpine.store('nativeSelectDemo').standaloneVariant = 'plain'")
+    page.evaluate("window.__nativeSelectDemo.standaloneVariant = 'plain'")
     page.wait_for_function("document.querySelector('#null-controlled').dataset.variant === 'plain'")
 
     assert len([message for message in errors if "required=true requires a placeholder" in message]) == 1
@@ -318,7 +377,7 @@ def test_controlled_native_invalid_episode_clears_only_after_final_value_settles
     select = page.locator("#invalid-controlled")
     field = page.locator("#invalid-controlled-field")
 
-    page.evaluate("Alpine.store('nativeSelectDemo').immutable = ''")
+    page.evaluate("window.__nativeSelectDemo.immutable = ''")
     page.wait_for_function("document.querySelector('#invalid-controlled').value === ''")
     select.evaluate("element => element.dispatchEvent(new Event('invalid', {bubbles: false}))")
     assert field.get_attribute("data-invalid") == ""
@@ -327,7 +386,7 @@ def test_controlled_native_invalid_episode_clears_only_after_final_value_settles
     page.wait_for_function("document.querySelector('#invalid-controlled').value === ''")
     assert field.get_attribute("data-invalid") == ""
 
-    page.evaluate("Alpine.store('nativeSelectDemo').immutable = 'pelagic'")
+    page.evaluate("window.__nativeSelectDemo.immutable = 'pelagic'")
     page.wait_for_function("document.querySelector('#invalid-controlled').value === 'pelagic'")
     assert field.get_attribute("data-invalid") is None
 
@@ -365,7 +424,7 @@ def test_client_presentation_and_public_css_overrides(page):
     assert select.evaluate("element => getComputedStyle(element).borderTopWidth") == "5px"
 
     page.evaluate(
-        """() => Object.assign(Alpine.store('nativeSelectDemo'), {
+        """() => Object.assign(window.__nativeSelectDemo, {
           variant: 'filled',
           size: 'lg',
         })"""

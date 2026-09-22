@@ -23,19 +23,6 @@ class PaletteLayers(Component):
     template = """
       <section
         class="command-palette-layers"
-        x-data="{removed:false}"
-        x-init="
-          Alpine.store('commandPaletteLayers', {paletteOpen:false,popoverOpen:false});
-          $nextTick(() => {
-          const host=$refs.shadowHost;
-          const fixture=$refs.shadowFixture;
-          if (!host.shadowRoot && fixture) {
-            Alpine.destroyTree(fixture);
-            host.attachShadow({mode:'open'}).append(fixture);
-            Alpine.initTree(fixture);
-          }
-          })
-        "
       >
         <h2>Modal and anchored layers</h2>
         <c-CDialog>
@@ -45,17 +32,13 @@ class PaletteLayers(Component):
           <c-fill name="title">Deployment workflow</c-fill>
           <c-fill name="default">
             <div class="command-palette-layers__workflow">
-              <div x-ref="paletteOwner">
+              <div ref="paletteOwner">
                 <c-CCommandPalette
                   label="Deployment workflow commands"
-                c-entries="commands"
-                $c-props="{
-                  open:$store.commandPaletteLayers.paletteOpen,
-                  onOpenChange:(value)=>$store.commandPaletteLayers.paletteOpen=value,
-                  onAction:(value)=>{
-                    if (value==='show-details') $store.commandPaletteLayers.popoverOpen=true;
-                  },
-                    }"
+                  c-entries="commands"
+                  :open="paletteOpen"
+                  :onOpenChange="(value) => paletteOpen = value"
+                  :onAction="handlePaletteAction"
                 >
                   <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                     <c-CButton
@@ -67,10 +50,8 @@ class PaletteLayers(Component):
               </div>
 
               <c-CPopover
-                $c-props="{
-                  open:$store.commandPaletteLayers.popoverOpen,
-                  onOpenChange:(value)=>$store.commandPaletteLayers.popoverOpen=value,
-                }"
+                :open="popoverOpen"
+                :onOpenChange="(value) => popoverOpen = value"
               >
                 <c-fill name="activator" data="{ activator_attrs }">
                   <c-CButton variant="outline" c-attrs="activator_attrs">Details anchor</c-CButton>
@@ -80,17 +61,19 @@ class PaletteLayers(Component):
               </c-CPopover>
               <button
                 type="button"
-                @click="$refs.paletteOwner.remove(); removed=true"
-                x-show="!removed"
-              >Remove palette owner</button>
-              <output x-text="removed ? 'Palette owner removed' : 'Palette owner present'">
+                @click="removePaletteOwner"
+                v-show="!removed"
+              >
+                Remove palette owner
+              </button>
+              <output v-text="removed ? 'Palette owner removed' : 'Palette owner present'">
                 Palette owner present
               </output>
             </div>
           </c-fill>
         </c-CDialog>
-        <div x-ref="shadowHost" class="command-palette-layers__shadow-host">
-          <div x-ref="shadowFixture">
+        <div ref="shadowHost" class="command-palette-layers__shadow-host">
+          <div ref="shadowFixture">
             <c-CCommandPalette label="ShadowRoot commands" c-entries="commands">
               <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                 <c-CButton
@@ -102,6 +85,35 @@ class PaletteLayers(Component):
           </div>
         </div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            removed: false,
+            paletteOpen: false,
+            popoverOpen: false,
+          };
+        },
+        methods: {
+          handlePaletteAction(value) {
+            if (value === 'show-details') this.popoverOpen = true;
+          },
+          removePaletteOwner() {
+            this.$refs.paletteOwner.remove();
+            this.removed = true;
+          },
+        },
+        mounted() {
+          this.$nextTick(() => {
+            const host = this.$refs.shadowHost;
+            const fixture = this.$refs.shadowFixture;
+            if (!host.shadowRoot && fixture) {
+              host.attachShadow({ mode: 'open' }).append(fixture);
+            }
+          });
+        },
+      });
     """
 
     css = """

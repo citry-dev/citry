@@ -24,7 +24,7 @@ inputs:
       - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the fieldset ID.}
       - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds fieldset classes and merges them with `attrs`.'}
       - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds fieldset inline styles and merges them with `attrs`.'}
-      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting metadata and targeted Alpine attributes to the fieldset.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting metadata and targeted Vue attributes to the fieldset.}
   - id: cradio-group-client-inputs
     component: CRadioGroup
     channel: client

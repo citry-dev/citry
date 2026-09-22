@@ -14,7 +14,7 @@ from citry.ext.debug import Debug
 pytestmark = pytest.mark.e2e
 
 
-def test_component_callback_still_receives_authored_roots(page: Any, serve_document: Any) -> None:
+def test_component_callback_preserves_authored_refs_and_root_metadata(page: Any, serve_document: Any) -> None:
     app = Citry(
         extensions=[Debug],
         extensions_defaults={"debug": {"highlight_components": True}},
@@ -23,10 +23,11 @@ def test_component_callback_still_receives_authored_roots(page: Any, serve_docum
     class Widget(Component):
         citry = app
         template = """
-            <section class="widget">one</section><aside class="widget">two</aside>
+            <section ref="section" class="widget">one</section><aside ref="aside" class="widget">two</aside>
         """
         js = """
-            $component(({ els }) => {
+            $component(({ component }) => {
+              const els = [component.$refs.section, component.$refs.aside];
               els.forEach((el) => {
                 el.dataset.authoredRoot = String(el.classList.contains('widget'));
                 el.dataset.debugWrapper = String(el.classList.contains('citry-debug'));
@@ -51,3 +52,59 @@ def test_component_callback_still_receives_authored_roots(page: Any, serve_docum
     assert [widgets.nth(index).get_attribute("data-debug-wrapper") for index in range(2)] == ["false", "false"]
     assert [widgets.nth(index).get_attribute("data-root-count") for index in range(2)] == ["2", "2"]
     assert widgets.first.locator("xpath=..").get_attribute("class") == "citry-debug citry-debug-component"
+
+
+def test_same_type_instances_and_native_slot_keep_lexical_data_and_refs(page: Any, serve_document: Any) -> None:
+    app = Citry(
+        extensions=[Debug],
+        extensions_defaults={"debug": {"highlight_components": True, "highlight_slots": True}},
+    )
+
+    class Card(Component):
+        citry = app
+        template = """
+            <article ref="shell" class="card"><c-slot /></article>
+        """
+        js = """
+            $component(({ component }) => {
+              component.$refs.shell.dataset.callback = 'ready';
+            });
+        """
+
+    class Page(Component):
+        citry = app
+        template = """
+            <!doctype html>
+            <html><head></head><body>
+              <c-card><span id="slot-one" v-text="message"></span></c-card>
+              <c-card><span id="slot-two" v-text="message"></span></c-card>
+              <c-js />
+            </body></html>
+        """
+        js = """
+            $component({data(){return {message:'parent value'}}});
+        """
+
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve_document(Page().render().serialize(deps_strategy="document")))
+    page.wait_for_function("document.querySelectorAll('.card[data-callback=ready]').length === 2")
+
+    assert errors == []
+    assert page.locator("#slot-one").inner_text() == "parent value"
+    assert page.locator("#slot-two").inner_text() == "parent value"
+    assert page.locator(".citry-debug-component").count() == 2
+    assert page.locator(".citry-debug-slot").count() == 2
+    labels = page.locator(".citry-debug-component > .citry-debug-label").all_inner_texts()
+    assert sum(label.startswith("Card (") for label in labels) == 2
+    assert len({label for label in labels if label.startswith("Card (")}) == 2
+    card_definition_ids = page.evaluate(
+        """() => {
+          const runtimeApp = [...CitryStable._apps.values()][0];
+          return [...runtimeApp.occurrences.values()]
+            .filter((occurrence) => occurrence.typeKey.startsWith('Card_'))
+            .map((occurrence) => occurrence.definitionId);
+        }"""
+    )
+    assert len(card_definition_ids) == 2
+    assert len(set(card_definition_ids)) == 1

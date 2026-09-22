@@ -9,7 +9,12 @@ import citry_ui
 from citry import Citry, Component
 
 
-def _render(source: str, data: dict[str, object] | None = None) -> str:
+def _render(
+    source: str,
+    data: dict[str, object] | None = None,
+    *,
+    static_fallback: bool = False,
+) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -20,7 +25,8 @@ def _render(source: str, data: dict[str, object] | None = None) -> str:
         def template_data(self, kwargs, slots):
             return data or {}
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
 
 
 _MINIMAL = """
@@ -39,8 +45,9 @@ _MINIMAL = """
 
 def test_server_anatomy_uses_exact_alertdialog_relationships_and_safe_buttons() -> None:
     html = _render(_MINIMAL)
+    static_html = _render(_MINIMAL, static_fallback=True)
     assert "citry-ui:dialog-controller-runtime" in html
-    dialog = re.search(r'<dialog[^>]+data-citry-ui-part="alert-dialog"[^>]*>', html)
+    dialog = re.search(r'<dialog[^>]+data-citry-ui-part="alert-dialog"[^>]*>', static_html)
     assert dialog is not None
     root = dialog.group(0)
     assert 'id="delete"' in root
@@ -49,7 +56,7 @@ def test_server_anatomy_uses_exact_alertdialog_relationships_and_safe_buttons() 
     assert 'aria-labelledby="delete-title"' in root
     assert 'aria-describedby="delete-description"' in root
     assert 'data-size="sm"' in root
-    markup = html[html.find('<div class="cui-dialog-host') : html.find("<script")]
+    markup = static_html[static_html.find('<div class="cui-dialog-host') :]
     assert 'id="delete-title"' in markup
     assert 'id="delete-description"' in markup
     assert markup.count('type="button"') == 2
@@ -60,8 +67,7 @@ def test_server_anatomy_uses_exact_alertdialog_relationships_and_safe_buttons() 
 
 
 def test_activator_and_supplemental_body_render_with_slot_mappings() -> None:
-    html = _render(
-        """
+    source = """
         <c-CAlertDialog>
           <c-fill name="activator" data="{activator_attrs, activator_type}">
             <button c-type="activator_type" c-bind="activator_attrs">Open prompt</button>
@@ -73,7 +79,7 @@ def test_activator_and_supplemental_body_render_with_slot_mappings() -> None:
           <c-fill name="action" data="{action_attrs}"><c-CButton c-attrs="action_attrs">Leave</c-CButton></c-fill>
         </c-CAlertDialog>
         """
-    )
+    html = _render(source, static_fallback=True)
     assert 'aria-haspopup="dialog"' in html
     assert 'aria-expanded="false"' in html
     assert 'data-citry-ui-part="body"' in html

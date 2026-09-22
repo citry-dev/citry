@@ -59,7 +59,7 @@ _GUIDE_REQUIRED_FRAGMENTS: dict[str, tuple[tuple[str, str], ...]] = {
         ("operating system's callout timing", "state the real-device long-press limit"),
         ("/ui-library/components/menu/", "link the reused Menu declaration contract"),
         ("no public coordinate", "state that consumers cannot supply arbitrary points"),
-        ("isolated expression scope", "state the native-listener expression boundary"),
+        ("executable listener strings", "state the native-listener expression boundary"),
         ("Without JavaScript", "teach the native progressive-enhancement fallback"),
     ),
 }
@@ -103,7 +103,7 @@ _PREVIEW_REQUIRED_FRAGMENTS: dict[str, dict[str, tuple[tuple[str, str], ...]]] =
             ("Throw in next action", "include callback exception behavior"),
         ),
         "application-shortcut": (
-            ("@keydown.window", "show the application-owned global listener"),
+            ('window.addEventListener("keydown"', "show the application-owned global listener"),
             ("contenteditable", "exclude editable content from the shortcut"),
             ("Help palette", "include multiple palette isolation"),
         ),
@@ -157,8 +157,9 @@ _PREVIEW_REQUIRED_FRAGMENTS: dict[str, dict[str, tuple[tuple[str, str], ...]]] =
             ("Recover with a small image", "include explicit error recovery"),
         ),
         "reactive-image": (
-            ("image_attrs", "bind native load and error listeners through img_attrs"),
-            ("$dispatch", "demonstrate the isolated native-event bridge"),
+            ("onStatusChange", "report native load and error settlement through the normalized callback"),
+            ("detail.status === 'loaded'", "handle the normalized native load settlement"),
+            ("detail.status === 'error'", "handle the normalized native error settlement"),
             ("Rapid A then B", "include request supersession"),
             ("Open ShadowRoot fixture", "name the ShadowRoot lifecycle fixture"),
         ),

@@ -1,3 +1,5 @@
+# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
+
 from typing import Any
 
 import citry_ui
@@ -32,27 +34,29 @@ class DisabledAndShortcuts(Component):
       <section
         class="command-palette-disabled"
         dir="rtl"
-        x-data="{open:true,disabled:false,loop:true,last:'none'}"
       >
         <h2>Deployment commands</h2>
         <div role="group" aria-label="Palette settings">
-          <label><input type="checkbox" x-model="disabled" /> Disable palette</label>
-          <label><input type="checkbox" x-model="loop" /> Loop navigation</label>
+          <label><input type="checkbox" v-model="disabled" /> Disable palette</label>
+          <label><input type="checkbox" v-model="loop" /> Loop navigation</label>
         </div>
         <c-CCommandPalette
           label="Deployment commands"
           c-entries="commands"
           size="lg"
-          $c-props="{
-            open,
-            disabled,
-            loop,
-            onOpenChange:(value)=>open=value,
-            onAction:(value)=>last=value,
-          }"
+          :open="open" :disabled="disabled" :loop="loop" :onOpenChange="(value)=>open=value" :onAction="(value)=>last=value"
         />
-        <output aria-live="polite">Action: <span x-text="last">none</span></output>
+        <output aria-live="polite">Action: <span v-text="last">none</span></output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            open:true,disabled:false,loop:true,last:'none'
+          };
+        },
+      });
     """
 
     css = """

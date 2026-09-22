@@ -6,7 +6,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
-from typing import TypeAlias, cast
+from typing import Literal, TypeAlias, cast
 
 from .errors import CacheArtifactError, _CacheArtifactCompatibilityError, _CacheArtifactOversizedError
 from .limits import (
@@ -25,17 +25,12 @@ _ROOT_MARKER_RE = re.compile(r'([^\s=/><]+)(?:="([^"<>]*)")?\Z')
 
 @dataclass(frozen=True, slots=True)
 class FrozenJsonObject:
-    """An ordered immutable JSON object used by extension and ownership payloads."""
+    """An ordered immutable JSON object used by extension payloads."""
 
     items: tuple[tuple[str, FrozenJsonValue], ...]
 
 
 FrozenJsonValue: TypeAlias = "None | bool | int | float | str | tuple[FrozenJsonValue, ...] | FrozenJsonObject"
-
-
-@dataclass(frozen=True, slots=True)
-class ArtifactTextPart:
-    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,12 +44,160 @@ class ArtifactPlaceholderPart:
 
 
 @dataclass(frozen=True, slots=True)
-class ArtifactRegionPart:
-    region: int
-    part: ArtifactPart
+class ArtifactSourceTextPart:
+    source: str
+    span: tuple[int, int]
+    text: str
 
 
-ArtifactPart: TypeAlias = "ArtifactTextPart | ArtifactFramePart | ArtifactPlaceholderPart | ArtifactRegionPart"
+@dataclass(frozen=True, slots=True)
+class ArtifactVerbatimHtmlPart:
+    source: str
+    span: tuple[int, int]
+    html: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactTextValuePart:
+    source: str
+    span: tuple[int, int]
+    value: FrozenJsonValue
+    browser_binding: ArtifactBrowserBinding | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactTrustedHtmlPart:
+    html: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactAttribute:
+    name: str
+    origin: str
+    span: tuple[int, int]
+    value: FrozenJsonValue
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactBrowserBinding:
+    helper: str
+    operand: FrozenJsonValue
+    target: str
+    name: str | None
+    values_expression: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactElementOpenPart:
+    source: str
+    span: tuple[int, int]
+    tag: str
+    attrs: tuple[ArtifactAttribute, ...]
+    is_void: bool
+    is_self_closing: bool
+    element_metadata: FrozenJsonValue
+    event_bindings: tuple[FrozenJsonObject, ...]
+    control_bindings: tuple[FrozenJsonObject, ...] = ()
+    browser_bindings: tuple[ArtifactBrowserBinding, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactElementClosePart:
+    source: str
+    span: tuple[int, int]
+    tag: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDynamicElementOpenPart:
+    tag: str
+    attrs: FrozenJsonObject
+    is_void: bool
+    authored_attrs: tuple[ArtifactAttribute, ...]
+    key: str | None
+    authored_source: str | None
+    event_bindings: tuple[FrozenJsonObject, ...] = ()
+    control_bindings: tuple[FrozenJsonObject, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDynamicElementClosePart:
+    tag: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactStaticRunOpening:
+    start_at: int
+    insert_at: int
+    end_at: int
+    relative_depth: int
+    attr_identities: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactStaticRunStructure:
+    openings: tuple[ArtifactStaticRunOpening, ...]
+    final_depth_delta: int
+    tag_transitions: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactStaticRunPart:
+    html: str
+    structure: ArtifactStaticRunStructure | None
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactLeafProgramPart:
+    template: str
+    element_bindings: tuple[FrozenJsonObject, ...]
+    browser_requirements: tuple[str, ...]
+    safe_body: bool
+    prepared_data: FrozenJsonObject
+    vue_errors: tuple[str, ...]
+    typed_parts: tuple[ArtifactPart, ...]
+    static_parts: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDirectSlotPart:
+    frame: int
+    execution: int
+    parent_execution: int | None
+    external_parent_execution: bool
+    lexical_instance: int | None
+    lexical_parent_depth: int | None
+    receiver_instance: int | None
+    receiver_parent_depth: int | None
+    kind: str
+    public_name: str
+    fill_source: str
+    source: str
+    span: tuple[int, int]
+    origin: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDirectCallRunPart:
+    frame: int
+    child_class_id: str
+    source: str
+    span: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDirectPythonComponentPart:
+    frame: int
+    local_ordinal: int
+
+
+ArtifactPart: TypeAlias = (
+    "ArtifactFramePart | ArtifactPlaceholderPart | ArtifactSourceTextPart | ArtifactVerbatimHtmlPart | "
+    "ArtifactTextValuePart | ArtifactTrustedHtmlPart | ArtifactElementOpenPart | ArtifactElementClosePart | "
+    "ArtifactDynamicElementOpenPart | ArtifactDynamicElementClosePart | ArtifactStaticRunPart | "
+    "ArtifactLeafProgramPart | ArtifactDirectSlotPart | ArtifactDirectCallRunPart | "
+    "ArtifactDirectPythonComponentPart"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +211,30 @@ class ArtifactFrame:
     root_markers: tuple[str, ...]
     parts: tuple[ArtifactPart, ...]
     is_transparent_root: bool = False
+    data: FrozenJsonObject = FrozenJsonObject(())
+    prepared_call: ArtifactPreparedCall | None = None
+    source_fingerprint: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactPreparedCall:
+    source: str
+    span: tuple[int, int]
+    explicit_key: str | None
+    origin: str | None
+    slot_free_body: bool
+    raw_slots_present: bool
+    bindings: tuple[ArtifactPreparedBinding, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactPreparedBinding:
+    kind: str
+    key: str
+    value: str
+    source: str
+    span: tuple[int, int]
+    provenance: Literal["authored", "runtime-spread"] = "authored"
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +252,6 @@ class CachedRenderArtifact:
 
     root_frame: int
     frames: tuple[ArtifactFrame, ...]
-    ownership: FrozenJsonObject
     extensions: tuple[ArtifactExtension, ...]
 
 
@@ -169,7 +335,6 @@ def _validate_typed_artifact(artifact: CachedRenderArtifact) -> None:
         raise CacheArtifactError("artifact.frames must be an immutable tuple.")
     if type(artifact.extensions) is not tuple:
         raise CacheArtifactError("artifact.extensions must be an immutable tuple.")
-    _validate_frozen_json(artifact.ownership, "artifact.ownership")
     extension_names: set[str] = set()
     for index, extension in enumerate(artifact.extensions):
         path = f"artifact.extensions[{index}]"
@@ -216,6 +381,10 @@ def _validate_typed_artifact(artifact: CachedRenderArtifact) -> None:
             )
         if type(frame.parts) is not tuple:
             raise CacheArtifactError(f"{path}.parts must be an immutable tuple.")
+        _validate_frozen_json(frame.data, f"{path}.data")
+        if frame.prepared_call is not None:
+            _prepared_call_from_wire(_prepared_call_to_wire(frame.prepared_call), f"{path}.prepared_call")
+        _require_optional_nonempty_string(frame.source_fingerprint, f"{path}.source_fingerprint")
     _validate_frame_tree(artifact)
 
 
@@ -326,7 +495,6 @@ def _artifact_to_wire(artifact: CachedRenderArtifact) -> dict[str, object]:
         "created_by": _CREATED_BY,
         "root_frame": artifact.root_frame,
         "frames": [_frame_to_wire(frame) for frame in artifact.frames],
-        "ownership": _thaw_json(artifact.ownership),
         "extensions": [
             {
                 "name": extension.name,
@@ -346,19 +514,145 @@ def _frame_to_wire(frame: ArtifactFrame) -> dict[str, object]:
         "component_root": frame.is_component_root,
         "transparent_root": frame.is_transparent_root,
         "root_markers": list(frame.root_markers),
+        "data": _thaw_json(frame.data),
+        "prepared_call": None if frame.prepared_call is None else _prepared_call_to_wire(frame.prepared_call),
+        "source_fingerprint": frame.source_fingerprint,
         "parts": [_part_to_wire(part) for part in frame.parts],
     }
 
 
+def _prepared_call_to_wire(value: ArtifactPreparedCall) -> list[object]:
+    return [
+        value.source,
+        list(value.span),
+        value.explicit_key,
+        value.origin,
+        value.slot_free_body,
+        value.raw_slots_present,
+        [[item.kind, item.key, item.value, item.source, list(item.span), item.provenance] for item in value.bindings],
+    ]
+
+
+def _browser_binding_to_wire(value: ArtifactBrowserBinding) -> list[object]:
+    return [value.helper, _thaw_json(value.operand), value.target, value.name, value.values_expression]
+
+
+def _browser_binding_from_wire(value: object, path: str) -> ArtifactBrowserBinding:
+    item = _require_list(value, path)
+    if len(item) != 5:
+        raise CacheArtifactError(f"{path} must contain exactly five fields.")
+    target = _require_nonempty_string(item[2], f"{path}[2]")
+    name = None if item[3] is None else _require_nonempty_string(item[3], f"{path}[3]")
+    if target not in {"text", "attribute"} or (target == "text") != (name is None):
+        raise CacheArtifactError(f"{path} has an invalid target.")
+    return ArtifactBrowserBinding(
+        _require_nonempty_string(item[0], f"{path}[0]"),
+        _freeze_json_value(item[1], f"{path}[1]"),
+        target,
+        name,
+        None if item[4] is None else _require_nonempty_string(item[4], f"{path}[4]"),
+    )
+
+
 def _part_to_wire(part: ArtifactPart) -> list[object]:
-    if type(part) is ArtifactTextPart:
-        return ["text", part.text]
     if type(part) is ArtifactFramePart:
         return ["frame", part.frame]
     if type(part) is ArtifactPlaceholderPart:
         return ["placeholder", part.key]
-    if type(part) is ArtifactRegionPart:
-        return ["region", part.region, _part_to_wire(part.part)]
+    if type(part) is ArtifactSourceTextPart:
+        return ["source_text", part.source, list(part.span), part.text]
+    if type(part) is ArtifactVerbatimHtmlPart:
+        return ["verbatim_html", part.source, list(part.span), part.html]
+    if type(part) is ArtifactTextValuePart:
+        return [
+            "text_value",
+            part.source,
+            list(part.span),
+            _thaw_json(part.value),
+            None if part.browser_binding is None else _browser_binding_to_wire(part.browser_binding),
+        ]
+    if type(part) is ArtifactTrustedHtmlPart:
+        return ["trusted_html", part.html]
+    if type(part) is ArtifactElementOpenPart:
+        return [
+            "element_open",
+            part.source,
+            list(part.span),
+            part.tag,
+            [[item.name, item.origin, list(item.span), _thaw_json(item.value)] for item in part.attrs],
+            part.is_void,
+            part.is_self_closing,
+            _thaw_json(part.element_metadata),
+            [_thaw_json(item) for item in part.event_bindings],
+            [_thaw_json(item) for item in part.control_bindings],
+            [_browser_binding_to_wire(item) for item in part.browser_bindings],
+        ]
+    if type(part) is ArtifactElementClosePart:
+        return ["element_close", part.source, list(part.span), part.tag]
+    if type(part) is ArtifactDynamicElementOpenPart:
+        return [
+            "dynamic_open",
+            part.tag,
+            _thaw_json(part.attrs),
+            part.is_void,
+            [[item.name, item.origin, list(item.span), _thaw_json(item.value)] for item in part.authored_attrs],
+            part.key,
+            part.authored_source,
+            [_thaw_json(item) for item in part.event_bindings],
+            [_thaw_json(item) for item in part.control_bindings],
+        ]
+    if type(part) is ArtifactDynamicElementClosePart:
+        return ["dynamic_close", part.tag]
+    if type(part) is ArtifactStaticRunPart:
+        structure = part.structure
+        return [
+            "static_run",
+            part.html,
+            None
+            if structure is None
+            else [
+                [
+                    [item.start_at, item.insert_at, item.end_at, item.relative_depth, list(item.attr_identities)]
+                    for item in structure.openings
+                ],
+                structure.final_depth_delta,
+                [list(item) for item in structure.tag_transitions],
+            ],
+        ]
+    if type(part) is ArtifactLeafProgramPart:
+        return [
+            "leaf_program",
+            part.template,
+            [_thaw_json(item) for item in part.element_bindings],
+            list(part.browser_requirements),
+            part.safe_body,
+            _thaw_json(part.prepared_data),
+            list(part.vue_errors),
+            [_part_to_wire(item) for item in part.typed_parts],
+            list(part.static_parts),
+        ]
+    if type(part) is ArtifactDirectSlotPart:
+        return [
+            "direct_slot",
+            part.frame,
+            part.execution,
+            part.parent_execution,
+            part.external_parent_execution,
+            part.lexical_instance,
+            part.lexical_parent_depth,
+            part.receiver_instance,
+            part.receiver_parent_depth,
+            part.kind,
+            part.public_name,
+            part.fill_source,
+            part.source,
+            list(part.span),
+            part.origin,
+        ]
+    if type(part) is ArtifactDirectCallRunPart:
+        return ["direct_call_run", part.frame, part.child_class_id, part.source, list(part.span)]
+    if type(part) is ArtifactDirectPythonComponentPart:
+        return ["direct_python_component", part.frame, part.local_ordinal]
     msg = f"Unsupported artifact part {type(part).__name__}."
     raise TypeError(msg)
 
@@ -373,7 +667,6 @@ def _artifact_from_wire(value: object) -> CachedRenderArtifact:
             "created_by",
             "root_frame",
             "frames",
-            "ownership",
             "extensions",
         },
         "artifact",
@@ -391,7 +684,6 @@ def _artifact_from_wire(value: object) -> CachedRenderArtifact:
     root_frame = _require_nonnegative_int(root["root_frame"], "artifact.root_frame")
     frame_values = _require_list(root["frames"], "artifact.frames")
     frames = tuple(_frame_from_wire(item, index) for index, item in enumerate(frame_values))
-    ownership = _freeze_object(root["ownership"], "artifact.ownership")
     extension_values = _require_list(root["extensions"], "artifact.extensions")
     extensions = tuple(_extension_from_wire(item, index) for index, item in enumerate(extension_values))
     names = [extension.name for extension in extensions]
@@ -400,7 +692,6 @@ def _artifact_from_wire(value: object) -> CachedRenderArtifact:
     return CachedRenderArtifact(
         root_frame=root_frame,
         frames=frames,
-        ownership=ownership,
         extensions=extensions,
     )
 
@@ -410,7 +701,18 @@ def _frame_from_wire(value: object, index: int) -> ArtifactFrame:
     frame = _require_object(value, path)
     _require_fields(
         frame,
-        {"instance", "class_id", "class_name", "component_root", "transparent_root", "root_markers", "parts"},
+        {
+            "instance",
+            "class_id",
+            "class_name",
+            "component_root",
+            "transparent_root",
+            "root_markers",
+            "data",
+            "prepared_call",
+            "source_fingerprint",
+            "parts",
+        },
         path,
     )
     instance_value = frame["instance"]
@@ -446,6 +748,67 @@ def _frame_from_wire(value: object, index: int) -> ArtifactFrame:
         is_transparent_root=transparent_root,
         root_markers=root_markers,
         parts=parts,
+        data=_freeze_object(frame["data"], f"{path}.data"),
+        prepared_call=(
+            None
+            if frame["prepared_call"] is None
+            else _prepared_call_from_wire(frame["prepared_call"], f"{path}.prepared_call")
+        ),
+        source_fingerprint=_require_optional_nonempty_string(
+            frame["source_fingerprint"], f"{path}.source_fingerprint"
+        ),
+    )
+
+
+def _prepared_call_from_wire(value: object, path: str) -> ArtifactPreparedCall:
+    item = _require_list(value, path)
+    if len(item) != 7:
+        raise CacheArtifactError(f"{path} must contain exactly seven fields.")
+    source = _require_string(item[0], f"{path}[0]")
+    bindings: list[ArtifactPreparedBinding] = []
+    for index, raw in enumerate(_require_list(item[6], f"{path}[6]")):
+        binding = _require_list(raw, f"{path}[6][{index}]")
+        if len(binding) not in {5, 6}:
+            raise CacheArtifactError(f"{path}[6][{index}] must contain exactly five or six fields.")
+        kind = _require_nonempty_string(binding[0], f"{path}[6][{index}][0]")
+        if kind not in {
+            "prop",
+            "props-object",
+            "events-object",
+            "event",
+            "ref-static",
+            "ref-expression",
+            "citry-handler",
+        }:
+            raise CacheArtifactError(f"{path}[6][{index}][0] has an unknown binding kind.")
+        binding_source = _require_string(binding[3], f"{path}[6][{index}][3]")
+        provenance = (
+            "authored"
+            if len(binding) == 5
+            else _require_binding_provenance(
+                _require_nonempty_string(binding[5], f"{path}[6][{index}][5]"), f"{path}[6][{index}][5]"
+            )
+        )
+        if provenance == "runtime-spread" and kind != "citry-handler":
+            raise CacheArtifactError(f"{path}[6][{index}] gives runtime provenance to a non-handler binding.")
+        bindings.append(
+            ArtifactPreparedBinding(
+                kind,
+                _require_nonempty_string(binding[1], f"{path}[6][{index}][1]"),
+                _require_string(binding[2], f"{path}[6][{index}][2]"),
+                binding_source,
+                _require_source_span(binding[4], binding_source, f"{path}[6][{index}][4]"),
+                provenance,
+            )
+        )
+    return ArtifactPreparedCall(
+        source,
+        _require_source_span(item[1], source, f"{path}[1]"),
+        None if item[2] is None else _require_string(item[2], f"{path}[2]"),
+        _require_optional_nonempty_string(item[3], f"{path}[3]"),
+        _require_bool(item[4], f"{path}[4]"),
+        _require_bool(item[5], f"{path}[5]"),
+        tuple(bindings),
     )
 
 
@@ -454,18 +817,242 @@ def _part_from_wire(value: object, path: str) -> ArtifactPart:
     if not part or type(part[0]) is not str:
         raise CacheArtifactError(f"{path} must start with a string part tag.")
     tag = part[0]
-    if tag == "text" and len(part) == 2:
-        return ArtifactTextPart(_require_string(part[1], f"{path}[1]"))
     if tag == "frame" and len(part) == 2:
         return ArtifactFramePart(_require_nonnegative_int(part[1], f"{path}[1]"))
     if tag == "placeholder" and len(part) == 2:
         return ArtifactPlaceholderPart(_require_nonempty_string(part[1], f"{path}[1]"))
-    if tag == "region" and len(part) == 3:
-        return ArtifactRegionPart(
+    if tag == "source_text" and len(part) == 4:
+        source = _require_string(part[1], f"{path}[1]")
+        return ArtifactSourceTextPart(
+            source,
+            _require_source_span(part[2], source, f"{path}[2]"),
+            _require_string(part[3], f"{path}[3]"),
+        )
+    if tag == "verbatim_html" and len(part) == 4:
+        source = _require_string(part[1], f"{path}[1]")
+        return ArtifactVerbatimHtmlPart(
+            source,
+            _require_source_span(part[2], source, f"{path}[2]"),
+            _require_string(part[3], f"{path}[3]"),
+        )
+    if tag == "text_value" and len(part) == 5:
+        source = _require_string(part[1], f"{path}[1]")
+        return ArtifactTextValuePart(
+            source,
+            _require_source_span(part[2], source, f"{path}[2]"),
+            _freeze_json_value(part[3], f"{path}[3]"),
+            None if part[4] is None else _browser_binding_from_wire(part[4], f"{path}[4]"),
+        )
+    if tag == "trusted_html" and len(part) == 2:
+        return ArtifactTrustedHtmlPart(_require_string(part[1], f"{path}[1]"))
+    if tag == "element_open" and len(part) == 11:
+        source = _require_string(part[1], f"{path}[1]")
+        attrs = tuple(
+            _attribute_from_wire(item, source, f"{path}[4][{index}]")
+            for index, item in enumerate(_require_list(part[4], f"{path}[4]"))
+        )
+        bindings = tuple(
+            _freeze_object(item, f"{path}[8][{index}]")
+            for index, item in enumerate(_require_list(part[8], f"{path}[8]"))
+        )
+        controls = tuple(
+            _freeze_object(item, f"{path}[9][{index}]")
+            for index, item in enumerate(_require_list(part[9], f"{path}[9]"))
+        )
+        browser_bindings = tuple(
+            _browser_binding_from_wire(item, f"{path}[10][{index}]")
+            for index, item in enumerate(_require_list(part[10], f"{path}[10]"))
+        )
+        return ArtifactElementOpenPart(
+            source,
+            _require_source_span(part[2], source, f"{path}[2]"),
+            _require_nonempty_string(part[3], f"{path}[3]"),
+            attrs,
+            _require_bool(part[5], f"{path}[5]"),
+            _require_bool(part[6], f"{path}[6]"),
+            _freeze_json_value(part[7], f"{path}[7]"),
+            bindings,
+            controls,
+            browser_bindings,
+        )
+    if tag == "element_close" and len(part) == 4:
+        source = _require_string(part[1], f"{path}[1]")
+        return ArtifactElementClosePart(
+            source,
+            _require_source_span(part[2], source, f"{path}[2]"),
+            _require_nonempty_string(part[3], f"{path}[3]"),
+        )
+    if tag == "dynamic_open" and len(part) in {7, 9}:
+        authored_source = None if part[6] is None else _require_string(part[6], f"{path}[6]")
+        authored_attrs = tuple(
+            _attribute_from_wire(item, authored_source or "", f"{path}[4][{index}]")
+            for index, item in enumerate(_require_list(part[4], f"{path}[4]"))
+        )
+        if bool(authored_attrs) is (authored_source is None):
+            raise CacheArtifactError(f"{path} has inconsistent authored dynamic element source.")
+        if any(item.origin != "source" for item in authored_attrs):
+            raise CacheArtifactError(f"{path}[4] contains a non-source dynamic element attribute.")
+        return ArtifactDynamicElementOpenPart(
+            _require_nonempty_string(part[1], f"{path}[1]"),
+            _freeze_object(part[2], f"{path}[2]"),
+            _require_bool(part[3], f"{path}[3]"),
+            authored_attrs,
+            None if part[5] is None else _require_string(part[5], f"{path}[5]"),
+            authored_source,
+            ()
+            if len(part) == 7
+            else tuple(_freeze_object(item, f"{path}[7]") for item in _require_list(part[7], f"{path}[7]")),
+            ()
+            if len(part) == 7
+            else tuple(_freeze_object(item, f"{path}[8]") for item in _require_list(part[8], f"{path}[8]")),
+        )
+    if tag == "dynamic_close" and len(part) == 2:
+        return ArtifactDynamicElementClosePart(_require_nonempty_string(part[1], f"{path}[1]"))
+    if tag == "static_run" and len(part) == 3:
+        html = _require_string(part[1], f"{path}[1]")
+        return ArtifactStaticRunPart(html, _static_structure_from_wire(part[2], html, f"{path}[2]"))
+    if tag == "leaf_program" and len(part) == 9:
+        bindings = tuple(
+            _freeze_object(item, f"{path}[2][{index}]")
+            for index, item in enumerate(_require_list(part[2], f"{path}[2]"))
+        )
+        requirements = tuple(
+            _require_nonempty_string(item, f"{path}[3][{index}]")
+            for index, item in enumerate(_require_list(part[3], f"{path}[3]"))
+        )
+        if tuple(sorted(set(requirements))) != requirements:
+            raise CacheArtifactError(f"{path}[3] must be unique and sorted.")
+        errors = tuple(
+            _require_nonempty_string(item, f"{path}[6][{index}]")
+            for index, item in enumerate(_require_list(part[6], f"{path}[6]"))
+        )
+        typed = tuple(
+            _part_from_wire(item, f"{path}[7][{index}]")
+            for index, item in enumerate(_require_list(part[7], f"{path}[7]"))
+        )
+        if any(
+            type(item)
+            not in {
+                ArtifactSourceTextPart,
+                ArtifactVerbatimHtmlPart,
+                ArtifactTextValuePart,
+                ArtifactTrustedHtmlPart,
+                ArtifactElementOpenPart,
+                ArtifactElementClosePart,
+                ArtifactDynamicElementOpenPart,
+                ArtifactDynamicElementClosePart,
+                ArtifactStaticRunPart,
+            }
+            for item in typed
+        ):
+            raise CacheArtifactError(f"{path}[7] contains a non-leaf typed projection part.")
+        static = tuple(
+            _require_string(item, f"{path}[8][{index}]")
+            for index, item in enumerate(_require_list(part[8], f"{path}[8]"))
+        )
+        return ArtifactLeafProgramPart(
+            _require_string(part[1], f"{path}[1]"),
+            bindings,
+            requirements,
+            _require_bool(part[4], f"{path}[4]"),
+            _freeze_object(part[5], f"{path}[5]"),
+            errors,
+            typed,
+            static,
+        )
+    if tag == "direct_slot" and len(part) == 15:
+        parent = part[3]
+        source = _require_string(part[12], f"{path}[12]")
+        return ArtifactDirectSlotPart(
             _require_nonnegative_int(part[1], f"{path}[1]"),
-            _part_from_wire(part[2], f"{path}[2]"),
+            _require_nonnegative_int(part[2], f"{path}[2]"),
+            None if parent is None else _require_nonnegative_int(parent, f"{path}[3]"),
+            _require_bool(part[4], f"{path}[4]"),
+            None if part[5] is None else _require_nonnegative_int(part[5], f"{path}[5]"),
+            None if part[6] is None else _require_positive_int(part[6], f"{path}[6]"),
+            None if part[7] is None else _require_nonnegative_int(part[7], f"{path}[7]"),
+            None if part[8] is None else _require_positive_int(part[8], f"{path}[8]"),
+            _require_nonempty_string(part[9], f"{path}[9]"),
+            _require_nonempty_string(part[10], f"{path}[10]"),
+            _require_string(part[11], f"{path}[11]"),
+            source,
+            _require_source_span(part[13], source, f"{path}[13]"),
+            _require_optional_nonempty_string(part[14], f"{path}[14]"),
+        )
+    if tag == "direct_call_run" and len(part) == 5:
+        source = _require_string(part[3], f"{path}[3]")
+        return ArtifactDirectCallRunPart(
+            _require_nonnegative_int(part[1], f"{path}[1]"),
+            _require_nonempty_string(part[2], f"{path}[2]"),
+            source,
+            _require_source_span(part[4], source, f"{path}[4]"),
+        )
+    if tag == "direct_python_component" and len(part) == 3:
+        return ArtifactDirectPythonComponentPart(
+            _require_nonnegative_int(part[1], f"{path}[1]"),
+            _require_nonnegative_int(part[2], f"{path}[2]"),
         )
     raise CacheArtifactError(f"{path} has an unknown or malformed artifact part tag {tag!r}.")
+
+
+def _attribute_from_wire(value: object, source: str, path: str) -> ArtifactAttribute:
+    item = _require_list(value, path)
+    if len(item) != 4:
+        raise CacheArtifactError(f"{path} must contain exactly four fields.")
+    origin = _require_string(item[1], f"{path}[1]")
+    if origin not in {"source", "data"}:
+        raise CacheArtifactError(f"{path}[1] must be 'source' or 'data'.")
+    return ArtifactAttribute(
+        _require_nonempty_string(item[0], f"{path}[0]"),
+        origin,
+        _require_source_span(item[2], source, f"{path}[2]"),
+        _freeze_json_value(item[3], f"{path}[3]"),
+    )
+
+
+def _static_structure_from_wire(value: object, html: str, path: str) -> ArtifactStaticRunStructure | None:
+    if value is None:
+        return None
+    item = _require_list(value, path)
+    if len(item) != 3:
+        raise CacheArtifactError(f"{path} must contain openings, final depth, and tag transitions.")
+    openings: list[ArtifactStaticRunOpening] = []
+    for index, raw in enumerate(_require_list(item[0], f"{path}[0]")):
+        opening = _require_list(raw, f"{path}[0][{index}]")
+        if len(opening) != 5:
+            raise CacheArtifactError(f"{path}[0][{index}] must contain exactly five fields.")
+        identities = tuple(
+            _require_nonempty_string(v, f"{path}[0][{index}][4]")
+            for v in _require_list(opening[4], f"{path}[0][{index}][4]")
+        )
+        if tuple(sorted(set(identities))) != identities:
+            raise CacheArtifactError(f"{path}[0][{index}] attribute identities must be unique and sorted.")
+        start_at, insert_at, end_at = (
+            _require_nonnegative_int(opening[i], f"{path}[0][{index}][{i}]") for i in range(3)
+        )
+        if not start_at <= insert_at <= end_at <= len(html):
+            raise CacheArtifactError(f"{path}[0][{index}] offsets must be ordered within the static HTML.")
+        if openings and start_at < openings[-1].end_at:
+            raise CacheArtifactError(f"{path}[0][{index}] overlaps or precedes the previous opening.")
+        openings.append(
+            ArtifactStaticRunOpening(
+                start_at,
+                insert_at,
+                end_at,
+                _require_int(opening[3], f"{path}[0][{index}][3]"),
+                identities,
+            )
+        )
+    transitions: list[tuple[str, str]] = []
+    for index, raw in enumerate(_require_list(item[2], f"{path}[2]")):
+        transition = _require_list(raw, f"{path}[2][{index}]")
+        if len(transition) != 2 or transition[0] not in {"open", "close"}:
+            raise CacheArtifactError(f"{path}[2][{index}] must be an open/close tag transition.")
+        # Re-read the checked value as text so the pair carries the tag kind, not
+        # the raw JSON entry it came from.
+        kind = _require_nonempty_string(transition[0], f"{path}[2][{index}][0]")
+        transitions.append((kind, _require_nonempty_string(transition[1], f"{path}[2][{index}][1]")))
+    return ArtifactStaticRunStructure(tuple(openings), _require_int(item[1], f"{path}[1]"), tuple(transitions))
 
 
 def _extension_from_wire(value: object, index: int) -> ArtifactExtension:
@@ -505,13 +1092,46 @@ def _validate_frame_tree(artifact: CachedRenderArtifact) -> None:
                     raise CacheArtifactError(f"artifact.frames[{frame_index}] refers to missing frame {part.frame!r}.")
                 incoming[part.frame] += 1
                 adjacency[frame_index].append(part.frame)
-            elif type(part) is ArtifactRegionPart:
-                _require_nonnegative_int(part.region, f"{path}.region")
-                pending.append((part.part, f"{path}.part", depth + 1))
-            elif type(part) is ArtifactTextPart:
-                _require_string(part.text, f"{path}.text")
+            # Spelled as separate identity checks rather than a membership test so the
+            # exact-type rule stays visible and each branch's part type is known below.
+            elif (
+                type(part) is ArtifactDirectSlotPart
+                or type(part) is ArtifactDirectCallRunPart
+                or type(part) is ArtifactDirectPythonComponentPart
+            ):
+                child = part.frame
+                if not 0 <= child < frame_count:
+                    raise CacheArtifactError(f"artifact.frames[{frame_index}] refers to missing frame {child!r}.")
+                incoming[child] += 1
+                adjacency[frame_index].append(child)
+                _part_from_wire(_part_to_wire(part), path)
+                if type(part) is ArtifactDirectSlotPart:
+                    if part.parent_execution is not None and part.external_parent_execution:
+                        raise CacheArtifactError(f"{path} has conflicting direct execution parent anchors.")
+                    if (part.lexical_instance is None) == (part.lexical_parent_depth is None):
+                        raise CacheArtifactError(f"{path} must have exactly one lexical writer anchor.")
+                    if (part.receiver_instance is None) == (part.receiver_parent_depth is None):
+                        raise CacheArtifactError(f"{path} must have exactly one receiver anchor.")
+                    projection_kinds = {"implicit", "named", "fallback", "nested-template"}
+                    if part.kind not in projection_kinds:
+                        raise CacheArtifactError(f"{path} has unknown direct projection kind {part.kind!r}.")
             elif type(part) is ArtifactPlaceholderPart:
                 _require_nonempty_string(part.key, f"{path}.key")
+            elif type(part) in (
+                ArtifactSourceTextPart,
+                ArtifactVerbatimHtmlPart,
+                ArtifactTextValuePart,
+                ArtifactTrustedHtmlPart,
+                ArtifactElementOpenPart,
+                ArtifactElementClosePart,
+                ArtifactDynamicElementOpenPart,
+                ArtifactDynamicElementClosePart,
+                ArtifactStaticRunPart,
+                ArtifactLeafProgramPart,
+            ):
+                # Use the wire decoder as the single exact-field/type validator
+                # for immutable in-memory values as well as backend input.
+                _part_from_wire(_part_to_wire(part), path)
             else:
                 raise CacheArtifactError(
                     f"artifact.frames[{frame_index}] contains unsupported part {type(part).__name__}."
@@ -549,6 +1169,11 @@ def _freeze_object(value: object, path: str) -> FrozenJsonObject:
     if type(frozen) is not FrozenJsonObject:
         raise CacheArtifactError(f"{path} must be a JSON object.")
     return frozen
+
+
+def _freeze_json_value(value: object, path: str) -> FrozenJsonValue:
+    _validate_json_shape(value, path)
+    return _freeze_json(value, path)
 
 
 def _freeze_json(value: object, path: str) -> FrozenJsonValue:
@@ -595,6 +1220,31 @@ def _require_list(value: object, path: str) -> list[object]:
     return cast("list[object]", value)
 
 
+def _require_span(value: object, path: str) -> tuple[int, int]:
+    raw = _require_list(value, path)
+    if len(raw) != 2:
+        raise CacheArtifactError(f"{path} must contain exactly two offsets.")
+    start = _require_nonnegative_int(raw[0], f"{path}[0]")
+    end = _require_nonnegative_int(raw[1], f"{path}[1]")
+    if end < start:
+        raise CacheArtifactError(f"{path} end must not precede its start.")
+    return start, end
+
+
+def _require_source_span(value: object, source: str, path: str) -> tuple[int, int]:
+    span = _require_span(value, path)
+    byte_offsets = {0}
+    byte_length = 0
+    for character in source:
+        byte_length += len(character.encode("utf-8"))
+        byte_offsets.add(byte_length)
+    if span[1] > byte_length:
+        raise CacheArtifactError(f"{path} exceeds its source UTF-8 length.")
+    if span[0] not in byte_offsets or span[1] not in byte_offsets:
+        raise CacheArtifactError(f"{path} must use UTF-8 byte boundaries in its source.")
+    return span
+
+
 def _require_fields(value: dict[str, object], expected: set[str], path: str) -> None:
     missing = expected - set(value)
     unknown = set(value) - expected
@@ -613,6 +1263,18 @@ def _require_exact_int(value: object, path: str, *, expected: int) -> int:
 def _require_nonnegative_int(value: object, path: str) -> int:
     if type(value) is not int or value < 0:
         raise CacheArtifactError(f"{path} must be an exact non-negative integer; got {value!r}.")
+    return value
+
+
+def _require_int(value: object, path: str) -> int:
+    if type(value) is not int:
+        raise CacheArtifactError(f"{path} must be an exact integer; got {value!r}.")
+    return value
+
+
+def _require_bool(value: object, path: str) -> bool:
+    if type(value) is not bool:
+        raise CacheArtifactError(f"{path} must be a bool.")
     return value
 
 
@@ -643,6 +1305,29 @@ def _require_nonempty_string(value: object, path: str) -> str:
     return result
 
 
+def _require_binding_provenance(value: str, path: str) -> Literal["authored", "runtime-spread"]:
+    """Narrow one replayed binding provenance to a value the renderer accepts."""
+    # The artifact stores this as ordinary JSON text, so each accepted value is
+    # returned by name: an unrecognized one must not reach the renderer, where
+    # runtime provenance decides whether a handler may come from a spread.
+    if value == "authored":
+        return "authored"
+    if value == "runtime-spread":
+        return "runtime-spread"
+    raise CacheArtifactError(f"{path} has an unknown binding provenance.")
+
+
+def _require_attribute_origin(value: str, path: str) -> Literal["source", "data"]:
+    """Narrow one replayed attribute origin to a value the renderer accepts."""
+    # Origin decides whether the attribute is treated as template source or as
+    # data, so a cache entry naming anything else is rejected rather than guessed.
+    if value == "source":
+        return "source"
+    if value == "data":
+        return "data"
+    raise CacheArtifactError(f"{path} has an unknown attribute origin.")
+
+
 def _require_optional_nonempty_string(value: object, path: str) -> str | None:
     if value is None:
         return None
@@ -650,12 +1335,25 @@ def _require_optional_nonempty_string(value: object, path: str) -> str | None:
 
 
 __all__ = [
+    "ArtifactAttribute",
+    "ArtifactDirectCallRunPart",
+    "ArtifactDirectSlotPart",
+    "ArtifactDynamicElementClosePart",
+    "ArtifactDynamicElementOpenPart",
+    "ArtifactElementClosePart",
+    "ArtifactElementOpenPart",
     "ArtifactExtension",
     "ArtifactFrame",
     "ArtifactFramePart",
+    "ArtifactLeafProgramPart",
     "ArtifactPlaceholderPart",
-    "ArtifactRegionPart",
-    "ArtifactTextPart",
+    "ArtifactSourceTextPart",
+    "ArtifactStaticRunOpening",
+    "ArtifactStaticRunPart",
+    "ArtifactStaticRunStructure",
+    "ArtifactTextValuePart",
+    "ArtifactTrustedHtmlPart",
+    "ArtifactVerbatimHtmlPart",
     "CachedRenderArtifact",
     "FrozenJsonObject",
 ]

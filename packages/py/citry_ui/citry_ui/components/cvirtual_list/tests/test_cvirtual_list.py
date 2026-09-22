@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -13,7 +14,7 @@ from citry_ui import CVirtualList, CVirtualListItem, CVirtualWindow
 from citry_ui.quality.asset_sources import read_component_source_css
 
 
-def _render(source: str) -> str:
+def _render(source: str, *, static_fallback: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -21,7 +22,18 @@ def _render(source: str) -> str:
         citry = app
         template = f"<main>{source}</main>"
 
-    return str(Page())
+    page = Page()
+    return page.render().serialize(security_javascript="omit") if static_fallback else str(page)
+
+
+def _manifest(html: str) -> dict[str, object]:
+    match = re.search(r"CitryStable\.startPrepared\((\{.*\})\)\.catch", html, re.DOTALL)
+    assert match is not None
+    return json.loads(match.group(1))["manifest"]
+
+
+def _window_occurrence(manifest: dict[str, object]) -> dict[str, object]:
+    return next(item for item in manifest["occurrences"] if item["typeKey"].startswith("CInternalVirtualList_"))
 
 
 def test_public_schema_separates_css_only_list_from_reactive_window():
@@ -60,7 +72,8 @@ def test_public_schema_separates_css_only_list_from_reactive_window():
 def test_complete_dom_anatomy_keeps_every_server_item_and_loads_no_runtime():
     html = _render(
         '<c-CVirtualList aria_label="Activity"><c-CVirtualListItem item_key="alpha">Alpha</c-CVirtualListItem>'
-        '<c-CVirtualListItem item_key="beta">Beta</c-CVirtualListItem></c-CVirtualList>'
+        '<c-CVirtualListItem item_key="beta">Beta</c-CVirtualListItem></c-CVirtualList>',
+        static_fallback=True,
     )
 
     assert len(re.findall(r'<div[^>]+data-citry-ui-part="virtual-list"', html)) == 1
@@ -83,66 +96,83 @@ def test_complete_dom_slot_data_and_empty_collection_are_server_owned():
         '<c-CVirtualList><c-CVirtualListItem item_key="alpha">'
         '<c-fill name="default" data="{ index, item_key, set_size, strategy }">'
         "{{ index }}:{{ item_key }}:{{ set_size }}:{{ strategy }}"
-        "</c-fill></c-CVirtualListItem></c-CVirtualList>"
+        "</c-fill></c-CVirtualListItem></c-CVirtualList>",
+        static_fallback=True,
     )
     assert "0:alpha:1:content-visibility" in html
 
-    empty = _render("<c-CVirtualList />")
+    empty = _render("<c-CVirtualList />", static_fallback=True)
     assert 'role="list"' in empty
     assert not re.search(r'<div[^>]+data-citry-ui-part="item"', empty)
 
 
 def test_window_renders_exact_spacers_positions_and_fixed_item_metadata():
-    html = _render(
+    source = (
         '<c-CVirtualWindow c-total_count="100" c-start_index="10" c-item_size="40" c-initial_index="10" '
         'aria_label="Rows"><c-CVirtualListItem item_key="alpha">Alpha</c-CVirtualListItem>'
         '<c-CVirtualListItem item_key="beta">Beta</c-CVirtualListItem></c-CVirtualWindow>'
     )
-
-    assert 'data-strategy="window"' in html
-    assert 'data-start-index="10"' in html
-    assert 'data-total-count="100"' in html
-    assert 'aria-label="Rows"' in html
-    assert 'style="block-size: 400px;"' in html
-    assert 'style="block-size: 3520px;"' in html
-    assert 'aria-posinset="11"' in html
-    assert 'aria-posinset="12"' in html
-    assert html.count('aria-setsize="100"') == 2
-    assert 'data-index="10"' in html
-    assert 'data-index="11"' in html
+    html = _render(source)
+    static_html = _render(source, static_fallback=True)
+    assert 'data-strategy="window"' in static_html
+    assert 'data-start-index="10"' in static_html
+    assert 'data-total-count="100"' in static_html
+    assert 'aria-label="Rows"' in static_html
+    assert 'style="block-size: 400px;"' in static_html
+    assert 'style="block-size: 3520px;"' in static_html
+    assert 'aria-posinset="11"' in static_html
+    assert 'aria-posinset="12"' in static_html
+    assert static_html.count('aria-setsize="100"') == 2
+    assert 'data-index="10"' in static_html
+    assert 'data-index="11"' in static_html
     assert "CVirtualList onRangeChange" in html
+    prepared = _window_occurrence(_manifest(html))["preparedData"]
+    assert prepared["citryAttrs0"]["data-start-index"] == 10
+    assert prepared["citryAttrs0"]["data-total-count"] == 100
+    assert prepared["citryAttrs2"]["data-item-key"] == "alpha"
+    assert prepared["citryAttrs3"]["data-item-key"] == "beta"
 
 
 def test_window_slot_data_uses_logical_positions_and_set_size():
-    html = _render(
+    source = (
         '<c-CVirtualWindow c-total_count="12" c-start_index="7">'
         '<c-CVirtualListItem item_key="row-7"><c-fill name="default" '
         'data="{ index, item_key, set_size, strategy }">'
         "{{ index }}:{{ item_key }}:{{ set_size }}:{{ strategy }}"
         "</c-fill></c-CVirtualListItem></c-CVirtualWindow>"
     )
-    assert "7:row-7:12:window" in html
+    html = _render(source)
+    static_html = _render(source, static_fallback=True)
+    assert "7:row-7:12:window" in static_html
+    prepared = _window_occurrence(_manifest(html))["preparedData"]
+    assert [prepared[f"citryText{index}"] for index in range(4)] == ["7", "row-7", "12", "window"]
 
 
 def test_window_accepts_empty_and_final_partial_ranges():
     empty = _render('<c-CVirtualWindow c-total_count="0" />')
-    assert 'data-total-count="0"' in empty
-    assert len(re.findall(r'<div[^>]+data-citry-ui-part="spacer"', empty)) == 2
-    assert "aria-posinset" not in empty
+    empty_static = _render('<c-CVirtualWindow c-total_count="0" />', static_fallback=True)
+    assert 'data-total-count="0"' in empty_static
+    assert len(re.findall(r'<div[^>]+data-citry-ui-part="spacer"', empty_static)) == 2
+    assert "aria-posinset" not in empty_static
+    empty_prepared = _window_occurrence(_manifest(empty))["preparedData"]
+    assert empty_prepared["citryAttrs0"]["data-total-count"] == 0
 
-    final = _render(
+    final_source = (
         '<c-CVirtualWindow c-total_count="3" c-start_index="2" c-item_size="50">'
         '<c-CVirtualListItem item_key="last">Last</c-CVirtualListItem></c-CVirtualWindow>'
     )
-    assert 'style="block-size: 100px;"' in final
-    assert 'style="block-size: 0px;"' in final
-    assert 'aria-posinset="3"' in final
+    _render(final_source)
+    final_static = _render(final_source, static_fallback=True)
+    assert 'style="block-size: 100px;"' in final_static
+    assert 'style="block-size: 0px;"' in final_static
+    assert 'aria-posinset="3"' in final_static
 
-    self_contained = _render(
+    self_contained_source = (
         '<c-CVirtualWindow c-total_count="2" c-item_size="50">'
         '<c-CVirtualListItem item_key="first">First</c-CVirtualListItem>'
         '<c-CVirtualListItem item_key="second">Second</c-CVirtualListItem></c-CVirtualWindow>'
     )
+    self_contained = _render(self_contained_source, static_fallback=True)
     assert self_contained.count('style="block-size: 0px;"') == 2
 
 
@@ -193,7 +223,8 @@ def test_root_and_item_attrs_merge_but_owned_surfaces_are_rejected():
         "<c-CVirtualList class_=\"brand\" c-style=\"{'color':'red'}\" "
         "c-attrs=\"{'data-test':'root'}\">"
         '<c-CVirtualListItem item_key="a" class_="row" c-attrs="{\'data-test-item\':\'a\'}">A'
-        "</c-CVirtualListItem></c-CVirtualList>"
+        "</c-CVirtualListItem></c-CVirtualList>",
+        static_fallback=True,
     )
     assert re.search(r'<div class="cui-virtual-list brand"[^>]+data-test="root"', html)
     assert re.search(r'<div class="cui-virtual-list__item row"[^>]+data-test-item="a"', html)
@@ -208,8 +239,15 @@ def test_root_and_item_attrs_merge_but_owned_surfaces_are_rejected():
         )
 
 
+def test_vue_directives_cannot_enter_through_python_attr_mappings():
+    with pytest.raises(ValueError, match="dynamically bind owned attribute"):
+        _render("<c-CVirtualList c-attrs=\"{'v-bind:role':'kind'}\" />")
+    with pytest.raises(ValueError, match="ownership directive"):
+        _render("<c-CVirtualList c-attrs=\"{'v-if':'visible'}\" />")
+
+
 def test_focusable_false_removes_extra_tab_stop():
-    html = _render('<c-CVirtualList c-focusable="False" />')
+    html = _render('<c-CVirtualList c-focusable="False" />', static_fallback=True)
     root = re.search(r'<div class="cui-virtual-list"[^>]*>', html)
     assert root is not None
     assert "tabindex" not in root.group(0)
@@ -228,7 +266,8 @@ def test_nested_list_inside_item_content_is_independent():
     html = _render(
         '<c-CVirtualList><c-CVirtualListItem item_key="outer">Outer'
         '<c-CVirtualList><c-CVirtualListItem item_key="inner">Inner</c-CVirtualListItem></c-CVirtualList>'
-        "</c-CVirtualListItem></c-CVirtualList>"
+        "</c-CVirtualListItem></c-CVirtualList>",
+        static_fallback=True,
     )
     assert len(re.findall(r'<div[^>]+data-citry-ui-part="virtual-list"', html)) == 2
     assert len(re.findall(r'<div[^>]+data-item-key="outer"', html)) == 1

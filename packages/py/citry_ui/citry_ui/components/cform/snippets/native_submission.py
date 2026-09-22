@@ -8,7 +8,6 @@ class NativeSubmission(Component):
     template = """
       <section
         class="transient-report"
-        x-data="{ submitted: '', submitter: '' }"
       >
         <header>
           <p>Transient watch</p>
@@ -20,7 +19,7 @@ class NativeSubmission(Component):
           method="post"
           @submit.prevent="
             submitted = JSON.stringify(
-              Object.fromEntries(new FormData($el, $event.submitter))
+              Object.fromEntries(new window.FormData($el, $event.submitter))
             );
             submitter = $event.submitter?.value ?? '';
           "
@@ -62,11 +61,20 @@ class NativeSubmission(Component):
           </div>
         </c-CForm>
 
-        <output aria-live="polite" x-show="submitted">
-          Submitter: <strong x-text="submitter"></strong><br />
-          FormData: <code x-text="submitted"></code>
+        <output aria-live="polite" v-show="submitted">
+          Submitter: <strong v-text="submitter"></strong><br />
+          FormData: <code v-text="submitted"></code>
         </output>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            submitted: '', submitter: ''
+          };
+        },
+      });
     """
 
     css = """

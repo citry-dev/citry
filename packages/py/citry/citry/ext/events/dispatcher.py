@@ -37,12 +37,13 @@ import json
 import logging
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._protocol.events import (
     CAPABILITIES_BASELINE_V1,
     PROTOCOL,
+    RENDERERS,
     CallEnvelopeFailure,
     ProtocolValueError,
     assemble_owned_ok_result,
@@ -66,6 +67,9 @@ from citry.ext.events.csrf import _MSG_CSRF_FAILED
 from citry.ext.events.errors import EventError, wire_error
 from citry.ext.events.handlers import event_options
 from citry.ext.events.results import (
+    HTML_RENDER_ENCODER,
+    RenderEncoder,
+    RenderEncodingContext,
     coerce_result,
     encode_actions,
     extract_download_result,
@@ -123,13 +127,6 @@ _NOT_ANSWERED: Any = object()
 # by the debug hint for a handler that mutated state but returned nothing
 # visible (design 3.4).
 _VISIBLE_KINDS = frozenset({"render", "data", "event", "redirect", "url"})
-
-# Compatibility/no-JS responses consume render HTML as the whole response
-# before it reaches a client. Giving an otherwise targetless render this
-# schema-valid internal target keeps on_event_result hooks on the wire shape;
-# the target itself is never sent in compatibility mode.
-_COMPAT_RENDER_TARGET = ":root"
-
 
 ################################################
 # THE SHAPES THE DISPATCHER RECEIVES AND INJECTS
@@ -378,6 +375,24 @@ class EventsDispatcher:
     and calls [`dispatch`][citry.ext.events.EventsDispatcher.dispatch]
     (or its async twin) directly.
     """
+
+    def __init__(
+        self,
+        *,
+        render_encoders: tuple[RenderEncoder, ...] = (HTML_RENDER_ENCODER,),
+        preferred_renderer: str = "html-fragment/1",
+    ) -> None:
+        registry: dict[str, RenderEncoder] = {}
+        for encoder in render_encoders:
+            if encoder.renderer not in RENDERERS:
+                raise ValueError(f"Unknown render encoder renderer {encoder.renderer!r}.")
+            if encoder.renderer in registry:
+                raise ValueError(f"A render encoder is already registered for {encoder.renderer!r}.")
+            registry[encoder.renderer] = encoder
+        if preferred_renderer not in registry:
+            raise ValueError(f"The preferred renderer {preferred_renderer!r} has no registered encoder.")
+        self._render_encoders = registry
+        self._preferred_renderer = preferred_renderer
 
     def dispatch(
         self,
@@ -929,15 +944,40 @@ class EventsDispatcher:
         capabilities: dict[str, frozenset[str]],
     ) -> dict[str, Any]:
         """Encode, apply capabilities, emit ``on_event_result``, re-sign state, echo send_sequence."""
-        if ctx.response_mode == "compat" and plan.instance_id is None:
-            actions = [
-                replace(action, target=_COMPAT_RENDER_TARGET)
-                if isinstance(action, Render) and action.target is None
-                else action
-                for action in actions
-            ]
+        if ctx.response_mode == "compat":
+            capabilities = {name: frozenset(values) for name, values in CAPABILITIES_BASELINE_V1.items()}
         try:
-            encoded = encode_actions(actions, instance_id=plan.instance_id, handler=plan.handler.name)
+            advertised_renderers = capabilities["renderers"]
+            if ctx.response_mode == "compat":
+                renderer = HTML_RENDER_ENCODER.renderer
+            elif self._preferred_renderer in advertised_renderers:
+                renderer = self._preferred_renderer
+            else:
+                renderer = next(
+                    (name for name in self._render_encoders if name in advertised_renderers),
+                    self._preferred_renderer,
+                )
+            if any(isinstance(action, Render) for action in actions) and renderer not in advertised_renderers:
+                raise ValueError(
+                    f"Event handler {plan.handler.name!r} produced a render, but no configured renderer"
+                    " was advertised by the client."
+                )
+            encoder = self._render_encoders[renderer]
+            encoded = encode_actions(
+                actions,
+                instance_id=plan.instance_id,
+                handler=plan.handler.name,
+                render_encoder=encoder,
+                render_context=RenderEncodingContext(
+                    citry=ctx.citry,
+                    caller_render_id=plan.instance_id,
+                    handler=plan.handler,
+                    transport=ctx.transport,
+                    renderer=renderer,
+                    headers=dict(ctx.headers),
+                    response_mode=ctx.response_mode,
+                ),
+            )
         except ProtocolValueError:
             return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         encoded = self._apply_capabilities(encoded, capabilities, handler=plan.handler.name)
@@ -1096,6 +1136,7 @@ class EventsDispatcher:
         """
         swaps = capabilities["swaps"]
         kinds = capabilities["actions"]
+        renderers = capabilities["renderers"]
         applied: list[dict[str, Any]] = []
         for action in wire_actions:
             kind = action.get("action")
@@ -1107,6 +1148,12 @@ class EventsDispatcher:
                 )
                 raise ValueError(msg)
             if kind == "render":
+                renderer = action.get("renderer", "html-fragment/1")
+                if renderer not in renderers:
+                    raise ValueError(
+                        f"Event handler {handler!r} produced a render with renderer {renderer!r}, which"
+                        " the client did not advertise."
+                    )
                 swap = action.get("swap")
                 if swap not in swaps:
                     if swap == "morph" and "replace" in swaps:

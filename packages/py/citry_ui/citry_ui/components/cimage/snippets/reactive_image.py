@@ -1,5 +1,3 @@
-from typing import Any
-
 import citry_ui
 from citry import Component, citry
 
@@ -7,37 +5,10 @@ citry.register_library(citry_ui)
 
 
 class ReactiveImage(Component):
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
-
-    def template_data(
-        self,
-        kwargs: Kwargs,  # noqa: ARG002
-        slots: Slots,  # noqa: ARG002
-    ) -> dict[str, Any]:
-        return {
-            "image_attrs": {
-                "@load": "$dispatch('image-native-load')",
-                "@error": "$dispatch('image-native-error')",
-                "data-native-events": "bridged",
-            }
-        }
-
     template = """
       <section
         class="image-reactive"
-        x-data="{
-          source:'/static/img/ui/image/horsehead-nebula-1280.jpg?frame=slow-red',
-          status:'waiting',
-          selected:'none',
-          callbacks:0,
-          nativeLoads:0,
-          nativeErrors:0,
-          redact:(value)=>value ? value.split('/').pop().split('?')[0] : 'none',
-        }"
+
         @image-native-load="nativeLoads++"
         @image-native-error="nativeErrors++"
       >
@@ -58,7 +29,7 @@ class ReactiveImage(Component):
             type="button"
             @click="
               source='/static/img/ui/image/horsehead-nebula-1280.jpg?frame=rapid-a';
-              queueMicrotask(()=>source='/static/img/ui/image/orion-nebula-640.jpg?frame=rapid-b');
+              window.queueMicrotask(()=>source='/static/img/ui/image/orion-nebula-640.jpg?frame=rapid-b');
             "
           >Rapid A then B</button>
         </div>
@@ -68,31 +39,44 @@ class ReactiveImage(Component):
           alt="Live survey frame from Northstar Ridge"
           c-width="1280"
           c-height="720"
-          c-img_attrs="image_attrs"
-          $c-props="{
-            src:source,
-            onStatusChange:(detail)=>{
+          :src="source" :onStatusChange="(detail)=>{
               callbacks++;
               status=detail.status;
               selected=redact(detail.current_src || detail.src);
-            },
-          }"
+              if (detail.status === 'loaded') nativeLoads++;
+              if (detail.status === 'error') nativeErrors++;
+            }"
         >
           <c-fill name="fallback">Survey frame unavailable</c-fill>
         </c-CImage>
 
         <output
-          x-text="
+          v-text="
             `Status ${status}; selected ${selected}; callbacks ${callbacks};
             native load/error ${nativeLoads}/${nativeErrors}`
           "
         >Status waiting; selected none; callbacks 0; native load/error 0/0</output>
         <p>
-          The output redacts paths to filenames. Native events use an img_attrs
-          $dispatch bridge; onStatusChange is the owner-local cached-race surface.
+          The output redacts paths to filenames. onStatusChange reports the
+          accepted native load or error settlement for the current image.
         </p>
         <div id="image-reactive-shadow-host" aria-label="Open ShadowRoot fixture"></div>
       </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            source:'/static/img/ui/image/horsehead-nebula-1280.jpg?frame=slow-red',
+            status:'waiting',
+            selected:'none',
+            callbacks:0,
+            nativeLoads:0,
+            nativeErrors:0,
+            redact:(value)=>value ? value.split('/').pop().split('?')[0] : 'none',
+          };
+        },
+      });
     """
 
     css = """

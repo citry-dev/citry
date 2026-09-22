@@ -91,7 +91,7 @@ class PageShell(Component):
         scroll-padding-top: 5rem;
       }
 
-      [x-cloak] { display: none !important; }
+      [v-cloak] { display: none !important; }
 
       body {
         min-height: 100vh;

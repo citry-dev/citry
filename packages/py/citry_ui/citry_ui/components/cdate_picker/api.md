@@ -67,7 +67,7 @@ blocks selection; disabled blocks opening and Form participation.
 
 Client `value` and `open` are separate controlled channels. A controlled
 selection or open/close interaction calls `onValueChange` or `onOpenChange`
-without claiming it committed. Return the accepted value through `$c-props`.
+without claiming it committed. Return the accepted value with native Vue bindings.
 
 <c-ui-demo path="packages/py/citry_ui/citry_ui/components/cdate_picker/snippets/controlled.py" title="Control value and popup state" />
 
