@@ -99,9 +99,7 @@ def vue_owned_native_properties(
     ``v-bind`` and dynamic arguments are conservative because their runtime
     property is not known at capture time.
     """
-    attrs: tuple[object, ...] = (
-        () if authored_attrs is None else tuple(cast("Iterable[object]", authored_attrs))
-    )
+    attrs: tuple[object, ...] = () if authored_attrs is None else tuple(cast("Iterable[object]", authored_attrs))
     input_type: str | None = None
     dynamic_input_type = has_spread
     for attribute in attrs:
