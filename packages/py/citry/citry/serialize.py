@@ -775,19 +775,148 @@ def _append_frame_parts(
     compensate_textarea_lf: bool,
     out: list[str],
 ) -> None:
+    """Append one frame, keeping the Vue serialization path allocation-light."""
+    if compensate_textarea_lf:
+        _append_frame_parts_with_fallback_tracking(
+            parts,
+            render=render,
+            children=children,
+            placeholder_map=placeholder_map,
+            placeholder_nonce=placeholder_nonce,
+            omit_handler_marker=omit_handler_marker,
+            out=out,
+        )
+        return
+
+    # Keep this path structurally equivalent to the pre-textarea serializer.
+    # Static fallback tracking is selected once per frame; Vue serialization
+    # never calls the tracker or scans its ordinary text parts.
+    stack: list[Iterator[RenderPart]] = [iter(parts)]
+    while stack:
+        try:
+            part = next(stack[-1])
+        except StopIteration:
+            stack.pop()
+            continue
+        if isinstance(part, str):
+            out.append(part)
+        elif isinstance(part, RenderDecoration):
+            part_frame = part.frame
+            decoration_id = (
+                part_frame.render_id
+                if part_frame.is_component_root
+                and part_frame.render_id is not None
+                and part_frame.render_id != render.frame.render_id
+                else f"decoration:{id(part)}:{len(children)}"
+            )
+            out.append(f'<template c-render-id="{decoration_id}"></template>')
+            children.append((part, decoration_id))
+        elif isinstance(part, CitryRender):
+            part_frame = part.frame
+            if (
+                part_frame.is_component_root
+                and part_frame.render_id is not None
+                and part_frame.render_id != render.frame.render_id
+            ):
+                out.append(f'<template c-render-id="{part_frame.render_id}"></template>')
+                children.append((part, part_frame.render_id))
+            else:
+                stack.append(iter(part.parts))
+        elif isinstance(part, Placeholder):
+            placeholder_id = f"{part.key}:{len(placeholder_map) + 1}:{placeholder_nonce}"
+            text = f'<template c-render-id="{placeholder_id}"></template>'
+            placeholder_map[placeholder_id] = text
+            out.append(text)
+        else:
+            from citry._vue.capture import (  # noqa: PLC0415
+                PreparedDynamicElementClose,
+                PreparedDynamicElementOpen,
+                PreparedElementClose,
+                PreparedElementOpen,
+                PreparedSourceText,
+                PreparedStaticRun,
+                PreparedTextValue,
+                PreparedTrustedHtmlValue,
+                PreparedVerbatimHtml,
+            )
+            from citry._vue.leaf_program import (  # noqa: PLC0415
+                PreparedLeafProgram,
+                static_leaf_parts,
+                typed_leaf_parts,
+            )
+
+            if isinstance(part, PreparedLeafProgram):
+                leaf_parts = typed_leaf_parts(part) if omit_handler_marker is not None else static_leaf_parts(part)
+                stack.append(iter(leaf_parts))
+                continue
+            if isinstance(part, PreparedDynamicElementOpen):
+                formatted = str(format_attrs(part.attrs))
+                suffix = f" {formatted}" if formatted else ""
+                out.append(f"<{part.tag}{suffix}>")
+                continue
+            if isinstance(part, PreparedDynamicElementClose):
+                out.append(f"</{part.tag}>")
+                continue
+            if isinstance(part, PreparedSourceText):
+                out.append(part.text)
+                continue
+            if isinstance(part, PreparedStaticRun):
+                out.append(part.html)
+                continue
+            if isinstance(part, PreparedTextValue):
+                out.append(escape_to_str(part.value))
+                continue
+            if isinstance(part, PreparedTrustedHtmlValue):
+                out.append(part.html)
+                continue
+            if isinstance(part, PreparedVerbatimHtml):
+                out.append(part.html)
+                continue
+            if isinstance(part, PreparedElementOpen):
+                from citry._vue.capture import format_prepared_element_attrs  # noqa: PLC0415
+
+                rendered_attrs = list(format_prepared_element_attrs(part))
+                if omit_handler_marker is not None and (
+                    part.event_bindings
+                    or part.poll_bindings
+                    or part.runtime_event_bindings
+                    or part.runtime_poll_bindings
+                ):
+                    rendered_attrs.append(omit_handler_marker)
+                suffix = "" if not rendered_attrs else " " + " ".join(rendered_attrs)
+                ending = "/>" if part.is_void and part.is_self_closing else ">"
+                out.append(f"<{part.tag}{suffix}{ending}")
+                continue
+            if isinstance(part, PreparedElementClose):
+                out.append(f"</{part.tag}>")
+                continue
+            msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
+            raise RuntimeError(msg)
+
+
+def _append_frame_parts_with_fallback_tracking(
+    parts: list[RenderPart],
+    *,
+    render: CitryRender,
+    children: list[tuple[CitryRender, str]],
+    placeholder_map: dict[str, str],
+    placeholder_nonce: str,
+    omit_handler_marker: str | None,
+    out: list[str],
+) -> None:
     """Append nested content iteratively while preserving child order."""
     stack: list[Iterator[RenderPart | PreparedStaticText]] = [iter(parts)]
     tracker: _PreparedMarkupTracker | None = None
 
     def activate_tracker(markup: str) -> _PreparedMarkupTracker | None:
         nonlocal tracker
-        if compensate_textarea_lf and tracker is None and _TEXTAREA_OPEN_RE.search(markup):
+        if tracker is None and _TEXTAREA_OPEN_RE.search(markup):
             tracker = _PreparedMarkupTracker()
         return tracker
 
     def activate_for_element(tag: str) -> _PreparedMarkupTracker | None:
         nonlocal tracker
-        if compensate_textarea_lf and tracker is None and tag.casefold() == "textarea":
+        if tracker is None and tag.casefold() == "textarea":
             tracker = _PreparedMarkupTracker()
         return tracker
 
