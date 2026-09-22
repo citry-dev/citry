@@ -410,6 +410,11 @@ def test_fragment_manager_loads_and_mounts_python_composed_component(page, serve
     }""")
     assert "host changed while mounting" in page.evaluate("() => __lateScriptFirst")
     late_script_routes[0].abort()
+    # Route abort delivery and the script element's error cleanup are separate
+    # browser tasks. Wait for the cancelled request's actual script cleanup
+    # before mounting the replacement, otherwise both script elements can
+    # remain visible while the retry is waiting for its one deduplicated asset.
+    page.wait_for_function("() => !__lateScriptElement.isConnected")
     page.evaluate("""() => {
       const host = document.createElement('div');
       host.id = __lateScriptAppId;
