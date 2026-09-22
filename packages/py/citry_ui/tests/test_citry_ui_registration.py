@@ -554,7 +554,7 @@ def test_installed_classes_compose_directly_and_support_runtime_subclassing():
     assert "Save" in html
     attrs = _prepared_button_occurrence(html)["preparedData"]["citryAttrs0"]
     assert attrs["aria-busy"] == "true"
-    assert attrs["data-loading"] is True
+    assert attrs["data-loading"] == ""
     assert attrs["disabled"] is True
     static_html = element.render().serialize(security_javascript="omit")
     assert 'data-citry-ui-part="loading-indicator"' in static_html
