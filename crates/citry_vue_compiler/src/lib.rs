@@ -683,9 +683,11 @@ fn walk(
         ordinal += 1;
         if element.tag.starts_with("citry-dynamic-") {
             let declared = state.dynamic_by_start.get(&element.loc.span.start).copied();
-            let opening_end = state.source[element.loc.span.start as usize..]
-                .find('>')
-                .map(|offset| element.loc.span.start + offset as u32 + 1);
+            // `>` is valid inside a quoted Vue directive expression (for
+            // example, the `>` in an arrow function).  The parser already
+            // recorded the exact opening-tag span, so use that instead of
+            // searching the source text for the first greater-than sign.
+            let opening_end = Some(element.loc.span.end);
             if let Some(item) = declared
                 .filter(|item| item.alias == element.tag && opening_end == Some(item.source_end))
             {
@@ -2098,8 +2100,7 @@ mod tests {
 
     #[test]
     fn validates_definition_scoped_dynamic_element_alias() {
-        let template =
-            "<citry-dynamic-0123456789abcdef title=\"x\"></citry-dynamic-0123456789abcdef>";
+        let template = "<citry-dynamic-0123456789abcdef v-on:click=\"$x(($el) => ({value: 7}))\">x</citry-dynamic-0123456789abcdef>";
         let artifact = compile(CompileRequest {
             template: template.to_owned(),
             local_calls: vec![],
@@ -2109,7 +2110,7 @@ mod tests {
                 alias: "citry-dynamic-0123456789abcdef".to_owned(),
                 tag: "section".to_owned(),
                 source_start: 0,
-                source_end: template.find('>').unwrap() as u32 + 1,
+                source_end: template.find("\">").unwrap() as u32 + 2,
             }],
         });
         assert!(
