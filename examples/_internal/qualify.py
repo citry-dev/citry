@@ -676,8 +676,7 @@ def browser_htmx(base_url: str, browser_name: str) -> None:
         )
         if len(form_style_urls) != 1:
             raise AssertionError(
-                "Expected opening the ContactForm to attach exactly one new owned stylesheet, "
-                f"got {form_style_urls!r}"
+                f"Expected opening the ContactForm to attach exactly one new owned stylesheet, got {form_style_urls!r}"
             )
         form_style = page.locator(f'[data-citry-css-url="{form_style_urls[0]}"]')
         form_style.wait_for(state="attached")

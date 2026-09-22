@@ -47,6 +47,7 @@ class ContactDetail(Component):
     js = """
       $component({
         mounted() {
+          this.$refs.root.dataset.citryContact = String(this.contactId);
           window.htmx.process(this.$refs.root);
         },
       });
