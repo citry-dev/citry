@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "protocol_version": 1,
+  "source": "published",
   "pyodide": {
     "version": "314.0.3",
     "python": "3.14.2",

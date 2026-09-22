@@ -32,6 +32,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - "scripts/build_citry_core_pyodide_wheel.py"
+      - "packages/py/citry_core/pyodide-build.json"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -59,6 +61,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - "scripts/build_citry_core_pyodide_wheel.py"
+      - "packages/py/citry_core/pyodide-build.json"
       - "pyproject.toml"
       - "uv.lock"
       - "package.json"
@@ -184,6 +188,7 @@ jobs:
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # pinned 2026-08-18
         with:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          targets: wasm32-unknown-emscripten
 
       - name: Set up shared Rust compiler cache
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
@@ -199,6 +204,78 @@ jobs:
         run: >-
           uv sync --locked --package citry-monorepo --package citry
           --package citry-ui --extra docs
+
+      # The local authoring fixture exercises workspace Citry and Citry UI. Its
+      # Rust extension must come from one PyEmscripten wheel built from this
+      # checkout; rebuilding it in the uvicorn factory would make every reload
+      # pay the cross-compilation cost and could mix workspace/published bytes.
+      - name: Restore the pinned Pyodide cross environment
+        id: pyodide-xbuildenv
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/citry-pyodide-xbuildenv
+          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.96.0-cli-0.5.0-build-0.37.0
+
+      - name: Install the pinned Pyodide cross environment
+        if: ${{ steps.pyodide-xbuildenv.outputs.cache-hit != 'true' }}
+        env:
+          CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv
+        run: |
+          PYODIDE_XBUILDENV_PATH="$CITRY_XBUILDENV" uvx --python 3.14.2 \
+            --from pyodide-cli==0.5.0 \
+            --with pyodide-build==0.37.0 \
+            pyodide xbuildenv install 314.0.3 --path "$CITRY_XBUILDENV"
+          PYODIDE_XBUILDENV_PATH="$CITRY_XBUILDENV" uvx --python 3.14.2 \
+            --from pyodide-cli==0.5.0 \
+            --with pyodide-build==0.37.0 \
+            pyodide xbuildenv install-emscripten --path "$CITRY_XBUILDENV"
+
+      - name: Save the pinned Pyodide cross environment
+        if: ${{ steps.pyodide-xbuildenv.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/citry-pyodide-xbuildenv
+          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.96.0-cli-0.5.0-build-0.37.0
+
+      - name: Restore the workspace Citry Core Pyodide wheel
+        id: workspace-core-wheel
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/citry-playground-core
+          key: docs-playground-core-pyemscripten-pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.96.0-cli-0.5.0-build-0.37.0-${{ hashFiles('packages/py/citry_core/**', 'packages/py/citry_core/pyodide-build.json', 'crates/**', 'third_party/**', 'Cargo.toml', 'Cargo.lock', 'scripts/build_citry_core_pyodide_wheel.py') }}
+
+      - name: Build the workspace Citry Core Pyodide wheel once
+        if: ${{ steps.workspace-core-wheel.outputs.cache-hit != 'true' }}
+        env:
+          CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv
+        run: |
+          set -euo pipefail
+          source_epoch=$(git show -s --format=%ct HEAD)
+          python scripts/build_citry_core_pyodide_wheel.py \
+            --source packages/py/citry_core \
+            --out-dir "${{ runner.temp }}/citry-playground-core" \
+            --xbuildenv-path "$CITRY_XBUILDENV" \
+            --cargo-target-dir "${{ runner.temp }}/cargo-pyemscripten" \
+            --cargo-home "$CARGO_HOME" \
+            --source-date-epoch "$source_epoch"
+
+      - name: Save the workspace Citry Core Pyodide wheel
+        if: ${{ steps.workspace-core-wheel.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/citry-playground-core
+          key: docs-playground-core-pyemscripten-pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.96.0-cli-0.5.0-build-0.37.0-${{ hashFiles('packages/py/citry_core/**', 'packages/py/citry_core/pyodide-build.json', 'crates/**', 'third_party/**', 'Cargo.toml', 'Cargo.lock', 'scripts/build_citry_core_pyodide_wheel.py') }}
+
+      - name: Select the workspace browser runtime artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          core_wheels=("${{ runner.temp }}/citry-playground-core/"citry_core-*.whl)
+          if [[ ${#core_wheels[@]} -ne 1 || ! -f ${core_wheels[0]} ]]; then
+            printf 'Expected exactly one cached workspace Core wheel, found: %s\n' "${core_wheels[*]}" >&2
+            exit 1
+          fi
+          echo "CITRY_PLAYGROUND_CORE_WHEEL=${core_wheels[0]}" >> "$GITHUB_ENV"
 
       # The e2e group belongs to the citry workspace package. Install it
       # additively so uv retains the root project's docs extra from above.

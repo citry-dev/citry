@@ -18,6 +18,7 @@ from __future__ import annotations
 import functools
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -32,6 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from scripts.verify_playground_release import PlaygroundReleaseError, validate_published_runtime
 
 from docs_site._internal.build import build_site
 from docs_site._internal.pipeline import render_page
@@ -50,6 +52,62 @@ class _QuietHandler(StaticSiteHandler):
         pass
 
 
+def _stop_process(process: subprocess.Popen[str]) -> str:
+    """Stop a fixture server and return its captured startup diagnostics."""
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+    return process.stdout.read() if process.stdout else ""
+
+
+def _unique_runtime_packages(packages: object, *, label: str) -> dict[str, dict[str, Any]]:
+    """Return runtime packages by normalized name, rejecting hidden duplicates."""
+    if not isinstance(packages, list):
+        pytest.fail(f"{label} has no package list.")
+    found: dict[str, dict[str, Any]] = {}
+    for package in packages:
+        if (
+            not isinstance(package, dict)
+            or not isinstance(package.get("name"), str)
+            or not package["name"]
+            or not isinstance(package.get("version"), str)
+            or not package["version"]
+        ):
+            pytest.fail(f"{label} contains a package without a name and version.")
+        name = re.sub(r"[-_.]+", "-", package["name"]).casefold()
+        if name in found:
+            pytest.fail(f"{label} contains duplicate package entries for {name!r}.")
+        found[name] = package
+    return found
+
+
+def _assert_published_runtime(site: Path) -> None:
+    """Ensure the static fixture still exercises the committed runtime tuple."""
+    runtime_path = site / "static" / "playground" / "runtime.json"
+    try:
+        runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        pytest.fail(f"Static docs site has no readable playground runtime: {error}")
+    if not isinstance(runtime, dict) or runtime.get("source") != "published":
+        pytest.fail("Static docs E2E must serve runtime.json with source: 'published'.")
+    try:
+        validate_published_runtime(runtime)
+    except PlaygroundReleaseError as error:
+        pytest.fail(f"Static docs E2E runtime is not a valid published runtime: {error}")
+    required = {"citry-core", "citry", "citry-ui"}
+    found = _unique_runtime_packages(runtime["packages"], label="Static docs E2E runtime")
+    missing = sorted(required - found.keys())
+    if missing:
+        pytest.fail("Static docs E2E runtime is missing published packages: " + ", ".join(missing))
+    mixed = sorted(name for name in required if found[name].get("source") != "pypi")
+    if mixed:
+        pytest.fail("Static docs E2E runtime mixes in non-published packages: " + ", ".join(mixed))
+
+
 @pytest.fixture(scope="session")
 def docs_site_url() -> Iterator[str]:
     """Build the static docs site once, serve it, and yield its base URL."""
@@ -58,6 +116,7 @@ def docs_site_url() -> Iterator[str]:
     # Social cards off (they need a browser and are unit-tested elsewhere); search
     # and minify stay on so the served site matches the deployed artifact.
     build_site(output_dir=site, social_cards=False)
+    _assert_published_runtime(site)
     # A product-neutral fixture proves coordination across multiple authored
     # blocks without adding duplicate examples to the public navigation.
     synthetic = render_page(
@@ -262,43 +321,50 @@ def local_docs_site_url() -> Iterator[str]:
         except OSError:
             time.sleep(0.05)
     else:
-        process.terminate()
-        pytest.fail("Local docs server did not start within 30 seconds")
+        output = _stop_process(process)
+        pytest.fail(f"Local docs server did not start within 30 seconds:\n{output}")
 
-    # These tests specifically exercise the workspace wheel. The committed
-    # runtime also includes Citry UI now, so identify the local wheel by URL
-    # rather than by the shared ui_version field.
-    local_ui_version = None
+    # These tests specifically exercise the complete workspace tuple. A
+    # published fallback is useful for ordinary authoring, but must never be
+    # mistaken for this fixture's workspace coverage.
     try:
         with urllib.request.urlopen(f"{url}/static/playground/runtime.json", timeout=5) as response:  # noqa: S310
             runtime = json.loads(response.read())
-        if isinstance(runtime, dict) and isinstance(runtime.get("packages"), list):
-            for package in runtime["packages"]:
-                if (
-                    isinstance(package, dict)
-                    and package.get("name") == "citry-ui"
-                    and str(package.get("url", "")).startswith("./local/")
-                ):
-                    local_ui_version = package.get("version")
     except (OSError, ValueError) as error:
-        process.terminate()
+        output = _stop_process(process)
         pytest.fail(f"Local docs server did not serve a playground runtime: {error}")
-    if not local_ui_version:
-        process.terminate()
+    if not isinstance(runtime, dict) or runtime.get("source") != "workspace":
+        output = _stop_process(process)
         pytest.fail(
-            "Local docs server is serving the committed playground runtime without the workspace "
-            "Citry UI wheel. Its startup output reports why the local wheel was rejected."
+            "Local docs server is serving the published runtime instead of the workspace tuple.\n"
+            + output
+        )
+    workspace_packages = _unique_runtime_packages(runtime.get("packages"), label="Local docs server workspace runtime")
+    missing = sorted({"citry-core", "citry", "citry-ui"} - workspace_packages.keys())
+    local_missing = sorted(
+        name
+        for name in ("citry-core", "citry", "citry-ui")
+        if workspace_packages.get(name, {}).get("source") != "url"
+        or not str(workspace_packages.get(name, {}).get("url", "")).startswith("./local/")
+    )
+    if missing or local_missing:
+        output = _stop_process(process)
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if local_missing:
+            details.append("not local: " + ", ".join(local_missing))
+        pytest.fail(
+            "Local docs server did not provide a complete workspace tuple ("
+            + "; ".join(details)
+            + ").\n"
+            + output
         )
 
     try:
         yield url
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+        _stop_process(process)
 
 
 @pytest.fixture(scope="session")

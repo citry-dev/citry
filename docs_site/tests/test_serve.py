@@ -263,14 +263,21 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
     citry_wheel.write_bytes(b"local Citry wheel")
     ui_wheel = local_wheels / "citry_ui-0.1.0-py3-none-any.whl"
     ui_wheel.write_bytes(b"local Citry UI wheel")
+    core_wheel = local_wheels / "citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+    core_wheel.write_bytes(b"local Citry Core wheel")
     (local_dir / "runtime.json").write_text(
         json.dumps(
             {
-                "source": "local",
+                "source": "workspace",
                 "schema_version": 1,
                 "protocol_version": 1,
                 "citry": {"version": "0.4.2", "core_version": "1.5.1", "ui_version": "0.1.0"},
                 "packages": [
+                    {
+                        "name": "citry-core",
+                        "version": "1.5.1",
+                        "url": f"./local/{core_wheel.name}",
+                    },
                     {
                         "name": "citry",
                         "version": "0.4.2",
@@ -308,7 +315,7 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
 
     assert page.status_code == 200
     assert "data-citry-live-code" in page.text
-    assert runtime_response.json()["source"] == "local"
+    assert runtime_response.json()["source"] == "workspace"
     assert wheel_response.content == b"local Citry UI wheel"
     assert runtime_response.headers["cache-control"] == "no-store"
     assert wheel_response.headers["cache-control"] == "no-store"
@@ -329,13 +336,23 @@ def _record_create_app(monkeypatch) -> list[LocalPlaygroundRuntime | None]:
 
 def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch) -> None:
     built: list[Path] = []
+    core_wheel_path = Path("citry-core.whl")
 
-    def fake_build(*, repo_root: Path, output_dir: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
+    monkeypatch.setenv("CITRY_PLAYGROUND_CORE_WHEEL", str(core_wheel_path))
+
+    def fake_build(*, repo_root: Path, output_dir: Path, core_wheel: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
         built.append(output_dir)
+        assert core_wheel == core_wheel_path
         return LocalPlaygroundRuntime(
             directory=output_dir,
             manifest_path=output_dir / "runtime.json",
-            wheel_names=frozenset({"citry_ui-0.1.0-py3-none-any.whl"}),
+            wheel_names=frozenset(
+                {
+                    "citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+                    "citry-0.4.2-py3-none-any.whl",
+                    "citry_ui-0.1.0-py3-none-any.whl",
+                }
+            ),
         )
 
     monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
@@ -347,7 +364,13 @@ def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch)
         LocalPlaygroundRuntime(
             directory=built[0],
             manifest_path=built[0] / "runtime.json",
-            wheel_names=frozenset({"citry_ui-0.1.0-py3-none-any.whl"}),
+            wheel_names=frozenset(
+                {
+                    "citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+                    "citry-0.4.2-py3-none-any.whl",
+                    "citry_ui-0.1.0-py3-none-any.whl",
+                }
+            ),
         )
     ]
     # The wheels are served from this directory for as long as the app lives.
@@ -357,13 +380,30 @@ def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch)
     owner.cleanup()
 
 
+def test_create_local_app_uses_the_published_runtime_without_a_core_wheel(monkeypatch, capsys) -> None:
+    monkeypatch.delenv("CITRY_PLAYGROUND_CORE_WHEEL", raising=False)
+    seen = _record_create_app(monkeypatch)
+
+    app = serve.create_local_app()
+
+    assert isinstance(app, Starlette)
+    assert seen == [None]
+    printed = capsys.readouterr().out
+    assert "CITRY_PLAYGROUND_CORE_WHEEL is not set" in printed
+    assert "committed published runtime" in printed
+
+
 def test_create_local_app_serves_the_committed_runtime_when_the_local_wheel_is_rejected(monkeypatch, capsys) -> None:
     # The workspace Citry UI regularly needs an unreleased Citry, and the dev
     # server has to keep serving every other page while that is true.
     attempted: list[Path] = []
+    core_wheel_path = Path("citry-core.whl")
 
-    def fake_build(*, repo_root: Path, output_dir: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
+    monkeypatch.setenv("CITRY_PLAYGROUND_CORE_WHEEL", str(core_wheel_path))
+
+    def fake_build(*, repo_root: Path, output_dir: Path, core_wheel: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
         attempted.append(output_dir)
+        assert core_wheel == core_wheel_path
         raise LocalPlaygroundRuntimeError("local Citry UI 0.1.0 does not accept the playground's Citry 0.3.1")
 
     monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
@@ -377,7 +417,7 @@ def test_create_local_app_serves_the_committed_runtime_when_the_local_wheel_is_r
     assert not attempted[0].exists()
     printed = capsys.readouterr().out
     assert "does not accept the playground's Citry 0.3.1" in printed
-    assert "committed playground runtime" in printed
+    assert "committed published runtime" in printed
 
 
 def test_serve_404_for_unknown_page(tmp_path: Path) -> None:

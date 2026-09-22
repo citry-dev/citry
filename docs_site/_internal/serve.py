@@ -14,6 +14,7 @@ point any ASGI server at ``docs_site._internal.serve:app``.
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -384,25 +385,29 @@ def create_app(
 
 
 def create_local_app() -> Starlette:
-    """Add workspace Citry UI to the pinned browser runtime, or serve the docs without it."""
+    """Serve the workspace browser tuple when its prebuilt core wheel is supplied."""
     owner = tempfile.TemporaryDirectory(prefix="citry-docs-playground-")
-    print("Building the local Citry UI wheel for the browser playground...")
+    core_wheel_value = os.environ.get("CITRY_PLAYGROUND_CORE_WHEEL", "").strip()
+    if not core_wheel_value:
+        owner.cleanup()
+        print(
+            "Workspace browser runtime unavailable: CITRY_PLAYGROUND_CORE_WHEEL is not set. "
+            "Serving the committed published runtime instead."
+        )
+        return create_app()
+    print("Building the local Citry and Citry UI wheels for the browser playground...")
     try:
         local_runtime = build_local_playground_runtime(
             repo_root=default_config.repo_root,
             output_dir=Path(owner.name),
+            core_wheel=Path(core_wheel_value),
         )
     except LocalPlaygroundRuntimeError as error:
-        # The workspace Citry UI usually needs a Citry newer than the pinned
-        # release, and stays that way for the whole stretch between releases.
-        # Every page still renders without the local wheel, so keep serving
-        # rather than blocking docs authoring until the next Citry ships.
         owner.cleanup()
-        print(f"Citry UI is missing from the browser playground: {error}")
+        print(f"Workspace browser runtime unavailable: {error}")
         print(
-            "Serving the committed playground runtime instead. Citry UI examples show their code "
-            "without a live preview until docs_site/static/playground/runtime.json pins a Citry "
-            "release that the workspace Citry UI accepts."
+            "Serving the committed published runtime instead. The local E2E fixture will fail if it "
+            "requires the workspace tuple and this artifact is unavailable."
         )
         return create_app()
     local_app = create_app(local_playground_runtime=local_runtime)

@@ -155,7 +155,7 @@ def test_worker_revalidates_the_coupled_runtime_files() -> None:
 
     assert 'cache: "no-cache"' in worker
     assert 'cache: "force-cache"' not in worker
-    assert "resolvePackageUrls(runtime.packages)" in worker
+    assert "resolvePackageUrls(runtime.packages, { pyodide: runtime.pyodide })" in worker
     assert 'importlib.metadata.version("citry-ui")' in worker
     assert "runtime.citry.ui_version" in worker
     assert "citry-events.js" not in worker

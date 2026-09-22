@@ -459,10 +459,18 @@ jobs:
           # pip download may have selected the published Citry version while
           # resolving citry-ui. Replace that candidate with the wheel built
           # from this checkout before the wheelhouse is used offline.
-          local_citry=$(find dist -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -print -quit)
-          test -n "$local_citry"
-          local_citry_core=$(find dist -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -print -quit)
-          test -n "$local_citry_core"
+          local_citry_wheels=(dist/citry-[0-9]*.whl)
+          local_citry_core_wheels=(dist/citry_core-[0-9]*.whl)
+          if [[ ${#local_citry_wheels[@]} -ne 1 || ! -f ${local_citry_wheels[0]} ]]; then
+            printf 'Expected exactly one local Citry wheel, found: %s\n' "${local_citry_wheels[*]}" >&2
+            exit 1
+          fi
+          if [[ ${#local_citry_core_wheels[@]} -ne 1 || ! -f ${local_citry_core_wheels[0]} ]]; then
+            printf 'Expected exactly one local Citry Core wheel, found: %s\n' "${local_citry_core_wheels[*]}" >&2
+            exit 1
+          fi
+          local_citry=${local_citry_wheels[0]}
+          local_citry_core=${local_citry_core_wheels[0]}
           find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -delete
           find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -delete
           cp "$local_citry" "$RUNNER_TEMP/wheelhouse/"
@@ -560,10 +568,18 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/wheelhouse"
           python -m pip download --dest "$RUNNER_TEMP/wheelhouse" dist/citry_ui-*.whl
-          local_citry=$(find dist -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -print -quit)
-          test -n "$local_citry"
-          local_citry_core=$(find dist -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -print -quit)
-          test -n "$local_citry_core"
+          local_citry_wheels=(dist/citry-[0-9]*.whl)
+          local_citry_core_wheels=(dist/citry_core-[0-9]*.whl)
+          if [[ ${#local_citry_wheels[@]} -ne 1 || ! -f ${local_citry_wheels[0]} ]]; then
+            printf 'Expected exactly one local Citry wheel, found: %s\n' "${local_citry_wheels[*]}" >&2
+            exit 1
+          fi
+          if [[ ${#local_citry_core_wheels[@]} -ne 1 || ! -f ${local_citry_core_wheels[0]} ]]; then
+            printf 'Expected exactly one local Citry Core wheel, found: %s\n' "${local_citry_core_wheels[*]}" >&2
+            exit 1
+          fi
+          local_citry=${local_citry_wheels[0]}
+          local_citry_core=${local_citry_core_wheels[0]}
           find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry-[0-9]*.whl' -delete
           find "$RUNNER_TEMP/wheelhouse" -maxdepth 1 -type f -name 'citry_core-[0-9]*.whl' -delete
           cp "$local_citry" "$RUNNER_TEMP/wheelhouse/"

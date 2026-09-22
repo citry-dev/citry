@@ -111,7 +111,7 @@ export class CitryBrowserSession {
         state.resolveReady();
         state.resolveReady = null;
         state.rejectReady = null;
-        this.onReady(data.runtime || "Citry runtime ready");
+        this.onReady(data.runtime || "Citry runtime ready", data.source || "");
       } else if (data.type === "executing" && data.runId === this.activeRunId) {
         this.armExecutionTimeout(state, data.runId);
         this.onPhase("Running Python");

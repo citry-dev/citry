@@ -18,11 +18,14 @@ pytestmark = pytest.mark.e2e
 _CITRY_UI_TABS = (
     Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
 )
+_CITRY_UI_BUTTON = (
+    Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/cbutton/snippets/basic_actions.py"
+)
 _RUNTIME_PATH = Path(__file__).parents[2] / "static" / "playground" / "runtime.json"
 _RUNTIME = json.loads(_RUNTIME_PATH.read_text(encoding="utf-8"))
 _CITRY_VERSION = _RUNTIME["citry"]["version"]
-_PUBLISHED_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {_RUNTIME['citry']['ui_version']}"
-_LOCAL_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {version('citry-ui')}"
+_PUBLISHED_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {_RUNTIME['citry']['ui_version']} · published"
+_LOCAL_RUNTIME_LABEL = f"Citry {_CITRY_VERSION} · Citry UI {version('citry-ui')} · workspace"
 
 
 def _set_source(page: Any, source: str) -> None:
@@ -188,18 +191,24 @@ def test_published_runtime_runs_citry_ui_twice(page: Any, docs_site_url: str) ->
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
     page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
     page.wait_for_function("window.citryPlayground !== undefined")
-    _set_source(page, _CITRY_UI_TABS.read_text(encoding="utf-8"))
+    # Keep this source within the published 0.2.2 API. The tabs example uses
+    # workspace Citry source and belongs to the local tuple test above.
+    _set_source(
+        page,
+        """from citry_ui import CButton
+
+CButton(slots={"default": "Save changes"})
+""",
+    )
 
     _run_and_wait(page)
     _run_and_wait(page)
     expect(page.locator("#citry-playground-runtime")).to_have_text(_PUBLISHED_RUNTIME_LABEL)
 
     preview = page.frame_locator("#citry-playground-preview")
-    tabs = preview.locator('[role="tab"]')
-    expect(tabs).to_have_count(3, timeout=120_000)
-    tabs.nth(1).click()
-    expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
-    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
+    button = preview.locator("button", has_text="Save changes")
+    expect(button).to_be_visible(timeout=120_000)
+    expect(button).to_have_class("cui-button")
     assert console_errors == []
 
 
@@ -231,15 +240,15 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
         if message.type == "error"
         else None,
     )
-    page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="domcontentloaded")
-    root = page.locator("[data-citry-ui-demo]").nth(1)
+    page.goto(docs_site_url + "/ui-library/components/button/", wait_until="domcontentloaded")
+    root = page.locator('[data-citry-ui-demo]:has-text("Create Button actions")')
     built_preview = root.locator("[data-ui-preview-frame]")
 
     expect(built_preview).to_be_visible()
     expect(root.locator("[data-live-activate]")).to_be_visible()
     root.locator("[data-live-activate]").click()
     expect(root.locator(".cm-content")).to_be_attached(timeout=15_000)
-    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_TABS.read_text(encoding="utf-8"))
+    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_BUTTON.read_text(encoding="utf-8"))
     expect(built_preview).to_be_hidden()
     page.wait_for_function(
         """root => {
@@ -261,11 +270,8 @@ def test_published_runtime_activates_inline_citry_ui(page: Any, docs_site_url: s
 
     root.locator('[data-live-tab="result"]').click()
     preview = root.frame_locator(".citry-live-code__preview:not(.citry-playground__preview--candidate)")
-    tabs = preview.locator('[role="tab"]')
-    expect(tabs).to_have_count(3, timeout=120_000)
-    tabs.nth(1).click()
-    expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
-    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
+    expect(preview.locator("button", has_text="Record specimen")).to_be_visible(timeout=120_000)
+    expect(preview.locator("button", has_text="Add observation")).to_have_class("cui-button")
     root.locator("[data-live-close]").click()
     expect(built_preview).to_be_visible()
     expect(root.locator("[data-live-activate]")).to_be_focused()
