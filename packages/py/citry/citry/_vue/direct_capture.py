@@ -768,6 +768,15 @@ def assemble_typed_render(
                         part.span,
                         receiver_owner,
                     )
+                    if not placement_route:
+                        # A slot site is part of the receiver's reusable
+                        # definition.  Occurrence IDs are unique per
+                        # instance, so an unscoped site must use the stable
+                        # receiver type in its identity.
+                        receiver_type = occurrence_types.get(receiver_owner)
+                        if receiver_type is None:
+                            raise UnsupportedPreparedView("direct slot receiver has no prepared component type")
+                        source_key = (*source_key[:-1], receiver_type)
                     site_identity = (source_key, placement_route)
                     site_index = slot_site_counts[site_identity]
                     slot_site_counts[site_identity] += 1
