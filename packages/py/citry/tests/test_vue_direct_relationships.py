@@ -8,8 +8,10 @@ import pytest
 
 from citry import Citry, Component, Const, Extension, Slot
 from citry._vue.capture import (
+    PreparedAttribute,
     PreparedDynamicElementOpen,
     PreparedElementOpen,
+    PreparedSourceText,
     PreparedStaticRun,
     PreparedTextValue,
     prepared_browser_binding,
@@ -18,7 +20,11 @@ from citry._vue.capture import (
 )
 from citry._vue.compiler import NativeCompiler
 from citry._vue.direct import DirectCallRunRender, DirectPythonComponentRender, DirectSlotRender
-from citry._vue.direct_capture import UnsupportedPreparedView, assemble_typed_render
+from citry._vue.direct_capture import (
+    UnsupportedPreparedView,
+    _contains_authored_vue_binding,
+    assemble_typed_render,
+)
 from citry._vue.document import typed_document_shell
 from citry._vue.leaf_program import PreparedLeafProgram, typed_leaf_parts
 from citry._vue.prepared import PreparedOccurrence
@@ -113,7 +119,7 @@ def test_ctabs_transparent_projection_puts_nested_calls_in_physical_definition()
         citry = registry
         template = """
             <c-CTabs default_value="one" aria_label="Example">
-              <c-CTab value="one"><span>One <c-projection-leaf #c-key="'tab-one'" /></span></c-CTab>
+              <c-CTab value="one"><span>One @name #topic <c-projection-leaf #c-key="'tab-one'" /></span></c-CTab>
               <c-CTabPanel value="one"><p>Panel one <c-projection-leaf #c-key="'panel-one'" /></p></c-CTabPanel>
               <c-CTab value="two"><span>Two <c-projection-leaf #c-key="'tab-two'" /></span></c-CTab>
               <c-CTabPanel value="two"><p>Panel two <c-projection-leaf #c-key="'panel-two'" /></p></c-CTabPanel>
@@ -133,11 +139,71 @@ def test_ctabs_transparent_projection_puts_nested_calls_in_physical_definition()
     # Declaration components remain calls in the lexical page slot. Their
     # projected child output is assembled into CInternalTabs, so its nested
     # calls must use the physical definition's preparedData.calls table.
+    assert "One @name #topic" in physical_input.template
+    assert "One @name #topic" not in page_input.template
     assert not any(call["typeKey"] == Leaf.class_id for call in page_input.local_calls)
     leaf_calls = [call for call in physical_input.local_calls if call["typeKey"] == Leaf.class_id]
     assert len(leaf_calls) == 4
     assert len(physical.prepared_data["calls"]) == 4
     assert all(physical.prepared_data["calls"][call["localId"]]["parentId"] == physical.id for call in leaf_calls)
+
+
+def _binding_open(name: str) -> PreparedElementOpen:
+    value = f'{name}="value"'
+    source = f"<span {value}>text</span>"
+    return PreparedElementOpen(
+        source=source,
+        span=(0, len(source.encode())),
+        tag="span",
+        attrs=(PreparedAttribute(name, "source", (6, 6 + len(value.encode())), value),),
+        is_void=False,
+        is_self_closing=False,
+        element_metadata=(),
+    )
+
+
+@pytest.mark.parametrize("name", ["v-text", ":title", "@click", "#c-key"])
+def test_transparent_projection_binding_detection_uses_authored_attribute_names(name: str) -> None:
+    assert _contains_authored_vue_binding((_binding_open(name),))
+
+
+def test_transparent_projection_binding_detection_ignores_plain_text_tokens() -> None:
+    assert not _contains_authored_vue_binding(
+        (PreparedSourceText("plain @name #topic", (0, 19), "plain @name #topic"),)
+    )
+
+
+def test_ctabs_transparent_projection_keeps_vue_bindings_with_lexical_caller() -> None:
+    import citry_ui
+
+    registry = Citry(autodiscover=False)
+    registry.register_library(citry_ui)
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <c-CTabs default_value="one" aria_label="Example">
+              <c-CTab value="one"><span v-text="label">fallback</span></c-CTab>
+              <c-CTabPanel value="one"><span v-text="label">fallback panel</span></c-CTabPanel>
+            </c-CTabs>
+        """
+
+        def js_data(self, kwargs, slots):
+            return {"label": "lexical"}
+
+    assembly = assemble_typed_render(
+        render_prepared_direct(Page()),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
+    page = next(item for item in assembly.view.occurrences if item.type_key == Page.class_id)
+    physical = next(item for item in assembly.view.occurrences if item.type_key.startswith("CInternalTabs_"))
+    page_input = assembly.compile_inputs[page.definition_id]
+    physical_input = assembly.compile_inputs[physical.definition_id]
+
+    assert 'v-text="label"' in page_input.template
+    assert 'v-text="label"' not in physical_input.template
+    assert '<slot v-if="preparedData.selectedSlots[' in physical_input.template
 
 
 def test_repeated_forwarded_multi_slot_fills_keep_nested_calls_with_the_lexical_caller() -> None:

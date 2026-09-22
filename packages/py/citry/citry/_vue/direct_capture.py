@@ -10,6 +10,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from html import unescape
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING, TypeAlias, TypeGuard, TypeVar, cast
 
 from citry.attrs import _html_attr_identity, validate_html_attr_name
@@ -55,7 +56,27 @@ from .direct import (
     DirectProjectionRender,
     DirectPythonComponentRender,
 )
-from .leaf_program import PreparedLeafProgram
+from .leaf_program import (
+    PreparedLeafProgram,
+)
+from .leaf_program import (
+    _Close as _LeafClose,
+)
+from .leaf_program import (
+    _For as _LeafFor,
+)
+from .leaf_program import (
+    _If as _LeafIf,
+)
+from .leaf_program import (
+    _Open as _LeafOpen,
+)
+from .leaf_program import (
+    _Static as _LeafStatic,
+)
+from .leaf_program import (
+    _Text as _LeafText,
+)
 from .opaque_html import mark_opaque_html, reject_cross_boundary_html
 from .prepared import (
     PreparedMarker,
@@ -235,6 +256,90 @@ class _FillFragment:
     body: _DefinitionFragment
 
 
+_AUTHORED_VUE_BINDING = re.compile(r"^(?:v-|:|@|#)")
+
+
+def _has_authored_vue_binding(attributes: object) -> bool:
+    """Return whether structured attributes contain an authored Vue binding."""
+    return any(
+        getattr(attribute, "origin", None) == "source"
+        and _AUTHORED_VUE_BINDING.match(str(getattr(attribute, "name", "")))
+        for attribute in tuple(attributes or ())
+    )
+
+
+class _VueBindingAttributeParser(HTMLParser):
+    """Find Vue binding names in opening tags, never in ordinary text."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.found = False
+
+    def _inspect(self, attributes: list[tuple[str, str | None]]) -> None:
+        self.found = self.found or any(_AUTHORED_VUE_BINDING.match(name) for name, _ in attributes)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del tag
+        self._inspect(attrs)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del tag
+        self._inspect(attrs)
+
+
+def _contains_vue_binding_in_template(template: str) -> bool:
+    parser = _VueBindingAttributeParser()
+    parser.feed(template)
+    parser.close()
+    return parser.found
+
+
+def _structured_leaf_vue_binding(value: object) -> tuple[bool, bool]:
+    """Return ``(metadata_complete, has_binding)`` for leaf operations."""
+    if isinstance(value, (tuple, list)):
+        results = [_structured_leaf_vue_binding(item) for item in value]
+        return all(complete for complete, _ in results), any(found for _, found in results)
+    if isinstance(value, _LeafOpen):
+        return True, _has_authored_vue_binding(value.authored_attributes)
+    if isinstance(value, (_LeafStatic, _LeafText, _LeafClose)):
+        return True, False
+    if isinstance(value, _LeafIf):
+        complete, found = _structured_leaf_vue_binding(value.branches)
+        return complete, found
+    if isinstance(value, _LeafFor):
+        body_complete, body_found = _structured_leaf_vue_binding(value.body)
+        empty_complete, empty_found = _structured_leaf_vue_binding(value.empty)
+        return body_complete and empty_complete, body_found or empty_found
+    return False, False
+
+
+def _contains_authored_vue_binding(parts: Sequence[RenderPart]) -> bool:
+    """Whether projected authored markup needs its lexical Vue scope."""
+    for part in parts:
+        if isinstance(part, PreparedElementOpen):
+            if _has_authored_vue_binding(part.attrs):
+                return True
+            continue
+        if isinstance(part, PreparedDynamicElementOpen):
+            if _has_authored_vue_binding(part.authored_attrs):
+                return True
+            continue
+        if isinstance(part, PreparedLeafProgram):
+            metadata_complete, has_binding = _structured_leaf_vue_binding(part.operations)
+            if has_binding or (not metadata_complete and _contains_vue_binding_in_template(part.fragment.template)):
+                return True
+            continue
+        if isinstance(part, (CitryRender, RenderDecoration)):
+            # A nested component owns its own Vue scope. Its internal
+            # directives must not force the containing projection to move out
+            # of the physical definition.
+            if part.frame.is_component_root:
+                continue
+            if _contains_authored_vue_binding(tuple(part.parts)):
+                return True
+    return False
+
+
 @dataclass(frozen=True, slots=True)
 class _LeafDefinitionArtifact:
     definition_id: str
@@ -382,6 +487,7 @@ def assemble_typed_render(
     prepared_by_occurrence: dict[str, dict[str, object]] = {}
     occurrence_types: dict[str, str] = {}
     occurrence_parents: dict[str, str | None] = {}
+    occurrence_placement_keys: dict[str, str | None] = {}
     reference_parents: defaultdict[str, list[str]] = defaultdict(list)
     binding_counts_by_owner: defaultdict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
     call_counts_by_owner: defaultdict[str, defaultdict[tuple[object, ...], int]] = defaultdict(
@@ -531,6 +637,7 @@ def assemble_typed_render(
         prepared_by_occurrence[occurrence_id] = prepared_values
         occurrence_types[occurrence_id] = type_key
         occurrence_parents[occurrence_id] = parent_id
+        occurrence_placement_keys[occurrence_id] = placement_key
         occurrence_index = len(occurrence_fields)
         occurrence_fields.append((occurrence_id, type_key, parent_id, placement_key, frame_data, prepared_values))
         occurrence_definition_ids.append(None)
@@ -657,6 +764,26 @@ def assemble_typed_render(
                     )
                 output.append("</template>")
 
+        def receiver_placement_path(receiver_owner: str, lexical_owner: str) -> tuple[str, ...] | None:
+            """Return a receiver's stable path below its lexical owner."""
+            if receiver_owner == lexical_owner:
+                return ()
+            path: list[str] = []
+            cursor = receiver_owner
+            visited: set[str] = set()
+            while cursor != lexical_owner:
+                if cursor in visited:
+                    raise UnsupportedPreparedView("prepared component ancestry contains a cycle")
+                visited.add(cursor)
+                parent = occurrence_parents.get(cursor)
+                placement_key = occurrence_placement_keys.get(cursor)
+                if parent is None or placement_key is None:
+                    return None
+                path.append(placement_key)
+                cursor = parent
+            path.reverse()
+            return tuple(path)
+
         def transform_parts(
             parts: Sequence[RenderPart],
             *,
@@ -764,6 +891,10 @@ def assemble_typed_render(
                     receiver_owner = _stable_owner(part.receiver_render_id, render_to_occurrence)
                     if receiver_owner is None:
                         raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
+                    lexical_owner = _stable_owner(fill_source.lexical_render_id, render_to_occurrence)
+                    if lexical_owner is None:
+                        raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
+                    relative_receiver_path = receiver_placement_path(receiver_owner, lexical_owner)
                     source_key = (
                         occurrence_types[occurrence_id],
                         fill_source.kind,
@@ -781,21 +912,21 @@ def assemble_typed_render(
                         if receiver_type is None:
                             raise UnsupportedPreparedView("direct slot receiver has no prepared component type")
                         source_key = (*source_key[:-1], receiver_type)
+                    if relative_receiver_path is not None:
+                        source_key = (*source_key, relative_receiver_path)
                     site_identity = (source_key, placement_route)
                     site_index = slot_site_counts[site_identity]
                     slot_site_counts[site_identity] += 1
-                    # Positional ordinals alone make a slot inside a keyed
-                    # transparent wrapper change identity when sibling wrappers
-                    # reorder. Scope the ordinal by its placement route instead.
+                    # Keep the ordinal scoped by the transparent placement
+                    # route and the receiver path relative to the lexical
+                    # owner, so sibling wrappers retain distinct stable sites
+                    # when their keyed order changes.
                     site_digest = (
                         _digest(source_key, site_index)
                         if not placement_route
                         else _digest(source_key, placement_route, site_index)
                     )
                     site_id = f"citrySlot{site_digest[:16]}"
-                    lexical_owner = _stable_owner(fill_source.lexical_render_id, render_to_occurrence)
-                    if lexical_owner is None:
-                        raise UnsupportedPreparedView("direct slot ownership has no prepared occurrence")
                     flattened_transparent_receiver = (
                         not nested_template and part.receiver_render_id in flattened_transparent_receivers
                     )
@@ -835,7 +966,34 @@ def assemble_typed_render(
                         slot_key_scopes=tuple(active_slot_key_scopes),
                     )
                     if flattened_transparent_receiver:
-                        output.extend(selected)
+                        if lexical_owner == occurrence_id or not _contains_authored_vue_binding(tuple(part.parts)):
+                            output.extend(selected)
+                            continue
+
+                        # A transparent receiver can be folded into a
+                        # physical definition without making its authored
+                        # body part of that definition's Vue scope.  Keep
+                        # the body as a native slot closure owned by the
+                        # lexical caller.  This is the same relationship we
+                        # use for an ordinary supplied fill; the only
+                        # difference is that the transparent receiver has no
+                        # component tag at which to emit the outlet.
+                        selected_slots = prepared_by_occurrence[occurrence_id].setdefault("selectedSlots", {})
+                        if type(selected_slots) is not dict:
+                            raise AssertionError("prepared selectedSlots container changed type")
+                        previous_selection = selected_slots.setdefault(site_id, "supplied")
+                        if previous_selection != "supplied":
+                            raise UnsupportedPreparedView("one prepared slot site selected conflicting sources")
+                        supplied_fills[occurrence_id].append(
+                            _FillFragment(site_id, part.public_name, lexical_owner, selected)
+                        )
+                        _append_slot_outlet(
+                            output,
+                            site_id,
+                            _DefinitionFragment.empty(),
+                            context_binding_attrs,
+                            _next_slot_key(active_slot_key_scopes),
+                        )
                         continue
                     fill = _FillFragment(site_id, part.public_name, lexical_owner, selected)
                     output_owner = (

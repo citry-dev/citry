@@ -1057,6 +1057,11 @@
   // DOM so application code cannot accidentally forge ownership by assigning
   // an expando with the same name.
   const vueOwnedNativeProperties = new WeakMap();
+  // Uncontrolled native values need a per-element snapshot when Vue patches a
+  // surrounding component. The private ownership directive is present on each
+  // prepared native control, so this avoids scanning an entire app on every
+  // reactive update.
+  const nativeControlUpdateSnapshots = new WeakMap();
   const eventTimingLifetimes = new WeakMap();
   const eventTimingDirectives = new WeakMap();
   const runtimeEventTimingDirectives = new WeakMap();
@@ -2624,6 +2629,37 @@
           while (cursor !== null && cursor !== rootId) cursor = ownedApp.occurrences.get(cursor)?.parentId ?? null;
           if (cursor === rootId) { removed.add(id); break; }
         }
+        // A nontransparent parent can own the VNode for a child projected
+        // through a marker. Replacing that marker removes the child from the
+        // target subtree, while the parent's prepared call table still has to
+        // satisfy its unchanged render definition. Keep those ancestor-owned
+        // call chains in the composed graph; the replacement definition does
+        // not consume the projected slot, and the replaced-root style stage
+        // still retires their assets.
+        const preserve = new Set();
+        const preserveCalls = owner => {
+          const prepared = owner.preparedData || {};
+          for (const binding of Object.values(prepared.calls || {})) {
+            if (removed.has(binding.id) && !targetIds.has(binding.id)) preserve.add(binding.id);
+          }
+          for (const ids of Object.values(prepared.callRuns || {})) {
+            for (const id of ids) if (removed.has(id) && !targetIds.has(id)) preserve.add(id);
+          }
+        };
+        for (const owner of ownedApp.occurrences.values()) if (!removed.has(owner.id)) preserveCalls(owner);
+        for (const id of [...preserve]) {
+          const queue = [id];
+          while (queue.length) {
+            const current = queue.pop();
+            const owner = ownedApp.occurrences.get(current);
+            if (!owner) continue;
+            const before = preserve.size;
+            preserveCalls(owner);
+            if (preserve.size === before) continue;
+            for (const child of preserve) if (!queue.includes(child)) queue.push(child);
+          }
+        }
+        for (const id of preserve) removed.delete(id);
         const occurrences = new Map([...ownedApp.occurrences].filter(([id]) => !removed.has(id)));
         for (const entry of entries) {
           const existingTarget = ownedApp.occurrences.get(entry.targetId);
@@ -2740,6 +2776,9 @@
             if (cursor === rootId) { replacedStyleIds.add(id); break; }
           }
         }
+        const suppliedLiveOccurrenceIds = renderPlan?.entries?.length
+          ? new Set(renderPlan.entries.flatMap(entry => entry.envelope.occurrences.map(item => item.id)))
+          : null;
         attempt.styleStage = {
           token: Object.freeze({appId, revision: envelope.revision}),
           replacedIds: replacedStyleIds,
@@ -2747,7 +2786,10 @@
         };
         for (const asset of normalizedAssets.styles) {
           const refs = attempt.styleStage.refs.get(asset.source.url) || new Set();
-          for (const id of assetRefs(asset)) refs.add(id);
+          for (const id of assetRefs(asset)) {
+            if (suppliedLiveOccurrenceIds && replacedStyleIds.has(id) && !suppliedLiveOccurrenceIds.has(id)) continue;
+            refs.add(id);
+          }
           attempt.styleStage.refs.set(asset.source.url, refs);
         }
         if (!source || sources.get(source.stableId)?.generation !== source.generation)
@@ -3153,7 +3195,18 @@
     });
     vueApp.directive("citry-vue-owned", {
       mounted(element, binding) { setVueOwnedNativeProperties(element, binding.value); },
-      updated(element, binding) { setVueOwnedNativeProperties(element, binding.value); },
+      beforeUpdate(element, binding) {
+        if (Array.isArray(binding.value) && binding.value.length === 0) {
+          const snapshot = captureNativeControlState(element);
+          if (snapshot.length) nativeControlUpdateSnapshots.set(element, snapshot);
+        }
+      },
+      updated(element, binding) {
+        setVueOwnedNativeProperties(element, binding.value);
+        const snapshot = nativeControlUpdateSnapshots.get(element);
+        nativeControlUpdateSnapshots.delete(element);
+        if (snapshot) restoreNativeControlState(snapshot);
+      },
       beforeUnmount(element) { vueOwnedNativeProperties.delete(element); },
     });
     const runtimeEventLifetimes = new WeakMap();
@@ -3544,11 +3597,98 @@
       removed.push(id);
     }
     const addedIds = new Set([...incoming.keys()].filter(id => !app.occurrences.has(id)));
+    // The browser owns the only authoritative accepted baseline. Derive keyed
+    // replacement declarations from that baseline and the incoming occurrence
+    // graph instead of relying on process-local server revision history. A
+    // server may still send declarations for older clients, but they must
+    // exactly agree with this derivation.
+    const derivedReplacements = [];
+    for (const item of staged.filter(item => item.definitionChanged && !item.added)) {
+      const priorOccurrence = app.occurrences.get(item.action.id);
+      const priorDefinition = app.definitions.get(priorOccurrence.definitionId);
+      if (!priorDefinition) throw new Error("retained occurrence has no prior render definition");
+      const before = new Map(priorDefinition.replacementSites.map(site => [site.siteId, site]));
+      const after = new Map(item.nextDefinition.replacementSites.map(site => [site.siteId, site]));
+      const changed = [...new Set([...before.keys(), ...after.keys()])]
+        .filter(id => before.get(id)?.key !== after.get(id)?.key).sort();
+      const siteRecords = [];
+      for (const siteId of changed) {
+        const expectedForSite = new Set();
+        const coveredBySite = new Set();
+        for (const [site, occurrence] of [[before.get(siteId), priorOccurrence],
+          [after.get(siteId), incoming.get(item.action.id)]]) {
+          if (!site) continue;
+          for (const localId of site.localDescendants) {
+            const call = occurrence.preparedData.calls[localId];
+            if (!call) throw new Error("replacement site references an absent ordinary local call");
+            coveredBySite.add(call.id);
+            if (incoming.has(call.id) && app.mounted.has(call.id)) expectedForSite.add(call.id);
+          }
+          for (const runId of site.localDescendantRuns) {
+            for (const id of occurrence.preparedData.callRuns[runId]) {
+              coveredBySite.add(id);
+              if (incoming.has(id) && app.mounted.has(id)) expectedForSite.add(id);
+            }
+          }
+        }
+        siteRecords.push({ownerId: item.action.id, siteId, coveredBySite, expectedForSite});
+      }
+      // A lifecycle directive can be nested inside another changed directive
+      // in one definition.  Both metadata records then mention the same
+      // mounted component, but one remount must account for it only once.  A
+      // larger local coverage identifies the enclosing site; equal coverage
+      // falls back to the stable site order because the wire format carries
+      // no source path.
+      const assigned = new Map();
+      for (const record of siteRecords) {
+        for (const id of record.expectedForSite) {
+          const candidates = siteRecords.filter(candidate => candidate.expectedForSite.has(id));
+          candidates.sort((left, right) => right.coveredBySite.size - left.coveredBySite.size ||
+            (left.siteId < right.siteId ? -1 : left.siteId > right.siteId ? 1 : 0));
+          const owner = candidates[0];
+          if (!assigned.has(owner.siteId)) assigned.set(owner.siteId, new Set());
+          assigned.get(owner.siteId).add(id);
+        }
+      }
+      for (const record of siteRecords) {
+        derivedReplacements.push({ownerId: record.ownerId, siteId: record.siteId,
+          expectedRemountIds: [...(assigned.get(record.siteId) || [])].sort()});
+      }
+    }
+    const replacementSortKey = value => value && typeof value === "object" && !Array.isArray(value)
+      ? [typeof value.ownerId === "string" ? value.ownerId : "", typeof value.siteId === "string" ? value.siteId : ""]
+      : ["", ""];
+    const compareReplacementDeclarations = (left, right) => {
+      const [leftOwner, leftSite] = replacementSortKey(left), [rightOwner, rightSite] = replacementSortKey(right);
+      if (leftOwner !== rightOwner) return leftOwner < rightOwner ? -1 : 1;
+      if (leftSite !== rightSite) return leftSite < rightSite ? -1 : 1;
+      return 0;
+    };
+    // The generated declarations follow occurrence traversal order, which is
+    // not a protocol ordering guarantee.  Keep the derived effective list in
+    // the same strict order required of supplied declarations.
+    derivedReplacements.sort(compareReplacementDeclarations);
+    const suppliedReplacements = envelope.replacements;
+    // Compatibility is set-like with respect to declaration order, while the
+    // effective supplied list remains ordered and is checked below.  This lets
+    // an older server send the same valid declarations in a different
+    // traversal order without weakening the wire-order invariant.
+    const replacementSignature = values => signatureKey(values.map(value => value && typeof value === "object" && !Array.isArray(value)
+      ? {ownerId: value.ownerId, siteId: value.siteId, expectedRemountIds: value.expectedRemountIds}
+      : value).sort(compareReplacementDeclarations));
+    if (suppliedReplacements.length !== 0 &&
+        replacementSignature(suppliedReplacements) !== replacementSignature(derivedReplacements))
+      throw new Error("replacement metadata does not match client derivation");
+    const replacements = suppliedReplacements.length === 0 ? derivedReplacements : suppliedReplacements;
+    const derivedReplacementByKey = new Map(derivedReplacements.map(replacement =>
+      [JSON.stringify([replacement.ownerId, replacement.siteId]), replacement]));
     const expectedRemountIds = new Set(), replacementSites = new Set();
     let priorReplacementOwner, priorReplacementSite;
-    for (const replacement of envelope.replacements) {
+    for (const replacement of replacements) {
       plain(replacement, "replacement");
-      if (typeof replacement.ownerId !== "string" || typeof replacement.siteId !== "string" || !Array.isArray(replacement.expectedRemountIds)) throw new Error("invalid replacement metadata");
+      if (Object.keys(replacement).sort().join(",") !== "expectedRemountIds,ownerId,siteId" ||
+          typeof replacement.ownerId !== "string" || typeof replacement.siteId !== "string" || !Array.isArray(replacement.expectedRemountIds))
+        throw new Error("invalid replacement metadata");
       const siteKey = JSON.stringify([replacement.ownerId, replacement.siteId]);
       if (replacementSites.has(siteKey)) throw new Error("duplicate replacement site");
       replacementSites.add(siteKey);
@@ -3563,21 +3703,9 @@
       const priorSite = app.definitions.get(app.occurrences.get(replacement.ownerId).definitionId)
         .replacementSites.find(item => item.siteId === replacement.siteId);
       if (!declaredSite && !priorSite) throw new Error("replacement site is absent from both definitions");
-      const expectedForSite = new Set();
-      for (const [site, occurrence] of [[priorSite, app.occurrences.get(replacement.ownerId)], [declaredSite, incoming.get(replacement.ownerId)]]) {
-        if (!site) continue;
-        for (const localId of site.localDescendants) {
-          const call = occurrence.preparedData.calls[localId];
-          if (!call) throw new Error("replacement site references an absent ordinary local call");
-          if (incoming.has(call.id) && app.mounted.has(call.id)) expectedForSite.add(call.id);
-        }
-        for (const runId of site.localDescendantRuns) {
-          for (const id of occurrence.preparedData.callRuns[runId]) {
-            if (incoming.has(id) && app.mounted.has(id)) expectedForSite.add(id);
-          }
-        }
-      }
-      if (signatureKey(replacement.expectedRemountIds) !== signatureKey([...expectedForSite].sort()))
+      const derivedReplacement = derivedReplacementByKey.get(siteKey);
+      if (!derivedReplacement || signatureKey(replacement.expectedRemountIds) !==
+          signatureKey(derivedReplacement.expectedRemountIds))
         throw new Error("expected remount ids do not match replacement descendant runs");
       let priorRemountId = "";
       for (const id of replacement.expectedRemountIds) {
@@ -3599,7 +3727,7 @@
       const before = new Map(prior.replacementSites.map(site => [site.siteId, site.key]));
       const after = new Map(item.nextDefinition.replacementSites.map(site => [site.siteId, site.key]));
       const changed = [...new Set([...before.keys(), ...after.keys()])].filter(id => before.get(id) !== after.get(id)).sort();
-      const declared = envelope.replacements.filter(entry => entry.ownerId === item.action.id).map(entry => entry.siteId).sort();
+      const declared = replacements.filter(entry => entry.ownerId === item.action.id).map(entry => entry.siteId).sort();
       if (signatureKey(changed) !== signatureKey(declared))
         throw new Error("replacement metadata does not match changed definition sites: " + item.action.id);
       const beforeDirectives = new Map(prior.directiveSignature.map(value => [value.siteId, signatureKey(value)]));

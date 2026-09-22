@@ -213,6 +213,45 @@ test("Vue bridge sends current credentials, commits renders, and resets sequence
   await assert.rejects(bridge.send({ source, handler: "move" }), /stale or retired/);
 });
 
+test("a custom transport does not read cookies from an opaque document", async () => {
+  const priorDocument = globalThis.document;
+  const opaqueDocument = {};
+  Object.defineProperty(opaqueDocument, "cookie", {
+    get() {
+      throw new Error("opaque documents cannot expose cookies");
+    },
+  });
+  globalThis.document = opaqueDocument;
+  let sent = false;
+  try {
+    const bridge = bridgeModule.createVueEventsBridge({
+      endpoint: "/events",
+      host: basicHost(),
+      csrf: { cookie: "csrftoken" },
+      transport: () => ({
+        send(envelope) {
+          sent = true;
+          return {
+            protocol: "citry-events/1",
+            requestId: envelope.requestId,
+            results: [
+              {
+                ok: true,
+                sendSequence: envelope.calls[0].sendSequence,
+                actions: [],
+              },
+            ],
+          };
+        },
+      }),
+    });
+    await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+  } finally {
+    globalThis.document = priorDocument;
+  }
+  assert.equal(sent, true);
+});
+
 test("a detached delayed action cannot mutate after a newer response is accepted", async () => {
   const fired = [];
   const context = {

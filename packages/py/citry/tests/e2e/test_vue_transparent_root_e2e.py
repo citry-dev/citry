@@ -598,8 +598,7 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
         time.sleep(0.35)
         route.continue_()
 
-    page.route("**/citry/cache/SlowReplacement_*.css", slow_style)
-    page.route("**/citry/cache/Cancelled_*.css", slow_style)
+    page.route("**/citry/ext/events/assets/*.css", slow_style)
     page.goto(url)
     page.wait_for_selector(".slow-replacement", timeout=5_000)
     page.wait_for_timeout(500)
@@ -608,7 +607,7 @@ def test_fragment_startup_styles_survive_other_unmount_and_release_on_own_cancel
     assert page.evaluate("() => window.__replacementMounted") is True
     assert page.evaluate("() => window.__cancelledMounted") is not True
     assert page.locator(".cancelled-startup").count() == 0
-    assert page.locator('link[href*="Cancelled_"]').count() == 0
+    assert page.locator("link[data-citry-vue-style-app][data-citry-css-url]").count() == 1
     assert page.locator(".slow-replacement").evaluate("node => getComputedStyle(node).color") == "rgb(4, 5, 6)"
     assert page_errors == []
     assert len(console_errors) == 1

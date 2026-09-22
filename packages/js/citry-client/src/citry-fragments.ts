@@ -64,6 +64,7 @@ export function installFragmentManager(
       throw new TypeError("[Citry] Vue fragment host must resolve once inside the document body.");
     const host = hosts[0];
     const initialParent = host.parentNode;
+    const initialTagParent = tag?.parentNode ?? null;
     if (reservedHosts.has(host)) throw new TypeError("[Citry] Vue fragment host is already mounting.");
     if ((tag && isManagedDescendant(tag)) || isManagedDescendant(host))
       throw new TypeError("[Citry] a Vue fragment cannot be inserted inside a managed Vue host.");
@@ -74,6 +75,7 @@ export function installFragmentManager(
         current[0] !== host ||
         !document.body.contains(host) ||
         host.parentNode !== initialParent ||
+        (tag !== undefined && (!document.body.contains(tag) || tag.parentNode !== initialTagParent)) ||
         isManagedDescendant(host, vue.appId)
       )
         throw new TypeError("[Citry] Vue fragment host changed while mounting.");

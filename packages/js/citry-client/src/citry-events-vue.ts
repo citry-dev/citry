@@ -593,7 +593,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       "X-Citry-Vue-Occurrence": input.source.stableId,
       "X-Citry-Vue-Revision": String(committedRevision),
     };
-    const csrf = runtimeConfig.csrf ?? options.csrf;
+    const selectedTransport = options.transport?.() ?? null;
+    // A custom transport owns the request boundary. In particular, the
+    // playground transport runs inside an opaque sandbox where reading
+    // document.cookie throws; it does not need an HTTP CSRF header.
+    const csrf = selectedTransport ? undefined : (runtimeConfig.csrf ?? options.csrf);
     if (!useGet && csrf) {
       const token = csrf.token
         ? typeof csrf.token === "function"
@@ -604,8 +608,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     }
     // The Vue bridge currently serializes queued jobs and emits one-call
     // envelopes. `allowBatching` therefore selects the per-event route for
-    // isolated handlers; it does not yet recreate Alpine's same-tick
-    // multi-call envelope/dependency scheduler.
+    // isolated handlers; it does not yet implement same-tick multi-call
+    // envelope/dependency scheduling.
     const isolated = useGet || handlerOptions.allowBatching === false;
     const endpoint = isolated ? eventUrl(routes.eventBaseUrl ?? "", context, input.handler) : routes.endpoint;
     const callTimeout = input.options?.timeout;
@@ -613,7 +617,6 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Vue Events timeoutMs must be positive.");
     const controller = new AbortController();
     job.controller = controller;
-    const selectedTransport = options.transport?.() ?? null;
     const operation = (async (): Promise<{ raw: unknown } | { attachment: Blob; filename: string }> => {
       if (selectedTransport) {
         try {
