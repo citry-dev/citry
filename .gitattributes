@@ -52,6 +52,9 @@ packages/py/citry_core/LICENSE text eol=lf
 packages/py/citry_core/README.md text eol=lf
 packages/py/citry_core/pyproject.toml text eol=lf
 
+# Vendored Vize snapshots preserve upstream whitespace.
+third_party/rust/vize_atelier_core/**/*.snap whitespace=-blank-at-eol
+
 # The VS Code extension bundle is generated and minified. JavaScript template
 # literals inside it preserve trailing spaces as product bytes, so Git should
 # not treat those lines as source-formatting mistakes during release audits.
