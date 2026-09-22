@@ -332,7 +332,7 @@
                     e.host.ownerDocument === P))
               );
             },
-            ensureShadowStyles = () => {
+            ensureShadowStyles = (force = !1) => {
               const e = i.getRootNode();
               if (!At() || !(e instanceof ShadowRoot)) return;
               const t = P.querySelector("style[nonce], script[nonce]"),
@@ -349,6 +349,8 @@
                   t.textContent === shadowPointStyleText &&
                   (t.nonce || t.getAttribute("nonce") || null) === n,
                 s = [...r].find(a);
+              if (!s && !force && e === z && i.hasAttribute(u) && !i.hasAttribute("data-open"))
+                return;
               if (s) {
                 for (const t of r)
                   t !== s && t.getRootNode() === e && t.remove();
@@ -1477,6 +1479,7 @@
               }
             },
             Qe = () => {
+              ensureShadowStyles(!0);
               if (capInvalid) {
                 if (!Z()) return !1;
                 ((capInvalid = !1), Fe());
