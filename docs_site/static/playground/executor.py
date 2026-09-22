@@ -23,8 +23,7 @@ from typing import Any
 import citry_ui
 from citry import Citry, CitryElement, CitryRender, Component, ComponentLike, citry
 from citry.component_like import _resolve_component_like
-from citry.ext.events import EventRequest, TransportContext
-from citry.ext.events.renderers import dispatcher_for
+from citry.ext.events import EventRequest, EventsDispatcher, TransportContext
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
 PLAYGROUND_FILENAME = "<playground>"
@@ -64,10 +63,29 @@ class _RuntimeState:
 
 
 _runtime_state = _RuntimeState()
-# The browser playground always runs the prepared Vue client. Keep the worker's
-# dispatcher on the same renderer so event Render actions negotiate the
-# vue-prepared/1 wire shape instead of falling back to the HTML encoder.
-_dispatcher = dispatcher_for(citry)
+
+
+def _select_events_dispatcher(engine: Citry) -> EventsDispatcher:
+    """
+    Use Vue render encoding when the workspace runtime provides it.
+
+    The committed playground can still be loaded with the published Citry
+    runtime, whose public events API predates the private renderer selector.
+    Keep that runtime compatible by falling back to its public dispatcher.
+    """
+    try:
+        from citry.ext.events.renderers import dispatcher_for  # noqa: PLC0415
+    except ModuleNotFoundError as error:
+        if error.name != "citry.ext.events.renderers":
+            raise
+        return EventsDispatcher()
+    return dispatcher_for(engine)
+
+
+# The browser playground always runs the prepared Vue client when the local
+# runtime supports it. On an older published runtime this remains the public
+# HTML events dispatcher.
+_dispatcher = _select_events_dispatcher(citry)
 
 # The default Citry engine belongs only to this disposable Worker. Give it a
 # per-Worker secret so visitor components can use ordinary signed State without

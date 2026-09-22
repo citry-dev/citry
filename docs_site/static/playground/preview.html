@@ -432,7 +432,7 @@
           send("console_error", values.join(" "));
         };
 
-        async function activateScripts(scripts) {
+        async function activateScripts(scripts, afterActivation) {
           for (const oldScript of scripts) {
             // Data blocks retain their original node identity. Citry
             // manifests are staged separately; the rest are already live.
@@ -451,9 +451,11 @@
               });
             }
             oldScript.replaceWith(script);
+            afterActivation();
             ensurePlaygroundTransport();
             if (externalCompletion) {
               await externalCompletion;
+              afterActivation();
               ensurePlaygroundTransport();
             }
           }
@@ -535,7 +537,9 @@
             // Keep prepared manifests staged until executable scripts register
             // their Vue definitions and runtime behavior. Then restore the
             // original nodes and positions before the Events bridge handles
-            // browser behavior.
+            // browser behavior. The conditional Alpine hold preserves the
+            // published pre-Vue runtime; Vue has no Citry.alpine hook, so it
+            // remains a no-op for the workspace path.
             for (const node of document.head.querySelectorAll("[data-citry-preview-content]")) node.remove();
             for (const node of headNodes) {
               if (node.nodeType === Node.ELEMENT_NODE) node.setAttribute("data-citry-preview-content", "");
@@ -544,8 +548,18 @@
             for (const attribute of [...document.body.attributes]) document.body.removeAttribute(attribute.name);
             for (const attribute of bodyAttributes) document.body.setAttribute(attribute.name, attribute.value);
             document.body.replaceChildren(...bodyNodes);
-            await activateScripts(visitorScripts);
-            await restoreCitryManifests(stagedManifests);
+            let releaseAlpineStart = null;
+            const holdAlpineStart = () => {
+              if (releaseAlpineStart || !stagedManifests.length) return;
+              const hold = globalThis.Citry?.alpine?._holdStart;
+              if (typeof hold === "function") releaseAlpineStart = hold();
+            };
+            try {
+              await activateScripts(visitorScripts, holdAlpineStart);
+              await restoreCitryManifests(stagedManifests);
+            } finally {
+              releaseAlpineStart?.();
+            }
             ensurePlaygroundTransport();
           } catch (error) {
             send("render_error", error);

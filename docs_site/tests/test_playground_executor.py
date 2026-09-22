@@ -15,6 +15,40 @@ _WORKER = Path(__file__).parents[1] / "static" / "playground" / "worker.js"
 _RUNTIME = Path(__file__).parents[1] / "static" / "playground" / "runtime.json"
 
 
+def test_executor_selects_vue_or_published_events_dispatcher() -> None:
+    """The same executor supports workspace and published Citry runtimes."""
+    program = f"""
+import builtins
+import json
+import runpy
+
+adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
+engine = adapter["citry"]
+workspace = adapter["_select_events_dispatcher"](engine)
+
+real_import = builtins.__import__
+def missing_renderer(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "citry.ext.events.renderers":
+        raise ModuleNotFoundError(name=name)
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = missing_renderer
+published = adapter["_select_events_dispatcher"](engine)
+print(json.dumps({{"workspace": workspace._preferred_renderer, "published": published._preferred_renderer}}))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert json.loads(completed.stdout) == {
+        "workspace": "vue-prepared/1",
+        "published": "html-fragment/1",
+    }
+
+
 def _run_sources(*sources: str) -> list[dict]:
     program = (
         "import json, runpy, sys; "
