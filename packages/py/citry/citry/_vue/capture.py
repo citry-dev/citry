@@ -1103,6 +1103,14 @@ def _validate_prepared_render(render: CitryRender) -> None:
                 continue
             elif isinstance(part, leaf_types):
                 continue
+            elif isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
+                # Dependency insertion points are consumed by the ordinary
+                # serializer.  Direct event rendering deliberately omits
+                # them from the prepared view and publishes the dependency
+                # manifest separately, so they are resolved placeholders from
+                # the event renderer's perspective rather than unresolved
+                # runtime output.
+                continue
             elif isinstance(part, (DeferredComponent, Placeholder)):
                 raise TypeError("prepared Vue rendering contains an unresolved runtime part")
             else:
