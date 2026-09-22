@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -17,6 +18,16 @@ from citry.extension import Extension
 
 pytest.importorskip("playwright.sync_api")
 pytestmark = pytest.mark.e2e
+
+
+def _pause_fake_clock(page: Any) -> float:
+    # Date and pause_at are separate browser commands. Pin Date at the
+    # page-ready instant first so the pause target cannot become stale while
+    # the second command is in flight.
+    target = page.evaluate("new Date().toISOString()")
+    page.clock.set_fixed_time(target)
+    page.clock.pause_at(target)
+    return float(page.evaluate("performance.now()"))
 
 
 def _client_bundle_source(vue_root: Path) -> str:
@@ -143,7 +154,7 @@ def test_native_polling_uses_live_element_scope_visibility_and_revision_lifecycl
     )
     assert sorted(call["args"]["value"] for call in sent_calls() if call["handlerName"] == "poll") == [1, 2]
 
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
     page.wait_for_function(
         "() => [...CitryStable._apps.values().next().value.mounted.values()].every("
         "({component}) => !component.$loading('poll'))"
@@ -322,7 +333,7 @@ def test_native_runtime_poll_keeps_deadline_across_reordered_revision_and_visibi
     page.clock.install()
     page.goto(serve_live(engine, RuntimePoll(revision=0).render().serialize(), "") + "/")
     page.locator("#runtime-poller").wait_for()
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
 
     page.clock.run_for(1_000)
     wait_for_held_polls(1)
@@ -468,7 +479,7 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     page.wait_for_function(
         "() => [...document.querySelectorAll('.row-poller')].map(node => node.dataset.row).join(',') === 'a,b'"
     )
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    clock_origin = _pause_fake_clock(page)
 
     page.clock.run_for(1_000)
     wait_for_poll_routes(1)
@@ -506,10 +517,23 @@ def test_native_runtime_poll_loop_elements_keep_independent_lifetimes(page: Any,
     assert after_remove["pollingLifetimeCount"] == 1
     assert event_lifetime_count(after_remove) == 1
     assert all(lifetime["current"] for mounted in after_remove["mounted"] for lifetime in mounted["lifetimes"])
-    page.clock.run_for(990)
+    second_poll_deadline = clock_origin + 2_000
+    now_before_deadline = float(page.evaluate("performance.now()"))
+    remaining_until_deadline = second_poll_deadline - now_before_deadline
+    assert remaining_until_deadline > 0, (
+        f"surviving poll deadline already passed: origin={clock_origin}, "
+        f"now={now_before_deadline}, deadline={second_poll_deadline}"
+    )
+    # Leave at least a fraction of a millisecond before the surviving timer's
+    # second deadline. Rounding up, then subtracting one, keeps this advance
+    # strictly before the deadline even when performance.now() is fractional.
+    before_deadline = max(0, math.ceil(remaining_until_deadline) - 1)
+    page.clock.run_for(before_deadline)
     assert len(poll_routes) == 2
-    page.clock.run_for(10)
-    page.wait_for_timeout(20)
+    page.clock.run_for(1)
+    # wait_for_timeout advances the installed fake clock too; use it only after
+    # crossing the deadline so queued request/event work is drained first.
+    page.wait_for_timeout(30)
     after_remaining_deadline = poll_lifetime_snapshot()
     assert len(poll_routes) == 3, (
         f"initial={completed_initial_polls}, after removal={after_remove}, "
@@ -671,7 +695,7 @@ def test_native_dom_event_timing_is_per_element_and_drops_retired_work(page: Any
     page.clock.install()
     page.goto(base + "/")
     page.locator("#refresh").wait_for()
-    page.clock.pause_at(page.evaluate("new Date().toISOString()"))
+    _pause_fake_clock(page)
 
     def wait_for_call_count(count: int) -> None:
         deadline = time.monotonic() + 5
