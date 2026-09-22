@@ -1776,6 +1776,12 @@ class CMenu(LibraryComponent):
                 return;
               }
               invalidEpisodes.delete("ancestor-open");
+              // Publish the logical state before entering the top layer. Some
+              // engines can deliver the native toggle synchronously; the
+              // handler must recognize this as our own open transition rather
+              // than hide the root and leave submenu restoration detached
+              // from a closed surface.
+              logicalOpen = true;
               try {
                 if (!surface.matches(":popover-open")) {
                   surface.showPopover();
@@ -1789,7 +1795,6 @@ class CMenu(LibraryComponent):
                 normalizeRootClosed("ancestor", surface);
                 return;
               }
-              logicalOpen = true;
               surface.inert = false;
               surface.removeAttribute("data-citry-menu-exiting");
               surface.setAttribute("data-open", "");
