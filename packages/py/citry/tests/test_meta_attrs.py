@@ -18,6 +18,8 @@ from citry._vue.direct_capture import UnsupportedPreparedView, assemble_typed_re
 from citry.citry_render import CitryRender
 from citry.constness import Const
 
+SIGNING_KEY = "component-ignore-secret"
+
 
 def _assemble_render(render: CitryRender):
     return assemble_typed_render(
@@ -491,8 +493,69 @@ class TestComponentIgnore:
             citry = c
             template = "<c-child #c-ignore />"
 
-        with pytest.raises(TypeError, match="component #c-ignore is unsupported in prepared Vue"):
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-child>"):
             render_prepared_direct(Page())
+
+    def test_ignore_inside_an_interactive_parent_is_rejected(self):
+        c = Citry(secret=SIGNING_KEY)
+        c.set_mounted_prefix("/citry")
+
+        class Child(Component):
+            citry = c
+            template = "<span>child</span>"
+
+        class Parent(Component):
+            citry = c
+
+            class Events:
+                def go(self) -> None:
+                    return None
+
+            template = """
+                <div @click="go">
+                    <c-Child #c-ignore />
+                </div>
+            """
+
+        # A plain page render decides on Vue only at serialization; the tag
+        # must still fail instead of rendering without the directive.
+        with pytest.raises(TypeError) as excinfo:
+            str(Parent())
+
+        message = str(excinfo.value)
+        assert "'#c-ignore' is not supported on the component tag <c-child>" in message
+        assert "Remove '#c-ignore' from the tag." in message
+
+    def test_ignore_inside_a_static_parent_is_rejected(self):
+        c = Citry()
+
+        class Child(Component):
+            citry = c
+            template = "<span>child</span>"
+
+        class Page(Component):
+            citry = c
+            template = "<div><c-Child #c-ignore /></div>"
+
+        # Matches `#c-ignore` on an HTML element, which fails on every page.
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-child>"):
+            str(Page())
+
+    def test_ignore_in_a_branch_that_does_not_run_is_rejected(self):
+        c = Citry()
+
+        class Child(Component):
+            citry = c
+            template = "<span>child</span>"
+
+        class Page(Component):
+            citry = c
+            template = '<c-if cond="False"><c-Child #c-ignore /></c-if>'
+
+        # The check runs when the template loads, so a branch that never
+        # renders cannot hide the directive.
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-child>"):
+            str(Page())
 
 
 class TestTemplateAuthoredOnly:

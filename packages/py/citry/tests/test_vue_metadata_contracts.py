@@ -83,5 +83,5 @@ def test_component_range_ignore_is_explicitly_unsupported_in_prepared_vue() -> N
         citry = app
         template = "<c-Child #c-ignore />"
 
-    with pytest.raises(TypeError, match="component #c-ignore is unsupported in prepared Vue"):
+    with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-child>"):
         render_prepared(Page())

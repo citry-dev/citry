@@ -1957,7 +1957,7 @@ class TestConstThroughTypedKwargs:
 class TestConstPrecomputeInsideKeptNodes:
     def test_component_clone_preserves_the_original_metadata_tuple(self):
         key = ExprHtmlAttr("", (0, 0), "#c-key", "item", ("item",))
-        metadata = ("range", ("key", key), ("morph", "ignore"))
+        metadata = ("range", ("key", key))
         node = ComponentNode(
             "",
             (0, 0),

@@ -1497,6 +1497,18 @@ class ComponentNode(Node):
                 raise TypeError(msg)
             else:
                 self.morph_mode = "ignore"
+        if self._metadata_locus == "range" and self.morph_mode == "ignore":
+            # Whether a page becomes a Vue app is decided only when the
+            # finished tree is serialized, after this tag's metadata is gone.
+            # Rejecting when the template loads keeps the directive from being
+            # dropped silently from an interactive page, and matches
+            # `#c-ignore` on an HTML element, which also fails at load.
+            msg = (
+                f"'#c-ignore' is not supported on the component tag <c-{name}>. Vue re-renders every"
+                " component it mounts, so Citry cannot stop Vue from updating this component."
+                " Remove '#c-ignore' from the tag."
+            )
+            raise TypeError(msg)
 
     @override
     def render(self, context: CitryContext) -> DeferredComponent:
@@ -1537,11 +1549,6 @@ class ComponentNode(Node):
                 context,
                 body=self.body,
             )
-        if self._metadata_locus == "range" and self.morph_mode == "ignore":
-            from citry._vue.capture import vue_render_active  # noqa: PLC0415
-
-            if vue_render_active():
-                raise TypeError("component #c-ignore is unsupported in prepared Vue")
         slots = self._collect_slots(context)
         # The key expression evaluates once in the parent's scope. Exactly
         # None opts out; every other value, including falsey values, is a key.

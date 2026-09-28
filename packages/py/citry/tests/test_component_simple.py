@@ -720,8 +720,17 @@ def test_dynamic_selector_can_own_a_simple_target(use_name: bool) -> None:
     assert "label:" in rendered.serialize()
 
 
-@pytest.mark.parametrize("attribute", ['#c-key="None"', "#c-ignore", '@click="pressed = true"'])
-def test_dynamic_simple_target_rejects_instance_directives(attribute: str) -> None:
+@pytest.mark.parametrize(
+    ("attribute", "message"),
+    [
+        ('#c-key="None"', r"simple=True"),
+        # `#c-ignore` is rejected on every component tag when the template
+        # loads, before the dynamic target is known.
+        ("#c-ignore", r"'#c-ignore' is not supported on the component tag <c-component>"),
+        ('@click="pressed = true"', r"simple=True|component-boundary client bindings"),
+    ],
+)
+def test_dynamic_simple_target_rejects_instance_directives(attribute: str, message: str) -> None:
     app = Citry()
 
     class Label(Component):
@@ -732,7 +741,7 @@ def test_dynamic_simple_target_rejects_instance_directives(attribute: str) -> No
         """
 
     page = type("Page", (Component,), {"citry": app, "template": f'<c-component c-is="target" {attribute} />'})
-    with pytest.raises(TypeError, match=r"simple=True|component-boundary client bindings"):
+    with pytest.raises(TypeError, match=message):
         page(target=Label).render()
 
 

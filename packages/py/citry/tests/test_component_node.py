@@ -31,13 +31,19 @@ class TestComponentNodeMetadata:
 
     def test_tagged_tuple_normalizes_once_and_keeps_the_original(self):
         key = ExprHtmlAttr("<c-card />", (0, 1), "#c-key", "item", ("item",))
-        metadata = ("range", ("key", key), ("morph", "ignore"))
+        metadata = ("element", ("key", key), ("morph", "ignore"))
         node = _component_node(metadata)
 
         assert node.metadata is metadata
-        assert node._metadata_locus == "range"
+        assert node._metadata_locus == "element"
         assert node.key is key
         assert node.morph_mode == "ignore"
+
+    def test_range_ignore_is_rejected_when_the_node_is_built(self):
+        # A component-range `#c-ignore` has no Vue implementation, so the
+        # node refuses it before any render can drop it silently.
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-card>"):
+            _component_node(("range", ("morph", "ignore")))
 
     @pytest.mark.parametrize(
         "metadata",
