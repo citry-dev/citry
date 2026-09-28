@@ -168,7 +168,16 @@ envelope = {{
 }}
 if event_context["stateToken"] is not None:
     envelope["calls"][0]["stateToken"] = event_context["stateToken"]
-response = json.loads(adapter["dispatch_event_json"](json.dumps(envelope), payload["run_id"]))
+# A prepared Vue render names the app and revision it updates, so forward the
+# same headers the preview's Citry client sends with every event.
+headers = {{
+    "X-Citry-Vue-App": manifest["appId"],
+    "X-Citry-Vue-Occurrence": manifest["rootId"],
+    "X-Citry-Vue-Revision": str(manifest["revision"]),
+}}
+response = json.loads(
+    adapter["dispatch_event_json"](json.dumps(envelope), payload["run_id"], json.dumps(headers))
+)
 action = response["results"][0]["actions"][0]
 manifest = action["prepared"]
 paths = []

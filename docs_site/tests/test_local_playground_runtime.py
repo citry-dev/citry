@@ -64,11 +64,9 @@ def _write_wheel(
     return path
 
 
-def test_build_local_runtime_keeps_compatible_citry_and_adds_workspace_citry_ui(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    runtime_dir = tmp_path / "docs_site" / "static" / "playground"
+def _write_published_runtime(repo_root: Path, *, citry: str, core: str, ui: str) -> None:
+    """Write a committed runtime that pins published wheels, as the docs site ships it."""
+    runtime_dir = repo_root / "docs_site" / "static" / "playground"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "runtime.json").write_text(
         json.dumps(
@@ -77,49 +75,49 @@ def test_build_local_runtime_keeps_compatible_citry_and_adds_workspace_citry_ui(
                 "protocol_version": 1,
                 "source": "published",
                 "pyodide": {"version": "test", "python": "3.14.2"},
-                "citry": {"version": "0.4.2", "core_version": "1.5.1", "ui_version": "0.1.0"},
+                "citry": {"version": citry, "core_version": core, "ui_version": ui},
                 "packages": [
-                    {"name": "citry-core", "version": "1.5.1", "url": "https://example.test/core.whl"},
-                    {"name": "citry", "version": "0.4.2", "url": "https://example.test/citry.whl"},
-                    {"name": "citry-ui", "version": "0.1.0", "url": "https://example.test/ui.whl"},
+                    {"name": "citry-core", "version": core, "url": "https://example.test/core.whl"},
+                    {"name": "citry", "version": citry, "url": "https://example.test/citry.whl"},
+                    {"name": "citry-ui", "version": ui, "url": "https://example.test/ui.whl"},
                 ],
             }
         ),
         encoding="utf-8",
     )
 
-    core_wheel = _write_wheel(
-        tmp_path,
-        distribution="citry-core",
-        import_name="citry_core",
-        version="1.5.1",
-        tag="cp314-cp314-pyemscripten_2026_0_wasm32",
-    )
+
+def _fake_ui_only_build(*, requires_citry: str):
+    """Stand in for uv; without a Core wheel only Citry UI may be built from the workspace."""
 
     def fake_build(package_dir: Path, output_dir: Path) -> Path:
-        if package_dir.name == "citry":
-            return _write_wheel(
-                output_dir,
-                distribution="citry",
-                import_name="citry",
-                version="0.4.2",
-                requirements=("citry-core==1.5.1",),
-            )
         assert package_dir.name == "citry_ui"
         return _write_wheel(
             output_dir,
             distribution="citry-ui",
             import_name="citry_ui",
             version="0.1.0",
-            requirements=("citry>=0.4.0,<0.5.0",),
+            requirements=(requires_citry,),
         )
 
-    monkeypatch.setattr(local_playground_runtime, "_build_workspace_wheel", fake_build)
+    return fake_build
 
+
+def test_build_local_runtime_keeps_compatible_citry_and_adds_workspace_citry_ui(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    _write_published_runtime(tmp_path, citry="0.4.2", core="1.5.1", ui="0.1.0")
+    monkeypatch.setattr(
+        local_playground_runtime,
+        "_build_workspace_wheel",
+        _fake_ui_only_build(requires_citry="citry>=0.4.0,<0.5.0"),
+    )
+
+    # No Core wheel was requested, so Citry and Citry Core stay on the pins.
     local = local_playground_runtime.build_local_playground_runtime(
         repo_root=tmp_path,
         output_dir=tmp_path / "runtime",
-        core_wheel=core_wheel,
     )
     manifest = json.loads(local.manifest_path.read_text(encoding="utf-8"))
     packages = {package["name"]: package for package in manifest["packages"]}
@@ -129,71 +127,29 @@ def test_build_local_runtime_keeps_compatible_citry_and_adds_workspace_citry_ui(
         "core_version": "1.5.1",
         "ui_version": "0.1.0",
     }
+    # The runtime label must admit that one package is not the published one.
     assert manifest["source"] == "workspace"
-    assert packages["citry-core"]["url"] == "./local/citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+    assert packages["citry-core"]["url"] == "https://example.test/core.whl"
     assert packages["citry"]["version"] == "0.4.2"
-    assert packages["citry"]["url"] == "./local/citry-0.4.2-py3-none-any.whl"
+    assert packages["citry"]["url"] == "https://example.test/citry.whl"
     assert packages["citry-ui"]["version"] == "0.1.0"
     assert packages["citry-ui"]["url"] == "./local/citry_ui-0.1.0-py3-none-any.whl"
     assert [package["name"] for package in manifest["packages"]].count("citry-ui") == 1
-    assert local.wheel_names == {
-        "citry_core-1.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
-        "citry-0.4.2-py3-none-any.whl",
-        "citry_ui-0.1.0-py3-none-any.whl",
-    }
+    assert local.wheel_names == {"citry_ui-0.1.0-py3-none-any.whl"}
 
 
 def test_build_local_runtime_rejects_workspace_ui_newer_than_published_citry(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    runtime_dir = tmp_path / "docs_site" / "static" / "playground"
-    runtime_dir.mkdir(parents=True)
-    (runtime_dir / "runtime.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "protocol_version": 1,
-                "source": "published",
-                "pyodide": {"version": "test", "python": "3.14.2"},
-                "citry": {"version": "0.3.1", "core_version": "1.4.0", "ui_version": "0.1.0"},
-                "packages": [
-                    {"name": "citry-core", "version": "1.4.0", "url": "https://example.test/core.whl"},
-                    {"name": "citry", "version": "0.3.1", "url": "https://example.test/citry.whl"},
-                    {"name": "citry-ui", "version": "0.1.0", "url": "https://example.test/ui.whl"},
-                ],
-            }
-        ),
-        encoding="utf-8",
+    _write_published_runtime(tmp_path, citry="0.3.1", core="1.4.0", ui="0.1.0")
+    monkeypatch.setattr(
+        local_playground_runtime,
+        "_build_workspace_wheel",
+        _fake_ui_only_build(requires_citry="citry>=0.4.0,<0.5.0"),
     )
 
-    core_wheel = _write_wheel(
-        tmp_path,
-        distribution="citry-core",
-        import_name="citry_core",
-        version="1.4.0",
-        tag="cp314-cp314-pyemscripten_2026_0_wasm32",
-    )
-
-    def fake_build(package_dir: Path, output_dir: Path) -> Path:
-        if package_dir.name == "citry":
-            return _write_wheel(
-                output_dir,
-                distribution="citry",
-                import_name="citry",
-                version="0.3.1",
-                requirements=("citry-core==1.4.0",),
-            )
-        return _write_wheel(
-            output_dir,
-            distribution="citry-ui",
-            import_name="citry_ui",
-            version="0.1.0",
-            requirements=("citry>=0.4.0,<0.5.0",),
-        )
-
-    monkeypatch.setattr(local_playground_runtime, "_build_workspace_wheel", fake_build)
-
+    # The server reports this reason and falls back to the committed runtime.
     with pytest.raises(
         local_playground_runtime.LocalPlaygroundRuntimeError,
         match=r"local Citry UI 0\.1\.0 does not accept the playground's Citry 0\.3\.1",
@@ -201,7 +157,6 @@ def test_build_local_runtime_rejects_workspace_ui_newer_than_published_citry(
         local_playground_runtime.build_local_playground_runtime(
             repo_root=tmp_path,
             output_dir=tmp_path / "runtime",
-            core_wheel=core_wheel,
         )
 
 

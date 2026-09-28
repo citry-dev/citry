@@ -205,14 +205,14 @@ the browser runtime:
 
 This keeps the canonical source beside the component and uses the same
 highlighting and text projection without offering a broken activation control.
-The live authoring server builds workspace `citry` and `citry-ui` wheels and
-adds one prebuilt PyEmscripten `citry-core` wheel when
-`CITRY_PLAYGROUND_CORE_WHEEL` is configured. With that complete three-wheel
-tuple, these component snippets can run in the browser. If the Core wheel is
-missing or does not match the workspace versions, the server explains the
-reason and falls back to the committed published runtime. Keep `static` for a
-snippet that depends on a workspace-only package when that fallback is active.
-Static builds and `build-check` intentionally use the published package set.
+The browser runs these snippets on the published release that
+`docs_site/static/playground/runtime.json` pins. The live authoring server
+swaps in a `citry-ui` wheel built from this checkout when that wheel accepts
+the pinned Citry. When you set `CITRY_PLAYGROUND_CORE_WHEEL` to a Pyodide build
+of this checkout's `citry-core`, the server also builds `citry` from this
+checkout, so the snippets run this checkout's code end to end. Keep `static`
+for a snippet that needs a package or feature the pinned release lacks. Static
+builds and `build-check` always use the pinned release.
 
 The path may name any Python file in the repository, including after resolving
 symlinks. The module must be UTF-8 with LF line endings and no larger than 64
@@ -434,14 +434,26 @@ uv run --no-sync python -m docs_site serve
 Open <http://127.0.0.1:8000/>. The server reads content and navigation on each
 request, renders through Citry, and serves component assets and examples.
 Refresh the browser after changing Markdown. Uvicorn reloads when Python or
-YAML docs configuration changes. Each server start or reload builds temporary
-universal wheels from the workspace `citry` and `citry-ui` packages and combines
-them with the prebuilt PyEmscripten Core wheel named by
-`CITRY_PLAYGROUND_CORE_WHEEL`. If that complete tuple is unavailable or
-incompatible, the server prints the reason and uses the committed published
-runtime. The workspace-only runtime lets interactive snippets exercise current
-source before release; `serve-built`, static builds, CI, and deployed docs use
-the committed published runtime unchanged.
+YAML docs configuration changes.
+
+The browser playground installs the published Citry release that
+`docs_site/static/playground/runtime.json` pins. On each start or reload, the
+server picks what to swap in from this checkout:
+
+- By default it builds a `citry-ui` wheel from this checkout and uses it with
+  the pinned Citry. When that wheel does not accept the pinned Citry, which is
+  common between releases, the server prints the reason and serves the pinned
+  release unchanged.
+- When `CITRY_PLAYGROUND_CORE_WHEEL` names a Pyodide build of this checkout's
+  `citry-core`, the server also builds `citry` from this checkout, so the
+  playground runs this checkout's code end to end. A wrong or incompatible
+  wheel stops the server with the reason, so you never test the published
+  code by mistake.
+
+The playground README explains
+[how to build that wheel](static/playground/README.md#run-the-playground-with-this-checkouts-citry).
+`serve-built`, static builds, and deployed docs always use the pinned release.
+The release workflow moves the pins to each newly published release.
 
 Example recipes live at `/examples/<slug>/`. Their bare runnable pages live at
 `/examples/<slug>/demo/`, so opening a recipe and opening its iframe directly
@@ -560,6 +572,12 @@ uv run --no-sync pytest docs_site/tests/e2e --browser chromium
 
 The second sync selects the `e2e` group from its owning `citry` workspace
 package. `--inexact` keeps the root project's docs dependencies installed.
+
+Without `CITRY_PLAYGROUND_CORE_WHEEL`, the playground and live-code browser
+tests run against the pinned release, and pytest skips the tests that need this
+checkout's Citry and prints the reason. With the variable set, they run this
+checkout's Citry. The playground README lists
+[which browser tests run against the pinned release](static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
 
 The complete repository gate is:
 

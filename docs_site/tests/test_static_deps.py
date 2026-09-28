@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import re
+import threading
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from urllib.request import urlopen
 
 from citry import Component
 from citry import citry as default_citry
 from docs_site._internal.static_deps import (
     CITRY_MOUNT_PREFIX,
+    StaticSiteRequestHandler,
     export_prepared_page_assets,
     export_runtime,
     validate_prepared_assets,
@@ -139,3 +144,25 @@ def test_prepared_fragment_exports_its_manifest_assets(tmp_path: Path) -> None:
 
     assert any(path.suffix == ".js" for path in written)
     assert any(path.suffix == ".css" for path in written)
+
+
+def test_static_site_handler_sends_the_cors_header_github_pages_sends(tmp_path: Path) -> None:
+    # Sandboxed preview frames load Citry files with SRI from an opaque origin,
+    # so `serve-built` and the browser tests must answer like the deployed host.
+    asset = tmp_path / "citry" / "ext" / "events" / "assets" / f"{'c' * 64}.css"
+    asset.parent.mkdir(parents=True)
+    asset.write_text(".preview { color: red; }", encoding="utf-8")
+    (tmp_path / "index.html").write_text("<p>home</p>", encoding="utf-8")
+    handler = functools.partial(StaticSiteRequestHandler, directory=str(tmp_path))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        for path in (f"/citry/ext/events/assets/{'c' * 64}.css", "/index.html"):
+            with urlopen(f"{base_url}{path}", timeout=2) as response:  # noqa: S310
+                assert response.headers["Access-Control-Allow-Origin"] == "*"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

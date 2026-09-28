@@ -14,7 +14,7 @@ from docs_site._internal.project import default_docs_project
 pytestmark = pytest.mark.e2e
 
 
-def test_landing_page_mounts_shared_chrome_and_both_social_rows(page: Any, local_docs_site_url: str) -> None:
+def test_landing_page_mounts_shared_chrome_and_both_social_rows(page: Any, docs_site_url: str) -> None:
     """The prepared shell must mount the same header and footer users see elsewhere."""
     page_errors: list[str] = []
     console_errors: list[str] = []
@@ -23,7 +23,7 @@ def test_landing_page_mounts_shared_chrome_and_both_social_rows(page: Any, local
         "console",
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
-    response = page.goto(local_docs_site_url + "/", wait_until="networkidle")
+    response = page.goto(docs_site_url + "/", wait_until="networkidle")
 
     assert response is not None
     assert response.status == 200
