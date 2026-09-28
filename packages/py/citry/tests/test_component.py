@@ -93,6 +93,24 @@ class TestComponentFields:
         assert reset_lint.rule_vue_python_variable == "warning"
         assert reset_lint.component_js_globals == ()
 
+    def test_lint_declaration_names_the_vue_replacement_for_alpine_settings(self):
+        c = Citry(autodiscover=False)
+
+        with pytest.raises(ValueError, match="unknown setting") as excinfo:
+
+            class Upgraded(Component):
+                citry = c
+
+                class Lint:
+                    rule_unknown_alpine_variable = "warning"
+                    alpine_variables = {"$analytics": object}
+
+        assert str(excinfo.value) == (
+            "Component Upgraded.Lint has unknown setting(s): alpine_variables, rule_unknown_alpine_variable. "
+            "Vue lint settings replace the Alpine ones; rename 'alpine_variables' to 'vue_variables', "
+            "'rule_unknown_alpine_variable' to 'rule_unknown_vue_variable'."
+        )
+
     def test_lint_declaration_rejects_unknown_fields_and_invalid_values(self):
         c = Citry(autodiscover=False)
 

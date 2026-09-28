@@ -19,7 +19,9 @@ from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 from citry_core.template_parser import analyze_browser_source
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Mapping, Sequence
+
+    from typing_extensions import Self
 
     from citry.cache import CitryCache
     from citry.extension import Extension
@@ -81,6 +83,24 @@ def _is_template_variable_name(name: object) -> bool:
     return isinstance(parsed, ast.Name) and parsed.id == name
 
 
+# Lint setting names from citry 0.5.1 mapped to the setting that took over
+# their job. They are not accepted as aliases (Alpine's `$` helpers have no
+# meaning in a Vue scope); the map only lets the error name the replacement.
+_REPLACED_LINT_SETTINGS: dict[str, str] = {
+    "rule_unknown_alpine_variable": "rule_unknown_vue_variable",
+    "alpine_variables": "vue_variables",
+}
+
+
+def _replaced_lint_settings_hint(names: Iterable[str]) -> str | None:
+    """Return a sentence naming the replacement for each 0.5.1 lint setting in ``names``, or None."""
+    replaced = sorted(name for name in names if name in _REPLACED_LINT_SETTINGS)
+    if not replaced:
+        return None
+    renames = ", ".join(f"{name!r} to {_REPLACED_LINT_SETTINGS[name]!r}" for name in replaced)
+    return f"Vue lint settings replace the Alpine ones; rename {renames}."
+
+
 def _is_vue_variable_name(name: object) -> bool:
     """Return whether OXC parses a string as one exact free JS identifier."""
     if type(name) is not str or not name:
@@ -140,6 +160,22 @@ class LintSettings:
     component_js_globals: Mapping[str, object] = field(default_factory=dict)
     rule_unknown_component_js_member: LintSeverity = "error"
     rule_vue_python_variable: LintSeverity = "warning"
+
+    # Hidden from type checkers so they keep checking calls against the
+    # generated __init__ signature.
+    if not TYPE_CHECKING:
+
+        def __new__(cls, *_args: object, **kwargs: object) -> Self:
+            # The generated __init__ rejects an unknown keyword with a
+            # TypeError that suggests the replacement only on Python 3.13+.
+            # __new__ sees the same keywords first, so a 0.5.1 name fails
+            # with the replacement named on every supported version.
+            hint = _replaced_lint_settings_hint(kwargs)
+            if hint is not None:
+                replaced = ", ".join(sorted(name for name in kwargs if name in _REPLACED_LINT_SETTINGS))
+                msg = f"LintSettings got unexpected keyword argument(s): {replaced}. {hint}"
+                raise TypeError(msg)
+            return object.__new__(cls)
 
     def __post_init__(self) -> None:
         if (

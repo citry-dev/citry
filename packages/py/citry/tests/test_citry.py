@@ -173,6 +173,24 @@ class TestCitryInstance:
         with pytest.raises(ValueError, match="invalid JavaScript identifier"):
             LintSettings(component_js_globals={name: str})
 
+    @pytest.mark.parametrize(
+        ("old_name", "value", "replacement"),
+        [
+            ("rule_unknown_alpine_variable", "warning", "rule_unknown_vue_variable"),
+            ("alpine_variables", {"$analytics": object}, "vue_variables"),
+        ],
+    )
+    def test_lint_settings_name_the_vue_replacement_for_alpine_settings(self, old_name, value, replacement):
+        # The generated dataclass error suggests a close name only on newer
+        # Python versions; this message must name the replacement everywhere.
+        with pytest.raises(TypeError) as excinfo:
+            LintSettings(**{old_name: value})
+
+        assert str(excinfo.value) == (
+            f"LintSettings got unexpected keyword argument(s): {old_name}. "
+            f"Vue lint settings replace the Alpine ones; rename {old_name!r} to {replacement!r}."
+        )
+
     def test_settings_reject_a_non_lint_settings_value(self):
         with pytest.raises(TypeError, match="must be a LintSettings"):
             CitrySettings(lint={})

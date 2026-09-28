@@ -12,7 +12,7 @@ from citry._class_introspection import _safe_class_import_path, _static_class_di
 from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _format_annotation
 from citry.introspection import _is_utf8_string
-from citry.settings import LintSettings, LintSeverity, _is_vue_variable_name
+from citry.settings import LintSettings, LintSeverity, _is_vue_variable_name, _replaced_lint_settings_hint
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -453,6 +453,11 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         if unknown:
             rendered = ", ".join(sorted(unknown))
             msg = f"Component {component_class.__name__}.Lint has unknown setting(s): {rendered}"
+            # A component written for citry 0.5.1 may still use the Alpine
+            # setting names; point its author at the Vue replacement.
+            hint = _replaced_lint_settings_hint(unknown)
+            if hint is not None:
+                msg = f"{msg}. {hint}"
             raise ValueError(msg)
         if "rule_unknown_template_variable" in public_values:
             candidate_rule = public_values["rule_unknown_template_variable"]
