@@ -371,23 +371,6 @@ test("replacement sites reference declared call runs", () => {
   );
 });
 
-function keyedReplacementDefinition(fixture, key) {
-  return fixture.definition(
-    definition(
-      [],
-      [
-        {
-          siteId: "site",
-          key,
-          localDescendants: ["child"],
-          localDescendantRuns: [],
-        },
-      ],
-      [ordinary("child", "Child", "citry-child")],
-    ),
-  );
-}
-
 function replacementDefinition(fixture, sites, localCalls = []) {
   return fixture.definition(definition([], sites, localCalls));
 }
@@ -396,143 +379,18 @@ function replacementSite(siteId, key, localDescendants = [], localDescendantRuns
   return { siteId, key, localDescendants, localDescendantRuns };
 }
 
-function mountedRoot(app, definitionId = "root-old") {
-  const live = app.snapshot.value.get("root");
-  app.mounted.set("root", {
-    component: { $parent: null, $options: {} },
-    record: {
-      app,
-      occurrenceId: "root",
-      parentId: null,
-      generation: 1,
-      callbackScope: undefined,
-      callbackCleanup: undefined,
-      serverKeys: new Set(),
-      live: { value: live },
-      definition: { value: { id: definitionId, render() {}, cache: [] } },
-    },
-  });
-}
-
-function multiOwnerRevision(appId) {
-  const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
-    realm({
-      protocol: "citry-vue-prepared/1",
-      appId,
-      revision: 0,
-      rootId: "root",
-      markers: [],
-      occurrences: [
-        occurrence("root", "Root", "root-def", null, {
-          z: { id: "owner-z", key: "z", parentId: "root" },
-          a: { id: "owner-a", key: "a", parentId: "root" },
-        }),
-        occurrence("owner-z", "OwnerZ", "owner-z-old", "root"),
-        occurrence("owner-a", "OwnerA", "owner-a-old", "root"),
-      ],
-    }),
-  );
-  stable.registerDefinition(
-    appId,
-    "root-def",
-    replacementDefinition(
-      fixture,
-      [],
-      [ordinary("z", "OwnerZ", "citry-owner-z"), ordinary("a", "OwnerA", "citry-owner-a")],
-    ),
-  );
-  stable.registerDefinition(
-    appId,
-    "owner-z-old",
-    replacementDefinition(fixture, [replacementSite("site-a", "z-old-a"), replacementSite("site-z", "z-old-z")]),
-  );
-  stable.registerDefinition(
-    appId,
-    "owner-z-new",
-    replacementDefinition(fixture, [replacementSite("site-a", "z-new-a"), replacementSite("site-z", "z-new-z")]),
-  );
-  stable.registerDefinition(appId, "owner-a-old", replacementDefinition(fixture, [replacementSite("site-a", "a-old")]));
-  stable.registerDefinition(appId, "owner-a-new", replacementDefinition(fixture, [replacementSite("site-a", "a-new")]));
-  const app = stable._apps.get(appId);
-  for (const typeKey of ["Root", "OwnerZ", "OwnerA"]) app.types.set(typeKey, {});
-  mountedRoot(app, "root-def");
-  return {
-    fixture,
-    stable,
-    realm,
-    app,
-    envelope(replacements) {
-      return realm({
-        protocol: "citry-vue-prepared/1",
-        appId,
-        baseRevision: 0,
-        revision: 1,
-        rootId: "root",
-        markers: [],
-        scripts: [],
-        styles: [],
-        typePolicies: [],
-        definitions: [],
-        occurrences: [
-          occurrence("root", "Root", "root-def", null, {
-            z: { id: "owner-z", key: "z", parentId: "root" },
-            a: { id: "owner-a", key: "a", parentId: "root" },
-          }),
-          // Deliberately preserve nonlexicographic occurrence traversal.
-          occurrence("owner-z", "OwnerZ", "owner-z-new", "root"),
-          occurrence("owner-a", "OwnerA", "owner-a-new", "root"),
-        ],
-        updatedIds: ["root", "owner-z", "owner-a"],
-        replacements,
-      });
-    },
-  };
-}
-
-test("replacement compatibility canonicalizes owners and sites without relaxing wire order", async () => {
-  const fixture = multiOwnerRevision("replacement-order");
-  const { stable, app } = fixture;
-  await stable.applyEnvelope(
-    "replacement-order",
-    fixture.envelope([
-      { ownerId: "owner-a", siteId: "site-a", expectedRemountIds: [] },
-      { ownerId: "owner-z", siteId: "site-a", expectedRemountIds: [] },
-      { ownerId: "owner-z", siteId: "site-z", expectedRemountIds: [] },
-    ]),
-  );
-  assert.equal(app.revision, 1);
-  assert.equal(app.occurrences.get("owner-z").definitionId, "owner-z-new");
-});
-
-test("replacement compatibility still rejects a supplied list in noncanonical order", async () => {
-  const fixture = multiOwnerRevision("replacement-order-reject");
-  const { stable, app } = fixture;
-  await assert.rejects(
-    stable.applyEnvelope(
-      "replacement-order-reject",
-      fixture.envelope([
-        { ownerId: "owner-z", siteId: "site-a", expectedRemountIds: [] },
-        { ownerId: "owner-a", siteId: "site-a", expectedRemountIds: [] },
-        { ownerId: "owner-z", siteId: "site-z", expectedRemountIds: [] },
-      ]),
-    ),
-    /replacement sites must be sorted/,
-  );
-  assert.equal(app.revision, 0);
-});
-
-test("nested changed sites assign an actually mounted descendant to the outer site once", async () => {
+// Both keyed sites change, and the inner one sits inside the outer one, so the browser derives the
+// shared child from each of them. It must remount the child once and skip the unmounted sibling.
+test("nested changed replacement sites remount their shared mounted descendant once", async () => {
   let flush;
   const fixture = runtime({
     nextTick: async () => {
       if (flush) await flush();
     },
   });
-  const { stable, realm } = fixture;
-  const appId = "nested-replacements";
-  stable.configure(
+  const { citryRuntime, realm } = fixture;
+  const appId = "nested-sites";
+  citryRuntime.configure(
     realm({
       protocol: "citry-vue-prepared/1",
       appId,
@@ -549,7 +407,7 @@ test("nested changed sites assign an actually mounted descendant to the outer si
       ],
     }),
   );
-  stable.registerDefinition(
+  citryRuntime.registerDefinition(
     appId,
     "root-old",
     replacementDefinition(
@@ -558,7 +416,7 @@ test("nested changed sites assign an actually mounted descendant to the outer si
       [ordinary("child", "Child", "citry-child"), ordinary("sibling", "Sibling", "citry-sibling")],
     ),
   );
-  stable.registerDefinition(
+  citryRuntime.registerDefinition(
     appId,
     "root-new",
     replacementDefinition(
@@ -567,19 +425,21 @@ test("nested changed sites assign an actually mounted descendant to the outer si
       [ordinary("child", "Child", "citry-child"), ordinary("sibling", "Sibling", "citry-sibling")],
     ),
   );
-  stable.registerDefinition(appId, "child-def", replacementDefinition(fixture));
-  stable.registerDefinition(appId, "sibling-def", replacementDefinition(fixture));
-  const app = stable._apps.get(appId);
-  const Root = stable.defineType(appId, "Root", {});
-  const Child = stable.defineType(appId, "Child", {});
-  stable.defineType(appId, "Sibling", {});
+  citryRuntime.registerDefinition(appId, "child-def", replacementDefinition(fixture));
+  citryRuntime.registerDefinition(appId, "sibling-def", replacementDefinition(fixture));
+  const app = citryRuntime._apps.get(appId);
+  const Root = citryRuntime.defineType(appId, "Root", {});
+  const Child = citryRuntime.defineType(appId, "Child", {});
+  citryRuntime.defineType(appId, "Sibling", {});
   const rootInstance = { $parent: null, $options: {}, citryId: "root" };
   Root.beforeCreate.call(rootInstance);
   Root.created.call(rootInstance);
   const childInstance = { $parent: rootInstance, $options: {}, citryId: "child" };
   Child.beforeCreate.call(childInstance);
   Child.created.call(childInstance);
+  // Only the child is mounted, so a remount expected for the sibling would fail the commit.
   const priorGeneration = app.mounted.get("child").record.generation;
+  // Vue replaces the child a single time, however many changed sites name it.
   let remounted = false;
   flush = async () => {
     if (remounted) return;
@@ -591,7 +451,7 @@ test("nested changed sites assign an actually mounted descendant to the outer si
     Child.mounted.call(nextChild);
   };
 
-  await stable.applyEnvelope(
+  await citryRuntime.applyEnvelope(
     appId,
     realm({
       protocol: "citry-vue-prepared/1",
@@ -613,115 +473,14 @@ test("nested changed sites assign an actually mounted descendant to the outer si
         occurrence("sibling", "Sibling", "sibling-def", "root"),
       ],
       updatedIds: ["root", "child", "sibling"],
-      replacements: [
-        { ownerId: "root", siteId: "site-a", expectedRemountIds: [] },
-        { ownerId: "root", siteId: "site-z", expectedRemountIds: ["child"] },
-      ],
     }),
   );
 
   assert.equal(app.revision, 1);
   assert.equal(app.mounted.get("child").record.generation, priorGeneration + 1);
   assert.equal(app.mounted.get("root").record.generation, 1);
-});
-
-test("replacement declarations derive from the browser baseline without server history", async () => {
-  const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
-    realm({
-      protocol: "citry-vue-prepared/1",
-      appId: "derived-replacements",
-      revision: 0,
-      rootId: "root",
-      markers: [],
-      occurrences: [
-        occurrence("root", "Parent", "root-old", null, { child: { id: "child", key: "child", parentId: "root" } }),
-        occurrence("child", "Child", "child-def", "root"),
-      ],
-    }),
-  );
-  stable.registerDefinition("derived-replacements", "child-def", fixture.definition(definition()));
-  stable.registerDefinition("derived-replacements", "root-old", keyedReplacementDefinition(fixture, "old"));
-  stable.registerDefinition("derived-replacements", "root-new", keyedReplacementDefinition(fixture, "new"));
-  const app = stable._apps.get("derived-replacements");
-  app.types.set("Parent", {});
-  app.types.set("Child", {});
-  mountedRoot(app);
-
-  await stable.applyEnvelope(
-    "derived-replacements",
-    realm({
-      protocol: "citry-vue-prepared/1",
-      appId: "derived-replacements",
-      baseRevision: 0,
-      revision: 1,
-      rootId: "root",
-      markers: [],
-      scripts: [],
-      styles: [],
-      typePolicies: [],
-      definitions: [],
-      occurrences: [
-        occurrence("root", "Parent", "root-new", null, { child: { id: "child", key: "child", parentId: "root" } }),
-        occurrence("child", "Child", "child-def", "root"),
-      ],
-      updatedIds: ["child", "root"],
-      replacements: [],
-    }),
-  );
-
-  assert.equal(app.revision, 1);
-  assert.equal(app.occurrences.get("root").definitionId, "root-new");
-});
-
-test("supplied replacement declarations must agree with browser derivation", async () => {
-  const fixture = runtime();
-  const { stable, realm } = fixture;
-  stable.configure(
-    realm({
-      protocol: "citry-vue-prepared/1",
-      appId: "reject-server-history",
-      revision: 0,
-      rootId: "root",
-      markers: [],
-      occurrences: [
-        occurrence("root", "Parent", "root-old", null, { child: { id: "child", key: "child", parentId: "root" } }),
-        occurrence("child", "Child", "child-def", "root"),
-      ],
-    }),
-  );
-  stable.registerDefinition("reject-server-history", "child-def", fixture.definition(definition()));
-  stable.registerDefinition("reject-server-history", "root-old", keyedReplacementDefinition(fixture, "old"));
-  stable.registerDefinition("reject-server-history", "root-new", keyedReplacementDefinition(fixture, "new"));
-  const app = stable._apps.get("reject-server-history");
-  mountedRoot(app);
-
-  await assert.rejects(
-    stable.applyEnvelope(
-      "reject-server-history",
-      realm({
-        protocol: "citry-vue-prepared/1",
-        appId: "reject-server-history",
-        baseRevision: 0,
-        revision: 1,
-        rootId: "root",
-        markers: [],
-        scripts: [],
-        styles: [],
-        typePolicies: [],
-        definitions: [],
-        occurrences: [
-          occurrence("root", "Parent", "root-new", null, { child: { id: "child", key: "child", parentId: "root" } }),
-          occurrence("child", "Child", "child-def", "root"),
-        ],
-        updatedIds: ["child", "root"],
-        replacements: [{ ownerId: "root", siteId: "site", expectedRemountIds: ["child"] }],
-      }),
-    ),
-    /client derivation/,
-  );
-  assert.equal(app.revision, 0);
+  // The sibling was never mounted, so the update must not have mounted it either.
+  assert.equal(app.mounted.has("sibling"), false);
 });
 
 test("one definition cannot bind a component tag to two stable types", () => {

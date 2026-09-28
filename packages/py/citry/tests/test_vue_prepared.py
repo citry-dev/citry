@@ -4,6 +4,7 @@ import hashlib
 import re
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -54,20 +55,39 @@ def test_browser_client_checks_the_helper_contract_the_compiler_emits() -> None:
     assert set(bundled) == {HELPER_CONTRACT}
 
 
-def _direct_definition_template(source: str) -> str:
+def _direct_definition_root(source: str, **kwargs: Any) -> tuple[str, dict[str, object]]:
     registry = Citry(autodiscover=False)
 
     class Page(Component):
         citry = registry
         template = source
 
+        # Kwargs reach the template unchanged, so a test can vary a key
+        # value while the template source (and so every site id) stays fixed.
+        def template_data(self, kwargs: dict[str, object], slots: object) -> dict[str, object]:
+            return dict(kwargs)
+
     assembly = assemble_typed_render(
-        render_prepared_direct(Page()),
+        render_prepared_direct(Page(**kwargs)),
         revision=0,
         tag_for_type=lambda type_key: f"x-{type_key.lower().replace('_', '-')}",
     )
     root = next(item for item in assembly.view.occurrences if item.id == assembly.view.root_id)
-    return assembly.compile_inputs[root.definition_id].template
+    return assembly.compile_inputs[root.definition_id].template, dict(root.prepared_data)
+
+
+def _direct_definition_template(source: str) -> str:
+    return _direct_definition_root(source)[0]
+
+
+def _slot_keys_in_outlet_order(template: str, prepared_data: dict[str, object]) -> list[str]:
+    # Each keyed outlet reads its own entry from `slotKeys`; resolve them in
+    # template order so a test can compare one outlet across two renders.
+    sites = re.findall(r":key=\"\$citryPrepared\.slotKeys\['(\w+)'\]\"", template)
+    slot_keys = prepared_data["slotKeys"]
+    assert isinstance(slot_keys, dict)
+    assert set(slot_keys) == set(sites)
+    return [slot_keys[site] for site in sites]
 
 
 def test_direct_definition_composer_preserves_bindings_calls_slots_and_utf8_spans() -> None:
@@ -166,21 +186,31 @@ def test_compatibility_definition_composer_emits_native_state_metadata() -> None
 
 
 def test_direct_capture_keys_slots_by_nearest_prepared_element_and_preserves_void_boundaries() -> None:
-    template = _direct_definition_template(
-        """
+    source = """
         <div #c-key="'outer'">
-          <span #c-key="'inner'"><c-slot name="inner" /><c-slot name="inner-second" /></span>
-          <input #c-key="'void'">
+          <span #c-key="inner_key"><c-slot name="inner" /><c-slot name="inner-second" /></span>
+          <input #c-key="void_key">
           <c-slot name="outer" />
         </div>
         """
-    )
+    template, prepared_data = _direct_definition_root(source, inner_key="a", void_key="v")
+    keys = _slot_keys_in_outlet_order(template, prepared_data)
+    # Every outlet under a keyed element gets its own key, so the two
+    # outlets that share the inner span still get different keys.
+    assert len(keys) == 3
+    assert len(set(keys)) == 3
 
-    assert template.count(':key="JSON.stringify([$citryPrepared.citryKey1,') == 2
-    assert ':key="JSON.stringify([$citryPrepared.citryKey1, 0])"' in template
-    assert ':key="JSON.stringify([$citryPrepared.citryKey1, 1])"' in template
-    assert ':key="JSON.stringify([$citryPrepared.citryKey0, 0])"' in template
-    assert ':key="JSON.stringify([$citryPrepared.citryKey1, 2])"' not in template
+    # A slot key follows the key of its nearest keyed ancestor: renaming the
+    # inner span's key moves only the two outlets inside it.
+    renamed_inner = _slot_keys_in_outlet_order(*_direct_definition_root(source, inner_key="b", void_key="v"))
+    assert renamed_inner[0] != keys[0]
+    assert renamed_inner[1] != keys[1]
+    assert renamed_inner[2] == keys[2]
+
+    # A keyed void element closes at once, so the outer outlet written after
+    # it stays under the outer div and does not follow the void key.
+    renamed_void = _slot_keys_in_outlet_order(*_direct_definition_root(source, inner_key="a", void_key="w"))
+    assert renamed_void == keys
 
 
 def test_direct_capture_leaves_unkeyed_slots_without_a_synthetic_key() -> None:
@@ -190,11 +220,14 @@ def test_direct_capture_leaves_unkeyed_slots_without_a_synthetic_key() -> None:
 
 
 def test_direct_capture_keys_slots_under_a_keyed_dynamic_element() -> None:
-    template = _direct_definition_template(
-        """<c-element c-is="'section'" #c-key="'dynamic'"><c-slot name="body" /></c-element>"""
-    )
+    source = """<c-element c-is="'section'" #c-key="element_key"><c-slot name="body" /></c-element>"""
+    template, prepared_data = _direct_definition_root(source, element_key="first")
 
-    assert ':key="JSON.stringify([$citryPrepared.citryKey0, 0])"' in template
+    # The outlet inside the keyed dynamic element carries its own key.
+    keys = _slot_keys_in_outlet_order(template, prepared_data)
+    assert len(keys) == 1
+    # That key follows the dynamic element's key value.
+    assert _slot_keys_in_outlet_order(*_direct_definition_root(source, element_key="second")) != keys
 
 
 def test_prepared_compiler_keys_slot_outlets_from_the_balanced_element_stream() -> None:
