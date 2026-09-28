@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Citry UI now requires `citry` 0.6.0 or newer, which the fixes below
+  depend on.
 - Component `attrs` mappings (and part mappings such as `input_attrs` or
   `trigger_attrs`) now reject Vue directive names, those starting with `v-`,
   `:`, `.`, `^`, `@`, or `#`, with an error that names the component. Write
@@ -22,12 +24,12 @@
   bindings there work instead of rendering empty or doing nothing. Write
   such content inside the group's tag or in a transparent component: content
   in an ordinary component that you pass into the group stops the render
-  with an error that names the content. This needs the next `citry` release.
+  with an error that names the content.
 - Inside a client i18n provider (`<c-i18n client>`), the default labels
   and announcements that components update in the browser now translate
   instead of failing with "message ... is not loaded". This affects many
   interactive components, such as `CCombobox`, `CPagination`, `CDataGrid`,
-  `CTreeGrid`, and `CToastRegion`, and needs the matching `citry` release.
+  `CTreeGrid`, and `CToastRegion`.
 - `CScrollArea` no longer calls `onScrollChange` for the scroll event its own
   offset restore causes when the area is moved to another place in the page
   before the next frame; the callback previously received that event with a
