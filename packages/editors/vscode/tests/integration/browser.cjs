@@ -20,14 +20,18 @@ async function exerciseBrowser(folder) {
 			"    citry = engine",
 			...(className === "Declared" ? ["    class JsData:", "        a: str", "        ab: str", "        b: int"] : []),
 			"    def js_data(self, kwargs, slots):",
-			'        return {"a": "str", "ab": "longer", "b": 1}',
+			// Only the first fixture sends this key. The second fixture must not be
+			// offered it, which proves each projection is typed on its own.
+			className === "Inferred"
+				? '        return {"a": "str", "ab": "longer", "b": 1, "inferredOnly": 2}'
+				: '        return {"a": "str", "ab": "longer", "b": 1}',
 			'    js = """',
-			"      $component(({ data, props }) => {",
-			"        // Completion should offer the known fields after data.",
-			"        // The string field is data.a and the numeric field is data.b.",
+			"      $component(({ component, revision }) => {",
+			"        // Completion should offer the js_data() keys after component.",
+			"        // The string key is component.a and the numeric key is component.b.",
 			"        // Several indented lines must preserve the authored edit position.",
-			"        console.log(data.b);",
-			"        console.log(data.c);",
+			"        console.log(component.b, revision);",
+			"        console.log(component.c);",
 			"        window.setTimeout(() => {}, 0);",
 			"      });",
 			'    """',
@@ -42,8 +46,8 @@ async function exerciseBrowser(folder) {
 		const document = await vscode.workspace.openTextDocument(uri);
 		await vscode.window.showTextDocument(document);
 		const classStart = source.indexOf(`class ${className}`);
-		const access = source.indexOf("console.log(data.b)", classStart) + "console.log(".length;
-		const position = document.positionAt(access + "data.".length);
+		const access = source.indexOf("console.log(component.b", classStart) + "console.log(".length;
+		const position = document.positionAt(access + "component.".length);
 		const itemsAt = async (cursor) => {
 			const result = await vscode.commands.executeCommand("vscode.executeCompletionItemProvider", uri, cursor);
 			return result?.items ?? [];
@@ -56,14 +60,19 @@ async function exerciseBrowser(folder) {
 		// Wait for the selected app schema before testing unsaved authoring.
 		await eventually(`${className} completion before existing member`, async () => {
 			const labels = await labelsAt(position);
-			return labels.has("a") && labels.has("ab") && labels.has("b");
+			return (
+				labels.has("a") &&
+				labels.has("ab") &&
+				labels.has("b") &&
+				labels.has("inferredOnly") === (className === "Inferred")
+			);
 		});
 		// Remove complete spellings so each request must complete an unfinished
 		// identifier in the unsaved document.
 		for (const [name, marker, prefixLength] of [
 			["console", "console.log", 4],
 			["window", "window.setTimeout", 3],
-			["props", "props })", 2],
+			["revision", "revision })", 3],
 		]) {
 			const prefix = name.slice(0, prefixLength);
 			const incompleteSource = source.replaceAll(name, prefix);
@@ -101,12 +110,12 @@ async function exerciseBrowser(folder) {
 		const erase = new vscode.WorkspaceEdit();
 		erase.delete(uri, new vscode.Range(position, position.translate(0, 1)));
 		await vscode.workspace.applyEdit(erase);
-		await eventually(`${className} incomplete data.`, async () => (await labelsAt(position)).has("ab"));
+		await eventually(`${className} incomplete component.`, async () => (await labelsAt(position)).has("ab"));
 		const edit = new vscode.WorkspaceEdit();
 		edit.insert(uri, position, "a");
 		await vscode.workspace.applyEdit(edit);
 		const cursor = position.translate(0, 1);
-		const completion = await eventually(`${className} data.a completion includes ab`, async () =>
+		const completion = await eventually(`${className} component.a completion includes ab`, async () =>
 			(await itemsAt(cursor)).find((item) => (typeof item.label === "string" ? item.label : item.label.label) === "ab"),
 		);
 		// VS Code discards suggestions whose edit range is on another source line,
@@ -125,7 +134,7 @@ async function exerciseBrowser(folder) {
 		const accepted = new vscode.WorkspaceEdit();
 		accepted.replace(uri, replacing, completion.insertText);
 		assert.equal(await vscode.workspace.applyEdit(accepted), true);
-		assert.equal(document.getText(), source.replace("console.log(data.b)", "console.log(data.ab)"));
+		assert.equal(document.getText(), source.replace("console.log(component.b", "console.log(component.ab"));
 		const restore = new vscode.WorkspaceEdit();
 		restore.replace(uri, new vscode.Range(position, position.translate(0, 2)), "b");
 		await vscode.workspace.applyEdit(restore);
@@ -137,7 +146,7 @@ async function exerciseBrowser(folder) {
 				.join("\n");
 			return /\(property\) b: (?:number|1)\b/.test(text);
 		});
-		const bindingOffset = source.indexOf("data, props", classStart);
+		const bindingOffset = source.indexOf("component, revision", classStart);
 		await eventually(`${className} callback definition`, async () => {
 			const locations = await vscode.commands.executeCommand(
 				"vscode.executeDefinitionProvider",
@@ -150,8 +159,8 @@ async function exerciseBrowser(folder) {
 				return target.toString() === uri.toString() && document.offsetAt(range.start) === bindingOffset;
 			});
 		});
-		const unknownOffset = source.indexOf("data.c", classStart) + 5;
-		await eventually(`${className} unknown data member diagnostic`, async () =>
+		const unknownOffset = source.indexOf("component.c", classStart) + "component.".length;
+		await eventually(`${className} unknown member diagnostic`, async () =>
 			vscode.languages
 				.getDiagnostics(uri)
 				.some(
@@ -159,7 +168,7 @@ async function exerciseBrowser(folder) {
 						diagnostic.range.start.isEqual(document.positionAt(unknownOffset)) &&
 						diagnostic.range.end.isEqual(document.positionAt(unknownOffset + 1)) &&
 						(typeof diagnostic.code === "object" ? diagnostic.code.value : diagnostic.code) ===
-							"citry.component-js.unknown-data-member",
+							"citry.component-js.unknown-member",
 				),
 		);
 		const corrected = new vscode.WorkspaceEdit();
@@ -175,7 +184,7 @@ async function exerciseBrowser(folder) {
 						(diagnostic) =>
 							diagnostic.range.contains(unknownPosition) &&
 							(typeof diagnostic.code === "object" ? diagnostic.code.value : diagnostic.code) ===
-								"citry.component-js.unknown-data-member",
+								"citry.component-js.unknown-member",
 					),
 		);
 		const restoreUnknown = new vscode.WorkspaceEdit();

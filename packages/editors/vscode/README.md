@@ -141,8 +141,10 @@ The same connection extends into the browser layer:
 
 - `JsData` or inferred `js_data()` keys type Vue expressions
   and component JavaScript.
-- Callback `data` members complete through the JavaScript provider; unknown
-  fields are errors when the component's data schema is known and closed.
+- `component.<name>` and `this.<name>` complete through the JavaScript
+  provider with `js_data()` keys, props, and the other Vue Options names.
+  Reading a name the component does not have is an error when Citry knows
+  every `js_data()` key and the Options are written out in the source.
 - Callback parameters navigate to their declarations in the JavaScript source.
 - Typing `:c-` offers public State fields and unknown binding fields are errors
   when the owning State schema is known.

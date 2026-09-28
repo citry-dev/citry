@@ -27,6 +27,11 @@
 from collections.abc import Mapping
 from typing import Literal
 
+# Whether this extension was compiled without optimizations ("debug", the
+# plain `maturin develop` build) or with them ("release", `--release` and
+# published wheels). Benchmarks refuse to measure a "debug" build.
+BUILD_PROFILE: Literal["release", "debug"]
+
 ########################################################
 # Internationalization
 ########################################################
@@ -191,7 +196,49 @@ class i18n:
 
 class html_transform:
     @staticmethod
+    def browser_fragment_matches_elements(
+        html: str,
+        context: str,
+        expected: list[tuple[bool, str, list[tuple[str, str | None]]]],
+    ) -> bool: ...
+    @staticmethod
+    def browser_fragment_matches_nodes(
+        html: str,
+        context: str,
+        expected: list[tuple[str, str, list[tuple[str, str | None]]]],
+    ) -> bool:
+        """
+        Check that the browser builds the expected nodes from an HTML fragment.
+
+        Each expected event is a `(kind, value, attributes)` tuple, in
+        document order: `("open", tag, attributes)` for an element whose
+        children follow, `("close", tag, [])` for its end, `("shell", tag,
+        attributes)` for an element whose contents Vue builds in the browser,
+        checked with any contents the server wrote there cut out of `html`
+        (its attributes must include `("data-allow-mismatch",
+        "children")`, it must have no child nodes, and no `close` follows it),
+        `("comment", data, [])` for a Vue anchor comment (`[`, `]`, `v-if`,
+        or empty), and `("text", value, [])` for whitespace-only text directly
+        in the fragment root.
+
+        Returns `False` when the browser's tree differs, including any comment
+        or root text that is not expected.
+
+        Raises `ValueError` if a kind is unknown, or a `close`, `comment`, or
+        `text` event carries attributes.
+        """
+    @staticmethod
     def validate_html_fragment_boundary(html: str) -> None: ...
+    @staticmethod
+    def static_html_node_count(html: str) -> int:
+        """
+        Count the top-level nodes the browser creates when Vue inserts `html`
+        as one fixed block while it builds a page.
+
+        The browser parses the block inside a `<template>` element, so table
+        parts stay where they are written. Vue needs this count to adopt the
+        block's nodes when the server already wrote them into the page.
+        """
     @staticmethod
     def scan_output_html(html: str) -> list[dict[str, object]]: ...
     @staticmethod
@@ -446,6 +493,51 @@ class vue:
         dynamic_elements_json: str = "[]",
     ) -> str: ...
 
+    class ServerRenderProgram:
+        """
+        One compiled render function, read once so the server can run it to
+        write HTML that Vue adopts in the browser.
+        """
+
+        @property
+        def fully_supported(self) -> bool:
+            """Whether every part was read; unread parts are left for the browser to build."""
+
+    @staticmethod
+    def _read_server_render_program(code: str, dynamic_elements_json: str = "[]") -> vue.ServerRenderProgram:
+        """
+        Read a compiled render function (`code` from the compiler artifact).
+
+        Raises `ValueError` if the code is not a render function the compiler
+        emits, or the dynamic element metadata is invalid.
+        """
+    @staticmethod
+    def _render_for_hydration(
+        programs: dict[str, vue.ServerRenderProgram],
+        manifest_json: str,
+        tags: dict[str, str],
+        threshold: int,
+        *,
+        full_parse_check: bool = False,
+    ) -> tuple[str | None, int, int, list[tuple[str, str, str | None, str | None, bool]], str | None]:
+        """
+        Write a page's Vue host content for hydration from its prepared manifest.
+
+        `programs` maps compiled definition ids to their read render
+        functions, `manifest_json` is the prepared manifest, `tags` maps each
+        type key to its registered component tag, and the page is only
+        returned when it writes more than `threshold` elements.
+        `full_parse_check` parses the whole written HTML instead of first
+        checking its tokens against stored parser answers; the two checks
+        must agree, and the render parity check reports any page where they
+        do not. Returns `(html, element_count, shell_count, declines,
+        reason)`, where each decline is `(code, detail, component type key,
+        shell tag, shell content)`; `shell content` is `True` when the shell
+        carries Citry's HTML for its contents, which the browser runtime
+        removes before Vue hydrates. `html` is `None` and `reason` names why
+        when the page should mount in the browser instead.
+        """
+
 class template_parser:
     @staticmethod
     def analyze_browser_binding_pattern(
@@ -456,10 +548,6 @@ class template_parser:
         input: str,
         mode: str,
     ) -> tuple[bool, list[tuple[str, int, int]]]: ...
-    @staticmethod
-    def analyze_component_members(
-        input: str,
-    ) -> tuple[bool, list[tuple[str, str, int, int, int, int]]]: ...
     @staticmethod
     def analyze_component_scope_writes(
         input: str,

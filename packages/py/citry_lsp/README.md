@@ -94,13 +94,16 @@ Registry mode adds:
   Vue expressions, JavaScript, and CSS;
 - Events handler and native component-prop checks;
 - public State-field completion in `:c-*` binding names, with errors on unknown fields;
-- callback-parameter navigation and errors on unknown `data` members when
-  `JsData` or a complete `js_data()` return analysis determines the fields;
+- callback-parameter navigation, and errors on unknown `component.<name>` and
+  `this.<name>` reads when Citry can read every `js_data()` key (from
+  `JsData` or the method's return value) and the Vue Options declare every
+  other name;
 - Fluent message, key, argument, formatter, and translation navigation;
 - project lint settings and component-aware diagnostics.
 
 Unknown-field checks wait until the component and its schema are known. Dynamic
-JavaScript keys and open data schemas remain unchecked. Ordinary JavaScript
+JavaScript keys, Vue Options built at run time, and open data schemas remain
+unchecked. Ordinary JavaScript
 member completion in VS Code uses its installed JavaScript provider.
 
 Each workspace folder should run its own server process so it can use that

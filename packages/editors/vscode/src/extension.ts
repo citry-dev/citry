@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { rmSync } from "node:fs";
 import path from "node:path";
 import { PythonExtension } from "@vscode/python-extension";
 import * as prettierBabel from "prettier/plugins/babel";
@@ -55,9 +57,9 @@ import {
 	delegatedCompletionResolveCount,
 	delegatedProviderTimeoutMs,
 	linearlyMappedProjectionPosition,
-	type ProjectionRangeMapper,
-	type ProjectionSourceMapping,
-	prepareProjectionRangeMapper,
+	mapSegmentedPosition,
+	mapSegmentedRange,
+	type ProjectionSegment,
 	projectionTimeoutMs,
 	virtualDocumentTimeoutMs,
 	withTimeout,
@@ -150,7 +152,6 @@ interface FormatMetadata {
 }
 
 interface ProviderProjectionResponse {
-	sourceMappings?: ProjectionSourceMapping[];
 	source: string;
 	position: { line: number; character: number };
 	sourceRange: {
@@ -161,6 +162,9 @@ interface ProviderProjectionResponse {
 		start: { line: number; character: number };
 		end: { line: number; character: number };
 	};
+	// Present when the virtual text is not one constant offset from the
+	// authored text, as in dedented component JavaScript.
+	sourceMappings?: ProjectionSegment[];
 }
 
 interface BrowserProjectionResponse extends ProviderProjectionResponse {
@@ -184,6 +188,7 @@ let projectionGeneration = 0;
 let embeddedDocuments: EmbeddedContentProvider;
 let embeddedFormattingDocuments: EmbeddedFormattingContentProvider;
 let browserDocuments: BrowserContentProvider;
+let browserScripts: BrowserScriptFiles;
 let pendingCompletionRetrigger: { uri: string; offset: number } | undefined;
 let pendingCompletionDispatch: { uri: string; version: number; position: vscode.Position } | undefined;
 let nextPerformanceRequest = 0;
@@ -320,6 +325,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	embeddedDocuments = new EmbeddedContentProvider();
 	embeddedFormattingDocuments = new EmbeddedFormattingContentProvider();
 	browserDocuments = new BrowserContentProvider();
+	browserScripts = new BrowserScriptFiles(context.globalStorageUri);
 	context.subscriptions.push(
 		statusBar,
 		formatterOutput,
@@ -327,6 +333,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		embeddedDocuments,
 		embeddedFormattingDocuments,
 		browserDocuments,
+		browserScripts,
 	);
 	context.subscriptions.push(...registerEmbeddedLanguageProviders());
 	context.subscriptions.push(...registerBrowserLanguageProviders());
@@ -1130,6 +1137,166 @@ class BrowserContentProvider implements vscode.TextDocumentContentProvider, vsco
 	}
 }
 
+/**
+ * Keep each browser JavaScript projection in a real file so TypeScript can type it.
+ *
+ * A projection imports Vue's types by absolute path. VS Code's TypeScript
+ * extension resolves imports only for `file` and `untitled` documents; it sends
+ * a document from a content provider to its syntax-only server, which gives the
+ * imported types `any`. An untitled document would show as unsaved work in the
+ * window, so each projection is written to a file under the extension's own
+ * storage folder. That folder is normally outside every workspace folder, and
+ * the browser providers skip these files explicitly.
+ *
+ * All files in the folder share one TypeScript project through the
+ * `jsconfig.json` beside them. Each projection declares the same global names
+ * (`$component`, `CitryJsData`, and so on), so the config makes TypeScript
+ * treat every file as its own module; otherwise one component's types would
+ * leak into another's. The config also fixes the compiler options, so the
+ * user's JavaScript settings cannot report type errors in files they did not
+ * write.
+ */
+class BrowserScriptFiles implements vscode.Disposable {
+	// Each window writes to its own folder, so windows never delete each other's files.
+	private readonly directory: vscode.Uri;
+	private readonly root: vscode.Uri;
+	private readonly directoryPrefix: string;
+	private readonly uriByIdentity = new Map<string, vscode.Uri>();
+	private ready: Promise<void> | undefined;
+
+	constructor(storage: vscode.Uri) {
+		// The storage folder can use VS Code's own `vscode-userdata` scheme. TypeScript
+		// types only `file` documents fully, so name the same folder by its disk path.
+		this.root = vscode.Uri.joinPath(
+			storage.scheme === "file" ? storage : vscode.Uri.file(storage.fsPath),
+			"browser-projections",
+		);
+		this.directory = vscode.Uri.joinPath(this.root, `${process.pid}-${Date.now().toString(36)}`);
+		this.directoryPrefix = `${this.root.toString()}/`;
+		// A window that crashed never removed its folder, so clear folders nobody wrote to for a day.
+		void this.removeStaleFolders();
+	}
+
+	dispose(): void {
+		this.uriByIdentity.clear();
+		// VS Code stops the extension host soon after deactivation, before an
+		// asynchronous delete would finish, so remove the folder synchronously.
+		try {
+			rmSync(this.directory.fsPath, { recursive: true, force: true });
+		} catch {
+			// A file still held open (Windows) stays until the next stale-folder cleanup.
+		}
+	}
+
+	/** Whether `uri` is one of these projection files, from this window or another. */
+	contains(uri: vscode.Uri): boolean {
+		return uri.toString().startsWith(this.directoryPrefix);
+	}
+
+	/** Return a file whose text is `source`, reusing the file already written for identical text. */
+	async create(identity: string, source: string): Promise<vscode.Uri> {
+		// The name follows the text, so a changed projection is a new file that VS Code
+		// reads fresh from disk rather than a stale copy of an earlier one.
+		const digest = createHash("sha256").update(identity).update("\0").update(source).digest("hex").slice(0, 24);
+		const uri = vscode.Uri.joinPath(this.directory, `projection-${digest}.js`);
+		// Another window may have removed this folder as stale, so a reused file is checked first.
+		if (this.uriByIdentity.get(identity)?.toString() !== uri.toString() || !(await this.exists(uri))) {
+			await this.write(uri, source);
+		}
+		// Read the entry only now: a concurrent call for the same identity may have replaced it.
+		const prior = this.uriByIdentity.get(identity);
+		// Map order doubles as recency, so the oldest projection is dropped first.
+		this.uriByIdentity.delete(identity);
+		this.uriByIdentity.set(identity, uri);
+		if (prior !== undefined && prior.toString() !== uri.toString()) {
+			this.remove(prior);
+		}
+		while (this.uriByIdentity.size > 64) {
+			const [oldestIdentity, oldestUri] = this.uriByIdentity.entries().next().value ?? [];
+			if (oldestIdentity === undefined || oldestUri === undefined) {
+				break;
+			}
+			this.uriByIdentity.delete(oldestIdentity);
+			this.remove(oldestUri);
+		}
+		return uri;
+	}
+
+	private async exists(uri: vscode.Uri): Promise<boolean> {
+		try {
+			await vscode.workspace.fs.stat(uri);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	private async write(uri: vscode.Uri, source: string): Promise<void> {
+		try {
+			await this.prepare();
+			await vscode.workspace.fs.writeFile(uri, Buffer.from(source, "utf8"));
+		} catch {
+			// Another window may have removed this folder as stale; create it again once.
+			this.ready = undefined;
+			await this.prepare();
+			await vscode.workspace.fs.writeFile(uri, Buffer.from(source, "utf8"));
+		}
+	}
+
+	private prepare(): Promise<void> {
+		this.ready ??= (async () => {
+			await vscode.workspace.fs.createDirectory(this.directory);
+			const config = {
+				compilerOptions: {
+					target: "ES2022",
+					module: "ESNext",
+					moduleResolution: "Bundler",
+					lib: ["ES2022", "DOM", "DOM.Iterable"],
+					checkJs: false,
+					moduleDetection: "force",
+					noEmit: true,
+					types: [],
+				},
+				typeAcquisition: { enable: false },
+				include: ["*.js"],
+			};
+			await vscode.workspace.fs.writeFile(
+				vscode.Uri.joinPath(this.directory, "jsconfig.json"),
+				Buffer.from(JSON.stringify(config, null, "\t"), "utf8"),
+			);
+		})();
+		const pending = this.ready;
+		// A failed attempt must not stay cached, or every later write would fail with it.
+		pending.catch(() => {
+			if (this.ready === pending) {
+				this.ready = undefined;
+			}
+		});
+		return pending;
+	}
+
+	private remove(uri: vscode.Uri): void {
+		void Promise.resolve(vscode.workspace.fs.delete(uri, { useTrash: false })).catch(() => undefined);
+	}
+
+	private async removeStaleFolders(): Promise<void> {
+		try {
+			const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+			for (const [name, type] of await vscode.workspace.fs.readDirectory(this.root)) {
+				const folder = vscode.Uri.joinPath(this.root, name);
+				if (type !== vscode.FileType.Directory || folder.toString() === this.directory.toString()) {
+					continue;
+				}
+				if ((await vscode.workspace.fs.stat(folder)).mtime < cutoff) {
+					await vscode.workspace.fs.delete(folder, { recursive: true, useTrash: false });
+				}
+			}
+		} catch {
+			// Nothing was written yet, or another window is clearing the same folder.
+		}
+	}
+}
+
 class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
 	private readonly sources = new Map<string, string>();
 
@@ -1264,7 +1431,6 @@ class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentPro
 }
 
 interface MappedProviderRequest {
-	sourceRangeMapper?: ProjectionRangeMapper | null;
 	projection: ProviderProjectionResponse;
 	sourceDocument: vscode.TextDocument;
 	sourceVersion: number;
@@ -1459,7 +1625,9 @@ async function browserProviderRequest(
 	token: vscode.CancellationToken,
 	trace: ProviderTrace,
 ): Promise<BrowserProviderRequest | undefined> {
-	if (document.uri.scheme !== "file" || token.isCancellationRequested) {
+	// A projection file is itself a `file` JavaScript document, so the providers
+	// VS Code runs on it must not start another projection.
+	if (document.uri.scheme !== "file" || browserScripts.contains(document.uri) || token.isCancellationRequested) {
 		return undefined;
 	}
 	const version = document.version;
@@ -1472,23 +1640,31 @@ async function browserProviderRequest(
 		projection.sourceRange.start.line,
 		projection.sourceRange.start.character,
 	]);
-	const virtualUri = browserDocuments.create(identity, projection.source);
-	let virtualDocument = await trace.stage("virtual-document-open", () =>
-		waitForProvider(
-			vscode.workspace.openTextDocument(virtualUri),
-			token,
-			"browser-virtual-document-open",
-			virtualDocumentTimeoutMs,
-		),
-	);
+	let virtualUri: vscode.Uri;
+	let virtualDocument: vscode.TextDocument;
+	try {
+		virtualUri = await trace.stage("virtual-document-write", () =>
+			waitForProvider(
+				browserScripts.create(identity, projection.source),
+				token,
+				"browser-virtual-document-write",
+				virtualDocumentTimeoutMs,
+			),
+		);
+		virtualDocument = await trace.stage("virtual-document-open", () =>
+			waitForProvider(
+				vscode.workspace.openTextDocument(virtualUri),
+				token,
+				"browser-virtual-document-open",
+				virtualDocumentTimeoutMs,
+			),
+		);
+	} catch {
+		return undefined;
+	}
+	// Each text gets its own file, so a mismatch means something else changed the file.
 	if (virtualDocument.getText() !== projection.source) {
-		try {
-			virtualDocument = await trace.stage("virtual-document-refresh", () =>
-				waitForBrowserDocument(virtualUri, projection.source, token),
-			);
-		} catch {
-			return undefined;
-		}
+		return undefined;
 	}
 	if (virtualDocument.languageId !== "javascript") {
 		virtualDocument = await trace.stage("virtual-document-language", () =>
@@ -1667,26 +1843,22 @@ function mapProviderDefinition(
 }
 
 function mapProviderRange(range: vscode.Range, request: MappedProviderRequest): vscode.Range | undefined {
-	if (request.projection.sourceMappings !== undefined) {
-		// All items in this response share immutable document versions and the same source copies.
-		if (request.sourceRangeMapper === undefined) {
-			request.sourceRangeMapper =
-				prepareProjectionRangeMapper(
-					request.sourceDocument.getText(),
-					request.virtualDocument.getText(),
-					request.projection.sourceMappings,
-				) ?? null;
-		}
-		const mapped = request.sourceRangeMapper?.(range);
-		if (mapped === undefined || !protocolRange(request.projection.virtualRange).contains(range)) return undefined;
-		const result = protocolRange(mapped);
-		return protocolRange(request.projection.sourceRange).contains(result) ? result : undefined;
-	}
 	const virtual = protocolRange(request.projection.virtualRange);
 	if (!virtual.contains(range.start) || !virtual.contains(range.end)) {
 		return undefined;
 	}
 	const source = protocolRange(request.projection.sourceRange);
+	const segments = request.projection.sourceMappings;
+	if (segments !== undefined && segments.length > 0) {
+		// A constant offset would land on the removed indentation of a
+		// dedented line, so map each end through the server's segments.
+		const mapped = mapSegmentedRange(range, segments);
+		if (mapped === undefined) {
+			return undefined;
+		}
+		const result = protocolRange(mapped);
+		return source.contains(result) ? result : undefined;
+	}
 	const virtualBase = request.virtualDocument.offsetAt(virtual.start);
 	const sourceBase = request.sourceDocument.offsetAt(source.start);
 	const start = sourceBase + request.virtualDocument.offsetAt(range.start) - virtualBase;
@@ -2195,6 +2367,12 @@ function projectionAtCachedPosition(
 ): ProviderProjectionResponse | null {
 	if (projection === null) {
 		return null;
+	}
+	if (projection.sourceMappings !== undefined && projection.sourceMappings.length > 0) {
+		// A cursor in removed indentation has no virtual position, so the
+		// cached projection cannot serve it.
+		const mapped = mapSegmentedPosition(position, projection.sourceMappings, "sourceRange", "start");
+		return mapped === undefined ? null : { ...projection, position: mapped };
 	}
 	const sourceStart = document.offsetAt(protocolRange(projection.sourceRange).start);
 	const sourceEnd = document.offsetAt(protocolRange(projection.sourceRange).end);

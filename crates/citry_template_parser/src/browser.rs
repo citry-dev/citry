@@ -11,13 +11,13 @@ use std::str::FromStr;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrowFunctionBody, AssignmentExpression, AssignmentTarget, CallExpression,
-    ComputedMemberExpression, Expression, FormalParameters, Function, ObjectExpression,
-    ObjectPropertyKind, Statement, StaticMemberExpression,
+    Expression, FormalParameters, Function, ObjectExpression, ObjectPropertyKind, Statement,
+    VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_semantic::{Scoping, SemanticBuilder, SymbolId};
-use oxc_span::{GetSpan, SourceType, Span};
+use oxc_span::{GetSpan, SourceType};
 use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 
 /// The grammar expected for one authored browser-expression host.
@@ -227,6 +227,11 @@ pub struct BrowserOptionsSection {
 }
 
 /// One component-instance member reference with a proven receiver.
+///
+/// The span normally covers the member name in `receiver.name`. For the
+/// `$i18n` member only, it may instead cover a read of a local variable that
+/// holds `receiver.$i18n` and is never reassigned, so a consumer that needs
+/// the identifier written at the call site reads it from the span.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BrowserComponentMemberReference {
     pub receiver: String,
@@ -246,81 +251,6 @@ pub struct BrowserComponentAnalysis {
     pub public_names: Vec<BrowserPublicName>,
     pub sections: Vec<BrowserOptionsSection>,
     pub member_references: Vec<BrowserComponentMemberReference>,
-}
-
-/// One static member of a proven, unreassigned component context binding.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct BrowserComponentMember {
-    pub context_name: String,
-    pub member_name: String,
-    pub owner_start: usize,
-    pub owner_end: usize,
-    pub member_start: usize,
-    pub member_end: usize,
-}
-
-/// Static component members with exact authored UTF-8 byte ranges.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BrowserComponentMemberAnalysis {
-    pub valid: bool,
-    pub members: Vec<BrowserComponentMember>,
-}
-
-/// Find direct context members, including references captured by closures.
-///
-/// Invalid JavaScript returns no records. Dynamic keys, escaped bracket keys,
-/// defaulted context bindings, and bindings assigned anywhere are omitted
-/// because their target or exact authored key cannot be established here.
-pub fn analyze_component_members(source: &str) -> BrowserComponentMemberAnalysis {
-    let invalid = || BrowserComponentMemberAnalysis {
-        valid: false,
-        members: Vec::new(),
-    };
-    let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, source, SourceType::default()).parse();
-    if !parsed.diagnostics.is_empty() {
-        return invalid();
-    }
-    let built = SemanticBuilder::new_compiler()
-        .with_build_nodes(true)
-        .with_check_syntax_error(true)
-        .build(&parsed.program);
-    if !built.diagnostics.is_empty() {
-        return invalid();
-    }
-    let scoping = built.semantic.scoping();
-    let mut initializers = MemberInitializerVisitor {
-        scoping,
-        bindings: Vec::new(),
-    };
-    initializers.visit_program(&parsed.program);
-    // A symbol's writes may run in another closure or branch. Exclude the
-    // entire binding rather than infer execution order from source positions.
-    initializers.bindings.retain(|binding| {
-        binding.direct
-            && matches!(
-                binding.context_name.as_str(),
-                "data" | "scope" | "state" | "props"
-            )
-            && !scoping
-                .get_resolved_references(binding.symbol_id)
-                .any(|reference| reference.is_write())
-    });
-    let mut visitor = ComponentMemberVisitor {
-        source,
-        scoping,
-        bindings: &initializers.bindings,
-        members: Vec::new(),
-    };
-    visitor.visit_program(&parsed.program);
-    visitor
-        .members
-        .sort_by_key(|member| (member.owner_start, member.member_start, member.member_end));
-    visitor.members.dedup();
-    BrowserComponentMemberAnalysis {
-        valid: true,
-        members: visitor.members,
-    }
 }
 
 /// Parse one browser expression/statement and return its exact free roots.
@@ -443,6 +373,29 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
     };
     alias_members.visit_program(&parsed.program);
     visitor.member_references.extend(alias_members.references);
+    // Component code often stores the i18n service once
+    // (`const i18n = component.$i18n`) and calls `i18n.bind(...)` later. The
+    // i18n extension only preloads messages for calls on a proven `$i18n`,
+    // so each read of such a variable is reported as that member too.
+    let mut i18n_aliases = I18nAliasVisitor {
+        scoping: semantic.scoping(),
+        members: &visitor.member_references,
+        aliases: Vec::new(),
+    };
+    i18n_aliases.visit_program(&parsed.program);
+    for (receiver, symbol) in i18n_aliases.aliases {
+        for reference in semantic.scoping().get_resolved_references(symbol) {
+            let span = semantic.nodes().get_node(reference.node_id()).span();
+            visitor
+                .member_references
+                .push(BrowserComponentMemberReference {
+                    receiver: receiver.clone(),
+                    name: "$i18n".to_string(),
+                    start: span.start as usize,
+                    end: span.end as usize,
+                });
+        }
+    }
     visitor
         .component_calls
         .sort_by_key(|call| (call.call_start, call.call_end));
@@ -573,7 +526,17 @@ impl<'a> Visit<'a> for ComponentVisitor<'_> {
                     self.collect_options(options);
                 } else {
                     self.collect_initializer(argument, true);
-                    self.collect_unknown_options(argument.span());
+                    if matches!(
+                        argument.without_parentheses(),
+                        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
+                    ) {
+                        // The runtime treats a function literal as
+                        // `{onServerRender: fn}`, so it declares no Options
+                        // names and every section is known to be empty.
+                        self.collect_absent_options();
+                    } else {
+                        self.collect_unknown_options(argument.span());
+                    }
                 }
             }
         }
@@ -682,6 +645,53 @@ impl<'semantic> ComponentVisitor<'semantic> {
                 }
             }
             self.sections.push(state);
+        }
+        // `mixins` and `extends` merge another options object into this one,
+        // so any section can gain names this source does not show.
+        let inherits = options.properties.iter().any(|item| {
+            item.as_property().is_some_and(|property| {
+                !property.computed
+                    && (property.key.is_specific_static_name("mixins")
+                        || property.key.is_specific_static_name("extends"))
+            })
+        });
+        if inherits {
+            for state in &mut self.sections {
+                state.state = "unknown".to_string();
+                state.unknown_reason = Some("inherited-options".to_string());
+            }
+        }
+        // Vue also calls lifecycle hooks, `provide()`, and `watch` handlers
+        // with `this` set to the instance, so their member reads are proven
+        // too. Any other option is read by code Vue does not know, which may
+        // call it with a different `this`, so its reads prove nothing.
+        for item in &options.properties {
+            let Some(property) = item.as_property() else {
+                continue;
+            };
+            if property.computed {
+                continue;
+            }
+            let Some(name) = property.key.static_name() else {
+                continue;
+            };
+            if !INSTANCE_BOUND_OPTIONS.contains(&name.as_ref()) {
+                continue;
+            }
+            self.member_references
+                .extend(bound_hook_members(&name, &property.value));
+        }
+    }
+
+    fn collect_absent_options(&mut self) {
+        for name in ["props", "methods", "computed", "inject", "data", "setup"] {
+            self.sections.push(BrowserOptionsSection {
+                name: name.to_owned(),
+                state: "absent".to_owned(),
+                start: None,
+                end: None,
+                unknown_reason: None,
+            });
         }
     }
 
@@ -996,171 +1006,6 @@ impl<'a> Visit<'a> for ScopeWriteVisitor<'_, '_> {
     }
 }
 
-struct MemberBindingCandidate {
-    context_name: String,
-    symbol_id: SymbolId,
-    direct: bool,
-}
-
-struct MemberInitializerVisitor<'semantic> {
-    scoping: &'semantic Scoping,
-    bindings: Vec<MemberBindingCandidate>,
-}
-
-impl<'a> Visit<'a> for MemberInitializerVisitor<'_> {
-    fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
-        if self.is_unresolved_identifier(&call.callee, "$component") {
-            if let Some(argument) = call.arguments.first().and_then(Argument::as_expression) {
-                self.collect_initializer(argument);
-            }
-        }
-        walk::walk_call_expression(self, call);
-    }
-}
-
-impl<'semantic> MemberInitializerVisitor<'semantic> {
-    fn is_unresolved_identifier(&self, expression: &Expression<'_>, name: &str) -> bool {
-        expression
-            .get_identifier_reference()
-            .is_some_and(|identifier| {
-                identifier.name == name
-                    && self
-                        .scoping
-                        .get_reference(identifier.reference_id())
-                        .symbol_id()
-                        .is_none()
-            })
-    }
-
-    fn collect_initializer<'a>(&mut self, expression: &Expression<'a>) {
-        match expression.without_parentheses() {
-            Expression::ArrowFunctionExpression(function) => {
-                self.bindings
-                    .extend(member_context_bindings(&function.params));
-            }
-            Expression::FunctionExpression(function) => {
-                self.bindings
-                    .extend(member_context_bindings(&function.params));
-            }
-            Expression::ObjectExpression(object) => {
-                // A later duplicate, spread, or computed key can replace init.
-                // Member errors require one statically selected callback.
-                let mut init_count = 0;
-                for item in &object.properties {
-                    let Some(property) = item.as_property() else {
-                        return;
-                    };
-                    let Some(name) = property.key.static_name() else {
-                        return;
-                    };
-                    if name == "init" {
-                        init_count += 1;
-                        if property.kind != oxc_ast::ast::PropertyKind::Init {
-                            return;
-                        }
-                    }
-                }
-                if init_count != 1 {
-                    return;
-                }
-                for item in &object.properties {
-                    let Some(property) = item.as_property() else {
-                        continue;
-                    };
-                    if property.key.is_specific_static_name("init") {
-                        self.collect_initializer(&property.value);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-fn member_context_bindings(params: &FormalParameters<'_>) -> Vec<MemberBindingCandidate> {
-    let Some(first) = params.items.first() else {
-        return Vec::new();
-    };
-    let oxc_ast::ast::BindingPattern::ObjectPattern(pattern) = &first.pattern else {
-        return Vec::new();
-    };
-    pattern
-        .properties
-        .iter()
-        .filter_map(|property| {
-            let context_name = property.key.static_name()?.into_owned();
-            let identifier = property.value.get_binding_identifier()?;
-            Some(MemberBindingCandidate {
-                context_name,
-                symbol_id: identifier.symbol_id(),
-                direct: matches!(
-                    property.value,
-                    oxc_ast::ast::BindingPattern::BindingIdentifier(_)
-                ),
-            })
-        })
-        .collect()
-}
-
-struct ComponentMemberVisitor<'source, 'semantic, 'bindings> {
-    source: &'source str,
-    scoping: &'semantic Scoping,
-    bindings: &'bindings [MemberBindingCandidate],
-    members: Vec<BrowserComponentMember>,
-}
-
-impl ComponentMemberVisitor<'_, '_, '_> {
-    fn push(&mut self, object: &Expression<'_>, name: &str, span: Span) {
-        let Some(identifier) = object.without_parentheses().get_identifier_reference() else {
-            return;
-        };
-        let symbol = self
-            .scoping
-            .get_reference(identifier.reference_id())
-            .symbol_id();
-        let Some(binding) = self
-            .bindings
-            .iter()
-            .find(|binding| Some(binding.symbol_id) == symbol)
-        else {
-            return;
-        };
-        self.members.push(BrowserComponentMember {
-            context_name: binding.context_name.clone(),
-            member_name: name.to_string(),
-            owner_start: identifier.span.start as usize,
-            owner_end: identifier.span.end as usize,
-            member_start: span.start as usize,
-            member_end: span.end as usize,
-        });
-    }
-}
-
-impl<'a> Visit<'a> for ComponentMemberVisitor<'_, '_, '_> {
-    fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
-        self.push(
-            &member.object,
-            member.property.name.as_str(),
-            member.property.span,
-        );
-        walk::walk_static_member_expression(self, member);
-    }
-
-    fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
-        // Only unescaped string keys have a one-to-one key range suitable for
-        // editor diagnostics; computed expressions remain the JS provider's job.
-        if let Expression::StringLiteral(literal) = &member.expression {
-            let span = Span::new(literal.span.start + 1, literal.span.end - 1);
-            if self.source.get(span.start as usize..span.end as usize)
-                == Some(literal.value.as_str())
-            {
-                self.push(&member.object, literal.value.as_str(), span);
-            }
-        }
-        walk::walk_computed_member_expression(self, member);
-    }
-}
-
 fn section_object<'a>(
     section: &str,
     value: &'a Expression<'a>,
@@ -1329,6 +1174,64 @@ fn bound_instance_members(
     visitor.references
 }
 
+/// Options Vue calls with `this` set to the component instance, apart from
+/// the `methods`, `computed` and `data` sections handled with their names.
+const INSTANCE_BOUND_OPTIONS: [&str; 16] = [
+    "beforeCreate",
+    "created",
+    "beforeMount",
+    "mounted",
+    "beforeUpdate",
+    "updated",
+    "beforeUnmount",
+    "unmounted",
+    "activated",
+    "deactivated",
+    "errorCaptured",
+    "renderTracked",
+    "renderTriggered",
+    "serverPrefetch",
+    "provide",
+    "watch",
+];
+
+fn bound_hook_members(name: &str, value: &Expression<'_>) -> Vec<BrowserComponentMemberReference> {
+    let mut visitor = InstanceMemberVisitor::default();
+    match value.without_parentheses() {
+        Expression::FunctionExpression(_) => visitor.visit_expression(value),
+        Expression::ObjectExpression(object) if name == "watch" => {
+            for item in &object.properties {
+                let Some(property) = item.as_property() else {
+                    continue;
+                };
+                match property.value.without_parentheses() {
+                    Expression::FunctionExpression(_) => visitor.visit_expression(&property.value),
+                    // `{ handler() {...}, deep: true }` keeps its handler bound.
+                    Expression::ObjectExpression(descriptor) => {
+                        for descriptor_item in &descriptor.properties {
+                            let Some(descriptor_property) = descriptor_item.as_property() else {
+                                continue;
+                            };
+                            if !descriptor_property.computed
+                                && descriptor_property.key.is_specific_static_name("handler")
+                                && matches!(
+                                    descriptor_property.value.without_parentheses(),
+                                    Expression::FunctionExpression(_)
+                                )
+                            {
+                                visitor.visit_expression(&descriptor_property.value);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+    visitor.references
+}
+
 #[derive(Default)]
 struct InstanceMemberVisitor {
     ordinary_function_depth: usize,
@@ -1362,6 +1265,62 @@ impl<'a> Visit<'a> for AliasMemberVisitor<'_, '_> {
             }
         }
         walk::walk_static_member_expression(self, member);
+    }
+}
+
+/// Find local variables that hold a proven `$i18n` member.
+///
+/// A variable qualifies when its declaration is a plain identifier whose
+/// initializer is exactly `receiver.$i18n` for an already proven receiver, and
+/// nothing assigns or redeclares it afterwards. A `let` or `var` that is never
+/// reassigned or redeclared holds the same service as a `const`, so all three
+/// count.
+/// Destructuring, optional chaining, computed keys, and a variable copied from
+/// another variable are not followed; their calls are not preloaded.
+struct I18nAliasVisitor<'members, 'semantic> {
+    scoping: &'semantic Scoping,
+    // Proven member reads. Only a `$i18n` property span in this list may
+    // start an alias, so an alias inherits the receiver proof those reads have.
+    members: &'members [BrowserComponentMemberReference],
+    // The aliased member's receiver and the variable's symbol.
+    aliases: Vec<(String, SymbolId)>,
+}
+
+impl<'a> Visit<'a> for I18nAliasVisitor<'_, '_> {
+    fn visit_variable_declarator(&mut self, declarator: &VariableDeclarator<'a>) {
+        let alias = match (
+            &declarator.id,
+            declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses),
+        ) {
+            (
+                oxc_ast::ast::BindingPattern::BindingIdentifier(identifier),
+                Some(Expression::StaticMemberExpression(member)),
+            ) if member.property.name == "$i18n" => {
+                let span = member.property.span;
+                self.members
+                    .iter()
+                    .find(|reference| {
+                        reference.name == "$i18n"
+                            && reference.start == span.start as usize
+                            && reference.end == span.end as usize
+                    })
+                    .map(|reference| (reference.receiver.clone(), identifier.symbol_id()))
+            }
+            _ => None,
+        };
+        // A later assignment or a second `var` declaration could replace the
+        // service before a call runs, so such a variable proves nothing.
+        if let Some((receiver, symbol)) = alias {
+            if !self.scoping.symbol_is_mutated(symbol)
+                && self.scoping.symbol_redeclarations(symbol).is_empty()
+            {
+                self.aliases.push((receiver, symbol));
+            }
+        }
+        walk::walk_variable_declarator(self, declarator);
     }
 }
 
@@ -1723,6 +1682,24 @@ $component /* kept */ ({
     }
 
     #[test]
+    fn callback_literals_declare_no_options_names() {
+        for source in [
+            "$component(({ component }) => { component.ready })",
+            "$component(function ({ component }) { component.ready })",
+        ] {
+            let analysis = analyze_component_source(source);
+
+            assert!(analysis.public_names.is_empty());
+            assert_eq!(analysis.sections.len(), 6);
+            assert!(analysis
+                .sections
+                .iter()
+                .all(|section| section.state == "absent" && section.unknown_reason.is_none()));
+            assert_eq!(analysis.member_references.len(), 1);
+        }
+    }
+
+    #[test]
     fn duplicate_sections_keep_only_the_effective_names_and_member_references() {
         let analysis = analyze_component_source(
             "$component({ methods: { old() { return this.oldValue } }, methods: { current() { return this.currentValue } } })",
@@ -1763,6 +1740,60 @@ $component /* kept */ ({
     }
 
     #[test]
+    fn lifecycle_hooks_and_watch_handlers_bind_this() {
+        let analysis = analyze_component_source(
+            "$component({ mounted() { const i = this.$i18n; i.tr('m'); this.hookValue }, provide() { return { p: this.provided } }, watch: { a() { this.watchValue }, b: { handler() { this.handlerValue }, deep: true } }, emits: ['x'] })",
+        );
+
+        let mut names = analysis
+            .member_references
+            .iter()
+            .map(|reference| reference.name.as_str())
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            [
+                "$i18n",
+                "$i18n",
+                "handlerValue",
+                "hookValue",
+                "provided",
+                "watchValue"
+            ]
+        );
+    }
+
+    #[test]
+    fn only_options_vue_calls_on_the_instance_bind_this() {
+        let analysis = analyze_component_source(
+            "$component({ asyncData() { this.custom }, customOption: function () { this.other }, created() { this.known } })",
+        );
+
+        let names = analysis
+            .member_references
+            .iter()
+            .map(|reference| reference.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["known"]);
+    }
+
+    #[test]
+    fn mixins_and_extends_leave_every_section_unknown() {
+        for source in [
+            "$component({ mixins: [shared], methods: { m() {} } })",
+            "$component({ extends: base, methods: { m() {} } })",
+        ] {
+            let analysis = analyze_component_source(source);
+            assert!(analysis.valid);
+            assert!(analysis.sections.iter().all(|section| {
+                section.state == "unknown"
+                    && section.unknown_reason.as_deref() == Some("inherited-options")
+            }));
+        }
+    }
+
+    #[test]
     fn only_on_server_render_authenticates_context_aliases() {
         let analysis = analyze_component_source(
             "$component({ init({ onEvent: ignored }) { ignored(\"init\", () => {}); } }); $component({ onServerRender({ component: direct, onEvent: listen }) { direct.x; listen(\"server\", () => {}); } }); $component({ onServerRender({ component: current }) { current.z } })",
@@ -1775,6 +1806,85 @@ $component /* kept */ ({
                 .collect::<Vec<_>>(),
             ["direct", "listen", "current"]
         );
+    }
+
+    #[test]
+    fn i18n_alias_reads_are_reported_as_i18n_members() {
+        let source = r#"$component({
+  onServerRender: ({ component: e }) => {
+    const t = e.$el, i = e.$i18n;
+    i.bind({});
+    let j = (e.$i18n);
+    j?.tr("a");
+    var v = e.$i18n;
+    v.tr("b");
+    { const e = other; const k = e.$i18n; k.bind({}); }
+  },
+  methods: { run() { const m = this.$i18n; return m.tr("c"); } },
+})"#;
+        let analysis = analyze_component_source(source);
+
+        let found = analysis
+            .member_references
+            .iter()
+            .filter(|reference| reference.name == "$i18n")
+            .map(|reference| {
+                (
+                    reference.receiver.as_str(),
+                    &source[reference.start..reference.end],
+                )
+            })
+            .collect::<Vec<_>>();
+        // Each variable is reported at the `$i18n` read in its initializer and
+        // at every later read of the variable; the alias of a shadowing `e` is
+        // not.
+        assert_eq!(
+            found,
+            [
+                ("component", "$i18n"),
+                ("component", "i"),
+                ("component", "$i18n"),
+                ("component", "j"),
+                ("component", "$i18n"),
+                ("component", "v"),
+                ("this", "$i18n"),
+                ("this", "m"),
+            ]
+        );
+    }
+
+    #[test]
+    fn i18n_alias_is_not_followed_in_unsupported_forms() {
+        let source = r#"$component({
+  onServerRender: ({ component }) => {
+    let a = component.$i18n;
+    a = other;
+    a.bind({});
+    var b = component.$i18n;
+    var b = other;
+    b.bind({});
+    const { bind } = component.$i18n;
+    bind({});
+    const c = component?.$i18n;
+    c.bind({});
+    const d = component["$i18n"];
+    d.bind({});
+    const f = component.$i18n;
+    const g = f;
+    g.bind({});
+  },
+})"#;
+        let analysis = analyze_component_source(source);
+
+        let found = analysis
+            .member_references
+            .iter()
+            .filter(|reference| reference.name == "$i18n")
+            .map(|reference| &source[reference.start..reference.end])
+            .collect::<Vec<_>>();
+        // Only the member reads themselves remain proven. The one alias read
+        // is `f` copied into `g`; `g.bind` is not followed.
+        assert_eq!(found, ["$i18n", "$i18n", "$i18n", "$i18n", "$i18n", "f"]);
     }
 
     #[test]

@@ -75,6 +75,7 @@ from citry.analysis import (
     browser_state_bindings,
     build_inferred_template_shadow,
     build_schema_template_shadow,
+    component_js_i18n_owners,
     component_name_match,
     css_data_completion_at,
     css_data_reference_at,
@@ -86,6 +87,7 @@ from citry.analysis import (
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
     lint_unknown_vue_variables,
+    lint_vue_python_variables,
     mark_literal_findings,
     merge_json_wire_types,
     python_application_lint_variable_range,
@@ -1195,7 +1197,10 @@ def browser_diagnostics(
             open_documents,
         )
         if vue_consumers is not None:
-            for finding in lint_unknown_vue_variables(expressions, vue_consumers):
+            for finding in (
+                *lint_unknown_vue_variables(expressions, vue_consumers),
+                *lint_vue_python_variables(expressions, vue_consumers),
+            ):
                 diagnostics.append(
                     types.Diagnostic(
                         range=_range(region.source_map.map_range(finding.start_index, finding.end_index)),
@@ -1278,6 +1283,7 @@ def browser_diagnostics(
         for member_finding in lint_unknown_component_js_members(
             js_region.source_map.template_source,
             data_names,
+            severity=_component_js_member_severity(js_consumers, project),
         ):
             diagnostics.append(
                 types.Diagnostic(
@@ -1288,7 +1294,11 @@ def browser_diagnostics(
                         )
                     ),
                     message=member_finding.message,
-                    severity=types.DiagnosticSeverity.Error,
+                    severity=(
+                        types.DiagnosticSeverity.Error
+                        if member_finding.severity == "error"
+                        else types.DiagnosticSeverity.Warning
+                    ),
                     code=member_finding.code,
                     code_description=types.CodeDescription(diagnostic_documentation_url(member_finding.code)),
                     source="citry",
@@ -1323,12 +1333,16 @@ def browser_diagnostics(
         if not js_consumers:
             continue
         js_expression = _component_js_expression(js_region)
+        # Only reads the analyzer proves hold `component.$i18n` or
+        # `this.$i18n` are i18n calls; any other object named `i18n` is not.
+        i18n_owners, i18n_owner_spans = component_js_i18n_owners(js_region.source_map.template_source)
         diagnostics.extend(
             _browser_i18n_profile_diagnostics(
                 js_expression,
                 js_region,
                 project,
-                owners=frozenset({"i18n"}),
+                owners=i18n_owners,
+                proven_owner_spans=i18n_owner_spans,
             )
         )
         if js_event_contract is None:
@@ -1355,15 +1369,16 @@ def _browser_i18n_profile_diagnostics(
     project: ProjectState,
     *,
     owners: frozenset[str],
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> list[types.Diagnostic]:
     index = project.i18n
     if index is None or not index.configured:
         return []
-    if "$i18n" in owners and "$i18n" not in expression.bindings:
+    if "$i18n" in owners and "$i18n" not in expression.bindings and proven_owner_spans is None:
         return []
     operation_names = {"relativeTime": "relative_time"}
     diagnostics: list[types.Diagnostic] = []
-    for call in browser_i18n_message_calls(expression, owners):
+    for call in browser_i18n_message_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         if call.has_dynamic_attribute:
             continue
         output = index.output(call.message, call.attribute)
@@ -1399,7 +1414,7 @@ def _browser_i18n_profile_diagnostics(
                 I18N_ARGUMENT_INVALID,
             )
         )
-    for bind_call in browser_i18n_bind_calls(expression, owners):
+    for bind_call in browser_i18n_bind_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         if bind_call.has_dynamic_output:
             continue
         output = index.output(bind_call.message, bind_call.output)
@@ -1418,7 +1433,7 @@ def _browser_i18n_profile_diagnostics(
                 I18N_UNKNOWN_MESSAGE,
             )
         )
-    for profile_call in browser_i18n_profile_calls(expression, owners):
+    for profile_call in browser_i18n_profile_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         operation = operation_names.get(profile_call.operation, profile_call.operation)
         known = index.profile_names(profile_call.namespace, operation)
         if profile_call.profile in known:
@@ -1520,14 +1535,11 @@ def _component_js_lint_consumers(
     if project.analysis is None or not consumers:
         return None
     resolved: list[ComponentJsLintConsumer] = []
-    i18n_configured = project.i18n is not None and project.i18n.configured
     for component in consumers:
         lint = project.analysis.component_lint.get(component.definition_id)
         if lint is None:
             return None
         known_names = {variable.name for variable in lint.component_js_globals}
-        if i18n_configured:
-            known_names.add("i18n")
         resolved.append(
             ComponentJsLintConsumer(
                 known_names=frozenset(known_names),
@@ -1535,6 +1547,30 @@ def _component_js_lint_consumers(
             )
         )
     return tuple(resolved)
+
+
+def _component_js_member_severity(
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+) -> Literal["ignore", "warning", "error"]:
+    """Return the strictest unknown-member severity among a JS asset's owners."""
+    # Without app analysis the rule keeps its documented default, which is
+    # also what the batch checker applies to an unconfigured application.
+    if project.analysis is None:
+        return "error"
+    rules = {
+        (
+            lint.rule_unknown_component_js_member
+            if (lint := project.analysis.component_lint.get(component.definition_id)) is not None
+            else project.analysis.lint.rule_unknown_component_js_member
+        )
+        for component in consumers
+    }
+    # One asset can serve several components; like the variable rule, the
+    # strictest owner decides, and every owner must ignore it to silence it.
+    if "error" in rules or not rules:
+        return "error"
+    return "warning" if "warning" in rules else "ignore"
 
 
 def _component_js_global_types(
@@ -1599,6 +1635,7 @@ def _vue_lint_consumers(
                 ),
                 rule_unknown_vue_variable=lint.rule_unknown_vue_variable,
                 namespace_policy=namespace_policy,
+                rule_vue_python_variable=lint.rule_vue_python_variable,
             )
         )
     return tuple(resolved)
@@ -2184,7 +2221,15 @@ def _i18n_use_at(
             "statement",
             "component-js",
         )
-        uses.extend(_mapped_browser_i18n_uses(expression, js_region, owners=frozenset({"i18n"})))
+        i18n_owners, i18n_owner_spans = component_js_i18n_owners(js_region.source_map.template_source)
+        uses.extend(
+            _mapped_browser_i18n_uses(
+                expression,
+                js_region,
+                owners=i18n_owners,
+                proven_owner_spans=i18n_owner_spans,
+            )
+        )
     if document.language_id == "python":
         uses.extend(_host_python_i18n_uses(document.source))
     matches = [use for use in uses if _position_in_range(position, use.range)]
@@ -2524,11 +2569,14 @@ def _mapped_browser_i18n_uses(
     region: TemplateRegion | JsRegion,
     *,
     owners: frozenset[str],
+    proven_owner_spans: frozenset[tuple[int, int]] | None = None,
 ) -> list[_I18nUse]:
-    if "$i18n" in owners and "$i18n" not in expression.bindings:
+    # A template expression can use `$i18n` only when the template provides it.
+    # Component JavaScript passes proven spans instead, which already settle it.
+    if "$i18n" in owners and "$i18n" not in expression.bindings and proven_owner_spans is None:
         return []
     uses: list[_I18nUse] = []
-    for call in browser_i18n_message_calls(expression, owners):
+    for call in browser_i18n_message_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         try:
             mapped = region.source_map.map_range(call.message_start_index, call.message_end_index)
         except ValueError:
@@ -2550,7 +2598,7 @@ def _mapped_browser_i18n_uses(
                     message=call.message,
                 )
             )
-    for bind_call in browser_i18n_bind_calls(expression, owners):
+    for bind_call in browser_i18n_bind_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         try:
             message_range = region.source_map.map_range(
                 bind_call.message_start_index,
@@ -2584,7 +2632,7 @@ def _mapped_browser_i18n_uses(
             )
         )
     operation_names = {"relativeTime": "relative_time"}
-    for profile_call in browser_i18n_profile_calls(expression, owners):
+    for profile_call in browser_i18n_profile_calls(expression, owners, proven_owner_spans=proven_owner_spans):
         try:
             mapped = region.source_map.map_range(profile_call.start_index, profile_call.end_index)
         except ValueError:
@@ -4880,7 +4928,8 @@ _VUE_SYNTAX = (
         "v-show",
         "attribute",
         "Toggle element visibility",
-        "Show the element while this Vue expression is truthy.",
+        "Show the element while this Vue expression is truthy. On a component tag, it shows or hides the "
+        "component's one root element.",
         "https://vuejs.org/api/built-in-directives.html#v-show",
         insert_text='v-show="${1:expression}"',
     ),
@@ -4922,7 +4971,8 @@ _VUE_SYNTAX = (
         "v-model",
         "attribute",
         "Bind a form value",
-        "Synchronize a form control's value with Vue state.",
+        "Synchronize a form control's value with Vue state. On a component tag, it passes the value as the "
+        "`modelValue` prop and updates it when the component emits `update:modelValue`.",
         "https://vuejs.org/api/built-in-directives.html#v-model",
         insert_text='v-model="${1:value}"',
     ),
@@ -4938,12 +4988,35 @@ _VUE_SYNTAX = (
         "v-if",
         "attribute",
         "Conditionally render an element",
-        "Render this element while the Vue expression is truthy.",
+        "Render this element or component while the Vue expression is truthy.",
         "https://vuejs.org/api/built-in-directives.html#v-if",
         insert_text='v-if="${1:expression}"',
     ),
+    _SyntaxSpec(
+        "v-else-if",
+        "attribute",
+        "Render when an earlier condition is false",
+        "Render this element or component when every earlier branch of the `v-if` chain is false and this "
+        "Vue expression is truthy.",
+        "https://vuejs.org/api/built-in-directives.html#v-else-if",
+        insert_text='v-else-if="${1:expression}"',
+    ),
+    _SyntaxSpec(
+        "v-else",
+        "attribute",
+        "Render when every earlier condition is false",
+        "Render this element or component when every earlier branch of the `v-if` chain is false.",
+        "https://vuejs.org/api/built-in-directives.html#v-else",
+        insert_text="v-else",
+    ),
 )
 _VUE_SYNTAX_BY_LABEL = {spec.label: spec for spec in _VUE_SYNTAX}
+# Documented Vue directives a Citry component tag carries besides props and
+# listeners. Custom directives are also carried but have no documentation here.
+_COMPONENT_TAG_VUE_DIRECTIVES = ("v-show", "v-if", "v-else-if", "v-else", "v-model")
+# The documented directives a component tag accepts only without an argument
+# or modifiers.
+_BARE_COMPONENT_TAG_VUE_DIRECTIVES = frozenset({"v-show", "v-if", "v-else-if", "v-else"})
 _VUE_COMMON_EVENTS = ("click", "submit", "input", "change", "keydown", "keyup", "focus", "blur")
 _VUE_COMMON_BINDINGS = (
     "class",
@@ -5321,9 +5394,16 @@ def _vue_completion_specs(tag_name: str, *, semantic_component: bool) -> tuple[_
     event_specs = (_VUE_SYNTAX_BY_LABEL["v-on"], *_VUE_EVENT_COMPLETIONS)
     binding_specs = (_VUE_SYNTAX_BY_LABEL["v-bind"], *_VUE_BINDING_COMPLETIONS)
     if semantic_component:
-        # Native Vue listeners and props cross a component boundary. DOM-only
-        # content and visibility directives belong on concrete HTML elements.
-        return (*event_specs, *binding_specs)
+        # Listeners and props cross a component boundary,
+        # `v-if`/`v-else-if`/`v-else` decide whether the call renders,
+        # `v-model` becomes a prop and a listener, and `v-show` and custom
+        # directives reach the child's root element. `v-for` and the content
+        # directives belong on concrete HTML elements.
+        return (
+            *event_specs,
+            *binding_specs,
+            *(_VUE_SYNTAX_BY_LABEL[label] for label in _COMPONENT_TAG_VUE_DIRECTIVES),
+        )
     return (*_VUE_SYNTAX, *_VUE_EVENT_COMPLETIONS, *_VUE_BINDING_COMPLETIONS)
 
 
@@ -5567,11 +5647,18 @@ def _vue_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
     elif canonical.startswith((":", "v-bind:")):
         spec = _VUE_SYNTAX_BY_LABEL["v-bind"]
     else:
-        base_name = canonical.split(".", 1)[0]
+        # `v-model:title.trim` documents as `v-model`.
+        base_name = re.split(r"[:.]", canonical, maxsplit=1)[0] if canonical.startswith("v-") else canonical
         spec = _VUE_SYNTAX_BY_LABEL.get(base_name)
     if spec is None:
         return None
-    if _is_semantic_component_tag(tag_name) and spec.label not in {"v-on", "v-bind"}:
+    # A component tag accepts props, listeners, `v-model` in any form, and
+    # the condition directives and `v-show` without an argument or modifiers.
+    if (
+        _is_semantic_component_tag(tag_name)
+        and spec.label not in {"v-on", "v-bind", "v-model"}
+        and (spec.label not in _BARE_COMPONENT_TAG_VUE_DIRECTIVES or canonical != spec.label)
+    ):
         return None
     return spec
 
@@ -7973,7 +8060,8 @@ def _component_public_instance_shape(
         "{$state: CitryEventsState, $sendEvent: (name: CitryServerEventName, "
         "args?: Record<string, unknown>) => Promise<unknown>, "
         "$loading: (name?: CitryServerEventName) => boolean, "
-        "$error: (name?: CitryServerEventName) => CitryEventError | null}"
+        "$error: (name?: CitryServerEventName) => CitryEventError | null, "
+        "$onEvent: (name: string, callback: (detail: unknown) => void) => CitryCleanup}"
     )
     if i18n is not None and i18n.configured:
         helpers = helpers[:-1] + ", $i18n: CitryI18nService | null}"
@@ -8020,8 +8108,6 @@ def _browser_preamble(
         names.add(binding)
         if binding == "$i18n" and i18n is not None and i18n.configured:
             binding_type = "CitryI18nService"
-        elif binding == "i18n" and i18n is not None and i18n.configured:
-            binding_type = "CitryI18nService | null"
         else:
             binding_type = (binding_types or {}).get(binding, JsonWireType("unknown")).javascript
         lines.extend((f"/** @type {{{binding_type}}} */", f"var {binding};"))
@@ -8114,7 +8200,7 @@ def _browser_preamble(
             " * @typedef {Object} CitryComponentContext",
             " * @property {CitryComponentPublicInstance} component",
             " * @property {number} revision",
-            " * @property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} onEvent",
+            " * @property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent",
             " */",
             "/** @callback CitryComponentSetup",
             " * @param {Readonly<CitryClientProps>} props",
@@ -9133,7 +9219,7 @@ def _js_data_public_name_diagnostics(
                     public.setdefault(item.exposed_name, []).append(item)
         for root in namespace.roots:
             owners = public.get(root.name, [])
-            reserved_name = root.name.startswith(("$", "_")) or root.name == "preparedData"
+            reserved_name = root.name.startswith(("$", "_"))
             if not owners and not reserved_name:
                 continue
             variant: Literal["default", "conditional"] = "conditional" if root.presence == "conditional" else "default"

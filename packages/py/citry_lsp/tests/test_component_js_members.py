@@ -23,7 +23,13 @@ def _position(source: str, marker: str, offset: int = 0) -> types.Position:
 
 
 def _project_document(
-    tmp_path: Path, javascript: str, *, standalone: bool = False, declared: bool = False, open_data: bool = False
+    tmp_path: Path,
+    javascript: str,
+    *,
+    standalone: bool = False,
+    declared: bool = False,
+    open_data: bool = False,
+    member_rule: str | None = None,
 ):
     app_source = """from pathlib import Path
 from citry import Citry, Component
@@ -35,6 +41,8 @@ class Card(Component):
 """
     if declared:
         app_source += "    class JsData:\n        a: str\n        b: int\n"
+    if member_rule is not None:
+        app_source += f"    class Lint:\n        rule_unknown_component_js_member = {member_rule!r}\n"
     if open_data:
         app_source = app_source.replace('return {"a": "str", "b": 1}', 'return {"a": "str", **kwargs.extra}')
     if standalone:
@@ -87,20 +95,21 @@ def test_callback_alias_navigation_follows_its_binding_and_excludes_shadowed_nam
 
 
 def test_callback_navigation_does_not_guess_when_javascript_is_invalid(tmp_path):
-    project, document = _project_document(tmp_path, "$component(({ data }) => { data.; });")
-    assert definition(document, _position(document.source, "data.;", 2), project) is None
+    project, document = _project_document(tmp_path, "$component(({ component }) => { component.; });")
+    assert definition(document, _position(document.source, "component.;", 2), project) is None
 
 
 @pytest.mark.parametrize("standalone", [False, True])
 @pytest.mark.parametrize("declared", [False, True])
-def test_unknown_data_member_has_exact_field_range_and_clears_after_edit(tmp_path, standalone, declared):
-    javascript = '$component(({ data: payload }) => { console.log("😀", payload.c, payload.b); });'
+def test_unknown_member_has_exact_name_range_and_clears_after_edit(tmp_path, standalone, declared):
+    javascript = '$component(({ component: payload }) => { console.log("😀", payload.c, payload.b); });'
     project, document = _project_document(tmp_path, javascript, standalone=standalone, declared=declared)
     diagnostics = browser_diagnostics(document, project, {document.uri: document})
 
     assert len(diagnostics) == 1
     finding = diagnostics[0]
-    assert finding.code == "citry.component-js.unknown-data-member"
+    assert finding.code == "citry.component-js.unknown-member"
+    assert finding.message == "Component instance member 'c' is not defined by this component."
     assert finding.severity == types.DiagnosticSeverity.Error
     assert finding.range == types.Range(
         _position(document.source, "payload.c", 8), _position(document.source, "payload.c", 9)
@@ -111,14 +120,14 @@ def test_unknown_data_member_has_exact_field_range_and_clears_after_edit(tmp_pat
 
 def test_open_inferred_data_does_not_create_a_closed_namespace(tmp_path):
     project, document = _project_document(
-        tmp_path, "$component(({ data }) => { console.log(data.dynamic); });", open_data=True
+        tmp_path, "$component(({ component }) => { console.log(component.dynamic); });", open_data=True
     )
     assert browser_diagnostics(document, project, {document.uri: document}) == ()
 
 
 def test_unsaved_js_data_declaration_supplies_a_new_field(tmp_path):
     project, document = _project_document(
-        tmp_path, "$component(({ data }) => { console.log(data.c); });", declared=True
+        tmp_path, "$component(({ component }) => { console.log(component.c); });", declared=True
     )
     assert len(browser_diagnostics(document, project, {document.uri: document})) == 1
     document.update(document.source.replace("        b: int", "        b: int\n        c: bool"), 2, project)
@@ -135,7 +144,7 @@ class Card(Component):
         model_config = ConfigDict(extra="forbid")
         a: str
     js = """
-        $component(({ data }) => { console.log(data.extra); });
+        $component(({ component }) => { console.log(component.extra); });
     """
 '''
     path = tmp_path / "app.py"
@@ -153,36 +162,87 @@ class Card(Component):
 @pytest.mark.parametrize(
     "javascript",
     [
-        '$component(({ data }) => { console.log(data.b, "data.c"); });',
-        "$component(({ data }) => { data.toString(); data.hasOwnProperty('b'); });",
-        "$component(({ data }) => { function read(data) { return data.c; } });",
-        "$component(({ data }) => { data = {}; console.log(data.c); });",
-        "$component(({ data }) => { console.log(data[dynamicKey]); });",
-        "$component(({ data = {} }) => { console.log(data.c); });",
-        "$component(({ data }) => { data.; });",
+        # Text inside a string is not a member read.
+        '$component(({ component }) => { console.log(component.b, "component.c"); });',
+        # Vue's instance API, Citry's helpers, and the runtime-added prop.
+        "$component(({ component }) => { component.$el; component._uid; component.citryId; });",
+        "$component(({ component }) => { component.toString(); component.hasOwnProperty('b'); });",
+        # A shadowing parameter is a different object.
+        "$component(({ component }) => { function read(component) { return component.c; } });",
+        # A reassigned or defaulted parameter may no longer hold the instance.
+        "$component(({ component }) => { component = {}; console.log(component.c); });",
+        "$component(({ component = {} }) => { console.log(component.c); });",
+        "$component(({ component }) => { console.log(component[dynamicKey]); });",
+        "$component(({ component }) => { component.; });",
+        # Vue lets code add plain instance properties, so a written name is known.
+        "$component(({ component }) => { component.timer = 1; console.log(component.timer); });",
+        "$component({ created() { this.count += 1; }, methods: { m() { return this.count; } } });",
+        "$component(({ component }) => { Object.assign(component, extra); console.log(component.c); });",
+        # Options the analyzer cannot read make every name possible.
+        "$component(options);",
+        "$component({ ...shared, methods: { m() { return this.c; } } });",
+        "$component({ setup() { return make(); }, methods: { m() { return this.c; } } });",
+        "$component({ inject: names, methods: { m() { return this.c; } } });",
+        # Destructuring and `for` targets may write the member they name.
+        "$component({ methods: { m(o) { [this.x] = o; ({ a: this.y } = o); return this.x + this.y; } } });",
+        "$component({ methods: { m(xs) { for (this.k of xs); return this.k; } } });",
+        # Writes the text cannot name, and `this` inside a class body.
+        "$component({ methods: { m(k) { this[k] = 1; return this.c; } } });",
+        "$component({ methods: { m() { const self = this; Object.assign(self, x); return this.c; } } });",
+        "$component(({ component }) => { ({ component } = next); console.log(component.c); });",
+        "$component({ methods: { m() { class A { x = this.c; } return A; } } });",
+        # Merged options can declare any name; an option Vue never calls has no proven `this`.
+        "$component({ mixins: [shared], methods: { m() { return this.c; } } });",
+        "$component({ extends: base, mounted() { return this.c; } });",
+        "$component({ asyncData() { return this.c; } });",
     ],
 )
-def test_data_member_analysis_excludes_unproven_objects_and_dynamic_keys(javascript):
+def test_member_analysis_excludes_unproven_receivers_and_open_namespaces(javascript):
     assert lint_unknown_component_js_members(javascript, frozenset({"a", "b"})) == ()
 
 
-def test_data_member_analysis_handles_aliases_bracket_keys_and_closure_captures():
-    source = """$component({ init({ data: payload }) {
+def test_member_analysis_handles_aliases_and_closure_captures():
+    source = """$component({ onServerRender({ component: payload }) {
         const read = () => `${payload.missing}`;
         console.log(payload?.other, payload["third"]);
     } });"""
     findings = lint_unknown_component_js_members(source, frozenset({"a", "b"}))
-    assert [finding.name for finding in findings] == ["missing", "other", "third"]
+    assert [finding.name for finding in findings] == ["missing", "other"]
     encoded = source.encode("utf-8")
     assert [encoded[finding.start_index : finding.end_index].decode() for finding in findings] == [
         "missing",
         "other",
-        "third",
     ]
     assert lint_unknown_component_js_members(source, None) == ()
 
 
-def test_checker_and_lsp_share_unknown_data_member_diagnostics(tmp_path):
+def test_member_analysis_accepts_every_declared_options_name():
+    source = """$component({
+      props: ["label"],
+      inject: ["theme"],
+      data() { return { open: false }; },
+      setup() { return { query: "" }; },
+      computed: {
+        shown() { return this.open && this.label && this.theme && this.query && this.a && this.typoComputed; },
+      },
+      methods: {
+        toggle() {
+          const later = () => this.typoArrow;
+          function detached() { return this.notChecked; }
+          return this.shown + this.toggle + this.$state + later + detached;
+        },
+      },
+      mounted() {
+        const { open } = this;
+        return open && this.typoHook;
+      },
+      watch: { open: { handler() { return this.typoWatch; } } },
+    });"""
+    findings = lint_unknown_component_js_members(source, frozenset({"a", "b"}))
+    assert [finding.name for finding in findings] == ["typoComputed", "typoArrow", "typoHook", "typoWatch"]
+
+
+def test_checker_and_lsp_share_unknown_member_diagnostics(tmp_path):
     engine = Citry(autodiscover=False)
 
     class Card(Component):
@@ -192,7 +252,7 @@ def test_checker_and_lsp_share_unknown_data_member_diagnostics(tmp_path):
             a: str
             b: int
 
-    javascript = "$component(({ data }) => { console.log(data.c); });"
+    javascript = "$component(({ component }) => { console.log(component.c); });"
     findings = _check_browser_source(engine, _BrowserSource("card.js", javascript, [Card]), {})
     project, document = _project_document(tmp_path, javascript, standalone=True, declared=True)
     diagnostics = browser_diagnostics(document, project)
@@ -200,3 +260,77 @@ def test_checker_and_lsp_share_unknown_data_member_diagnostics(tmp_path):
     assert findings[0].code == diagnostics[0].code
     assert findings[0].message == diagnostics[0].message
     assert findings[0].column == diagnostics[0].range.start.character
+
+
+def test_member_analysis_reports_at_the_requested_severity():
+    source = "$component(({ component }) => { console.log(component.c); });"
+    [warning] = lint_unknown_component_js_members(source, frozenset({"a"}), severity="warning")
+    assert (warning.name, warning.severity) == ("c", "warning")
+    assert lint_unknown_component_js_members(source, frozenset({"a"}), severity="ignore") == ()
+    with pytest.raises(ValueError, match="member rule severity"):
+        lint_unknown_component_js_members(source, frozenset({"a"}), severity="warn")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("rule", "expected"),
+    [("warning", types.DiagnosticSeverity.Warning), ("ignore", None), ("error", types.DiagnosticSeverity.Error)],
+)
+def test_checker_and_lsp_apply_the_component_member_rule_severity(tmp_path, rule, expected):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+
+        class JsData:
+            a: str
+            b: int
+
+        class Lint:
+            rule_unknown_component_js_member = rule
+
+    javascript = "$component(({ component }) => { console.log(component.c); });"
+    findings = _check_browser_source(engine, _BrowserSource("card.js", javascript, [Card]), {})
+    project, document = _project_document(tmp_path, javascript, standalone=True, declared=True, member_rule=rule)
+    diagnostics = [
+        diagnostic
+        for diagnostic in browser_diagnostics(document, project)
+        if diagnostic.code == "citry.component-js.unknown-member"
+    ]
+    if expected is None:
+        assert findings == []
+        assert diagnostics == []
+        return
+    [finding] = findings
+    [diagnostic] = diagnostics
+    assert finding.severity == rule
+    assert diagnostic.severity == expected
+
+
+def test_shared_javascript_uses_the_strictest_owner_member_severity():
+    engine = Citry(autodiscover=False)
+
+    class Quiet(Component):
+        citry = engine
+
+        class JsData:
+            a: str
+
+        class Lint:
+            rule_unknown_component_js_member = "ignore"
+
+    class Loud(Component):
+        citry = engine
+
+        class JsData:
+            a: str
+
+        class Lint:
+            rule_unknown_component_js_member = "warning"
+
+    javascript = "$component(({ component }) => { console.log(component.c); });"
+    both = _check_browser_source(engine, _BrowserSource("shared.js", javascript, [Quiet, Loud]), {})
+    quiet_only = _check_browser_source(engine, _BrowserSource("shared.js", javascript, [Quiet]), {})
+    assert [(finding.code, finding.severity) for finding in both] == [
+        ("citry.component-js.unknown-member", "warning"),
+    ]
+    assert quiet_only == []

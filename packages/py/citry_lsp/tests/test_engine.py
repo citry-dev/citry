@@ -1421,7 +1421,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     assert "function((" not in js_projection.source
     assert "/** @typedef {Object} CitryEventError" in js_projection.source
     assert (
-        "@property {(name: string, callback: (detail: unknown) => void) => CitryCleanup} onEvent"
+        "@property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent"
         in js_projection.source
     )
     assert "function $component(definition)" in js_projection.source

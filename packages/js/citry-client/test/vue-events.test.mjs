@@ -836,6 +836,51 @@ test("registered Vue Events transports receive the protocol envelope", async () 
   assert.equal(envelopes[0].calls[0].handlerName, "move");
 });
 
+test("custom transports receive the request context the fetch transport sends", async () => {
+  const sent = [];
+  const fetched = [];
+  const result = (envelope) => ({
+    protocol: "citry-events/1",
+    requestId: envelope.requestId,
+    results: [{ ok: true, sendSequence: envelope.calls[0].sendSequence, actions: [{ action: "data", value: 1 }] }],
+  });
+  const create = (transport) =>
+    bridgeModule.createVueEventsBridge({
+      endpoint: "/events",
+      host: basicHost(),
+      csrf: { token: "csrf-token" },
+      transport: () => transport,
+      fetch: async (url, init) => {
+        fetched.push({ url, method: init.method, headers: init.headers });
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => result(JSON.parse(init.body)) };
+      },
+    });
+  const source = { stableId: "board", generation: 1 };
+  await create({
+    send(envelope, request) {
+      sent.push(request);
+      // A transport may add its own headers without changing later calls.
+      request.headers["X-Bridge"] = "1";
+      return result(envelope);
+    },
+  }).send({ source, handler: "move" });
+  await create(null).send({ source, handler: "move" });
+
+  assert.equal(sent.length, 1);
+  const [request] = sent;
+  assert.ok(request.signal instanceof AbortSignal);
+  assert.equal(request.signal.aborted, false);
+  const { "X-Bridge": added, ...forwarded } = request.headers;
+  assert.equal(added, "1");
+  // Same URL, method and headers as the built-in fetch transport, including
+  // the Vue app, occurrence and revision headers the server needs for Render.
+  assert.deepEqual({ url: request.url, method: request.method, headers: forwarded }, fetched[0]);
+  assert.equal(forwarded["X-Citry-Vue-App"], "app-1");
+  assert.equal(forwarded["X-Citry-Vue-Occurrence"], "board");
+  assert.equal(forwarded["X-Citry-Vue-Revision"], "0");
+  assert.equal(forwarded["X-CSRFToken"], "csrf-token");
+});
+
 test("GET uses the exact per-event URL and flat metadata without consuming State drafts", async () => {
   const getDescriptor = {
     componentClassId: "Board_1",
@@ -1454,7 +1499,7 @@ test("native beforeUnmount reports the exact generation despite user cleanup fai
   };
   vm.runInNewContext(clientSource, realm);
   const helperContract = clientSource.match(/const HELPER_CONTRACT = "([^"]+)"/)[1];
-  const stable = realm.CitryStable;
+  const stable = realm.__citryRuntime;
   const asRealm = (value) => {
     realm.__json = JSON.stringify(value);
     return vm.runInNewContext("JSON.parse(__json)", realm);
@@ -1707,4 +1752,135 @@ test("dequeue snapshots pending State and restores it once on failure", async ()
   pending.rows[0].id = 9;
   assert.deepEqual(request.calls[0].stateUpdates, { rows: [{ id: 1 }] });
   assert.deepEqual(restored, [{ rows: [{ id: 1 }] }]);
+});
+
+const renderAction = (prepared = { occurrences: [{ serverData: { count: 1 } }] }) => ({
+  action: "render",
+  target: "render:server_1",
+  swap: "morph",
+  renderer: "vue-prepared/1",
+  prepared,
+});
+
+// The prepared host freezes and keeps the result it preflights, the way client.js does.
+const freezingHost = (seen) => ({
+  ...basicHost(),
+  preflightResult(result) {
+    seen.push(result);
+    const freeze = (value) => {
+      if (value && typeof value === "object" && !Object.isFrozen(value)) {
+        Object.freeze(value);
+        for (const child of Object.values(value)) freeze(child);
+      }
+      return value;
+    };
+    return { result: freeze(result) };
+  },
+  async prepareRender() {
+    return { transaction: {} };
+  },
+  abortRender() {},
+  async commitRender() {},
+});
+
+test("a fetched result reaches host preflight as the parsed object, with no copy", async () => {
+  const seen = [];
+  let parsed;
+  const fetch = async (_url, init) => {
+    const envelope = JSON.parse(init.body);
+    parsed = {
+      protocol: "citry-events/1",
+      requestId: envelope.requestId,
+      results: [{ ok: true, sendSequence: envelope.calls[0].sendSequence, actions: [renderAction()] }],
+    };
+    return { ok: true, headers: new Headers(), json: async () => parsed };
+  };
+  const bridge = bridgeModule.createVueEventsBridge({ endpoint: "/events", host: freezingHost(seen), fetch });
+
+  await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0], parsed.results[0]);
+});
+
+test("a transport result is copied once so the host never freezes the caller's object", async () => {
+  const seen = [];
+  let sent;
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: freezingHost(seen),
+    transport: () => ({
+      send(envelope) {
+        sent = {
+          protocol: "citry-events/1",
+          requestId: envelope.requestId,
+          results: [{ ok: true, sendSequence: envelope.calls[0].sendSequence, actions: [renderAction()] }],
+        };
+        return sent;
+      },
+    }),
+    fetch: async () => {
+      throw new Error("registered transport should replace fetch");
+    },
+  });
+
+  await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+
+  assert.equal(seen.length, 1);
+  assert.notEqual(seen[0], sent.results[0]);
+  assert.deepEqual(JSON.parse(JSON.stringify(seen[0])), JSON.parse(JSON.stringify(sent.results[0])));
+  assert.equal(Object.isFrozen(seen[0].actions[0].prepared), true);
+  assert.equal(Object.isFrozen(sent.results[0].actions[0].prepared), false);
+  sent.results[0].actions[0].prepared.occurrences[0].serverData.count = 2;
+  assert.equal(seen[0].actions[0].prepared.occurrences[0].serverData.count, 1);
+});
+
+test("a response that fails the strict JSON check reaches no host step and stays unfrozen", async () => {
+  const calls = [];
+  let parsed;
+  const host = {
+    ...basicHost(),
+    preflightResult(result) {
+      calls.push("preflight");
+      return { result };
+    },
+    commitState() {
+      calls.push("state");
+    },
+    async prepareRender() {
+      calls.push("prepare");
+      return { transaction: {} };
+    },
+    abortRender() {},
+    async commitRender() {
+      calls.push("render");
+    },
+  };
+  const fetch = async (_url, init) => {
+    const envelope = JSON.parse(init.body);
+    // JSON.parse turns 1e999 into Infinity, which strict JSON rejects.
+    parsed = {
+      protocol: "citry-events/1",
+      requestId: envelope.requestId,
+      results: [
+        {
+          ok: true,
+          sendSequence: envelope.calls[0].sendSequence,
+          actions: [
+            { action: "state", targetRenderId: "server_1", stateToken: "token_2" },
+            renderAction({ occurrences: [{ serverData: { count: Number.POSITIVE_INFINITY } }] }),
+          ],
+        },
+      ],
+    };
+    return { ok: true, headers: new Headers(), json: async () => parsed };
+  };
+  const bridge = bridgeModule.createVueEventsBridge({ endpoint: "/events", host, fetch });
+
+  await assert.rejects(
+    bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }),
+    /Invalid Events response: The value contains a non-finite number/,
+  );
+  assert.deepEqual(calls, []);
+  assert.equal(Object.isFrozen(parsed.results[0].actions[1].prepared), false);
 });

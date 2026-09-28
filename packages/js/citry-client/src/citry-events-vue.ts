@@ -5,6 +5,7 @@ import {
   buildOkResult,
   buildCall,
   buildCallEnvelope,
+  copyJson,
   preflightResultEnvelope,
   validateDescriptor,
   validateStrictJson,
@@ -46,6 +47,10 @@ export interface VueEventsHost {
   appId(source: VueEventSource): string;
   resolve(source: VueEventSource): VueEventContext | null;
   revision(source: VueEventSource): number;
+  /**
+   * Checks a result before any of its actions run. The bridge passes a result that no other code
+   * holds, so the host may freeze its data in place and keep it without copying.
+   */
   preflightResult?(result: EventResult, source: VueEventSource): PreparedVueResult;
   prepareRender(
     action: EventAction,
@@ -91,8 +96,22 @@ export interface VueEventRuntimeConfig {
   url?: string;
 }
 
+/**
+ * The request the built-in fetch transport would send for one call.
+ *
+ * A custom transport receives it beside the envelope so a server-side bridge
+ * can rebuild the same HTTP request: the Vue app, occurrence and revision
+ * headers are what let the server answer with a Render action.
+ */
+export interface VueEventTransportRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  signal: AbortSignal;
+}
+
 export interface VueEventTransport {
-  send(envelope: unknown): Promise<unknown> | unknown;
+  send(envelope: unknown, request: VueEventTransportRequest): Promise<unknown> | unknown;
 }
 
 export interface VueEventSend {
@@ -594,16 +613,18 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       "X-Citry-Vue-Revision": String(committedRevision),
     };
     const selectedTransport = options.transport?.() ?? null;
-    // A custom transport owns the request boundary. In particular, the
-    // playground transport runs inside an opaque sandbox where reading
-    // document.cookie throws; it does not need an HTTP CSRF header.
-    const csrf = selectedTransport ? undefined : (runtimeConfig.csrf ?? options.csrf);
+    const csrf = runtimeConfig.csrf ?? options.csrf;
     if (!useGet && csrf) {
+      // A custom transport forwards only a token the page configured. The
+      // playground transport runs inside an opaque sandbox where reading
+      // document.cookie throws, so the cookie fallback is for fetch alone.
       const token = csrf.token
         ? typeof csrf.token === "function"
           ? csrf.token()
           : csrf.token
-        : readCookie(csrf.cookie ?? "csrftoken");
+        : selectedTransport
+          ? undefined
+          : readCookie(csrf.cookie ?? "csrftoken");
       if (token) headers[csrf.header ?? "X-CSRFToken"] = token;
     }
     // The Vue bridge currently serializes queued jobs and emits one-call
@@ -617,32 +638,44 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Vue Events timeoutMs must be positive.");
     const controller = new AbortController();
     job.controller = controller;
-    const operation = (async (): Promise<{ raw: unknown } | { attachment: Blob; filename: string }> => {
+    let requestUrl = endpoint;
+    if (useGet) {
+      const query = flatQuery(input.args ?? {});
+      query.append("_citry_protocol", envelope.protocol);
+      query.append("_citry_request_id", envelope.requestId);
+      query.append("_citry_capabilities", JSON.stringify(envelope.capabilities));
+      query.append("_citry_caller_render_id", call.callerRenderId ?? "");
+      query.append("_citry_send_sequence", String(call.sendSequence));
+      if (handlerOptions.usesState === true && call.stateToken !== undefined)
+        query.append("_citry_state_token", call.stateToken);
+      requestUrl += `?${query.toString()}`;
+    }
+    const requestHeaders = useGet
+      ? Object.fromEntries(Object.entries(headers).filter(([name]) => name !== "Content-Type"))
+      : headers;
+    const requestMethod = isolated ? handlerOptions.httpMethod : "POST";
+    const operation = (async (): Promise<
+      { raw: unknown; transported?: true } | { attachment: Blob; filename: string }
+    > => {
       if (selectedTransport) {
+        // The server needs the same app, occurrence and revision headers the
+        // fetch path sends to build a Render action, so a custom transport
+        // gets its own copy of that request to forward.
+        const request: VueEventTransportRequest = {
+          url: requestUrl,
+          method: requestMethod,
+          headers: { ...requestHeaders },
+          signal: controller.signal,
+        };
         try {
-          return { raw: await selectedTransport.send(envelope) };
+          return { raw: await selectedTransport.send(envelope, request), transported: true };
         } catch (error) {
           if (error !== null && typeof error === "object") reportableFailures.add(error);
           throw error;
         }
       }
-      let requestUrl = endpoint;
-      if (useGet) {
-        const query = flatQuery(input.args ?? {});
-        query.append("_citry_protocol", envelope.protocol);
-        query.append("_citry_request_id", envelope.requestId);
-        query.append("_citry_capabilities", JSON.stringify(envelope.capabilities));
-        query.append("_citry_caller_render_id", call.callerRenderId ?? "");
-        query.append("_citry_send_sequence", String(call.sendSequence));
-        if (handlerOptions.usesState === true && call.stateToken !== undefined)
-          query.append("_citry_state_token", call.stateToken);
-        requestUrl += `?${query.toString()}`;
-      }
-      const requestHeaders = useGet
-        ? Object.fromEntries(Object.entries(headers).filter(([name]) => name !== "Content-Type"))
-        : headers;
       const requestInit: RequestInit = {
-        method: isolated ? handlerOptions.httpMethod : "POST",
+        method: requestMethod,
         credentials: "same-origin",
         headers: requestHeaders,
         ...(useGet ? {} : { body: JSON.stringify(envelope) }),
@@ -690,11 +723,12 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const raw = received.raw;
     const checked = preflightResultEnvelope(raw, envelope);
     if (!checked.ok) throw new Error(`Invalid Events response: ${checked.issue.message}`);
+    // The host may freeze and keep the result it is given. The browser's fetch parses a fresh object
+    // for this call, but code behind a custom transport may still hold its object, so copy that one.
+    const [result] = received.transported ? copyJson(checked.results) : checked.results;
     stillCurrent(input.source, state);
-    validateTargets(checked.results[0], input.source, context.serverRenderId);
-    const preparedResult = options.host.preflightResult?.(checked.results[0], input.source) ?? {
-      result: checked.results[0],
-    };
+    validateTargets(result, input.source, context.serverRenderId);
+    const preparedResult = options.host.preflightResult?.(result, input.source) ?? { result };
     state.acceptedEpoch += 1;
     // The server has consumed the dequeued State draft once the complete
     // response/result/target preflight succeeds.  Mark that transaction

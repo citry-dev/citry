@@ -25,7 +25,8 @@ use citry_template_parser::{
 };
 
 use crate::html_transform::{
-    mark_html, scan_output_html, transform_html, validate_html_fragment_boundary,
+    browser_fragment_matches_elements, browser_fragment_matches_nodes, mark_html, scan_output_html,
+    static_html_node_count, transform_html, validate_html_fragment_boundary,
 };
 use crate::i18n::{
     I18nCompileError, PyCatalogCompiler, PyCompiledCatalog, PyTextCatalog, canonicalize_locale,
@@ -36,9 +37,8 @@ use crate::template_formatter::{
     prepare_embedded_format, python_expression_provider,
 };
 use crate::template_parser::{
-    analyze_browser_binding_pattern, analyze_browser_source, analyze_component_members,
-    analyze_component_scope_writes, analyze_component_source, compile_prepared_template,
-    compile_template, parse_template,
+    analyze_browser_binding_pattern, analyze_browser_source, analyze_component_scope_writes,
+    analyze_component_source, compile_prepared_template, compile_template, parse_template,
 };
 
 /// Singular Python API that brings together all the other Rust crates.
@@ -48,6 +48,18 @@ use crate::template_parser::{
 ///       It MUST match the `module-name` setting in `pyproject.toml` in `packages/py/citry_core/`.
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Benchmarks read this to refuse an unoptimized build, whose Rust paths
+    // run many times slower. Cargo turns debug assertions on in the `dev`
+    // profile (what `maturin develop` builds without `--release`) and off in
+    // `release` and `release-wheel`.
+    m.add(
+        "BUILD_PROFILE",
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        },
+    )?;
     let vue_mod = PyModule::new(m.py(), "vue")?;
     vue::register(&vue_mod)?;
     m.add_submodule(&vue_mod)?;
@@ -58,7 +70,19 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     html_transform_mod.add_function(wrap_pyfunction!(mark_html, &html_transform_mod)?)?;
     html_transform_mod.add_function(wrap_pyfunction!(scan_output_html, &html_transform_mod)?)?;
     html_transform_mod.add_function(wrap_pyfunction!(
+        browser_fragment_matches_elements,
+        &html_transform_mod
+    )?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(
+        browser_fragment_matches_nodes,
+        &html_transform_mod
+    )?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(
         validate_html_fragment_boundary,
+        &html_transform_mod
+    )?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(
+        static_html_node_count,
         &html_transform_mod
     )?)?;
 
@@ -119,10 +143,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
         analyze_browser_binding_pattern,
-        &template_parser_mod
-    )?)?;
-    template_parser_mod.add_function(wrap_pyfunction!(
-        analyze_component_members,
         &template_parser_mod
     )?)?;
     template_parser_mod.add_function(wrap_pyfunction!(
