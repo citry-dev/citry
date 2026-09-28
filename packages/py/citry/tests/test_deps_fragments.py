@@ -1,11 +1,13 @@
 """Tests for the ``fragment`` strategy and the mounted ``document`` flow."""
 
+import hashlib
 import json
 import re
 
 import pytest
 
 from citry import Citry, Component, Extension, Markup
+from citry._vue import events as vue_events
 from citry.ext.dependencies import Script
 from citry.ext.dependencies.routes import script_url
 from citry.util.routing import match_route
@@ -130,17 +132,61 @@ class TestFragmentStrategy:
             item["id"] for item in manifest["occurrences"] if item["typeKey"] == widget.class_id
         )
 
-    def test_interactive_before_manifest_script_fails_closed_before_output(self):
+    @pytest.mark.parametrize("strategy", ["fragment", "document"])
+    def test_interactive_before_manifest_scripts_load_first(self, strategy):
+        # On an interactive page the before_manifest entries become the
+        # leading prepared scripts, in the order the hook added them, ahead of
+        # the hook's own scripts and the component's scripts.
+        early_inline = "globalThis.hookOrder = ['early'];"
+        late_inline = "globalThis.hookOrder.push('late');"
+
         class HookAssets(Extension):
             name = "hook_assets"
 
             def on_dependencies(self, ctx):
-                ctx.before_manifest.append(Script(content="globalThis.fragmentLeaked = true;", wrap=False))
+                ctx.scripts.append(Script(content=late_inline, wrap=False))
+                ctx.before_manifest.append(Script(content=early_inline, wrap=False))
+                ctx.before_manifest.append(Script(url="https://cdn.example.com/early.js"))
 
         c = Citry(extensions=[HookAssets])
         c.set_mounted_prefix("/citry")
         widget = _widget(c)
-        with pytest.raises(RuntimeError, match="before_manifest is unsupported"):
+        html = widget().render().serialize(deps_strategy=strategy)
+        if strategy == "fragment":
+            manifest = _vue_manifest(html)
+        else:
+            document_manifest = r'<script type="application/json" data-citry-vue-document="[0-9a-f]+">(.*?)</script>'
+            match = re.search(document_manifest, html)
+            assert match is not None
+            manifest = json.loads(match.group(1))["manifest"]
+
+        sources = [item["source"] for item in manifest["scripts"]]
+        # Inline entries are published as owned assets named by their digest.
+        early_digest = hashlib.sha256(early_inline.encode()).hexdigest()
+        late_digest = hashlib.sha256(late_inline.encode()).hexdigest()
+        assert sources[0]["kind"] == "owned"
+        assert sources[0]["sha256"] == early_digest
+        assert sources[1] == {"kind": "external", "url": "https://cdn.example.com/early.js", "attrs": {}}
+        digests = [source.get("sha256") for source in sources]
+        assert digests.index(late_digest) > 1
+        assert vue_events.definition_bundle(c, early_digest) == early_inline.encode()
+        # No tag for them is written outside the Vue app.
+        assert 'src="https://cdn.example.com/early.js"' not in html
+
+    def test_interactive_before_manifest_follows_prepared_script_rules(self):
+        # Entries become ordinary prepared scripts, so a data script that a
+        # static page could carry is rejected on an interactive page, just
+        # as it would be in ctx.scripts.
+        class HookData(Extension):
+            name = "hook_data"
+
+            def on_dependencies(self, ctx):
+                ctx.before_manifest.append(Script(content="{}", attrs={"type": "application/json"}, wrap=False))
+
+        c = Citry(extensions=[HookData])
+        c.set_mounted_prefix("/citry")
+        widget = _widget(c)
+        with pytest.raises(ValueError, match="classic JavaScript MIME type"):
             widget().render().serialize(deps_strategy="fragment")
 
     def test_fragment_serves_contained_css_variables(self):

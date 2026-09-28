@@ -95,10 +95,11 @@ class OnDependenciesContext:
     """The ``serialize(deps_strategy=...)`` value this emission runs under
     (``"document"``, ``"simple"``, or ``"fragment"``)."""
     before_manifest: list[Dependency]
-    """Entries rendered before the dependency scripts of static output
-    (mutable). Under ``simple`` they are emitted with the other direct
-    dependency tags. An interactive fragment rejects any entry here; its
-    browser code goes through the prepared browser extension API."""
+    """Scripts that must run before the other dependency scripts (mutable).
+    Static output writes them as tags ahead of the dependency scripts; under
+    ``simple`` they are emitted with the other direct dependency tags. On an
+    interactive page the Vue app loads them first, in list order, ahead of
+    ``scripts``, under the same rules as any entry in ``scripts``."""
     _security_csp: SecurityCspMode = "off"
     """The effective call-local CSP mode used by built-in dependency producers."""
     _security_javascript: SecurityJavascriptMode = "allow"

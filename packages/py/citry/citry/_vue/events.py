@@ -719,12 +719,12 @@ class DirectVueEventsProducer:
             dependency_ctx.styles,
             dependency_ctx.before_manifest,
         )
-        if dependency_ctx.before_manifest:
-            raise RuntimeError(
-                "Interactive dependency hooks must contribute Script and Style assets through their normal lists; "
-                "before_manifest is unsupported by the prepared Vue transaction."
-            )
-        dependency_scripts = dependency_ctx.scripts
+        # An interactive page has no static manifest to write tags ahead of.
+        # The Vue app loads its scripts in list order, so loading these
+        # entries first, in the order the hooks added them, keeps what static
+        # output promises: they run before every other dependency script.
+        # They are then ordinary scripts and follow the same loading rules.
+        dependency_scripts = [*dependency_ctx.before_manifest, *dependency_ctx.scripts]
         dependency_styles = dependency_ctx.styles
         if javascript_policy is not None:
             dependency_scripts = javascript_policy.process_dependencies(
