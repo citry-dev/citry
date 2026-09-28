@@ -44,7 +44,9 @@ BrowserExpressionMode = Literal["expression", "statement", "loop", "binding-patt
 BrowserExpressionEvaluator = Literal["normal", "raw"]
 BrowserExpressionTransform = Literal["identity", "citry-args", "v-model", "v-for", "dynamic-slot"]
 BrowserExpressionHost = Literal["vue", "citry-event-args", "citry-i18n-values"]
-BrowserComponentContextName = Literal["component", "revision", "onEvent"]
+BrowserComponentContextName = Literal[
+    "component", "revision", "onEvent", "id", "els", "state", "sendEvent", "loading", "error", "i18n"
+]
 SERVER_EVENT_CALL_NAMES = frozenset({"$error", "$loading", "$sendEvent", "error", "loading", "sendEvent"})
 
 

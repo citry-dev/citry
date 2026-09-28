@@ -29,6 +29,7 @@ from citry.analysis import (
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_csp_compatibility,
+    lint_unknown_component_js_members,
     lint_unknown_component_js_variables,
     lint_unknown_vue_variables,
     lint_vue_python_variables,
@@ -847,6 +848,33 @@ $component({ onServerRender({ component: current, revision, onEvent: listen, dat
         ("onEvent", "listen"),
     ]
     assert [item.name for item in analysis.references] == ["console", "missingInside"]
+
+
+def test_init_callback_gets_the_full_onserverrender_context():
+    # `init` is the 0.5.1 name of `onServerRender`. Its context fields are
+    # bindings, and its `component` is a proven instance, so a read of an
+    # undeclared member is reported just as it is in `onServerRender`.
+    source = """$component({ init({ component, id, els, state, sendEvent, loading, error, i18n }) {
+  sendEvent("save", { id, count: els.length, state, busy: loading(), failed: error(), i18n });
+  component.missing;
+} });"""
+
+    analysis = analyze_browser_component_source(source)
+
+    assert [(item.name, item.local_name) for item in analysis.bindings] == [
+        ("component", "component"),
+        ("id", "id"),
+        ("els", "els"),
+        ("state", "state"),
+        ("sendEvent", "sendEvent"),
+        ("loading", "loading"),
+        ("error", "error"),
+        ("i18n", "i18n"),
+    ]
+    assert [(item.receiver, item.name) for item in analysis.member_references] == [("component", "missing")]
+    assert [item.name for item in lint_unknown_component_js_members(source, frozenset())] == ["missing"]
+    consumers = (ComponentJsLintConsumer(frozenset(), "error"),)
+    assert lint_unknown_component_js_variables(source, consumers) == ()
 
 
 def test_component_source_analysis_reports_vue_options_and_authenticated_helper_spans():

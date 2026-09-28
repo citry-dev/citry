@@ -770,7 +770,7 @@ def test_source_analysis_declines_non_function_template_data_without_invoking_it
 
 @pytest.mark.parametrize(
     "version",
-    [".".join(map(str, MINIMUM_CITRY_VERSION)), "0.6.0", "1.0.0", "9.0.0"],
+    [".".join(map(str, MINIMUM_CITRY_VERSION)), "0.6.1", "1.0.0", "9.0.0"],
 )
 def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkeypatch, version):
     monkeypatch.chdir(tmp_path)
@@ -789,7 +789,7 @@ def test_compatible_future_citry_versions_keep_registry_results(tmp_path, monkey
     assert "schema 999 is unsupported" in state.status.message
 
 
-@pytest.mark.parametrize("version", ["0.4.5", "0.5.0", "development"])
+@pytest.mark.parametrize("version", ["0.4.5", "0.5.1", "development"])
 def test_older_patch_versions_decline_registry_results(tmp_path, monkeypatch, version):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "minimum_version_app.py").write_text(

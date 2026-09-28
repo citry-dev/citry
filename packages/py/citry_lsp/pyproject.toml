@@ -30,7 +30,7 @@ classifiers = [
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
-    "citry>=0.5.1",
+    "citry>=0.6.0",
     "packaging>=25.0",
     "pygls==2.1.1",
     "python-dotenv>=1.2.3,<2",

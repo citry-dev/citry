@@ -7864,24 +7864,6 @@ _ALPINE_API_SPECS = {
         "Listen for a browser event targeting this component instance.",
         f"{_BROWSER_APIS_URL}#on-event",
     ),
-    "$provide": _BrowserApiSpec(
-        "function",
-        "(key: string | symbol, value: unknown) => void",
-        "Provide a client value to rendered descendants.",
-        f"{_BROWSER_APIS_URL}#provide",
-    ),
-    "$inject": _BrowserApiSpec(
-        "function",
-        "(key: string | symbol, fallback?: unknown) => unknown",
-        "Read the nearest inherited client value.",
-        f"{_BROWSER_APIS_URL}#inject",
-    ),
-    "$unprovide": _BrowserApiSpec(
-        "function",
-        "(key: string | symbol) => void",
-        "Hide an inherited client value for this subtree.",
-        f"{_BROWSER_APIS_URL}#unprovide",
-    ),
 }
 _COMPONENT_API_SPECS = {
     "$component": _BrowserApiSpec(
@@ -7891,18 +7873,63 @@ _COMPONENT_API_SPECS = {
         f"{_BROWSER_APIS_URL}#component",
     ),
 }
+# One entry per field of the `onServerRender` (or `init`) context. The fields
+# are listed in the table under the `onServerRender` heading, so they link there
+# unless a field has its own section.
 _COMPONENT_CONTEXT_SPECS = {
     "component": _BrowserApiSpec(
         "parameter",
         "CitryComponentPublicInstance",
         "The mounted Vue public component instance.",
-        f"{_BROWSER_APIS_URL}#component",
+        f"{_BROWSER_APIS_URL}#on-server-render",
     ),
     "revision": _BrowserApiSpec(
         "parameter",
         "number",
         "The committed server-render revision.",
-        f"{_BROWSER_APIS_URL}#component",
+        f"{_BROWSER_APIS_URL}#on-server-render",
+    ),
+    "id": _BrowserApiSpec(
+        "parameter",
+        "string | null",
+        "The component's current server render ID, or null when it has none. Read-only.",
+        f"{_BROWSER_APIS_URL}#on-server-render",
+    ),
+    "els": _BrowserApiSpec(
+        "parameter",
+        "Element[]",
+        "The component's connected top-level elements, read fresh on each access.",
+        f"{_BROWSER_APIS_URL}#on-server-render",
+    ),
+    "state": _BrowserApiSpec(
+        "parameter",
+        "CitryEventsState | null",
+        "The same object as `component.$state`, or null when the component declares no Events.",
+        f"{_BROWSER_APIS_URL}#state",
+    ),
+    "sendEvent": _BrowserApiSpec(
+        "parameter",
+        "(name: CitryServerEventName, args?: Record<string, unknown>, opts?: unknown) => Promise<unknown>",
+        "Call one of this component's declared server event handlers, like `component.$sendEvent`.",
+        f"{_BROWSER_APIS_URL}#send-event",
+    ),
+    "loading": _BrowserApiSpec(
+        "parameter",
+        "(name?: CitryServerEventName) => boolean",
+        "Check for queued or running server calls, like `component.$loading`.",
+        f"{_BROWSER_APIS_URL}#loading",
+    ),
+    "error": _BrowserApiSpec(
+        "parameter",
+        "(name?: CitryServerEventName) => CitryEventError | null",
+        "Read the latest retained server-handler error, like `component.$error`.",
+        f"{_BROWSER_APIS_URL}#error",
+    ),
+    "i18n": _BrowserApiSpec(
+        "parameter",
+        "CitryI18nService | null",
+        "The same service as `component.$i18n`, or null outside a client i18n provider.",
+        f"{_BROWSER_APIS_URL}#i18n",
     ),
     "onEvent": _BrowserApiSpec(
         "parameter",
@@ -8201,6 +8228,14 @@ def _browser_preamble(
             " * @property {CitryComponentPublicInstance} component",
             " * @property {number} revision",
             " * @property {(name: string, handler: (detail: unknown) => void) => CitryCleanup} onEvent",
+            " * @property {string | null} id",
+            " * @property {Element[]} els",
+            " * @property {CitryEventsState | null} state",
+            " * @property {(name: CitryServerEventName, args?: Record<string, unknown>, opts?: unknown) "
+            "=> Promise<unknown>} sendEvent",
+            " * @property {(name?: CitryServerEventName) => boolean} loading",
+            " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
+            " * @property {CitryI18nService | null} i18n",
             " */",
             "/** @callback CitryComponentSetup",
             " * @param {Readonly<CitryClientProps>} props",
@@ -8211,7 +8246,8 @@ def _browser_preamble(
             f"CitryClientProps, {setup_shape}, {data_options_shape}, {computed_shape}, {methods_shape}, "
             f"never, never, any, string, {{}}, {inject_options_shape}, {inject_names}> & "
             "{mixins?: never, extends?: never, render?: never, setup?: CitryComponentSetup, "
-            "onServerRender?: CitryComponentInitializer}} CitryComponentDefinition */",
+            "onServerRender?: CitryComponentInitializer, init?: CitryComponentInitializer}} "
+            "CitryComponentDefinition */",
         )
     )
     if component_js:
@@ -8241,12 +8277,6 @@ def _browser_preamble(
                 "function $loading(name) { return false; }",
                 "/** @param {CitryServerEventName} [name] @returns {CitryEventError | null} */",
                 "function $error(name) { return null; }",
-                "/** @param {string | symbol} key @param {unknown} value @returns {void} */",
-                "function $provide(key, value) {}",
-                "/** @param {string | symbol} key @param {unknown} [fallback] @returns {unknown} */",
-                "function $inject(key, fallback) { return fallback; }",
-                "/** @param {string | symbol} key @returns {void} */",
-                "function $unprovide(key) {}",
                 "/** @type {Event} */ var $event;",
                 "/** @type {Element} */ var $el;",
                 "/** @type {Record<string, Element>} */ var $refs;",

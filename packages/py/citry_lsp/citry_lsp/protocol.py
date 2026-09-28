@@ -10,7 +10,7 @@ from citry_core.template_formatter import python_expression_provider
 SERVER_VERSION = "0.1.7"
 PROTOCOL_VERSION = 1
 CATALOG_SCHEMA_VERSION = 1
-MINIMUM_CITRY_VERSION = (0, 5, 1)
+MINIMUM_CITRY_VERSION = (0, 6, 0)
 MINIMUM_CITRY_SERIES = MINIMUM_CITRY_VERSION[:2]
 BROWSER_PROJECTION_METHOD = "citry/browserProjection"
 HTML_PROJECTION_METHOD = "citry/htmlProjection"

@@ -819,7 +819,7 @@ def lint_unknown_component_js_members(
     The JavaScript analyzer proves which reads target the live Vue instance:
     `this.<name>` in Vue Options methods, computed values, `data()`, lifecycle
     hooks, `provide()`, and `watch` handlers, and `component.<name>` in an
-    `onServerRender` callback. Each name must then be a
+    `onServerRender` or `init` callback. Each name must then be a
     `js_data()` key or a name the Vue Options declare (props, `data()`, `setup`,
     methods, computed values, injections).
 

@@ -772,9 +772,11 @@ impl<'semantic> ComponentVisitor<'semantic> {
                     let Some(property) = property.as_property() else {
                         continue;
                     };
-                    if property.key.is_specific_static_name("init") {
-                        self.collect_initializer(&property.value, false);
-                    } else if property.key.is_specific_static_name("onServerRender") {
+                    // The runtime renames `init` (the 0.5.1 spelling) to
+                    // `onServerRender`, so both receive the same context.
+                    if property.key.is_specific_static_name("init")
+                        || property.key.is_specific_static_name("onServerRender")
+                    {
                         self.collect_initializer(&property.value, true);
                     }
                 }
@@ -825,6 +827,22 @@ impl<'semantic> ComponentVisitor<'semantic> {
     }
 }
 
+/// Every field the runtime puts on the `onServerRender` context (`runCallback`
+/// in `citry/_vue/client.js`). A destructured name outside this list is not a
+/// context value, so it gets no binding.
+const COMPONENT_CONTEXT_NAMES: &[&str] = &[
+    "component",
+    "revision",
+    "onEvent",
+    "id",
+    "els",
+    "state",
+    "sendEvent",
+    "loading",
+    "error",
+    "i18n",
+];
+
 struct ComponentBindingCandidate {
     name: String,
     local_name: String,
@@ -845,7 +863,7 @@ fn component_context_bindings(params: &FormalParameters<'_>) -> Vec<ComponentBin
         .iter()
         .filter_map(|property| {
             let name = property.key.static_name()?;
-            if !matches!(name.as_ref(), "component" | "revision" | "onEvent") {
+            if !COMPONENT_CONTEXT_NAMES.contains(&name.as_ref()) {
                 return None;
             }
             let identifier = property.value.get_binding_identifier()?;
@@ -1794,7 +1812,37 @@ $component /* kept */ ({
     }
 
     #[test]
-    fn only_on_server_render_authenticates_context_aliases() {
+    fn restored_context_fields_are_bindings_and_unknown_names_are_not() {
+        let source = r#"$component({ init({ id, els: roots, state, sendEvent: send, loading, error, i18n, scope, data }) {
+  send("save", { id, count: roots.length, state, busy: loading(), failed: error(), i18n, scope, data });
+} });"#;
+        let analysis = analyze_component_source(source);
+
+        assert!(analysis.valid);
+        assert_eq!(
+            analysis
+                .bindings
+                .iter()
+                .map(|binding| (
+                    binding.name.as_str(),
+                    binding.local_name.as_str(),
+                    binding.references.len()
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("id", "id", 1),
+                ("els", "roots", 1),
+                ("state", "state", 1),
+                ("sendEvent", "send", 1),
+                ("loading", "loading", 1),
+                ("error", "error", 1),
+                ("i18n", "i18n", 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn init_and_on_server_render_authenticate_context_aliases() {
         let analysis = analyze_component_source(
             "$component({ init({ onEvent: ignored }) { ignored(\"init\", () => {}); } }); $component({ onServerRender({ component: direct, onEvent: listen }) { direct.x; listen(\"server\", () => {}); } }); $component({ onServerRender({ component: current }) { current.z } })",
         );
@@ -1804,7 +1852,7 @@ $component /* kept */ ({
                 .iter()
                 .map(|binding| binding.local_name.as_str())
                 .collect::<Vec<_>>(),
-            ["direct", "listen", "current"]
+            ["ignored", "direct", "listen", "current"]
         );
     }
 

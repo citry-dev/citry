@@ -918,7 +918,6 @@ def test_i18n_browser_projection_exposes_nested_service_types(tmp_path):
     assert "CitryI18nNumericParseResult" in projection.source
     assert 'format: "measurement"' in projection.source
     assert "/** @type {CitryI18nService} */\nvar $i18n;" in projection.source
-    assert "@property {CitryI18nService | null} i18n" not in projection.source
 
     js_projection = browser_projection(
         document,
@@ -926,7 +925,8 @@ def test_i18n_browser_projection_exposes_nested_service_types(tmp_path):
         project,
     )
     assert js_projection is not None
-    assert "@property {CitryI18nService | null} i18n" not in js_projection.source
+    # The `onServerRender` context carries the same service as `component.$i18n`.
+    assert "@property {CitryI18nService | null} i18n" in js_projection.source
     assert "@typedef {Object} CitryI18nFormatter" in js_projection.source
 
 
@@ -1255,6 +1255,77 @@ def test_native_slot_pattern_projection_uses_a_parameter_declaration(tmp_path):
     )
 
 
+def test_init_callback_context_fields_have_types_and_documentation_links(tmp_path):
+    # `init` is the 0.5.1 name of `onServerRender`, and its context carries the
+    # restored 0.5.1 fields, so each destructured field needs a hover and a type.
+    js_source = (
+        "$component({\n"
+        "  init({ component, id, els: roots, state, sendEvent, loading, error, i18n }) {\n"
+        "    sendEvent('save', { id, count: roots.length, state, busy: loading(), failed: error(), i18n });\n"
+        "    component.$el;\n"
+        "  },\n"
+        "});\n"
+    )
+    js_file = tmp_path / "card.js"
+    app_file = tmp_path / "app.py"
+    (tmp_path / "card.html").write_text("<button></button>", encoding="utf-8")
+    js_file.write_text(js_source, encoding="utf-8")
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    js_file = 'card.js'\n"
+        "    class Events:\n"
+        "        def save(self):\n"
+        "            pass\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
+    javascript.update(javascript.source, javascript.version, project)
+    documents = {javascript.uri: javascript}
+
+    expected = {
+        "component, id": ("component: CitryComponentPublicInstance", "#on-server-render"),
+        "id,": ("id: string | null", "#on-server-render"),
+        "els: roots": ("roots: Element[]", "#on-server-render"),
+        "state,": ("state: CitryEventsState | null", "#state"),
+        "sendEvent,": ("sendEvent: (name: CitryServerEventName", "#send-event"),
+        "loading,": ("loading: (name?: CitryServerEventName) => boolean", "#loading"),
+        "error,": ("error: (name?: CitryServerEventName) => CitryEventError | null", "#error"),
+        "i18n }": ("i18n: CitryI18nService | null", "#i18n"),
+    }
+    for marker, (signature, anchor) in expected.items():
+        # Hover over the local name, which for `els: roots` is the alias.
+        offset = marker.index("roots") + 1 if "roots" in marker else 1
+        found = hover(javascript, _position(js_source, marker, offset), project, documents)
+        assert found is not None, marker
+        assert f"(parameter) {signature}" in found.contents.value, marker
+        assert f"https://citry.dev/reference/browser-apis/{anchor})" in found.contents.value, marker
+
+    projection = browser_projection(
+        javascript,
+        _position(js_source, "component.$el", len("component.$e")),
+        project,
+        documents,
+    )
+    assert projection is not None
+    for line in (
+        " * @property {string | null} id",
+        " * @property {Element[]} els",
+        " * @property {CitryEventsState | null} state",
+        " * @property {(name?: CitryServerEventName) => boolean} loading",
+        " * @property {(name?: CitryServerEventName) => CitryEventError | null} error",
+        " * @property {CitryI18nService | null} i18n",
+        "=> Promise<unknown>} sendEvent",
+        "onServerRender?: CitryComponentInitializer, init?: CitryComponentInitializer}",
+    ):
+        assert line in projection.source, line
+
+
 def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tmp_path):
     template_source = (
         '<button @c-click="save" @c-blur="missing" '
@@ -1397,7 +1468,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     assert template_projection is not None
     assert "var title;" in template_projection.source
     assert "var label;" in template_projection.source
-    assert "function $provide(key, value)" in template_projection.source
+    assert "$provide" not in template_projection.source
     assert template_projection.owned_root_names == (
         "title",
         "count",
@@ -1425,7 +1496,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
         in js_projection.source
     )
     assert "function $component(definition)" in js_projection.source
-    assert "function $provide(key, value)" not in js_projection.source
+    assert "$provide" not in js_projection.source
     assert "secret" not in js_projection.source
     assert not js_projection.citry_owns_position
 
@@ -1484,7 +1555,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     )
     assert context_hover is not None
     assert "(parameter) current: CitryComponentPublicInstance" in context_hover.contents.value
-    assert "https://citry.dev/reference/browser-apis/#component" in context_hover.contents.value
+    assert "https://citry.dev/reference/browser-apis/#on-server-render" in context_hover.contents.value
     send_event_context_hover = hover(
         javascript,
         _position(js_source, "revision, onEvent", len("rev")),
@@ -1493,7 +1564,7 @@ def test_js_data_vue_and_component_js_intelligence_share_exact_python_origins(tm
     )
     assert send_event_context_hover is not None
     assert "(parameter) revision" in send_event_context_hover.contents.value
-    assert "https://citry.dev/reference/browser-apis/#component" in send_event_context_hover.contents.value
+    assert "https://citry.dev/reference/browser-apis/#on-server-render" in send_event_context_hover.contents.value
     on_event_context_hover = hover(
         javascript,
         _position(js_source, "onEvent: listen", len("onEvent: lis")),
