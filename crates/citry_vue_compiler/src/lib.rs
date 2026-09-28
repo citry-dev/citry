@@ -3266,7 +3266,7 @@ mod tests {
 
     #[test]
     fn validates_an_authored_object_event_binding_with_utf8_spans() {
-        let template = "<p>ž</p><citry-child v-on=\"listeners\" :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>";
+        let template = "<p>ž</p><citry-child v-on=\"listeners\" :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>";
         let binding_start = template.find("v-on").unwrap();
         let binding_end = binding_start + "v-on=\"listeners\"".len();
         let call_start = template.find("<citry-child").unwrap();
@@ -3309,7 +3309,7 @@ mod tests {
 
     #[test]
     fn preserves_comparison_operators_in_declared_component_bindings() {
-        let template = "<citry-child @input=\"value = value < 3\" :citry-id=\"preparedData.calls.citryCallA.id\" :key=\"preparedData.calls.citryCallA.key\"></citry-child>";
+        let template = "<citry-child @input=\"value = value < 3\" :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>";
         let binding_start = template.find("@input").unwrap();
         let binding_end = binding_start + "@input=\"value = value < 3\"".len();
         let artifact = compile(CompileRequest {
