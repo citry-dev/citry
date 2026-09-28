@@ -37,9 +37,10 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
 # `packages/js/citry-client` bundles these inputs into `_vue/runtime.js`, and an
-# install reads only that bundle, so package-data leaves them out of the wheel
-# and the sdist. Paths are relative to the `citry` package directory.
-REPOSITORY_ONLY_SOURCES: Final = frozenset({"_vue/client.js", "_vue/events.js", "_vue/fragments.js", "_vue/vue.js"})
+# install reads only that bundle, so the wheel leaves them out. The sdist keeps
+# them (MANIFEST.in) because it carries sources and its tests read them. Paths
+# are relative to the `citry` package directory.
+SDIST_ONLY_SOURCES: Final = frozenset({"_vue/client.js", "_vue/events.js", "_vue/fragments.js", "_vue/vue.js"})
 # The package carries the bundled browser runtime, the i18n Vue plugin, and the
 # reusable browser programs in `_vue/leaf_program.py`. The wheel measured
 # 1,088,694 bytes when this cap was set, leaving about 61 KB of headroom.
@@ -127,14 +128,14 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected optional extras")
 
 
-def source_inventory(root: Path = SOURCE_ROOT) -> dict[str, str]:
-    """Hash every source file that belongs inside the installed package."""
+def source_inventory(root: Path = SOURCE_ROOT, *, include_sdist_only: bool = False) -> dict[str, str]:
+    """Hash every source file that belongs inside the installed package, or the sdist's copy of it."""
     inventory: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
             continue
         relative = path.relative_to(root).as_posix()
-        if relative in REPOSITORY_ONLY_SOURCES:
+        if relative in SDIST_ONLY_SOURCES and not include_sdist_only:
             continue
         inventory[relative] = sha256_bytes(path.read_bytes())
     return inventory
@@ -244,11 +245,11 @@ def verify_wheel(path: Path, *, version: str) -> dict[str, Any]:
 
 def _checkout_sdist_files() -> dict[str, bytes]:
     """Return every reviewed checkout file setuptools may place in the sdist."""
-    result = {name: (PACKAGE_ROOT / name).read_bytes() for name in ("LICENSE", "README.md", "pyproject.toml")}
+    result = {
+        name: (PACKAGE_ROOT / name).read_bytes() for name in ("LICENSE", "MANIFEST.in", "README.md", "pyproject.toml")
+    }
     for path in sorted(SOURCE_ROOT.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
-            continue
-        if path.relative_to(SOURCE_ROOT).as_posix() in REPOSITORY_ONLY_SOURCES:
             continue
         result[path.relative_to(PACKAGE_ROOT).as_posix()] = path.read_bytes()
     # Setuptools' default sdist contract includes top-level test_*.py modules,
@@ -375,7 +376,7 @@ def verify_artifacts(source_wheel: Path, sdist: Path, rebuilt_wheel: Path) -> di
     sdist_root = roots.pop()
     require_equal(
         "source and sdist package payload",
-        source_files,
+        source_inventory(include_sdist_only=True),
         package_payload(sdist_files, f"{sdist_root}/citry"),
     )
 

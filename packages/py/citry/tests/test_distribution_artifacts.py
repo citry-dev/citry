@@ -51,15 +51,19 @@ def test_archive_inventories_hash_payloads_without_extracting(tmp_path: Path) ->
     assert inventory_fingerprint(wheel_files) == inventory_fingerprint(dict(reversed(wheel_files.items())))
 
 
-def test_source_inventory_leaves_out_the_repository_only_bundle_inputs(tmp_path: Path) -> None:
-    # The wheel ships only the bundled runtime, so the expected payload must
-    # skip the bundle inputs or every wheel would look incomplete.
+def test_source_inventory_keeps_bundle_inputs_only_for_the_sdist(tmp_path: Path) -> None:
+    # The wheel ships only the bundled runtime while the sdist keeps the
+    # readable inputs, so each artifact needs its own expected payload.
     (tmp_path / "_vue").mkdir()
     (tmp_path / "_vue" / "runtime.js").write_text("bundle\n")
-    for name in distribution_verifier.REPOSITORY_ONLY_SOURCES:
+    for name in distribution_verifier.SDIST_ONLY_SOURCES:
         (tmp_path / name).write_text("input\n")
 
     assert set(distribution_verifier.source_inventory(tmp_path)) == {"_vue/runtime.js"}
+    assert set(distribution_verifier.source_inventory(tmp_path, include_sdist_only=True)) == {
+        "_vue/runtime.js",
+        *distribution_verifier.SDIST_ONLY_SOURCES,
+    }
 
 
 def test_inventory_comparison_names_changed_and_missing_files() -> None:

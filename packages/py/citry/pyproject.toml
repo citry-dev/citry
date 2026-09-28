@@ -130,10 +130,16 @@ Repository = "https://github.com/citry-dev/citry"
 Changelog = "https://github.com/citry-dev/citry/blob/main/CHANGELOG.md"
 Issues = "https://github.com/citry-dev/citry/issues"
 
+[tool.setuptools]
+# The wheel takes non-Python files only from package-data below. MANIFEST.in
+# adds the readable `_vue/*.js` sources to the sdist, and this keeps them from
+# also reaching the wheel.
+include-package-data = false
+
 [tool.setuptools.package-data]
 # Non-Python files shipped inside the package: the type-checking marker, the
 # bundled browser runtime (`_vue/runtime.js`) that pages load or inline, and
 # the i18n Vue plugin. The other `_vue/*.js` files are the sources that
 # `packages/js/citry-client` bundles into `runtime.js`, so installs never read
-# them and they stay in the repository only.
+# them; only the sdist carries them (see MANIFEST.in).
 citry = ["py.typed", "_vue/runtime.js", "ext/i18n/client/*.js"]
