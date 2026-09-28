@@ -17,7 +17,6 @@ Keys follow django-components' scheme with a citry prefix::
     citry:<class_id>:css             the class's Component.css
     citry:<class_id>:js:component:<hash>   one content-addressed JS version
     citry:<class_id>:css:component:<hash>  one content-addressed CSS version
-    citry:<class_id>:js:<hash>       a generated js_data() variables script
     citry:<class_id>:css:<hash>      a generated css_data() variables stylesheet
 
 Design: docs/design/dependencies.md section 4.
@@ -25,7 +24,6 @@ Design: docs/design/dependencies.md section 4.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 from dataclasses import dataclass
@@ -739,21 +737,6 @@ def _canonical_variables_json(source_json: str) -> dict[str, object]:
     return data
 
 
-def _js_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCapture:
-    _canonical_variables_json(source_json)
-    variables_hash = sha256(source_json.encode()).hexdigest()[:32]
-    encoded = base64.b64encode(source_json.encode()).decode()
-    # Keep the content-addressed transport deduplicated, but hand the manager
-    # canonical JSON text so it can parse a fresh graph for every instance.
-    content = f'Citry.manager.registerComponentData("{class_id}", "{variables_hash}", atob("{encoded}"));'
-    script = Script(kind="variables", content=content, origin_class_id=class_id)
-    return _VariablesScriptCapture(
-        source_json=source_json,
-        variables_hash=variables_hash,
-        cache_value=json.dumps(script.to_json()),
-    )
-
-
 def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCapture:
     data = _canonical_variables_json(source_json)
     variables_hash = sha256(source_json.encode()).hexdigest()[:32]
@@ -773,19 +756,6 @@ def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCaptur
         variables_hash=variables_hash,
         cache_value=json.dumps(style.to_json()),
     )
-
-
-def _cache_component_js_vars_capture(
-    comp_cls: type[Component],
-    js_data: Mapping[str, object],
-) -> _VariablesScriptCapture:
-    source_json, _variables_hash = _hash_vars(js_data)
-    capture = _js_vars_capture(comp_cls.class_id, source_json)
-    cache = comp_cls.citry.cache
-    key = gen_cache_key(comp_cls.class_id, "js", capture.variables_hash)
-    if cache.get(key) != capture.cache_value:
-        cache.set(key, capture.cache_value)
-    return capture
 
 
 def _cache_component_css_vars_capture(
@@ -815,17 +785,6 @@ def _cache_component_css_vars_capture(
     if cache.get(key) != capture.cache_value:
         cache.set(key, capture.cache_value)
     return capture
-
-
-def cache_component_js_vars(comp_cls: type[Component], js_data: Mapping[str, object]) -> str:
-    """
-    Cache the generated script for one distinct ``js_data()`` result and return its hash.
-
-    The strict-JSON payload is base64-encoded in the script, and identical
-    JSON reuses the same content-addressed cache entry.
-    """
-    capture = _cache_component_js_vars_capture(comp_cls, js_data)
-    return capture.variables_hash
 
 
 def cache_component_css_vars(comp_cls: type[Component], css_data: Mapping[str, object]) -> str | None:
