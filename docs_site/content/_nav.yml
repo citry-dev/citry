@@ -119,6 +119,7 @@ areas:
         collapsible: true
         section_style: true
         items:
+          - { title: Upgrade to 0.6.0, path: /guides/upgrading-to-0-6-0/, needs_review: true }
           - { title: Web frameworks, path: /web-frameworks/, needs_review: true }
           - { title: Use Citry with HTMX, path: /guides/htmx/, needs_review: true }
           - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
