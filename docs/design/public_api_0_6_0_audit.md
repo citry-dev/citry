@@ -252,7 +252,7 @@ TypeScript types were ever published.
 | `$loading(name?)` | E51:5200-5212 | C:1779, 3750-3756 | unchanged | Same meaning; `false` on a component without Events. Outside any Citry component it throws, as in 0.5.1 (E51:1794-1805). |
 | `$error(name?)` | E51:5214-5223 | C:1780, 3757-3762 | unchanged | Same error shape; `null` on a component without Events. Outside any Citry component it throws, as in 0.5.1. |
 | `$sendEvent(name, args?, opts?)` | E51:5225-5257 | C `$sendEvent` | changed-incompatible | `timeout` works. Without Events it rejects, as in 0.5.1 (restored). `opts.wait: false` is still silently ignored and every call from an app is sent one at a time (decision 6.1). |
-| `$onEvent(name, fn)` | E51:5259-5270 | C:1803-1810 | changed-incompatible | The runtime calls listeners directly, so events fired by page code do not reach them. On a component without Events it throws, where 0.5.1 returned an unsubscribe function that did nothing. In CHANGELOG. |
+| `$onEvent(name, fn)` | E51:5259-5270 | C:1803-1810 | changed-incompatible | The runtime calls listeners directly, so events fired by page code do not reach them. On a component without Events it returns an unsubscribe function that does nothing, as in 0.5.1 (restored). In CHANGELOG. |
 | `$provide`, `$inject`, `$unprovide` | M51:7086-7096 | none | removed | Vue `provide` / `inject`. |
 | `$i18n` | I51:2208 | `citry-i18n-vue.ts:715-760`; RB `#i18n` | changed-compatible | Vue instance member with the same ten members. The reference entry is back on RB (restored in the HTTP/i18n area). |
 | `$c-tr:...` binding | I51:2207 | `P/_i18n_directives.py` | unchanged | Same syntax. |
@@ -1042,8 +1042,8 @@ Alpine or the ownership graph, or Vue already provides the same thing.
 ## 7. CHANGELOG reconciliation
 
 Each "Not in CHANGELOG" item from the five audits was checked against the
-root `CHANGELOG.md` Unreleased section and the upgrade guide at HEAD
-`0dc7bd0a`.
+root `CHANGELOG.md` Unreleased section and the upgrade guide on the
+`vue-pr-api` branch after the restoration commits.
 
 Covered now:
 
@@ -1080,14 +1080,14 @@ Covered now:
 - A shared cache required for several workers (CHANGELOG and upgrade
   guide).
 - The per-event route admitting PUT/PATCH/DELETE (Fixed).
+- `applyActions` rejecting unknown fields and lists with gaps.
+- `URLRoute(methods=...)` validation when the route is built.
+- `$onEvent` on a component without Events needs no entry: it returns an
+  unsubscribe function that does nothing, as in 0.5.1 (restored).
 
 Still missing from the root CHANGELOG:
 
 - `opts.wait: false` being ignored (pending decision 6.1).
-- `$onEvent` on a component without Events throwing where 0.5.1 returned
-  an unsubscribe function that did nothing.
-- `applyActions` rejecting unknown fields, sparse arrays, and non-plain
-  objects.
 - Security and hook settings that turn off hydration
   (`security_csp` other than `"off"`, `security_javascript` other than
   `"allow"`, `security_script_integrity="citry"`, custom
@@ -1095,7 +1095,6 @@ Still missing from the root CHANGELOG:
   `advanced/vue-runtime.md`; the upgrade guide links it once.
 - `OnRenderCacheStageContext` gaining `parent_ids` and
   `provided_render_ids`.
-- `URLRoute(methods=...)` validation when the route is built.
 - The new `Extension.browser_plugin` / `prepare_browser_render` hooks and
   `citry.browser_render` module (pending decision 6.2 on documenting them).
 - The Events protocol additions (`renderers` capability, `vue-prepared/1`
