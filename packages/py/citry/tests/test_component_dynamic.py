@@ -752,7 +752,10 @@ class TestDynamicElement:
             citry = c
             template = "<c-element c-is=\"'hr'\" #c-ignore />"
 
-        with pytest.raises(TypeError, match="prepared dynamic <c-element> does not yet support #c-ignore metadata"):
+        with pytest.raises(
+            TypeError,
+            match=r"'#c-ignore' is not supported on the element <c-element> \(rendered as <hr>\)\.",
+        ):
             render_prepared_direct(Page())
 
     def test_private_key_only_keeps_nonconflicting_ordinary_attrs(self):

@@ -191,8 +191,27 @@ class TestElementIgnore:
             citry = c
             template = "<div><p #c-ignore>chart</p></div>"
 
-        with pytest.raises(ValueError, match="prepared Vue rendering does not yet support #c-ignore"):
+        with pytest.raises(TypeError) as excinfo:
             render_prepared_direct(Page())
+
+        # The render error names the component path first, then this message.
+        assert str(excinfo.value).endswith(
+            "'#c-ignore' is not supported on the element <p>. Vue updates every element it renders,"
+            " so Citry cannot stop Vue from updating this element. Remove '#c-ignore' and keep content"
+            " that browser code manages inside an element your component reaches through a Vue `ref`."
+        )
+
+    def test_ignore_on_an_element_fails_on_first_render_even_in_a_branch_that_does_not_run(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<c-if cond="False"><p #c-ignore>chart</p></c-if>'
+
+        # Loading the template succeeds; the first render of the component
+        # rejects the directive, whichever branch runs.
+        with pytest.raises(TypeError, match=r"'#c-ignore' is not supported on the element <p>\."):
+            str(Page())
 
 
 class TestComponentKey:
@@ -523,7 +542,8 @@ class TestComponentIgnore:
             str(Parent())
 
         message = str(excinfo.value)
-        assert "'#c-ignore' is not supported on the component tag <c-child>" in message
+        # The message quotes the tag as the template spells it.
+        assert "'#c-ignore' is not supported on the component tag <c-Child>" in message
         assert "Remove '#c-ignore' from the tag." in message
 
     def test_ignore_inside_a_static_parent_is_rejected(self):
@@ -537,8 +557,8 @@ class TestComponentIgnore:
             citry = c
             template = "<div><c-Child #c-ignore /></div>"
 
-        # Matches `#c-ignore` on an HTML element, which fails on every page.
-        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-child>"):
+        # A page that never becomes a Vue app still rejects the directive.
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-Child>"):
             str(Page())
 
     def test_ignore_in_a_branch_that_does_not_run_is_rejected(self):
@@ -554,7 +574,7 @@ class TestComponentIgnore:
 
         # The check runs when the template loads, so a branch that never
         # renders cannot hide the directive.
-        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-child>"):
+        with pytest.raises(TypeError, match="'#c-ignore' is not supported on the component tag <c-Child>"):
             str(Page())
 
 

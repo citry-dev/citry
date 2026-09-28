@@ -1501,14 +1501,26 @@ class ComponentNode(Node):
             # Whether a page becomes a Vue app is decided only when the
             # finished tree is serialized, after this tag's metadata is gone.
             # Rejecting when the template loads keeps the directive from being
-            # dropped silently from an interactive page, and matches
-            # `#c-ignore` on an HTML element, which also fails at load.
+            # dropped silently from an interactive page, even inside a branch
+            # that never renders. `#c-ignore` on an HTML element is rejected
+            # later, the first time the component renders its template.
             msg = (
-                f"'#c-ignore' is not supported on the component tag <c-{name}>. Vue re-renders every"
-                " component it mounts, so Citry cannot stop Vue from updating this component."
+                f"'#c-ignore' is not supported on the component tag <{self._authored_tag()}>. Vue re-renders"
+                " every component it mounts, so Citry cannot stop Vue from updating this component."
                 " Remove '#c-ignore' from the tag."
             )
             raise TypeError(msg)
+
+    def _authored_tag(self) -> str:
+        """Return the tag name as the template spells it (``c-Child``), for error messages."""
+        # `name` is lowercased, so a message quoting it would not match what
+        # the author searches for. Parser positions are UTF-8 byte offsets and
+        # start at the tag's `<`, so slice the encoded source.
+        start = str(self.source).encode()[self.position[0] : self.position[1]].decode(errors="replace")
+        end = next((index for index, char in enumerate(start) if char.isspace() or char in "/>"), len(start))
+        authored = start[1:end]
+        # A node built by hand rather than from a template has no source tag to quote.
+        return authored if start.startswith("<") and authored.lower() == f"c-{self.name}" else f"c-{self.name}"
 
     @override
     def render(self, context: CitryContext) -> DeferredComponent:

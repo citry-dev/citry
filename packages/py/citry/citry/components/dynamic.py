@@ -202,7 +202,13 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
                 is_void = tag.lower() in HTML_VOID_ELEMENTS
                 metadata = self._element_morph_metadata
                 if metadata is not None and metadata.morph_mode is not None:
-                    raise TypeError("prepared dynamic <c-element> does not yet support #c-ignore metadata")
+                    msg = (
+                        f"'#c-ignore' is not supported on the element <c-element> (rendered as <{tag}>)."
+                        " Vue updates every element it renders, so Citry cannot stop Vue from updating"
+                        " this element. Remove '#c-ignore' and keep content that browser code manages"
+                        " inside an element your component reaches through a Vue `ref`."
+                    )
+                    raise TypeError(msg)
                 authored_bindings = () if metadata is None else metadata.authored_bindings
                 retained_bindings = []
                 for binding in authored_bindings:

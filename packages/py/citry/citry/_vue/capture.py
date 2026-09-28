@@ -860,7 +860,17 @@ class PreparedElementOpenNode(ElementAttrsNode):
                 (),
             )
         if any(item and item[0] == "morph" for item in element_metadata):
-            raise ValueError("prepared Vue rendering does not yet support #c-ignore or element morph metadata")
+            # `#c-ignore` is the only directive that produces morph metadata. This
+            # node is built the first time the component renders its template, so
+            # the author sees the error then, even when the element sits in a
+            # branch that does not run. The wording matches the component-tag error.
+            msg = (
+                f"'#c-ignore' is not supported on the element <{tag}>. Vue updates every element it"
+                " renders, so Citry cannot stop Vue from updating this element. Remove '#c-ignore' and"
+                " keep content that browser code manages inside an element your component reaches"
+                " through a Vue `ref`."
+            )
+            raise TypeError(msg)
 
     def render(self, context: CitryContext) -> PreparedElementOpen:
         static = self._static_prepared
