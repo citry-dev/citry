@@ -67,7 +67,7 @@ class TestRejectedDirectives:
             ('v-show.lazy="open"', "Write 'v-show' without an argument or modifiers."),
             ('v-if.once="open"', "Write 'v-if', 'v-else-if', and 'v-else' without an argument or modifiers."),
             ("v-else:x", "Write 'v-if', 'v-else-if', and 'v-else' without an argument or modifiers."),
-            ("v-once", "Put the directive on an element inside the child's template."),
+            ("v-once", "Remove the directive."),
             ('v-citry-control="x"', "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime."),
             ('v-If="open"', "names are lowercase"),
             ('v-model:="q"', "Name the prop after 'v-model:'"),

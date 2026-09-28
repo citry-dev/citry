@@ -1842,6 +1842,11 @@ fn component_tag_directive_hint(directive: &str) -> &'static str {
             "Write each listener as '@event=\"...\"' or 'v-on:event=\"...\"', or bind a listener object with a plain 'v-on=\"...\"'."
         }
         "prop" => "Pass the value as a component prop with ':name=\"...\"'.",
+        // Pointing these at an element inside the child would only move the
+        // failure, because component templates reject them everywhere.
+        "once" | "memo" => {
+            "Citry does not support 'v-once' or 'v-memo' in component templates, on elements or component tags. Remove the directive."
+        }
         _ if directive.to_ascii_lowercase() != directive => {
             "Vue's own directives and Citry's 'v-c-*' and 'v-citry-*' names are lowercase."
         }
@@ -2035,7 +2040,7 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
                     return Err(context.error_from_token(
                         &attr.token,
                         format!(
-                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element (the morph pairing key) or on a component tag (the key of the child instance).",
+                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element or a component tag, where it is the key Vue uses to match that element or child instance across renders.",
                             META_ATTR_KEY, tag_name, line, col
                         ),
                     ));

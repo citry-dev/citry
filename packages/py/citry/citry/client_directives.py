@@ -157,6 +157,10 @@ _CONTENT_HINT = (
     "render it inside the child."
 )
 _CONDITION_FORM_HINT = "Write 'v-if', 'v-else-if', and 'v-else' without an argument or modifiers."
+_ONCE_MEMO_HINT = (
+    "Citry does not support 'v-once' or 'v-memo' in component templates, "
+    "on elements or component tags. Remove the directive."
+)
 # What to write instead, by directive name. The template parser reports the
 # same wording for attributes written directly in a template.
 _COMPONENT_TAG_DIRECTIVE_HINTS = {
@@ -175,6 +179,10 @@ _COMPONENT_TAG_DIRECTIVE_HINTS = {
         "or bind a listener object with a plain 'v-on=\"...\"'."
     ),
     "prop": "Pass the value as a component prop with ':name=\"...\"'.",
+    # Pointing these at an element inside the child would only move the
+    # failure, because component templates reject them everywhere.
+    "once": _ONCE_MEMO_HINT,
+    "memo": _ONCE_MEMO_HINT,
 }
 # Vue's own directives that never pass through a component tag unchanged.
 # Any other `v-` name is a custom directive the caller registered. Mirrors

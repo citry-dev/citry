@@ -312,7 +312,7 @@ mod tests {
     fn test_key_on_slot_tag_is_error() {
         assert_parse_error(
             r#"<c-slot name="s" #c-key="k" />"#,
-            "'#c-key' is not supported on '<c-slot>' (line 1, column 18). It belongs on a plain HTML element (the morph pairing key) or on a component tag (the key of the child instance).",
+            "'#c-key' is not supported on '<c-slot>' (line 1, column 18). It belongs on a plain HTML element or a component tag, where it is the key Vue uses to match that element or child instance across renders.",
         );
     }
 

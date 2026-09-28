@@ -114,11 +114,7 @@ mod tests {
                 "'v-else:x'",
                 "without an argument or modifiers",
             ),
-            (
-                r#"<c-child v-once />"#,
-                "'v-once'",
-                "inside the child's template",
-            ),
+            (r#"<c-child v-once />"#, "'v-once'", "Remove the directive"),
             (
                 r#"<c-child v-citry-control="x" />"#,
                 "'v-citry-control'",
